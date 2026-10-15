@@ -813,6 +813,10 @@ func TestSharedAuthorizationServer_RemoteConnectReturnsToSharedConsent(t *testin
 	authCtx := requireProjectAuthContext(t, ctx)
 	f := seedSharedIssuer(t, ctx, ti)
 	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "shared-rc-"+uuid.NewString()[:8], "", []uuid.UUID{f.issuer.ID})
+	// The identity commit writes the provider on each server that signs its
+	// users in through it; without it the server signs nobody in and its
+	// consent carries no card.
+	configureServerProviders(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, f.issuer.ID)
 
 	authorized := sharedAuthorize(t, ctx, ti, f, pkceChallenge(pkceVerifier(t)), f.resource(ti, f.slugA))
 	require.Equal(t, http.StatusFound, authorized.Code, authorized.Body.String())

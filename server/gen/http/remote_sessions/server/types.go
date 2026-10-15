@@ -53,6 +53,14 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
 }
 
+// DisableServerIdentityConfigurationRequestBody is the type of the
+// "remoteSessions" service "disableServerIdentityConfiguration" endpoint HTTP
+// request body.
+type DisableServerIdentityConfigurationRequestBody struct {
+	// The target MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
 // ListBindingsResponseBody is the type of the "remoteSessions" service
 // "listBindings" endpoint HTTP response body.
 type ListBindingsResponseBody struct {
@@ -101,6 +109,19 @@ type CommitServerIdentityConfigurationResponseBody struct {
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
 	Failure *ServerIdentityRegistrationFailureResponseBody `form:"failure,omitempty" json:"failure,omitempty" xml:"failure,omitempty"`
+}
+
+// DisableServerIdentityConfigurationResponseBody is the type of the
+// "remoteSessions" service "disableServerIdentityConfiguration" endpoint HTTP
+// response body.
+type DisableServerIdentityConfigurationResponseBody struct {
+	// The Remote Identity Provider the server signed in to, absent when it already
+	// signed in to none.
+	ProviderID *string `form:"provider_id,omitempty" json:"provider_id,omitempty" xml:"provider_id,omitempty"`
+	// Whether the provider's client was unbound from the user session issuer,
+	// which signs out everyone holding a session through it. False when another
+	// MCP server still signs in through that client, which keeps it bound.
+	ClientUnbound bool `form:"client_unbound" json:"client_unbound" xml:"client_unbound"`
 }
 
 // GetServerIdentityImpactResponseBody is the type of the "remoteSessions"
@@ -866,6 +887,196 @@ type CommitServerIdentityConfigurationUnexpectedResponseBody struct {
 // "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
 // response body for the "gateway_error" error.
 type CommitServerIdentityConfigurationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationUnauthorizedResponseBody is the type of
+// the "remoteSessions" service "disableServerIdentityConfiguration" endpoint
+// HTTP response body for the "unauthorized" error.
+type DisableServerIdentityConfigurationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationForbiddenResponseBody is the type of the
+// "remoteSessions" service "disableServerIdentityConfiguration" endpoint HTTP
+// response body for the "forbidden" error.
+type DisableServerIdentityConfigurationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationBadRequestResponseBody is the type of the
+// "remoteSessions" service "disableServerIdentityConfiguration" endpoint HTTP
+// response body for the "bad_request" error.
+type DisableServerIdentityConfigurationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationNotFoundResponseBody is the type of the
+// "remoteSessions" service "disableServerIdentityConfiguration" endpoint HTTP
+// response body for the "not_found" error.
+type DisableServerIdentityConfigurationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationConflictResponseBody is the type of the
+// "remoteSessions" service "disableServerIdentityConfiguration" endpoint HTTP
+// response body for the "conflict" error.
+type DisableServerIdentityConfigurationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationUnsupportedMediaResponseBody is the type
+// of the "remoteSessions" service "disableServerIdentityConfiguration"
+// endpoint HTTP response body for the "unsupported_media" error.
+type DisableServerIdentityConfigurationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationInvalidResponseBody is the type of the
+// "remoteSessions" service "disableServerIdentityConfiguration" endpoint HTTP
+// response body for the "invalid" error.
+type DisableServerIdentityConfigurationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationInvariantViolationResponseBody is the type
+// of the "remoteSessions" service "disableServerIdentityConfiguration"
+// endpoint HTTP response body for the "invariant_violation" error.
+type DisableServerIdentityConfigurationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationUnexpectedResponseBody is the type of the
+// "remoteSessions" service "disableServerIdentityConfiguration" endpoint HTTP
+// response body for the "unexpected" error.
+type DisableServerIdentityConfigurationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableServerIdentityConfigurationGatewayErrorResponseBody is the type of
+// the "remoteSessions" service "disableServerIdentityConfiguration" endpoint
+// HTTP response body for the "gateway_error" error.
+type DisableServerIdentityConfigurationGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1929,11 +2140,9 @@ type ServerIdentityImpactServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The name of the owning project.
 	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
-	// repoint: its upstream authorization server changes to another single
-	// provider. clear: it is left with no single provider and loses its upstream.
-	// resignin: its upstream is unchanged but its client is replaced, so everyone
-	// signs in again. client_removed: a gateway loses a provider client its
-	// members sign in through.
+	// clear: the client of the provider it signs in to is unbound, so it loses its
+	// sign-in until that server is configured again. client_removed: a gateway
+	// loses a provider client its members sign in through.
 	Impact string `form:"impact" json:"impact" xml:"impact"`
 }
 
@@ -2113,6 +2322,17 @@ func NewCommitServerIdentityConfigurationResponseBody(res *remotesessions.Commit
 	}
 	if res.Failure != nil {
 		body.Failure = marshalRemotesessionsServerIdentityRegistrationFailureToServerIdentityRegistrationFailureResponseBody(res.Failure)
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationResponseBody builds the HTTP response
+// body from the result of the "disableServerIdentityConfiguration" endpoint of
+// the "remoteSessions" service.
+func NewDisableServerIdentityConfigurationResponseBody(res *remotesessions.DisableServerIdentityConfigurationResult) *DisableServerIdentityConfigurationResponseBody {
+	body := &DisableServerIdentityConfigurationResponseBody{
+		ProviderID:    res.ProviderID,
+		ClientUnbound: res.ClientUnbound,
 	}
 	return body
 }
@@ -2735,6 +2955,160 @@ func NewCommitServerIdentityConfigurationUnexpectedResponseBody(res *goa.Service
 // endpoint of the "remoteSessions" service.
 func NewCommitServerIdentityConfigurationGatewayErrorResponseBody(res *goa.ServiceError) *CommitServerIdentityConfigurationGatewayErrorResponseBody {
 	body := &CommitServerIdentityConfigurationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "disableServerIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewDisableServerIdentityConfigurationUnauthorizedResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationUnauthorizedResponseBody {
+	body := &DisableServerIdentityConfigurationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationForbiddenResponseBody builds the HTTP
+// response body from the result of the "disableServerIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewDisableServerIdentityConfigurationForbiddenResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationForbiddenResponseBody {
+	body := &DisableServerIdentityConfigurationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationBadRequestResponseBody builds the HTTP
+// response body from the result of the "disableServerIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewDisableServerIdentityConfigurationBadRequestResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationBadRequestResponseBody {
+	body := &DisableServerIdentityConfigurationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationNotFoundResponseBody builds the HTTP
+// response body from the result of the "disableServerIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewDisableServerIdentityConfigurationNotFoundResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationNotFoundResponseBody {
+	body := &DisableServerIdentityConfigurationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationConflictResponseBody builds the HTTP
+// response body from the result of the "disableServerIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewDisableServerIdentityConfigurationConflictResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationConflictResponseBody {
+	body := &DisableServerIdentityConfigurationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "disableServerIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewDisableServerIdentityConfigurationUnsupportedMediaResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationUnsupportedMediaResponseBody {
+	body := &DisableServerIdentityConfigurationUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationInvalidResponseBody builds the HTTP
+// response body from the result of the "disableServerIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewDisableServerIdentityConfigurationInvalidResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationInvalidResponseBody {
+	body := &DisableServerIdentityConfigurationInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "disableServerIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewDisableServerIdentityConfigurationInvariantViolationResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationInvariantViolationResponseBody {
+	body := &DisableServerIdentityConfigurationInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationUnexpectedResponseBody builds the HTTP
+// response body from the result of the "disableServerIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewDisableServerIdentityConfigurationUnexpectedResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationUnexpectedResponseBody {
+	body := &DisableServerIdentityConfigurationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableServerIdentityConfigurationGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "disableServerIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewDisableServerIdentityConfigurationGatewayErrorResponseBody(res *goa.ServiceError) *DisableServerIdentityConfigurationGatewayErrorResponseBody {
+	body := &DisableServerIdentityConfigurationGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3408,15 +3782,29 @@ func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfi
 	return v
 }
 
+// NewDisableServerIdentityConfigurationPayload builds a remoteSessions service
+// disableServerIdentityConfiguration endpoint payload.
+func NewDisableServerIdentityConfigurationPayload(body *DisableServerIdentityConfigurationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.DisableServerIdentityConfigurationPayload {
+	v := &remotesessions.DisableServerIdentityConfigurationPayload{
+		McpServerID: *body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetServerIdentityImpactPayload builds a remoteSessions service
 // getServerIdentityImpact endpoint payload.
-func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
+func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, clientMode *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
 	v := &remotesessions.GetServerIdentityImpactPayload{}
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.McpServerID = mcpServerID
 	v.Change = change
 	v.ProviderID = providerID
 	v.ClientID = clientID
+	v.ClientMode = clientMode
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3550,6 +3938,18 @@ func ValidateCommitServerIdentityConfigurationRequestBody(body *CommitServerIden
 		if !(*body.RegistrationMethod == "cimd" || *body.RegistrationMethod == "dcr") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration_method", *body.RegistrationMethod, []any{"cimd", "dcr"}))
 		}
+	}
+	return
+}
+
+// ValidateDisableServerIdentityConfigurationRequestBody runs the validations
+// defined on DisableServerIdentityConfigurationRequestBody
+func ValidateDisableServerIdentityConfigurationRequestBody(body *DisableServerIdentityConfigurationRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }

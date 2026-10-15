@@ -74,20 +74,21 @@ func connectScope(t *testing.T, fx consentActionFixture, clientID uuid.UUID) str
 	return postConnectAction(t, fx, clientID).Query().Get("scope")
 }
 
-// A consent endpoint binding clients from two authorization servers: the
-// endpoint resource's advertised scopes go to the client whose grant is
-// qualified to it, and the other client's request is decided by its own
-// authorization server.
+// A consent endpoint carrying two of its server's upstream bindings: the
+// endpoint resource's advertised scopes go to the binding whose grant is
+// qualified to it, and the other is decided by the authorization server the
+// server signs its users in to.
 func TestServeConsentAction_MultiBindingConnectRequestsOwnResourceScopes(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-multi")
 	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read"})
 	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-multi-a", "", []uuid.UUID{fx.shared})
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-multi-b", "", []uuid.UUID{fx.shared, other})
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, owner)
+	shared := createConsentRemoteClientAt(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-multi-b", fx.endpoint.RemoteSessionIssuerID.UUID, []uuid.UUID{fx.shared, other})
 	advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, shared), []string{"b:read"})
 
-	require.Equal(t, "b:read", connectScope(t, fx, shared), "provider B is decided by its own catalogue, not A's resource")
+	require.Equal(t, "b:read", connectScope(t, fx, shared), "a binding with no resource of its own is decided by its authorization server's catalogue, not A's resource")
 	require.Equal(t, "a:read", connectScope(t, fx, owner), "the owner requests the resource's advertised scopes")
 }
 
@@ -99,6 +100,7 @@ func TestServeConsentAction_SoleSharedClientRequestsEndpointResourceScopes(t *te
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-sole")
 	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read"})
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-sole", "", []uuid.UUID{fx.shared, other})
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, shared)
 	advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, shared), []string{"b:read"})
 
 	require.Equal(t, "a:read", connectScope(t, fx, shared))
@@ -113,8 +115,9 @@ func TestServeConsent_MultiBindingCardReadsOwnResourceScopes(t *testing.T) {
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-card")
 	registerPageClient(t, ctx, fx)
 	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read", "openid"})
-	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-card-a", "", []uuid.UUID{fx.shared})
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-card-b", "", []uuid.UUID{fx.shared, other})
+	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-card-a", "", []uuid.UUID{fx.shared})
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, owner)
+	shared := createConsentRemoteClientAt(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-card-b", fx.endpoint.RemoteSessionIssuerID.UUID, []uuid.UUID{fx.shared, other})
 	advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, shared), []string{"b:read"})
 	// A grant minted before the owner was bound routes to the endpoint.
 	grantScopedTo(t, ctx, fx, shared, []string{"b:read"}, consentUpstreamA+"/")
@@ -160,6 +163,7 @@ func TestServeConsent_RemoteEndpointIdentityReconnectFollowsLogin(t *testing.T) 
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, upstream.URL)
 	})
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-remote", "", []uuid.UUID{fx.shared})
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, clientID)
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 	const claimed = "https://claimed.example.com/mcp"
 	claimResource(t, ctx, fx, clientID, claimed)

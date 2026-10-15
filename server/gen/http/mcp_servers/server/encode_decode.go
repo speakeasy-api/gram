@@ -3003,6 +3003,7 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		PlatformEndpointSlug:  v.PlatformEndpointSlug,
 		EnvironmentID:         v.EnvironmentID,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
+		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,
 		TunneledMcpServerID:   v.TunneledMcpServerID,
 		ToolsetID:             v.ToolsetID,

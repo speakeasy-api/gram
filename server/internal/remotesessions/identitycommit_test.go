@@ -13,6 +13,7 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -29,12 +30,13 @@ func TestIdentityCommitBindRefusesDetachingOrgClientOnOrgIssuer(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "identity-commit-detach-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "identity-commit-detach-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-detach-current", "", false, []string{"none"})
-	orgClientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-detach-org-client", currentProviderID, userIssuerID, true)
+	orgClientID := bindAndStampServerIdentityClient(t, ctx, ti, "identity-commit-detach-org-client", currentProviderID, userIssuerID, targetID, true)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-detach-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-detach-next-client", nextProviderID, false)
 
-	commit, tx, reg := lockIdentityCommit(t, ctx, ti, linkPlan(t, ctx, userIssuerID, nextProviderID, nextClientID))
+	commit, tx, reg := lockIdentityCommit(t, ctx, ti, linkPlan(t, ctx, userIssuerID, conv.ToNullUUID(targetID), nextProviderID, nextClientID))
 	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityOrgWideBinding)
 	require.NoError(t, tx.Rollback(ctx))
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
@@ -49,7 +51,7 @@ func TestIdentityCommitBindRefusesAttachingOrgClientToOrgIssuer(t *testing.T) {
 	providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-attach-provider", "", false, []string{"none"})
 	orgClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-attach-client", providerID, true)
 
-	commit, tx, reg := lockIdentityCommit(t, ctx, ti, linkPlan(t, ctx, userIssuerID, providerID, orgClientID))
+	commit, tx, reg := lockIdentityCommit(t, ctx, ti, linkPlan(t, ctx, userIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, providerID, orgClientID))
 	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityOrgWideBinding)
 }
 
@@ -58,13 +60,14 @@ func TestIdentityCommitBindRefusesDetachingClientWithLiveAgentBinding(t *testing
 
 	ctx, ti := newTestService(t)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-agent-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "identity-commit-agent-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-agent-current", "", false, []string{"none"})
-	clientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-agent-client", currentProviderID, userIssuerID, false)
+	clientID := bindAndStampServerIdentityClient(t, ctx, ti, "identity-commit-agent-client", currentProviderID, userIssuerID, targetID, false)
 	seedLiveAgentBinding(t, ctx, ti, clientID, userIssuerID)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-agent-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-agent-next-client", nextProviderID, false)
 
-	commit, tx, reg := lockIdentityCommit(t, ctx, ti, linkPlan(t, ctx, userIssuerID, nextProviderID, nextClientID))
+	commit, tx, reg := lockIdentityCommit(t, ctx, ti, linkPlan(t, ctx, userIssuerID, conv.ToNullUUID(targetID), nextProviderID, nextClientID))
 	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityConflict)
 	require.NoError(t, tx.Rollback(ctx))
 	requireClientBound(t, ctx, ti, clientID, userIssuerID, true)
@@ -79,7 +82,7 @@ func TestIdentityCommitBindRequiresLock(t *testing.T) {
 	providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-unlocked-provider", "", false, []string{"none"})
 	clientID := createServerIdentityClient(t, ctx, ti, "identity-commit-unlocked-client", providerID, false)
 
-	commit := identityCommitter(t, ti).Prepare(linkPlan(t, ctx, userIssuerID, providerID, clientID))
+	commit := identityCommitter(t, ti).Prepare(linkPlan(t, ctx, userIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, providerID, clientID))
 	reg, err := commit.Register(ctx)
 	require.NoError(t, err)
 	tx, err := commit.Begin(ctx)
@@ -105,7 +108,7 @@ func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 	providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-reuse-provider", registrationServer.URL, false, []string{"client_secret_basic"})
 	clientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, userIssuerID, false)
 
-	plan := linkPlan(t, ctx, userIssuerID, providerID, uuid.Nil)
+	plan := linkPlan(t, ctx, userIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, providerID, uuid.Nil)
 	plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, RegistrationResource: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
 	plan.Bound = remotesessions.ReuseBound
 	commit := identityCommitter(t, ti).Prepare(plan)
@@ -186,9 +189,11 @@ func lockIdentityCommit(t *testing.T, ctx context.Context, ti *testInstance, pla
 	return commit, tx, reg
 }
 
-// linkPlan binds the stored client clientID of providerID, replacing the
-// clients bound for the user session issuer's current provider.
-func linkPlan(t *testing.T, ctx context.Context, userIssuerID, providerID, clientID uuid.UUID) remotesessions.IdentityPlan {
+// linkPlan binds the stored client clientID of providerID to mcpServerID,
+// releasing the client of the provider that server signs in to today. An unset
+// mcpServerID releases nothing, which is the shape for a refusal about the
+// client being bound rather than the one being released.
+func linkPlan(t *testing.T, ctx context.Context, userIssuerID uuid.UUID, mcpServerID uuid.NullUUID, providerID, clientID uuid.UUID) remotesessions.IdentityPlan {
 	t.Helper()
 	return remotesessions.IdentityPlan{
 		Scope: remotesessions.IdentityScope{
@@ -198,9 +203,10 @@ func linkPlan(t *testing.T, ctx context.Context, userIssuerID, providerID, clien
 			ActorDisplayName: nil,
 		},
 		UserSessionIssuerID: userIssuerID,
+		MCPServerID:         mcpServerID,
 		Provider:            remotesessions.UseProvider(providerID),
 		Client:              remotesessions.LinkClient(clientID),
-		Bound:               remotesessions.ReplaceBound,
+		Bound:               remotesessions.ReplaceServerBound,
 		ResourceDisplay:     nil,
 	}
 }

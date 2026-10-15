@@ -14,6 +14,7 @@ import { RequestOptions } from "../lib/sdks.js";
 import { ServerIdentityImpactResult } from "../models/components/serveridentityimpactresult.js";
 import {
   Change,
+  ClientMode,
   GetServerIdentityImpactRequest,
   GetServerIdentityImpactSecurity,
 } from "../models/operations/getserveridentityimpact.js";
@@ -55,6 +56,7 @@ export function buildServerIdentityImpactQuery(
       change: request.change,
       providerId: request.providerId,
       clientId: request.clientId,
+      clientMode: request.clientMode,
       gramSession: request.gramSession,
       gramKey: request.gramKey,
       gramProject: request.gramProject,
@@ -90,6 +92,7 @@ export function queryKeyServerIdentityImpact(
     change: Change;
     providerId?: string | undefined;
     clientId?: string | undefined;
+    clientMode?: ClientMode | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

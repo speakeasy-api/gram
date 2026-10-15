@@ -115,48 +115,181 @@ func TestGetServerIdentityImpactProjectIssuer(t *testing.T) {
 	otherIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "impact-other-issuer")
 	createImpactServer(t, ctx, ti, projectID, "impact-unrelated", otherIssuerID)
 
-	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-current", "", false, []string{"none"})
+	// Both servers sign in to the same provider through its one client, which
+	// is what makes the sibling reachable at all: the change has to remove the
+	// client of the provider the sibling itself names.
+	sharedProviderID := createServerIdentityProvider(t, ctx, ti, "impact-current", "", false, []string{"none"})
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-next", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-current-client", currentProviderID, userIssuerID, false)
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-current-client", sharedProviderID, userIssuerID, targetID, false)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, sharedProviderID)
 
-	cases := []struct {
+	// Configuring the target alone reaches nothing: the sibling still signs in
+	// through the shared client, so the commit leaves it bound.
+	for _, tc := range []struct {
 		name       string
 		change     string
 		providerID *uuid.UUID
-		want       string
 	}{
-		{name: "another provider repoints", change: "replace", providerID: &nextProviderID, want: "repoint"},
-		{name: "a new provider repoints", change: "replace", providerID: nil, want: "repoint"},
-		{name: "same provider swaps the client", change: "replace", providerID: &currentProviderID, want: "resignin"},
-		{name: "attaching a second provider clears", change: "attach", providerID: &nextProviderID, want: "clear"},
-		{name: "detach clears", change: "detach", providerID: nil, want: "clear"},
-	}
-	for _, tc := range cases {
+		{name: "another provider", change: "replace", providerID: &nextProviderID},
+		{name: "a new provider", change: "replace", providerID: nil},
+		{name: "the same provider", change: "replace", providerID: &sharedProviderID},
+		{name: "attaching a second provider", change: "attach", providerID: &nextProviderID},
+	} {
 		result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, tc.change, tc.providerID, nil))
 		require.NoError(t, err, tc.name)
-		require.Equal(t, map[string]string{siblingID.String(): tc.want}, impactsByServer(result), tc.name)
+		require.Empty(t, impactsByServer(result), tc.name)
 		require.Zero(t, result.HiddenServerCount, tc.name)
 	}
 
-	// Without a target nothing is excluded.
-	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, nil, "replace", &nextProviderID, nil))
+	// Removing User Identity unbinds every client the project can see, which
+	// does take the sibling's sign-in with it.
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "detach", nil, nil))
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{siblingID.String(): "repoint", targetID.String(): "repoint"}, impactsByServer(result))
+	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
+	require.Zero(t, result.HiddenServerCount)
+
+	// Without a target nothing is excluded.
+	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, nil, "detach", nil, nil))
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{siblingID.String(): "clear", targetID.String(): "clear"}, impactsByServer(result))
 }
 
-func TestGetServerIdentityImpactUnchangedUpstreamIsEmpty(t *testing.T) {
+// AIM-577: replacing the client a sibling server signs in through would take
+// that server's sign-in with it, and this page authorizes only its own server.
+// The commit refuses it, so the preview refuses it with the same message
+// rather than describing a change that cannot happen.
+func TestGetServerIdentityImpactRefusesReplacingASharedProvidersClient(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	projectID := projectIDFromContext(t, ctx)
-	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "impact-noop-target")
-	createImpactServer(t, ctx, ti, projectID, "impact-noop-sibling", userIssuerID)
-	providerID := createServerIdentityProvider(t, ctx, ti, "impact-noop-provider", "", false, []string{"none"})
-	clientID := bindServerIdentityClient(t, ctx, ti, "impact-noop-client", providerID, userIssuerID, false)
+	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "impact-shared-target")
+	siblingID := createImpactServer(t, ctx, ti, projectID, "impact-shared-sibling", userIssuerID)
+	providerID := createServerIdentityProvider(t, ctx, ti, "impact-shared-provider", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-shared-client", providerID, userIssuerID, targetID, false)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, providerID)
+	replacementID := createServerIdentityClient(t, ctx, ti, "impact-shared-replacement", providerID, false)
 
-	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &providerID, &clientID))
+	for _, mode := range []string{"existing", "manual"} {
+		payload := impactPayload(userIssuerID, &targetID, "replace", &providerID, &replacementID)
+		payload.ClientMode = conv.PtrEmpty(mode)
+		_, err := ti.service.GetServerIdentityImpact(ctx, payload)
+		requireOopsCode(t, err, oops.CodeConflict)
+		require.ErrorContains(t, err, "another MCP server signs in through this Remote Identity Provider's client", mode)
+	}
+
+	// The commit refuses it the same way, which is what the preview promises.
+	_, commitErr := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, replacementID))
+	requireOopsCode(t, commitErr, oops.CodeConflict)
+	require.ErrorContains(t, commitErr, "another MCP server signs in through this Remote Identity Provider's client")
+}
+
+// The preview decides on the client mode the commit will run in. Inferring it
+// from the absence of a client id read hand-entered credentials as an
+// automatic registration, which reuses the bound client instead of replacing
+// it, and reported no impact for a change that unbinds it.
+func TestGetServerIdentityImpactUsesTheCommitsClientMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "impact-mode-target")
+	providerID := createServerIdentityProvider(t, ctx, ti, "impact-mode-provider", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-mode-client", providerID, userIssuerID, targetID, false)
+	// A sibling signing in through the same provider, so the bound client is
+	// shared: what the two modes do with it is the whole difference between
+	// them, and a mode read wrongly is visible here rather than in an empty
+	// preview that says nothing either way.
+	siblingID := createImpactServer(t, ctx, ti, projectID, "impact-mode-sibling", userIssuerID)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, providerID)
+
+	preview := func(mode *string) (*gen.ServerIdentityImpactResult, error) {
+		payload := impactPayload(userIssuerID, &targetID, "replace", &providerID, nil)
+		payload.ClientMode = mode
+		return ti.service.GetServerIdentityImpact(ctx, payload)
+	}
+
+	// Manual names a client of its own, so the shared one would be unbound and
+	// the sibling stranded. Refused, naming the surface that covers them both.
+	_, err := preview(conv.PtrEmpty("manual"))
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "another MCP server signs in through this Remote Identity Provider's client")
+
+	// An automatic setup reuses the bound client, so nothing is taken from the
+	// sibling and the preview reports no impact. Reading an absent mode as
+	// manual would refuse a change that is allowed; reading manual as auto
+	// would allow one that strands the sibling.
+	result, err := preview(conv.PtrEmpty("auto"))
 	require.NoError(t, err)
-	require.Empty(t, result.Servers)
+	require.Empty(t, impactsByServer(result))
+	result, err = preview(nil)
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
+
+	// Detaching still reaches the sibling: it unbinds every client the project
+	// can see, including the one they share.
+	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "detach", nil, nil))
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
+}
+
+// AIM-577: the disable preview is the disable's own decision. Previewing it as
+// an issuer-wide detach warned that unrelated servers would lose their
+// identity, let an unrelated organization-owned client refuse it, and counted
+// unreadable siblings that blocked a valid server-local operation.
+func TestGetServerIdentityImpactDisableIsServerScoped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "impact-disable-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-disable-target", userIssuerID)
+	siblingID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-disable-sibling", userIssuerID)
+
+	ownProviderID := createServerIdentityProvider(t, ctx, ti, "impact-disable-own", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-disable-own-client", ownProviderID, userIssuerID, targetID, false)
+	siblingProviderID := createServerIdentityProvider(t, ctx, ti, "impact-disable-sibling-provider", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-disable-sibling-client", siblingProviderID, userIssuerID, siblingID, false)
+
+	// Only this server's provider is unbound, so no other server is named and
+	// the sibling's own client cannot make the disable look dangerous.
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "disable", nil, nil))
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
+	require.Zero(t, result.HiddenServerCount)
+
+	// An organization-owned client of another provider is not this disable's
+	// to touch, so it neither refuses nor counts.
+	orgProviderID := createServerIdentityProvider(t, ctx, ti, "impact-disable-org", "", false, []string{"none"})
+	bindServerIdentityClient(t, ctx, ti, "impact-disable-org-client", orgProviderID, userIssuerID, true)
+	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "disable", nil, nil))
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
+	require.Zero(t, result.HiddenServerCount)
+
+	// The detach the Remote Identity Provider settings perform still reports
+	// every server it would reach, which is the operation it describes.
+	_, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "detach", nil, nil))
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
+}
+
+// A server sharing its provider's client keeps it, so the disable reaches
+// nothing and the preview says so.
+func TestGetServerIdentityImpactDisableKeepsASharedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "impact-disable-shared-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-disable-shared-target", userIssuerID)
+	siblingID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-disable-shared-sibling", userIssuerID)
+	providerID := createServerIdentityProvider(t, ctx, ti, "impact-disable-shared-provider", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-disable-shared-client", providerID, userIssuerID, targetID, false)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, providerID)
+
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "disable", nil, nil))
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
 	require.Zero(t, result.HiddenServerCount)
 }
 
@@ -173,13 +306,15 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-current", "", false, []string{"none"})
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-next", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-org-project-client", currentProviderID, userIssuerID, false)
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-org-project-client", currentProviderID, userIssuerID, targetID, false)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, currentProviderID)
+	stampIssuer(t, ctx, ti.conn, otherProjectID, otherServerID, currentProviderID)
 
-	// A project-owned client is invisible to other projects, so replacing it
+	// A project-owned client is invisible to other projects, so unbinding it
 	// leaves their upstream alone.
-	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &nextProviderID, nil))
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "detach", nil, nil))
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{siblingID.String(): "repoint"}, impactsByServer(result))
+	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
 
 	require.NotContains(t, impactsByServer(result), otherServerID.String())
 	for _, server := range result.Servers {
@@ -207,7 +342,7 @@ func TestGetServerIdentityImpactRefusesUnbindingOrgClientOnOrgIssuer(t *testing.
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "impact-org-unbind-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-org-unbind-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-unbind-current", "", false, []string{"none"})
-	orgClientID := bindServerIdentityClient(t, ctx, ti, "impact-org-unbind-client", currentProviderID, userIssuerID, true)
+	orgClientID := bindAndStampServerIdentityClient(t, ctx, ti, "impact-org-unbind-client", currentProviderID, userIssuerID, targetID, true)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-unbind-next", "", false, []string{"none"})
 
 	for _, change := range []string{"detach", "replace"} {
@@ -237,13 +372,14 @@ func TestGetServerIdentityImpactMatchesCommitOnDeletedProvider(t *testing.T) {
 	siblingID := createImpactServer(t, ctx, ti, projectID, "impact-deleted-sibling", userIssuerID)
 	liveProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-live", "", false, []string{"none"})
 	deletedProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-gone", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-deleted-live-client", liveProviderID, userIssuerID, false)
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-deleted-live-client", liveProviderID, userIssuerID, targetID, false)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, liveProviderID)
 	bindServerIdentityClient(t, ctx, ti, "impact-deleted-gone-client", deletedProviderID, userIssuerID, false)
 	_, err := repo.New(ti.conn).DeleteRemoteSessionIssuer(ctx, repo.DeleteRemoteSessionIssuerParams{ID: deletedProviderID, ProjectID: conv.ToNullUUID(projectID)})
 	require.NoError(t, err)
 
-	// The commit still sees the deleted provider's bound client, and so does
-	// the preview: two other providers make the replacement ambiguous.
+	// A deleted provider's bound client does not keep a server qualified, so
+	// neither the preview nor the commit treats it as the one being replaced.
 	var requests atomic.Int64
 	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
@@ -252,19 +388,13 @@ func TestGetServerIdentityImpactMatchesCommitOnDeletedProvider(t *testing.T) {
 	t.Cleanup(registrationServer.Close)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-deleted-next", registrationServer.URL, false, []string{"client_secret_basic"})
 
-	_, previewErr := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &nextProviderID, nil))
-	_, commitErr := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, nextProviderID))
-	requireOopsCode(t, previewErr, oops.CodeConflict)
-	requireOopsCode(t, commitErr, oops.CodeConflict)
-	var previewOops, commitOops *oops.ShareableError
-	require.ErrorAs(t, previewErr, &previewOops)
-	require.ErrorAs(t, commitErr, &commitOops)
-	require.Equal(t, commitOops.Error(), previewOops.Error())
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &nextProviderID, nil))
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result), "the sibling still signs in through the live provider's client")
 	require.Zero(t, requests.Load())
 
-	// The deleted provider's client does not count toward the derivation, as
-	// in the resync: the sibling derives the live provider until another joins.
-	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "attach", &nextProviderID, nil))
+	// Detaching removes the live provider's client too, which the sibling names.
+	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "detach", nil, nil))
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
 }
@@ -277,7 +407,7 @@ func TestGetServerIdentityImpactListsGateways(t *testing.T) {
 	gatewayID := createImpactGateway(t, ctx, ti, "impact-gateway", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-gateway-current", "", false, []string{"none"})
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-gateway-next", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-gateway-client", currentProviderID, userIssuerID, false)
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-gateway-client", currentProviderID, userIssuerID, targetID, false)
 
 	for _, tc := range []struct {
 		change     string
@@ -345,7 +475,8 @@ func TestGetServerIdentityImpactCountsUnreadableServers(t *testing.T) {
 	siblingID := createImpactServer(t, ctx, ti, projectID, "impact-hidden-sibling", userIssuerID)
 	createImpactGateway(t, ctx, ti, "impact-hidden-gateway", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "impact-hidden-current", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-hidden-current-client", currentProviderID, userIssuerID, false)
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-hidden-current-client", currentProviderID, userIssuerID, targetID, false)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, currentProviderID)
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-hidden-next", "", false, []string{"none"})
 	orgClientID := createServerIdentityClient(t, ctx, ti, "impact-hidden-org-client", nextProviderID, true)
 
@@ -353,17 +484,26 @@ func TestGetServerIdentityImpactCountsUnreadableServers(t *testing.T) {
 		authz.NewGrant(authz.ScopeMCPWrite, targetID.String()),
 		authz.NewGrant(authz.ScopeMCPRead, siblingID.String()),
 	)
-	// A project client: only affected servers count, and the gateway is not.
-	result, err := ti.service.GetServerIdentityImpact(readSiblingCtx, impactPayload(userIssuerID, &targetID, "attach", &nextProviderID, nil))
+	// Unbinding a project client reaches the sibling that signs in through it
+	// and the unreadable gateway that offers it, and nothing else.
+	result, err := ti.service.GetServerIdentityImpact(readSiblingCtx, impactPayload(userIssuerID, &targetID, "detach", nil, nil))
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
-	require.Zero(t, result.HiddenServerCount)
+	require.Equal(t, 1, result.HiddenServerCount)
+
+	// Replacing this server's client with another of the same provider would
+	// take the sibling's sign-in with it, which the commit refuses from a page
+	// authorizing only this server — so the preview refuses it too, rather
+	// than naming servers the caller cannot act on.
+	replacementID := createServerIdentityClient(t, ctx, ti, "impact-hidden-replacement", currentProviderID, false)
+	_, err = ti.service.GetServerIdentityImpact(readSiblingCtx, impactPayload(userIssuerID, &targetID, "replace", &currentProviderID, &replacementID))
+	requireOopsCode(t, err, oops.CodeConflict)
 
 	// An organization-level client: every unreadable server on the issuer
 	// counts, including the unaffected gateway.
 	result, err = ti.service.GetServerIdentityImpact(readSiblingCtx, impactPayload(userIssuerID, &targetID, "attach", nil, &orgClientID))
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
+	require.Empty(t, impactsByServer(result))
 	require.Equal(t, 1, result.HiddenServerCount)
 
 	targetOnlyCtx := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, targetID.String()))

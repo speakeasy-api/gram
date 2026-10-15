@@ -43,17 +43,28 @@ type Service interface {
 	// additionally requires project:write. Unsupported automatic registration
 	// returns manual_setup_required without changing local state.
 	CommitServerIdentityConfiguration(context.Context, *CommitServerIdentityConfigurationPayload) (res *CommitServerIdentityConfigurationResult, err error)
+	// Turn User Identity off for one MCP server: it stops signing anyone in, and
+	// the client of the provider it used is unbound from its user session issuer
+	// only when no other MCP server in the organization still signs in through
+	// that provider. Unbinding signs out everyone holding a session through that
+	// client. Idempotent: a server already signing in to nothing is unchanged.
+	// Requires mcp:write on the target. Refused when the client carries live agent
+	// attachments or identity-chaining bindings, or when it is an
+	// organization-owned client on an organization-level user session issuer,
+	// which is changed from the organization's identity provider settings instead.
+	DisableServerIdentityConfiguration(context.Context, *DisableServerIdentityConfigurationPayload) (res *DisableServerIdentityConfigurationResult, err error)
 	// Preview which other MCP servers and gateways a client binding change on a
 	// user session issuer would affect, across every project in the organization
 	// for an organization-level issuer. Each server's upstream authorization
-	// server is derived from the clients it can see (its own project's and
-	// organization-level ones), so a server is listed when that derivation changes
-	// (repoint or clear) or when a client it uses is replaced (resignin). A
-	// gateway is listed when a client it can see is unbound (client_removed). The
-	// target server is excluded. A change the commit would refuse, such as one
-	// that touches an organization-level client on an organization-level issuer,
-	// is refused here too. Requires mcp:write on mcp_server_id when given,
-	// otherwise project:write. Servers the caller cannot read are counted in
+	// server is configured on that server, so a server is listed only when the
+	// change unbinds the client of its own provider and it loses its sign-in
+	// (clear). A gateway is listed when a client it can see is unbound
+	// (client_removed). Configuring one server never reaches another: replacing a
+	// client another MCP server signs in through is refused rather than previewed,
+	// as is any change the commit would refuse, such as one that touches an
+	// organization-level client on an organization-level issuer. The target server
+	// is excluded. Requires mcp:write on mcp_server_id when given, otherwise
+	// project:write. Servers the caller cannot read are counted in
 	// hidden_server_count and never named.
 	GetServerIdentityImpact(context.Context, *GetServerIdentityImpactPayload) (res *ServerIdentityImpactResult, err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
@@ -94,7 +105,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [9]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "disableServerIdentityConfiguration", "getServerIdentityImpact", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -289,6 +300,28 @@ type DetachBindingPayload struct {
 	ProjectSlugInput    *string
 }
 
+// DisableServerIdentityConfigurationPayload is the payload type of the
+// remoteSessions service disableServerIdentityConfiguration method.
+type DisableServerIdentityConfigurationPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The target MCP server.
+	McpServerID string
+}
+
+// DisableServerIdentityConfigurationResult is the result type of the
+// remoteSessions service disableServerIdentityConfiguration method.
+type DisableServerIdentityConfigurationResult struct {
+	// The Remote Identity Provider the server signed in to, absent when it already
+	// signed in to none.
+	ProviderID *string
+	// Whether the provider's client was unbound from the user session issuer,
+	// which signs out everyone holding a session through it. False when another
+	// MCP server still signs in through that client, which keeps it bound.
+	ClientUnbound bool
+}
+
 // GetServerIdentityImpactPayload is the payload type of the remoteSessions
 // service getServerIdentityImpact method.
 type GetServerIdentityImpactPayload struct {
@@ -306,6 +339,10 @@ type GetServerIdentityImpactPayload struct {
 	ProviderID *string
 	// An existing client being bound. Omit for a new client.
 	ClientID *string
+	// The client mode commitServerIdentityConfiguration would run in. auto reuses
+	// a client already bound for the chosen provider; existing and manual replace
+	// it, which signs out everyone using it. Defaults to auto.
+	ClientMode *string
 }
 
 // ListBindingsPayload is the payload type of the remoteSessions service
@@ -418,11 +455,9 @@ type ServerIdentityImpactServer struct {
 	ProjectID string
 	// The name of the owning project.
 	ProjectName string
-	// repoint: its upstream authorization server changes to another single
-	// provider. clear: it is left with no single provider and loses its upstream.
-	// resignin: its upstream is unchanged but its client is replaced, so everyone
-	// signs in again. client_removed: a gateway loses a provider client its
-	// members sign in through.
+	// clear: the client of the provider it signs in to is unbound, so it loses its
+	// sign-in until that server is configured again. client_removed: a gateway
+	// loses a provider client its members sign in through.
 	Impact string
 }
 

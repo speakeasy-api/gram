@@ -852,9 +852,10 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id;
 
 -- name: SetMCPServerRemoteSessionIssuerFixture :execrows
--- Test-only fixture: stamps the denormalised upstream authorization server on
--- an MCP server. Server creation cannot set it — no client bindings exist yet —
--- so tests seed it after the fact, standing in for the binding resync.
+-- Test-only fixture: stamps the upstream authorization server an MCP server's
+-- users sign in to. Server creation cannot set it — no client bindings exist
+-- yet — so tests seed it after the fact, standing in for the identity commit
+-- that configures User Identity on the server.
 --
 -- Returns the row count so the caller can insist the stamp landed: one that
 -- matched nothing would otherwise let a negative test pass vacuously.
@@ -863,6 +864,44 @@ SET remote_session_issuer_id = @remote_session_issuer_id
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: ConfigureMCPServerProvidersFromBindingsFixture :execrows
+-- Test-only fixture: stamps every live MCP server on the named user session
+-- issuers with the single provider bound there, for a fixture that seeds client
+-- bindings in SQL and needs the servers configured with them. In production
+-- each server's provider is written by the identity commit that configures
+-- User Identity on it, one server at a time, so no shipped code derives this.
+--
+-- None or several providers leave the value alone: a fixture that means to
+-- configure one server of several must name it and use
+-- SetMCPServerRemoteSessionIssuerFixture.
+WITH resolved AS (
+    SELECT input.user_session_issuer_id,
+           CASE WHEN count(DISTINCT i.id) = 1
+                THEN (array_agg(DISTINCT i.id))[1]
+           END AS remote_session_issuer_id
+    FROM unnest(@user_session_issuer_ids::uuid[]) AS input(user_session_issuer_id)
+    LEFT JOIN remote_session_client_user_session_issuers AS link
+           ON link.user_session_issuer_id = input.user_session_issuer_id
+    LEFT JOIN remote_session_clients AS c
+           ON c.id = link.remote_session_client_id
+          AND c.deleted IS FALSE
+          AND (c.project_id = @project_id::uuid
+               OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+    LEFT JOIN remote_session_issuers AS i
+           ON i.id = c.remote_session_issuer_id
+          AND i.deleted IS FALSE
+          AND (i.project_id IS NULL
+               OR (i.project_id = @project_id::uuid AND c.project_id = @project_id::uuid))
+    GROUP BY input.user_session_issuer_id
+)
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = resolved.remote_session_issuer_id
+FROM resolved
+WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
+  AND s.project_id = @project_id::uuid
+  AND s.deleted IS FALSE
+  AND resolved.remote_session_issuer_id IS NOT NULL;
 
 -- name: CreateStripeBillingMetadataFixture :exec
 -- Test-only fixture: associates an organization with a Stripe customer.

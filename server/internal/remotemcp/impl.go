@@ -173,13 +173,13 @@ func (s *Service) CreateServerAndMcpServer(ctx context.Context, payload *gen.Cre
 		return nil, oops.E(oops.CodeUnexpected, err, "provision remote MCP server").LogError(ctx, logger)
 	}
 	if payload.UserSessionIssuerID != nil && result.MCPServer.UserSessionIssuerID.Valid {
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{result.MCPServer.UserSessionIssuerID.UUID})
+		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{result.MCPServer.UserSessionIssuerID.UUID})
 		refreshed, refreshErr := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 			ID:        result.MCPServer.ID,
 			ProjectID: *authCtx.ProjectID,
 		})
 		if refreshErr != nil {
-			logger.ErrorContext(ctx, "reload MCP server after issuer sync", attr.SlogError(refreshErr))
+			logger.ErrorContext(ctx, "reload MCP server after reconciling remote session issuers", attr.SlogError(refreshErr))
 		} else {
 			result.MCPServer = refreshed
 		}

@@ -608,6 +608,10 @@ func TestAuthenticationHost_RemoteConnectReturnsToAuthenticationHostConsent(t *t
 	f := seedAuthenticationHostEndpointIssuer(t, ctx, ti)
 	harness := newAuthenticationHostHarness(t, ti)
 	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "authn-host-rc-"+uuid.NewString()[:8], "", []uuid.UUID{f.issuer.ID})
+	// The identity commit writes the provider on each server that signs its
+	// users in through it; without it the server signs nobody in and its
+	// consent carries no card.
+	configureServerProviders(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, f.issuer.ID)
 	stored := authorizeOnAuthenticationHost(t, ctx, ti, harness, f, f.slugA)
 
 	w := harness.serve(t, http.MethodPost, "auth.example.com", "/mcp/"+f.slugA+"/connect/remote-session", url.Values{"state": {stored.ID}, "csrf_token": {stored.CSRFToken}, "action": {"connect"}, "client_id": {remoteClientID.String()}})

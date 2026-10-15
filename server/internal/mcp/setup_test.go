@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -33,9 +34,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientcredentials"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 	"github.com/stretchr/testify/require"
@@ -865,4 +868,53 @@ func createTestUser(t *testing.T, ctx context.Context, ti *testInstance, id stri
 	})
 	require.NoError(t, err)
 	return urn.NewUserSubject(id)
+}
+
+// configureServerProviders stamps the upstream authorization server on every
+// MCP server carrying one of userIssuerIDs, from the single provider its
+// clients name. In production each server's provider is written by the
+// identity commit that configures User Identity on it; a fixture that seeds
+// client bindings in SQL never runs that commit.
+func configureServerProviders(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, userIssuerIDs ...uuid.UUID) {
+	t.Helper()
+	stamped, err := testrepo.New(conn).ConfigureMCPServerProvidersFromBindingsFixture(ctx, testrepo.ConfigureMCPServerProvidersFromBindingsFixtureParams{
+		ProjectID:            projectID,
+		UserSessionIssuerIds: userIssuerIDs,
+		OrganizationID:       organizationID,
+	})
+	require.NoError(t, err)
+	require.Positive(t, stamped, "the fixture must configure at least one server, or the test proves nothing")
+}
+
+// configureServerProvider configures one MCP server with the provider of
+// clientID and returns it, standing in for the identity commit that writes
+// mcp_servers.remote_session_issuer_id in production.
+func configureServerProvider(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID string, serverID, clientID uuid.UUID) uuid.NullUUID {
+	t.Helper()
+	client, err := remotesessions_repo.New(ti.conn).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
+		ID:             clientID,
+		ProjectID:      projectID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	provider := conv.ToNullUUID(client.RemoteSessionClient.RemoteSessionIssuerID)
+	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+		ID:                    serverID,
+		ProjectID:             projectID,
+		RemoteSessionIssuerID: provider,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped, "the provider must land on exactly one live server")
+	return provider
+}
+
+// configureEndpointProvider configures the MCP server a resolved endpoint
+// fronts with the provider of clientID, and points the endpoint at it. This is
+// what the identity commit writes in production; a fixture that only binds a
+// client to the user session issuer leaves the server signing nobody in, and
+// its consent covers none of the issuer's clients.
+func configureEndpointProvider(t *testing.T, ctx context.Context, ti *testInstance, endpoint *mcp.ResolvedMcpEndpoint, clientID uuid.UUID) {
+	t.Helper()
+	require.True(t, endpoint.McpServerID.Valid, "only a server-keyed endpoint has a provider of its own")
+	endpoint.RemoteSessionIssuerID = configureServerProvider(t, ctx, ti, endpoint.ProjectID, endpoint.OrganizationID, endpoint.McpServerID.UUID, clientID)
 }

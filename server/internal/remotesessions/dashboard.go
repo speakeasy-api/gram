@@ -128,8 +128,64 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	return result, nil
 }
 
+func (s *Service) DisableServerIdentityConfiguration(ctx context.Context, payload *gen.DisableServerIdentityConfigurationPayload) (*gen.DisableServerIdentityConfigurationResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	mcpServerID, err := uuid.Parse(payload.McpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)
+	}
+	target, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        mcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
+	}
+	// Write access to this server is the whole requirement: the provider's
+	// client is unbound only when no other server signs in through it, so no
+	// other server's sign-in is reachable from here.
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpGrantResourceID(target.ID, target.ToolsetID), target.ProjectID.String())); err != nil {
+		return nil, err
+	}
+	if !target.UserSessionIssuerID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "MCP server has no user session issuer").LogError(ctx, logger)
+	}
+
+	result, err := s.identity.DisableServerIdentity(ctx, IdentityScope{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:     authCtx.Email,
+		ActorIsPlatformAdmin: authCtx.IsAdmin,
+		// The dashboard acts on the server it just read for this user, who is
+		// looking at it, so it expects nothing of its own.
+	}, target.UserSessionIssuerID.UUID, mcpServerID, DisableServerIdentityExpectation{Version: "", ClientUnbound: nil})
+	if err != nil {
+		return nil, identityOopsError(err, "disable MCP server identity").LogError(ctx, logger)
+	}
+	var providerID *string
+	if result.Provider.Valid {
+		providerID = conv.PtrEmpty(result.Provider.UUID.String())
+	}
+	return &gen.DisableServerIdentityConfigurationResult{
+		ProviderID:    providerID,
+		ClientUnbound: result.ClientUnbound,
+	}, nil
+}
+
 // authorizeServerIdentityTarget loads the MCP server and requires write access
-// to it and to every server sharing its user session issuer.
+// to it. No other server sharing its user session issuer is reached: the
+// provider is stamped on the named server alone, and the client of the
+// provider it moves off is released only when no other server signs in
+// through it.
 func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, req serverIdentityRequest) (mcpserversrepo.McpServer, error) {
 	mcpRepo := mcpserversrepo.New(s.db)
 	target, err := mcpRepo.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
@@ -143,28 +199,13 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
 	}
 
-	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, target.ID.String(), target.ProjectID.String())}
+	// A toolset-backed server's grants are held on its toolset, which is the
+	// resource every other MCP check on it uses. Configuring identity accepts
+	// every backend now, so checking the server id here would deny exactly the
+	// toolset-backed servers this opened up.
+	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, mcpGrantResourceID(target.ID, target.ToolsetID), target.ProjectID.String())}
 	if req.createProvider != nil || req.clientMode != serverIdentityClientModeExisting {
 		checks = append(checks, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
-	}
-	// A user session issuer is not unique to one MCP server. The client binding
-	// this commit rewrites is keyed by issuer, and ResyncMCPServerRemoteSessionIssuers
-	// re-stamps every server carrying that issuer, so write access to the named
-	// target alone would let a caller repoint its siblings.
-	if target.UserSessionIssuerID.Valid {
-		sharing, err := mcpRepo.ListMCPServerIDsByUserSessionIssuerID(ctx, mcpserversrepo.ListMCPServerIDsByUserSessionIssuerIDParams{
-			ProjectID:           *authCtx.ProjectID,
-			UserSessionIssuerID: target.UserSessionIssuerID,
-		})
-		if err != nil {
-			return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "list MCP servers sharing the user session issuer").LogError(ctx, logger)
-		}
-		for _, id := range sharing {
-			if id == target.ID {
-				continue
-			}
-			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
-		}
 	}
 	if err := s.authz.Require(ctx, checks...); err != nil {
 		return mcpserversrepo.McpServer{}, err
@@ -173,20 +214,28 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 }
 
 // checkServerIdentityRequest checks what only this flow knows about: the MCP
-// server must be directly Remote MCP-backed, and a new provider's form and
-// logo must be valid.
+// server must have a user session issuer to bind the client to, a Remote MCP
+// source it names must still exist, and a new provider's form and logo must be
+// valid.
+//
+// Every backend is accepted. This is the only writer of a server's provider,
+// so restricting it to directly Remote MCP-backed servers would leave a
+// toolset-backed or tunneled server with no way to be configured at all — the
+// gap a derivation used to paper over by guessing from the issuer's clients.
 func (s *Service) checkServerIdentityRequest(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, req *serverIdentityRequest, target mcpserversrepo.McpServer) error {
-	if !target.RemoteMcpServerID.Valid || !target.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeBadRequest, nil, "MCP server must be directly Remote MCP-backed and have a user session issuer").LogError(ctx, logger)
+	if !target.UserSessionIssuerID.Valid {
+		return oops.E(oops.CodeBadRequest, nil, "MCP server must have a user session issuer").LogError(ctx, logger)
 	}
-	if _, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
-		ID:        target.RemoteMcpServerID.UUID,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "Remote MCP source not found").LogError(ctx, logger)
+	if target.RemoteMcpServerID.Valid {
+		if _, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
+			ID:        target.RemoteMcpServerID.UUID,
+			ProjectID: *authCtx.ProjectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeNotFound, err, "Remote MCP source not found").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeUnexpected, err, "get Remote MCP source").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "get Remote MCP source").LogError(ctx, logger)
 	}
 	if req.createProvider == nil {
 		return nil
@@ -231,9 +280,10 @@ func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger,
 	return &out
 }
 
-// plan describes the request as an identity plan: the server's current
-// clients are replaced by the requested one. registrationResource is what a
-// registered client without scopes will discover at login.
+// plan describes the request as an identity plan for one server: the client of
+// the provider that server signs in to today is replaced by the requested one,
+// and the requested provider is stamped on the server. registrationResource is
+// what a registered client without scopes will discover at login.
 func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
 	provider := UseProvider(r.providerID)
 	if r.createProvider != nil {
@@ -275,9 +325,10 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 			ActorIsPlatformAdmin: authCtx.IsAdmin,
 		},
 		UserSessionIssuerID: target.UserSessionIssuerID.UUID,
+		MCPServerID:         uuid.NullUUID{UUID: target.ID, Valid: true},
 		Provider:            provider,
 		Client:              client,
-		Bound:               ReplaceBound,
+		Bound:               ReplaceServerBound,
 		ResourceDisplay:     nil,
 	}
 }
@@ -293,9 +344,8 @@ func serverIdentityRegistrationResult(reg Registration) *gen.CommitServerIdentit
 
 // recheckServerIdentityTarget locks the MCP server and refuses the commit if
 // its Remote MCP source or user session issuer moved, or the source went away,
-// since they were read. The denormalized remote_session_issuer_id is not
-// compared: the commit reads the current provider from the live bindings, and
-// the post-commit restamp of that column can lag a concurrent commit.
+// since they were read. remote_session_issuer_id is not compared: the commit
+// rereads it under this same lock and overwrites it.
 func recheckServerIdentityTarget(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, target mcpserversrepo.McpServer) error {
 	locked, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
 		ID:        target.ID,
@@ -310,11 +360,13 @@ func recheckServerIdentityTarget(ctx context.Context, tx pgx.Tx, projectID uuid.
 	if locked.RemoteMcpServerID != target.RemoteMcpServerID || locked.UserSessionIssuerID != target.UserSessionIssuerID {
 		return identityRefusal(ErrIdentityConflict, nil, "MCP server identity configuration changed while preparing the request")
 	}
-	if _, err := remotemcprepo.New(tx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: locked.RemoteMcpServerID.UUID, ProjectID: projectID}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return identityRefusal(ErrIdentityNotFound, err, "Remote MCP source not found")
+	if locked.RemoteMcpServerID.Valid {
+		if _, err := remotemcprepo.New(tx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: locked.RemoteMcpServerID.UUID, ProjectID: projectID}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return identityRefusal(ErrIdentityNotFound, err, "Remote MCP source not found")
+			}
+			return fmt.Errorf("get Remote MCP source: %w", err)
 		}
-		return fmt.Errorf("get Remote MCP source: %w", err)
 	}
 	return nil
 }

@@ -897,7 +897,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if err != nil {
 			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
 		}
-		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
+		if err := s.checkEndpointAccessTokens(agentCtx, endpoint, subject); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 				return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
 			}
@@ -1763,7 +1763,15 @@ func (s *Service) maybeAutoConnect(
 	// autoRefresh is nil: the subject has not been shown the control yet, so
 	// there is no choice to record. The page's own Connect action is what
 	// authors a stored preference.
-	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, nil, focusServer)
+	resourceSiblings, err := s.listEndpointIssuerClients(ctx, endpoint, challengeState)
+	if err != nil {
+		// The latch is already spent, so failing the request would leave the
+		// user with an error instead of the page. Same answer as the connect
+		// URL failure below: render, and let them connect manually.
+		logger.WarnContext(ctx, "list remote session clients; falling back to the consent page", attr.SlogError(err))
+		return false, nil
+	}
+	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, resourceSiblings, nil, focusServer)
 	if err != nil {
 		// Already logged. Render the page so the user can connect manually
 		// rather than seeing an error for a step they did not take.

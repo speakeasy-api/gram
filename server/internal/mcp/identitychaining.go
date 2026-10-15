@@ -88,7 +88,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
 	}
 
-	tokens, strictErr := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	tokens, strictErr := s.resolveEndpointAccessTokens(ctx, endpoint, authentication.subject)
 	unusable := errors.Is(strictErr, remotesessions.ErrNoValidToken)
 	var err error
 	switch {
@@ -99,7 +99,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		if !s.identityChainer.Governs(ctx, req) {
 			return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 		}
-		tokens, err = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+		tokens, err = s.resolveEndpointAvailableAccessTokens(ctx, endpoint, authentication.subject)
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
 		}

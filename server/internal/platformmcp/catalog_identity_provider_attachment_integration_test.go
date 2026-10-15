@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -103,7 +105,7 @@ func attachmentTestClients(t *testing.T, conn *pgxpool.Pool, principal Principal
 // attachmentTestCommit commits an attachment the way attachLocked does, with
 // already-registered credentials standing in for dynamic registration: reuse a
 // stored issuer when the flow may, otherwise create one in the commit.
-func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachmentService, principal Principal, project ResolvedProject, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, clientID, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) error {
+func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachmentService, principal Principal, project ResolvedProject, userSessionIssuerID uuid.UUID, mcpServerID uuid.NullUUID, metadata remotesessions.DiscoveredIssuerMetadata, clientID, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) error {
 	t.Helper()
 	ctx := t.Context()
 	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
@@ -120,6 +122,7 @@ func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachme
 			ActorDisplayName: nil,
 		},
 		UserSessionIssuerID: userSessionIssuerID,
+		MCPServerID:         mcpServerID,
 		Provider:            provider,
 		Client: remotesessions.ManualClient(remotesessions.ClientCredentials{
 			ClientID:                clientID,
@@ -170,7 +173,7 @@ func TestSharedAuthorizationServerDoesNotShareResourceBranding(t *testing.T) {
 
 	usiA := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	usiB := attachmentTestUserSessionIssuer(t, conn, project.ID)
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiA, metadata, "client-a", resourceA.Resource, resourceA))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiA, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-a", resourceA.Resource, resourceA))
 
 	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
@@ -178,7 +181,7 @@ func TestSharedAuthorizationServerDoesNotShareResourceBranding(t *testing.T) {
 	require.Equal(t, "Remote identity provider", issuer.Name.String)
 	require.False(t, issuer.ServiceDocumentation.Valid)
 	require.False(t, issuer.OpPolicyUri.Valid)
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiB, metadata, "client-b", resourceB.Resource, resourceB))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiB, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-b", resourceB.Resource, resourceB))
 
 	clientsB := attachmentTestClients(t, conn, principal, project, usiB)
 	require.Len(t, clientsB, 1)
@@ -205,7 +208,7 @@ func TestAttachmentStoresNothingFromMismatchedResourceDocument(t *testing.T) {
 
 	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	sibling := attachmentTestResource("https://example.test/mcp/a", "Resource A", "https://a.example.test/policy")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, attachmentTestIssuerMetadata("https://auth.example.test"), "client-b", "https://example.test/mcp/b", sibling))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, attachmentTestIssuerMetadata("https://auth.example.test"), "client-b", "https://example.test/mcp/b", sibling))
 
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
@@ -227,9 +230,9 @@ func TestReattachRefreshesResourceDisplayOnExistingClient(t *testing.T) {
 	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
 	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	first := attachmentTestResource("https://a.example.test/mcp", "Resource A", "https://a.example.test/policy")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", first.Resource, first))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-a", first.Resource, first))
 	renamed := attachmentTestResource("https://a.example.test/mcp", "Resource A v2", "")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", renamed.Resource, renamed))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-a", renamed.Resource, renamed))
 
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
@@ -289,8 +292,86 @@ func TestAttachmentStampsMCPServerRemoteSessionIssuer(t *testing.T) {
 	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
 
 	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", resource.Resource, resource))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
 
+	issuer, _, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(issuer.ID), server.RemoteSessionIssuerID)
+}
+
+// AIM-577: a client bound to the user session issuer is not on its own proof
+// that the registration's server is attached. A cleared provider leaves
+// exactly that state, and the server-level reconcile does not repair it on a
+// shared issuer, so reporting success there would leave the server with no
+// sign-in instead of reusing the client and configuring it.
+func TestAttachmentIdempotencyRequiresTheServersOwnProvider(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_idempotency")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
+	issuer, _, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+
+	attached, err := service.matchingAttachment(ctx, principal.OrganizationID, project, usi, conv.ToNullUUID(issuer.ID), metadata.Issuer)
+	require.NoError(t, err)
+	require.True(t, attached, "the server signs in to the bound client's provider")
+
+	// The provider is cleared, as turning User Identity off leaves it, while
+	// the client stays bound for the other servers on the issuer.
+	cleared, err := mcpserversrepo.New(conn).StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ID:                    serverID,
+		ProjectID:             project.ID,
+		UserSessionIssuerID:   conv.ToNullUUID(usi),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), cleared)
+
+	attached, err = service.matchingAttachment(ctx, principal.OrganizationID, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata.Issuer)
+	require.NoError(t, err)
+	require.False(t, attached, "a bound client the server does not name is not an attachment")
+
+	// Running the attachment again reuses that client and configures the
+	// server with it.
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(issuer.ID), server.RemoteSessionIssuerID)
+}
+
+// Several providers on one user session issuer belong to the several servers
+// sharing it, so they are not an ambiguous attachment.
+func TestAttachmentToleratesOtherProvidersOnTheIssuer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_siblings")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
+
+	sibling := attachmentTestIssuerMetadata("https://sibling.example.test")
+	siblingResource := attachmentTestResource("https://b.example.test/mcp", "Resource B", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, sibling, "client-b", siblingResource.Resource, siblingResource))
+
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	attached, err := service.matchingAttachment(ctx, principal.OrganizationID, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata.Issuer)
+	require.NoError(t, err)
+	require.False(t, attached, "another server's provider is not this attachment")
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
 	issuer, _, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
 	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
@@ -312,7 +393,7 @@ func TestAttachmentFailureLeavesNoIssuer(t *testing.T) {
 	testenv.RejectWritesTo(t, ctx, conn, "remote_session_clients")
 
 	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
-	require.Error(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", resource.Resource, resource))
+	require.Error(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-a", resource.Resource, resource))
 
 	_, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
@@ -361,7 +442,7 @@ func attachmentTestRegister(t *testing.T, service *CatalogIdentityProviderAttach
 	ctx := t.Context()
 	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
-	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
+	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
 	require.NoError(t, commit.Preflight(ctx))
 	reg, err := commit.Register(ctx)
 	require.NoError(t, err)
@@ -503,4 +584,174 @@ func TestAttachmentRegistersDiscoveredScopesWithoutStoringThem(t *testing.T) {
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
 	require.Empty(t, clients[0].ClientScope)
+}
+
+// signInRemovalIssuer is attachmentTestUserSessionIssuer with the
+// organization recorded, which a registration's composite foreign key to its
+// issuer requires.
+func signInRemovalIssuer(t *testing.T, conn *pgxpool.Pool, principal Principal, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(principal.OrganizationID),
+		Slug:               "usi-removal-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// signInRemovalRegistration seeds a registration bound to its own MCP server
+// and user session issuer, which is what the sign-in removal acts on.
+func signInRemovalRegistration(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, userSessionIssuerID, serverID uuid.UUID) uuid.UUID {
+	t.Helper()
+	registration, err := platformrepo.New(conn).CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		SourceKind:       "remote",
+		CatalogProvider:  "direct-remote-url-v1",
+		CatalogReference: "https://a.example.test/mcp",
+		Status:           "registered",
+		// Lifecycle actions match on the user that created the registration.
+		UserID: conv.ToPGText(principal.UserID),
+	})
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		ID:                  registration.ID,
+		OrganizationID:      principal.OrganizationID,
+		ProjectID:           project.ID,
+		Status:              "registered",
+		UserSessionIssuerID: conv.ToNullUUID(userSessionIssuerID),
+		McpServerID:         conv.ToNullUUID(serverID),
+	})
+	require.NoError(t, err)
+	return registration.ID
+}
+
+// AIM-577: the agent confirms a sign-in removal after showing the user what
+// the preview said. A confirmation that does not name the state it was agreed
+// against must be refused, so a sign-in reconfigured in between is not turned
+// off on the strength of an answer about the old one, and a confirmation
+// cannot be replayed once it has been carried out.
+func TestSignInRemovalRefusesAStalePreviewConfirmation(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_sign_in_removal_stale")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	usi := signInRemovalIssuer(t, conn, principal, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
+	registrationID := signInRemovalRegistration(t, ctx, conn, principal, project, usi, serverID)
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
+
+	preview, err := service.PreviewSignInRemoval(ctx, principal, project, registrationID)
+	require.NoError(t, err)
+	require.True(t, preview.Configured)
+	require.NotEmpty(t, preview.Version, "the preview must name the state it describes")
+
+	// The sign-in is configured again between the preview and the
+	// confirmation, which is a different answer to the same question.
+	second := attachmentTestIssuerMetadata("https://auth-second.example.test")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), second, "client-b", resource.Resource, resource))
+
+	_, err = service.RemoveSignIn(ctx, principal, project, registrationID, preview.Version)
+	require.ErrorIs(t, err, ErrSignInRemovalStale)
+	after, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.True(t, after.RemoteSessionIssuerID.Valid, "the refused confirmation must leave the sign-in configured")
+
+	// A confirmation naming no state at all is refused for the same reason.
+	_, err = service.RemoveSignIn(ctx, principal, project, registrationID, "")
+	require.ErrorIs(t, err, ErrSignInRemovalStale)
+
+	// Previewing again and confirming that is carried out, and the same
+	// confirmation cannot then be replayed.
+	fresh, err := service.PreviewSignInRemoval(ctx, principal, project, registrationID)
+	require.NoError(t, err)
+	require.NotEqual(t, preview.Version, fresh.Version)
+	removal, err := service.RemoveSignIn(ctx, principal, project, registrationID, fresh.Version)
+	require.NoError(t, err)
+	require.True(t, removal.Removed)
+	cleared, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.False(t, cleared.RemoteSessionIssuerID.Valid)
+
+	_, err = service.RemoveSignIn(ctx, principal, project, registrationID, fresh.Version)
+	require.ErrorIs(t, err, ErrSignInRemovalStale, "a carried-out confirmation must not be replayable")
+}
+
+// AIM-577: a confirmation is held to everything the preview described, not
+// only the target server's own row. The preview that says the provider's
+// client stays available to other servers is what the user agreed to; the last
+// of those servers disabling its sign-in in between turns the same request
+// into one that signs everyone out, without touching the target server.
+func TestSignInRemovalRefusesWhenTheSharedClientOutcomeChanged(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_sign_in_removal_siblings")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	usi := signInRemovalIssuer(t, conn, principal, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
+	siblingID := attachmentTestMCPServer(t, conn, project.ID, usi)
+	registrationID := signInRemovalRegistration(t, ctx, conn, principal, project, usi, serverID)
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
+	issuer, _, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	// The sibling signs in through the same provider, so the preview promises
+	// its OAuth client is kept.
+	stamped, err := mcpserversrepo.New(conn).StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(issuer.ID),
+		ID:                    siblingID,
+		ProjectID:             project.ID,
+		UserSessionIssuerID:   conv.ToNullUUID(usi),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped)
+
+	preview, err := service.PreviewSignInRemoval(ctx, principal, project, registrationID)
+	require.NoError(t, err)
+	require.True(t, preview.ClientStaysBound, "another server still signs in through this provider")
+
+	// The sibling stops signing in through it, so the same request would now
+	// release the client and sign out everyone holding a session through it.
+	cleared, err := mcpserversrepo.New(conn).StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ID:                    siblingID,
+		ProjectID:             project.ID,
+		UserSessionIssuerID:   conv.ToNullUUID(usi),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), cleared)
+
+	_, err = service.RemoveSignIn(ctx, principal, project, registrationID, preview.Version)
+	require.ErrorIs(t, err, ErrSignInRemovalStale)
+	after, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.True(t, after.RemoteSessionIssuerID.Valid, "the refused confirmation must change nothing")
+	bound, err := remotesessionsrepo.New(conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
+		UserSessionIssuerID: usi,
+		ProjectID:           conv.ToNullUUID(project.ID),
+		OrganizationID:      conv.ToPGText(principal.OrganizationID),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, bound, "the client the user was told would be kept must still be bound")
+
+	// Previewing again describes the new outcome, and confirming that is
+	// carried out.
+	fresh, err := service.PreviewSignInRemoval(ctx, principal, project, registrationID)
+	require.NoError(t, err)
+	require.False(t, fresh.ClientStaysBound)
+	removal, err := service.RemoveSignIn(ctx, principal, project, registrationID, fresh.Version)
+	require.NoError(t, err)
+	require.True(t, removal.ClientUnbound)
 }

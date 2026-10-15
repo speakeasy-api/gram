@@ -54,9 +54,9 @@ describe("groupByImpact", () => {
   it("groups servers by impact in a stable order and drops empty groups", () => {
     const groups = groupByImpact([
       server("g", "client_removed"),
-      server("a", "resignin"),
-      server("b", "repoint"),
-      server("c", "resignin"),
+      server("a", "client_removed"),
+      server("b", "clear"),
+      server("c", "client_removed"),
     ]);
 
     expect(
@@ -65,9 +65,8 @@ describe("groupByImpact", () => {
         servers.map((entry) => entry.id),
       ]),
     ).toEqual([
-      ["repoint", ["b"]],
-      ["resignin", ["a", "c"]],
-      ["client_removed", ["g"]],
+      ["clear", ["b"]],
+      ["client_removed", ["g", "a", "c"]],
     ]);
   });
 });

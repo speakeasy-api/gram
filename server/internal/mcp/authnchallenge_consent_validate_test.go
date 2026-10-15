@@ -460,6 +460,10 @@ func seedStandaloneValidationFixtureWith(t *testing.T, prefix string, metaRuntim
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, challengeState))
 
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, prefix, "", []uuid.UUID{shared})
+	// Configure the server with that client's provider, as the identity commit
+	// does: a direct server's consent and credential resolution are scoped to
+	// the provider it signs in to, and a server naming none needs neither.
+	endpoint.RemoteSessionIssuerID = configureServerProvider(t, ctx, ti, projectID, orgID, serverID, clientID)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, member.url)
 
 	return ctx, validationFixture{
@@ -992,7 +996,7 @@ func TestServeConsentAction_ValidateStandaloneTunneledBackend(t *testing.T) {
 	endpoint.McpServerID = conv.ToNullUUID(server.ID)
 
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-tunnel", "", []uuid.UUID{shared})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared}))
+	configureEndpointProvider(t, ctx, ti, endpoint, clientID)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-aim204-tunnel", "")
 
 	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: "", mu: sync.Mutex{}, forwards: nil, forwardBodies: nil}

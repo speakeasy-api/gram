@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 type connectionStatusResult struct {
@@ -92,7 +91,7 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_GatedReportsPerMemberSignIn(t
 
 	connectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-connected", "", []uuid.UUID{sharedIssuerID, connectedIssuerID})
 	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-unconnected", "", []uuid.UUID{sharedIssuerID, unconnectedIssuerID})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{connectedIssuerID, unconnectedIssuerID}))
+	configureServerProviders(t, ctx, ti.conn, projectID, orgID, connectedIssuerID, unconnectedIssuerID)
 
 	subject := createTestUser(t, ctx, ti, "status-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, connectedClient, subject, "token-connected", "")

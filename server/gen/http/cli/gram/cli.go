@@ -185,7 +185,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
-		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|get-server-identity-impact|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
+		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|disable-server-identity-configuration|get-server-identity-impact|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|list-risk-presets|suggest-risk-policy|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"sigint (create-signal|get-signal|list-signals|update-signal|delete-signal|create-sensor|get-sensor|list-sensors|update-sensor|delete-sensor)",
@@ -3034,12 +3034,19 @@ func ParseEndpoint(
 		remoteSessionsCommitServerIdentityConfigurationApikeyTokenFlag      = remoteSessionsCommitServerIdentityConfigurationFlags.String("apikey-token", "", "")
 		remoteSessionsCommitServerIdentityConfigurationProjectSlugInputFlag = remoteSessionsCommitServerIdentityConfigurationFlags.String("project-slug-input", "", "")
 
+		remoteSessionsDisableServerIdentityConfigurationFlags                = flag.NewFlagSet("disable-server-identity-configuration", flag.ExitOnError)
+		remoteSessionsDisableServerIdentityConfigurationBodyFlag             = remoteSessionsDisableServerIdentityConfigurationFlags.String("body", "REQUIRED", "")
+		remoteSessionsDisableServerIdentityConfigurationSessionTokenFlag     = remoteSessionsDisableServerIdentityConfigurationFlags.String("session-token", "", "")
+		remoteSessionsDisableServerIdentityConfigurationApikeyTokenFlag      = remoteSessionsDisableServerIdentityConfigurationFlags.String("apikey-token", "", "")
+		remoteSessionsDisableServerIdentityConfigurationProjectSlugInputFlag = remoteSessionsDisableServerIdentityConfigurationFlags.String("project-slug-input", "", "")
+
 		remoteSessionsGetServerIdentityImpactFlags                   = flag.NewFlagSet("get-server-identity-impact", flag.ExitOnError)
 		remoteSessionsGetServerIdentityImpactUserSessionIssuerIDFlag = remoteSessionsGetServerIdentityImpactFlags.String("user-session-issuer-id", "REQUIRED", "")
 		remoteSessionsGetServerIdentityImpactMcpServerIDFlag         = remoteSessionsGetServerIdentityImpactFlags.String("mcp-server-id", "", "")
 		remoteSessionsGetServerIdentityImpactChangeFlag              = remoteSessionsGetServerIdentityImpactFlags.String("change", "REQUIRED", "")
 		remoteSessionsGetServerIdentityImpactProviderIDFlag          = remoteSessionsGetServerIdentityImpactFlags.String("provider-id", "", "")
 		remoteSessionsGetServerIdentityImpactClientIDFlag            = remoteSessionsGetServerIdentityImpactFlags.String("client-id", "", "")
+		remoteSessionsGetServerIdentityImpactClientModeFlag          = remoteSessionsGetServerIdentityImpactFlags.String("client-mode", "", "")
 		remoteSessionsGetServerIdentityImpactSessionTokenFlag        = remoteSessionsGetServerIdentityImpactFlags.String("session-token", "", "")
 		remoteSessionsGetServerIdentityImpactApikeyTokenFlag         = remoteSessionsGetServerIdentityImpactFlags.String("apikey-token", "", "")
 		remoteSessionsGetServerIdentityImpactProjectSlugInputFlag    = remoteSessionsGetServerIdentityImpactFlags.String("project-slug-input", "", "")
@@ -5724,6 +5731,7 @@ func ParseEndpoint(
 	remoteSessionsAttachBindingFlags.Usage = remoteSessionsAttachBindingUsage
 	remoteSessionsDetachBindingFlags.Usage = remoteSessionsDetachBindingUsage
 	remoteSessionsCommitServerIdentityConfigurationFlags.Usage = remoteSessionsCommitServerIdentityConfigurationUsage
+	remoteSessionsDisableServerIdentityConfigurationFlags.Usage = remoteSessionsDisableServerIdentityConfigurationUsage
 	remoteSessionsGetServerIdentityImpactFlags.Usage = remoteSessionsGetServerIdentityImpactUsage
 	remoteSessionsListRemoteSessionsFlags.Usage = remoteSessionsListRemoteSessionsUsage
 	remoteSessionsCountRemoteSessionsFlags.Usage = remoteSessionsCountRemoteSessionsUsage
@@ -8207,6 +8215,9 @@ func ParseEndpoint(
 
 			case "commit-server-identity-configuration":
 				epf = remoteSessionsCommitServerIdentityConfigurationFlags
+
+			case "disable-server-identity-configuration":
+				epf = remoteSessionsDisableServerIdentityConfigurationFlags
 
 			case "get-server-identity-impact":
 				epf = remoteSessionsGetServerIdentityImpactFlags
@@ -11293,9 +11304,12 @@ func ParseEndpoint(
 			case "commit-server-identity-configuration":
 				endpoint = c.CommitServerIdentityConfiguration()
 				data, err = remotesessionsc.BuildCommitServerIdentityConfigurationPayload(*remoteSessionsCommitServerIdentityConfigurationBodyFlag, *remoteSessionsCommitServerIdentityConfigurationSessionTokenFlag, *remoteSessionsCommitServerIdentityConfigurationApikeyTokenFlag, *remoteSessionsCommitServerIdentityConfigurationProjectSlugInputFlag)
+			case "disable-server-identity-configuration":
+				endpoint = c.DisableServerIdentityConfiguration()
+				data, err = remotesessionsc.BuildDisableServerIdentityConfigurationPayload(*remoteSessionsDisableServerIdentityConfigurationBodyFlag, *remoteSessionsDisableServerIdentityConfigurationSessionTokenFlag, *remoteSessionsDisableServerIdentityConfigurationApikeyTokenFlag, *remoteSessionsDisableServerIdentityConfigurationProjectSlugInputFlag)
 			case "get-server-identity-impact":
 				endpoint = c.GetServerIdentityImpact()
-				data, err = remotesessionsc.BuildGetServerIdentityImpactPayload(*remoteSessionsGetServerIdentityImpactUserSessionIssuerIDFlag, *remoteSessionsGetServerIdentityImpactMcpServerIDFlag, *remoteSessionsGetServerIdentityImpactChangeFlag, *remoteSessionsGetServerIdentityImpactProviderIDFlag, *remoteSessionsGetServerIdentityImpactClientIDFlag, *remoteSessionsGetServerIdentityImpactSessionTokenFlag, *remoteSessionsGetServerIdentityImpactApikeyTokenFlag, *remoteSessionsGetServerIdentityImpactProjectSlugInputFlag)
+				data, err = remotesessionsc.BuildGetServerIdentityImpactPayload(*remoteSessionsGetServerIdentityImpactUserSessionIssuerIDFlag, *remoteSessionsGetServerIdentityImpactMcpServerIDFlag, *remoteSessionsGetServerIdentityImpactChangeFlag, *remoteSessionsGetServerIdentityImpactProviderIDFlag, *remoteSessionsGetServerIdentityImpactClientIDFlag, *remoteSessionsGetServerIdentityImpactClientModeFlag, *remoteSessionsGetServerIdentityImpactSessionTokenFlag, *remoteSessionsGetServerIdentityImpactApikeyTokenFlag, *remoteSessionsGetServerIdentityImpactProjectSlugInputFlag)
 			case "list-remote-sessions":
 				endpoint = c.ListRemoteSessions()
 				data, err = remotesessionsc.BuildListRemoteSessionsPayload(*remoteSessionsListRemoteSessionsPrincipalIDFlag, *remoteSessionsListRemoteSessionsUserSessionIssuerIDFlag, *remoteSessionsListRemoteSessionsSubjectUrnFlag, *remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag, *remoteSessionsListRemoteSessionsCursorFlag, *remoteSessionsListRemoteSessionsLimitFlag, *remoteSessionsListRemoteSessionsSessionTokenFlag, *remoteSessionsListRemoteSessionsApikeyTokenFlag, *remoteSessionsListRemoteSessionsProjectSlugInputFlag)
@@ -25255,7 +25269,8 @@ func remoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    attach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
 	fmt.Fprintln(os.Stderr, `    detach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
 	fmt.Fprintln(os.Stderr, `    commit-server-identity-configuration: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.`)
-	fmt.Fprintln(os.Stderr, `    get-server-identity-impact: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.`)
+	fmt.Fprintln(os.Stderr, `    disable-server-identity-configuration: Turn User Identity off for one MCP server: it stops signing anyone in, and the client of the provider it used is unbound from its user session issuer only when no other MCP server in the organization still signs in through that provider. Unbinding signs out everyone holding a session through that client. Idempotent: a server already signing in to nothing is unchanged. Requires mcp:write on the target. Refused when the client carries live agent attachments or identity-chaining bindings, or when it is an organization-owned client on an organization-level user session issuer, which is changed from the organization's identity provider settings instead.`)
+	fmt.Fprintln(os.Stderr, `    get-server-identity-impact: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change unbinds the client of its own provider and it loses its sign-in (clear). A gateway is listed when a client it can see is unbound (client_removed). Configuring one server never reaches another: replacing a client another MCP server signs in through is refused rather than previewed, as is any change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer. The target server is excluded. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.`)
 	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
 	fmt.Fprintln(os.Stderr, `    count-remote-sessions: Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.`)
 	fmt.Fprintln(os.Stderr, `    revoke-remote-session: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.`)
@@ -25355,6 +25370,30 @@ func remoteSessionsCommitServerIdentityConfigurationUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions commit-server-identity-configuration --body '{\n      \"client_configuration\": {\n         \"audience\": \"aaa\",\n         \"client_id\": \"abc123\",\n         \"client_secret\": \"abc123\",\n         \"scope\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"token_endpoint_auth_method\": \"client_secret_post\"\n      },\n      \"client_mode\": \"existing\",\n      \"create_provider\": {\n         \"authorization_endpoint\": \"abc123\",\n         \"authorization_grant_profiles_supported\": [\n            \"abc123\"\n         ],\n         \"authorization_response_iss_parameter_supported\": false,\n         \"backchannel_logout_supported\": false,\n         \"claims_supported\": [\n            \"abc123\"\n         ],\n         \"client_id_metadata_document_supported\": false,\n         \"client_setup_documentation_url\": \"abc123\",\n         \"code_challenge_methods_supported\": [\n            \"abc123\"\n         ],\n         \"grant_types_supported\": [\n            \"abc123\"\n         ],\n         \"id_token_signing_alg_values_supported\": [\n            \"abc123\"\n         ],\n         \"introspection_endpoint\": \"abc123\",\n         \"introspection_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"issuer\": \"abc123\",\n         \"jwks_uri\": \"abc123\",\n         \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"name\": \"abc123\",\n         \"oidc\": false,\n         \"omit_scope_fallback\": false,\n         \"op_policy_uri\": \"abc123\",\n         \"op_tos_uri\": \"abc123\",\n         \"passthrough\": false,\n         \"registration_endpoint\": \"abc123\",\n         \"resource_indicator_supported\": false,\n         \"response_types_supported\": [\n            \"abc123\"\n         ],\n         \"revocation_endpoint\": \"abc123\",\n         \"scope_override\": [\n            \"abc123\"\n         ],\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"service_documentation\": \"abc123\",\n         \"slug\": \"abc123\",\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"userinfo_endpoint\": \"abc123\"\n      },\n      \"existing_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_method\": \"dcr\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func remoteSessionsDisableServerIdentityConfigurationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions disable-server-identity-configuration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Turn User Identity off for one MCP server: it stops signing anyone in, and the client of the provider it used is unbound from its user session issuer only when no other MCP server in the organization still signs in through that provider. Unbinding signs out everyone holding a session through that client. Idempotent: a server already signing in to nothing is unchanged. Requires mcp:write on the target. Refused when the client carries live agent attachments or identity-chaining bindings, or when it is an organization-owned client on an organization-level user session issuer, which is changed from the organization's identity provider settings instead.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions disable-server-identity-configuration --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteSessionsGetServerIdentityImpactUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions get-server-identity-impact", os.Args[0])
@@ -25363,6 +25402,7 @@ func remoteSessionsGetServerIdentityImpactUsage() {
 	fmt.Fprint(os.Stderr, " -change STRING")
 	fmt.Fprint(os.Stderr, " -provider-id STRING")
 	fmt.Fprint(os.Stderr, " -client-id STRING")
+	fmt.Fprint(os.Stderr, " -client-mode STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -25370,7 +25410,7 @@ func remoteSessionsGetServerIdentityImpactUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.`)
+	fmt.Fprintln(os.Stderr, `Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change unbinds the client of its own provider and it loses its sign-in (clear). A gateway is listed when a client it can see is unbound (client_removed). Configuring one server never reaches another: replacing a client another MCP server signs in through is refused rather than previewed, as is any change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer. The target server is excluded. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
@@ -25378,13 +25418,14 @@ func remoteSessionsGetServerIdentityImpactUsage() {
 	fmt.Fprintln(os.Stderr, `    -change STRING: `)
 	fmt.Fprintln(os.Stderr, `    -provider-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -client-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -client-mode STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions get-server-identity-impact --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --change \"attach\" --provider-id \"550e8400-e29b-41d4-a716-446655440000\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions get-server-identity-impact --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --change \"attach\" --provider-id \"550e8400-e29b-41d4-a716-446655440000\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --client-mode \"existing\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionsListRemoteSessionsUsage() {

@@ -214,9 +214,52 @@ func BuildCommitServerIdentityConfigurationPayload(remoteSessionsCommitServerIde
 	return v, nil
 }
 
+// BuildDisableServerIdentityConfigurationPayload builds the payload for the
+// remoteSessions disableServerIdentityConfiguration endpoint from CLI flags.
+func BuildDisableServerIdentityConfigurationPayload(remoteSessionsDisableServerIdentityConfigurationBody string, remoteSessionsDisableServerIdentityConfigurationSessionToken string, remoteSessionsDisableServerIdentityConfigurationApikeyToken string, remoteSessionsDisableServerIdentityConfigurationProjectSlugInput string) (*remotesessions.DisableServerIdentityConfigurationPayload, error) {
+	var err error
+	var body DisableServerIdentityConfigurationRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionsDisableServerIdentityConfigurationBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsDisableServerIdentityConfigurationSessionToken != "" {
+			sessionToken = &remoteSessionsDisableServerIdentityConfigurationSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsDisableServerIdentityConfigurationApikeyToken != "" {
+			apikeyToken = &remoteSessionsDisableServerIdentityConfigurationApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsDisableServerIdentityConfigurationProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsDisableServerIdentityConfigurationProjectSlugInput
+		}
+	}
+	v := &remotesessions.DisableServerIdentityConfigurationPayload{
+		McpServerID: body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetServerIdentityImpactPayload builds the payload for the
 // remoteSessions getServerIdentityImpact endpoint from CLI flags.
-func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUserSessionIssuerID string, remoteSessionsGetServerIdentityImpactMcpServerID string, remoteSessionsGetServerIdentityImpactChange string, remoteSessionsGetServerIdentityImpactProviderID string, remoteSessionsGetServerIdentityImpactClientID string, remoteSessionsGetServerIdentityImpactSessionToken string, remoteSessionsGetServerIdentityImpactApikeyToken string, remoteSessionsGetServerIdentityImpactProjectSlugInput string) (*remotesessions.GetServerIdentityImpactPayload, error) {
+func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUserSessionIssuerID string, remoteSessionsGetServerIdentityImpactMcpServerID string, remoteSessionsGetServerIdentityImpactChange string, remoteSessionsGetServerIdentityImpactProviderID string, remoteSessionsGetServerIdentityImpactClientID string, remoteSessionsGetServerIdentityImpactClientMode string, remoteSessionsGetServerIdentityImpactSessionToken string, remoteSessionsGetServerIdentityImpactApikeyToken string, remoteSessionsGetServerIdentityImpactProjectSlugInput string) (*remotesessions.GetServerIdentityImpactPayload, error) {
 	var err error
 	var userSessionIssuerID string
 	{
@@ -239,8 +282,8 @@ func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUs
 	var change string
 	{
 		change = remoteSessionsGetServerIdentityImpactChange
-		if !(change == "replace" || change == "attach" || change == "detach") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("change", change, []any{"replace", "attach", "detach"}))
+		if !(change == "replace" || change == "attach" || change == "detach" || change == "disable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("change", change, []any{"replace", "attach", "detach", "disable"}))
 		}
 		if err != nil {
 			return nil, err
@@ -261,6 +304,18 @@ func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUs
 		if remoteSessionsGetServerIdentityImpactClientID != "" {
 			clientID = &remoteSessionsGetServerIdentityImpactClientID
 			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clientMode *string
+	{
+		if remoteSessionsGetServerIdentityImpactClientMode != "" {
+			clientMode = &remoteSessionsGetServerIdentityImpactClientMode
+			if !(*clientMode == "auto" || *clientMode == "existing" || *clientMode == "manual") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_mode", *clientMode, []any{"auto", "existing", "manual"}))
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -290,6 +345,7 @@ func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUs
 	v.Change = change
 	v.ProviderID = providerID
 	v.ClientID = clientID
+	v.ClientMode = clientMode
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

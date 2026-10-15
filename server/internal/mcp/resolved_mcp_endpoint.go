@@ -88,6 +88,14 @@ type ResolvedMcpEndpoint struct {
 	// toolset-keyed resolution. Used for telemetry / log attribution.
 	McpServerID uuid.NullUUID
 
+	// RemoteSessionIssuerID is the upstream authorization server the endpoint's
+	// MCP server signs in to, as configured on that server. Zero
+	// (Valid=false) when the server has none, and for every resolution that is
+	// not an mcp_endpoints → mcp_servers pair. A user session issuer may bind
+	// clients for several upstreams, one per server sharing it, so this is
+	// what narrows credential resolution to the ones this endpoint needs.
+	RemoteSessionIssuerID uuid.NullUUID
+
 	// MetaMcpServerID is populated when the endpoint resolves through an
 	// mcp_endpoints → meta_mcp_servers pair. Zero (Valid=false) for every
 	// other resolution. Used for telemetry / log attribution and for
@@ -498,6 +506,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 		issuerStamped:             false,
 		useAuthenticationHost:     false,
 		McpServerID:               uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
+		RemoteSessionIssuerID:     mcpServer.RemoteSessionIssuerID,
 		MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:            organizationID,
 		ProjectID:                 mcpEndpoint.ProjectID,
@@ -557,6 +566,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		issuerStamped:             false,
 		useAuthenticationHost:     false,
 		McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteSessionIssuerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:           uuid.NullUUID{UUID: metaServer.ID, Valid: true},
 		OrganizationID:            organizationID,
 		ProjectID:                 mcpEndpoint.ProjectID,
@@ -588,6 +598,7 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 		issuerStamped:             false,
 		useAuthenticationHost:     false,
 		McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteSessionIssuerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:            toolset.OrganizationID,
 		ProjectID:                 toolset.ProjectID,

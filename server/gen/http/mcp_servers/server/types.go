@@ -132,6 +132,12 @@ type CreateMcpServerResponseBody struct {
 	// The ID of the user session issuer that gates OAuth-based MCP client
 	// authentication for this server, if any.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The ID of the Remote Identity Provider this server's users sign in to, if
+	// any. Configured on this server: other servers sharing its user session
+	// issuer may sign in to different providers, so this is the only field that
+	// says which upstream authorization server serves this one. Absent means no
+	// sign-in is configured and the server calls its upstream anonymously.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the tunneled MCP server used as the backend
@@ -174,6 +180,12 @@ type GetMcpServerResponseBody struct {
 	// The ID of the user session issuer that gates OAuth-based MCP client
 	// authentication for this server, if any.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The ID of the Remote Identity Provider this server's users sign in to, if
+	// any. Configured on this server: other servers sharing its user session
+	// issuer may sign in to different providers, so this is the only field that
+	// says which upstream authorization server serves this one. Absent means no
+	// sign-in is configured and the server calls its upstream anonymously.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the tunneled MCP server used as the backend
@@ -228,6 +240,12 @@ type UpdateMcpServerResponseBody struct {
 	// The ID of the user session issuer that gates OAuth-based MCP client
 	// authentication for this server, if any.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The ID of the Remote Identity Provider this server's users sign in to, if
+	// any. Configured on this server: other servers sharing its user session
+	// issuer may sign in to different providers, so this is the only field that
+	// says which upstream authorization server serves this one. Absent means no
+	// sign-in is configured and the server calls its upstream anonymously.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the tunneled MCP server used as the backend
@@ -2810,6 +2828,12 @@ type McpServerResponseBody struct {
 	// The ID of the user session issuer that gates OAuth-based MCP client
 	// authentication for this server, if any.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The ID of the Remote Identity Provider this server's users sign in to, if
+	// any. Configured on this server: other servers sharing its user session
+	// issuer may sign in to different providers, so this is the only field that
+	// says which upstream authorization server serves this one. Absent means no
+	// sign-in is configured and the server calls its upstream anonymously.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the tunneled MCP server used as the backend
@@ -2905,6 +2929,7 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		PlatformEndpointSlug:  res.PlatformEndpointSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
 		TunneledMcpServerID:   res.TunneledMcpServerID,
 		ToolsetID:             res.ToolsetID,
@@ -2929,6 +2954,7 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		PlatformEndpointSlug:  res.PlatformEndpointSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
 		TunneledMcpServerID:   res.TunneledMcpServerID,
 		ToolsetID:             res.ToolsetID,
@@ -2991,6 +3017,7 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		PlatformEndpointSlug:  res.PlatformEndpointSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
 		TunneledMcpServerID:   res.TunneledMcpServerID,
 		ToolsetID:             res.ToolsetID,

@@ -1095,6 +1095,45 @@ func (s *Service) isWorkloadSessionBearer(token string) bool {
 	return err == nil && subject.Kind == urn.SessionSubjectKindWorkload
 }
 
+// serverScopedProvider reports the upstream authorization server credential
+// resolution for this endpoint is scoped to, and whether it is scoped to one
+// MCP server at all.
+//
+// An endpoint that resolved through an mcp_servers row always is, including one
+// with no provider configured: that server's users sign in to nothing, so it
+// needs no upstream credential, and the clients its user session issuer binds
+// belong to the other servers sharing it. Resolving them anyway would let a
+// sibling's missing grant refuse this server's requests, and would hand
+// toolset dispatch a bearer it injects into every oauth2 tool with no
+// security-scheme restriction. The gateway makes the same call for a member
+// with no provider in hostedMemberTokens.
+//
+// A legacy /mcp toolset endpoint has no server identity to scope by, so it
+// stays issuer-wide.
+func serverScopedProvider(endpoint *ResolvedMcpEndpoint) (uuid.NullUUID, bool) {
+	if endpoint.McpServerID.Valid {
+		return endpoint.RemoteSessionIssuerID, true
+	}
+	return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, false
+}
+
+// checkEndpointAccessTokens validates that subject has what this endpoint
+// needs connected. A server naming its own upstream authorization server is
+// checked against that provider alone, and a server naming none needs nothing:
+// the clients its user session issuer binds for the other servers sharing it
+// are not what reaching this one requires.
+func (s *Service) checkEndpointAccessTokens(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) error {
+	provider, serverScoped := serverScopedProvider(endpoint)
+	switch {
+	case serverScoped && !provider.Valid:
+		return nil
+	case serverScoped:
+		return s.remoteChallengeMgr.CheckServerAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, provider.UUID, subject) //nolint:wrapcheck // Callers classify the sentinels.
+	default:
+		return s.remoteChallengeMgr.CheckAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject) //nolint:wrapcheck // Callers classify the sentinels.
+	}
+}
+
 func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	endpoint := authentication.endpoint
 
@@ -1114,11 +1153,39 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	// The Speakeasy credential is valid in every rejection below; only the upstream
 	// remote session behind it is not. The specific broken upstream and the
 	// answer its token endpoint gave are logged by remotesessions.
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	tokens, err := s.resolveEndpointAccessTokens(ctx, endpoint, authentication.subject)
 	if err != nil {
 		return nil, s.rejectRemoteSession(ctx, w, authentication, err)
 	}
 	return tokens, nil
+}
+
+// resolveEndpointAccessTokens is the all-or-nothing resolution a direct
+// endpoint needs, scoped by serverScopedProvider: one MCP server's own
+// provider, nothing at all for a server configured with none, and the whole
+// issuer only for a legacy endpoint with no server identity.
+func (s *Service) resolveEndpointAccessTokens(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	provider, serverScoped := serverScopedProvider(endpoint)
+	switch {
+	case serverScoped && !provider.Valid:
+		return nil, nil
+	case serverScoped:
+		return s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, provider.UUID, subject) //nolint:wrapcheck // Callers classify the sentinels.
+	default:
+		return s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject) //nolint:wrapcheck // Callers classify the sentinels.
+	}
+}
+
+// resolveEndpointAvailableAccessTokens is resolveEndpointAccessTokens for the
+// callers that want what is usable rather than an all-or-nothing answer. It
+// applies the same scoping: a real server reads its own provider's clients and
+// a legacy toolset endpoint stays issuer-wide.
+func (s *Service) resolveEndpointAvailableAccessTokens(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	provider, serverScoped := serverScopedProvider(endpoint)
+	if serverScoped {
+		return s.remoteChallengeMgr.ResolveAvailableServerAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, provider, subject) //nolint:wrapcheck // Callers classify the sentinels.
+	}
+	return s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject) //nolint:wrapcheck // Callers classify the sentinels.
 }
 
 // rejectRemoteSession answers a ResolveAccessTokens failure. The Speakeasy

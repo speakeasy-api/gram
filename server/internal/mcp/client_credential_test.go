@@ -167,7 +167,7 @@ func newSelfClientEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 
 	// The client handlers stamp the server's issuer after each binding change;
 	// a self credential routes by it.
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID}))
+	configureServerProviders(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID)
 
 	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),

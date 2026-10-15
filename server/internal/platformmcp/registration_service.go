@@ -398,6 +398,64 @@ func (s *RegistrationService) AttachDefaultIdentityProvider(ctx context.Context,
 	return s.identityProviderAttachment.Attach(ctx, principal, project, parsedID)
 }
 
+// PreviewIdentityProviderRemoval reads what turning one registered MCP
+// server's sign-in off would do, without changing anything.
+func (s *RegistrationService) PreviewIdentityProviderRemoval(ctx context.Context, principal Principal, projectSlug, registrationID string) (SignInRemovalPreview, error) {
+	project, parsedID, err := s.identityProviderTarget(ctx, principal, projectSlug, registrationID)
+	if err != nil {
+		return SignInRemovalPreview{}, err
+	}
+	return s.identityProviderAttachment.PreviewSignInRemoval(ctx, principal, project, parsedID)
+}
+
+// RemoveIdentityProvider turns one registered MCP server's sign-in off, only
+// while the server is still in the state expectedVersion names.
+//
+// Charged against the same budget as the attachment it reverses: both reach
+// the identity commit and either can be driven in a loop by an agent.
+func (s *RegistrationService) RemoveIdentityProvider(ctx context.Context, principal Principal, projectSlug, registrationID, expectedVersion string) (SignInRemovalResult, error) {
+	if s == nil || !s.budgets.SetupStart.valid() {
+		return SignInRemovalResult{}, ErrIdentityProviderAttachmentUnavailable
+	}
+	if err := s.budgets.SetupStart.Allow(ctx, principal); err != nil {
+		return SignInRemovalResult{}, err
+	}
+	project, parsedID, err := s.identityProviderTarget(ctx, principal, projectSlug, registrationID)
+	if err != nil {
+		return SignInRemovalResult{}, err
+	}
+	return s.identityProviderAttachment.RemoveSignIn(ctx, principal, project, parsedID, expectedVersion)
+}
+
+// identityProviderTarget resolves the project and registration an
+// identity-provider operation names, under the same gate and eligibility
+// checks the attachment runs.
+func (s *RegistrationService) identityProviderTarget(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, uuid.UUID, error) {
+	var none ResolvedProject
+	if s == nil || s.gate == nil || s.store == nil || s.identityProviderAttachment == nil || projectSlug == "" || registrationID == "" {
+		return none, uuid.Nil, ErrIdentityProviderAttachmentUnavailable
+	}
+	parsedID, err := uuid.Parse(registrationID)
+	if err != nil {
+		return none, uuid.Nil, ErrSetupHandoffInvalid
+	}
+	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, projectSlug)
+	if err != nil {
+		return none, uuid.Nil, fmt.Errorf("check identity-provider gate: %w", err)
+	}
+	if !enabled {
+		return none, uuid.Nil, ErrRegistrationUnavailable
+	}
+	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, projectSlug)
+	if err != nil {
+		return none, uuid.Nil, fmt.Errorf("resolve identity-provider project: %w", err)
+	}
+	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
+		return none, uuid.Nil, err
+	}
+	return project, parsedID, nil
+}
+
 func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal Principal, input IssueSetupHandoffInput) (IssuedSetupHandoff, error) {
 	if s == nil || s.gate == nil || s.store == nil || !s.budgets.Handoff.valid() || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return IssuedSetupHandoff{}, ErrRegistrationUnavailable

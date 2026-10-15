@@ -85,6 +85,67 @@ func (q *Queries) AddMCPServerToolMetadata(ctx context.Context, arg AddMCPServer
 	return items, nil
 }
 
+const clearMCPServerRemoteSessionIssuerIfUnchanged = `-- name: ClearMCPServerRemoteSessionIssuerIfUnchanged :execrows
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = NULL,
+    updated_at = clock_timestamp()
+WHERE s.id = $1
+  AND s.project_id = $2::uuid
+  AND s.deleted IS FALSE
+  AND s.remote_session_issuer_id = $3
+  AND s.updated_at = $4
+  AND NOT EXISTS (SELECT 1
+                  FROM remote_session_client_user_session_issuers AS link
+                  JOIN remote_session_clients AS c
+                    ON c.id = link.remote_session_client_id
+                   AND c.deleted IS FALSE
+                   AND (c.project_id = $2::uuid
+                        OR (c.project_id IS NULL
+                            AND (c.organization_id IS NULL
+                                 OR c.organization_id = $5::text)))
+                  JOIN remote_session_issuers AS i
+                    ON i.id = c.remote_session_issuer_id
+                   AND i.deleted IS FALSE
+                  WHERE link.user_session_issuer_id = s.user_session_issuer_id
+                    AND i.id = s.remote_session_issuer_id)
+`
+
+type ClearMCPServerRemoteSessionIssuerIfUnchangedParams struct {
+	ID                            uuid.UUID
+	ProjectID                     uuid.UUID
+	ObservedRemoteSessionIssuerID uuid.NullUUID
+	ObservedUpdatedAt             pgtype.Timestamptz
+	OrganizationID                string
+}
+
+// Clears one server's upstream authorization server, and only while the row is
+// still the one the caller read: the same provider at the same version, with
+// that provider still holding no live client bound to the server's user
+// session issuer.
+//
+// The version is what makes this safe, not the provider. A configuration
+// commit that reconfigures the same provider leaves the provider comparison
+// satisfied, and the binding it writes is invisible to this statement: a row
+// lock taken after that commit re-checks these quals against the updated row,
+// but the subquery below still reads this statement's snapshot, so the client
+// it bound is not there. Every write to the row moves updated_at, so comparing
+// it refuses the clear whatever the commit changed. A shared server's
+// explicitly configured provider is not something a later pass can
+// reconstruct, so losing that write has to be impossible rather than unlikely.
+func (q *Queries) ClearMCPServerRemoteSessionIssuerIfUnchanged(ctx context.Context, arg ClearMCPServerRemoteSessionIssuerIfUnchangedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearMCPServerRemoteSessionIssuerIfUnchanged,
+		arg.ID,
+		arg.ProjectID,
+		arg.ObservedRemoteSessionIssuerID,
+		arg.ObservedUpdatedAt,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createMCPServer = `-- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
     id,
@@ -802,36 +863,209 @@ func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg Li
 	return items, nil
 }
 
-const listMCPServerIDsByUserSessionIssuerID = `-- name: ListMCPServerIDsByUserSessionIssuerID :many
-SELECT id
-FROM mcp_servers
-WHERE project_id = $1
-  AND user_session_issuer_id = $2
-  AND deleted IS FALSE
-ORDER BY id
+const listMCPServerRemoteSessionIssuerBackfill = `-- name: ListMCPServerRemoteSessionIssuerBackfill :many
+WITH servers AS (
+    SELECT s.id,
+           s.project_id,
+           p.organization_id,
+           s.user_session_issuer_id,
+           s.remote_session_issuer_id,
+           s.updated_at,
+           rms.url
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    LEFT JOIN remote_mcp_servers AS rms
+      ON rms.id = s.remote_mcp_server_id
+     AND rms.project_id = s.project_id
+     AND rms.deleted IS FALSE
+    WHERE s.deleted IS FALSE
+      AND s.user_session_issuer_id IS NOT NULL
+      AND ($1::text = '' OR p.organization_id = $1::text)
+), cohort AS (
+    SELECT s.user_session_issuer_id, p.organization_id, count(*) AS servers
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    WHERE s.deleted IS FALSE
+      AND s.user_session_issuer_id IS NOT NULL
+    GROUP BY s.user_session_issuer_id, p.organization_id
+), matched AS (
+    SELECT srv.id,
+           (CASE WHEN count(DISTINCT i.id) = 1
+                 THEN (array_agg(DISTINCT i.id))[1]
+            END)::uuid AS remote_session_issuer_id
+    FROM servers AS srv
+    JOIN remote_protected_resources AS rpr
+      ON rpr.project_id = srv.project_id
+     AND rpr.resource_identifier = srv.url
+     AND rpr.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS link
+      ON link.user_session_issuer_id = srv.user_session_issuer_id
+    JOIN remote_session_clients AS c
+      ON c.id = link.remote_session_client_id
+     AND c.deleted IS FALSE
+     AND (c.project_id = srv.project_id
+          OR (c.project_id IS NULL AND c.organization_id = srv.organization_id))
+    JOIN remote_session_issuers AS i
+      ON i.id = c.remote_session_issuer_id
+     AND i.deleted IS FALSE
+     AND i.issuer = ANY (rpr.authorization_servers)
+    GROUP BY srv.id
+)
+SELECT srv.id,
+       srv.project_id,
+       srv.organization_id,
+       srv.user_session_issuer_id,
+       srv.remote_session_issuer_id AS current_remote_session_issuer_id,
+       srv.updated_at AS observed_updated_at,
+       matched.remote_session_issuer_id AS matched_remote_session_issuer_id,
+       (srv.url IS NOT NULL)::boolean AS remote_backed,
+       cohort.servers AS issuer_server_count
+FROM servers AS srv
+JOIN cohort
+  ON cohort.user_session_issuer_id = srv.user_session_issuer_id
+ AND cohort.organization_id = srv.organization_id
+LEFT JOIN matched
+  ON matched.id = srv.id
+ORDER BY srv.id
 `
 
-type ListMCPServerIDsByUserSessionIssuerIDParams struct {
-	ProjectID           uuid.UUID
-	UserSessionIssuerID uuid.NullUUID
+type ListMCPServerRemoteSessionIssuerBackfillRow struct {
+	ID                           uuid.UUID
+	ProjectID                    uuid.UUID
+	OrganizationID               string
+	UserSessionIssuerID          uuid.NullUUID
+	CurrentRemoteSessionIssuerID uuid.NullUUID
+	ObservedUpdatedAt            pgtype.Timestamptz
+	MatchedRemoteSessionIssuerID uuid.NullUUID
+	RemoteBacked                 bool
+	IssuerServerCount            int64
 }
 
-// Every live MCP server in the project bound to one user session issuer.
-// A user session issuer is not unique per MCP server, so an operation that
-// mutates the issuer's client binding reaches every server listed here.
-func (q *Queries) ListMCPServerIDsByUserSessionIssuerID(ctx context.Context, arg ListMCPServerIDsByUserSessionIssuerIDParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listMCPServerIDsByUserSessionIssuerID, arg.ProjectID, arg.UserSessionIssuerID)
+// Every live MCP server carrying a user session issuer, with what its own
+// upstream says its provider should be. Read-only: the operator backfill
+// decides and writes, so a plain run explains itself before anything changes.
+//
+// matched_remote_session_issuer_id is the provider derived from the server's
+// own upstream, not from its user session issuer: the server's URL names a
+// protected resource whose RFC 9728 authorization_servers list the issuer of
+// exactly one client bound to the issuer. Resource identifiers are matched
+// exactly, as the serve-time lookup does, since /mcp and /mcp/ may be
+// different resources. remote_session_clients.resource_identifier is
+// deliberately unused: most clients leave it unset.
+//
+// issuer_server_count is how many live servers share the user session issuer
+// across the organization. One means the superseded per-issuer derivation
+// could not have borrowed another server's provider, so the stored value is
+// trustworthy where no metadata match is available.
+func (q *Queries) ListMCPServerRemoteSessionIssuerBackfill(ctx context.Context, organizationID string) ([]ListMCPServerRemoteSessionIssuerBackfillRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServerRemoteSessionIssuerBackfill, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []uuid.UUID
+	var items []ListMCPServerRemoteSessionIssuerBackfillRow
 	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
+		var i ListMCPServerRemoteSessionIssuerBackfillRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.UserSessionIssuerID,
+			&i.CurrentRemoteSessionIssuerID,
+			&i.ObservedUpdatedAt,
+			&i.MatchedRemoteSessionIssuerID,
+			&i.RemoteBacked,
+			&i.IssuerServerCount,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServerRemoteSessionIssuersToClear = `-- name: ListMCPServerRemoteSessionIssuersToClear :many
+SELECT s.id, s.remote_session_issuer_id, s.updated_at AS observed_updated_at
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = $1::text
+WHERE s.user_session_issuer_id = ANY ($2::uuid[])
+  AND s.project_id = $3::uuid
+  AND s.deleted IS FALSE
+  AND s.remote_session_issuer_id IS NOT NULL
+  AND EXISTS (SELECT 1
+              FROM user_session_issuers AS usi
+              WHERE usi.id = s.user_session_issuer_id
+                AND (usi.project_id = $3::uuid
+                     OR (usi.project_id IS NULL AND usi.organization_id = $1::text)))
+  AND NOT EXISTS (SELECT 1
+                  FROM remote_session_client_user_session_issuers AS link
+                  JOIN remote_session_clients AS c
+                    ON c.id = link.remote_session_client_id
+                   AND c.deleted IS FALSE
+                   AND (c.project_id = $3::uuid
+                        OR (c.project_id IS NULL
+                            AND (c.organization_id IS NULL
+                                 OR c.organization_id = $1::text)))
+                  JOIN remote_session_issuers AS i
+                    ON i.id = c.remote_session_issuer_id
+                   AND i.deleted IS FALSE
+                  WHERE link.user_session_issuer_id = s.user_session_issuer_id
+                    AND i.id = s.remote_session_issuer_id)
+ORDER BY s.id
+`
+
+type ListMCPServerRemoteSessionIssuersToClearParams struct {
+	OrganizationID       string
+	UserSessionIssuerIds []uuid.UUID
+	ProjectID            uuid.UUID
+}
+
+type ListMCPServerRemoteSessionIssuersToClearRow struct {
+	ID                    uuid.UUID
+	RemoteSessionIssuerID uuid.NullUUID
+	ObservedUpdatedAt     pgtype.Timestamptz
+}
+
+// Live MCP servers on the named user session issuers whose configured upstream
+// authorization server has no live client bound there, with the provider and
+// row version each one names. The caller clears them one row at a time against
+// both, so a configuration committed in between is not overwritten.
+//
+// Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
+// removal signal; the column's ON DELETE SET NULL never fires. The filters
+// mirror the serve-time credential resolver: the column must never name an
+// issuer that resolver would refuse, and a client it accepts must never read
+// as absent here. That includes a platform-global client (no project and no
+// organization), which serving accepts and whose server would otherwise have
+// its working configuration cleared.
+//
+// Tenancy: the ids arrive from an untenanted join table, so each one must
+// resolve to an issuer the caller's project can see — a foreign id reaches no
+// row — and only that project's servers are listed. Organization-level clients
+// of the caller's organization count, matching what the attach surface
+// permits.
+func (q *Queries) ListMCPServerRemoteSessionIssuersToClear(ctx context.Context, arg ListMCPServerRemoteSessionIssuersToClearParams) ([]ListMCPServerRemoteSessionIssuersToClearRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServerRemoteSessionIssuersToClear, arg.OrganizationID, arg.UserSessionIssuerIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPServerRemoteSessionIssuersToClearRow
+	for rows.Next() {
+		var i ListMCPServerRemoteSessionIssuersToClearRow
+		if err := rows.Scan(&i.ID, &i.RemoteSessionIssuerID, &i.ObservedUpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1435,70 +1669,118 @@ func (q *Queries) LockMCPServersByIDs(ctx context.Context, arg LockMCPServersByI
 	return items, nil
 }
 
-const resyncMCPServerRemoteSessionIssuers = `-- name: ResyncMCPServerRemoteSessionIssuers :execrows
-WITH resolved AS (
-    SELECT input.user_session_issuer_id,
-           CASE WHEN count(DISTINCT i.id) = 1
-                THEN (array_agg(DISTINCT i.id))[1]
-           END AS remote_session_issuer_id
-    FROM unnest($3::uuid[]) AS input(user_session_issuer_id)
-    JOIN user_session_issuers AS usi
-      ON usi.id = input.user_session_issuer_id
-     AND (usi.project_id = $1::uuid
-          OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
-    LEFT JOIN remote_session_client_user_session_issuers AS link
-           ON link.user_session_issuer_id = input.user_session_issuer_id
-    LEFT JOIN remote_session_clients AS c
-           ON c.id = link.remote_session_client_id
-          AND c.deleted IS FALSE
-          AND (c.project_id = $1::uuid
-               OR (c.project_id IS NULL AND c.organization_id = $2::text))
-    LEFT JOIN remote_session_issuers AS i
-           ON i.id = c.remote_session_issuer_id
-          AND i.deleted IS FALSE
-    GROUP BY input.user_session_issuer_id
-)
-UPDATE mcp_servers AS s
-SET remote_session_issuer_id = resolved.remote_session_issuer_id,
-    updated_at = clock_timestamp()
-FROM resolved
-WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
-  AND s.project_id = $1::uuid
-  -- Belt and suspenders on the caller's org/project pair agreeing.
-  AND EXISTS (SELECT 1
-              FROM projects AS p
-              WHERE p.id = s.project_id
-                AND p.organization_id = $2::text)
-  AND s.deleted IS FALSE
-  AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id
+const mCPServerRemoteSessionIssuerHasLiveClient = `-- name: MCPServerRemoteSessionIssuerHasLiveClient :one
+SELECT EXISTS (SELECT 1
+               FROM mcp_servers AS s
+               JOIN remote_session_client_user_session_issuers AS link
+                 ON link.user_session_issuer_id = s.user_session_issuer_id
+               JOIN remote_session_clients AS c
+                 ON c.id = link.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = $1::uuid
+                     OR (c.project_id IS NULL
+                         AND (c.organization_id IS NULL
+                              OR c.organization_id = $2::text)))
+               JOIN remote_session_issuers AS i
+                 ON i.id = c.remote_session_issuer_id
+                AND i.deleted IS FALSE
+               WHERE s.id = $3
+                 AND s.project_id = $1::uuid
+                 AND s.deleted IS FALSE
+                 AND i.id = $4)::boolean AS bound
 `
 
-type ResyncMCPServerRemoteSessionIssuersParams struct {
-	ProjectID            uuid.UUID
-	OrganizationID       string
-	UserSessionIssuerIds []uuid.UUID
+type MCPServerRemoteSessionIssuerHasLiveClientParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ID                    uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
 }
 
-// Recomputes mcp_servers.remote_session_issuer_id from the live client
-// bindings on each named user session issuer. Exactly one distinct remote
-// issuer stamps it; none or several leave it NULL and readers fail closed.
+// Whether the provider a server names still has a live client bound to its
+// user session issuer, under this statement's own snapshot.
 //
-// Best effort: runs post-commit outside the mutating transaction, so it takes
-// no advisory lock and a raced run merely leaves a stale value, which the
-// consent-time lookup degrades on and the next run heals.
+// The conditional clear cannot see a binding committed after its statement
+// began — its NOT EXISTS reads the snapshot that statement started with — so
+// the reconcile runs this in a later statement of the same transaction and
+// rolls the clear back when a binding appeared. Same tenancy as the clear, so
+// the two agree on what counts as bound.
+func (q *Queries) MCPServerRemoteSessionIssuerHasLiveClient(ctx context.Context, arg MCPServerRemoteSessionIssuerHasLiveClientParams) (bool, error) {
+	row := q.db.QueryRow(ctx, mCPServerRemoteSessionIssuerHasLiveClient,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.RemoteSessionIssuerID,
+	)
+	var bound bool
+	err := row.Scan(&bound)
+	return bound, err
+}
+
+const repairMCPServerRemoteSessionIssuerIfUnchanged = `-- name: RepairMCPServerRemoteSessionIssuerIfUnchanged :execrows
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE s.id = $2
+  AND s.project_id = $3
+  AND s.user_session_issuer_id = $4
+  AND s.remote_session_issuer_id IS NOT DISTINCT FROM $5
+  AND s.updated_at = $6
+  AND s.deleted IS FALSE
+  -- A provider being stamped must still have a live client bound, in this
+  -- statement's own snapshot: the decision was made from an earlier read, and
+  -- a client unbound since then would leave the server stamped with a provider
+  -- nothing can serve. Same tenancy as the clear, so the two agree on what is
+  -- bound. Clearing names no provider and has nothing to check.
+  AND ($1::uuid IS NULL
+       OR EXISTS (SELECT 1
+              FROM remote_session_client_user_session_issuers AS link
+              JOIN remote_session_clients AS c
+                ON c.id = link.remote_session_client_id
+               AND c.deleted IS FALSE
+               AND (c.project_id = $3::uuid
+                    OR (c.project_id IS NULL
+                        AND (c.organization_id IS NULL
+                             OR c.organization_id = $7::text)))
+              JOIN remote_session_issuers AS i
+                ON i.id = c.remote_session_issuer_id
+               AND i.deleted IS FALSE
+                  WHERE link.user_session_issuer_id = s.user_session_issuer_id
+                    AND i.id = $1))
+`
+
+type RepairMCPServerRemoteSessionIssuerIfUnchangedParams struct {
+	RemoteSessionIssuerID         uuid.NullUUID
+	ID                            uuid.UUID
+	ProjectID                     uuid.UUID
+	UserSessionIssuerID           uuid.NullUUID
+	ObservedRemoteSessionIssuerID uuid.NullUUID
+	ObservedUpdatedAt             pgtype.Timestamptz
+	OrganizationID                string
+}
+
+// The operator backfill's write: stamps one server only while its upstream
+// authorization server is still the one the decision was made against.
 //
-// Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
-// removal signal; the column's ON DELETE SET NULL never fires. The filters
-// mirror the serve-time credential resolver: the column must never name an
-// issuer that resolver would refuse.
+// The backfill decides from a read of every server and writes afterwards, so
+// an administrator can configure User Identity on one of them in between. That
+// commit is the authority on its own server, and matching the server, project
+// and user session issuer would not notice it.
 //
-// Tenancy: the ids arrive from an untenanted join table, so the derivation is
-// pinned to the caller's own project — a foreign id derives no row and writes
-// nothing — and only that project's servers are written. Organization-level
-// clients of the caller's organization count toward the derivation, matching
-// what the attach surface permits.
-func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg ResyncMCPServerRemoteSessionIssuersParams) (int64, error) {
-	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
+// updated_at is the version every write to the row advances, including a save
+// that configures the provider it already named — which comparing the provider
+// alone would read as unchanged and overwrite. The caller counts the rows this
+// skips.
+func (q *Queries) RepairMCPServerRemoteSessionIssuerIfUnchanged(ctx context.Context, arg RepairMCPServerRemoteSessionIssuerIfUnchangedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, repairMCPServerRemoteSessionIssuerIfUnchanged,
+		arg.RemoteSessionIssuerID,
+		arg.ID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.ObservedRemoteSessionIssuerID,
+		arg.ObservedUpdatedAt,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -1651,6 +1933,48 @@ func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServer
 	return items, nil
 }
 
+const stampMCPServerRemoteSessionIssuer = `-- name: StampMCPServerRemoteSessionIssuer :execrows
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE s.id = $2
+  AND s.project_id = $3
+  AND s.user_session_issuer_id = $4
+  AND s.deleted IS FALSE
+`
+
+type StampMCPServerRemoteSessionIssuerParams struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.NullUUID
+}
+
+// Writes one MCP server's upstream authorization server: the authorization
+// server its own users sign in to, chosen when an administrator configures
+// User Identity on it. A user session issuer shared by many servers says
+// nothing about which upstream any one of them authenticates against, so this
+// names the server and touches no other row.
+//
+// user_session_issuer_id is the issuer the configuring commit bound its client
+// to. A server moved off that issuer in the meantime matches nothing and the
+// commit is refused rather than stamping a provider its issuer does not bind.
+//
+// The column's foreign key cannot qualify tenancy, so callers must resolve the
+// provider through a tenant-scoped lookup before stamping it.
+func (q *Queries) StampMCPServerRemoteSessionIssuer(ctx context.Context, arg StampMCPServerRemoteSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, stampMCPServerRemoteSessionIssuer,
+		arg.RemoteSessionIssuerID,
+		arg.ID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const syncHostedMCPServer = `-- name: SyncHostedMCPServer :one
 UPDATE mcp_servers
 SET
@@ -1727,6 +2051,15 @@ SET
     slug = $2,
     environment_id = $3,
     user_session_issuer_id = COALESCE($4, user_session_issuer_id),
+    -- A server's upstream authorization server is reached through its user
+    -- session issuer, so moving it to another one drops the provider: the new
+    -- issuer need not bind a client for it. Fail closed and let User Identity
+    -- be configured again rather than keep a provider the issuer cannot serve.
+    remote_session_issuer_id = CASE
+        WHEN $4::uuid IS NOT NULL
+         AND $4::uuid IS DISTINCT FROM user_session_issuer_id THEN NULL
+        ELSE remote_session_issuer_id
+    END,
     remote_mcp_server_id = $5,
     tunneled_mcp_server_id = $6,
     toolset_id = $7,

@@ -469,11 +469,11 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Client-binding writers follow their commit with this resync so the
-	// denormalized mcp_servers.remote_session_issuer_id cannot go stale when
-	// the gateway issuer is shared with a server row.
+	// Client-binding writers follow their commit with this reconcile so a
+	// server row sharing the gateway's issuer cannot keep naming a provider the
+	// issuer no longer binds a client for.
 	if rewiredIssuer {
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID.UUID})
+		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID.UUID})
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
@@ -959,11 +959,11 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Every client-binding writer follows its commit with this resync so the
-	// denormalized mcp_servers.remote_session_issuer_id cannot go stale when
-	// the gateway issuer is shared with a server row.
+	// Every client-binding writer follows its commit with this reconcile so a
+	// server row sharing the gateway's issuer cannot keep naming a provider the
+	// issuer no longer binds a client for.
 	if wiredGatewayIssuer {
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
+		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, metaID, false)
 
@@ -1130,7 +1130,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	// client from the gateway issuer so it stops appearing on the consent
 	// screen. The member row is already soft-deleted above, so the detach's
 	// "last member" guard sees the post-removal set. Mirrors the add path's
-	// lock + post-commit resync.
+	// lock + post-commit reconcile.
 	wiredGatewayIssuer := false
 	if meta.UserSessionIssuerID.Valid {
 		server, serr := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
@@ -1186,10 +1186,10 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Keep the denormalized mcp_servers.remote_session_issuer_id in sync after a
-	// binding change, matching the add path's post-commit resync.
+	// Bring any server row sharing the gateway's issuer back in line with what
+	// this binding change left, matching the add path's post-commit reconcile.
 	if wiredGatewayIssuer {
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
+		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, meta.ID, false)
 

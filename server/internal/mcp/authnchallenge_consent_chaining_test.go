@@ -92,7 +92,12 @@ func seedChainedConsentEndpoint(t *testing.T, tag string) (context.Context, cons
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
 	})
 	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "", []uuid.UUID{fx.shared})
-	return ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
+	configureServerProviders(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.shared)
+	provider := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
+	// As the endpoint resolves it: the provider configured on the server is
+	// what its credential resolution is scoped to.
+	fx.endpoint.RemoteSessionIssuerID = conv.ToNullUUID(provider)
+	return ctx, fx, provider
 }
 
 func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {
@@ -216,8 +221,8 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 		return serverID
 	})
 	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim480-tunnel-chained", "", []uuid.UUID{fx.shared})
-	issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
-	stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, serverID, conv.ToNullUUID(issuer))
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, fx.clientA)
+	issuer := fx.endpoint.RemoteSessionIssuerID.UUID
 	g := setConsentGovernor(t, fx, issuer, identifier)
 
 	code, page, loc := render(t, fx)

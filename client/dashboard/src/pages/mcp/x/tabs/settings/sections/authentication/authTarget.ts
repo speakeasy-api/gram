@@ -34,6 +34,13 @@ export type AuthTarget = {
   /** Current issuer link; null when the target has none yet. */
   userSessionIssuerId: string | null;
   /**
+   * The provider this target's users sign in to, null when none is configured
+   * and for a target that is not an MCP server row. Servers sharing a user
+   * session issuer each name their own, so the issuer's full client list is
+   * not this target's identity.
+   */
+  remoteSessionIssuerId: string | null;
+  /**
    * Remote MCP server id for the RFC 9728 probe. Undefined for targets with
    * no probeable upstream (tunneled, toolset-backed), leaving the probe idle.
    */
@@ -73,6 +80,7 @@ export function useMcpServerAuthTarget(
       mcpServerId: mcpServer.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
+      remoteSessionIssuerId: mcpServer.remoteSessionIssuerId ?? null,
       attachImpactTarget: { mcpServerId: mcpServer.id },
       mcpUrl,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
@@ -122,6 +130,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       permissionResourceId: toolset.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
+      remoteSessionIssuerId: null,
       attachImpactTarget: { toolsetId: toolset.id },
       mcpUrl,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
@@ -158,6 +167,9 @@ export function useMetaMcpAuthTarget(
       permissionResourceId: metaMcpServer.projectId,
       supportsOrganizationIssuers: false,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
+      // A gateway offers every provider its members use, so it has no single
+      // one of its own.
+      remoteSessionIssuerId: null,
       attachImpactTarget: { metaMcpServerId: metaMcpServer.id },
       mcpUrl,
       multipleProviders: true,

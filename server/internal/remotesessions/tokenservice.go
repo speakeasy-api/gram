@@ -484,7 +484,29 @@ func (m *ChallengeManager) ResolveAccessTokens(
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (map[uuid.UUID]UpstreamToken, error) {
-	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, false)
+	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject, false)
+}
+
+// ResolveServerAccessTokens is ResolveAccessTokens narrowed to one upstream
+// authorization server: the provider configured on the MCP server being
+// served. A user session issuer shared by several servers binds a client per
+// server's provider, and the issuer-wide form fails the whole map as soon as
+// any of them has no usable grant — so without this, a member who signed in to
+// this server's provider would still be refused because a sibling server's
+// provider is unconnected. Resolution of the selected client is identical,
+// including every misconfiguration it reports.
+func (m *ChallengeManager) ResolveServerAccessTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	remoteSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+) (map[uuid.UUID]UpstreamToken, error) {
+	if remoteSessionIssuerID == uuid.Nil {
+		return nil, ErrInvalidAuthorizationRequest
+	}
+	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true}, subject, false)
 }
 
 type availabilityCheckKey struct{}
@@ -499,6 +521,15 @@ type availabilityCheckKey struct{}
 // reported when a request needs it.
 func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject) error {
 	_, err := m.ResolveAccessTokens(context.WithValue(ctx, availabilityCheckKey{}, true), projectID, organizationID, issuerID, subject)
+	return err
+}
+
+// CheckServerAccessTokens is CheckAccessTokens for one MCP server's own
+// upstream authorization server, narrowed the way ResolveServerAccessTokens
+// is: what the caller must have connected to reach this server, not what the
+// other servers sharing its user session issuer need.
+func (m *ChallengeManager) CheckServerAccessTokens(ctx context.Context, projectID uuid.UUID, organizationID string, issuerID, remoteSessionIssuerID uuid.UUID, subject urn.SessionSubject) error {
+	_, err := m.ResolveServerAccessTokens(context.WithValue(ctx, availabilityCheckKey{}, true), projectID, organizationID, issuerID, remoteSessionIssuerID, subject)
 	return err
 }
 
@@ -520,20 +551,62 @@ func (m *ChallengeManager) ResolveAvailableAccessTokens(
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (map[uuid.UUID]UpstreamToken, error) {
-	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, true)
+	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject, true)
 }
 
+// ResolveAvailableServerAccessTokens is ResolveAvailableAccessTokens narrowed
+// to the provider configured on the MCP server being served, and resolves
+// nothing for a server configured with none. The identity chaining fallback
+// reads it: a sibling server's grant for the same resource is not this
+// server's to route, however usable it is.
+func (m *ChallengeManager) ResolveAvailableServerAccessTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	remoteSessionIssuerID uuid.NullUUID,
+	subject urn.SessionSubject,
+) (map[uuid.UUID]UpstreamToken, error) {
+	if !remoteSessionIssuerID.Valid {
+		return nil, nil
+	}
+	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, remoteSessionIssuerID, subject, true)
+}
+
+// resolveBoundAccessTokens resolves the upstream tokens of the clients bound to
+// the user session issuer. remoteSessionIssuerID, when set, keeps only the
+// client of that provider: the clients of the other providers on the issuer
+// belong to other servers and must not decide this one's request.
 func (m *ChallengeManager) resolveBoundAccessTokens(
 	ctx context.Context,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
+	remoteSessionIssuerID uuid.NullUUID,
 	subject urn.SessionSubject,
 	skipUnusable bool,
 ) (map[uuid.UUID]UpstreamToken, error) {
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	bound, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return nil, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	clients := bound
+	if remoteSessionIssuerID.Valid {
+		clients = nil
+		for _, c := range bound {
+			if c.RemoteSessionIssuerID == remoteSessionIssuerID.UUID {
+				clients = append(clients, c)
+			}
+		}
+		// The server names a provider, so it signs its users in; its client
+		// being unbound is a configuration that cannot serve, not a server
+		// that needs no credential. Answering with no tokens would let the
+		// request go upstream anonymously under a sign-in the server still
+		// advertises. An availability check reads the empty map instead, as it
+		// does for every other client it cannot use.
+		if len(clients) == 0 && !skipUnusable {
+			return nil, ErrNoValidToken
+		}
 	}
 	if len(clients) == 0 {
 		return nil, nil
@@ -684,9 +757,46 @@ func (m *ChallengeManager) RemoteSessionsNeedReconnect(
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (bool, error) {
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	return m.remoteSessionsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
+}
+
+// ServerRemoteSessionsNeedReconnect is RemoteSessionsNeedReconnect for one MCP
+// server's own upstream authorization server. A sibling server's unconnected
+// provider on the same user session issuer says nothing about whether this
+// server's caller must reconnect.
+func (m *ChallengeManager) ServerRemoteSessionsNeedReconnect(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID, remoteSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+) (bool, error) {
+	if remoteSessionIssuerID == uuid.Nil {
+		return false, ErrInvalidAuthorizationRequest
+	}
+	return m.remoteSessionsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true}, subject)
+}
+
+func (m *ChallengeManager) remoteSessionsNeedReconnect(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	remoteSessionIssuerID uuid.NullUUID,
+	subject urn.SessionSubject,
+) (bool, error) {
+	bound, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return false, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	clients := bound
+	if remoteSessionIssuerID.Valid {
+		clients = nil
+		for _, c := range bound {
+			if c.RemoteSessionIssuerID == remoteSessionIssuerID.UUID {
+				clients = append(clients, c)
+			}
+		}
 	}
 	return m.storedGrantsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, clients, subject)
 }

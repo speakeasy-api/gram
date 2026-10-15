@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => ({
   discoverProtectedResource: vi.fn(),
   commit: vi.fn(),
   detach: vi.fn(),
+  disableIdentity: vi.fn(),
   userSessionIssuer: vi.fn(),
   toastSuccess: vi.fn(),
   scopes: vi.fn(),
@@ -205,6 +206,17 @@ vi.mock("@gram/client/react-query/detachUserSessionIssuer.js", () => ({
     error: null,
   }),
 }));
+
+vi.mock(
+  "@gram/client/react-query/disableServerIdentityConfiguration.js",
+  () => ({
+    useDisableServerIdentityConfigurationMutation: () => ({
+      mutateAsync: mocks.disableIdentity,
+      isPending: false,
+      error: null,
+    }),
+  }),
+);
 
 vi.mock("@gram/client/react-query/remoteSessionsCount.js", () => ({
   useRemoteSessionsCount: () => mocks.sessions(),
@@ -492,14 +504,20 @@ const target: AuthTarget = {
   slug: "remote-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
+  mcpServerId: "mcp-server-1",
   attachImpactTarget: { mcpServerId: "mcp-server-1" },
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer-1",
+  // The provider this server is configured with: the panel reads its identity
+  // from the clients of that provider alone, not from every client its user
+  // session issuer binds for the other servers sharing it.
+  remoteSessionIssuerId: "provider-1",
   remoteMcpServerId: "remote-source-1",
   invalidate: vi.fn(),
 };
 
 beforeEach(() => {
+  target.remoteSessionIssuerId = "provider-1";
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
     isLoading: false,
@@ -1192,6 +1210,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
   });
 
   it("shows the linked provider when the issuer listing does not contain it", () => {
+    target.remoteSessionIssuerId = "provider-far";
     mocks.clients.mockReturnValue({
       items: [
         {
@@ -1265,32 +1284,41 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(none.disabled).toBe(false);
     fireEvent.click(none);
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.disableIdentity).not.toHaveBeenCalled();
 
     // Save is what commits it, and the dialog is where the consequence is
     // stated — the footer stays quiet.
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("dialog")).toBeDefined();
-    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.disableIdentity).not.toHaveBeenCalled();
+    // The preview is the disable this Save performs, not an issuer-wide
+    // detach: an unrelated client on the issuer must not warn or block it.
     expect(mocks.impact).toHaveBeenLastCalledWith(
       expect.objectContaining({
         userSessionIssuerId: "user-session-issuer-1",
-        change: "detach",
+        mcpServerId: "mcp-server-1",
+        change: "disable",
       }),
       expect.objectContaining({ enabled: true }),
     );
 
+    // One call naming this server: the provider's client is unbound only if no
+    // other server still signs in through it, which the server decides.
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
-      expect(mocks.detach).toHaveBeenCalledWith({
+      expect(mocks.disableIdentity).toHaveBeenCalledWith({
         request: {
-          attachUserSessionIssuerForm: {
-            id: "client-1",
-            userSessionIssuerId: "user-session-issuer-1",
+          disableServerIdentityConfigurationForm: {
+            mcpServerId: "mcp-server-1",
           },
         },
       }),
     );
+    expect(mocks.detach).not.toHaveBeenCalled();
+    // The server row is what says which provider it signs in to. A shared
+    // client stays bound, so without this refresh the panel would keep
+    // deriving identity from the provider it just stopped using.
+    await waitFor(() => expect(target.invalidate).toHaveBeenCalled());
   });
 
   it("shows a connected client with its sign-ins, scopes and settings", () => {
@@ -1416,26 +1444,31 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("names servers sharing the issuer when a client swap keeps the provider", async () => {
+  it("names the servers a change leaves without a sign-in", async () => {
     swapClientWithImpact([
       {
         id: "mcp-server-2",
         name: "Other server",
         projectId: "project-1",
         projectName: "Project",
-        impact: "resignin",
+        impact: "clear",
       },
     ]);
 
     expect(screen.getByText("Replace the connected client?")).toBeDefined();
     expect(screen.getByText("Other server")).toBeDefined();
-    expect(screen.getByText(/have to sign in again:/)).toBeDefined();
+    expect(screen.getByText(/stop signing anyone in/)).toBeDefined();
     expect(mocks.commit).not.toHaveBeenCalled();
+    // The preview names the mode the commit will run in. This one is an
+    // automatic setup, which registers its own client in place of the bound
+    // one, and the preview must decide on the same rule rather than inferring
+    // the mode from an absent client id.
     expect(mocks.impact).toHaveBeenLastCalledWith(
       expect.objectContaining({
         userSessionIssuerId: "user-session-issuer-1",
         change: "replace",
         providerId: "provider-1",
+        clientMode: "auto",
       }),
       expect.objectContaining({ enabled: true }),
     );
@@ -1449,7 +1482,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
           name: "Elsewhere",
           projectId: "project-2",
           projectName: "Other project",
-          impact: "repoint",
+          impact: "clear",
         },
       ],
       2,
@@ -1520,7 +1553,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     swapClientWithImpact(null);
 
     expect(
-      screen.getByText(/Could not check which other servers share/),
+      screen.getByText(/Could not check which other servers sign in through/),
     ).toBeDefined();
   });
 

@@ -43,8 +43,33 @@ var _ = Service("remoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CommitServerIdentityConfiguration"}`)
 	})
 
+	Method("disableServerIdentityConfiguration", func() {
+		Description("Turn User Identity off for one MCP server: it stops signing anyone in, and the client of the provider it used is unbound from its user session issuer only when no other MCP server in the organization still signs in through that provider. Unbinding signs out everyone holding a session through that client. Idempotent: a server already signing in to nothing is unchanged. Requires mcp:write on the target. Refused when the client carries live agent attachments or identity-chaining bindings, or when it is an organization-owned client on an organization-level user session issuer, which is changed from the organization's identity provider settings instead.")
+
+		Payload(func() {
+			Extend(DisableServerIdentityConfigurationForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(DisableServerIdentityConfigurationResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteSessions.disableServerIdentityConfiguration")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "disableServerIdentityConfiguration")
+		Meta("openapi:extension:x-speakeasy-name-override", "disableServerIdentityConfiguration")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DisableServerIdentityConfiguration"}`)
+	})
+
 	Method("getServerIdentityImpact", func() {
-		Description("Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.")
+		Description("Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change unbinds the client of its own provider and it loses its sign-in (clear). A gateway is listed when a client it can see is unbound (client_removed). Configuring one server never reaches another: replacing a client another MCP server signs in through is refused rather than previewed, as is any change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer. The target server is excluded. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.")
 
 		Payload(func() {
 			Extend(ServerIdentityImpactForm)
@@ -62,6 +87,7 @@ var _ = Service("remoteSessions", func() {
 			Param("change")
 			Param("provider_id")
 			Param("client_id")
+			Param("client_mode")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -193,8 +219,29 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 	Required("mcp_server_id", "client_mode")
 })
 
+var DisableServerIdentityConfigurationForm = Type("DisableServerIdentityConfigurationForm", func() {
+	Description("The MCP server to stop signing users in to.")
+
+	Attribute("mcp_server_id", String, "The target MCP server.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("mcp_server_id")
+})
+
+var DisableServerIdentityConfigurationResult = Type("DisableServerIdentityConfigurationResult", func() {
+	Description("What turning User Identity off left in place.")
+
+	Attribute("provider_id", String, "The Remote Identity Provider the server signed in to, absent when it already signed in to none.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("client_unbound", Boolean, "Whether the provider's client was unbound from the user session issuer, which signs out everyone holding a session through it. False when another MCP server still signs in through that client, which keeps it bound.")
+
+	Required("client_unbound")
+})
+
 var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
-	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: the bound clients of other providers (or of the same provider, for a client swap) are unbound and the chosen client is bound. attach binds one more client and unbinds nothing. detach unbinds every client the caller's project can see. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider.")
+	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: the chosen client is bound, and the client of the provider mcp_server_id signs in to today is unbound when no other server in the organization still signs in through it. attach binds one more client and unbinds nothing. detach unbinds every client the caller's project can see, which is what the Remote Identity Provider settings do. disable mirrors disableServerIdentityConfiguration: it unbinds the client of the provider mcp_server_id signs in to, and only when no other server in the organization still signs in through it, so it reaches no other server at all. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider. client_mode is the mode the matching commit would run in, which decides whether a client already bound for the chosen provider is reused or replaced; omitting it assumes auto.")
 
 	Attribute("user_session_issuer_id", String, "The user session issuer whose client bindings change.", func() {
 		Format(FormatUUID)
@@ -203,13 +250,16 @@ var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("change", String, "The kind of binding change.", func() {
-		Enum("replace", "attach", "detach")
+		Enum("replace", "attach", "detach", "disable")
 	})
 	Attribute("provider_id", String, "The Remote Identity Provider of the client being bound. Omit for a new provider.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("client_id", String, "An existing client being bound. Omit for a new client.", func() {
 		Format(FormatUUID)
+	})
+	Attribute("client_mode", String, "The client mode commitServerIdentityConfiguration would run in. auto reuses a client already bound for the chosen provider; existing and manual replace it, which signs out everyone using it. Defaults to auto.", func() {
+		Enum("auto", "existing", "manual")
 	})
 
 	Required("user_session_issuer_id", "change")
@@ -226,8 +276,8 @@ var ServerIdentityImpactServer = Type("ServerIdentityImpactServer", func() {
 	Attribute("slug", String, "The MCP server slug. Gateways have none.")
 	Attribute("project_id", String, "The owning project.", func() { Format(FormatUUID) })
 	Attribute("project_name", String, "The name of the owning project.")
-	Attribute("impact", String, "repoint: its upstream authorization server changes to another single provider. clear: it is left with no single provider and loses its upstream. resignin: its upstream is unchanged but its client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.", func() {
-		Enum("repoint", "clear", "resignin", "client_removed")
+	Attribute("impact", String, "clear: the client of the provider it signs in to is unbound, so it loses its sign-in until that server is configured again. client_removed: a gateway loses a provider client its members sign in through.", func() {
+		Enum("clear", "client_removed")
 	})
 
 	Required("id", "kind", "project_id", "project_name", "impact")

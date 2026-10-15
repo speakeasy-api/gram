@@ -28,11 +28,25 @@ export const Change = {
   Replace: "replace",
   Attach: "attach",
   Detach: "detach",
+  Disable: "disable",
 } as const;
 /**
  * The kind of binding change.
  */
 export type Change = ClosedEnum<typeof Change>;
+
+/**
+ * The client mode commitServerIdentityConfiguration would run in. auto reuses a client already bound for the chosen provider; existing and manual replace it, which signs out everyone using it. Defaults to auto.
+ */
+export const ClientMode = {
+  Auto: "auto",
+  Existing: "existing",
+  Manual: "manual",
+} as const;
+/**
+ * The client mode commitServerIdentityConfiguration would run in. auto reuses a client already bound for the chosen provider; existing and manual replace it, which signs out everyone using it. Defaults to auto.
+ */
+export type ClientMode = ClosedEnum<typeof ClientMode>;
 
 export type GetServerIdentityImpactRequest = {
   /**
@@ -55,6 +69,10 @@ export type GetServerIdentityImpactRequest = {
    * An existing client being bound. Omit for a new client.
    */
   clientId?: string | undefined;
+  /**
+   * The client mode commitServerIdentityConfiguration would run in. auto reuses a client already bound for the chosen provider; existing and manual replace it, which signs out everyone using it. Defaults to auto.
+   */
+  clientMode?: ClientMode | undefined;
   /**
    * Session header
    */
@@ -182,12 +200,17 @@ export const Change$outboundSchema: z.ZodMiniEnum<typeof Change> = z.enum(
 );
 
 /** @internal */
+export const ClientMode$outboundSchema: z.ZodMiniEnum<typeof ClientMode> = z
+  .enum(ClientMode);
+
+/** @internal */
 export type GetServerIdentityImpactRequest$Outbound = {
   user_session_issuer_id: string;
   mcp_server_id?: string | undefined;
   change: string;
   provider_id?: string | undefined;
   client_id?: string | undefined;
+  client_mode?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -204,6 +227,7 @@ export const GetServerIdentityImpactRequest$outboundSchema: z.ZodMiniType<
     change: Change$outboundSchema,
     providerId: z.optional(z.string()),
     clientId: z.optional(z.string()),
+    clientMode: z.optional(ClientMode$outboundSchema),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
@@ -214,6 +238,7 @@ export const GetServerIdentityImpactRequest$outboundSchema: z.ZodMiniType<
       mcpServerId: "mcp_server_id",
       providerId: "provider_id",
       clientId: "client_id",
+      clientMode: "client_mode",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

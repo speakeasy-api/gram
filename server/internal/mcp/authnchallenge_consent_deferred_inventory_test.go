@@ -110,7 +110,10 @@ func seedLoggedChainedConsent(t *testing.T, tag string) (context.Context, consen
 	fx := consentActionFixture{ti: ti, endpoint: endpoint, stateID: stateID, projectID: projectID, orgID: orgID, shared: issuerID, subject: subject, clientA: uuid.Nil, clientB: uuid.Nil, clientC: uuid.Nil, clientD: uuid.Nil}
 	registerPageClient(t, ctx, fx)
 	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "", []uuid.UUID{issuerID})
-	return ctx, fx, clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, fx.clientA), logs
+	configureServerProviders(t, ctx, ti.conn, projectID, orgID, issuerID)
+	provider := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, fx.clientA)
+	fx.endpoint.RemoteSessionIssuerID = conv.ToNullUUID(provider)
+	return ctx, fx, provider, logs
 }
 
 const (
@@ -177,8 +180,9 @@ func TestConsentPage_UnconnectedUnchainedServicesDoNotDefer(t *testing.T) {
 
 	ctx, fx, issuer := seedChainedConsentEndpoint(t, "aim524-unchained-page")
 	setConsentGovernor(t, fx, issuer)
-	// A second unlinked card keeps the page from auto-connecting the first.
-	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-unchained-page-b", "", []uuid.UUID{fx.shared})
+	// A second unlinked binding of the same sign-in keeps the page from
+	// auto-connecting the first.
+	fx.clientB = createConsentRemoteClientAt(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-unchained-page-b", fx.endpoint.RemoteSessionIssuerID.UUID, []uuid.UUID{fx.shared})
 
 	page := renderToolsIsland(t, fx)
 	require.NotContains(t, page, consentManagedCopy)
@@ -190,7 +194,7 @@ func TestConsentPage_ConnectedCardBesideChainedCardDoesNotDefer(t *testing.T) {
 
 	ctx, fx, issuer := seedChainedConsentEndpoint(t, "aim524-mixed-page")
 	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
-	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-mixed-page-b", "", []uuid.UUID{fx.shared})
+	fx.clientB = createConsentRemoteClientAt(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-mixed-page-b", fx.endpoint.RemoteSessionIssuerID.UUID, []uuid.UUID{fx.shared})
 	grant(t, ctx, fx, fx.clientB, consentChainedUpstream)
 
 	page := renderToolsIsland(t, fx)

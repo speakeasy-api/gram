@@ -766,7 +766,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		// Attachments may be revoked between consent and code exchange.
 		// Recheck before persisting an agent session or issuing its tokens.
-		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
+		if cerr := s.checkEndpointAccessTokens(authorizationCtx, endpoint, subject); cerr != nil {
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
 				return remoteSessionUnavailableError(w, cerr).LogWarn(ctx, logger)
 			}
@@ -1341,12 +1341,29 @@ func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger 
 	if endpoint.MetaMcpServerID.Valid {
 		return false
 	}
-	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	reconnect, err := s.endpointRemoteSessionsNeedReconnect(ctx, endpoint, subject)
 	if err != nil {
 		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
 		return false
 	}
 	return reconnect
+}
+
+// endpointRemoteSessionsNeedReconnect asks about the endpoint's own upstream
+// authorization server, scoped by serverScopedProvider, so a sibling server's
+// unconnected provider on the same user session issuer cannot refuse this
+// endpoint's refresh. A server configured with no provider has no upstream to
+// reconnect.
+func (s *Service) endpointRemoteSessionsNeedReconnect(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) (bool, error) {
+	provider, serverScoped := serverScopedProvider(endpoint)
+	switch {
+	case serverScoped && !provider.Valid:
+		return false, nil
+	case serverScoped:
+		return s.remoteChallengeMgr.ServerRemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, provider.UUID, subject) //nolint:wrapcheck // The caller fails open on any error.
+	default:
+		return s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject) //nolint:wrapcheck // The caller fails open on any error.
+	}
 }
 
 func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lockOwner string, logger *slog.Logger) {

@@ -1047,6 +1047,43 @@ func (q *Queries) CountActiveRemoteSessionsByClientID(ctx context.Context, remot
 	return count, err
 }
 
+const countOrganizationMCPServersWithRemoteSessionIssuer = `-- name: CountOrganizationMCPServersWithRemoteSessionIssuer :one
+SELECT count(*)
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+WHERE s.user_session_issuer_id = $1
+  AND s.remote_session_issuer_id = $2
+  AND s.id <> $3
+  AND p.organization_id = $4::text
+  AND s.deleted IS FALSE
+`
+
+type CountOrganizationMCPServersWithRemoteSessionIssuerParams struct {
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	ExcludedMcpServerID   uuid.UUID
+	OrganizationID        string
+}
+
+// Live MCP servers in the organization that sign in to one provider through
+// one user session issuer, excluding the server a commit is configuring. A
+// per-server identity commit releases the client of the provider it moves off
+// only when this is zero: the provider's other servers keep signing in through
+// that client, and unbinding it would strand them.
+func (q *Queries) CountOrganizationMCPServersWithRemoteSessionIssuer(ctx context.Context, arg CountOrganizationMCPServersWithRemoteSessionIssuerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizationMCPServersWithRemoteSessionIssuer,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.ExcludedMcpServerID,
+		arg.OrganizationID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRemoteSessionClientUserSessionIssuerBindings = `-- name: CountRemoteSessionClientUserSessionIssuerBindings :one
 SELECT COUNT(remote_session_client_id)
 FROM remote_session_client_user_session_issuers
@@ -7268,7 +7305,7 @@ type ListOrganizationClientsForUserSessionIssuerRow struct {
 // organization can see: project-owned clients of the organization's projects
 // and organization-level clients. Each server's derivation then keeps only its
 // own project's and the organization-level ones, as
-// ResyncMCPServerRemoteSessionIssuers does. Clients of a deleted provider stay
+// ReconcileMCPServerRemoteSessionIssuers does. Clients of a deleted provider stay
 // in the list, as the commit's ListRemoteSessionClientsByProjectIDForUserSessionIssuer
 // keeps them; provider_deleted drops them from the derivation only.
 func (q *Queries) ListOrganizationClientsForUserSessionIssuer(ctx context.Context, arg ListOrganizationClientsForUserSessionIssuerParams) ([]ListOrganizationClientsForUserSessionIssuerRow, error) {
@@ -7348,7 +7385,7 @@ func (q *Queries) ListOrganizationGatewaysForUserSessionIssuer(ctx context.Conte
 }
 
 const listOrganizationMCPServersForUserSessionIssuer = `-- name: ListOrganizationMCPServersForUserSessionIssuer :many
-SELECT s.id, s.project_id, s.name, s.slug, s.toolset_id, p.name AS project_name
+SELECT s.id, s.project_id, s.name, s.slug, s.toolset_id, s.remote_session_issuer_id, p.name AS project_name
 FROM mcp_servers AS s
 JOIN projects AS p ON p.id = s.project_id
 WHERE s.user_session_issuer_id = $1
@@ -7364,16 +7401,19 @@ type ListOrganizationMCPServersForUserSessionIssuerParams struct {
 }
 
 type ListOrganizationMCPServersForUserSessionIssuerRow struct {
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-	Name        pgtype.Text
-	Slug        pgtype.Text
-	ToolsetID   uuid.NullUUID
-	ProjectName string
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	ToolsetID             uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	ProjectName           string
 }
 
 // Live MCP servers on one user session issuer in every project of the
-// organization, for the binding-change impact preview.
+// organization, for the binding-change impact preview. Each row carries the
+// server's own stamped provider, which is what decides whether the change
+// reaches it: the issuer's other clients say nothing about its upstream.
 func (q *Queries) ListOrganizationMCPServersForUserSessionIssuer(ctx context.Context, arg ListOrganizationMCPServersForUserSessionIssuerParams) ([]ListOrganizationMCPServersForUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMCPServersForUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {
@@ -7389,6 +7429,7 @@ func (q *Queries) ListOrganizationMCPServersForUserSessionIssuer(ctx context.Con
 			&i.Name,
 			&i.Slug,
 			&i.ToolsetID,
+			&i.RemoteSessionIssuerID,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err

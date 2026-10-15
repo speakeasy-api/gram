@@ -345,6 +345,7 @@ const standardTargetWithSessionIssuer: AuthTarget = {
   attachImpactTarget: { mcpServerId: "mcp-server-1" },
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer",
+  remoteSessionIssuerId: null,
   invalidate: vi.fn(),
 };
 

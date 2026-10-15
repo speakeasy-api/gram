@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
@@ -62,8 +61,10 @@ func TestConsentValidationStandaloneTunnelWillNotProbeWithAnotherCardsCredential
 	endpoint.McpServerID = conv.ToNullUUID(server.ID)
 
 	owner := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "validate-selected-tunnel", "", []uuid.UUID{shared})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared}))
+	configureEndpointProvider(t, ctx, ti, endpoint, owner)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, owner, subject, "token-owner", "")
+	// A client of another authorization server belongs to another server on
+	// the same organization sign-in, not to this one.
 	foreign := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "validate-selected-foreign", "", []uuid.UUID{shared})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, foreign, subject, "token-foreign", "")
 
@@ -78,7 +79,7 @@ func TestConsentValidationStandaloneTunnelWillNotProbeWithAnotherCardsCredential
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeBadRequest, shareable.Code)
-	require.ErrorContains(t, err, "cannot be verified")
+	require.ErrorContains(t, err, "unknown remote session client for this MCP server")
 	headers, _ := tunnelForwards(gateway)
 	require.Empty(t, headers, "a foreign tunnel issuer must not probe with the owning card")
 }

@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcp_repo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -743,7 +742,7 @@ func TestServeConsentAction_MetaMCPConnectResolvesFromTheRealResync(t *testing.T
 	}))
 
 	// The production write path.
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, fx.ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
+	configureServerProviders(t, ctx, fx.ti.conn, projectID, orgID, memberIssuerID)
 
 	loc := postConnectAction(t, fx, gatewayClientID)
 	require.Equal(t, "https://aim87-composed.example.com/mcp", loc.Query().Get("resource"),
