@@ -2,7 +2,6 @@ import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useOrganization } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
-import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
@@ -372,14 +371,6 @@ function PluginsContent({
     );
   };
 
-  const createCard = canWritePlugin ? (
-    <CreateResourceCard
-      title="New Plugin"
-      description="Bundle MCP servers and hooks for distribution to supported coding agents."
-      onClick={() => setIsCreateDialogOpen(true)}
-    />
-  ) : null;
-
   return (
     <>
       <ResourceListPage
@@ -514,7 +505,6 @@ function PluginsContent({
             plugins={filteredPlugins}
             publishStatus={canManageMarketplace ? publishStatus : undefined}
             searchQuery={hasPlugins ? search : ""}
-            createCard={createCard}
           />
           {canManageMarketplace && (
             <>
@@ -908,12 +898,10 @@ function PluginGrid({
   plugins,
   publishStatus,
   searchQuery,
-  createCard,
 }: {
   plugins: Plugin[];
   publishStatus: PublishStatusResult | undefined;
   searchQuery: string;
-  createCard: React.ReactNode;
 }) {
   if (plugins.length === 0) {
     return (
@@ -921,9 +909,6 @@ function PluginGrid({
         {searchQuery ? (
           <Text muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Text>
         ) : null}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {createCard}
-        </div>
       </div>
     );
   }
@@ -937,7 +922,6 @@ function PluginGrid({
           publishStatus={publishStatus}
         />
       ))}
-      {createCard}
     </div>
   );
 }

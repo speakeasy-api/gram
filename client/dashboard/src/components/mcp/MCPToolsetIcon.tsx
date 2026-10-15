@@ -2,12 +2,17 @@ import { useCatalogIconMap } from "../sources/sources-hooks";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { Network } from "lucide-react";
 
 export function MCPToolsetIcon({
   toolset,
+  className = "h-12 w-12",
+  fallbackClassName = "h-8 w-8",
 }: {
   toolset: ToolsetEntry;
+  className?: string;
+  fallbackClassName?: string;
 }): JSX.Element {
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
@@ -31,9 +36,9 @@ export function MCPToolsetIcon({
     <img
       src={externalMcpLogoUrl}
       alt={toolset.name}
-      className="h-12 w-12 object-contain"
+      className={cn("object-contain", className)}
     />
   ) : (
-    <Network className="text-muted-foreground h-8 w-8" />
+    <Network className={cn("text-muted-foreground", fallbackClassName)} />
   );
 }

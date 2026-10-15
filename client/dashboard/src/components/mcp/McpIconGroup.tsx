@@ -11,7 +11,7 @@ export function McpIconGroup({
     return <Network className="text-muted-foreground h-8 w-8" />;
   }
   const only = serverIds[0];
-  if (serverIds.length === 1 && only) {
+  if (serverIds.length === 1) {
     return (
       <SourceMcpIcon mcpServerId={only} className="h-8 w-8 object-contain" />
     );
@@ -21,9 +21,9 @@ export function McpIconGroup({
   const shown = serverIds.slice(0, overflow > 0 ? 3 : 4);
   return (
     <div className="grid grid-cols-2 gap-1.5">
-      {shown.map((member) => (
+      {shown.map((member, index) => (
         <SourceMcpIcon
-          key={member}
+          key={member ?? index}
           mcpServerId={member}
           className="h-6 w-6 object-contain"
         />

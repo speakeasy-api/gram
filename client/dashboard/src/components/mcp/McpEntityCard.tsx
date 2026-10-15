@@ -13,11 +13,14 @@ export function McpEntityCard(
         iconRailClassName="isolate"
         iconTileClassName="icon-hover-pulse"
         overlay={
-          <canvas
-            ref={canvasRef}
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 -z-10 size-full"
-          />
+          <>
+            {props.overlay}
+            <canvas
+              ref={canvasRef}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 -z-10 size-full"
+            />
+          </>
         }
       />
     </div>

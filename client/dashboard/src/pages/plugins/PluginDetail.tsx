@@ -1427,7 +1427,7 @@ function PluginServerCard({
           <MCPToolsetIcon toolset={toolset} />
         ) : (
           <SourceMcpIcon
-            mcpServerId={server.mcpServerId ?? server.toolsetId}
+            mcpServerId={server.mcpServerId}
             className="h-8 w-8 object-contain"
           />
         )

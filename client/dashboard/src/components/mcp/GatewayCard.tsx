@@ -68,39 +68,35 @@ export function GatewayCard({
   const routes = useRoutes();
 
   return (
-    <>
-      {/* Clickable div rather than a link, as MCPCard is: an <a> may not nest
-          the copy button below. */}
-      <McpEntityCard
-        className="focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-        onClick={() => routes.mcp.gateway.overview.goTo(gateway.id)}
-        icon={<GatewayMemberIcons metaMcpServerId={gateway.id} />}
-      >
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <Text
-            variant="subheading"
-            as="div"
-            className="text-md group-hover:text-primary flex-1 truncate transition-colors"
-            title={gateway.name}
-          >
-            {gateway.name}
-          </Text>
-        </div>
+    <McpEntityCard
+      className="focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      onClick={() => routes.mcp.gateway.overview.goTo(gateway.id)}
+      icon={<GatewayMemberIcons metaMcpServerId={gateway.id} />}
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <Text
+          variant="subheading"
+          as="div"
+          className="text-md group-hover:text-primary flex-1 truncate transition-colors"
+          title={gateway.name}
+        >
+          {gateway.name}
+        </Text>
+      </div>
 
-        <GatewayMemberSummary metaMcpServerId={gateway.id} />
+      <GatewayMemberSummary metaMcpServerId={gateway.id} />
 
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="neutral">
-              <Badge.Text>Gateway</Badge.Text>
-            </Badge>
-          </div>
-          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-            <span>Open</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </div>
+      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="neutral">
+            <Badge.Text>Gateway</Badge.Text>
+          </Badge>
         </div>
-      </McpEntityCard>
-    </>
+        <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+          <span>Open</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </div>
+      </div>
+    </McpEntityCard>
   );
 }
