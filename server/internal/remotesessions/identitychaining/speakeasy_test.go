@@ -309,6 +309,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	rejectRedemption.Store(true)
 	refusedSignIn, err := signins.Record(ctx, f.db, signins.RecordParams{OrganizationID: f.req.OrganizationID, UserID: f.req.UserID, WorkOSSessionID: uuid.NewString(), AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now().Add(-time.Minute), Evidence: signins.Evidence{VerifiedEmail: f.req.UserID + "@example.test", IDPAuthenticatedAt: time.Now().Add(-time.Minute)}})
 	require.NoError(t, err)
+	chainer.now = func() time.Time { return status.ActiveKey.CreatedAt.Time.Add(time.Minute) }
 	refused := chainer.CheckConsent(ctx, preGrant, refusedSignIn.ID.UUID)
 	checkExchange()
 	require.Equal(t, ReasonInvalidGrant, refused.Reason)

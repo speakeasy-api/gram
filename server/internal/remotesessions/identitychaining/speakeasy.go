@@ -319,7 +319,11 @@ func (c *Chainer) adoptConsentCredential(ctx context.Context, logger *slog.Logge
 	// Most misses have no consent credential; skip the locks for them.
 	pending := sel
 	pending.userSessionID = uuid.Nil
-	if row, err := readCredential(ctx, repo.New(c.db), req, pending, c.now()); err != nil || !row.Usable {
+	row, err := readCredential(ctx, repo.New(c.db), req, pending, c.now())
+	if err != nil || !row.Usable {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			logger.ErrorContext(ctx, "read consent identity chaining credential", attr.SlogError(err))
+		}
 		return none, false
 	}
 	adopted, err := c.adopt(ctx, logger, req, sel)
