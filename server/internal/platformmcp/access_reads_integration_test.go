@@ -154,7 +154,8 @@ func TestGetMemberMCPAccessEvaluatesLiveRoleGrantsAcrossInventory(t *testing.T) 
 	require.NotEmpty(t, rows)
 	target := rows[0]
 
-	selfAccess, err := service.GetMyMCPAccess(ctx, principal)
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, principal.UserID, "self-access@example.test")
+	selfAccess, err := service.ListMyMCPAccess(ctx, principal)
 	require.NoError(t, err)
 	selfReference, err := service.references.Encode(principal, subjectKindAccessMember, principal.UserID, service.now())
 	require.NoError(t, err)

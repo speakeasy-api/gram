@@ -31,7 +31,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_access_members",
 		Title:       "Find Organization Members for MCP Access",
-		Description: "Find organization members by an explicit identity query of at least three characters (part of a name, email, or role name). External clients may instead filter by a role reference from list_access_roles; that option is not available to the project assistant, which has no list_access_roles and must use the identity query. Identities are masked (for example a***@e***) and are never returned in full, so confirm a match from the query and the returned role names rather than expecting a display name. Results are enumerated only when at least five people match; smaller cohorts are withheld and reported only as a suppressed count. Each member carries a short-lived opaque reference and version bound to this surface and session: they identify nobody on their own and are consumed only by get_member_mcp_access or assign_mcp_access_role, which are available to external clients, before they expire. Do not use this directory search for the caller's own access; external clients use get_my_mcp_access instead.",
+		Description: "Find organization members by an explicit identity query of at least three characters (part of a name, email, or role name). External clients may instead filter by a role reference from list_access_roles; that option is not available to the project assistant, which has no list_access_roles and must use the identity query. Identities are masked (for example a***@e***) and are never returned in full, so confirm a match from the query and the returned role names rather than expecting a display name. Results are enumerated only when at least five people match; smaller cohorts are withheld and reported only as a suppressed count. Each member carries a short-lived opaque reference and version bound to this surface and session: they identify nobody on their own and are consumed only by get_member_mcp_access or assign_mcp_access_role, which are available to external clients, before they expire. Do not use this directory search for the caller's own access; external clients use list_my_mcp_access instead.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: listAccessMembersInputSchema(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAccessMembersInput) (*mcp.CallToolResult, ListAccessMembersOutput, error) {
@@ -41,21 +41,21 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 	})
 
 	addTool(reg, &mcp.Tool{
-		Name:        "get_my_mcp_access",
+		Name:        "list_my_mcp_access",
 		Title:       "Inspect My Access Across MCP Servers",
 		Description: "Inspect the authenticated caller's effective access across every configured MCP server without searching or enumerating the organization directory. Returns the same table-ready project and server rows as get_member_mcp_access. Use this tool for questions about the caller's own access; do not infer their roles or server access from their ability to call Platform MCP or from organization administration.",
 		Annotations: readOnlyAnnotations(),
-		InputSchema: getMyMCPAccessInputSchema(),
+		InputSchema: listMyMCPAccessInputSchema(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, GetMemberMCPAccessOutput, error) {
 		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (GetMemberMCPAccessOutput, error) {
-			return accessReads.GetMyMCPAccess(ctx, principal)
+			return accessReads.ListMyMCPAccess(ctx, principal)
 		})
 	})
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_member_mcp_access",
 		Title:       "Inspect One Member's Access Across MCP Servers",
-		Description: "Inspect one exact organization member's effective access across every configured MCP server. Use get_my_mcp_access instead when the caller asks about their own access. For someone else, first select the member with list_access_members and pass its short-lived member reference. Returns table-ready rows with project and server names, visibility, effective connection and tool coverage, and view and manage access. Public and disabled endpoint behavior matches the dashboard access check; private endpoints use the member's live direct, role, everyone, and directory-mapped grants.",
+		Description: "Inspect one exact organization member's effective access across every configured MCP server. Use list_my_mcp_access instead when the caller asks about their own access. For someone else, first select the member with list_access_members and pass its short-lived member reference. Returns table-ready rows with project and server names, visibility, effective connection and tool coverage, and view and manage access. Public and disabled endpoint behavior matches the dashboard access check; private endpoints use the member's live direct, role, everyone, and directory-mapped grants.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: getMemberMCPAccessInputSchema(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMemberMCPAccessInput) (*mcp.CallToolResult, GetMemberMCPAccessOutput, error) {
@@ -91,7 +91,7 @@ func registerUnavailableAccessReadTools(reg *Registrar) {
 	}{
 		{"list_access_roles", "List MCP Access Roles", "List MCP access roles. This is not switched on for your organization yet.", externalOnly, ProjectScopeNone, nil},
 		{"list_access_members", "Find Organization Members for MCP Access", "Find organization members for MCP access. This is not switched on for your organization yet.", bothAudiences, ProjectScopeNone, listAccessMembersInputSchema()},
-		{"get_my_mcp_access", "Inspect My Access Across MCP Servers", "Inspect your own access across MCP servers. This is not switched on for your organization yet.", externalOnly, ProjectScopeNone, getMyMCPAccessInputSchema()},
+		{"list_my_mcp_access", "Inspect My Access Across MCP Servers", "Inspect your own access across MCP servers. This is not switched on for your organization yet.", externalOnly, ProjectScopeNone, listMyMCPAccessInputSchema()},
 		{"get_member_mcp_access", "Inspect One Member's Access Across MCP Servers", "Inspect one member's access across MCP servers. This is not switched on for your organization yet.", externalOnly, ProjectScopeNone, getMemberMCPAccessInputSchema()},
 		{"get_mcp_access", "Inspect Access to One MCP Server", "Inspect access to one MCP server. This is not switched on for your organization yet.", externalOnly, ProjectScopeExplicit, nil},
 	} {
@@ -111,10 +111,10 @@ func registerUnavailableAccessReadTools(reg *Registrar) {
 	}
 }
 
-func getMyMCPAccessInputSchema() *jsonschema.Schema {
+func listMyMCPAccessInputSchema() *jsonschema.Schema {
 	schema, err := jsonschema.For[struct{}](nil)
 	if err != nil {
-		panic(fmt.Sprintf("platformmcp: infer get_my_mcp_access input schema: %v", err))
+		panic(fmt.Sprintf("platformmcp: infer list_my_mcp_access input schema: %v", err))
 	}
 	return schema
 }

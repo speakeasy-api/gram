@@ -385,7 +385,7 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 	return output, nil
 }
 
-func (s *AccessReadService) GetMyMCPAccess(ctx context.Context, principal Principal) (GetMemberMCPAccessOutput, error) {
+func (s *AccessReadService) ListMyMCPAccess(ctx context.Context, principal Principal) (GetMemberMCPAccessOutput, error) {
 	return s.getMemberMCPAccess(ctx, principal, principal.UserID)
 }
 

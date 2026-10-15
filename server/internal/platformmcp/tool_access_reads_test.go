@@ -39,7 +39,7 @@ func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 	}{
 		"list_access_roles":     {ProjectScopeNone, externalOnly},
 		"list_access_members":   {ProjectScopeNone, bothAudiences},
-		"get_my_mcp_access":     {ProjectScopeNone, externalOnly},
+		"list_my_mcp_access":    {ProjectScopeNone, externalOnly},
 		"get_member_mcp_access": {ProjectScopeNone, externalOnly},
 		"get_mcp_access":        {ProjectScopeExplicit, externalOnly},
 	}
@@ -60,7 +60,7 @@ func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 	assistant := names(registrar.For(AudienceAssistant))
 	require.Contains(t, assistant, "list_access_members")
 	require.NotContains(t, assistant, "list_access_roles")
-	require.NotContains(t, assistant, "get_my_mcp_access")
+	require.NotContains(t, assistant, "list_my_mcp_access")
 	require.NotContains(t, assistant, "get_member_mcp_access")
 	require.NotContains(t, assistant, "get_mcp_access")
 }
@@ -82,7 +82,7 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 		"must use the identity query",
 		"masked",
 		"at least five people",
-		"get_my_mcp_access",
+		"list_my_mcp_access",
 		"get_member_mcp_access",
 		"assign_mcp_access_role",
 	} {
@@ -101,12 +101,12 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 // The assistant advertises the descriptor's schema to a model. A stub with a
 // different schema would teach the model one contract and then enforce another
 // the moment the service is wired.
-func TestGetMyMCPAccessUsesCallerIdentityWithoutInferringAccess(t *testing.T) {
+func TestListMyMCPAccessUsesCallerIdentityWithoutInferringAccess(t *testing.T) {
 	t.Parallel()
 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerAccessReadTools(registrar, nil)
-	descriptor := descriptorByName(t, registrar, "get_my_mcp_access")
+	descriptor := descriptorByName(t, registrar, "list_my_mcp_access")
 	for _, fragment := range []string{"authenticated caller", "without searching", "do not infer", "organization administration"} {
 		require.Contains(t, descriptor.Description, fragment)
 	}
@@ -118,7 +118,7 @@ func TestGetMyMCPAccessUsesCallerIdentityWithoutInferringAccess(t *testing.T) {
 
 	stub := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerUnavailableAccessReadTools(stub)
-	require.JSONEq(t, string(descriptor.InputSchema), string(descriptorByName(t, stub, "get_my_mcp_access").InputSchema))
+	require.JSONEq(t, string(descriptor.InputSchema), string(descriptorByName(t, stub, "list_my_mcp_access").InputSchema))
 }
 
 func TestGetMemberMCPAccessAdvertisesTableReadyOutput(t *testing.T) {
