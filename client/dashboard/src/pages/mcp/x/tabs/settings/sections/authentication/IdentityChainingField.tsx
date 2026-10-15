@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router";
 import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
@@ -18,22 +19,29 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { VendorEmaTrustNotice } from "@/components/vendor-ema-trust-notice";
-import { useOrganization, useProject } from "@/contexts/Auth";
+import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useProtectedResourceMetadata } from "@/lib/remote-identity/queries/useProtectedResourceMetadata";
+import { identityProvidersHref } from "@/pages/org/identity-provider/tabs";
+import { useOrgRoutes } from "@/routes";
 import type { IdentityChainingPreparation } from "@gram/client/models/components/identitychainingpreparation.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useRemoteSessionClientsPrepareEMAMutation } from "@gram/client/react-query/remoteSessionClientsPrepareEMA.js";
+import { useAddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderMutation } from "@gram/client/react-query/addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider.js";
+import {
+  useRemoteSessionClientsPrepareEMAMutation,
+  type RemoteSessionClientsPrepareEMAMutationVariables,
+} from "@gram/client/react-query/remoteSessionClientsPrepareEMA.js";
 import { useRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { buildRemoteSessionClientsReadEMAMutation } from "@gram/client/react-query/remoteSessionClientsReadEMA.js";
 import { useRemoteSessionClientsUnlinkEMAMutation } from "@gram/client/react-query/remoteSessionClientsUnlinkEMA.js";
 
 import { AuthRow } from "./AuthRow";
-import { EmaProviderOrderControl } from "./EmaProviderOrderControl";
+import { EmaProviderOrderLine } from "./EmaProviderOrderLine";
+import { useSpeakeasyAppendCheck } from "./useSpeakeasyAppendCheck";
 import {
   trustsExternalIdp,
   type ChainingProviders,
@@ -87,6 +95,14 @@ function stateBadge(state: ChainingState): {
     case "provider_rejection":
       return { label: "Provider rejected", variant: "destructive" };
   }
+}
+
+/** A server refusal as a sentence. */
+function sentence(message: string): string {
+  const text = message.trim();
+  if (!text) return text;
+  const capitalized = text[0]!.toUpperCase() + text.slice(1);
+  return /[.!?]$/.test(capitalized) ? capitalized : `${capitalized}.`;
 }
 
 function ClientPicker({
@@ -251,6 +267,63 @@ export function IdentityChainingField({
     !hasScope("org:admin", organization.id);
 
   const onSettled = () => void read.refetch();
+
+  // A sign-in that trusts no external identity provider can only be vouched
+  // for by Speakeasy, so enabling also puts Speakeasy in the vendor's order.
+  const speakeasyOnly =
+    providers.speakeasy && !trustsExternalIdp(userSessionIssuer);
+  const session = useSession();
+  const orgRoutes = useOrgRoutes();
+  const order = read.data?.emaProviders;
+  const speakeasyInOrder =
+    !!order &&
+    !order.isDefault &&
+    order.providers.some((provider) => provider.kind === "speakeasy");
+  const needsSpeakeasy = speakeasyOnly && !!order && !speakeasyInOrder;
+  const orgAdmin = hasScope("org:admin", organization.id);
+  const supportSession =
+    session.organizationOverride || !!session.impersonatorEmail;
+  const canAddSpeakeasy =
+    needsSpeakeasy && speakeasyEnabled && orgAdmin && !supportSession;
+  const appendTarget = picked && {
+    remoteSessionIssuerId: picked.remoteSessionIssuerId,
+    userSessionIssuerId: userSessionIssuer.id,
+  };
+  const appendCheck = useSpeakeasyAppendCheck(
+    appendTarget ?? { remoteSessionIssuerId: "", userSessionIssuerId: "" },
+    canAddSpeakeasy && !!appendTarget && !read.isFetching,
+  );
+  const addSpeakeasy =
+    useAddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderMutation({
+      onError: () => undefined,
+    });
+  const identitySettingsHref = `${orgRoutes.identity.href()}${identityProvidersHref()}`;
+  let speakeasyBlock: {
+    reason: string;
+    link?: { href: string; label: string };
+  } | null = null;
+  if (speakeasyOnly && !speakeasyEnabled)
+    speakeasyBlock = {
+      reason: "Turn on Speakeasy’s issuer first.",
+      link: {
+        href: identitySettingsHref,
+        label: "Speakeasy identity provider",
+      },
+    };
+  else if (needsSpeakeasy && !orgAdmin)
+    speakeasyBlock = {
+      reason:
+        "An organization admin needs to add Speakeasy for this vendor first.",
+    };
+  else if (needsSpeakeasy && supportSession)
+    speakeasyBlock = {
+      reason:
+        "The provider order can’t be changed from a support or impersonated session.",
+    };
+  else if (needsSpeakeasy && appendCheck.isError)
+    speakeasyBlock = { reason: sentence(appendCheck.error.message) };
+  const speakeasyChecking =
+    canAddSpeakeasy && (appendCheck.isFetching || !appendCheck.isSuccess);
   const prepare = useRemoteSessionClientsPrepareEMAMutation({
     onSuccess: (result) => {
       if (!preparationSucceeded(result)) {
@@ -291,7 +364,7 @@ export function IdentityChainingField({
       return;
     if (grantsBlocked || (needsGrantConfirm && !grantsConfirmed)) return;
     setPrepareOutcome(null);
-    prepare.mutate({
+    const prepareRequest: RemoteSessionClientsPrepareEMAMutationVariables = {
       request: {
         gramProject,
         prepareEMARequestBody: {
@@ -304,7 +377,44 @@ export function IdentityChainingField({
           resourceMetadata: chainingResourceMetadata(prm.metadata),
         },
       },
-    });
+    };
+    if (!needsSpeakeasy) {
+      prepare.mutate(prepareRequest);
+      return;
+    }
+    // Add first: a failed prepare leaves Speakeasy in the order, which is
+    // harmless and makes a retry's add a no-op.
+    if (!appendTarget || speakeasyBlock) return;
+    addSpeakeasy.mutate(
+      {
+        request: {
+          addSpeakeasyEMAProviderRequestBody: {
+            ...appendTarget,
+            dryRun: false,
+          },
+        },
+      },
+      { onSuccess: () => prepare.mutate(prepareRequest) },
+    );
+  };
+  const appendSpeakeasy = () => {
+    if (!appendTarget || speakeasyBlock) return;
+    addSpeakeasy.mutate(
+      {
+        request: {
+          addSpeakeasyEMAProviderRequestBody: {
+            ...appendTarget,
+            dryRun: false,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success("Speakeasy added to the provider order");
+        },
+        onSettled,
+      },
+    );
   };
   const disable = () => {
     if (!target || !read.data) return;
@@ -323,7 +433,11 @@ export function IdentityChainingField({
     );
   };
 
-  const pending = read.isFetching || prepare.isPending || unlink.isPending;
+  const pending =
+    read.isFetching ||
+    prepare.isPending ||
+    unlink.isPending ||
+    addSpeakeasy.isPending;
   const ready = bound && read.data?.state === "ready";
   const shownState = read.data ? displayedChainingState(read.data) : null;
   const canUnlink = chainingUnlinkable(read.data);
@@ -332,6 +446,8 @@ export function IdentityChainingField({
     shownState === "unlinked" || (shownState === "ready" && canUnlink);
   const badge = shownState && !badgeRedundant ? stateBadge(shownState) : null;
   const enableBlocked =
+    !!speakeasyBlock ||
+    (needsSpeakeasy && speakeasyChecking) ||
     publicClient ||
     !scopesValid ||
     grantsBlocked ||
@@ -417,6 +533,45 @@ export function IdentityChainingField({
                 )}
               </RequireScope>
             </div>
+            {!ready && speakeasyBlock && (
+              <Text muted small className="block">
+                {speakeasyBlock.reason}
+                {speakeasyBlock.link && (
+                  <>
+                    {" "}
+                    <Link
+                      className="underline underline-offset-4"
+                      to={speakeasyBlock.link.href}
+                    >
+                      {speakeasyBlock.link.label}
+                    </Link>
+                  </>
+                )}
+              </Text>
+            )}
+            {ready && needsSpeakeasy && (
+              <div className="flex flex-wrap items-center gap-3">
+                <Text warning small>
+                  Speakeasy isn’t in this vendor’s provider order, so identity
+                  chaining can’t run.
+                </Text>
+                {canAddSpeakeasy && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={pending || speakeasyChecking || !!speakeasyBlock}
+                    onClick={appendSpeakeasy}
+                  >
+                    Add Speakeasy
+                  </Button>
+                )}
+                {speakeasyBlock && (
+                  <Text muted small className="block w-full">
+                    {speakeasyBlock.reason}
+                  </Text>
+                )}
+              </div>
+            )}
             {switchingClient && (
               <Text muted small className="block">
                 Identity chaining uses client{" "}
@@ -471,14 +626,9 @@ export function IdentityChainingField({
                 issuerUrl={trustedIssuerQuery.data?.issuer}
               />
             )}
-            {!ready &&
-              providers.speakeasy &&
-              !(picked && read.data?.emaProviders) && (
-                <VendorEmaTrustNotice
-                  issuerUrl={speakeasyIssuerUrl}
-                  speakeasy
-                />
-              )}
+            {!ready && speakeasyOnly && (
+              <VendorEmaTrustNotice issuerUrl={speakeasyIssuerUrl} speakeasy />
+            )}
             {prepareOutcome?.remediation ? (
               <Alert variant="warning" dismissible={false}>
                 {prepareOutcome.remediation}
@@ -492,21 +642,19 @@ export function IdentityChainingField({
                 </Text>
               )
             )}
-            {providers.speakeasy && picked && read.data?.emaProviders && (
-              <EmaProviderOrderControl
-                order={read.data.emaProviders}
-                vendorRemoteSessionIssuerId={picked.remoteSessionIssuerId}
-                userSessionIssuerId={userSessionIssuer.id}
-                trustsExternalIdp={trustsExternalIdp(userSessionIssuer)}
-                speakeasyEnabled={speakeasyEnabled}
-                speakeasyIssuerUrl={speakeasyIssuerUrl}
-                chainingReady={ready}
-                refreshing={read.isFetching}
-                onSaved={onSettled}
+            {order && (
+              <EmaProviderOrderLine
+                order={order}
+                speakeasyOnly={speakeasyOnly}
               />
             )}
             <ApiErrorAlert
-              error={read.error ?? prepare.error ?? unlink.error}
+              error={
+                read.error ??
+                addSpeakeasy.error ??
+                prepare.error ??
+                unlink.error
+              }
             />
           </>
         )}

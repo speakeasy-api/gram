@@ -78,12 +78,12 @@ binding changes. This workflow cannot choose Speakeasy as an MCP server's
 enterprise authorization provider. For a server whose sign-in trusts no
 external identity provider, send an organization administrator to the server's
 **Settings** → **Authentication** → **Identity chaining** control in the
-dashboard, where **Add Speakeasy** appends Speakeasy to the vendor's EMA
-provider order; that needs the ema-providers rollout. It never removes or
-reorders providers, and it is refused while the vendor has no saved order and
-another server has a ready binding to it through an external identity
-provider. Any other
-order change goes through the organization's management API.
+dashboard: **Enable identity chaining** there also appends Speakeasy to the
+vendor's EMA provider order, which needs the ema-providers rollout. It never
+removes or reorders providers, and it is refused while the vendor has no saved
+order and another server has a ready binding to it through an external
+identity provider. Any other order change goes through the organization's
+management API.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for
 enterprise authorization readiness. Do not substitute a Platform MCP registration
 ID or generic registration readiness for this check.

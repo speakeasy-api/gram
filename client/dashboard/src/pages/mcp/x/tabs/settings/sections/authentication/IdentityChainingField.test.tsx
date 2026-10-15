@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityChainingField } from "./IdentityChainingField";
 import type { ChainingProviders } from "./identityChainingGate";
@@ -10,7 +10,18 @@ const pending = vi.hoisted(() => ({ prepare: false, unlink: false }));
 const unlinked = { state: "unlinked", scopes: [] };
 const read = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
 const scopeChecks = vi.hoisted(() => [] as unknown[]);
-const orderControl = vi.hoisted(() => vi.fn());
+const orderLine = vi.hoisted(() => vi.fn());
+const state = vi.hoisted(() => ({
+  orgAdmin: true,
+  session: { organizationOverride: false, impersonatorEmail: "" },
+  check: {} as Record<string, unknown>,
+  checkEnabled: [] as boolean[],
+  addSucceeds: true,
+  calls: [] as string[],
+  prepare: vi.fn(),
+  add: vi.fn(),
+  unlink: vi.fn(),
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ isFetching: false, data: read.data }),
   useQueryClient: () => ({}),
@@ -21,10 +32,41 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org" }),
   useProject: () => ({ id: "project-id" }),
+  useSession: () => state.session,
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope !== "org:admin" || state.orgAdmin,
+  }),
 }));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
+}));
+vi.mock("react-router", () => ({
+  Link: ({ children, to }: { children: ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
+}));
+vi.mock("./useSpeakeasyAppendCheck", () => ({
+  useSpeakeasyAppendCheck: (_target: unknown, enabled: boolean) => {
+    state.checkEnabled.push(enabled);
+    return state.check;
+  },
+}));
+vi.mock(
+  "@gram/client/react-query/addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider.js",
+  () => ({
+    useAddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderMutation: () => ({
+      isPending: false,
+      error: null,
+      mutate: (variables: unknown, options?: { onSuccess?: () => void }) => {
+        state.calls.push("add");
+        state.add(variables);
+        if (state.addSucceeds) options?.onSuccess?.();
+      },
+    }),
+  }),
+);
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
     children,
@@ -66,17 +108,25 @@ vi.mock("@gram/client/react-query/remoteSessionIssuer.js", () => ({
 vi.mock("@gram/client/react-query/remoteSessionClientsPrepareEMA.js", () => ({
   useRemoteSessionClientsPrepareEMAMutation: () => ({
     isPending: pending.prepare,
+    mutate: (variables: unknown) => {
+      state.calls.push("prepare");
+      state.prepare(variables);
+    },
   }),
 }));
-vi.mock("./EmaProviderOrderControl", () => ({
-  EmaProviderOrderControl: (props: Record<string, unknown>) => {
-    orderControl(props);
-    return <div data-testid="order-control" />;
+vi.mock("./EmaProviderOrderLine", () => ({
+  EmaProviderOrderLine: (props: Record<string, unknown>) => {
+    orderLine(props);
+    return <div data-testid="order-line" />;
   },
 }));
 vi.mock("@gram/client/react-query/remoteSessionClientsUnlinkEMA.js", () => ({
   useRemoteSessionClientsUnlinkEMAMutation: () => ({
     isPending: pending.unlink,
+    mutate: (variables: unknown) => {
+      state.calls.push("unlink");
+      state.unlink(variables);
+    },
   }),
 }));
 
@@ -117,7 +167,16 @@ const bound = (clientId: string) => ({
 beforeEach(() => {
   read.data = unlinked;
   scopeChecks.length = 0;
-  orderControl.mockReset();
+  orderLine.mockReset();
+  state.orgAdmin = true;
+  state.session = { organizationOverride: false, impersonatorEmail: "" };
+  state.check = { isSuccess: true, isFetching: false, isError: false };
+  state.checkEnabled.length = 0;
+  state.addSucceeds = true;
+  state.calls.length = 0;
+  state.prepare.mockReset();
+  state.add.mockReset();
+  state.unlink.mockReset();
 });
 
 afterEach(() => {
@@ -194,11 +253,43 @@ describe("identity chaining bound client", () => {
 describe("identity chaining vouched for by Speakeasy", () => {
   const speakeasyOnly = { external: false, speakeasy: true };
   const plainIssuer = { id: "session-issuer" } as UserSessionIssuer;
-  const order = {
-    isDefault: true,
+  const oktaOrder = {
+    isDefault: false,
     vendorIssuer: "https://vendor.example.com",
-    providers: [{ kind: "external" }],
+    providers: [{ kind: "external", remoteSessionIssuerId: "okta" }],
   };
+  const withSpeakeasy = {
+    ...oktaOrder,
+    providers: [
+      ...oktaOrder.providers,
+      { kind: "speakeasy", internalSessionIssuerId: "internal" },
+    ],
+  };
+  const trusting = {
+    id: "session-issuer",
+    trustedRemoteSessionIssuerId: "idp",
+    trustedRemoteSessionClientId: "second",
+  } as UserSessionIssuer;
+
+  function speakeasyField(
+    overrides: Partial<Parameters<typeof IdentityChainingField>[0]> = {},
+  ) {
+    return (
+      <IdentityChainingField
+        userSessionIssuer={plainIssuer}
+        providers={speakeasyOnly}
+        speakeasyEnabled
+        speakeasyIssuerUrl="https://speakeasy.example.com/issuer"
+        linkedClients={clients}
+        resource="https://example.com/mcp"
+        {...overrides}
+      />
+    );
+  }
+  const enableButton = () =>
+    screen.getByRole("button", {
+      name: "Enable identity chaining",
+    }) as HTMLButtonElement;
 
   it("offers every linked client when no sign-in client is trusted", () => {
     render(field(speakeasyOnly, plainIssuer));
@@ -209,87 +300,171 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
-    const trusting = {
-      id: "session-issuer",
-      trustedRemoteSessionIssuerId: "idp",
-      trustedRemoteSessionClientId: "second",
-    } as UserSessionIssuer;
     render(field({ external: true, speakeasy: false }, trusting));
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
   it("keeps the trusted sign-in client out even when only Speakeasy applies", () => {
-    const trusting = {
-      id: "session-issuer",
-      trustedRemoteSessionIssuerId: "idp",
-      trustedRemoteSessionClientId: "second",
-    } as UserSessionIssuer;
     render(field(speakeasyOnly, trusting));
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
   it("asks for an authorization server client, not an identity provider one", () => {
-    render(
-      <IdentityChainingField
-        userSessionIssuer={plainIssuer}
-        providers={speakeasyOnly}
-        linkedClients={[]}
-        resource="https://example.com/mcp"
-      />,
-    );
+    render(speakeasyField({ linkedClients: [] }));
     expect(
       screen.getByText(/registered with this server’s authorization server/),
     ).toBeTruthy();
   });
 
-  it("hands the order control this server's sign-in and Speakeasy state", () => {
-    read.data = { ...bound("first"), emaProviders: order };
+  it("adds Speakeasy to the order, then prepares the binding", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
+    render(speakeasyField());
+    fireEvent.click(enableButton());
+    expect(state.calls).toEqual(["add", "prepare"]);
+    expect(state.add).toHaveBeenCalledWith({
+      request: {
+        addSpeakeasyEMAProviderRequestBody: {
+          remoteSessionIssuerId: "issuer",
+          userSessionIssuerId: "session-issuer",
+          dryRun: false,
+        },
+      },
+    });
+  });
+
+  it("doesn't prepare when adding Speakeasy fails", () => {
+    state.addSucceeds = false;
+    read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
+    render(speakeasyField());
+    fireEvent.click(enableButton());
+    expect(state.calls).toEqual(["add"]);
+  });
+
+  it("skips the add when Speakeasy is already in the order", () => {
+    state.orgAdmin = false;
+    read.data = { ...unlinked, generation: 0, emaProviders: withSpeakeasy };
+    render(speakeasyField());
+    fireEvent.click(enableButton());
+    expect(state.calls).toEqual(["prepare"]);
+    expect(state.checkEnabled).not.toContain(true);
+  });
+
+  it("never writes the order for a server that trusts an external identity provider", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
     render(
-      <IdentityChainingField
-        userSessionIssuer={plainIssuer}
-        providers={speakeasyOnly}
-        speakeasyEnabled
-        speakeasyIssuerUrl="https://speakeasy.example.com/issuer"
-        linkedClients={clients}
-        resource="https://example.com/mcp"
-      />,
-    );
-    expect(orderControl).toHaveBeenCalledWith(
-      expect.objectContaining({
-        order,
-        vendorRemoteSessionIssuerId: "issuer",
-        userSessionIssuerId: "session-issuer",
-        trustsExternalIdp: false,
-        speakeasyEnabled: true,
-        speakeasyIssuerUrl: "https://speakeasy.example.com/issuer",
-        chainingReady: true,
-        refreshing: false,
+      speakeasyField({
+        userSessionIssuer: trusting,
+        providers: { external: true, speakeasy: true },
       }),
     );
-    expect(screen.queryByTestId("trust-notice")).toBeNull();
+    fireEvent.click(enableButton());
+    expect(state.calls).toEqual(["prepare"]);
+    expect(state.checkEnabled).not.toContain(true);
   });
 
-  it("tells the control when the sign-in trusts an external identity provider", () => {
-    read.data = { ...unlinked, emaProviders: order };
-    render(field({ external: true, speakeasy: true }));
-    expect(orderControl).toHaveBeenCalledWith(
-      expect.objectContaining({ trustsExternalIdp: true }),
-    );
+  it.each([
+    [
+      "the server refuses the add",
+      (): void => {
+        state.check = {
+          isSuccess: false,
+          isFetching: false,
+          isError: true,
+          error: new Error("other servers chain to this vendor"),
+        };
+      },
+      {},
+      "Other servers chain to this vendor.",
+    ],
+    [
+      "Speakeasy's issuer is off",
+      (): void => undefined,
+      { speakeasyEnabled: false },
+      "Turn on Speakeasy’s issuer first.",
+    ],
+    [
+      "the person isn't an organization admin",
+      (): void => {
+        state.orgAdmin = false;
+      },
+      {},
+      "An organization admin needs to add Speakeasy for this vendor first.",
+    ],
+    [
+      "the session is a support session",
+      (): void => {
+        state.session = { organizationOverride: true, impersonatorEmail: "" };
+      },
+      {},
+      "The provider order can’t be changed from a support or impersonated session.",
+    ],
+  ] as const)(
+    "disables Enable with a reason when %s",
+    (_name, arrange, overrides, reason) => {
+      arrange();
+      read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
+      render(speakeasyField(overrides));
+      expect(enableButton().disabled).toBe(true);
+      expect(screen.getByText(reason, { exact: false })).toBeTruthy();
+      fireEvent.click(enableButton());
+      expect(state.calls).toEqual([]);
+    },
+  );
+
+  it("links a refusal for an off issuer to the identity settings", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
+    render(speakeasyField({ speakeasyEnabled: false }));
+    expect(
+      screen
+        .getByRole("link", { name: "Speakeasy identity provider" })
+        .getAttribute("href"),
+    ).toBe("/org/identity?tab=identity-providers");
   });
 
-  it("shows the Speakeasy trust notice before the order is read", () => {
-    render(
-      <IdentityChainingField
-        userSessionIssuer={plainIssuer}
-        providers={speakeasyOnly}
-        speakeasyIssuerUrl="https://speakeasy.example.com/issuer"
-        linkedClients={clients}
-        resource="https://example.com/mcp"
-      />,
-    );
+  it("offers to add Speakeasy for a ready server whose order lacks it", () => {
+    read.data = { ...bound("first"), emaProviders: oktaOrder };
+    render(speakeasyField());
+    expect(
+      screen.getByText(/Speakeasy isn’t in this vendor’s provider order/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Add Speakeasy" }));
+    expect(state.calls).toEqual(["add"]);
+  });
+
+  it("leaves the recovery action to organization admins", () => {
+    state.orgAdmin = false;
+    read.data = { ...bound("first"), emaProviders: oktaOrder };
+    render(speakeasyField());
+    expect(
+      screen.getByText(/Speakeasy isn’t in this vendor’s provider order/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add Speakeasy" })).toBeNull();
+  });
+
+  it("disables without touching the order", () => {
+    read.data = { ...bound("first"), emaProviders: withSpeakeasy };
+    render(speakeasyField());
+    fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Disable" }).at(-1)!);
+    expect(state.calls).toEqual(["unlink"]);
+  });
+
+  it("shows the order read-only, with the Speakeasy trust notice until ready", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: withSpeakeasy };
+    render(speakeasyField());
+    expect(orderLine).toHaveBeenCalledWith({
+      order: withSpeakeasy,
+      speakeasyOnly: true,
+    });
     expect(screen.getByTestId("trust-notice").textContent).toBe(
       "speakeasy:https://speakeasy.example.com/issuer",
     );
-    expect(screen.queryByTestId("order-control")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Speakeasy" })).toBeNull();
+  });
+
+  it("drops the trust notice once chaining is ready", () => {
+    read.data = { ...bound("first"), emaProviders: withSpeakeasy };
+    render(speakeasyField());
+    expect(screen.queryByTestId("trust-notice")).toBeNull();
   });
 });

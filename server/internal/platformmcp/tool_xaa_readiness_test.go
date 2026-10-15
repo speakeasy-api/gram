@@ -416,6 +416,7 @@ func TestXAAReadinessOktaSignInGuidanceCoversEveryStep(t *testing.T) {
 	require.Contains(t, descriptor.Description, "send the administrator to the dashboard")
 	require.Contains(t, descriptor.Description, "Identity chaining control in the dashboard")
 	require.Contains(t, descriptor.Description, "never removes or reorders providers")
+	require.Contains(t, descriptor.Description, "Enable identity chaining also appends the Speakeasy issuer")
 	require.Contains(t, descriptor.Description, "setEMAProviders management API")
 	require.Contains(t, platformOverview, "so is adding the Speakeasy issuer to a vendor's EMA provider order")
 }

@@ -292,7 +292,7 @@ func checkSpeakeasyAppend(ctx context.Context, logger *slog.Logger, q *repo.Quer
 	}
 	for _, issuer := range issuers {
 		if canonical, err := NormalizeVendorIssuer(issuer); err == nil && canonical == vendor {
-			return oops.E(oops.CodeFailedPrecondition, nil, "other servers chain to this vendor through an external identity provider; saving a provider order would change their sign-in, so change it from the organization's identity settings")
+			return oops.E(oops.CodeFailedPrecondition, nil, "other servers chain to this vendor through an external identity provider; saving a provider order would change their sign-in")
 		}
 	}
 	return nil
