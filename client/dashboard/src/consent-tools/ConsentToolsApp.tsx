@@ -516,7 +516,9 @@ export function ConsentToolsApp({
     }
     return annGrants.has(id);
   };
-  const navGranted = groupGranted(nav);
+  const navGranted =
+    groupGranted(nav) ||
+    (grouped.length > 0 && grouped.every((t) => scope.has(t.name)));
   const navPartial = !navGranted && grouped.some((t) => scope.has(t.name));
 
   // Bulk-select tools by name: the "All tools" and unannotated groups, which
@@ -547,16 +549,15 @@ export function ConsentToolsApp({
   };
 
   const toggleGroupGrant = () => {
-    if (nav === "all" || nav === "none") {
-      togglePicks(groupTools(tools, nav));
+    // A fully covered group clears, whether picks or a grant cover it, so
+    // the checked header never adds a grant the user did not ask for.
+    if (nav === "all" || nav === "none" || navGranted) {
+      togglePicks(grouped);
       return;
     }
-    const next = new Map(annGrants);
-    if (next.has(nav)) next.delete(nav);
     // New grants default to live: like the all-tools grant, matching tools
     // the server adds later are included until the user freezes the grant.
-    else next.set(nav, "live");
-    setAnnGrants(next);
+    setAnnGrants(new Map(annGrants).set(nav, "live"));
   };
 
   const togglePick = (name: string) => {

@@ -255,6 +255,21 @@ describe("ConsentToolsApp", () => {
     expect(screen.queryByText("get_thing")).toBeNull();
   });
 
+  it("a group covered by picks shows checked and clears without a grant", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("checkbox", { name: /get_thing/ }));
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    const selectAll = screen.getByRole("checkbox", { name: /Select all 1/ });
+    expect(selectAll.getAttribute("aria-checked")).toBe("true");
+
+    await user.click(selectAll);
+    expect(formFieldValues("tools")).toEqual([]);
+    expect(formFieldValues("tool_annotations")).toEqual([]);
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+  });
+
   it("navigating groups filters the list without granting anything", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -560,8 +575,10 @@ describe("parsePrefillBootstrap", () => {
         .getByRole("checkbox", { name: /Select all 3/ })
         .getAttribute("aria-checked"),
     ).toBe("mixed");
-    expect(
-      screen.getByText(/of 3 tools in scope on gateway/).textContent,
-    ).not.toMatch(/picked/);
+    const footer = screen.getByText(
+      /of 3 tools in scope on gateway/,
+    ).textContent;
+    expect(footer).toContain("1 of 3 tools in scope on gateway");
+    expect(footer).not.toMatch(/picked/);
   });
 });
