@@ -76,7 +76,8 @@ type PreparationResult struct {
 	Resource         string
 	GrantTypes       []string
 	// Scopes is the set recorded on the binding at its last Turn on; identity
-	// chaining requests it, without OIDC-reserved scopes.
+	// chaining requests it without OIDC-reserved scopes and bounds an ID-JAG
+	// by the whole set when that leaves nothing to request.
 	Scopes      []string
 	GrantSource string
 

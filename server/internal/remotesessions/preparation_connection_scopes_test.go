@@ -51,11 +51,11 @@ func TestPreparationScopes_TurnOnSnapshotsTheConnection(t *testing.T) {
 	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, "ready", prepared.State)
-	require.Equal(t, []string{"files:read"}, prepared.Scopes, "the connection's scopes, without OIDC scopes, not the request's")
+	require.Equal(t, []string{"files:read", "openid"}, prepared.Scopes, "the connection's whole set, not the request's")
 
 	read := readEMA(t, ti, ctx, in)
-	require.Equal(t, []string{"files:read"}, read.Scopes)
-	require.Equal(t, []string{"files:read"}, read.ConnectionScopes)
+	require.Equal(t, []string{"files:read", "openid"}, read.Scopes)
+	require.Equal(t, []string{"files:read", "openid"}, read.ConnectionScopes)
 	require.False(t, *read.ScopesOutOfDate)
 }
 
@@ -107,6 +107,50 @@ func TestPreparationScopes_ConnectionChangeAppliesOnlyOnTurnOn(t *testing.T) {
 	require.False(t, *readEMA(t, ti, ctx, in).ScopesOutOfDate)
 }
 
+func TestPreparationScopes_OIDCOnlyConnectionIsRecordedWhole(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	in.ConfirmGrants = []string{oauthwire.GrantTypeJWTBearer}
+	in.Scopes = nil
+	connectedPreparation(t, ti, ctx, in, in.Resource, []string{"openid", "email"})
+
+	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, "ready", prepared.State)
+	require.Equal(t, []string{"email", "openid"}, prepared.Scopes, "the OIDC scopes bound an ID-JAG when chaining requests none")
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	runtime, err := remotesessions.ReadIdentityChainingForTenant(ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, in)
+	require.NoError(t, err)
+	require.Equal(t, []string{"email", "openid"}, runtime.Scopes, "the runtime reads the whole recorded set as its ceiling")
+	require.Empty(t, remotesessions.GrantScopes(runtime.Scopes))
+
+	in.ExpectedGeneration = prepared.Generation
+	again, err := ti.service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, prepared.Generation, again.Generation)
+	require.False(t, *readEMA(t, ti, ctx, in).ScopesOutOfDate)
+}
+
+func TestPreparationScopes_RecordedOIDCScopesCompareWhole(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	in.ConfirmGrants = []string{oauthwire.GrantTypeJWTBearer}
+	in.Scopes = []string{"openid", "files:read", "openid"}
+	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, []string{"files:read", "openid"}, prepared.Scopes, "an unconnected binding records the request, sorted and deduplicated")
+
+	connectedPreparation(t, ti, ctx, in, in.Resource, []string{"openid", "files:read"})
+	require.False(t, *readEMA(t, ti, ctx, in).ScopesOutOfDate)
+	before := preparationAuditCounts(t, ctx, ti)
+	in.Scopes = nil
+	in.ExpectedGeneration = prepared.Generation
+	again, err := ti.service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, prepared.Generation, again.Generation, "a recorded set with OIDC scopes matches the same connection set")
+	requirePreparationAuditDelta(t, before, preparationAuditCounts(t, ctx, ti), 0, 0, 0)
+}
+
 func TestPreparationScopes_ServerFoundByItsDocumentResource(t *testing.T) {
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)
@@ -139,9 +183,9 @@ func TestPreparationScopes_UnlinkedClientRecordsTheRequest(t *testing.T) {
 	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, "ready", prepared.State)
-	require.Equal(t, []string{"files:read"}, prepared.Scopes, "a client no sign-in uses has no connection to follow")
+	require.Equal(t, []string{"files:read", "openid"}, prepared.Scopes, "a client no sign-in uses has no connection to follow")
 	read := readEMA(t, ti, ctx, in)
-	require.Equal(t, []string{"files:read"}, read.ConnectionScopes)
+	require.Equal(t, []string{"files:read", "openid"}, read.ConnectionScopes)
 	require.False(t, *read.ScopesOutOfDate)
 }
 

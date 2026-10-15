@@ -51,7 +51,7 @@ func reportConnectionScopes(ctx context.Context, db repo.DBTX, project uuid.UUID
 	}
 	current := BindingScopes(connection, r.Scopes).Scopes
 	r.ConnectionScopes = current
-	r.ScopesOutOfDate = !slices.Equal(current, sortedScopes(GrantScopes(r.Scopes)))
+	r.ScopesOutOfDate = !SameBindingScopes(current, r.Scopes)
 	return nil
 }
 

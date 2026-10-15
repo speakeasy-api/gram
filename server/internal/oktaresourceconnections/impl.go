@@ -537,8 +537,8 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 	}
 }
 
-// turnOnScopes is what Turn on through c would record for sv now, from the
-// cached resource row; this surface never probes. A server that is not
+// turnOnScopes is what identity chaining through c would request for sv after
+// Turn on now, from the cached resource row; this surface never probes. A server that is not
 // remote-backed has no connection Turn on can key, so its scopes would come
 // from the request.
 func turnOnScopes(sv repo.ListEligibleServersRow, c repo.ListIssuerClientsRow, resource remotesessions.ResourceScopes) []string {
@@ -553,7 +553,7 @@ func turnOnScopes(sv repo.ListEligibleServersRow, c repo.ListIssuerClientsRow, r
 		}, resource, true)
 		connection = &resolution
 	}
-	return remotesessions.BindingScopes(connection, nil).Scopes
+	return remotesessions.GrantScopes(remotesessions.BindingScopes(connection, nil).Scopes)
 }
 
 func (s *Service) List(ctx context.Context, payload *srv.ListPayload) (*srv.ListOktaResourceConnectionsResult, error) {

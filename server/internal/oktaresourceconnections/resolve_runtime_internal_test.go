@@ -66,7 +66,7 @@ func TestResolveClientRuntimeScopesAndAttachments(t *testing.T) {
 	require.Equal(t, []string{"pinned"}, scopes)
 	client.IssuerScopeOverride = nil
 	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{}))
-	require.Equal(t, []string{"read", "write"}, scopes, "Turn on never records OIDC-reserved scopes")
+	require.Equal(t, []string{"read", "write"}, scopes, "identity chaining never requests OIDC-reserved scopes")
 
 	// Resource-matched clients use the same trailing-slash normalization as runtime.
 	server.UserSessionIssuerID = uuid.NullUUID{}

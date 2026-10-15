@@ -55,7 +55,7 @@ export type IdentityChainingPreparation = {
    */
   clientId?: string | undefined;
   /**
-   * Scopes turning identity chaining on again would record now, sorted and without OpenID Connect scopes: what an interactive sign-in through the selected client requests for this server, or the recorded scopes when the binding has no server connection to follow or the connection names none. Returned by readEMA and prepareEMA when a client is selected.
+   * Scopes turning identity chaining on again would record now, sorted: what an interactive sign-in through the selected client requests for this server, or the recorded scopes when the binding has no server connection to follow or the connection names only OpenID Connect scopes while the recorded ones name others. Returned by readEMA and prepareEMA when a client is selected.
    */
   connectionScopes?: Array<string> | undefined;
   /**
@@ -83,11 +83,11 @@ export type IdentityChainingPreparation = {
   resource: string;
   retryable: boolean;
   /**
-   * Scopes recorded on the binding when identity chaining was turned on. Identity chaining requests exactly these, without OpenID Connect scopes; changes to the server connection apply only when it is turned on again.
+   * Scopes recorded on the binding when identity chaining was turned on. Identity chaining requests exactly these, without OpenID Connect scopes; when that leaves none, an ID-JAG naming a scope outside these is rejected. Changes to the server connection apply only when it is turned on again.
    */
   scopes: Array<string>;
   /**
-   * True when connection_scopes differs from the scopes identity chaining requests; turning identity chaining on again applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.
+   * True when connection_scopes differs from scopes; turning identity chaining on again applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.
    */
   scopesOutOfDate?: boolean | undefined;
   stage: IdentityChainingPreparationStage;

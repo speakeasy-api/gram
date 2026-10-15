@@ -203,8 +203,8 @@ type XAAIdentityChainingBinding struct {
 	GrantSource      string   `json:"grant_source"`
 	RequestedScopes  []string `json:"requested_scopes" jsonschema:"scopes identity chaining requests, after dropping OpenID Connect scopes"`
 	ConfiguredScopes []string `json:"configured_scopes" jsonschema:"scopes recorded on the binding when identity chaining was turned on, before dropping OpenID Connect scopes"`
-	ConnectionScopes []string `json:"connection_scopes,omitempty" jsonschema:"scopes turning identity chaining on again would record now, without OpenID Connect scopes: what an interactive sign-in through the bound client requests for this server, or the recorded scopes when the binding has no server connection to follow; omitted when no client is bound"`
-	ScopesOutOfDate  bool     `json:"scopes_out_of_date" jsonschema:"true when connection_scopes differs from requested_scopes; turning identity chaining on again in the dashboard applies the connection's scopes"`
+	ConnectionScopes []string `json:"connection_scopes,omitempty" jsonschema:"scopes turning identity chaining on again would record now, comparable to configured_scopes: what an interactive sign-in through the bound client requests for this server, or the recorded scopes when the binding has no server connection to follow; omitted when no client is bound"`
+	ScopesOutOfDate  bool     `json:"scopes_out_of_date" jsonschema:"true when connection_scopes differs from configured_scopes; turning identity chaining on again in the dashboard applies the connection's scopes"`
 }
 
 type OktaSignInStatus struct {

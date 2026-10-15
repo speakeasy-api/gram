@@ -228,9 +228,10 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 	}
 	// Turn on snapshots the server connection's scopes onto the binding, and
-	// chaining requests only that snapshot. The request's scopes are recorded
-	// only when there is no connection to follow or it names no grantable
-	// scope; they are always what a DCR registration asks for.
+	// chaining requests only that snapshot, OIDC-reserved scopes dropped. The
+	// request's scopes are recorded only when there is no connection to follow
+	// or it names no grantable scope while they do; they are always what a
+	// DCR registration asks for.
 	var connection *ScopeResolution
 	if selected != uuid.Nil {
 		connection, err = ConnectionScopes(ctx, tx, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, ClientID: selected, Resource: in.Resource, Discover: s.resources != nil})
@@ -239,7 +240,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 	}
 	scopes := BindingScopes(connection, in.Scopes)
-	changed := preparationBindingState(b.State) == PreparationStateProviderRejection || selected != b.RemoteSessionClientID.UUID || preparationBindingState(b.State) == PreparationStateUnlinked || !slices.Equal(b.RequestedScopes, scopes.Scopes) || (in.ConfirmGrants != nil && (!samePreparationGrants(in.ConfirmGrants, client.GrantTypes) || preparationBindingGrantSource(b.GrantSource) != PreparationGrantSourceAdministratorDeclared)) || (in.Mechanism == PreparationMechanismCIMD && (!slices.Contains(client.GrantTypes, oauthwire.GrantTypeJWTBearer) || preparationBindingGrantSource(b.GrantSource) != PreparationGrantSourceCIMDPublished))
+	changed := preparationBindingState(b.State) == PreparationStateProviderRejection || selected != b.RemoteSessionClientID.UUID || preparationBindingState(b.State) == PreparationStateUnlinked || !SameBindingScopes(b.RequestedScopes, scopes.Scopes) || (in.ConfirmGrants != nil && (!samePreparationGrants(in.ConfirmGrants, client.GrantTypes) || preparationBindingGrantSource(b.GrantSource) != PreparationGrantSourceAdministratorDeclared)) || (in.Mechanism == PreparationMechanismCIMD && (!slices.Contains(client.GrantTypes, oauthwire.GrantTypeJWTBearer) || preparationBindingGrantSource(b.GrantSource) != PreparationGrantSourceCIMDPublished))
 	if changed && (b.RemoteSessionClientID.Valid || b.ClaimID.Valid || preparationBindingState(b.State) == PreparationStateUnlinked) && in.ExpectedGeneration != b.Generation {
 		return preparationResult(b, issuer, client, PreparationStateConfigurationRequired), nil
 	}
@@ -402,7 +403,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if err = tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
-	if !slices.Equal(before.RequestedScopes, b.RequestedScopes) {
+	if !SameBindingScopes(before.RequestedScopes, b.RequestedScopes) {
 		s.logger.InfoContext(ctx, "recorded identity chaining scopes",
 			attr.SlogProjectID(project.String()),
 			attr.SlogOrganizationID(org),

@@ -65,8 +65,9 @@ func GrantScopes(scopes []string) []string {
 // BindingScopeSet is the scope set Turn on records on an identity chaining
 // binding, and where it came from.
 type BindingScopeSet struct {
-	// Scopes is sorted, without OIDC-reserved scopes; empty when neither the
-	// connection nor the request names a grantable scope.
+	// Scopes is sorted and deduplicated, OIDC-reserved scopes kept: chaining
+	// drops them from its request but bounds an ID-JAG that names no requested
+	// scope by the whole set.
 	Scopes []string
 
 	// Source is the connection's precedence step, or
@@ -76,16 +77,21 @@ type BindingScopeSet struct {
 
 // BindingScopes is the one rule for the scopes an identity chaining binding
 // records: the server connection's set when the binding has a connection to
-// follow (connection is non-nil) and it names a grantable scope, else the
-// scopes the preparation request names. OIDC-reserved scopes are dropped
-// either way.
+// follow (connection is non-nil) and it names a grantable scope, or when the
+// request names none either; else the scopes the preparation request names.
+// GrantScopes decides which set applies; the chosen set is recorded whole.
 func BindingScopes(connection *ScopeResolution, requested []string) BindingScopeSet {
-	if connection != nil {
-		if scopes := sortedScopes(GrantScopes(connection.Scopes)); len(scopes) > 0 {
-			return BindingScopeSet{Scopes: scopes, Source: connection.Source}
-		}
+	if connection != nil && (len(GrantScopes(connection.Scopes)) > 0 || len(connection.Scopes) > 0 && len(GrantScopes(requested)) == 0) {
+		return BindingScopeSet{Scopes: sortedScopes(connection.Scopes), Source: connection.Source}
 	}
-	return BindingScopeSet{Scopes: sortedScopes(GrantScopes(requested)), Source: remotesessionmetrics.ScopeSourcePreparationRequest}
+	return BindingScopeSet{Scopes: sortedScopes(requested), Source: remotesessionmetrics.ScopeSourcePreparationRequest}
+}
+
+// SameBindingScopes reports whether two recorded scope sets are the same set,
+// so a row recorded unsorted or with duplicates compares equal to its
+// BindingScopes form.
+func SameBindingScopes(a, b []string) bool {
+	return slices.Equal(sortedScopes(a), sortedScopes(b))
 }
 
 func sortedScopes(scopes []string) []string {
@@ -125,6 +131,11 @@ type BindingConnection struct {
 // the server scopes view key it. The result is nil when the client is not
 // linked to the user session issuer or no single server matches: the binding
 // then has no connection to follow.
+//
+// Only servers signing in directly through the binding's user session issuer
+// are considered. A gateway member qualified through a different direct-login
+// issuer signs in under that member's resource policy, which this does not
+// resolve, so such a binding records the request's scopes.
 func ConnectionScopes(ctx context.Context, db repo.DBTX, b BindingConnection) (*ScopeResolution, error) {
 	q := repo.New(db)
 	rows, err := q.ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{

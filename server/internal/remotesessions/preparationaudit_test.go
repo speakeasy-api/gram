@@ -57,7 +57,7 @@ func TestPreparationAudit_EnableScopesAndUnlink(t *testing.T) {
 	require.Equal(t, enabled.BindingID.String(), metadata["binding_id"])
 	require.Equal(t, in.UserSessionIssuerID.String(), metadata["user_session_issuer_id"])
 	require.Equal(t, in.Resource, metadata["resource"])
-	require.Equal(t, []any{}, metadata["scopes"], "OIDC-reserved scopes are never recorded")
+	require.Equal(t, []any{"openid"}, metadata["scopes"])
 
 	replayed, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestPreparationAudit_EnableScopesAndUnlink(t *testing.T) {
 	require.NoError(t, err)
 	metadata, err = audittest.DecodeAuditData(record.Metadata)
 	require.NoError(t, err)
-	require.Equal(t, []any{}, metadata["previous_scopes"])
+	require.Equal(t, []any{"openid"}, metadata["previous_scopes"])
 	require.Equal(t, []any{"read"}, metadata["scopes"])
 
 	in.ExpectedGeneration = rescoped.Generation
