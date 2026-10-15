@@ -473,6 +473,9 @@ var McpServer = Type("McpServer", func() {
 	Attribute("user_session_issuer_id", String, "The ID of the user session issuer that gates OAuth-based MCP client authentication for this server, if any.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("remote_session_issuer_id", String, "The ID of the Remote Identity Provider this server's users sign in to, if any. Configured on this server: other servers sharing its user session issuer may sign in to different providers, so this is the only field that says which upstream authorization server serves this one. Absent means no sign-in is configured and the server calls its upstream anonymously.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server used as the backend", func() {
 		Format(FormatUUID)
 	})

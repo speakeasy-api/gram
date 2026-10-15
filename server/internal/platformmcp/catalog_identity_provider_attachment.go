@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -148,7 +149,18 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock identity-provider issuer attachment: %w", err)
 	}
 
-	if attached, err := s.matchingAttachment(ctx, principal.OrganizationID, project, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        registration.McpServerID.UUID,
+		ProjectID: project.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("load registered MCP server: %w", err)
+	}
+
+	if attached, err := s.matchingAttachment(ctx, principal.OrganizationID, project, registration.UserSessionIssuerID.UUID, server.RemoteSessionIssuerID, metadata.Issuer); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	} else if attached {
 		return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
@@ -218,7 +230,21 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 	return remotesessions.DiscoveredIssuerMetadata{}, ErrIdentityProviderAttachmentUnsupported
 }
 
-func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, organizationID string, project ResolvedProject, userSessionIssuerID uuid.UUID, issuerURL string) (bool, error) {
+// matchingAttachment reports that this registration's MCP server is already
+// attached to issuerURL and the commit below has nothing to do: the server
+// signs in to that provider and a client for it is bound to its user session
+// issuer.
+//
+// Both halves are required. A client bound without the server naming the
+// provider is the state a cleared provider leaves behind, and the server-level
+// reconcile does not repair it on a shared issuer, so reporting success there
+// would leave the server with no sign-in. The commit instead reuses that
+// client and stamps the server.
+//
+// Other providers bound to the same user session issuer belong to the other
+// servers sharing it and are not a conflict. Two clients for this one provider
+// are: no reader can tell which the server signs in through.
+func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, organizationID string, project ResolvedProject, userSessionIssuerID uuid.UUID, serverProvider uuid.NullUUID, issuerURL string) (bool, error) {
 	clients, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(project.ID),
@@ -228,13 +254,19 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 	if err != nil {
 		return false, fmt.Errorf("list registered identity providers: %w", err)
 	}
-	if len(clients) == 0 {
-		return false, nil
+	matching := make([]remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow, 0, 1)
+	for _, client := range clients {
+		if sameIssuerURL(client.IssuerUrl, issuerURL) {
+			matching = append(matching, client)
+		}
 	}
-	if len(clients) != 1 || !sameIssuerURL(clients[0].IssuerUrl, issuerURL) {
+	if len(matching) > 1 {
 		return false, ErrIdentityProviderAttachmentConflict
 	}
-	return true, nil
+	if len(matching) == 0 {
+		return false, nil
+	}
+	return serverProvider.Valid && serverProvider.UUID == matching[0].RemoteSessionIssuerID, nil
 }
 
 // reusableIssuer resolves the project-owned issuer this attachment should reuse

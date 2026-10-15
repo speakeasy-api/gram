@@ -74,6 +74,10 @@ export type McpServer = {
    */
   remoteMcpServerId?: string | undefined;
   /**
+   * The ID of the Remote Identity Provider this server's users sign in to, if any. Configured on this server: other servers sharing its user session issuer may sign in to different providers, so this is the only field that says which upstream authorization server serves this one. Absent means no sign-in is configured and the server calls its upstream anonymously.
+   */
+  remoteSessionIssuerId?: string | undefined;
+  /**
    * A URL-safe, project-unique slug derived server-side from the name and ID
    */
   slug?: string | undefined;
@@ -132,6 +136,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       platform_endpoint_slug: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
+      remote_session_issuer_id: z.optional(z.string()),
       slug: z.optional(z.string()),
       tool_variations_group_id: z.optional(z.string()),
       toolset_id: z.optional(z.string()),
@@ -152,6 +157,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "platform_endpoint_slug": "platformEndpointSlug",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
+        "remote_session_issuer_id": "remoteSessionIssuerId",
         "tool_variations_group_id": "toolVariationsGroupId",
         "toolset_id": "toolsetId",
         "tunneled_mcp_server_id": "tunneledMcpServerId",

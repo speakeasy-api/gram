@@ -606,6 +606,25 @@ WHERE s.id = @id
   AND s.user_session_issuer_id = @user_session_issuer_id
   AND s.deleted IS FALSE;
 
+-- name: RepairMCPServerRemoteSessionIssuerIfUnchanged :execrows
+-- The operator backfill's write: stamps one server only while its upstream
+-- authorization server is still the one the decision was made against.
+--
+-- The backfill decides from a read of every server and writes afterwards, so
+-- an administrator can configure User Identity on one of them in between. That
+-- commit is the authority on its own server, and matching the server, project
+-- and user session issuer would not notice it. Comparing the provider makes
+-- the write lose that race instead of silently reverting it; the caller counts
+-- the skipped rows.
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = @remote_session_issuer_id,
+    updated_at = clock_timestamp()
+WHERE s.id = @id
+  AND s.project_id = @project_id
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND s.remote_session_issuer_id IS NOT DISTINCT FROM @observed_remote_session_issuer_id
+  AND s.deleted IS FALSE;
+
 -- name: ReconcileMCPServerRemoteSessionIssuers :execrows
 -- Keeps mcp_servers.remote_session_issuer_id, the upstream authorization
 -- server a server's users sign in to, consistent with the client bindings on

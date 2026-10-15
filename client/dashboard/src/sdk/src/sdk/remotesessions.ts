@@ -6,6 +6,7 @@ import { remoteSessionsAttachBinding } from "../funcs/remoteSessionsAttachBindin
 import { remoteSessionsCommitServerIdentityConfiguration } from "../funcs/remoteSessionsCommitServerIdentityConfiguration.js";
 import { remoteSessionsCount } from "../funcs/remoteSessionsCount.js";
 import { remoteSessionsDetachBinding } from "../funcs/remoteSessionsDetachBinding.js";
+import { remoteSessionsDisableServerIdentityConfiguration } from "../funcs/remoteSessionsDisableServerIdentityConfiguration.js";
 import { remoteSessionsGetServerIdentityImpact } from "../funcs/remoteSessionsGetServerIdentityImpact.js";
 import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.js";
@@ -13,6 +14,7 @@ import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CommitServerIdentityConfigurationResult } from "../models/components/commitserveridentityconfigurationresult.js";
 import { CountRemoteSessionsResult } from "../models/components/countremotesessionsresult.js";
+import { DisableServerIdentityConfigurationResult } from "../models/components/disableserveridentityconfigurationresult.js";
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
 import { PrincipalRemoteSessionBinding } from "../models/components/principalremotesessionbinding.js";
 import { ServerIdentityImpactResult } from "../models/components/serveridentityimpactresult.js";
@@ -32,6 +34,10 @@ import {
   DetachBindingRequest,
   DetachBindingSecurity,
 } from "../models/operations/detachbinding.js";
+import {
+  DisableServerIdentityConfigurationRequest,
+  DisableServerIdentityConfigurationSecurity,
+} from "../models/operations/disableserveridentityconfiguration.js";
 import {
   GetServerIdentityImpactRequest,
   GetServerIdentityImpactSecurity,
@@ -130,10 +136,29 @@ export class RemoteSessions extends ClientSDK {
   }
 
   /**
+   * disableServerIdentityConfiguration remoteSessions
+   *
+   * @remarks
+   * Turn User Identity off for one MCP server: it stops signing anyone in, and the client of the provider it used is unbound from its user session issuer only when no other MCP server in the organization still signs in through that provider. Unbinding signs out everyone holding a session through that client. Idempotent: a server already signing in to nothing is unchanged. Requires mcp:write on the target. Refused when the client carries live agent attachments or identity-chaining bindings, or when it is an organization-owned client on an organization-level user session issuer, which is changed from the organization's identity provider settings instead.
+   */
+  async disableServerIdentityConfiguration(
+    request: DisableServerIdentityConfigurationRequest,
+    security?: DisableServerIdentityConfigurationSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DisableServerIdentityConfigurationResult> {
+    return unwrapAsync(remoteSessionsDisableServerIdentityConfiguration(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getServerIdentityImpact remoteSessions
    *
    * @remarks
-   * Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change removes the client of its own provider: it loses its upstream (clear), or the same provider's client is replaced and everyone signs in again (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
+   * Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change unbinds the client of its own provider and it loses its sign-in (clear). A gateway is listed when a client it can see is unbound (client_removed). Configuring one server never reaches another: replacing a client another MCP server signs in through is refused rather than previewed, as is any change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer. The target server is excluded. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
    */
   async getServerIdentityImpact(
     request: GetServerIdentityImpactRequest,

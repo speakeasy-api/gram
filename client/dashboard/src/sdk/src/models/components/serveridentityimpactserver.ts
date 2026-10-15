@@ -10,15 +10,14 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * clear: the client of the provider it signs in to is removed and nothing replaces it, so it loses its upstream. resignin: its upstream is unchanged but that provider's client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
+ * clear: the client of the provider it signs in to is unbound, so it loses its sign-in until that server is configured again. client_removed: a gateway loses a provider client its members sign in through.
  */
 export const ServerIdentityImpactServerImpact = {
   Clear: "clear",
-  Resignin: "resignin",
   ClientRemoved: "client_removed",
 } as const;
 /**
- * clear: the client of the provider it signs in to is removed and nothing replaces it, so it loses its upstream. resignin: its upstream is unchanged but that provider's client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
+ * clear: the client of the provider it signs in to is unbound, so it loses its sign-in until that server is configured again. client_removed: a gateway loses a provider client its members sign in through.
  */
 export type ServerIdentityImpactServerImpact = ClosedEnum<
   typeof ServerIdentityImpactServerImpact
@@ -47,7 +46,7 @@ export type ServerIdentityImpactServer = {
    */
   id: string;
   /**
-   * clear: the client of the provider it signs in to is removed and nothing replaces it, so it loses its upstream. resignin: its upstream is unchanged but that provider's client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
+   * clear: the client of the provider it signs in to is unbound, so it loses its sign-in until that server is configured again. client_removed: a gateway loses a provider client its members sign in through.
    */
   impact: ServerIdentityImpactServerImpact;
   /**

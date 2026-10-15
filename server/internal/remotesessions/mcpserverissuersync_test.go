@@ -372,6 +372,56 @@ func TestReconcileMCPServerRemoteSessionIssuers(t *testing.T) {
 	})
 }
 
+// The operator backfill reads every server, decides, then writes. An
+// administrator configuring User Identity in between is the authority on their
+// own server, so the write is conditional on the provider the read observed
+// and loses that race instead of reverting it.
+func TestRepairMCPServerRemoteSessionIssuerIfUnchanged(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-repair")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "repair")
+	observed := seedUnboundRemoteIssuer(t, ctx, ti.conn, projectID, orgID, "rsi-repair-observed")
+	configured := seedUnboundRemoteIssuer(t, ctx, ti.conn, projectID, orgID, "rsi-repair-configured")
+	repaired := seedUnboundRemoteIssuer(t, ctx, ti.conn, projectID, orgID, "rsi-repair-target")
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, observed)
+
+	repair := func(observed, next uuid.NullUUID) int64 {
+		rows, err := mcpserversrepo.New(ti.conn).RepairMCPServerRemoteSessionIssuerIfUnchanged(ctx, mcpserversrepo.RepairMCPServerRemoteSessionIssuerIfUnchangedParams{
+			RemoteSessionIssuerID:         next,
+			ID:                            serverID,
+			ProjectID:                     projectID,
+			UserSessionIssuerID:           conv.ToNullUUID(userIssuerID),
+			ObservedRemoteSessionIssuerID: observed,
+		})
+		require.NoError(t, err)
+		return rows
+	}
+
+	// An identity commit lands between the read and the write.
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, configured)
+	require.Equal(t, int64(0), repair(conv.ToNullUUID(observed), conv.ToNullUUID(repaired)),
+		"a write against a stale provider must not land")
+	require.Equal(t, conv.ToNullUUID(configured), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+
+	// Against what is actually stored it lands, including a clear.
+	require.Equal(t, int64(1), repair(conv.ToNullUUID(configured), conv.ToNullUUID(repaired)))
+	require.Equal(t, conv.ToNullUUID(repaired), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+	require.Equal(t, int64(1), repair(conv.ToNullUUID(repaired), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
+	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
+
+	// An unset provider is matched as unset, not skipped.
+	require.Equal(t, int64(1), repair(uuid.NullUUID{UUID: uuid.Nil, Valid: false}, conv.ToNullUUID(repaired)))
+	require.Equal(t, conv.ToNullUUID(repaired), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+}
+
 // The read DeleteRemoteSessionClient takes before its purge: the tenancy has
 // to live in the query, since an unowned client must yield nothing.
 func TestListUserSessionIssuersBoundToProjectClient_Scoping(t *testing.T) {

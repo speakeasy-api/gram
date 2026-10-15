@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -33,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientcredentials"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -882,4 +884,26 @@ func configureServerProviders(t *testing.T, ctx context.Context, conn *pgxpool.P
 	})
 	require.NoError(t, err)
 	require.Positive(t, stamped, "the fixture must configure at least one server, or the test proves nothing")
+}
+
+// configureServerProvider configures one MCP server with the provider of
+// clientID and returns it, standing in for the identity commit that writes
+// mcp_servers.remote_session_issuer_id in production.
+func configureServerProvider(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID string, serverID, clientID uuid.UUID) uuid.NullUUID {
+	t.Helper()
+	client, err := remotesessions_repo.New(ti.conn).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
+		ID:             clientID,
+		ProjectID:      projectID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	provider := conv.ToNullUUID(client.RemoteSessionClient.RemoteSessionIssuerID)
+	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+		ID:                    serverID,
+		ProjectID:             projectID,
+		RemoteSessionIssuerID: provider,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped, "the provider must land on exactly one live server")
+	return provider
 }

@@ -32,6 +32,9 @@ type serverRemoteIssuersReport struct {
 	Stamped int
 	Cleared int
 	Kept    int
+	// Skipped counts writes that lost a race with an identity configuration
+	// saved after this run read the server. Rerun to pick up what remains.
+	Skipped int
 }
 
 func parseServerRemoteIssuersFlags(args []string, getenv func(string) string) (serverRemoteIssuersConfig, error) {
@@ -122,30 +125,42 @@ func backfillServerRemoteIssuers(ctx context.Context, db serverRemoteIssuersDB, 
 		return serverRemoteIssuersReport{}, fmt.Errorf("list MCP server remote session issuer backfill: %w", err)
 	}
 
-	report := serverRemoteIssuersReport{Servers: len(rows), Stamped: 0, Cleared: 0, Kept: 0}
+	report := serverRemoteIssuersReport{Servers: len(rows), Stamped: 0, Cleared: 0, Kept: 0, Skipped: 0}
 	for _, row := range rows {
 		target := decideServerRemoteIssuer(row)
 		if !target.write {
 			report.Kept++
 			continue
 		}
-		if target.provider.Valid {
-			report.Stamped++
-		} else {
-			report.Cleared++
-		}
 		if !apply {
+			if target.provider.Valid {
+				report.Stamped++
+			} else {
+				report.Cleared++
+			}
 			continue
 		}
-		// The same statement the identity commit uses, so the backfill cannot
-		// stamp a server that has since moved off this user session issuer.
-		if _, err := q.StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
-			RemoteSessionIssuerID: target.provider,
-			ID:                    row.ID,
-			ProjectID:             row.ProjectID,
-			UserSessionIssuerID:   row.UserSessionIssuerID,
-		}); err != nil {
-			return report, fmt.Errorf("stamp MCP server remote session issuer: %w", err)
+		// Conditional on the provider this run read: an administrator
+		// configuring User Identity on the server in the meantime is the
+		// authority on it, and this write loses that race rather than
+		// reverting it.
+		written, err := q.RepairMCPServerRemoteSessionIssuerIfUnchanged(ctx, mcpserversrepo.RepairMCPServerRemoteSessionIssuerIfUnchangedParams{
+			RemoteSessionIssuerID:         target.provider,
+			ID:                            row.ID,
+			ProjectID:                     row.ProjectID,
+			UserSessionIssuerID:           row.UserSessionIssuerID,
+			ObservedRemoteSessionIssuerID: row.CurrentRemoteSessionIssuerID,
+		})
+		if err != nil {
+			return report, fmt.Errorf("repair MCP server remote session issuer: %w", err)
+		}
+		switch {
+		case written == 0:
+			report.Skipped++
+		case target.provider.Valid:
+			report.Stamped++
+		default:
+			report.Cleared++
 		}
 	}
 	return report, nil
@@ -174,6 +189,6 @@ func runServerRemoteIssuers(args []string, stdout io.Writer, getenv func(string)
 	if cfg.apply {
 		mode = "apply"
 	}
-	_, _ = fmt.Fprintf(stdout, "mode=%s environment=%s servers=%d stamped=%d cleared=%d kept=%d\n", mode, cfg.environment, report.Servers, report.Stamped, report.Cleared, report.Kept)
+	_, _ = fmt.Fprintf(stdout, "mode=%s environment=%s servers=%d stamped=%d cleared=%d kept=%d skipped=%d\n", mode, cfg.environment, report.Servers, report.Stamped, report.Cleared, report.Kept, report.Skipped)
 	return 0
 }

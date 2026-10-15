@@ -573,6 +573,7 @@ trackedFiles:
   src/funcs/remoteSessionsCommitServerIdentityConfiguration.ts: {}
   src/funcs/remoteSessionsCount.ts: {}
   src/funcs/remoteSessionsDetachBinding.ts: {}
+  src/funcs/remoteSessionsDisableServerIdentityConfiguration.ts: {}
   src/funcs/remoteSessionsGetServerIdentityImpact.ts: {}
   src/funcs/remoteSessionsList.ts: {}
   src/funcs/remoteSessionsListBindings.ts: {}
@@ -1079,6 +1080,8 @@ trackedFiles:
   src/models/components/directorygroupoption.ts: {}
   src/models/components/directoryrolemapping.ts: {}
   src/models/components/disableopenrouterkeyrequestbody.ts: {}
+  src/models/components/disableserveridentityconfigurationform.ts: {}
+  src/models/components/disableserveridentityconfigurationresult.ts: {}
   src/models/components/disconnectslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/dismissoktaserversuggestionrequestbody.ts: {}
@@ -2228,6 +2231,7 @@ trackedFiles:
   src/models/operations/detachremotesessionclientkeyset.ts: {}
   src/models/operations/detachusersessionissuer.ts: {}
   src/models/operations/disableadminopenrouterkey.ts: {}
+  src/models/operations/disableserveridentityconfiguration.ts: {}
   src/models/operations/disablewebhooks.ts: {}
   src/models/operations/disconnectslackdirectoryconnection.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
@@ -3095,6 +3099,7 @@ trackedFiles:
   src/react-query/directoryRoleMappings.core.ts: {}
   src/react-query/directoryRoleMappings.ts: {}
   src/react-query/disableAdminOpenRouterKey.ts: {}
+  src/react-query/disableServerIdentityConfiguration.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/disconnectSlackDirectoryConnection.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
@@ -6261,6 +6266,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  disableServerIdentityConfiguration:
+    speakeasy-default-disable-server-identity-configuration:
+      requestBody:
+        application/json: {"mcp_server_id": "2d1f4dfd-21db-4920-9a6f-35537dde8a59"}
+      responses:
+        "200":
+          application/json: {"client_unbound": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   disableWebhooks:
     speakeasy-default-disable-webhooks:
       responses:

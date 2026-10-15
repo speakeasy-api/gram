@@ -33,6 +33,10 @@ type Client struct {
 	// requests to the commitServerIdentityConfiguration endpoint.
 	CommitServerIdentityConfigurationDoer goahttp.Doer
 
+	// DisableServerIdentityConfiguration Doer is the HTTP client used to make
+	// requests to the disableServerIdentityConfiguration endpoint.
+	DisableServerIdentityConfigurationDoer goahttp.Doer
+
 	// GetServerIdentityImpact Doer is the HTTP client used to make requests to the
 	// getServerIdentityImpact endpoint.
 	GetServerIdentityImpactDoer goahttp.Doer
@@ -70,19 +74,20 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListBindingsDoer:                      doer,
-		AttachBindingDoer:                     doer,
-		DetachBindingDoer:                     doer,
-		CommitServerIdentityConfigurationDoer: doer,
-		GetServerIdentityImpactDoer:           doer,
-		ListRemoteSessionsDoer:                doer,
-		CountRemoteSessionsDoer:               doer,
-		RevokeRemoteSessionDoer:               doer,
-		RestoreResponseBody:                   restoreBody,
-		scheme:                                scheme,
-		host:                                  host,
-		decoder:                               dec,
-		encoder:                               enc,
+		ListBindingsDoer:                       doer,
+		AttachBindingDoer:                      doer,
+		DetachBindingDoer:                      doer,
+		CommitServerIdentityConfigurationDoer:  doer,
+		DisableServerIdentityConfigurationDoer: doer,
+		GetServerIdentityImpactDoer:            doer,
+		ListRemoteSessionsDoer:                 doer,
+		CountRemoteSessionsDoer:                doer,
+		RevokeRemoteSessionDoer:                doer,
+		RestoreResponseBody:                    restoreBody,
+		scheme:                                 scheme,
+		host:                                   host,
+		decoder:                                dec,
+		encoder:                                enc,
 	}
 }
 
@@ -178,6 +183,31 @@ func (c *Client) CommitServerIdentityConfiguration() goa.Endpoint {
 		resp, err := c.CommitServerIdentityConfigurationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessions", "commitServerIdentityConfiguration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DisableServerIdentityConfiguration returns an endpoint that makes HTTP
+// requests to the remoteSessions service disableServerIdentityConfiguration
+// server.
+func (c *Client) DisableServerIdentityConfiguration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDisableServerIdentityConfigurationRequest(c.encoder)
+		decodeResponse = DecodeDisableServerIdentityConfigurationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDisableServerIdentityConfigurationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DisableServerIdentityConfigurationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "disableServerIdentityConfiguration", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -154,6 +154,7 @@ function target(overrides: Partial<AuthTarget> = {}): AuthTarget {
     attachImpactTarget: { mcpServerId: "mcp-server-1" },
     supportsOrganizationIssuers: true,
     userSessionIssuerId: null,
+    remoteSessionIssuerId: null,
     invalidate: mocks.invalidateTarget,
     linkUserSessionIssuer: mocks.linkTarget,
     ...overrides,

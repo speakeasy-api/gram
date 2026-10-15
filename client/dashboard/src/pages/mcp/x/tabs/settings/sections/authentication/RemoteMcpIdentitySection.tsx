@@ -17,6 +17,7 @@ import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
+import { useDisableServerIdentityConfigurationMutation } from "@gram/client/react-query/disableServerIdentityConfiguration.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
@@ -34,7 +35,7 @@ import {
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Loader2, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -100,13 +101,27 @@ export function RemoteMcpIdentitySectionBody({
     { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
   const {
-    items: clients,
+    items: issuerClients,
     isLoading: clientsLoading,
     isError: clientsError,
     error: clientsQueryError,
   } = useAllRemoteSessionClients(
     { userSessionIssuerId: target.userSessionIssuerId ?? undefined },
     { enabled: !!target.userSessionIssuerId },
+  );
+  // Servers sharing a user session issuer each sign in to their own provider,
+  // so only the clients of this server's provider are its identity. The rest
+  // belong to its siblings: showing them would read a sibling's client as this
+  // server's, and saving over it would reconfigure the wrong server.
+  const clients = useMemo(
+    () =>
+      target.remoteSessionIssuerId === null
+        ? []
+        : issuerClients.filter(
+            (linked) =>
+              linked.remoteSessionIssuerId === target.remoteSessionIssuerId,
+          ),
+    [issuerClients, target.remoteSessionIssuerId],
   );
   const {
     data: userSessionIssuer,
@@ -308,6 +323,7 @@ export function RemoteMcpIdentitySectionBody({
   );
 
   const detachIssuer = useDetachUserSessionIssuerMutation();
+  const disableIdentity = useDisableServerIdentityConfigurationMutation();
 
   // Picking a card only changes the draft. Nothing is written, removed or
   // confirmed until Save — the panel has one commit point and this is it.
@@ -383,6 +399,14 @@ export function RemoteMcpIdentitySectionBody({
         userDraft.choice === "existing"
           ? (userDraft.existingClientId ?? undefined)
           : undefined,
+      // The mode decides whether the provider's bound client is reused or
+      // replaced, and replacing it signs out every server using that provider.
+      clientMode:
+        userDraft.choice === "manual"
+          ? "manual"
+          : userDraft.choice === "existing"
+            ? "existing"
+            : "auto",
     };
   }
   const sharedIssuerImpact = useSharedIssuerImpact(impactRequest);
@@ -391,20 +415,16 @@ export function RemoteMcpIdentitySectionBody({
     destructive || needsSharedIssuerConfirm(sharedIssuerImpact);
 
   const detachUserIdentity = async (): Promise<boolean> => {
-    const userSessionIssuerId = target.userSessionIssuerId;
-    if (!userSessionIssuerId) return false;
-    for (const linked of clients) {
-      await detachIssuer.mutateAsync({
-        // The generated detach request reuses the attach form's field name;
-        // the endpoint it posts to is what distinguishes them.
-        request: {
-          attachUserSessionIssuerForm: {
-            id: linked.id,
-            userSessionIssuerId,
-          },
-        },
-      });
-    }
+    const mcpServerId = target.mcpServerId;
+    if (!target.userSessionIssuerId || !mcpServerId) return false;
+    // One call for this server: it stops signing people in, and the provider's
+    // client is unbound only when no other server still signs in through it.
+    // Unbinding every client on the issuer here instead would take those
+    // servers' sign-in with it, and nothing puts a shared server's provider
+    // back.
+    await disableIdentity.mutateAsync({
+      request: { disableServerIdentityConfigurationForm: { mcpServerId } },
+    });
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
       invalidateAllGetRemoteMcpServerScopes(queryClient),
@@ -625,6 +645,7 @@ export function RemoteMcpIdentitySectionBody({
     (identityCanSave || headerDrafts.isDirty || scopePinDirty);
   const savePending =
     detachIssuer.isPending ||
+    disableIdentity.isPending ||
     scopePin.saving ||
     saving ||
     headerDrafts.saving ||

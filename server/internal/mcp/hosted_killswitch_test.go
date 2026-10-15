@@ -196,6 +196,10 @@ func attachMissingRemoteSession(t *testing.T, ctx context.Context, ti *testInsta
 		RemoteSessionClientID: remoteClient.ID,
 		UserSessionIssuerID:   userSessionIssuerID,
 	}))
+	// Binding a client is followed by the reconcile every client-binding
+	// writer runs, which is what configures this server with that provider and
+	// so makes its credential one the endpoint requires.
+	configureServerProviders(t, ctx, ti.conn, projectID, organizationID, userSessionIssuerID)
 }
 
 func insertHostedKillswitchPrescription(t *testing.T, ctx context.Context, ti *testInstance, organizationID, userID string, serverID uuid.UUID, externalNote string) {

@@ -23,7 +23,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations server-remote-issuers \
   -environment=staging
 ```
 
-The default mode reads and decides without writing. `stamped`, `cleared` and `kept` are the prospective counts.
+The default mode reads and decides without writing. `stamped`, `cleared` and `kept` are the prospective counts; `skipped` is always zero in a dry run, since nothing is written to lose a race.
 
 Add `-organization=<id>` to scope a run to one organization, for a staged rollout.
 
@@ -40,7 +40,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations server-remote-issuers \
 
 `-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL` by pgx, which ties write confirmation to the actual database target rather than the descriptive environment label.
 
-Each write is the same statement the identity commit uses, so a server that has moved off the user session issuer the decision was made against is skipped rather than stamped. The operation is idempotent: a rerun reports `stamped=0 cleared=0`. Stop on any error, investigate, then rerun the same command.
+Each write is conditional on the provider this run read, so an administrator configuring User Identity on a server between the read and the write wins and the backfill skips that row rather than reverting them. A server that has moved off the user session issuer the decision was made against is skipped too. Skipped rows are counted as `skipped`; rerun to pick up whatever the next pass still finds. The operation is idempotent: a quiet rerun reports `stamped=0 cleared=0 skipped=0`. Stop on any error, investigate, then rerun the same command.
 
 ## Ordering
 

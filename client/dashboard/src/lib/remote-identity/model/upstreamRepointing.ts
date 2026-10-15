@@ -103,7 +103,7 @@ export function sharedIssuerChangeBlocked(
 export function groupByImpact(
   servers: readonly ServerIdentityImpactServer[],
 ): Array<[SharedIssuerImpact, ServerIdentityImpactServer[]]> {
-  const order: SharedIssuerImpact[] = ["clear", "resignin", "client_removed"];
+  const order: SharedIssuerImpact[] = ["clear", "client_removed"];
   return order
     .map((impact): [SharedIssuerImpact, ServerIdentityImpactServer[]] => [
       impact,

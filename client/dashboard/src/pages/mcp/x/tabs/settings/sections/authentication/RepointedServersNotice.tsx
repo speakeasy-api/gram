@@ -9,9 +9,7 @@ import { mcpServerDisplayName } from "@/pages/security/risk-outcome";
 
 const IMPACT_COPY: Record<SharedIssuerImpact, string> = {
   clear:
-    "These servers sign in through the provider this change unlinks, so they lose their sign-in until a client for it is linked again:",
-  resignin:
-    "These servers sign in through the provider whose client this change replaces. Everyone signed in to them will have to sign in again:",
+    "These servers sign in through the provider this change unlinks, so they stop signing anyone in. Linking a client for it again does not restore them: each one has to have its sign-in configured again on its own settings page:",
   client_removed:
     "These gateways share this user session issuer and lose a client their members sign in through. Those members stop working until a client for their provider is linked again:",
 };
@@ -76,8 +74,9 @@ export function RepointedServersNotice({
       )}
       {losesUpstream && (
         <Text small className="block">
-          To leave them signed in, link a client for their provider again
-          afterwards from its Remote Identity Provider settings.
+          Each server's provider is configured on that server, so recovering
+          them means opening each one and setting its sign-in up again. Their
+          users have to sign in again either way.
         </Text>
       )}
     </Alert>

@@ -460,6 +460,10 @@ func seedStandaloneValidationFixtureWith(t *testing.T, prefix string, metaRuntim
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, challengeState))
 
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, prefix, "", []uuid.UUID{shared})
+	// Configure the server with that client's provider, as the identity commit
+	// does: a direct server's consent and credential resolution are scoped to
+	// the provider it signs in to, and a server naming none needs neither.
+	endpoint.RemoteSessionIssuerID = configureServerProvider(t, ctx, ti, projectID, orgID, serverID, clientID)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, member.url)
 
 	return ctx, validationFixture{

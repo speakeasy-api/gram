@@ -23,6 +23,7 @@ import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   Change,
+  ClientMode,
   GetServerIdentityImpactRequest,
   GetServerIdentityImpactSecurity,
 } from "../models/operations/getserveridentityimpact.js";
@@ -60,7 +61,7 @@ export type ServerIdentityImpactQueryError =
  * getServerIdentityImpact remoteSessions
  *
  * @remarks
- * Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change removes the client of its own provider: it loses its upstream (clear), or the same provider's client is replaced and everyone signs in again (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
+ * Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change unbinds the client of its own provider and it loses its sign-in (clear). A gateway is listed when a client it can see is unbound (client_removed). Configuring one server never reaches another: replacing a client another MCP server signs in through is refused rather than previewed, as is any change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer. The target server is excluded. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
  */
 export function useServerIdentityImpact(
   request: GetServerIdentityImpactRequest,
@@ -89,7 +90,7 @@ export function useServerIdentityImpact(
  * getServerIdentityImpact remoteSessions
  *
  * @remarks
- * Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change removes the client of its own provider: it loses its upstream (clear), or the same provider's client is replaced and everyone signs in again (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
+ * Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change unbinds the client of its own provider and it loses its sign-in (clear). A gateway is listed when a client it can see is unbound (client_removed). Configuring one server never reaches another: replacing a client another MCP server signs in through is refused rather than previewed, as is any change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer. The target server is excluded. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
  */
 export function useServerIdentityImpactSuspense(
   request: GetServerIdentityImpactRequest,
@@ -123,6 +124,7 @@ export function setServerIdentityImpactData(
       change: Change;
       providerId?: string | undefined;
       clientId?: string | undefined;
+      clientMode?: ClientMode | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -144,6 +146,7 @@ export function invalidateServerIdentityImpact(
       change: Change;
       providerId?: string | undefined;
       clientId?: string | undefined;
+      clientMode?: ClientMode | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

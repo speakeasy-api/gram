@@ -351,6 +351,12 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 // covers: its project's own, or, for an organization gateway, the clients
 // behind the servers the challenge's subject can reach through it.
 //
+// A direct endpoint's list is deliberately not narrowed to the provider its
+// MCP server signs in to. One server may hold several upstream bindings whose
+// grants are qualified by their recorded resource (AGE-2554), which is what
+// the multi-binding cards and the resource-claiming rules below are for, and
+// routing picks between them at serve time.
+//
 // An organization gateway's issuer may carry clients from every project in
 // the organization, and one person reaches only some of them. Listing the
 // rest would show a person connections, and the services behind them, for

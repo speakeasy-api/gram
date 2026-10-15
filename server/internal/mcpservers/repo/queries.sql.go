@@ -1642,6 +1642,48 @@ func (q *Queries) ReconcileMCPServerRemoteSessionIssuers(ctx context.Context, ar
 	return result.RowsAffected(), nil
 }
 
+const repairMCPServerRemoteSessionIssuerIfUnchanged = `-- name: RepairMCPServerRemoteSessionIssuerIfUnchanged :execrows
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE s.id = $2
+  AND s.project_id = $3
+  AND s.user_session_issuer_id = $4
+  AND s.remote_session_issuer_id IS NOT DISTINCT FROM $5
+  AND s.deleted IS FALSE
+`
+
+type RepairMCPServerRemoteSessionIssuerIfUnchangedParams struct {
+	RemoteSessionIssuerID         uuid.NullUUID
+	ID                            uuid.UUID
+	ProjectID                     uuid.UUID
+	UserSessionIssuerID           uuid.NullUUID
+	ObservedRemoteSessionIssuerID uuid.NullUUID
+}
+
+// The operator backfill's write: stamps one server only while its upstream
+// authorization server is still the one the decision was made against.
+//
+// The backfill decides from a read of every server and writes afterwards, so
+// an administrator can configure User Identity on one of them in between. That
+// commit is the authority on its own server, and matching the server, project
+// and user session issuer would not notice it. Comparing the provider makes
+// the write lose that race instead of silently reverting it; the caller counts
+// the skipped rows.
+func (q *Queries) RepairMCPServerRemoteSessionIssuerIfUnchanged(ctx context.Context, arg RepairMCPServerRemoteSessionIssuerIfUnchangedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, repairMCPServerRemoteSessionIssuerIfUnchanged,
+		arg.RemoteSessionIssuerID,
+		arg.ID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.ObservedRemoteSessionIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many
 WITH input AS (
     SELECT

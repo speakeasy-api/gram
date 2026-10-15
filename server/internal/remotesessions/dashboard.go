@@ -128,6 +128,57 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	return result, nil
 }
 
+func (s *Service) DisableServerIdentityConfiguration(ctx context.Context, payload *gen.DisableServerIdentityConfigurationPayload) (*gen.DisableServerIdentityConfigurationResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	mcpServerID, err := uuid.Parse(payload.McpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)
+	}
+	target, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        mcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "MCP server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
+	}
+	// Write access to this server is the whole requirement: the provider's
+	// client is unbound only when no other server signs in through it, so no
+	// other server's sign-in is reachable from here.
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpGrantResourceID(target.ID, target.ToolsetID), target.ProjectID.String())); err != nil {
+		return nil, err
+	}
+	if !target.UserSessionIssuerID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "MCP server has no user session issuer").LogError(ctx, logger)
+	}
+
+	result, err := s.identity.DisableServerIdentity(ctx, IdentityScope{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:     authCtx.Email,
+		ActorIsPlatformAdmin: authCtx.IsAdmin,
+	}, target.UserSessionIssuerID.UUID, mcpServerID)
+	if err != nil {
+		return nil, identityOopsError(err, "disable MCP server identity").LogError(ctx, logger)
+	}
+	var providerID *string
+	if result.Provider.Valid {
+		providerID = conv.PtrEmpty(result.Provider.UUID.String())
+	}
+	return &gen.DisableServerIdentityConfigurationResult{
+		ProviderID:    providerID,
+		ClientUnbound: result.ClientUnbound,
+	}, nil
+}
+
 // authorizeServerIdentityTarget loads the MCP server and requires write access
 // to it. No other server sharing its user session issuer is reached: the
 // provider is stamped on the named server alone, and the client of the

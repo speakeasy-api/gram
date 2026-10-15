@@ -92,7 +92,12 @@ func seedChainedConsentEndpoint(t *testing.T, tag string) (context.Context, cons
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
 	})
 	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "", []uuid.UUID{fx.shared})
-	return ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
+	configureServerProviders(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.shared)
+	provider := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
+	// As the endpoint resolves it: the provider configured on the server is
+	// what its credential resolution is scoped to.
+	fx.endpoint.RemoteSessionIssuerID = conv.ToNullUUID(provider)
+	return ctx, fx, provider
 }
 
 func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {

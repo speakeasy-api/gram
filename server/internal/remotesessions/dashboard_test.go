@@ -819,6 +819,46 @@ func TestCommitServerIdentityConfigurationLeavesServersSharingTheIssuerAlone(t *
 	requireClientBound(t, ctx, ti, siblingClientID, userIssuerID, true)
 }
 
+// AIM-577: existing-client mode needs no project:write, and this page
+// authorizes only its own server. Linking another client for a provider a
+// sibling signs in through would unbind the client that sibling uses, so the
+// commit refuses it instead of reaching a server the caller cannot write.
+func TestCommitServerIdentityConfigurationRefusesReplacingASharedProvidersClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "shared-client-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "shared-client-target", userIssuerID)
+	siblingID := createServerIdentityTargetOnIssuer(t, ctx, ti, "shared-client-sibling", userIssuerID)
+
+	providerID := createServerIdentityProvider(t, ctx, ti, "shared-client-provider", "", false, []string{"none"})
+	boundClientID := bindAndStampServerIdentityClient(t, ctx, ti, "shared-client-bound", providerID, userIssuerID, targetID, false)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, providerID)
+	replacementID := createServerIdentityClient(t, ctx, ti, "shared-client-replacement", providerID, false)
+
+	targetOnlyCtx := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, targetID.String()))
+	_, err := ti.service.CommitServerIdentityConfiguration(targetOnlyCtx, existingServerIdentityPayload(targetID, providerID, replacementID))
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "another MCP server signs in through this Remote Identity Provider's client")
+
+	// Nothing moved: the sibling keeps the client it signs in through and the
+	// replacement stays unbound.
+	requireClientBound(t, ctx, ti, boundClientID, userIssuerID, true)
+	requireClientBound(t, ctx, ti, replacementID, userIssuerID, false)
+	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectID, siblingID))
+	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectID, targetID))
+
+	// With the sibling off that provider, the same call is allowed: the client
+	// is this server's alone.
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, createServerIdentityProvider(t, ctx, ti, "shared-client-elsewhere", "", false, []string{"none"}))
+	result, err := ti.service.CommitServerIdentityConfiguration(targetOnlyCtx, existingServerIdentityPayload(targetID, providerID, replacementID))
+	require.NoError(t, err)
+	require.Equal(t, replacementID.String(), result.Client.ID)
+	requireClientBound(t, ctx, ti, boundClientID, userIssuerID, false)
+	requireClientBound(t, ctx, ti, replacementID, userIssuerID, true)
+}
+
 func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testing.T) {
 	t.Parallel()
 

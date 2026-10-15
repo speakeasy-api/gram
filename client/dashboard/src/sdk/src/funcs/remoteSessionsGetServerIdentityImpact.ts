@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getServerIdentityImpact remoteSessions
  *
  * @remarks
- * Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change removes the client of its own provider: it loses its upstream (clear), or the same provider's client is replaced and everyone signs in again (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
+ * Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change unbinds the client of its own provider and it loses its sign-in (clear). A gateway is listed when a client it can see is unbound (client_removed). Configuring one server never reaches another: replacing a client another MCP server signs in through is refused rather than previewed, as is any change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer. The target server is excluded. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
  */
 export function remoteSessionsGetServerIdentityImpact(
   client: GramCore,
@@ -109,6 +109,7 @@ async function $do(
   const query = encodeFormQuery({
     "change": payload.change,
     "client_id": payload.client_id,
+    "client_mode": payload.client_mode,
     "mcp_server_id": payload.mcp_server_id,
     "provider_id": payload.provider_id,
     "user_session_issuer_id": payload.user_session_issuer_id,

@@ -85,6 +85,7 @@ const OrgWideBindingMessage = "this MCP server shares an organization identity b
 const (
 	agentBindingsOnReplacedClientMessage = "agents are still bound to this MCP server through its current client; unlink them before changing its Remote Identity Provider"
 	identityChainingBindingsMessage      = "active identity-chaining bindings reference this configuration; explicitly unlink them before changing or deleting it"
+	sharedProviderClientMessage          = "another MCP server signs in through this Remote Identity Provider's client; replace it from the Remote Identity Provider settings, which covers every server using it"
 )
 
 // IdentityError is a refusal whose Message is safe to show the caller. Kind is
@@ -663,29 +664,60 @@ func (c *IdentityCommit) releasableClients(ctx context.Context, q *repo.Queries,
 	if len(candidates) == 0 {
 		return nil, nil
 	}
-	others, err := q.CountOrganizationMCPServersWithRemoteSessionIssuer(ctx, repo.CountOrganizationMCPServersWithRemoteSessionIssuerParams{
-		UserSessionIssuerID:   uuid.NullUUID{UUID: c.plan.UserSessionIssuerID, Valid: true},
-		RemoteSessionIssuerID: c.serverProvider,
-		ExcludedMcpServerID:   c.plan.MCPServerID.UUID,
-		OrganizationID:        c.plan.Scope.OrganizationID,
-	})
+	shared, err := c.providerServedByAnotherServer(ctx, q, c.serverProvider.UUID)
 	if err != nil {
-		return nil, fmt.Errorf("count MCP servers sharing the provider: %w", err)
+		return nil, err
 	}
-	if others > 0 {
+	if shared {
 		return nil, nil
 	}
 	return candidates, nil
 }
 
-// unboundClients is every client a per-server commit takes off the issuer:
-// the releasable ones plus the superseded one.
+// unboundClients is every client a per-server commit takes off the issuer: the
+// releasable ones plus the superseded one.
+//
+// Superseding a client another server in the organization signs in through is
+// refused rather than skipped. The replacement would take that server's
+// sign-in with it, and a per-server commit authorizes only the server it
+// names, so the one surface that may do it is the provider's own settings,
+// which requires project:write. Skipping instead would leave two clients bound
+// for one provider, which no reader can tell apart. The count is read under
+// the user session issuer lock every identity commit takes, so a sibling
+// cannot be configured onto the provider alongside this check.
 func (c *IdentityCommit) unboundClients(ctx context.Context, q *repo.Queries, decision serverBoundDecision) ([]repo.RemoteSessionClient, error) {
+	if len(decision.superseded) > 0 {
+		shared, err := c.providerServedByAnotherServer(ctx, q, c.provider.ID)
+		if err != nil {
+			return nil, err
+		}
+		if shared {
+			return nil, identityRefusal(ErrIdentityConflict, nil, sharedProviderClientMessage)
+		}
+	}
 	released, err := c.releasableClients(ctx, q, decision.release)
 	if err != nil {
 		return nil, err
 	}
 	return append(released, decision.superseded...), nil
+}
+
+// providerServedByAnotherServer reports whether a live MCP server other than
+// the plan's signs in to providerID through this user session issuer.
+func (c *IdentityCommit) providerServedByAnotherServer(ctx context.Context, q *repo.Queries, providerID uuid.UUID) (bool, error) {
+	if providerID == uuid.Nil {
+		return false, nil
+	}
+	others, err := q.CountOrganizationMCPServersWithRemoteSessionIssuer(ctx, repo.CountOrganizationMCPServersWithRemoteSessionIssuerParams{
+		UserSessionIssuerID:   uuid.NullUUID{UUID: c.plan.UserSessionIssuerID, Valid: true},
+		RemoteSessionIssuerID: uuid.NullUUID{UUID: providerID, Valid: true},
+		ExcludedMcpServerID:   c.plan.MCPServerID.UUID,
+		OrganizationID:        c.plan.Scope.OrganizationID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("count MCP servers sharing the provider: %w", err)
+	}
+	return others > 0, nil
 }
 
 // Register obtains the plan's client. A linked or manual client passes
@@ -1272,39 +1304,74 @@ func (c *IdentityCommit) boundClient(ctx context.Context, tx *IdentityTx) (repo.
 	return bound[0], true, nil
 }
 
-// detachClient unbinds client from the user session issuer. It refuses an
-// organization-wide binding, a binding that live agent attachments go through,
-// and one identity-chaining bindings reference. It locks the client row, then
-// the join row an agent attachment's foreign key check reads, after the user
-// session issuer row Lock took: the order client detach and identity-chaining
-// preparation use.
+// detachClient unbinds client from the user session issuer, with the commit's
+// own scope and lock order.
 func (c *IdentityCommit) detachClient(ctx context.Context, tx *IdentityTx, client repo.RemoteSessionClient) error {
-	if err := c.refuseOrgWideBinding(client); err != nil {
+	return detachClientFromUserSessionIssuer(ctx, tx.tx, tx.q, c.committer.audit, c.detachScope(), client)
+}
+
+func (c *IdentityCommit) detachScope() identityDetachScope {
+	return identityDetachScope{
+		scope:              c.plan.Scope,
+		userIssuerID:       c.plan.UserSessionIssuerID,
+		userIssuerOrgLevel: c.userIssuerOrgLevel,
+	}
+}
+
+// identityDetachScope is who is unbinding a client and from which user session
+// issuer, shared by the identity commit and the per-server disable.
+type identityDetachScope struct {
+	scope              IdentityScope
+	userIssuerID       uuid.UUID
+	userIssuerOrgLevel bool
+}
+
+func (d identityDetachScope) attachmentEvent(client repo.RemoteSessionClient) audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent {
+	return audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
+		OrganizationID:         d.scope.OrganizationID,
+		ProjectID:              d.scope.ProjectID,
+		Actor:                  d.scope.Actor,
+		ActorDisplayName:       d.scope.ActorDisplayName,
+		ActorSlug:              nil,
+		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
+		ClientID:               client.ClientID,
+		UserSessionIssuerURN:   urn.NewUserSessionIssuer(d.userIssuerID),
+	}
+}
+
+// detachClientFromUserSessionIssuer unbinds client from the user session
+// issuer. It refuses an organization-wide binding, a binding that live agent
+// attachments go through, and one identity-chaining bindings reference. It
+// locks the client row, then the join row an agent attachment's foreign key
+// check reads, after the user session issuer row its caller locked: the order
+// client detach and identity-chaining preparation use.
+func detachClientFromUserSessionIssuer(ctx context.Context, tx pgx.Tx, q *repo.Queries, auditLogger *audit.Logger, detach identityDetachScope, client repo.RemoteSessionClient) error {
+	if err := refuseOrgWideBinding(detach.userIssuerOrgLevel, client.ProjectID); err != nil {
 		return err
 	}
-	if _, err := tx.q.LockEMAClient(ctx, repo.LockEMAClientParams{
+	if _, err := q.LockEMAClient(ctx, repo.LockEMAClientParams{
 		ID:             client.ID,
-		ProjectID:      conv.ToNullUUID(c.plan.Scope.ProjectID),
-		OrganizationID: conv.ToPGText(c.plan.Scope.OrganizationID),
+		ProjectID:      conv.ToNullUUID(detach.scope.ProjectID),
+		OrganizationID: conv.ToPGText(detach.scope.OrganizationID),
 	}); errors.Is(err, pgx.ErrNoRows) {
 		return identityRefusal(ErrIdentityNotFound, err, "remote session client not found")
 	} else if err != nil {
 		return fmt.Errorf("lock remote session client: %w", err)
 	}
-	if err := tx.q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{
+	if err := q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{
 		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   c.plan.UserSessionIssuerID,
+		UserSessionIssuerID:   detach.userIssuerID,
 	}); err != nil {
 		return fmt.Errorf("lock client binding to user session issuer: %w", err)
 	}
-	if err := refuseLiveAgentBindings(ctx, tx.q, c.plan.Scope, client.ID, c.plan.UserSessionIssuerID); err != nil {
+	if err := refuseLiveAgentBindings(ctx, q, detach.scope, client.ID, detach.userIssuerID); err != nil {
 		return err
 	}
-	affected, err := tx.q.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
+	affected, err := q.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
 		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   c.plan.UserSessionIssuerID,
-		ProjectID:             c.plan.Scope.ProjectID,
-		OrganizationID:        c.plan.Scope.OrganizationID,
+		UserSessionIssuerID:   detach.userIssuerID,
+		ProjectID:             detach.scope.ProjectID,
+		OrganizationID:        detach.scope.OrganizationID,
 	})
 	if err != nil {
 		return fmt.Errorf("detach client from user session issuer: %w", err)
@@ -1314,10 +1381,10 @@ func (c *IdentityCommit) detachClient(ctx context.Context, tx *IdentityTx, clien
 	}
 	// Checked after the delete, like client detach: a refusal rolls the
 	// tentative removal back with the transaction.
-	if err := refuseIdentityChainingBindings(ctx, tx.q, c.plan.Scope, client, c.plan.UserSessionIssuerID); err != nil {
+	if err := refuseIdentityChainingBindings(ctx, q, detach.scope, client, detach.userIssuerID); err != nil {
 		return err
 	}
-	if err := c.committer.audit.LogRemoteSessionClientDetachUserSessionIssuer(ctx, tx.tx, c.attachmentEvent(client)); err != nil {
+	if err := auditLogger.LogRemoteSessionClientDetachUserSessionIssuer(ctx, tx, detach.attachmentEvent(client)); err != nil {
 		return fmt.Errorf("audit client detachment: %w", err)
 	}
 	return nil
@@ -1512,14 +1579,5 @@ func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, 
 }
 
 func (c *IdentityCommit) attachmentEvent(client repo.RemoteSessionClient) audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent {
-	return audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
-		OrganizationID:         c.plan.Scope.OrganizationID,
-		ProjectID:              c.plan.Scope.ProjectID,
-		Actor:                  c.plan.Scope.Actor,
-		ActorDisplayName:       c.plan.Scope.ActorDisplayName,
-		ActorSlug:              nil,
-		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
-		ClientID:               client.ClientID,
-		UserSessionIssuerURN:   urn.NewUserSessionIssuer(c.plan.UserSessionIssuerID),
-	}
+	return c.detachScope().attachmentEvent(client)
 }

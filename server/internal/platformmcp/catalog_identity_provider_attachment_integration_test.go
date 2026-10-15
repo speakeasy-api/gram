@@ -299,6 +299,84 @@ func TestAttachmentStampsMCPServerRemoteSessionIssuer(t *testing.T) {
 	require.Equal(t, conv.ToNullUUID(issuer.ID), server.RemoteSessionIssuerID)
 }
 
+// AIM-577: a client bound to the user session issuer is not on its own proof
+// that the registration's server is attached. A cleared provider leaves
+// exactly that state, and the server-level reconcile does not repair it on a
+// shared issuer, so reporting success there would leave the server with no
+// sign-in instead of reusing the client and configuring it.
+func TestAttachmentIdempotencyRequiresTheServersOwnProvider(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_idempotency")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
+	issuer, _, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+
+	attached, err := service.matchingAttachment(ctx, principal.OrganizationID, project, usi, conv.ToNullUUID(issuer.ID), metadata.Issuer)
+	require.NoError(t, err)
+	require.True(t, attached, "the server signs in to the bound client's provider")
+
+	// The provider is cleared, as turning User Identity off leaves it, while
+	// the client stays bound for the other servers on the issuer.
+	cleared, err := mcpserversrepo.New(conn).StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ID:                    serverID,
+		ProjectID:             project.ID,
+		UserSessionIssuerID:   conv.ToNullUUID(usi),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), cleared)
+
+	attached, err = service.matchingAttachment(ctx, principal.OrganizationID, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata.Issuer)
+	require.NoError(t, err)
+	require.False(t, attached, "a bound client the server does not name is not an attachment")
+
+	// Running the attachment again reuses that client and configures the
+	// server with it.
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(issuer.ID), server.RemoteSessionIssuerID)
+}
+
+// Several providers on one user session issuer belong to the several servers
+// sharing it, so they are not an ambiguous attachment.
+func TestAttachmentToleratesOtherProvidersOnTheIssuer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_siblings")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
+
+	sibling := attachmentTestIssuerMetadata("https://sibling.example.test")
+	siblingResource := attachmentTestResource("https://b.example.test/mcp", "Resource B", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, sibling, "client-b", siblingResource.Resource, siblingResource))
+
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	attached, err := service.matchingAttachment(ctx, principal.OrganizationID, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata.Issuer)
+	require.NoError(t, err)
+	require.False(t, attached, "another server's provider is not this attachment")
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
+	issuer, _, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(issuer.ID), server.RemoteSessionIssuerID)
+}
+
 // The provider and client land in one transaction: a failure after the issuer
 // insert leaves no issuer behind for the next attempt to trip over.
 func TestAttachmentFailureLeavesNoIssuer(t *testing.T) {

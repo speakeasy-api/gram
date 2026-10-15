@@ -116,6 +116,7 @@ function renderField(currentIssuerId: string | null): void {
     attachImpactTarget: { toolsetId: "toolset-1" },
     supportsOrganizationIssuers: true,
     userSessionIssuerId: currentIssuerId,
+    remoteSessionIssuerId: null,
     linkUserSessionIssuer: link,
     invalidate: vi.fn(async () => {}),
   };
