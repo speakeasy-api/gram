@@ -18,6 +18,18 @@ const (
 	// SigintSensorModeKey identifies the sensor's classification mode.
 	SigintSensorModeKey = attribute.Key("gram.sigint.sensor.mode")
 
+	// SigintSensorDefinitionHashKey identifies the evaluated sensor configuration version.
+	SigintSensorDefinitionHashKey = attribute.Key("gram.sigint.sensor.definition_hash")
+
+	// SigintRequestedWindowSizeKey records the configured message count including the target.
+	SigintRequestedWindowSizeKey = attribute.Key("gram.sigint.window.requested_size")
+
+	// SigintEffectiveWindowSizeKey records the message count supplied to classification.
+	SigintEffectiveWindowSizeKey = attribute.Key("gram.sigint.window.effective_size")
+
+	// SigintContentBudgetBytesKey records the payload limit used to construct context.
+	SigintContentBudgetBytesKey = attribute.Key("gram.sigint.content_budget_bytes")
+
 	// ClassifierErrorKey preserves classifier failure details without input or provider bodies.
 	ClassifierErrorKey = attribute.Key("gram.classifier.error")
 
@@ -1031,6 +1043,26 @@ func SlogSigintSensorID(v string) slog.Attr { return slog.String(string(SigintSe
 
 // SlogSigintSensorMode identifies the sensor's classification mode.
 func SlogSigintSensorMode(v string) slog.Attr { return slog.String(string(SigintSensorModeKey), v) }
+
+// SlogSigintSensorDefinitionHash identifies the evaluated sensor configuration version.
+func SlogSigintSensorDefinitionHash(v string) slog.Attr {
+	return slog.String(string(SigintSensorDefinitionHashKey), v)
+}
+
+// SlogSigintRequestedWindowSize records the configured message count including the target.
+func SlogSigintRequestedWindowSize(v int) slog.Attr {
+	return slog.Int(string(SigintRequestedWindowSizeKey), v)
+}
+
+// SlogSigintEffectiveWindowSize records the message count supplied to classification.
+func SlogSigintEffectiveWindowSize(v int) slog.Attr {
+	return slog.Int(string(SigintEffectiveWindowSizeKey), v)
+}
+
+// SlogSigintContentBudgetBytes records the payload limit used to construct context.
+func SlogSigintContentBudgetBytes(v int) slog.Attr {
+	return slog.Int(string(SigintContentBudgetBytesKey), v)
+}
 
 // SlogClassifierError records the classifier's safe operation and question failures.
 func SlogClassifierError(err error) slog.Attr {

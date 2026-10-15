@@ -94104,6 +94104,12 @@ components:
                 enabled:
                     type: boolean
                     description: Whether to enable evaluation; omission defaults to true
+                input_strategy:
+                    type: string
+                    description: Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+                    enum:
+                        - single_message
+                        - sliding_window
                 instructions:
                     type: string
                     description: Optional classification instructions; empty stores no value
@@ -94131,6 +94137,12 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                window_size:
+                    type: integer
+                    description: Total sliding window messages including the target; omission defaults to 5
+                    format: int64
+                    minimum: 2
+                    maximum: 10
             required:
                 - name
                 - mode
@@ -114114,6 +114126,12 @@ components:
                     type: string
                     description: Sensor ID
                     format: uuid
+                input_strategy:
+                    type: string
+                    description: Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+                    enum:
+                        - single_message
+                        - sliding_window
                 instructions:
                     type: string
                     description: Optional framing instructions for classification
@@ -114149,8 +114167,16 @@ components:
                     type: string
                     description: Last update time
                     format: date-time
+                window_size:
+                    type: integer
+                    description: Sliding window size including the target message, between 2 and 10; defaults to 5
+                    format: int64
+                    minimum: 2
+                    maximum: 10
             description: A project-scoped sensor with ordered live references to custom signals. signal_ids is always present, including when empty.
             required:
+                - input_strategy
+                - window_size
                 - enabled
                 - match_expression
                 - id
@@ -120660,6 +120686,12 @@ components:
                     type: string
                     description: Sensor ID
                     format: uuid
+                input_strategy:
+                    type: string
+                    description: Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+                    enum:
+                        - single_message
+                        - sliding_window
                 instructions:
                     type: string
                     description: Replacement instructions; empty clears it
@@ -120687,6 +120719,12 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                window_size:
+                    type: integer
+                    description: Replacement total sliding window messages, including the target; omission preserves it
+                    format: int64
+                    minimum: 2
+                    maximum: 10
             required:
                 - id
         UpdateSigintSignalForm:
