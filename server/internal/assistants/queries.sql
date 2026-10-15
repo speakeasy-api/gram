@@ -3,7 +3,7 @@
 -- recovery only. Idle runtimes are collected separately through
 -- ListIdleAssistantRuntimes, which must poll the runner before stopping. Both
 -- branches cover rows stranded by a dead process, and the next admit
--- recreates the runtime. Stuck `expiring` rows on an idle-expiring backend
+-- recreates the runtime. Stuck `expiring` v2 rows on an idle-expiring backend
 -- are left to the idle sweep, which stops the backend before retiring them:
 --   - 'starting' rows that never transitioned to active within the startup
 --     grace window (server crashed mid-boot).
@@ -23,7 +23,7 @@ WHERE deleted IS FALSE
     OR (
       state = @expiring_state
       AND updated_at < @expiring_cutoff
-      AND backend <> ALL(@idle_expiring_backends::text[])
+      AND (runtime_version <> 2 OR backend <> ALL(@idle_expiring_backends::text[]))
     )
   )
 RETURNING assistant_id;

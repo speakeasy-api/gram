@@ -3327,7 +3327,7 @@ WHERE deleted IS FALSE
     OR (
       state = $4
       AND updated_at < $5
-      AND backend <> ALL($6::text[])
+      AND (runtime_version <> 2 OR backend <> ALL($6::text[]))
     )
   )
 RETURNING assistant_id
@@ -3346,7 +3346,7 @@ type ReapStuckAssistantRuntimesParams struct {
 // recovery only. Idle runtimes are collected separately through
 // ListIdleAssistantRuntimes, which must poll the runner before stopping. Both
 // branches cover rows stranded by a dead process, and the next admit
-// recreates the runtime. Stuck `expiring` rows on an idle-expiring backend
+// recreates the runtime. Stuck `expiring` v2 rows on an idle-expiring backend
 // are left to the idle sweep, which stops the backend before retiring them:
 //   - 'starting' rows that never transitioned to active within the startup
 //     grace window (server crashed mid-boot).
