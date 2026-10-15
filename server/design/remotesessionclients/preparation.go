@@ -23,7 +23,9 @@ var IdentityChainingPreparation = Type("IdentityChainingPreparation", func() {
 	Attribute("grant_types", ArrayOf(String), "Null means unknown; an empty array means no recorded grants.", func() {
 		Meta("struct:tag:json", "grant_types")
 	})
-	Attribute("scopes", ArrayOf(String), "Scopes identity chaining requests before dropping OpenID Connect scopes: what an interactive sign-in through the selected client requests for this resource, from the server connection's scope settings. The scopes recorded at preparation are kept when no client is selected or the selected client is not linked to the user session issuer.")
+	Attribute("scopes", ArrayOf(String), "Scopes recorded on the binding when identity chaining was turned on. Identity chaining requests exactly these, without OpenID Connect scopes; changes to the server connection apply only when it is turned on again.")
+	Attribute("connection_scopes", ArrayOf(String), "Scopes turning identity chaining on again would record now, sorted and without OpenID Connect scopes: what an interactive sign-in through the selected client requests for this server, or the recorded scopes when the binding has no server connection to follow or the connection names none. Returned by readEMA and prepareEMA when a client is selected.")
+	Attribute("scopes_out_of_date", Boolean, "True when connection_scopes differs from the scopes identity chaining requests; turning identity chaining on again applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.")
 	Attribute("grant_source", String, "Provenance of recorded grants, not provider trust.")
 	Attribute("ema_providers", shared.EMAProviderOrder, "The vendor's EMA provider order resolved for this endpoint. Identity chaining tries the providers that can serve, in order; entries with unavailable_reason are skipped. Returned by readEMA only.")
 	Required("state", "stage", "remediation", "retryable", "generation", "resource", "scopes", "grant_source")
@@ -43,7 +45,7 @@ func identityChainingMethods() {
 				if name == "prepareEMA" {
 					Attribute("client_id", String, "Explicit selected client row ID; never inferred.", func() { Format(FormatUUID) })
 					Attribute("scopes", ArrayOf(String), func() {
-						ScopeAttribute("Recorded on the binding for compatibility; identity chaining requests the server connection's scopes instead. A scope outside the client's registered scope still reports manual_setup_required.")
+						ScopeAttribute("The scopes a DCR registration asks for. Turning identity chaining on records the server connection's scopes (what an interactive sign-in through the selected client requests) and ignores these, unless the client is not linked to the user session issuer, no single remote MCP server signing in through it serves the resource, or the connection names no scope other than OpenID Connect ones; then these are recorded, and a scope outside the client's registered scope reports manual_setup_required. With neither naming a scope, it reports manual_setup_required.")
 					})
 					Attribute("mechanism", String, func() { Enum("manual", "cimd", "dcr"); Default("manual") })
 					Attribute("token_endpoint_auth_method", String, "Explicit DCR authentication method.", func() { Enum("client_secret_basic", "client_secret_post") })

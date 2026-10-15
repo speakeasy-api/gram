@@ -59,7 +59,7 @@ export type PrepareEMARequestBody = {
    */
   resourceMetadata?: ResourceMetadata | undefined;
   /**
-   * Recorded on the binding for compatibility; identity chaining requests the server connection's scopes instead. A scope outside the client's registered scope still reports manual_setup_required.
+   * The scopes a DCR registration asks for. Turning identity chaining on records the server connection's scopes (what an interactive sign-in through the selected client requests) and ignores these, unless the client is not linked to the user session issuer, no single remote MCP server signing in through it serves the resource, or the connection names no scope other than OpenID Connect ones; then these are recorded, and a scope outside the client's registered scope reports manual_setup_required. With neither naming a scope, it reports manual_setup_required.
    */
   scopes?: Array<string> | undefined;
   /**

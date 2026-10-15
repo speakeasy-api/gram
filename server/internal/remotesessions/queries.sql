@@ -2075,6 +2075,19 @@ WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE;
 
+-- name: ListRemoteServerURLsForUserSessionIssuer :many
+-- The upstream URLs of the project's remote-backed MCP servers that sign in
+-- through a user session issuer, each with the resource its cached protected
+-- resource document names, or empty. Identity chaining finds a binding's server by
+-- either value, then keys the resource row by the URL as logins do.
+SELECT rms.url, COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+LEFT JOIN remote_protected_resources AS rpr ON rpr.project_id = m.project_id AND rpr.resource_identifier = rms.url AND rpr.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.user_session_issuer_id = @user_session_issuer_id
+  AND m.deleted IS FALSE;
+
 -- name: ListRemoteSessionsByProjectID :many
 -- A project can reach a session only when both its provenance issuer and its
 -- remote client are in scope. An organization-tier issuer can be shared across

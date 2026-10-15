@@ -55,6 +55,10 @@ export type IdentityChainingPreparation = {
    */
   clientId?: string | undefined;
   /**
+   * Scopes turning identity chaining on again would record now, sorted and without OpenID Connect scopes: what an interactive sign-in through the selected client requests for this server, or the recorded scopes when the binding has no server connection to follow or the connection names none. Returned by readEMA and prepareEMA when a client is selected.
+   */
+  connectionScopes?: Array<string> | undefined;
+  /**
    * The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
    */
   emaProviders?: EMAProviderOrder | undefined;
@@ -79,9 +83,13 @@ export type IdentityChainingPreparation = {
   resource: string;
   retryable: boolean;
   /**
-   * Scopes identity chaining requests before dropping OpenID Connect scopes: what an interactive sign-in through the selected client requests for this resource, from the server connection's scope settings. The scopes recorded at preparation are kept when no client is selected or the selected client is not linked to the user session issuer.
+   * Scopes recorded on the binding when identity chaining was turned on. Identity chaining requests exactly these, without OpenID Connect scopes; changes to the server connection apply only when it is turned on again.
    */
   scopes: Array<string>;
+  /**
+   * True when connection_scopes differs from the scopes identity chaining requests; turning identity chaining on again applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.
+   */
+  scopesOutOfDate?: boolean | undefined;
   stage: IdentityChainingPreparationStage;
   /**
    * Preparation state; readiness never proves user access.
@@ -107,6 +115,7 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
   z.object({
     binding_id: z.optional(z.string()),
     client_id: z.optional(z.string()),
+    connection_scopes: z.optional(z.array(z.string())),
     ema_providers: z.optional(EMAProviderOrder$inboundSchema),
     external_client_id: z.optional(z.string()),
     generation: z.int(),
@@ -117,6 +126,7 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
     resource: z.string(),
     retryable: z.boolean(),
     scopes: z.array(z.string()),
+    scopes_out_of_date: z.optional(z.boolean()),
     stage: IdentityChainingPreparationStage$inboundSchema,
     state: IdentityChainingPreparationState$inboundSchema,
   }),
@@ -124,10 +134,12 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "binding_id": "bindingId",
       "client_id": "clientId",
+      "connection_scopes": "connectionScopes",
       "ema_providers": "emaProviders",
       "external_client_id": "externalClientId",
       "grant_source": "grantSource",
       "grant_types": "grantTypes",
+      "scopes_out_of_date": "scopesOutOfDate",
     });
   }),
 );

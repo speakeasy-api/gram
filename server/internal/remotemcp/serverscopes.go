@@ -322,7 +322,7 @@ func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID s
 	}
 	out := make([]*gen.RemoteMcpServerClientScopes, 0, len(rows))
 	for _, r := range rows {
-		resolved := remotesessions.ClientConnectionScopes(r, cached, owners[r.ClientID])
+		resolved := remotesessions.ClientConnectionScopes(remotesessions.ConnectionScopeInputFromClientRow(r), cached, owners[r.ClientID])
 		out = append(out, &gen.RemoteMcpServerClientScopes{
 			ClientID:                 r.ClientID.String(),
 			IssuerName:               conv.PtrEmpty(strings.TrimSpace(r.IssuerName.String)),

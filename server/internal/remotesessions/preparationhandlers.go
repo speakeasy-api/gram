@@ -69,22 +69,16 @@ func (s *Service) PrepareEMA(ctx context.Context, p *gen.PrepareEMAPayload) (*ge
 	return preparationAPIView(result), nil
 }
 
-// reportConnectionScopes replaces the scopes recorded at preparation with
-// the ones identity chaining requests, as every read reports them.
+// reportConnectionScopes adds the server connection's current scopes to a
+// management response, so the dashboard can say when Turn on would change
+// what identity chaining requests.
 func (s *Service) reportConnectionScopes(ctx context.Context, userSessionIssuerID uuid.UUID, r *PreparationResult) error {
-	if r == nil || r.ClientID == uuid.Nil {
-		return nil
-	}
 	project, org, err := s.preparationTenant(ctx, false)
 	if err != nil {
 		return err
 	}
-	resolution, found, err := ConnectionScopes(ctx, s.db, project, org, userSessionIssuerID, r.ClientID, r.Resource)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolve identity chaining scopes").LogError(ctx, s.logger)
-	}
-	if found {
-		r.Scopes = append([]string{}, resolution.Scopes...)
+	if err := reportConnectionScopes(ctx, s.db, project, org, userSessionIssuerID, s.resources != nil, r); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read identity chaining connection scopes").LogError(ctx, s.logger)
 	}
 	return nil
 }
@@ -96,6 +90,9 @@ func (s *Service) ReadEMA(ctx context.Context, p *gen.ReadEMAPayload) (*gen.Iden
 	}
 	result, err := s.ReadIdentityChaining(ctx, in)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.reportConnectionScopes(ctx, in.UserSessionIssuerID, result); err != nil {
 		return nil, err
 	}
 	view := preparationAPIView(result)
@@ -139,7 +136,10 @@ func preparationAPIView(r *PreparationResult) *gen.IdentityChainingPreparation {
 		State: r.State, Stage: r.Stage, Remediation: r.Remediation, Retryable: r.Retryable,
 		Generation: r.Generation, ExternalClientID: conv.PtrEmpty(r.ExternalClientID), Issuer: conv.PtrEmpty(r.Issuer),
 		Resource: r.Resource, GrantTypes: r.GrantTypes, Scopes: append([]string{}, r.Scopes...), GrantSource: r.GrantSource,
-		EmaProviders: nil,
+		EmaProviders: nil, ConnectionScopes: r.ConnectionScopes, ScopesOutOfDate: nil,
+	}
+	if r.ConnectionScopes != nil {
+		out.ScopesOutOfDate = new(r.ScopesOutOfDate)
 	}
 	if r.BindingID != uuid.Nil {
 		out.BindingID = conv.PtrEmpty(r.BindingID.String())

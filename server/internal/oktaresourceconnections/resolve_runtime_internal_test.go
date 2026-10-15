@@ -36,7 +36,7 @@ func TestResourceIndicatorRuntimeNormalization(t *testing.T) {
 func TestResolveClientRuntimeScopesAndAttachments(t *testing.T) {
 	t.Parallel()
 	issuer, project, login, otherLogin := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}}
+	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}, RemoteUrl: pgtype.Text{String: "https://mcp.example", Valid: true}}
 	client := repo.ListIssuerClientsRow{
 		ID: uuid.New(), RemoteSessionIssuerID: issuer, ClientID: "attached",
 		Scope: []string{"read"}, IssuerScopesSupported: []string{"read", "write", "openid", "offline_access"},
@@ -66,7 +66,7 @@ func TestResolveClientRuntimeScopesAndAttachments(t *testing.T) {
 	require.Equal(t, []string{"pinned"}, scopes)
 	client.IssuerScopeOverride = nil
 	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{}))
-	require.Equal(t, []string{"read", "write"}, scopes, "OIDC-reserved scopes are never requested")
+	require.Equal(t, []string{"read", "write"}, scopes, "Turn on never records OIDC-reserved scopes")
 
 	// Resource-matched clients use the same trailing-slash normalization as runtime.
 	server.UserSessionIssuerID = uuid.NullUUID{}
@@ -78,7 +78,7 @@ func TestResolveClientRuntimeScopesAndAttachments(t *testing.T) {
 func TestResolveClientBindingsRespectLoginIssuer(t *testing.T) {
 	t.Parallel()
 	issuer, project, login, otherLogin := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}}
+	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}, RemoteUrl: pgtype.Text{String: "https://mcp.example", Valid: true}}
 	client := repo.ListIssuerClientsRow{ID: uuid.New(), RemoteSessionIssuerID: issuer, ClientID: "attached", Scope: []string{"fallback"}, UserSessionIssuerIds: []uuid.UUID{login}}
 	other := repo.ListIssuerClientsRow{ID: uuid.New(), RemoteSessionIssuerID: issuer, ClientID: "other", UserSessionIssuerIds: []uuid.UUID{otherLogin}}
 	clients := []repo.ListIssuerClientsRow{client, other}
@@ -93,13 +93,13 @@ func TestResolveClientBindingsRespectLoginIssuer(t *testing.T) {
 		id, scopes, state := resolveClient(server, binding.Resource, clients, bindings, allClients(remotesessions.ResourceScopes{}))
 		require.Equal(t, "attached", id)
 		require.Equal(t, ClientBindingBound, state)
-		require.Equal(t, []string{"fallback"}, scopes)
+		require.Equal(t, []string{"read"}, scopes)
 	}
 	// Even a foreign binding to the same client must not contribute scopes.
 	foreign.RemoteSessionClientID.UUID = client.ID
 	_, scopes, state := resolveClient(server, binding.Resource, clients, []repo.ListEMABindingsRow{foreign, binding}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, ClientBindingBound, state)
-	require.Equal(t, []string{"fallback"}, scopes)
+	require.Equal(t, []string{"read"}, scopes)
 
 	// With only foreign bindings, use the server's attached fallback client.
 	id, scopes, state := resolveClient(server, binding.Resource, clients, []repo.ListEMABindingsRow{foreign}, allClients(remotesessions.ResourceScopes{}))
@@ -108,12 +108,12 @@ func TestResolveClientBindingsRespectLoginIssuer(t *testing.T) {
 	require.Equal(t, []string{"fallback"}, scopes)
 }
 
-func TestResolveClientUsesConnectionScopesForBindings(t *testing.T) {
+func TestResolveClientAggregatesEffectiveBindingScopes(t *testing.T) {
 	t.Parallel()
-	issuer, project, clientID, login := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	issuer, project, clientID := uuid.New(), uuid.New(), uuid.New()
 	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project}
-	client := repo.ListIssuerClientsRow{ID: clientID, RemoteSessionIssuerID: issuer, ClientID: "bound", Scope: []string{"read"}, IssuerScopesSupported: []string{"openid"}, UserSessionIssuerIds: []uuid.UUID{login}}
-	binding := repo.ListEMABindingsRow{ProjectID: project, UserSessionIssuerID: login, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example/", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}, RequestedScopes: []string{"write", "read"}}
+	client := repo.ListIssuerClientsRow{ID: clientID, RemoteSessionIssuerID: issuer, ClientID: "bound", Scope: []string{"read"}, IssuerScopesSupported: []string{"openid"}}
+	binding := repo.ListEMABindingsRow{ProjectID: project, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example/", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}, RequestedScopes: []string{"write", "read"}}
 	fallback := binding
 	fallback.RequestedScopes = nil
 	fallback.Resource = "https://mcp.example"
@@ -121,20 +121,8 @@ func TestResolveClientUsesConnectionScopesForBindings(t *testing.T) {
 		id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, bindings, allClients(remotesessions.ResourceScopes{}))
 		require.Equal(t, "bound", id)
 		require.Equal(t, ClientBindingBound, state)
-		require.Equal(t, []string{"read"}, scopes, "recorded binding scopes are not requested")
+		require.Equal(t, []string{"read", "write"}, scopes)
 	}
-}
-
-func TestResolveClientKeepsRecordedScopesForAnUnlinkedClient(t *testing.T) {
-	t.Parallel()
-	issuer, project, clientID, login := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project}
-	client := repo.ListIssuerClientsRow{ID: clientID, RemoteSessionIssuerID: issuer, ClientID: "bound", Scope: []string{"read"}, UserSessionIssuerIds: []uuid.UUID{uuid.New()}}
-	binding := repo.ListEMABindingsRow{ProjectID: project, UserSessionIssuerID: login, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}, RequestedScopes: []string{"openid", "write", "files:read"}}
-	id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, []repo.ListEMABindingsRow{binding}, allClients(remotesessions.ResourceScopes{}))
-	require.Equal(t, "bound", id)
-	require.Equal(t, ClientBindingBound, state)
-	require.Equal(t, []string{"files:read", "write"}, scopes, "a client no sign-in uses keeps the binding's recorded scopes, without OIDC scopes")
 }
 
 func TestResolveClientIgnoresBindingsToAnotherProjectsClient(t *testing.T) {
@@ -148,4 +136,30 @@ func TestResolveClientIgnoresBindingsToAnotherProjectsClient(t *testing.T) {
 	require.Empty(t, id)
 	require.Empty(t, scopes)
 	require.Equal(t, ClientBindingMissing, state)
+}
+
+func TestResolveClientReportsRecordedScopesForABinding(t *testing.T) {
+	t.Parallel()
+	issuer, project, clientID, login := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}, RemoteUrl: pgtype.Text{String: "https://mcp.example", Valid: true}}
+	client := repo.ListIssuerClientsRow{ID: clientID, RemoteSessionIssuerID: issuer, ClientID: "bound", Scope: []string{"admin", "read"}, UserSessionIssuerIds: []uuid.UUID{login}}
+	binding := repo.ListEMABindingsRow{ProjectID: project, UserSessionIssuerID: login, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}, RequestedScopes: []string{"openid", "read"}}
+	_, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, []repo.ListEMABindingsRow{binding}, allClients(remotesessions.ResourceScopes{}))
+	require.Equal(t, ClientBindingBound, state)
+	require.Equal(t, []string{"read"}, scopes, "a binding requests the scopes recorded at Turn on, not the connection's current set")
+
+	binding.RequestedScopes = nil
+	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, []repo.ListEMABindingsRow{binding}, allClients(remotesessions.ResourceScopes{}))
+	require.Empty(t, scopes, "a binding that recorded no scope requests none")
+}
+
+func TestResolveClientWithoutARemoteURLHasNoConnectionScopes(t *testing.T) {
+	t.Parallel()
+	issuer, project, login := uuid.New(), uuid.New(), uuid.New()
+	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}, TunneledResourceIdentifier: pgtype.Text{String: "https://tunneled.example/mcp", Valid: true}}
+	client := repo.ListIssuerClientsRow{ID: uuid.New(), RemoteSessionIssuerID: issuer, ClientID: "attached", Scope: []string{"read"}, UserSessionIssuerIds: []uuid.UUID{login}}
+	id, scopes, state := resolveClient(server, "https://tunneled.example/mcp", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{}))
+	require.Equal(t, "attached", id)
+	require.Equal(t, ClientBindingSingle, state)
+	require.Empty(t, scopes, "Turn on keys no connection for a server that is not remote-backed, so it records the request's scopes")
 }

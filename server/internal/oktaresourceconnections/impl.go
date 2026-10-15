@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -493,12 +492,8 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		// A client no sign-in through this issuer uses has no connection to follow.
-		scopes := requestedScopes(c, resourceScopes(c.ID))
-		if !slices.Contains(c.UserSessionIssuerIds, b.UserSessionIssuerID) {
-			scopes = identitychaining.GrantScopes(b.RequestedScopes)
-		}
-		for _, scope := range scopes {
+		// Identity chaining requests the scopes recorded at Turn on.
+		for _, scope := range remotesessions.GrantScopes(b.RequestedScopes) {
 			if !slices.Contains(boundScopes, scope) {
 				boundScopes = append(boundScopes, scope)
 			}
@@ -536,33 +531,29 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 	case 0:
 		return "", nil, ClientBindingMissing
 	case 1:
-		return candidates[0].ClientID, requestedScopes(candidates[0], resourceScopes(candidates[0].ID)), ClientBindingSingle
+		return candidates[0].ClientID, turnOnScopes(sv, candidates[0], resourceScopes(candidates[0].ID)), ClientBindingSingle
 	default:
 		return "", nil, ClientBindingAmbiguous
 	}
 }
 
-// requestedScopes is what identity chaining through c requests today: a
-// login's scopes from the cached resource row, without OIDC-reserved scopes.
-// This surface never probes.
-func requestedScopes(c repo.ListIssuerClientsRow, resourceScopes remotesessions.ResourceScopes) []string {
-	scopes := (remotesessions.Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
-		ClientScope:             c.Scope,
-		IssuerScopeOverride:     c.IssuerScopeOverride,
-		IssuerScopesSupported:   c.IssuerScopesSupported,
-		IssuerOmitScopeFallback: c.IssuerOmitScopeFallback.Valid && c.IssuerOmitScopeFallback.Bool,
-	}).RequestedScopes(resourceScopes).Scopes
-	return scopesOr(nil, identitychaining.GrantScopes(scopes))
-}
-
-func scopesOr(preferred, fallback []string) []string {
-	if len(preferred) > 0 {
-		return preferred
+// turnOnScopes is what Turn on through c would record for sv now, from the
+// cached resource row; this surface never probes. A server that is not
+// remote-backed has no connection Turn on can key, so its scopes would come
+// from the request.
+func turnOnScopes(sv repo.ListEligibleServersRow, c repo.ListIssuerClientsRow, resource remotesessions.ResourceScopes) []string {
+	var connection *remotesessions.ScopeResolution
+	if sv.RemoteUrl.Valid {
+		resolution := remotesessions.ClientConnectionScopes(remotesessions.ConnectionScopeInput{
+			ClientID:                c.ID,
+			ClientScope:             c.Scope,
+			IssuerScopesSupported:   c.IssuerScopesSupported,
+			IssuerScopeOverride:     c.IssuerScopeOverride,
+			IssuerOmitScopeFallback: c.IssuerOmitScopeFallback.Valid && c.IssuerOmitScopeFallback.Bool,
+		}, resource, true)
+		connection = &resolution
 	}
-	if fallback == nil {
-		return []string{}
-	}
-	return fallback
+	return remotesessions.BindingScopes(connection, nil).Scopes
 }
 
 func (s *Service) List(ctx context.Context, payload *srv.ListPayload) (*srv.ListOktaResourceConnectionsResult, error) {
@@ -929,7 +920,7 @@ func buildRow(snap *snapshot, r row) *srv.OktaResourceConnectionServer {
 		AuthorizationServerIssuer: conv.PtrEmpty(r.server.Issuer),
 		ClientID:                  conv.PtrEmpty(r.clientID),
 		ClientBinding:             r.binding,
-		Scopes:                    scopesOr(nil, r.scopes),
+		Scopes:                    conv.DefaultSlice(r.scopes, []string{}),
 		DeepLink:                  conv.PtrEmpty(snap.deepLink),
 		Audience:                  nil,
 		OktaApplicationID:         nil,

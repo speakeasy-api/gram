@@ -35,7 +35,24 @@ func (s *Service) readIdentityChaining(ctx context.Context, in PreparationInput)
 		return nil, oops.E(oops.CodeUnexpected, err, "read preparation")
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	return readIdentityChainingSnapshot(ctx, tx, project, org, in)
+	return readIdentityChainingSnapshot(ctx, repo.New(tx), project, org, in)
+}
+
+// reportConnectionScopes fills r's ConnectionScopes and ScopesOutOfDate when
+// it selects a client. The runtime's read never calls it: chaining requests
+// the recorded scopes alone.
+func reportConnectionScopes(ctx context.Context, db repo.DBTX, project uuid.UUID, org string, userSessionIssuerID uuid.UUID, discover bool, r *PreparationResult) error {
+	if r == nil || r.ClientID == uuid.Nil {
+		return nil
+	}
+	connection, err := ConnectionScopes(ctx, db, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: userSessionIssuerID, ClientID: r.ClientID, Resource: r.Resource, Discover: discover})
+	if err != nil {
+		return fmt.Errorf("resolve identity chaining connection scopes: %w", err)
+	}
+	current := BindingScopes(connection, r.Scopes).Scopes
+	r.ConnectionScopes = current
+	r.ScopesOutOfDate = !slices.Equal(current, sortedScopes(GrantScopes(r.Scopes)))
+	return nil
 }
 
 // ReadIdentityChainingForTenant recomputes a binding's readiness exactly as
@@ -51,13 +68,14 @@ func ReadIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, projec
 		return nil, fmt.Errorf("begin identity chaining snapshot: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
-	return readIdentityChainingSnapshot(ctx, tx, project, org, in)
+	return readIdentityChainingSnapshot(ctx, repo.New(tx), project, org, in)
 }
 
 // InspectIdentityChainingForTenant reports every live binding naming one
-// upstream, each as the preparation API reports it, for a tenant the caller
-// already authorized. It never mutates or contacts a provider.
-func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, project uuid.UUID, org string, userSessionIssuerID uuid.UUID, remoteSessionIssuerID uuid.NullUUID, upstream string) ([]*PreparationResult, error) {
+// upstream, each as readEMA reports it, connection scopes included, for a
+// tenant the caller already authorized. discover is as for BindingConnection.
+// It never mutates or contacts a provider.
+func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, project uuid.UUID, org string, userSessionIssuerID uuid.UUID, remoteSessionIssuerID uuid.NullUUID, upstream string, discover bool) ([]*PreparationResult, error) {
 	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return nil, fmt.Errorf("begin identity chaining snapshot: %w", err)
@@ -74,8 +92,11 @@ func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, pro
 		if err != nil {
 			return nil, err
 		}
-		result, err := readIdentityChainingSnapshot(ctx, tx, project, org, in)
+		result, err := readIdentityChainingSnapshot(ctx, q, project, org, in)
 		if err != nil {
+			return nil, err
+		}
+		if err := reportConnectionScopes(ctx, tx, project, org, b.UserSessionIssuerID, discover, result); err != nil {
 			return nil, err
 		}
 		results = append(results, result)
@@ -84,25 +105,8 @@ func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, pro
 }
 
 // readIdentityChainingSnapshot recomputes a binding's readiness for an already
-// authorized tenant. db must be a read-only snapshot transaction. A bound
-// binding reports the scopes its server's connection requests, which is what
-// identity chaining asks for; the scopes stored at preparation are not used.
-func readIdentityChainingSnapshot(ctx context.Context, db repo.DBTX, project uuid.UUID, org string, in PreparationInput) (*PreparationResult, error) {
-	r, err := readIdentityChainingState(ctx, repo.New(db), project, org, in)
-	if err != nil || r.ClientID == uuid.Nil {
-		return r, err
-	}
-	resolution, found, err := ConnectionScopes(ctx, db, project, org, in.UserSessionIssuerID, r.ClientID, r.Resource)
-	if err != nil {
-		return nil, fmt.Errorf("resolve identity chaining scopes: %w", err)
-	}
-	if found {
-		r.Scopes = append([]string{}, resolution.Scopes...)
-	}
-	return r, nil
-}
-
-func readIdentityChainingState(ctx context.Context, q *repo.Queries, project uuid.UUID, org string, in PreparationInput) (*PreparationResult, error) {
+// authorized tenant. q must be bound to a read-only snapshot transaction.
+func readIdentityChainingSnapshot(ctx context.Context, q *repo.Queries, project uuid.UUID, org string, in PreparationInput) (*PreparationResult, error) {
 	var err error
 	if _, err = q.ReadEMAProject(ctx, repo.ReadEMAProjectParams{ProjectID: project, OrganizationID: org}); err != nil {
 		return nil, preparationLookupError(err, "project not found")

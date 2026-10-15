@@ -31,12 +31,11 @@ func TestResolveClient(t *testing.T) {
 		RemoteUrl:                           pgtype.Text{String: "https://mcp.example/", Valid: true},
 		UnproxiedUrl:                        pgtype.Text{},
 	}
-	login := uuid.New()
 	client := func(id uuid.UUID, projectID uuid.NullUUID, clientID string, resource string) repo.ListIssuerClientsRow {
-		return repo.ListIssuerClientsRow{ID: id, RemoteSessionIssuerID: issuer, ProjectID: projectID, ClientID: clientID, Scope: []string{"read"}, ResourceIdentifier: pgtype.Text{String: resource, Valid: resource != ""}, UserSessionIssuerIds: []uuid.UUID{login}}
+		return repo.ListIssuerClientsRow{ID: id, RemoteSessionIssuerID: issuer, ProjectID: projectID, ClientID: clientID, Scope: []string{"read"}, ResourceIdentifier: pgtype.Text{String: resource, Valid: resource != ""}}
 	}
 	binding := func(clientID uuid.UUID, scopes ...string) repo.ListEMABindingsRow {
-		return repo.ListEMABindingsRow{ProjectID: project, UserSessionIssuerID: login, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example/", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}, RequestedScopes: scopes}
+		return repo.ListEMABindingsRow{ProjectID: project, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example/", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}, RequestedScopes: scopes}
 	}
 	a, b := uuid.New(), uuid.New()
 	inProject := uuid.NullUUID{UUID: project, Valid: true}
@@ -65,11 +64,10 @@ func TestResolveClient(t *testing.T) {
 	require.Equal(t, "one", id)
 	require.Equal(t, ClientBindingSingle, state)
 
-	// An explicit binding for the resource wins over ambiguity; its scopes are
-	// the connection's, not the ones recorded on the binding.
+	// An explicit binding for the resource wins over ambiguity and carries its scopes.
 	id, scopes, state = resolveClient(server, "https://mcp.example/", two, []repo.ListEMABindingsRow{binding(b, "files:read")}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "org", id)
-	require.Equal(t, []string{"read"}, scopes)
+	require.Equal(t, []string{"files:read"}, scopes)
 	require.Equal(t, ClientBindingBound, state)
 
 	// Bindings that agree stay bound; bindings that disagree are ambiguous.

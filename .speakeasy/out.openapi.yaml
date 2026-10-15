@@ -90536,6 +90536,11 @@ components:
         client_id:
           type: string
           description: Exact selected remote_session_client row ID, when available.
+        connection_scopes:
+          type: array
+          items:
+            type: string
+          description: 'Scopes turning identity chaining on again would record now, sorted and without OpenID Connect scopes: what an interactive sign-in through the selected client requests for this server, or the recorded scopes when the binding has no server connection to follow or the connection names none. Returned by readEMA and prepareEMA when a client is selected.'
         ema_providers:
           $ref: '#/components/schemas/EMAProviderOrder'
         external_client_id:
@@ -90566,7 +90571,10 @@ components:
           type: array
           items:
             type: string
-          description: 'Scopes identity chaining requests before dropping OpenID Connect scopes: what an interactive sign-in through the selected client requests for this resource, from the server connection''s scope settings. The scopes recorded at preparation are kept when no client is selected or the selected client is not linked to the user session issuer.'
+          description: Scopes recorded on the binding when identity chaining was turned on. Identity chaining requests exactly these, without OpenID Connect scopes; changes to the server connection apply only when it is turned on again.
+        scopes_out_of_date:
+          type: boolean
+          description: True when connection_scopes differs from the scopes identity chaining requests; turning identity chaining on again applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.
         stage:
           type: string
           enum:
@@ -97850,7 +97858,7 @@ components:
             type: string
             pattern: ^[!#-[\]-~]+$
             maxLength: 128
-          description: Recorded on the binding for compatibility; identity chaining requests the server connection's scopes instead. A scope outside the client's registered scope still reports manual_setup_required.
+          description: The scopes a DCR registration asks for. Turning identity chaining on records the server connection's scopes (what an interactive sign-in through the selected client requests) and ignores these, unless the client is not linked to the user session issuer, no single remote MCP server signing in through it serves the resource, or the connection names no scope other than OpenID Connect ones; then these are recorded, and a scope outside the client's registered scope reports manual_setup_required. With neither naming a scope, it reports manual_setup_required.
         token_endpoint_auth_method:
           type: string
           description: Explicit DCR authentication method.

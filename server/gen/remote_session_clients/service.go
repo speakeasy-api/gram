@@ -260,12 +260,20 @@ type IdentityChainingPreparation struct {
 	Resource         string
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	// Scopes identity chaining requests before dropping OpenID Connect scopes:
-	// what an interactive sign-in through the selected client requests for this
-	// resource, from the server connection's scope settings. The scopes recorded
-	// at preparation are kept when no client is selected or the selected client is
-	// not linked to the user session issuer.
+	// Scopes recorded on the binding when identity chaining was turned on.
+	// Identity chaining requests exactly these, without OpenID Connect scopes;
+	// changes to the server connection apply only when it is turned on again.
 	Scopes []string
+	// Scopes turning identity chaining on again would record now, sorted and
+	// without OpenID Connect scopes: what an interactive sign-in through the
+	// selected client requests for this server, or the recorded scopes when the
+	// binding has no server connection to follow or the connection names none.
+	// Returned by readEMA and prepareEMA when a client is selected.
+	ConnectionScopes []string
+	// True when connection_scopes differs from the scopes identity chaining
+	// requests; turning identity chaining on again applies connection_scopes.
+	// Returned by readEMA and prepareEMA when a client is selected.
+	ScopesOutOfDate *bool
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string
 	// The vendor's EMA provider order resolved for this endpoint. Identity
@@ -317,9 +325,14 @@ type PrepareEMAPayload struct {
 	Resource string
 	// Explicit selected client row ID; never inferred.
 	ClientID *string
-	// Recorded on the binding for compatibility; identity chaining requests the
-	// server connection's scopes instead. A scope outside the client's registered
-	// scope still reports manual_setup_required.
+	// The scopes a DCR registration asks for. Turning identity chaining on records
+	// the server connection's scopes (what an interactive sign-in through the
+	// selected client requests) and ignores these, unless the client is not linked
+	// to the user session issuer, no single remote MCP server signing in through
+	// it serves the resource, or the connection names no scope other than OpenID
+	// Connect ones; then these are recorded, and a scope outside the client's
+	// registered scope reports manual_setup_required. With neither naming a scope,
+	// it reports manual_setup_required.
 	Scopes    []string
 	Mechanism string
 	// Explicit DCR authentication method.

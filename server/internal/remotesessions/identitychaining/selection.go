@@ -13,7 +13,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
-	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -31,10 +30,8 @@ type selection struct {
 	resource         string
 	scopes           []string
 
-	// configuredScopes is the server connection's scope set before OIDC
-	// filtering, or the binding's recorded set when its client is not linked
-	// to the user session issuer; it bounds an ID-JAG's scope when filtering
-	// left none to request.
+	// configuredScopes is the binding's scope set before OIDC filtering; it
+	// bounds an ID-JAG's scope when filtering left none to request.
 	configuredScopes []string
 
 	// trustedIssuerID and trustedClientID are the user session issuer's
@@ -59,18 +56,6 @@ type selection struct {
 	// resource app audience when one exists, else the resource authorization
 	// server's issuer. Filled in by authorize.
 	audience string
-}
-
-// GrantScopes drops OIDC-reserved scopes, which Okta rejects in ID-JAG
-// requests. An empty result requests no scope.
-func GrantScopes(scopes []string) []string {
-	var out []string
-	for _, scope := range scopes {
-		if !oauthwire.IsOIDCReservedScope(scope) {
-			out = append(out, scope)
-		}
-	}
-	return out
 }
 
 // selectBinding applies explicit binding selection: exactly one ready binding
@@ -149,7 +134,7 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 	if resource.Discovered && !slices.ContainsFunc(resource.AuthorizationServers, func(server string) bool { return sameIssuer(server, result.Issuer) }) {
 		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
 	}
-	scopes := GrantScopes(result.Scopes)
+	scopes := remotesessions.GrantScopes(result.Scopes)
 	if len(scopes) == 0 && len(result.Scopes) > 0 {
 		logger.DebugContext(ctx, "identity chaining dropped every configured scope as OIDC reserved", attr.SlogOAuthScope(strings.Join(result.Scopes, " ")))
 	}
