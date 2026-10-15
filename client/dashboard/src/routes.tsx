@@ -1369,7 +1369,7 @@ const ORG_ROUTE_STRUCTURE = {
     component: OrgLogs,
   },
   gateway: {
-    title: "Gateway",
+    title: "Org Gateway",
     url: "gateway",
     icon: "network",
     component: OrgGateway,
@@ -1651,6 +1651,11 @@ const ORG_ROUTE_STRUCTURE = {
       members: {
         title: "Roles & Permissions",
         url: "members",
+        component: Access,
+      },
+      assignments: {
+        title: "MCP Assignments",
+        url: "assignments",
         component: Access,
       },
       challenges: {

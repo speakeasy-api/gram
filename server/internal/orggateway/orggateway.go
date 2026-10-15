@@ -6,7 +6,7 @@
 // The gateway is not stored. It exists while its organization owns exactly
 // one organization-level user session issuer, so creating, moving, or
 // deleting that issuer is what offers or withdraws it. An organization admin
-// can also turn it off, which withdraws it until they turn it back on. It is
+// must explicitly opt in before it is served, and can turn it off again. It is
 // served on the
 // platform host only, so an organization whose custom domain restricts
 // access to an IP allowlist, which the platform host enforces by refusing

@@ -155,6 +155,20 @@ func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationI
 		}
 		changed = inserted > 0
 	} else {
+		// The gateway is off until an administrator opts in. Persist the first
+		// opt-in as a soft-deleted disabled flag, retaining the existing API.
+		if feature == FeatureOrganizationGatewayDisabled {
+			current, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
+			if err != nil {
+				return false, fmt.Errorf("read gateway opt-in: %w", err)
+			}
+			if !current {
+				return false, nil
+			}
+			if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)}); err != nil {
+				return false, fmt.Errorf("record gateway opt-in: %w", err)
+			}
+		}
 		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):

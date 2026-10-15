@@ -52,6 +52,7 @@ export function ChangeRoleDialog({
         invalidateAllMembers(queryClient),
         invalidateAllRoles(queryClient),
         invalidateAllResourceAudience(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["mcpAssignments"] }),
       ]);
       onOpenChange(false);
     },

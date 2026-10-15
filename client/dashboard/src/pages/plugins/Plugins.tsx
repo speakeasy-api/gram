@@ -1,3 +1,4 @@
+import { OrganizationGatewayButton } from "@/components/mcp/OrganizationGatewayButton";
 import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useOrganization } from "@/contexts/Auth";
@@ -384,14 +385,17 @@ function PluginsContent({
           </span>
         }
         primaryAction={
-          canWritePlugin ? (
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
-              <Button.LeftIcon>
-                <Icon name="plus" />
-              </Button.LeftIcon>
-              <Button.Text>Create plugin</Button.Text>
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            <OrganizationGatewayButton size="md" />
+            {canWritePlugin && (
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                <Button.LeftIcon>
+                  <Icon name="plus" />
+                </Button.LeftIcon>
+                <Button.Text>Create plugin</Button.Text>
+              </Button>
+            )}
+          </div>
         }
       >
         <Stack direction="vertical" gap={8}>

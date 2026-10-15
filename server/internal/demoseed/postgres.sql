@@ -634,6 +634,16 @@ BEGIN
   FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac', 'signals_intelligence']) AS f
   ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
+  -- Org Gateway starts disabled so the demo shows the access review before
+  -- rollout. Preserve an administrator's explicit opt-in across reseeds.
+  INSERT INTO organization_features (organization_id, feature_name)
+  SELECT demo_org, 'organization_gateway_disabled'
+  WHERE NOT EXISTS (
+    SELECT 1 FROM organization_features
+    WHERE organization_id = demo_org AND feature_name = 'organization_gateway_disabled'
+  )
+  ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
   -- Unlike demo entitlements, preserve an explicit fail-closed choice on reseed.
   INSERT INTO organization_features (organization_id, feature_name)
   SELECT demo_org, 'hooks_fail_open'

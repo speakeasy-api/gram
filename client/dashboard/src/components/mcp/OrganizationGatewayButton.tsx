@@ -1,6 +1,11 @@
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useOrganizationGateway } from "@gram/client/react-query/organizationGateway.js";
 import { Network } from "lucide-react";
@@ -11,7 +16,11 @@ import { Network } from "lucide-react";
  * projects. Renders nothing unless the organization serves one, so it never
  * points anyone at a URL that would not answer.
  */
-export function OrganizationGatewayButton(): JSX.Element | null {
+export function OrganizationGatewayButton({
+  size = "sm",
+}: {
+  size?: "sm" | "md";
+}): JSX.Element | null {
   // Discoverability only: a failed read hides the button rather than the page.
   const { data } = useOrganizationGateway(undefined, undefined, {
     throwOnError: false,
@@ -21,14 +30,23 @@ export function OrganizationGatewayButton(): JSX.Element | null {
 
   return (
     <Dialog>
-      <Dialog.Trigger asChild>
-        <Button variant="secondary" size="sm">
-          <Button.LeftIcon>
-            <Network />
-          </Button.LeftIcon>
-          <Button.Text>Connect all servers</Button.Text>
-        </Button>
-      </Dialog.Trigger>
+      <Tooltip delayDuration={0}>
+        <TooltipTrigger asChild>
+          <Dialog.Trigger asChild>
+            <Button variant="secondary" size={size}>
+              <Button.LeftIcon>
+                <Network />
+              </Button.LeftIcon>
+              <Button.Text>Connect all servers</Button.Text>
+            </Button>
+          </Dialog.Trigger>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          The org gateway is a faster alternative for distributing servers
+          through one connection. Use plugins to create custom server groups or
+          roll out unbundled, individual MCP servers.
+        </TooltipContent>
+      </Tooltip>
       <Dialog.Content className="max-w-xl">
         <Dialog.Header>
           <Dialog.Title>Connect all your servers at once</Dialog.Title>

@@ -24,9 +24,6 @@ vi.mock("react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
   useNavigate: () => vi.fn(),
 }));
-vi.mock("./project-menu", () => ({
-  ProjectAvatar: () => <span data-testid="project-avatar" />,
-}));
 
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -38,5 +35,6 @@ describe("WorkspaceSwitcher", () => {
     // The trigger shows the project's display name (not the org/project slug),
     // suffixed with "Project".
     expect(screen.getByText("Proj Project")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Proj" }).textContent).toBe("P");
   });
 });

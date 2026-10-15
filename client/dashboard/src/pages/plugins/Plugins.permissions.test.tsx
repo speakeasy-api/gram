@@ -18,6 +18,11 @@ const state = vi.hoisted(() => ({
   settings: vi.fn(),
   settingsRead: vi.fn(),
 }));
+vi.mock("@gram/client/react-query/organizationGateway.js", () => ({
+  useOrganizationGateway: () => ({
+    data: { available: true, url: "https://gateway.example.test/mcp" },
+  }),
+}));
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => state.writer || state.admin,
 }));
@@ -201,6 +206,9 @@ describe("Plugins index authorization", () => {
   it("loads and offers creation and publishing for a writer without org read", () => {
     render(page());
     expect(state.list).toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Connect all servers" }),
+    ).toBeTruthy();
     expect(screen.getByText("A populated plugin card")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Sync plugins" }));
     expect(state.publish).toHaveBeenCalled();
