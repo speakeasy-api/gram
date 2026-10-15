@@ -141,9 +141,22 @@ func TestHosts_SharedAuthorizationServer(t *testing.T) {
 	require.Equal(t, testServerURL+authserver.SharedPath(pinned.ID)+"/token", server.TokenEndpoint)
 }
 
+func TestHosts_SharedIssuerURLOn(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.New()
+	require.Equal(t, testAuthenticationHostBaseURL+authserver.SharedPath(id), testHosts.SharedIssuerURLOn(id, true))
+	require.Equal(t, testServerURL+authserver.SharedPath(id), testHosts.SharedIssuerURLOn(id, false))
+
+	withoutAuthenticationHost := authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil}
+	require.False(t, withoutAuthenticationHost.AuthenticationHostAvailable())
+	require.Equal(t, testServerURL+authserver.SharedPath(id), withoutAuthenticationHost.SharedIssuerURLOn(id, true))
+}
+
 func TestHosts_PerServerOrigin(t *testing.T) {
 	t.Parallel()
 
+	require.True(t, testHosts.AuthenticationHostAvailable())
 	require.Equal(t, testAuthenticationHostBaseURL, testHosts.PerServerOrigin(true))
 	require.Equal(t, testServerURL, testHosts.PerServerOrigin(false))
 

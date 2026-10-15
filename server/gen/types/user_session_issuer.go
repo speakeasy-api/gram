@@ -73,6 +73,9 @@ type UserSessionIssuer struct {
 	// The owning project's name. Present on organization-level reads of
 	// project-specific issuers.
 	ProjectName *string
-	CreatedAt   string
-	UpdatedAt   string
+	// Whether this deployment has an authentication host the issuer can be moved
+	// onto. Present on responses, not audit snapshots.
+	AuthenticationHostAvailable *bool
+	CreatedAt                   string
+	UpdatedAt                   string
 }
