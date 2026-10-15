@@ -1,6 +1,7 @@
 package identitychaining
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -159,7 +161,7 @@ func TestSpeakeasyConsent_BelongsToItsSignIn(t *testing.T) {
 func TestSpeakeasyConsent_RefusalWithinKeyWindowReadsUnknown(t *testing.T) {
 	t.Parallel()
 	lf := newSpeakeasyLiveFixture(t)
-	lf.rejectRedemption.Store(true)
+	lf.rejectRedemption.Store(new(oautherr.CodeInvalidGrant))
 	lf.chainer.now = func() time.Time { return lf.status.ActiveKey.CreatedAt.Time.Add(time.Minute) }
 	refused := lf.chainer.CheckConsent(t.Context(), lf.consentRequest(), lf.signIn.ID.UUID)
 	lf.checkExchange()
@@ -172,6 +174,81 @@ func TestSpeakeasyConsent_RefusalWithinKeyWindowReadsUnknown(t *testing.T) {
 	require.Equal(t, ReasonInvalidGrant, refused.Reason)
 	require.False(t, refused.Retryable, "past the key window a refusal is definitive")
 	require.EqualValues(t, 2, lf.calls.Load())
+}
+
+func TestSpeakeasyConsent_DefinitiveRefusalWithinKeyWindow(t *testing.T) {
+	t.Parallel()
+	for code, reason := range map[string]Reason{oautherr.CodeInvalidClient: ReasonInvalidClient, oautherr.CodeInvalidScope: ReasonScopePolicyDenied} {
+		t.Run(code, func(t *testing.T) {
+			t.Parallel()
+			lf := newSpeakeasyLiveFixture(t)
+			lf.rejectRedemption.Store(&code)
+			lf.chainer.now = func() time.Time { return lf.status.ActiveKey.CreatedAt.Time.Add(time.Minute) }
+			refused := lf.chainer.CheckConsent(t.Context(), lf.consentRequest(), lf.signIn.ID.UUID)
+			lf.checkExchange()
+			require.Equal(t, reason, refused.Reason)
+			require.Equal(t, StageRedemption, refused.Stage)
+			require.False(t, refused.Retryable, "a client or scope refusal is not a stale key set")
+		})
+	}
+}
+
+func TestSignedWithRecentKey_OnlyStaleKeyRejections(t *testing.T) {
+	t.Parallel()
+	publishedAt := time.Now()
+	c := &Chainer{Governor: Governor{now: func() time.Time { return publishedAt.Add(time.Minute) }}}
+	sel := selection{provider: remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy}, internalKeyPublishedAt: publishedAt}
+	redemption := func(reason Reason) Outcome { return newOutcome(StageRedemption, reason, ConfidenceUnknown, false) }
+	for _, tc := range []struct {
+		name    string
+		outcome Outcome
+		signed  bool
+		want    bool
+	}{
+		{name: "invalid grant", outcome: redemption(ReasonInvalidGrant), signed: true, want: true},
+		{name: "unknown rejection", outcome: redemption(ReasonUnknownRejection), signed: true, want: true},
+		{name: "configuration before signing", outcome: newOutcome(StageRedemption, ReasonConfigurationRequired, ConfidenceVerified, false), signed: false, want: false},
+		{name: "invalid grant never signed", outcome: redemption(ReasonInvalidGrant), signed: false, want: false},
+		{name: "invalid client", outcome: redemption(ReasonInvalidClient), signed: true, want: false},
+		{name: "scope policy", outcome: redemption(ReasonScopePolicyDenied), signed: true, want: false},
+		{name: "insufficient scope", outcome: redemption(ReasonInsufficientScope), signed: true, want: false},
+		{name: "invalid target", outcome: redemption(ReasonInvalidTarget), signed: true, want: false},
+		{name: "access denied", outcome: redemption(ReasonAccessDenied), signed: true, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, c.signedWithRecentKey(sel, tc.outcome, tc.signed))
+		})
+	}
+	old := sel
+	old.internalKeyPublishedAt = publishedAt.Add(-recentKeyWindow)
+	require.False(t, c.signedWithRecentKey(old, redemption(ReasonInvalidGrant), true), "past the key window")
+}
+
+func TestSpeakeasyConsent_ConcurrentChecksShareUnstoredAcceptance(t *testing.T) {
+	t.Parallel()
+	lf := newSpeakeasyLiveFixture(t)
+	lf.acquire(t, lf.newGrant(t, lf.signIn.ID), true)
+	other := lf.recordSignIn(t, uuid.NewString())
+
+	// checks is enough concurrent consent loads to race single flight.
+	const checks = 8
+	var wg sync.WaitGroup
+	outcomes := make([]Outcome, checks)
+	for i := range checks {
+		wg.Go(func() {
+			// The consent page's deadline is shorter than waitBudget.
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			outcomes[i] = lf.chainer.CheckConsent(ctx, lf.consentRequest(), other.ID.UUID)
+		})
+	}
+	wg.Wait()
+	lf.checkExchange()
+	for i := range checks {
+		require.True(t, outcomes[i].Succeeded(), "%+v", outcomes[i])
+	}
+	require.EqualValues(t, 2, lf.calls.Load(), "concurrent checks share the one acceptance the held slot could not store")
 }
 
 func TestSpeakeasyConsent_RevokedBeforeApproval(t *testing.T) {

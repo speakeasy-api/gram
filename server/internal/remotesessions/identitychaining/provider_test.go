@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -310,41 +311,33 @@ func TestProviders_AllProvidersFailPrefersReauthentication(t *testing.T) {
 	require.Zero(t, src.issued)
 }
 
-// publishedKeySource is a failingSource whose signing key was published at
-// publishedAt.
-type publishedKeySource struct {
-	*failingSource
-	publishedAt time.Time
-}
-
-func (s publishedKeySource) authorize(ctx context.Context, logger *slog.Logger, req Request, sel *selection) Outcome {
-	sel.internalKeyPublishedAt = s.publishedAt
-	return s.failingSource.authorize(ctx, logger, req, sel)
-}
-
 func TestProviders_RecentKeyRedemptionFailureIsNotCached(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name        string
-		publishedAt time.Time
-		issues      int
+		name     string
+		sinceKey time.Duration
+		issues   int32
 	}{
-		{name: "recent key", publishedAt: time.Now(), issues: 2},
-		{name: "key past the vendor refresh window", publishedAt: time.Now().Add(-recentKeyWindow - time.Minute), issues: 1},
+		{name: "recent key", sinceKey: time.Minute, issues: 2},
+		{name: "key past the vendor refresh window", sinceKey: recentKeyWindow + time.Minute, issues: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			f := newDevIDPFixture(t, devIDPOptions{})
-			src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageRedemption, ReasonInvalidGrant, ConfidenceUnknown, false), issued: 0}
-			useSpeakeasySource(f, publishedKeySource{failingSource: src, publishedAt: tc.publishedAt})
-			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
+			lf := newSpeakeasyLiveFixture(t)
+			lf.rejectRedemption.Store(new(oautherr.CodeInvalidGrant))
+			lf.chainer.now = func() time.Time { return lf.status.ActiveKey.CreatedAt.Time.Add(tc.sinceKey) }
+			grant := lf.newGrant(t, lf.signIn.ID)
 
-			_, first := f.chainer.Acquire(t.Context(), f.req)
+			_, first := lf.chainer.Acquire(t.Context(), grant)
+			lf.checkExchange()
 			require.Equal(t, ReasonInvalidGrant, first.Reason)
-			_, second := f.chainer.Acquire(t.Context(), f.req)
+			_, second := lf.chainer.Acquire(t.Context(), grant)
+			if tc.issues == 2 {
+				lf.checkExchange()
+			}
 			require.Equal(t, ReasonInvalidGrant, second.Reason)
 			require.Equal(t, tc.issues == 1, second.Cached)
-			require.Equal(t, tc.issues, src.issued)
+			require.Equal(t, tc.issues, lf.calls.Load())
 		})
 	}
 }

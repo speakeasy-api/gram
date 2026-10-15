@@ -127,9 +127,9 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 }
 
 // retireDeniedConsentCredentials erases the vendor credentials this sign-in's
-// consent pages minted that no grant adopted, once the user denies access.
-// Best effort: a remaining credential expires within the hour and only a
-// grant of the same sign-in could adopt it.
+// consent pages stored that no grant adopted, as of the denial. An exchange
+// already in flight can still store one afterwards; only another eligible
+// grant of the same sign-in could adopt it, and it expires within the hour.
 func (s *Service) retireDeniedConsentCredentials(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) {
 	subject := challengeState.Subject
 	if s.identityChainer == nil || challengeState.SignInID == nil || subject == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
@@ -141,8 +141,10 @@ func (s *Service) retireDeniedConsentCredentials(ctx context.Context, logger *sl
 }
 
 // checkIdentityChaining checks every request under one deadline. Every
-// provider runs its live exchange, so a card is claimed connected only with a
-// downstream token. It also returns the outcome that decided the result.
+// provider runs its live exchange, so a card reads connected only after the
+// vendor accepted one: a stored downstream token or, when the credential slot
+// is held, a vendor acceptance cached for a few minutes. It also returns the
+// outcome that decided the result.
 func (s *Service) checkIdentityChaining(ctx context.Context, requests []identitychaining.Request, service string, signInID uuid.UUID) (consentChainCheckResult, identitychaining.Outcome) {
 	ctx, cancel := context.WithTimeout(ctx, consentChainCheckTimeout)
 	defer cancel()

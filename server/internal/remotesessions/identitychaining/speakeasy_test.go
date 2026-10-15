@@ -70,7 +70,7 @@ type speakeasyLiveFixture struct {
 	metadataCalls        *atomic.Int32
 	metadataUnavailable  *atomic.Bool
 	revokeDuringExchange *atomic.Bool
-	rejectRedemption     *atomic.Bool
+	rejectRedemption     *atomic.Pointer[string]
 	checkExchange        func()
 }
 
@@ -133,7 +133,7 @@ func newSpeakeasyLiveFixture(t *testing.T) *speakeasyLiveFixture {
 	metadataCalls := new(atomic.Int32)
 	metadataUnavailable := new(atomic.Bool)
 	revokeDuringExchange := new(atomic.Bool)
-	rejectRedemption := new(atomic.Bool)
+	rejectRedemption := new(atomic.Pointer[string])
 	exchangeErrors := make(chan error, 4)
 	checkExchange := func() {
 		t.Helper()
@@ -162,10 +162,10 @@ func newSpeakeasyLiveFixture(t *testing.T) *speakeasyLiveFixture {
 		}
 		calls.Add(1)
 		fail := func(err error) { exchangeErrors <- err; http.Error(w, "invalid test exchange", http.StatusBadRequest) }
-		if rejectRedemption.Load() {
+		if code := rejectRedemption.Load(); code != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": *code})
 			exchangeErrors <- nil
 			return
 		}

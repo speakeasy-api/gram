@@ -46,8 +46,10 @@ func (c *Chainer) CheckConsent(ctx context.Context, req Request, signInID uuid.U
 }
 
 // RetireConsentCredentials erases the credentials the sign-in's consent pages
-// minted for the issuer's endpoints that no grant has adopted. The consent
-// flow calls it when the user denies access.
+// stored for the issuer's endpoints that no grant has adopted. The consent
+// flow calls it when the user denies access. It is a point-in-time cleanup: an
+// exchange already in flight can still store a credential afterwards, which
+// only another eligible grant of the same sign-in could adopt.
 func (c *Chainer) RetireConsentCredentials(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, userID string, signInID uuid.UUID) error {
 	if signInID == uuid.Nil || userID == "" {
 		return nil

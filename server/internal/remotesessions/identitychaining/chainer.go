@@ -80,8 +80,10 @@ const (
 
 	// consentAcceptedTTL is how long a consent page reports a vendor's
 	// acceptance it could not store, because the subject's one credential
-	// slot is held, instead of redeeming again on every reload. Short, so a
-	// vendor-side refusal still shows within minutes.
+	// slot is held, instead of redeeming again on every reload. Within it,
+	// "connected" means a recent vendor acceptance, not a stored token, and
+	// can outlive a vendor-side refusal; local sign-in, issuer and provider
+	// checks still run on every load.
 	consentAcceptedTTL = 5 * time.Minute
 
 	// releaseTimeout bounds the detached single-flight release.
@@ -212,12 +214,8 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	if token, ok := c.adoptConsentCredential(ctx, logger, req, sel); ok {
 		return release(token)
 	}
-	if req.consent() {
-		var accepted bool
-		if err := c.locks.Get(ctx, cacheKey("identityChainingConsentAccepted", req, sel), &accepted); err == nil && accepted {
-			// The consent page only reports the outcome; no token is released.
-			return release(none)
-		}
+	if c.consentAccepted(ctx, req, sel) {
+		return release(none)
 	}
 	failureKey := cacheKey("identityChainingFailure", req, sel)
 	var cached Outcome
@@ -255,6 +253,9 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
 			return release(token)
 		}
+		if c.consentAccepted(ctx, req, sel) {
+			return release(none)
+		}
 	}
 
 	attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
@@ -265,7 +266,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	if !outcome.Succeeded() {
 		// A consent page has no later retry, so a vendor that may not have
 		// fetched a new key yet reads as unknown there, never as a refusal.
-		if req.consent() && c.signedWithRecentKey(sel, outcome) {
+		if req.consent() && c.signedWithRecentKey(sel, outcome, grantValidated) {
 			outcome.Retryable = true
 		}
 		logAcquisitionFailure(ctx, logger, outcome)
@@ -275,7 +276,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		if err := c.locks.Set(context.WithoutCancel(ctx), attemptKey, attemptResult{Outcome: outcome, FinishedAt: c.now()}, attemptResultTTL); err != nil {
 			logger.WarnContext(ctx, "record identity chaining attempt", attr.SlogCacheKey(attemptKey), attr.SlogError(err))
 		}
-		if outcome.cacheable() && !c.signedWithRecentKey(sel, outcome) {
+		if outcome.cacheable() && !c.signedWithRecentKey(sel, outcome, grantValidated) {
 			if err := c.locks.Set(context.WithoutCancel(ctx), failureKey, outcome, failureTTL); err != nil {
 				logger.WarnContext(ctx, "record identity chaining failure", attr.SlogCacheKey(failureKey), attr.SlogError(err))
 			}
@@ -299,8 +300,8 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	return token, outcome
 }
 
-// awaitConcurrentAcquisition adopts a concurrent holder's credential, or its
-// failure, instead of spending another assertion on the same identity. A
+// awaitConcurrentAcquisition adopts a concurrent holder's credential, its
+// consent acceptance, or its failure, instead of spending another assertion on the same identity. A
 // holder that finishes neither within the wait budget is reported transient.
 func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, Outcome) {
 	var none Token
@@ -320,6 +321,9 @@ func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.L
 		case <-tick.C:
 			if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
 				return token, success
+			}
+			if c.consentAccepted(ctx, req, sel) {
+				return none, success
 			}
 			var result attemptResult
 			if err := c.locks.Get(ctx, attemptKey, &result); err == nil && result.Outcome.Reason != "" && !result.FinishedAt.Before(startedAt) {
@@ -350,12 +354,32 @@ func cacheKey(prefix string, req Request, sel selection) string {
 	return prefix + ":" + hex.EncodeToString(digest[:])
 }
 
+// consentAccepted reports a vendor acceptance a consent check recorded
+// because it could not store the credential. No token comes with it: callers
+// still run release's authority checks.
+func (c *Chainer) consentAccepted(ctx context.Context, req Request, sel selection) bool {
+	if !req.consent() {
+		return false
+	}
+	var accepted bool
+	err := c.locks.Get(ctx, cacheKey("identityChainingConsentAccepted", req, sel), &accepted)
+	return err == nil && accepted
+}
+
 // signedWithRecentKey reports a Speakeasy redemption rejection of an assertion
-// signed by a key the vendor may not have fetched yet. It is not cached, so
-// the next request retries as soon as the vendor sees the key.
-func (c *Chainer) signedWithRecentKey(sel selection, outcome Outcome) bool {
-	return sel.provider.Kind == remotesessions.EMAProviderSpeakeasy && outcome.Stage == StageRedemption &&
-		!sel.internalKeyPublishedAt.IsZero() && c.now().Sub(sel.internalKeyPublishedAt) < recentKeyWindow
+// signed by a key the vendor may not have fetched yet. Only the ambiguous
+// rejections an unknown signing key draws qualify, and only once an assertion
+// was signed; local configuration, client and scope refusals stay definitive.
+// It is not cached, so the next request retries as soon as the vendor sees
+// the key.
+func (c *Chainer) signedWithRecentKey(sel selection, outcome Outcome, signed bool) bool {
+	if !signed || sel.provider.Kind != remotesessions.EMAProviderSpeakeasy || outcome.Stage != StageRedemption {
+		return false
+	}
+	if outcome.Reason != ReasonInvalidGrant && outcome.Reason != ReasonUnknownRejection {
+		return false
+	}
+	return !sel.internalKeyPublishedAt.IsZero() && c.now().Sub(sel.internalKeyPublishedAt) < recentKeyWindow
 }
 
 // logCredentialSource records where a Speakeasy credential came from. Reuse is
