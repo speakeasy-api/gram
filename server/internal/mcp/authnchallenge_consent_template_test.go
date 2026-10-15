@@ -976,7 +976,7 @@ func TestConsentTemplateCodeChoiceAndStoredDefault(t *testing.T) {
 	}{
 		{name: "available", discovery: true, code: true, offered: true},
 		{name: "runtime unavailable", discovery: true, code: false, offered: false},
-		{name: "entitlement off", discovery: false, code: false, offered: false},
+		{name: "no choice offered", discovery: false, code: false, offered: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -985,8 +985,9 @@ func TestConsentTemplateCodeChoiceAndStoredDefault(t *testing.T) {
 				ConsentEnabled: true, ShowDiscoveryMode: tc.discovery, ShowCodeMode: tc.code, GatewayDefaultMode: "Code Mode",
 			}))
 			html := normalizeWhitespace(page.String())
-			require.Contains(t, html, `<dt class="text-eyebrow">Gateway default</dt>`)
-			require.Contains(t, html, `>Code Mode. Connections without an override follow this setting.</dd>`)
+			require.Equal(t, tc.discovery, strings.Contains(html, `<option value="">Gateway default (Code Mode)</option>`))
+			require.Equal(t, !tc.discovery, strings.Contains(html, `<dt class="text-eyebrow">Discovery mode</dt>`))
+			require.Equal(t, !tc.discovery, strings.Contains(html, `>Code Mode (gateway default). Connections without an override follow this setting.</dd>`))
 			require.Equal(t, tc.offered, strings.Contains(html, `<option value="code_mode">Code Mode</option>`))
 		})
 	}

@@ -737,12 +737,6 @@
               </dd>
             </div>
             {{end}}
-            {{if .GatewayDefaultMode}}
-            <div data-agent-self-only>
-              <dt class="text-eyebrow">Gateway default</dt>
-              <dd class="mt-1 ml-0 text-sm text-muted-foreground">{{.GatewayDefaultMode}}. Connections without an override follow this setting.</dd>
-            </div>
-            {{end}}
             {{if .ShowDiscoveryMode}}
             <div data-agent-self-only>
               <dt class="text-eyebrow">Tool discovery</dt>
@@ -754,7 +748,7 @@
                   aria-describedby="discovery-mode-help"
                   class="bg-card border px-2 py-1.5 font-mono text-sm"
                 >
-                  <option value="">Use gateway default</option>
+                  <option value="">{{if .GatewayDefaultMode}}Gateway default ({{.GatewayDefaultMode}}){{else}}Use gateway default{{end}}</option>
                   <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
                   <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
  {{if .ShowCodeMode}}<option value="code_mode"{{if eq .PrefillDiscoveryMode "code_mode"}} selected{{end}}>Code Mode</option>{{end}}
@@ -768,6 +762,11 @@
                   tools progressively. {{if .ShowCodeMode}}Code exposes one execute tool to discover and call tools using Python.{{end}}
                 </p>
               </dd>
+            </div>
+            {{else if .GatewayDefaultMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Discovery mode</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">{{.GatewayDefaultMode}} (gateway default). Connections without an override follow this setting.</dd>
             </div>
             {{end}} {{if .RemoteSessionCards}}
             <div>
