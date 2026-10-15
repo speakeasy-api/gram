@@ -162,7 +162,7 @@ function PaygPlanDetails({
   subscription: StripeSubscriptionLike;
 }): JSX.Element {
   const state = paygPlanState(subscription);
-  const copy = planCopy(state);
+  const copy = planCopy(state, subscription);
 
   return (
     <Stack gap={4}>
@@ -203,7 +203,32 @@ function trialingHeadline(on: string | null): string {
   return `Trial — converts to pay as you go on ${on}`;
 }
 
-function activeDetail(on: string | null): string {
+// ponytail: periods under two days are the post-checkout UTC-midnight stub
+// (checkout never leaves one longer than about a day). A monthly period is
+// never that short, so its end date stays — including one that ends tomorrow.
+const INITIAL_PAYG_PERIOD_MAX_MS = 2 * 24 * 60 * 60 * 1000;
+
+function isInitialPaygBillingInterval(
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): boolean {
+  if (!(start instanceof Date) || !(end instanceof Date)) return false;
+  const length = end.getTime() - start.getTime();
+  return (
+    Number.isFinite(length) && length > 0 && length < INITIAL_PAYG_PERIOD_MAX_MS
+  );
+}
+
+function activeDetail(
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): string {
+  const on = formatBillingDate(end);
+  // The stub's end is the next UTC midnight, not the monthly renewal. Naming
+  // it reads as a month that ends tomorrow, or a fee due immediately.
+  if (on !== null && isInitialPaygBillingInterval(start, end)) {
+    return "You're billed monthly for what you use.";
+  }
   const base = "You're billed for the usage in each billing period.";
   if (on === null) return base;
   return `${base} The current period ends on ${on}.`;
@@ -228,7 +253,10 @@ function endingDetail(trialing: boolean): string {
 }
 
 /** The headline and supporting line for each plan state. */
-function planCopy(state: PaygPlanState): { headline: string; detail: string } {
+function planCopy(
+  state: PaygPlanState,
+  subscription: StripeSubscriptionLike,
+): { headline: string; detail: string } {
   const on = formatBillingDate(state.date);
 
   switch (state.kind) {
@@ -239,7 +267,13 @@ function planCopy(state: PaygPlanState): { headline: string; detail: string } {
           "Your payment method is on file. Billing starts when the trial converts.",
       };
     case "active":
-      return { headline: "Pay as you go", detail: activeDetail(on) };
+      return {
+        headline: "Pay as you go",
+        detail: activeDetail(
+          subscription.currentPeriodStart,
+          subscription.currentPeriodEnd,
+        ),
+      };
     case "ending":
       return {
         headline: endingHeadline(on, state.trialing),
