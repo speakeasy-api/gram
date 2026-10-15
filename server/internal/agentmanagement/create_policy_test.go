@@ -22,7 +22,7 @@ func TestCreateAgentWithInitialPolicy(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-create-policy")
-	seedOrganizationUser(t, conn, "org-create-policy", "owner")
+	seedAgentCreator(t, conn, "org-create-policy", "owner")
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
 	ctx := validatedHumanContext(t, "org-create-policy", "owner")
@@ -78,7 +78,7 @@ func TestCreateAgentInitialPolicyFailureIsAtomic(t *testing.T) {
 			t.Parallel()
 			conn := newTestDB(t)
 			seedOrganization(t, conn, "org-create-policy")
-			seedOrganizationUser(t, conn, "org-create-policy", "owner")
+			seedAgentCreator(t, conn, "org-create-policy", "owner")
 			seedOrganizationUser(t, conn, "org-create-policy", "other")
 			service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 			ctx := validatedHumanContext(t, "org-create-policy", "owner")
@@ -125,7 +125,7 @@ func TestCreateAgentInitialPolicyForOtherOwnerRequiresTenantMembership(t *testin
 	seedOrganizationUser(t, conn, "org-create-policy", "owner")
 	seedOrganizationUser(t, conn, "org-other-policy", "outside")
 	ctx := validatedHumanContext(t, "org-create-policy", "caller")
-	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, "*")
+	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentCreate, "*")
 	for _, userID := range []string{"caller", "owner"} {
 		seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeMCPRead, "*")
 	}

@@ -63,6 +63,9 @@ func (s Selector) StrictMatches(check Selector) bool {
 
 // ResourceKindForScope derives the selector resource kind from a scope.
 func ResourceKindForScope(scope Scope) string {
+	if scope == ScopeAgentCreate {
+		return ResourceKindAgentOwner
+	}
 	switch scope.Parts().Resource {
 	case "project", "plugin", "log":
 		return ResourceKindProject

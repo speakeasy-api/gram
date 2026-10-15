@@ -219,7 +219,7 @@ func TestRequireAgentRejectsStalePreparedGrants(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestCreateForAnotherOwnerUsesProspectiveAgentSelector(t *testing.T) {
+func TestCreateForAnotherOwnerUsesIntendedOwnerSelector(t *testing.T) {
 	t.Parallel()
 
 	conn := newTestDB(t)
@@ -229,19 +229,17 @@ func TestCreateForAnotherOwnerUsesProspectiveAgentSelector(t *testing.T) {
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
 	authorizer := NewAuthorizer(engine)
 	ctx := validatedHumanContext(t, "org-a", "caller")
-	prospectiveID := uuid.New()
-
-	_, err := authorizer.RequireCreate(ctx, conn, prospectiveID, "owner")
+	_, err := authorizer.RequireCreate(ctx, conn, "owner")
 	requireOopsCode(t, err, oops.CodeForbidden)
-	allow(engine, authz.ScopeAgentWrite, prospectiveID)
-	_, err = authorizer.RequireCreate(ctx, conn, prospectiveID, "owner")
+	seedGrant(t, ctx, conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentCreate, "owner")
+	_, err = authorizer.RequireCreate(ctx, conn, "owner")
 	require.NoError(t, err)
-	require.Equal(t, authz.ScopeAgentWrite, engine.checks[len(engine.checks)-1].Scope)
-	require.Equal(t, prospectiveID.String(), engine.checks[len(engine.checks)-1].ResourceID)
+	require.Equal(t, authz.ScopeAgentCreate, engine.checks[len(engine.checks)-1].Scope)
+	require.Equal(t, "owner", engine.checks[len(engine.checks)-1].ResourceID)
 
-	_, err = authorizer.RequireCreate(ctx, conn, uuid.New(), "caller")
-	require.NoError(t, err, "self-owned creation is intrinsic")
-	_, err = authorizer.RequireCreate(ctx, conn, uuid.New(), "missing-owner")
+	_, err = authorizer.RequireCreate(ctx, conn, "caller")
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = authorizer.RequireCreate(ctx, conn, "missing-owner")
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 

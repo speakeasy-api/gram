@@ -100,6 +100,41 @@ func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 	require.Contains(t, scopes, string(ScopeRiskPolicyEvaluate))
 }
 
+func TestExistingSystemRolesOnlyGiveAdminsAgentCreation(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org-create-defaults"
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, SeedSystemRoleGrants(ctx, conn, organizationID))
+	q := accessrepo.New(conn)
+	for _, slug := range []string{SystemRoleAdmin, SystemRoleMember} {
+		role, err := q.GetGlobalRoleBySlug(ctx, slug)
+		require.NoError(t, err)
+		principal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String())
+		rows, err := q.ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{OrganizationID: organizationID, PrincipalUrn: principal.String()})
+		require.NoError(t, err)
+		for _, row := range rows {
+			if row.Scope == string(ScopeAgentCreate) {
+				_, err := q.DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{OrganizationID: organizationID, ID: row.ID})
+				require.NoError(t, err)
+			}
+		}
+		grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{principal})
+		require.NoError(t, err)
+		allowed, err := GrantsAuthorize(grants, AgentCreationChecks("caller", "employee")[0])
+		require.NoError(t, err)
+		require.Equal(t, slug == SystemRoleAdmin, allowed)
+		listed, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, principal.String())
+		require.NoError(t, err)
+		found := false
+		for _, grant := range listed {
+			found = found || grant.Scope == string(ScopeAgentCreate)
+		}
+		require.Equal(t, allowed, found, "role editor and enforcement agree")
+	}
+}
+
 func TestSeedSystemRoleGrantsRollsBackOnGrantFailure(t *testing.T) {
 	t.Parallel()
 

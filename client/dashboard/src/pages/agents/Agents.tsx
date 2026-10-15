@@ -10,6 +10,16 @@ import { Table, type Column } from "@/components/ui/Table";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { RequireScope } from "@/components/require-scope";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
@@ -83,7 +93,7 @@ export default function AgentsPage(): JSX.Element {
         key={`${organization.id}:${session.user.id}:${isDemo}`}
         disabled={isDemo}
         onCreated={(id) => {
-          setSearchParams({ id });
+          setSearchParams(id ? { id } : {});
         }}
       />
     );
@@ -165,7 +175,11 @@ function AgentList({
       title="Agents"
       description="Agents visible to you."
       stage="preview"
-      primaryAction={<Button onClick={onCreate}>New agent identity</Button>}
+      primaryAction={
+        <RequireScope scope="agent:create" level="section">
+          <Button onClick={onCreate}>New agent identity</Button>
+        </RequireScope>
+      }
       search={{
         value: search,
         onChange: setSearch,
@@ -257,6 +271,18 @@ function CreateAgent({
   const scope: AgentScope =
     chosenScope ?? (project.id ? "project" : "organization");
   const { user } = useSession();
+  const { hasScope, canCreateAgentFor } = useRBAC();
+  const members = useMembers(undefined, undefined, {
+    enabled: hasScope("org:read") || hasScope("project:read"),
+  });
+  const owners = (members.data?.members ?? []).filter(
+    (member) => member.id !== user.id && canCreateAgentFor(member.id),
+  );
+  const canCreateForSelf = canCreateAgentFor(user.id);
+  const [chosenOwner, setChosenOwner] = useState<string | null>(null);
+  const ownerUserId =
+    chosenOwner ?? (canCreateForSelf ? user.id : (owners[0]?.id ?? ""));
+  const allowedOwner = canCreateAgentFor(ownerUserId);
   const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
     onSuccess: (agent) => {
@@ -267,7 +293,7 @@ function CreateAgent({
         agent.id,
       );
       toast.success("Agent created");
-      onCreated(agent.id);
+      onCreated(agent.permissions.read ? agent.id : "");
     },
     // The create is one transaction, so a failure leaves no agent behind and
     // the draft is still exactly what to retry.
@@ -282,6 +308,7 @@ function CreateAgent({
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
+    if (!allowedOwner || disabled) return;
     // useProject yields an empty id before a project resolves. Sending that
     // would read as "omitted" and quietly create an organization-wide agent
     // after the user asked for a project one.
@@ -295,6 +322,7 @@ function CreateAgent({
       request: {
         createAgentForm: {
           name: trimmedName,
+          ownerUserId,
           // Omitted, not blank: an organization-wide agent carries no project
           // binding at all.
           ...(scope === "project" ? { projectId: project.id } : {}),
@@ -313,10 +341,49 @@ function CreateAgent({
       description={
         disabled
           ? "Agent management is unavailable in the shared demo because it requires active organization membership."
-          : "You will be the owner. Ownership gives you intrinsic setup access without creating a reusable permission grant."
+          : "Choose who will own this agent. Owners can manage their existing agents independently of creation permission."
       }
     >
       <form onSubmit={onSubmit} className="w-full">
+        <div className="mb-8 space-y-2">
+          <Label htmlFor="agent-owner">Owner</Label>
+          <Select
+            value={ownerUserId}
+            onValueChange={setChosenOwner}
+            disabled={disabled || create.isPending}
+          >
+            <SelectTrigger id="agent-owner" className="max-w-full">
+              <SelectValue placeholder="Select an owner" />
+            </SelectTrigger>
+            <SelectContent>
+              {canCreateForSelf && <SelectItem value={user.id}>You</SelectItem>}
+              {owners.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {member.name || member.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {members.isFetching && (
+            <Text muted small>
+              Loading available owners…
+            </Text>
+          )}
+          {members.isError && (
+            <div role="alert">
+              <Text small>Unable to load available owners.</Text>
+              <Button variant="tertiary" onClick={() => void members.refetch()}>
+                Retry
+              </Button>
+            </div>
+          )}
+          {!allowedOwner && !members.isFetching && (
+            <Text small>
+              Ask an organization admin for permission to create agents for the
+              intended owner. Your existing agents remain available.
+            </Text>
+          )}
+        </div>
         <div className="space-y-2">
           <Label htmlFor="agent-name">Agent name</Label>
           <Input
@@ -381,7 +448,9 @@ function CreateAgent({
         <div className="mt-6 flex justify-end">
           <Button
             type="submit"
-            disabled={disabled || !name.trim() || create.isPending}
+            disabled={
+              disabled || !allowedOwner || !name.trim() || create.isPending
+            }
           >
             <Button.LeftIcon>
               <Plus className="size-4" />

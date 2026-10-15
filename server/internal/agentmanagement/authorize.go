@@ -148,23 +148,32 @@ func (a *Authorizer) lockHumanMemberships(ctx context.Context, dbtx repo.DBTX, a
 	return HumanContext{Auth: authCtx, grants: grants}, nil
 }
 
-// RequireCreate authorizes a prospective agent ID and locks the eligible owner
-// membership until the insert commits. Self-owned creation is intrinsic; any
-// other owner requires agent:write evaluated against the prospective agent.
-func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, ownerUserID string) (HumanContext, error) {
+// RequireCreate evaluates creation eligibility against the intended owner and
+// locks both active memberships until the insert commits. The recipient need
+// not hold creation permission; existing-agent management is independent.
+func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, ownerUserID string) (HumanContext, error) {
 	human, err := a.requireHumanWithMemberships(ctx, dbtx, ownerUserID)
 	if err != nil {
 		return HumanContext{}, err
 	}
 
-	if ownerUserID == human.Auth.UserID {
-		return human, nil
-	}
 	if a.authz == nil {
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
-		return HumanContext{}, fmt.Errorf("authorize agent creation for another owner: %w", err)
+	checks := authz.AgentCreationChecks(human.Auth.UserID, ownerUserID)
+	check := checks[0]
+	for _, candidate := range checks {
+		allowed, err := authz.GrantsAuthorize(human.grants, candidate)
+		if err != nil {
+			return HumanContext{}, fmt.Errorf("evaluate agent creation eligibility: %w", err)
+		}
+		if allowed {
+			check = candidate
+			break
+		}
+	}
+	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, check); err != nil {
+		return HumanContext{}, fmt.Errorf("authorize agent creation for intended owner: %w", err)
 	}
 	return human, nil
 }

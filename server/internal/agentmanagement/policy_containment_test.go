@@ -52,6 +52,7 @@ func TestPolicyWritesRequireCallerAndOwnerContainment(t *testing.T) {
 					t.Parallel()
 					f := newDelegableFixture(t)
 					f.grant(t, "caller", authz.ScopeAgentWrite, authz.NewSelector(authz.ScopeAgentWrite, "*"))
+					f.grant(t, "caller", authz.ScopeAgentCreate, authz.NewSelector(authz.ScopeAgentCreate, "owner"))
 					for user, grants := range map[string][]authz.Grant{"caller": tc.caller, "owner": tc.owner} {
 						for _, grant := range grants {
 							f.grant(t, user, grant.Scope, grant.Selector)
@@ -167,6 +168,7 @@ func TestPolicyContainmentRespectsDirectGrantPrecedence(t *testing.T) {
 func TestInitialPolicyContainmentFailureRollsBackEarlierGrants(t *testing.T) {
 	t.Parallel()
 	f := newDelegableFixture(t)
+	f.grant(t, "owner", authz.ScopeAgentCreate, authz.NewSelector(authz.ScopeAgentCreate, authz.AgentOwnerSelf))
 	f.grant(t, "owner", authz.ScopeMCPRead, authz.NewSelector(authz.ScopeMCPRead, "server-a"))
 	ctx := validatedHumanContext(t, "org-delegable", "owner")
 	_, err := f.service.Create(ctx, &gen.CreatePayload{Name: "Partially allowed policy", PolicyGrants: []*gen.AgentPolicyGrantForm{

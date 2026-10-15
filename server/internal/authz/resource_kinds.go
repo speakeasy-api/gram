@@ -11,6 +11,8 @@ const (
 	ResourceKindRiskPolicy  = "risk_policy"
 	ResourceKindChat        = "chat"
 	ResourceKindAgent       = "agent"
+	// ResourceKindAgentOwner targets an intended owner, not an existing agent.
+	ResourceKindAgentOwner = "agent_owner"
 	// ResourceKindWorkload scopes managing an organization's workload identity
 	// trust policy: its issuers, its admitted subjects, and which agent each
 	// inherits its policy from.

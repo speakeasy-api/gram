@@ -29,6 +29,7 @@ export type ResourceType =
   | "risk_policy"
   | "chat"
   | "agent"
+  | "agent_owner"
   | "workload";
 
 export function isUnrestrictedResourceType(

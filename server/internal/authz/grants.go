@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -259,20 +260,12 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 		return nil, oops.E(oops.CodeUnexpected, err, "parse role principal").LogError(ctx, logger)
 	}
 
-	rows, err := repo.New(db).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
-		OrganizationID: orgID,
-		PrincipalUrns:  []string{principal.String()},
-	})
+	rows, err := LoadGrants(ctx, db, orgID, []urn.Principal{principal})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").LogError(ctx, logger)
 	}
 
-	scoped, err := scopedGrantsFromGrantRows(rows)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").LogError(ctx, logger)
-	}
-
-	return scoped, nil
+	return GrantsToScopedGrants(rows), nil
 }
 
 func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGrant, error) {

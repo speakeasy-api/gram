@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Record actual query acquisition order, not just the order of a sorted helper.
@@ -46,6 +47,7 @@ func TestMembershipLocksUseCanonicalOrderBeforeAgent(t *testing.T) {
 	seedOrganization(t, db, "org-lock-order")
 	for _, userID := range []string{"a-user", "z-user"} {
 		seedOrganizationUser(t, db, "org-lock-order", userID)
+		seedGrant(t, t.Context(), db, "org-lock-order", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeAgentCreate, "*")
 	}
 	for _, operation := range []string{"create", "transfer", "credential", "policy"} {
 		for _, pair := range [][2]string{{"z-user", "a-user"}, {"a-user", "z-user"}, {"z-user", "z-user"}} {
@@ -64,7 +66,7 @@ func TestMembershipLocksUseCanonicalOrderBeforeAgent(t *testing.T) {
 					var err error
 					switch operation {
 					case "create":
-						_, err = authorizer.RequireCreate(ctx, recorder, agent.ID, owner)
+						_, err = authorizer.RequireCreate(ctx, recorder, owner)
 					case "transfer":
 						_, _, err = authorizer.RequireTransfer(ctx, recorder, agent.ID, owner)
 					case "credential":

@@ -840,6 +840,19 @@ BEGIN
     END LOOP;
   END LOOP;
 
+  -- Creation is a separate role permission; the owner namespace supports self,
+  -- a named member, and every eligible member without changing management.
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  SELECT demo_org, 'role:organization:' || r.id, 'agent:create',
+         jsonb_build_object('resource_kind', 'agent_owner', 'resource_id', v.owner_id)
+  FROM organization_roles r
+  JOIN (VALUES
+    ('engineer', 'self'),
+    ('collaborator', demo_user_ids[2]),
+    ('temporary-escalation', '*')
+  ) AS v(slug, owner_id) ON r.workos_slug = v.slug
+  WHERE r.organization_id = demo_org;
+
   -- Show the completed one-time onboarding result, not a pending repair job.
   -- Role plugins stay role-only; the Default plugin remains Everyone.
   -- Matching server content is populated after the servers exist below.
@@ -4192,6 +4205,18 @@ Channel context stays in the Raw view.
                demo.det_uuid('gram-demo-github-wildcard-grant'));
   IF stray <> 3 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 3 GitHub Check Access grants, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM principal_grants
+  WHERE organization_id = demo_org AND scope = 'agent:create'
+    AND selectors->>'resource_kind' = 'agent_owner'
+    AND principal_urn IN (
+      SELECT 'role:organization:' || r.id FROM organization_roles r
+      WHERE r.organization_id = demo_org
+        AND r.workos_slug IN ('engineer', 'collaborator', 'temporary-escalation')
+    );
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 owner-scoped agent creation grants, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM slack_identity_mappings WHERE organization_id = demo_org AND revoked_at IS NULL;

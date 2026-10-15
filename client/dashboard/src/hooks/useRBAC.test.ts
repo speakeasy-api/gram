@@ -1,6 +1,7 @@
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
 import {
+  canCreateAgentForInGrants,
   exclusionScopesForScope,
   hasScopeInGrants,
   hasScopeInProject,
@@ -8,6 +9,41 @@ import {
   selectorMatches,
   selectorMatchesStrict,
 } from "./useRBAC";
+
+describe("owner-scoped agent creation", () => {
+  it("limits self grants to the caller", () => {
+    const grants = [
+      {
+        scope: "agent:create" as const,
+        selectors: [
+          { resourceKind: "agent_owner" as const, resourceId: "self" },
+        ],
+      },
+    ];
+    expect(canCreateAgentForInGrants(grants, "alice", "alice")).toBe(true);
+    expect(canCreateAgentForInGrants(grants, "alice", "bob")).toBe(false);
+    expect(canCreateAgentForInGrants(grants, "bob", "bob")).toBe(true);
+  });
+  it("distinguishes specified owners, everyone, and management rights", () => {
+    const selected = [
+      {
+        scope: "agent:create" as const,
+        selectors: [
+          { resourceKind: "agent_owner" as const, resourceId: "bob" },
+        ],
+      },
+    ];
+    expect(canCreateAgentForInGrants(selected, "alice", "bob")).toBe(true);
+    expect(canCreateAgentForInGrants(selected, "alice", "alice")).toBe(false);
+    expect(
+      canCreateAgentForInGrants([{ scope: "agent:create" }], "alice", "bob"),
+    ).toBe(true);
+    expect(
+      canCreateAgentForInGrants([{ scope: "agent:write" }], "alice", "alice"),
+    ).toBe(false);
+    expect(canCreateAgentForInGrants([], "alice", "alice")).toBe(false);
+  });
+});
 
 describe("grants query key", () => {
   it("isolates effective grants by session", () => {

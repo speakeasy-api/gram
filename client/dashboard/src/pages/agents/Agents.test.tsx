@@ -68,6 +68,7 @@ const mocks = vi.hoisted(() => ({
   organizationId: "org_example",
   projectId: "00000000-0000-4000-8000-000000000001",
   createMutate: vi.fn(),
+  creationOwners: ["user_owner"] as string[],
   impersonatorEmail: undefined as string | undefined,
   user: {
     id: "user_owner",
@@ -122,6 +123,31 @@ vi.mock("react-router", () => ({
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: "enabled" }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => true,
+    hasAnyScope: () => mocks.creationOwners.length > 0,
+    hasAllScopes: () => mocks.creationOwners.length > 0,
+    canCreateAgentFor: (id: string) => mocks.creationOwners.includes(id),
+    isLoading: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({
+    data: {
+      members: [
+        { id: "user_other", name: "Other Owner", email: "other@example.test" },
+        {
+          id: "user_denied",
+          name: "Unpermitted Owner",
+          email: "denied@example.test",
+        },
+      ],
+    },
+    isFetching: false,
+    isError: false,
+  }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mocks.sdkClient(),
@@ -209,6 +235,7 @@ beforeEach(() => {
   mocks.projectId = "00000000-0000-4000-8000-000000000001";
   mocks.impersonatorEmail = undefined;
   mocks.scopeOverride = null;
+  mocks.creationOwners = ["user_owner"];
   mocks.agents[0]!.ownerUserId = "user_owner";
   mocks.agents[0]!.ownerProfile = undefined;
   vi.clearAllMocks();
@@ -400,6 +427,7 @@ describe("Agent scope", () => {
     const form = mocks.createMutate.mock.calls[0]![0].request.createAgentForm;
     expect(form.name).toBe("Scoped agent");
     expect(form.projectId).toBe(mocks.projectId);
+    expect(form.ownerUserId).toBe("user_owner");
   });
 
   it("sends no project binding when organization scope is chosen", () => {
@@ -412,6 +440,42 @@ describe("Agent scope", () => {
     // Omitted rather than blank: the server reads a missing binding as
     // organization-wide.
     expect("projectId" in form).toBe(false);
+  });
+});
+
+describe("Agent creation eligibility", () => {
+  it("keeps owned agents visible when creation permission is removed", () => {
+    mocks.creationOwners = [];
+    setup();
+    expect(screen.getByRole("button", { name: "Example agent" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "New agent identity" }),
+    ).toBeNull();
+  });
+  it("blocks direct create URLs without creation eligibility", () => {
+    mocks.creationOwners = [];
+    mocks.params = new URLSearchParams("create=true");
+    setup();
+    fireEvent.change(screen.getByLabelText("Agent name"), {
+      target: { value: "Denied" },
+    });
+    const button = screen.getByRole("button", { name: "Create agent" });
+    expect(button.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(button);
+    expect(mocks.createMutate).not.toHaveBeenCalled();
+  });
+  it("provisions for an allowed owner without self-creation permission", () => {
+    mocks.creationOwners = ["user_other"];
+    mocks.params = new URLSearchParams("create=true");
+    setup();
+    fireEvent.change(screen.getByLabelText("Agent name"), {
+      target: { value: "Provisioned" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+    expect(
+      mocks.createMutate.mock.calls[0]?.[0].request.createAgentForm.ownerUserId,
+    ).toBe("user_other");
+    expect(screen.queryByText("Unpermitted Owner")).toBeNull();
   });
 });
 

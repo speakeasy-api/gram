@@ -36,6 +36,7 @@ import { type ServerGroup, type ServerTool } from "./serverMerge";
 import { useOrgMcpServers } from "./useOrgMcpServers";
 import { useOrgAssistants } from "./useOrgAssistants";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
+import { AgentOwnerRulePicker } from "./AgentOwnerRulePicker";
 
 /**
  * What an empty server list means. The inventory is withheld until both org
@@ -340,6 +341,15 @@ export function GrantRuleDrawerContent({
         .filter((g) => g.servers.length > 0),
     [scopedMcpServers],
   );
+
+  if (resourceType === "agent_owner") {
+    return (
+      <AgentOwnerRulePicker
+        selectors={selectors}
+        onChange={onChangeSelectors}
+      />
+    );
+  }
 
   // Fixed-scope permissions have no resource picker — their granularity is
   // baked into the scope definition. The role editor only offers unrestricted

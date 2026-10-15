@@ -107,6 +107,7 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeLogRead:                 activeRuntimeScope(),
 	authz.ScopeAgentRead:               activeRuntimeScope(),
 	authz.ScopeAgentWrite:              activeRuntimeScope(),
+	authz.ScopeAgentCreate:             activeRuntimeScope(),
 	authz.ScopeAgentAuthorize:          activeRuntimeScope(),
 	authz.ScopeAgentTransfer:           activeRuntimeScope(),
 	// Registered but deliberately NOT agent-runtime-safe. A workload inherits its

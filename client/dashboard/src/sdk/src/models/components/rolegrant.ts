@@ -54,6 +54,7 @@ export const Scope = {
   LogRead: "log:read",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
+  AgentCreate: "agent:create",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
   WorkloadRead: "workload:read",

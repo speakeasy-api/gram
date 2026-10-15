@@ -42,31 +42,31 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		})
 	}
 
-	assistantDefaults, err := assistantSystemRoleDefaults(ctx, db, principals, grantRows)
+	defaults, err := systemRoleDefaults(ctx, db, principals, grantRows)
 	if err != nil {
 		return nil, err
 	}
 
-	return withAssistantSystemRoleDefaults(grantRows, assistantDefaults), nil
+	return withSystemRoleDefaults(grantRows, defaults), nil
 }
 
-// assistantSystemRoleDefaults returns the assistant scopes each built-in role
-// principal holds by default, keyed by the principals that lack stored
-// assistant grants. Organizations seeded before the assistant scopes existed
-// have no persisted rows for them, and system-role grants are immutable, so the
-// defaults are supplied at load time instead. The global roles are only looked
-// up when such a principal is present, which keeps the extra query off
-// organizations seeded with the current defaults.
-func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal, grants []Grant) (map[string][]Scope, error) {
+// systemRoleDefaults supplies immutable built-in-role capabilities absent from
+// persisted grants. Assistant defaults apply to Admin and Member; agent creation
+// applies only to Admin. Custom roles and individual users never gain defaults.
+func systemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal, grants []Grant) (map[string][]Scope, error) {
 	missing := make(map[string]struct{})
 	for _, principal := range principals {
 		if principal.Type != urn.PrincipalTypeRole || !strings.HasPrefix(principal.ID, "global:") {
 			continue
 		}
 		key := principal.String()
-		if !slices.ContainsFunc(grants, func(grant Grant) bool {
+		hasAssistant := slices.ContainsFunc(grants, func(grant Grant) bool {
 			return grant.PrincipalUrn == key && ResourceKindForScope(grant.Scope) == ResourceKindAssistant
-		}) {
+		})
+		hasCreate := slices.ContainsFunc(grants, func(grant Grant) bool {
+			return grant.PrincipalUrn == key && grant.Scope == ScopeAgentCreate
+		})
+		if !hasAssistant || !hasCreate {
 			missing[key] = struct{}{}
 		}
 	}
@@ -86,7 +86,12 @@ func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, princi
 			continue
 		}
 		for _, grant := range roleGrants {
-			if scope := Scope(grant.Scope); ResourceKindForScope(scope) == ResourceKindAssistant {
+			scope := Scope(grant.Scope)
+			isDefault := ResourceKindForScope(scope) == ResourceKindAssistant || scope == ScopeAgentCreate
+			alreadyPresent := slices.ContainsFunc(grants, func(existing Grant) bool {
+				return existing.PrincipalUrn == key && (existing.Scope == scope || (ResourceKindForScope(scope) == ResourceKindAssistant && ResourceKindForScope(existing.Scope) == ResourceKindAssistant))
+			})
+			if isDefault && !alreadyPresent {
 				defaults[key] = append(defaults[key], scope)
 			}
 		}
@@ -94,7 +99,7 @@ func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, princi
 	return defaults, nil
 }
 
-func withAssistantSystemRoleDefaults(grants []Grant, scopesByPrincipal map[string][]Scope) []Grant {
+func withSystemRoleDefaults(grants []Grant, scopesByPrincipal map[string][]Scope) []Grant {
 	for principal, scopes := range scopesByPrincipal {
 		for _, scope := range scopes {
 			grant := NewGrant(scope, WildcardResource)

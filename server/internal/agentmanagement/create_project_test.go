@@ -50,7 +50,7 @@ func TestCreateAgentRecordsRequestedProject(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-agent-project")
-	seedOrganizationUser(t, conn, "org-agent-project", "owner")
+	seedAgentCreator(t, conn, "org-agent-project", "owner")
 	project := seedProject(t, conn, "org-agent-project", "agent-project-alpha")
 	service := newProjectScopedService(t, conn)
 
@@ -73,7 +73,7 @@ func TestCreateAgentWithoutProjectIsOrganizationWide(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-agent-no-project")
-	seedOrganizationUser(t, conn, "org-agent-no-project", "owner")
+	seedAgentCreator(t, conn, "org-agent-no-project", "owner")
 	seedProject(t, conn, "org-agent-no-project", "agent-project-unused")
 	service := newProjectScopedService(t, conn)
 
@@ -91,7 +91,7 @@ func TestCreateAgentTreatsBlankProjectAsOrganizationWide(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-agent-blank-project")
-	seedOrganizationUser(t, conn, "org-agent-blank-project", "owner")
+	seedAgentCreator(t, conn, "org-agent-blank-project", "owner")
 	service := newProjectScopedService(t, conn)
 
 	blank := ""
@@ -108,7 +108,7 @@ func TestCreateAgentRejectsProjectFromAnotherOrganization(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-agent-tenant-a")
-	seedOrganizationUser(t, conn, "org-agent-tenant-a", "owner")
+	seedAgentCreator(t, conn, "org-agent-tenant-a", "owner")
 	seedOrganization(t, conn, "org-agent-tenant-b")
 	foreign := seedProject(t, conn, "org-agent-tenant-b", "agent-project-foreign")
 	service := newProjectScopedService(t, conn)
@@ -158,7 +158,7 @@ func TestCreateAgentRejectsDeletedProject(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-agent-deleted-project")
-	seedOrganizationUser(t, conn, "org-agent-deleted-project", "owner")
+	seedAgentCreator(t, conn, "org-agent-deleted-project", "owner")
 	project := seedProject(t, conn, "org-agent-deleted-project", "agent-project-gone")
 	_, err := projectsrepo.New(conn).DeleteProject(t.Context(), project.ID)
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestCreateAgentSerializesWithConcurrentProjectDeletion(t *testing.T) {
 	conn := newTestDB(t)
 	const organizationID = "org-agent-concurrent-delete"
 	seedOrganization(t, conn, organizationID)
-	seedOrganizationUser(t, conn, organizationID, "owner")
+	seedAgentCreator(t, conn, organizationID, "owner")
 	project := seedProject(t, conn, organizationID, "concurrent-delete")
 	service := newProjectScopedService(t, conn)
 	ctx := validatedHumanContext(t, organizationID, "owner")

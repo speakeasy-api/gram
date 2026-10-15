@@ -36,6 +36,7 @@ export const ResourceKind = {
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Agent: "agent",
+  AgentOwner: "agent_owner",
   Workload: "workload",
   Wildcard: "*",
 } as const;
@@ -57,7 +58,7 @@ export type Selector = {
    */
   projectId?: string | undefined;
   /**
-   * The resource identifier, or '*' for all resources of this kind.
+   * The resource identifier, or '*' for all resources of this kind. For agent_owner, use 'self' for the caller, a user ID for a specified owner, or '*' for any eligible owner in the organization.
    */
   resourceId: string;
   /**

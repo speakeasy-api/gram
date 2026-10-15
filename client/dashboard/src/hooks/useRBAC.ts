@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
  */
 export function resourceKindForScope(scope: string): string {
+  if (scope === "agent:create") return "agent_owner";
   if (
     scope.startsWith("project:") ||
     scope.startsWith("plugin:") ||
@@ -234,6 +235,18 @@ export function hasScopeInProject(
   return hasScopeInGrants(grants, scope, "*", projectId);
 }
 
+/** Creation grants target owners, with a caller-relative self alternative. */
+export function canCreateAgentForInGrants(
+  grants: EffectiveGrant[],
+  callerUserId: string,
+  ownerUserId: string,
+): boolean {
+  if (!callerUserId || !ownerUserId) return false;
+  const owners =
+    callerUserId === ownerUserId ? [ownerUserId, "self"] : [ownerUserId];
+  return hasScopeInGrants(grants, "agent:create", owners);
+}
+
 /**
  * Core RBAC hook. Fetches the current user's effective grants and provides
  * helpers to check whether the user holds a particular scope.
@@ -300,6 +313,12 @@ function useRBACImpl() {
     [hasScope],
   );
 
+  const canCreateAgentFor = useCallback(
+    (ownerUserId: string) =>
+      canCreateAgentForInGrants(grants ?? [], session.user.id, ownerUserId),
+    [grants, session.user.id],
+  );
+
   /**
    * Check multiple scopes at once. Returns true if the user has ANY of them.
    */
@@ -322,6 +341,7 @@ function useRBACImpl() {
   return useMemo(
     () => ({
       hasScope,
+      canCreateAgentFor,
       hasAllScopes,
       hasAnyScope,
       hasAnyScopeInProject,
@@ -332,6 +352,7 @@ function useRBACImpl() {
     }),
     [
       hasScope,
+      canCreateAgentFor,
       hasAllScopes,
       hasAnyScope,
       hasAnyScopeInProject,

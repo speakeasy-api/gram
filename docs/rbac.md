@@ -67,6 +67,30 @@ This lets us give most access through roles while still allowing direct user gra
 
 An agent-authenticated request loads the same way but from the agent's own set: the agent principal, such as `agent:<agent-uuid>`, plus the role principals recorded for it in `agent_role_assignments`. It never loads `user:all`, its owner's user principal, or its owner's roles into that set — those are evaluated as a separate policy the request is also bounded by.
 
+### Agent creation
+
+`agent:create` is independent of existing-agent management scopes. Its selector
+uses `resource_kind: agent_owner`, with `resource_id: self` for each grant holder's
+own agents, a user ID for one specified owner, or `*` for every eligible owner in
+the organization. Creation checks the intended owner, not a prospective agent ID.
+It requires a validated ordinary human session and locks both active organization
+memberships. The recipient needs no creation permission, and provisioning has no
+second `agent:write` gate. Initial policy containment and atomic auditing still apply.
+
+Admin receives organization-wide creation, including immutable Admin roles whose
+stored grants predate this scope. Member and custom roles do not gain it
+automatically. Use the existing role editor's **Create agents** row to grant
+eligibility. Removing it prevents only new creation: intrinsic owner management
+and independently authorized connections retain their own authorization paths.
+Agents cannot hold this permission at runtime.
+
+Platform MCP assessment: no new tool. This outcome requires a validated human
+session creating an agent for an exact owner; general agent management rejects
+MCP and machine authentication. Existing access-role mutation tools accept only
+bounded MCP-access rules, not general role capabilities. Widening them to this
+workflow would bypass their contract. Server authorization tests and dashboard
+owner-selection tests verify the boundary.
+
 ### Scope
 
 A scope is a named permission that describes the capability a caller needs. Scopes are the product-facing vocabulary of authorization, so they should be tied to domains that users and admins already understand.
@@ -634,6 +658,12 @@ Admin defaults include `assistant:read` and `assistant:write`; Member defaults i
 System roles are seeded when an organization is provisioned, and the first user is assigned the Admin role. WorkOS organization reconciliation also seeds the defaults as an idempotent backstop. System roles are not meant to be edited like custom roles. Changing their default grants is a product behavior change and should be treated carefully, especially for existing organizations.
 
 ## Dashboard Grant Reference
+
+| Agent creation action                                      | Required permission         | Target and behavior                                                                                                                                                         |
+| ---------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create a new agent                                         | `agent:create`              | `agent_owner` selector: `self`, a specified user ID, or `*`. Owner choices are filtered to permitted members; the server validates both memberships. No `agent:write` gate. |
+| Configure creation eligibility in the existing role editor | `org:admin`                 | The same role assignment and save flow as other permissions. Adding creation defaults to self-owned agents.                                                                 |
+| Manage an already-owned agent                              | Current unblocked ownership | Independent of creation eligibility. The inventory and management controls remain available when creation is removed.                                                       |
 
 Embedded onboarding configuration requires `org:admin` independently of task assignment. Distributing servers additionally requires `project:write` and `mcp:write`; Anthropic observability requires `project:read`. These gates target the SDK request project (the route project, then explicit `projectSlug` query parameter, then `default`), not the preferred project in the sidebar. Missing projects or grants show a handoff message without mounting protected configuration queries. Entitlement checks remain unchanged.
 

@@ -1278,7 +1278,7 @@ function AppliesTo({
   if (shown.length === 0) {
     return <span className="text-muted-foreground">—</span>;
   }
-  if (!isProjectScopedResourceType(type)) {
+  if (!isProjectScopedResourceType(type) && type !== "agent_owner") {
     return (
       <DropdownChip
         label="Applies to the whole organization"

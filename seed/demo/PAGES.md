@@ -67,6 +67,13 @@ Gateway and six across Linear, Slack, and Acme Agent Gateway. The project-scoped
 managed-agent session below is checked separately, not counted as a twelfth MCP
 connection.
 
+### Owner-scoped agent creation
+
+`[~]` Role editor Platform access: Engineer permits each role holder to create
+self-owned agents; Collaborator permits one specified owner; Temporary Escalation
+permits any eligible owner. Opening and saving must preserve all three targets.
+Agent creation remains unavailable to shared-demo visitors without membership.
+
 ### Gateway instructions
 
 The seeded gateway leaves `instructions` NULL. Settings must display the built-in

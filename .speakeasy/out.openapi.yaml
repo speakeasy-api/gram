@@ -93513,6 +93513,7 @@ components:
             - log:read
             - agent:read
             - agent:write
+            - agent:create
             - agent:authorize
             - agent:transfer
             - workload:read
@@ -93567,6 +93568,7 @@ components:
               - log:read
               - agent:read
               - agent:write
+              - agent:create
               - agent:authorize
               - agent:transfer
               - workload:read
@@ -102404,6 +102406,7 @@ components:
             - log:read
             - agent:read
             - agent:write
+            - agent:create
             - agent:authorize
             - agent:transfer
             - workload:read
@@ -102744,6 +102747,7 @@ components:
             - risk_policy
             - chat
             - agent
+            - agent_owner
             - workload
         slug:
           type: string
@@ -102785,6 +102789,7 @@ components:
             - log:read
             - agent:read
             - agent:write
+            - agent:create
             - agent:authorize
             - agent:transfer
             - workload:read
@@ -103266,7 +103271,7 @@ components:
           description: Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
         resource_id:
           type: string
-          description: The resource identifier, or '*' for all resources of this kind.
+          description: The resource identifier, or '*' for all resources of this kind. For agent_owner, use 'self' for the caller, a user ID for a specified owner, or '*' for any eligible owner in the organization.
         resource_kind:
           type: string
           description: The kind of resource this selector targets.
@@ -103280,6 +103285,7 @@ components:
             - risk_policy
             - chat
             - agent
+            - agent_owner
             - workload
             - '*'
         server_url:

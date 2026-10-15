@@ -1039,7 +1039,9 @@ type ScopeDefinition struct {
 type Selector struct {
 	// The kind of resource this selector targets.
 	ResourceKind string
-	// The resource identifier, or '*' for all resources of this kind.
+	// The resource identifier, or '*' for all resources of this kind. For
+	// agent_owner, use 'self' for the caller, a user ID for a specified owner, or
+	// '*' for any eligible owner in the organization.
 	ResourceID string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string

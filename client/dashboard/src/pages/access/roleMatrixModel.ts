@@ -539,6 +539,11 @@ const PLATFORM_AREAS: {
     description: "Agents and their settings",
   },
   {
+    resourceType: "agent_owner",
+    label: "Agent creation",
+    description: "Who new agents may belong to",
+  },
+  {
     resourceType: "chat",
     label: "Agent sessions",
     description: "Other members' session transcripts",
@@ -556,6 +561,10 @@ const PLATFORM_AREAS: {
  * server's description.
  */
 const EXTRA_COPY: Record<string, { label: string; description: string }> = {
+  "agent:create": {
+    label: "Create agents",
+    description: "Create agents for the permitted owners",
+  },
   "org:device_agent_sync": {
     label: "Device agent sync",
     description: "Agents fetch the plugins assigned to them",
@@ -640,7 +649,10 @@ export function setPlatformAllow(
     rules.unshift({
       id: crypto.randomUUID(),
       effect: "allow",
-      selectors: null,
+      selectors:
+        scope === "agent:create"
+          ? [{ resourceKind: "agent_owner", resourceId: "self" }]
+          : null,
     });
   }
   return withGrant(

@@ -53,6 +53,7 @@ const scopes: ScopeDefinition[] = [
   def("plugin:write", "project", "plugin:blocked_write"),
   def("chat:read", "chat"),
   def("chat:write", "chat"),
+  def("agent:create", "agent_owner"),
 ];
 
 const mcp = (resourceId: string, extra: Partial<Selector> = {}): Selector => ({
@@ -76,6 +77,40 @@ function save(grants: Record<string, RoleGrant>) {
 }
 
 const all: McpRow = { kind: "all" };
+
+it("defaults agent creation to self and preserves owner targets on save", () => {
+  const grants = setPlatformAllow({}, "agent:create", true);
+  expect(save(grants)).toContainEqual({
+    scope: "agent:create",
+    selectors: [{ resourceKind: "agent_owner", resourceId: "self" }],
+  });
+  for (const owner of ["self", "user-example"]) {
+    const stored = [
+      {
+        scope: "agent:create",
+        selectors: [
+          { resourceKind: "agent_owner" as const, resourceId: owner },
+        ],
+      },
+    ];
+    expect(save(load(stored))).toEqual(stored);
+  }
+  expect(
+    save(
+      load([
+        {
+          scope: "agent:create",
+          selectors: [{ resourceKind: "agent_owner", resourceId: "*" }],
+        },
+      ]),
+    ),
+  ).toEqual([{ scope: "agent:create", selectors: undefined }]);
+  expect(
+    platformAreas(scopes)
+      .flatMap((area) => area.extras)
+      .map((scope) => scope.slug),
+  ).toContain("agent:create");
+});
 const project: McpRow = { kind: "project", projectId: "p1" };
 const github: McpRow = { kind: "server", serverId: "gh", projectId: "p1" };
 const linear: McpRow = { kind: "server", serverId: "lin", projectId: "p1" };
@@ -253,6 +288,7 @@ describe("platform areas", () => {
     ).toEqual([
       ["Organization", "org:read", "org:admin", ["org:hooks_ingest"]],
       ["Projects", "project:read", "project:write", ["plugin:write"]],
+      ["Agent creation", undefined, undefined, ["agent:create"]],
       ["Agent sessions", "chat:read", "chat:write", []],
     ]);
   });
