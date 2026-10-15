@@ -13314,6 +13314,14 @@ paths:
             description: Optional organization name. When set, the organization is created for a new user during the auth callback.
             type: string
         - allowEmptyValue: true
+          description: Optional partner signup code.
+          in: query
+          name: partner_code
+          schema:
+            description: Optional partner signup code.
+            maxLength: 80
+            type: string
+        - allowEmptyValue: true
           description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
           in: query
           name: email
@@ -91312,6 +91320,9 @@ components:
     InfoResponseBody:
       type: object
       properties:
+        accepted_signup_offer_flow:
+          type: string
+          description: Display-only signup offer variant for an accepted promotion; not billing eligibility
         active_organization_dashboard_url:
           type: string
           description: Dashboard base URL of the platform host the active organization lives on. Set only for an ordinary session whose request arrived on a different platform host; the dashboard moves there.
@@ -99563,6 +99574,10 @@ components:
         org_name:
           type: string
           description: The name of the org to register
+        partner_code:
+          type: string
+          description: Optional partner signup code.
+          maxLength: 80
       required:
         - org_name
     RegisterWorkloadIssuerForm:
@@ -106691,6 +106706,16 @@ components:
           type: string
           description: Start of the current Stripe service period
           format: date-time
+        discount_description:
+          type: string
+          description: Verified terms of a currently applied Stripe subscription discount; absent when unsupported or inactive
+        discount_ends_at:
+          type: string
+          description: Discount expiration reported by Stripe, when present
+          format: date-time
+        gateway_promotion_applied:
+          type: boolean
+          description: Whether the live discount and gateway price verify the monthly five GiB promotion
         payment_failed:
           type: boolean
           description: Whether a past-due subscription has an open latest invoice with an unpaid balance

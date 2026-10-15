@@ -1165,3 +1165,16 @@ FROM organizations
 WHERE (account_type = 'enterprise' AND trial_state NOT IN ('running', 'ending_soon'))
    OR (account_type IN ('pro', 'payg') AND trial_state = 'none')
 ORDER BY lower(name) ASC, id ASC;
+
+-- name: ListSignupOffers :many
+SELECT * FROM signup_offers ORDER BY created_at DESC, id DESC;
+
+-- name: CreateSignupOffer :one
+INSERT INTO signup_offers (name, stripe_promotion_code_id, signup_flow)
+VALUES (@name, @stripe_promotion_code_id, @signup_flow)
+RETURNING *;
+
+-- name: UpdateSignupOffer :one
+UPDATE signup_offers SET name = @name, stripe_promotion_code_id = @stripe_promotion_code_id,
+ signup_flow = @signup_flow, enabled = @enabled, updated_at = clock_timestamp()
+WHERE id = @id RETURNING *;

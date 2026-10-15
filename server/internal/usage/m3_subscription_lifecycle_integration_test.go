@@ -222,3 +222,7 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deactivations)
 }
+
+func (*m3StripeWebhookClient) ResolveGatewayPromotionCode(context.Context, string) (string, error) {
+	return "", errors.New("promotion resolution is not used by billing")
+}

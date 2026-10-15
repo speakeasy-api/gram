@@ -247,6 +247,10 @@ func (c *checkoutStripeClient) VerifyWebhook([]byte, string) (*stripeclient.Webh
 	return nil, errors.New("not implemented")
 }
 
+func (c *checkoutStripeClient) ResolveGatewayPromotionCode(context.Context, string) (string, error) {
+	return "", errors.New("promotion resolution is not used by billing")
+}
+
 func (c *checkoutStripeClient) Catalog() stripeclient.Catalog {
 	return stripeclient.Catalog{PriceIDMCPEgress: "", PriceIDRiskScans: "", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}
 }

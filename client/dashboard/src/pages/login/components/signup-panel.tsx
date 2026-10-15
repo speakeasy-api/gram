@@ -3,9 +3,10 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { authPageHref } from "@/lib/safe-external-url";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useForm } from "@tanstack/react-form";
+import { useState } from "react";
 import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
-import { SigninErrorNotice } from "./auth-errors";
+import { AuthErrorText, SigninErrorNotice } from "./auth-errors";
 import { normalizeOrgName, validateOrgName } from "./org-name";
 
 // Mirrors the server's validateSignupEmail. WorkOS verifies the address and
@@ -39,13 +40,18 @@ function firstError(errors: unknown[]): string | undefined {
 
 export function SignUpPanel({
   redirectTo,
+  partnerCode: initialPartnerCode = "",
 }: {
   redirectTo?: string | null;
+  partnerCode?: string;
 }): JSX.Element {
   const telemetry = useTelemetry();
+  const [partnerCode] = useState(initialPartnerCode);
   const form = useForm({
     defaultValues: { email: "", companyName: "", acceptedTerms: false },
     onSubmit: ({ value }) => {
+      if (partnerCode.length > 80) return;
+      const submittedPartnerCode = partnerCode.trim();
       // The server has no identity until the identity provider answers, so it
       // can't count this attempt — only the client sees it. Firing here joins
       // signup_started to the server's new_org_created for a real conversion rate.
@@ -53,6 +59,7 @@ export function SignUpPanel({
         action: "signup_started",
         created_via: "signup",
         accepted_terms: value.acceptedTerms,
+        ...(submittedPartnerCode ? { partner_code: submittedPartnerCode } : {}),
       });
 
       // The org itself is created server-side during the auth callback. The
@@ -66,6 +73,7 @@ export function SignUpPanel({
           redirectTo ?? null,
           normalizeOrgName(value.companyName),
           value.email.trim(),
+          submittedPartnerCode,
         ),
       );
     },
@@ -102,10 +110,18 @@ export function SignUpPanel({
       >
         <div className="flex flex-col gap-1">
           <p className="auth-mono text-[16px] tracking-[0.06em]">Sign up</p>
-          <p className="auth-mono-text text-[12px] text-(--muted-strong)">
-            Get a 14-day trial of the full control plane.
-          </p>
+          {!partnerCode.trim() && (
+            <p className="auth-mono-text text-[12px] text-(--muted-strong)">
+              Get a 14-day trial of the full control plane.
+            </p>
+          )}
         </div>
+
+        {partnerCode.length > 80 && (
+          <AuthErrorText>
+            Partner code must be 80 characters or fewer.
+          </AuthErrorText>
+        )}
 
         {/* Field and CTA share one subscription: `form.state` is a plain getter
             onto the store, so only `Subscribe` (and `field.state` inside
@@ -288,7 +304,12 @@ export function SignUpPanel({
                   WorkOS — email and password among them. */}
               <button
                 type="submit"
-                disabled={!canSubmit || isSubmitting || isSubmitted}
+                disabled={
+                  !canSubmit ||
+                  isSubmitting ||
+                  isSubmitted ||
+                  partnerCode.length > 80
+                }
                 className={cn(
                   AUTH_BUTTON_CLASSES,
                   "mx-auto px-[22px] disabled:cursor-not-allowed disabled:opacity-50",
@@ -308,7 +329,7 @@ export function SignUpPanel({
       <p className="mt-2 text-[14px] text-(--muted-strong)">
         Already have an account?{" "}
         <Link
-          to={authPageHref("/login", redirectTo)}
+          to={authPageHref("/login", redirectTo, partnerCode)}
           className="text-(--link) underline hover:text-(--focus)"
         >
           Log in
