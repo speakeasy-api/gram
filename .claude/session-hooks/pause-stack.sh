@@ -4,7 +4,7 @@
 # left to do: the Claude Code counterpart of the OpenCode speakeasy.pause-stack
 # plugin (.opencode/plugins/pause-stack.js). It is opt-in the same way. Add
 # `speakeasy.pause-stack` to the colon-separated GRAM_OPENCODE_PLUGINS in
-# mise.local.toml (see .opencode/README.md). Without it, every event is a no-op.
+# mise.local.toml. Without it, every event is a no-op.
 #
 # Wired up in .claude/settings.json for these events:
 # - UserPromptSubmit marks the session busy in the worktree's git dir.

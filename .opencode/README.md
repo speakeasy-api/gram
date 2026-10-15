@@ -75,21 +75,10 @@ To disable automatic pausing locally, add this to `.opencode/opencode.jsonc`:
 }
 ```
 
-### Claude Code
-
-The same `speakeasy.pause-stack` ID also enables
-`.claude/session-hooks/pause-stack.sh`, which `.claude/settings.json` runs on
-`UserPromptSubmit`, `Stop` and `SessionEnd`. It pauses the stack at the end of a
-turn that leaves no background subagents, shells or monitors running, unless
-another Claude Code session in the same worktree is mid-turn. It skips
-already-paused stacks, live boots and worktrees without their own
-`mise.local.toml`. Changes take effect from the next event, so nothing needs
-reloading.
-
 ## Tests
 
 The Worktrunk lifecycle test uses an isolated repository and real `wt` commands:
 
 ```sh
-mise exec -- node --test .opencode/tests/*.test.mjs .claude/tests/*.test.mjs
+mise exec -- node --test .opencode/tests/*.test.mjs
 ```
