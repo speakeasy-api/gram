@@ -5,7 +5,7 @@ import {
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { AlertTriangle, Check } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import {
   ANNOTATION_OPTIONS,
@@ -313,10 +313,12 @@ export function ConsentToolsApp({
 
   // Approval is gated on both a successfully loaded inventory and the
   // server-rendered remote-session readiness flag; anything else (loading,
-  // error, retry, malformed response) keeps the button disabled.
+  // error, retry, malformed response) keeps the button disabled. A layout
+  // effect keeps the server-rendered button in step with the commit, so it is
+  // never enabled while the island already shows a blocking error.
   const approveReady =
     (phase.name === "ready" || phase.name === "deferred") && consentEnabled;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const button = document.getElementById(approveButtonId);
     if (button instanceof HTMLButtonElement) {
       button.dataset["consentSelfReady"] = approveReady ? "true" : "false";
