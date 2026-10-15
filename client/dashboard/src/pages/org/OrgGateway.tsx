@@ -120,6 +120,19 @@ function GatewaySetting({
             {on && gateway.data && !gateway.data.available && (
               <GatewayNotServed reason={gateway.data.unavailableReason} />
             )}
+            {on && gateway.error && (
+              <Text small className="text-warning mt-3" role="alert">
+                Couldn&apos;t check whether the gateway is being served.{" "}
+                <button
+                  type="button"
+                  className="underline"
+                  disabled={gateway.isFetching}
+                  onClick={() => void gateway.refetch()}
+                >
+                  {gateway.isFetching ? "Checking…" : "Check again"}
+                </button>
+              </Text>
+            )}
           </div>
         </div>
         <RequireScope
