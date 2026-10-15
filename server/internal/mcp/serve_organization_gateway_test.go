@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -443,4 +445,33 @@ func TestServeOrganizationGateway_CustomDomainLockdownIsNotFound(t *testing.T) {
 	_, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
 
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// connection_status reports the members the user can reach, and links the
+// organization gateway's own connect page rather than a project gateway's.
+func TestServeOrganizationGateway_ConnectionStatusLinksItsConnectPage(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+
+	body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": metamcp.ToolConnectionStatus, "arguments": map[string]any{}})
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	rpc := decodeRPCResponse(t, w)
+	text, isError := metaToolResultText(t, rpc)
+	require.False(t, isError, "connection_status must not fail: %s", text)
+	var structured struct {
+		StructuredContent metamcp.ConnectionStatusResult `json:"structuredContent"`
+	}
+	require.NoError(t, json.Unmarshal(rpc["result"], &structured))
+
+	require.True(t, strings.HasSuffix(structured.StructuredContent.ConnectURL, "/mcp/gateway/"+fx.organizationSlug+"/connect/first-party"),
+		"connectUrl %q must be the organization gateway's connect page", structured.StructuredContent.ConnectURL)
+	slugs := make([]string, 0, len(structured.StructuredContent.Servers))
+	for _, server := range structured.StructuredContent.Servers {
+		slugs = append(slugs, server.Slug)
+	}
+	require.ElementsMatch(t, []string{fx.projectSlug + "." + fx.granted, fx.projectSlug + "." + fx.open}, slugs)
 }
