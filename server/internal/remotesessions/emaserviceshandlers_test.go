@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -91,4 +93,35 @@ func TestListEMAServices_AggregatesServersAndAcceptanceAcrossTheOrganization(t *
 	require.False(t, byVendor[savedOnly].EmaProviders.IsDefault)
 	require.Equal(t, named.String(), conv.PtrValOr(byVendor[namedVendor].RemoteSessionIssuerID, ""),
 		"a saved order keeps an issuer record, matched across spellings, so it can still be changed")
+}
+
+func TestListEMAServices_SavedOrderNeverNamesAnotherTenantsIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org := auth.ActiveOrganizationID
+	vendor, err := remotesessions.NormalizeVendorIssuer("https://shared-vendor.example.com")
+	require.NoError(t, err)
+	internalIssuer := seedInternalSessionIssuer(t, ctx, ti, org)
+	require.NoError(t, repo.New(ti.conn).InsertEMAProvider(ctx, repo.InsertEMAProviderParams{OrganizationID: org, VendorIssuer: vendor, RemoteSessionIssuerID: uuid.NullUUID{}, InternalSessionIssuerID: conv.ToNullUUID(internalIssuer), Position: 0}))
+
+	// Another tenant's legacy project-owned issuer for the same vendor, with
+	// no organization_id: it belongs to that tenant, not the platform.
+	other := createOrganization(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "other", Slug: "other-" + uuid.NewString()[:8], OrganizationID: other})
+	require.NoError(t, err)
+	seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{UUID: otherProject.ID, Valid: true}, pgtype.Text{}, "legacy-"+uuid.NewString()[:8], "https://shared-vendor.example.com")
+
+	out, err := ti.service.ListEMAServices(ctx, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, out.Items, 1)
+	require.Nil(t, out.Items[0].RemoteSessionIssuerID, "another tenant's legacy issuer is never named")
+	require.Empty(t, out.Items[0].Name)
+
+	ownProject := createProject(t, ctx, ti.conn, "own-"+uuid.NewString()[:8])
+	own := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{UUID: ownProject, Valid: true}, pgtype.Text{}, "own-"+uuid.NewString()[:8], "https://shared-vendor.example.com/")
+	out, err = ti.service.ListEMAServices(ctx, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, own.String(), conv.PtrValOr(out.Items[0].RemoteSessionIssuerID, ""), "the organization's own legacy project issuer is found through its project")
 }

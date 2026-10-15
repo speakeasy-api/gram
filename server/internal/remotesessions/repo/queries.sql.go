@@ -3613,11 +3613,16 @@ func (q *Queries) GetEMAProjectOrganization(ctx context.Context, projectID uuid.
 }
 
 const getEMAVendorIssuerRecord = `-- name: GetEMAVendorIssuerRecord :one
-SELECT id, COALESCE(name, '')::text AS name
-FROM remote_session_issuers
-WHERE issuer = ANY($1::text[]) AND deleted IS FALSE
-  AND (organization_id = $2::text OR organization_id IS NULL)
-ORDER BY (organization_id IS NULL), (project_id IS NULL) DESC, created_at, id
+SELECT i.id, COALESCE(i.name, '')::text AS name
+FROM remote_session_issuers i
+LEFT JOIN projects p ON p.id = i.project_id
+WHERE i.issuer = ANY($1::text[]) AND i.deleted IS FALSE
+  AND (
+    i.organization_id = $2::text
+    OR (i.organization_id IS NULL AND i.project_id IS NULL)
+    OR (i.organization_id IS NULL AND p.organization_id = $2::text AND p.deleted IS FALSE)
+  )
+ORDER BY (i.organization_id IS NULL AND i.project_id IS NULL), (i.project_id IS NULL) DESC, i.created_at, i.id
 LIMIT 1
 `
 
@@ -3632,7 +3637,11 @@ type GetEMAVendorIssuerRecordRow struct {
 }
 
 // Any issuer record the organization can name for a vendor, so its saved order
-// can be changed after its last binding is gone. Organization-level first.
+// can be changed after its last binding is gone: the organization's own
+// records (including legacy project-owned ones with no organization_id,
+// resolved through their project), then the platform catalog. A record with
+// no organization and a project belongs to that project's organization, never
+// the platform. Organization-level first.
 func (q *Queries) GetEMAVendorIssuerRecord(ctx context.Context, arg GetEMAVendorIssuerRecordParams) (GetEMAVendorIssuerRecordRow, error) {
 	row := q.db.QueryRow(ctx, getEMAVendorIssuerRecord, arg.Issuers, arg.OrganizationID)
 	var i GetEMAVendorIssuerRecordRow
