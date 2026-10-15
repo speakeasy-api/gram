@@ -1,11 +1,13 @@
 package evaluation
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"strings"
 	"testing"
@@ -141,7 +143,7 @@ func TestWindowHistoryFailureRetriesAfterPublishingTargetOnly(t *testing.T) {
 	require.Len(t, pub.readings, 1)
 }
 
-func TestWindowBudgetFallbackAndMetrics(t *testing.T) {
+func TestWindowBudgetFallbackAndObservability(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"overflow marker", "oversized attachment", "short history"} {
 		t.Run(name, func(t *testing.T) {
@@ -160,6 +162,10 @@ func TestWindowBudgetFallbackAndMetrics(t *testing.T) {
 			t.Cleanup(func() { require.NoError(t, meters.Shutdown(context.Background())) })
 			c, requests := newRecordingClassifier(t)
 			h, pub := handler(t, m, definitions, c, meters)
+			var logs bytes.Buffer
+			evaluator, err := NewEvaluator(slog.New(slog.NewJSONHandler(&logs, nil)), meters, h.evaluator.source, h.evaluator.features, pub, c)
+			require.NoError(t, err)
+			h.evaluator = evaluator
 			target := storedMessage(m)
 			target.Content = "Yes, that one."
 			prior := targetContent(storedMessage(message()))
@@ -219,8 +225,37 @@ func TestWindowBudgetFallbackAndMetrics(t *testing.T) {
 			}
 			if name == "short history" {
 				require.Empty(t, got)
+				require.Empty(t, logs.String())
 			} else {
 				require.Equal(t, map[[2]int64]int64{{5, 2}: 2, {10, 2}: 1}, got)
+				decoder := json.NewDecoder(&logs)
+				for i, sensor := range definitions[1:] {
+					var record map[string]any
+					require.NoError(t, decoder.Decode(&record))
+					require.NotEmpty(t, record["time"])
+					delete(record, "time")
+					require.Equal(t, map[string]any{
+						"level":                              "WARN",
+						"msg":                                "sensor evaluation window truncated",
+						"gram.wide_event":                    true,
+						"gram.component":                     "sigint-evaluator",
+						"gram.org.id":                        m.GetOrganizationId(),
+						"gram.project.id":                    m.GetProjectId(),
+						"gram.chat.id":                       m.GetConversationId(),
+						"gram.message.id":                    m.GetMessageId(),
+						"gram.sigint.event.id":               m.GetMessageId(),
+						"gram.sigint.event.kind":             "conversation.message",
+						"gram.sigint.sensor.id":              sensor.ID,
+						"gram.sigint.sensor.mode":            sensor.Mode,
+						"gram.sigint.sensor.definition_hash": pub.readings[i+1].GetDefinitionHash(),
+						"gram.sigint.window.requested_size":  float64(sensor.WindowSize),
+						"gram.sigint.window.effective_size":  float64(2),
+						"gram.sigint.content_budget_bytes":   float64(maxContentBytes),
+						"reason":                             "content_too_large",
+					}, record)
+				}
+				var extra map[string]any
+				require.ErrorIs(t, decoder.Decode(&extra), io.EOF)
 			}
 		})
 	}

@@ -266,6 +266,12 @@ once per affected sensor evaluation attempt, with `reason=content_too_large`,
 `requested_window_size` and `effective_window_size`. Sensors sharing a request
 each count; redelivery counts another attempt. Naturally short histories do not
 increment this counter, and truncation alone does not increment failures.
+Each affected sensor also emits a warning-level wide event, `sensor evaluation
+window truncated`, with organization/project, event kind/ID, chat and target-message
+IDs, sensor ID/mode/definition hash, requested/effective window sizes, content byte
+budget and truncation reason. The log describes the context adjustment before
+classification; it does not imply that classification or publication succeeded.
+All evaluator logs carry `gram.component=sigint-evaluator`.
 Redelivery may reevaluate all sensors and republish successes with the same
 logical reading ID and different answers/attempt IDs. No evaluation checkpoints,
 DLQ, reading persistence or duplicate-winner policy are introduced.

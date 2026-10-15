@@ -48,6 +48,7 @@ type Evaluator struct {
 // NewEvaluator injects a classifier configured with the platform's credentials.
 // Runtime concurrency is bounded across all adapters sharing this instance.
 func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Source, features Features, publisher gcp.Publisher[*sigintv1.Reading], c classifier.Classifier) (*Evaluator, error) {
+	logger = logger.With(attr.SlogComponent("sigint-evaluator"))
 	meter := meters.Meter("github.com/speakeasy-api/gram/server/internal/sigint/evaluation")
 
 	failures, err := meter.Int64Counter("gram.sigint.evaluation.failures", metric.WithDescription("Terminal sensor or event evaluations acknowledged without a reading"))
@@ -190,6 +191,27 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 				attribute.Int("requested_window_size", size),
 				attribute.Int("effective_window_size", resolved.MessageCount),
 			))
+			attrs := []slog.Attr{
+				attr.SlogWideEvent(),
+				attr.SlogOrganizationID(event.OrganizationID),
+				attr.SlogProjectID(event.ProjectID),
+				attr.SlogSigintEventID(event.Subject.GetId()),
+				attr.SlogSigintEventKind(event.Subject.GetKind()),
+				attr.SlogReason("content_too_large"),
+				attr.SlogSigintRequestedWindowSize(size),
+				attr.SlogSigintEffectiveWindowSize(resolved.MessageCount),
+				attr.SlogSigintContentBudgetBytes(maxContentBytes),
+			}
+			if message := event.Subject.GetConversationMessage(); message != nil {
+				attrs = append(attrs, attr.SlogChatID(message.GetConversationId()), attr.SlogMessageID(event.Subject.GetId()))
+			}
+			for _, sensor := range sensors {
+				h.logger.LogAttrs(ctx, slog.LevelWarn, "sensor evaluation window truncated", append(attrs,
+					attr.SlogSigintSensorID(sensor.id),
+					attr.SlogSigintSensorMode(sensor.mode),
+					attr.SlogSigintSensorDefinitionHash(sensor.hash),
+				)...)
+			}
 		}
 		retry = errors.Join(retry, h.evaluateGroup(ctx, event, sensors, resolved.State, err))
 	}
