@@ -377,14 +377,15 @@ func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Lo
 	counter.RecordToolsetSlugFallback(ctx, logger, hit)
 }
 
-// RecordLegacyAudienceAccepted counts one bearer accepted via the legacy
-// toolset-URN audience. Semantics on
+// RecordLegacyAudienceAccepted logs and counts one bearer accepted via the
+// legacy toolset-URN audience. Semantics on
 // [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
-func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, issuerID string) {
-	if m == nil {
-		return
+func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, logger *slog.Logger, hit LegacyAudienceAccepted) {
+	var counter *LegacyFallbackCounter
+	if m != nil {
+		counter = m.legacyFallback
 	}
-	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, issuerID)
+	counter.RecordLegacyAudienceAccepted(ctx, logger, hit)
 }
 
 // RecordMCPInitialize counts one observed MCP handshake, dimensioned by the
