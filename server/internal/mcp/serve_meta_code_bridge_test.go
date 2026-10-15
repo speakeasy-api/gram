@@ -3,7 +3,6 @@ package mcp_test
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -200,8 +199,9 @@ func TestCodeBridgeHonorsToolSelection(t *testing.T) {
 }
 
 // TestCodeBridgeRefusesChangedDefinitionOrDestination pins the fingerprint
-// check at dispatch: a definition that changed since the catalog read, or a
-// member now served by a different backend, is refused before any call.
+// check at dispatch: a call reads the member's catalog once and dispatches
+// through that read, and a member now served by a different backend is
+// refused before any call.
 func TestCodeBridgeRefusesChangedDefinitionOrDestination(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -210,28 +210,25 @@ func TestCodeBridgeRefusesChangedDefinitionOrDestination(t *testing.T) {
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
 	original := newRecordingUpstream(t, "ping")
 	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, original.url)
-	backend := mcp.NewTestMetaCodeBackend(t, ctx, ti.service, gateway.ID, nil)
-	toolCalls := func(u *recordingUpstream) int {
-		count := 0
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, nil)
+	count := func(u *recordingUpstream, method string) int {
+		n := 0
 		for _, req := range u.journal() {
-			if req.rpcMethod == "tools/call" {
-				count++
+			if req.rpcMethod == method {
+				n++
 			}
 		}
-		return count
+		return n
 	}
 
-	catalog, err := backend.List(ctx, "remote")
+	_, err := host.Describe(ctx, "remote--ping")
 	require.NoError(t, err)
-	require.Len(t, catalog.Tools, 1)
-	pinned := catalog.Tools[0].Fingerprint
-
-	_, err = backend.Invoke(ctx, "remote--ping", pinned+"0", json.RawMessage(`{}`))
-	dispatch, ok := errors.AsType[*codemode.DispatchError](err)
-	require.True(t, ok, "%v", err)
-	require.True(t, dispatch.BeforeInvoke)
-	require.Equal(t, "tool_changed", dispatch.Code)
-	require.Zero(t, toolCalls(original), "a changed definition must not dispatch")
+	listsBefore := count(original, "tools/list")
+	result, err := host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.True(t, result.OK, "%+v", result)
+	require.Equal(t, 1, count(original, "tools/call"))
+	require.Equal(t, listsBefore+1, count(original, "tools/list"), "a call reads the member catalog once")
 
 	replacement := newRecordingUpstream(t, "ping")
 	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: *auth.ProjectID, TransportType: "streamable-http", Url: replacement.url})
@@ -240,10 +237,8 @@ func TestCodeBridgeRefusesChangedDefinitionOrDestination(t *testing.T) {
 	_, err = serverrepo.New(ti.conn).UpdateMCPServer(ctx, serverrepo.UpdateMCPServerParams{Name: row.Name, Slug: row.Slug, EnvironmentID: row.EnvironmentID, UserSessionIssuerID: row.UserSessionIssuerID, RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, TunneledMcpServerID: row.TunneledMcpServerID, ToolsetID: row.ToolsetID, UnproxiedMcpServerID: row.UnproxiedMcpServerID, ToolVariationsGroupID: row.ToolVariationsGroupID, Visibility: row.Visibility, ID: row.ID, ProjectID: row.ProjectID})
 	require.NoError(t, err)
 
-	_, err = backend.Invoke(ctx, "remote--ping", pinned, json.RawMessage(`{}`))
-	dispatch, ok = errors.AsType[*codemode.DispatchError](err)
-	require.True(t, ok, "%v", err)
-	require.Equal(t, "tool_changed", dispatch.Code)
-	require.Zero(t, toolCalls(original))
-	require.Zero(t, toolCalls(replacement), "a swapped backend must not receive the call")
+	_, err = host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
+	require.ErrorContains(t, err, "tool_changed")
+	require.Equal(t, 1, count(original, "tools/call"))
+	require.Zero(t, count(replacement, "tools/call"), "a swapped backend must not receive the call")
 }

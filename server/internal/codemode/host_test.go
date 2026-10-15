@@ -12,17 +12,31 @@ import (
 )
 
 type fixtureBackend struct {
-	mu       sync.Mutex
-	servers  []Server
-	catalogs map[string]*Catalog
-	failures map[string]error
-	listed   []string
-	calls    []string
-	result   json.RawMessage
+	mu        sync.Mutex
+	servers   []Server
+	catalogs  map[string]*Catalog
+	failures  map[string]error
+	listed    []string
+	calls     []string
+	result    json.RawMessage
+	refreshes int
 }
 
-func (b *fixtureBackend) Members(context.Context) ([]Server, error) { return b.servers, nil }
+func (b *fixtureBackend) Members(context.Context) ([]Server, Lister, error) {
+	b.mu.Lock()
+	b.refreshes++
+	b.mu.Unlock()
+	return b.servers, b.catalog, nil
+}
+
 func (b *fixtureBackend) List(ctx context.Context, server string) (*Catalog, error) {
+	b.mu.Lock()
+	b.refreshes++
+	b.mu.Unlock()
+	return b.catalog(ctx, server)
+}
+
+func (b *fixtureBackend) catalog(ctx context.Context, server string) (*Catalog, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.listed = append(b.listed, server)
@@ -38,23 +52,37 @@ func (b *fixtureBackend) List(ctx context.Context, server string) (*Catalog, err
 	}
 	return catalog, nil
 }
-func (b *fixtureBackend) Invoke(ctx context.Context, path, fingerprint string, _ json.RawMessage) (json.RawMessage, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("fixture canceled: %w", err)
-	}
+
+func (b *fixtureBackend) Resolve(ctx context.Context, path string) (*Tool, Dispatch, error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.refreshes++
+	b.mu.Unlock()
 	server, _, err := splitPath(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	for _, tool := range b.catalogs[server].Tools {
-		if tool.Path == path && tool.Fingerprint == fingerprint {
-			b.calls = append(b.calls, path)
-			return b.result, nil
+	catalog, err := b.catalog(ctx, server)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, tool := range catalog.Tools {
+		if tool.Path == path {
+			dispatch := func(json.RawMessage) (json.RawMessage, error) {
+				b.mu.Lock()
+				defer b.mu.Unlock()
+				b.calls = append(b.calls, path)
+				return b.result, nil
+			}
+			return &tool, dispatch, nil
 		}
 	}
-	return nil, ErrToolUnavailable
+	return nil, nil, ErrToolUnavailable
+}
+
+func (b *fixtureBackend) refreshCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.refreshes
 }
 
 func fixtureTool(path string) Tool {
@@ -267,4 +295,32 @@ func TestRepeatedQueryTermsDoNotAmplifyRanking(t *testing.T) {
 	}
 	_, err = Rank("scope", SearchArgs{Query: strings.Join(terms, " ")}, docs, nil)
 	require.ErrorContains(t, err, "too many query terms")
+}
+
+// TestCallbacksRefreshAuthorizationOnce pins one authorization refresh per
+// callback: search shares it across members, and a call dispatches from the
+// read that produced its definition instead of reading it again.
+func TestCallbacksRefreshAuthorizationOnce(t *testing.T) {
+	t.Parallel()
+	servers := []Server{{Slug: "a", Name: "A"}, {Slug: "b", Name: "B"}, {Slug: "c", Name: "C"}}
+	catalogs := map[string]*Catalog{}
+	for _, server := range servers {
+		catalogs[server.Slug] = &Catalog{Tools: []Tool{fixtureTool(server.Slug + "--list")}, Incomplete: false}
+	}
+	backend := &fixtureBackend{servers: servers, catalogs: catalogs, result: json.RawMessage(`{"structuredContent":{},"content":[]}`)}
+	host, err := NewHost(t.Context(), backend, "scope", nil)
+	require.NoError(t, err)
+
+	page, err := host.Search(t.Context(), SearchArgs{})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 3)
+	require.Equal(t, 1, backend.refreshCount())
+	require.Len(t, backend.listed, 3)
+
+	result, err := host.Call(t.Context(), "a--list", json.RawMessage(`{"customer_id":"c1"}`))
+	require.NoError(t, err)
+	require.True(t, result.OK)
+	require.Equal(t, 2, backend.refreshCount())
+	require.Len(t, backend.listed, 4)
+	require.Equal(t, []string{"a--list"}, backend.calls)
 }

@@ -50,17 +50,24 @@ type Catalog struct {
 	Incomplete bool
 }
 
+// Lister loads member catalogs under the authorization refresh that produced it.
+type Lister func(context.Context, string) (*Catalog, error)
+
+// Dispatch calls a resolved tool through the same member snapshot that
+// produced its definition and fingerprint.
+type Dispatch func(json.RawMessage) (json.RawMessage, error)
+
 // Backend owns authentication and existing gateway routing. Every method must
 // refresh current authorization and intersect it with the admitted member IDs.
 type Backend interface {
-	// Members returns the currently permitted part of the admitted member set.
-	Members(context.Context) ([]Server, error)
+	// Members returns the currently permitted part of the admitted member set
+	// and a Lister bound to that same refresh.
+	Members(context.Context) ([]Server, Lister, error)
 	// List loads one member's live permitted catalog.
 	List(context.Context, string) (*Catalog, error)
-	// Invoke re-resolves the tool's definition and destination from the
-	// member snapshot it dispatches to and refuses with tool_changed when
-	// their fingerprint differs from the expected one.
-	Invoke(context.Context, string, string, json.RawMessage) (json.RawMessage, error)
+	// Resolve reads one tool's current definition and destination and binds
+	// a Dispatch to that read, so the call reaches exactly what was fingerprinted.
+	Resolve(context.Context, string) (*Tool, Dispatch, error)
 }
 
 // CatalogHost holds only one execution's restrictions and resolved identities.
@@ -106,7 +113,7 @@ func NewHost(ctx context.Context, backend Backend, scope string, tools []string)
 			group.Go(func() error {
 				memberCtx, cancel := context.WithTimeout(groupCtx, memberDeadline)
 				defer cancel()
-				catalog, err := host.load(memberCtx, member)
+				catalog, err := load(memberCtx, backend.List, member)
 				if err != nil {
 					if errors.Is(err, ErrExecutionRevoked) {
 						return err
@@ -140,16 +147,16 @@ func NewHost(ctx context.Context, backend Backend, scope string, tools []string)
 
 func (h *CatalogHost) permitted(path string) bool { return h.allowed == nil || h.allowed[path] }
 
-func (h *CatalogHost) members(ctx context.Context) ([]Server, error) {
-	servers, err := h.backend.Members(ctx)
+func (h *CatalogHost) members(ctx context.Context) ([]Server, Lister, error) {
+	servers, list, err := h.backend.Members(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load permitted servers: %w", err)
+		return nil, nil, fmt.Errorf("load permitted servers: %w", err)
 	}
 	if len(servers) > maxMembers {
-		return nil, fmt.Errorf("gateway exceeds code-mode member limit")
+		return nil, nil, fmt.Errorf("gateway exceeds code-mode member limit")
 	}
 	if h.allowed == nil {
-		return servers, nil
+		return servers, list, nil
 	}
 	permitted := make([]Server, 0, len(servers))
 	for _, server := range servers {
@@ -157,12 +164,12 @@ func (h *CatalogHost) members(ctx context.Context) ([]Server, error) {
 			permitted = append(permitted, server)
 		}
 	}
-	return permitted, nil
+	return permitted, list, nil
 }
 
 // Servers returns permitted prefixes without enumerating upstream tools.
 func (h *CatalogHost) Servers(ctx context.Context, args PageArgs) (*ServerPage, error) {
-	servers, err := h.members(ctx)
+	servers, _, err := h.members(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +181,7 @@ func (h *CatalogHost) Search(ctx context.Context, args SearchArgs) (*SearchPage,
 	if len(args.Query) > maxQueryBytes || len(args.Server) > maxQueryBytes || len(args.Cursor) > maxCursorBytes || args.Limit < 0 || args.Limit > MaxPageSize {
 		return nil, fmt.Errorf("invalid search arguments")
 	}
-	servers, err := h.members(ctx)
+	servers, list, err := h.members(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +204,7 @@ func (h *CatalogHost) Search(ctx context.Context, args SearchArgs) (*SearchPage,
 		group.Go(func() error {
 			memberCtx, cancel := context.WithTimeout(groupCtx, memberDeadline)
 			defer cancel()
-			catalog, err := h.load(memberCtx, server.Slug)
+			catalog, err := load(memberCtx, list, server.Slug)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -232,8 +239,8 @@ func (h *CatalogHost) Search(ctx context.Context, args SearchArgs) (*SearchPage,
 	return Rank(h.scope, args, documents, failed)
 }
 
-func (h *CatalogHost) load(ctx context.Context, server string) (*Catalog, error) {
-	catalog, err := h.backend.List(ctx, server)
+func load(ctx context.Context, list Lister, server string) (*Catalog, error) {
+	catalog, err := list(ctx, server)
 	if err != nil {
 		return nil, fmt.Errorf("load member catalog: %w", err)
 	}
@@ -256,24 +263,21 @@ func (h *CatalogHost) load(ctx context.Context, server string) (*Catalog, error)
 	return catalog, nil
 }
 
-func (h *CatalogHost) resolve(ctx context.Context, path string) (*Tool, error) {
-	server, _, err := splitPath(path)
-	if err != nil || !h.permitted(path) {
-		return nil, ErrToolUnavailable
+func (h *CatalogHost) resolve(ctx context.Context, path string) (*Tool, Dispatch, error) {
+	if _, _, err := splitPath(path); err != nil || !h.permitted(path) {
+		return nil, nil, ErrToolUnavailable
 	}
-	catalog, err := h.load(ctx, server)
+	tool, dispatch, err := h.backend.Resolve(ctx, path)
 	if err != nil {
-		return nil, err
+		return nil, nil, fmt.Errorf("resolve tool: %w", err)
 	}
-	for _, tool := range catalog.Tools {
-		if tool.Path == path {
-			if err := h.pin(tool); err != nil {
-				return nil, err
-			}
-			return &tool, nil
-		}
+	if tool == nil || dispatch == nil || tool.Path != path || tool.Fingerprint == "" || len(tool.Definition) > MaxCatalogBytes {
+		return nil, nil, fmt.Errorf("invalid resolved tool")
 	}
-	return nil, ErrToolUnavailable
+	if err := h.pin(*tool); err != nil {
+		return nil, nil, err
+	}
+	return tool, dispatch, nil
 }
 
 func (h *CatalogHost) pin(tool Tool) error {
@@ -291,7 +295,7 @@ func (h *CatalogHost) pin(tool Tool) error {
 
 // Describe loads and pins an exact definition, then generates a Python example.
 func (h *CatalogHost) Describe(ctx context.Context, path string) (*Description, error) {
-	tool, err := h.resolve(ctx, path)
+	tool, _, err := h.resolve(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +317,7 @@ func (h *CatalogHost) Describe(ctx context.Context, path string) (*Description, 
 
 // Call validates arguments before invoking the existing authoritative dispatcher.
 func (h *CatalogHost) Call(ctx context.Context, path string, arguments json.RawMessage) (*ToolResult, error) {
-	tool, err := h.resolve(ctx, path)
+	tool, dispatch, err := h.resolve(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +327,7 @@ func (h *CatalogHost) Call(ctx context.Context, path string, arguments json.RawM
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("call cancelled before dispatch: %w", err)
 	}
-	raw, err := h.backend.Invoke(ctx, path, tool.Fingerprint, arguments)
+	raw, err := dispatch(arguments)
 	if err != nil {
 		if errors.Is(err, ErrExecutionRevoked) {
 			return nil, fmt.Errorf("invoke tool: %w", err)
