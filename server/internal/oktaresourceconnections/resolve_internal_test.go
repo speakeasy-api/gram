@@ -64,10 +64,11 @@ func TestResolveClient(t *testing.T) {
 	require.Equal(t, "one", id)
 	require.Equal(t, ClientBindingSingle, state)
 
-	// An explicit binding for the resource wins over ambiguity and carries its scopes.
+	// An explicit binding for the resource wins over ambiguity; its scopes are
+	// the connection's, not the ones recorded on the binding.
 	id, scopes, state = resolveClient(server, "https://mcp.example/", two, []repo.ListEMABindingsRow{binding(b, "files:read")}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "org", id)
-	require.Equal(t, []string{"files:read"}, scopes)
+	require.Equal(t, []string{"read"}, scopes)
 	require.Equal(t, ClientBindingBound, state)
 
 	// Bindings that agree stay bound; bindings that disagree are ambiguous.

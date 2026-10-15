@@ -90566,6 +90566,7 @@ components:
           type: array
           items:
             type: string
+          description: 'Scopes identity chaining requests: what an interactive sign-in through the selected client requests for this resource, from the server connection''s scope settings. Empty until a client is selected.'
         stage:
           type: string
           enum:
@@ -97849,7 +97850,7 @@ components:
             type: string
             pattern: ^[!#-[\]-~]+$
             maxLength: 128
-          description: Requested scope tokens.
+          description: Recorded on the binding for compatibility; identity chaining requests the server connection's scopes instead. A scope outside the client's registered scope still reports manual_setup_required.
         token_endpoint_auth_method:
           type: string
           description: Explicit DCR authentication method.

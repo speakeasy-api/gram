@@ -24,7 +24,9 @@ type PrepareEMARequestBody struct {
 	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 	// Explicit selected client row ID; never inferred.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// Requested scope tokens.
+	// Recorded on the binding for compatibility; identity chaining requests the
+	// server connection's scopes instead. A scope outside the client's registered
+	// scope still reports manual_setup_required.
 	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	Mechanism *string  `form:"mechanism,omitempty" json:"mechanism,omitempty" xml:"mechanism,omitempty"`
 	// Explicit DCR authentication method.
@@ -200,7 +202,10 @@ type PrepareEMAResponseBody struct {
 	Resource         string  `form:"resource" json:"resource" xml:"resource"`
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes identity chaining requests: what an interactive sign-in through the
+	// selected client requests for this resource, from the server connection's
+	// scope settings. Empty until a client is selected.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
 	// The vendor's EMA provider order resolved for this endpoint. Identity
@@ -228,7 +233,10 @@ type ReadEMAResponseBody struct {
 	Resource         string  `form:"resource" json:"resource" xml:"resource"`
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes identity chaining requests: what an interactive sign-in through the
+	// selected client requests for this resource, from the server connection's
+	// scope settings. Empty until a client is selected.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
 	// The vendor's EMA provider order resolved for this endpoint. Identity
@@ -256,7 +264,10 @@ type UnlinkEMAResponseBody struct {
 	Resource         string  `form:"resource" json:"resource" xml:"resource"`
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Scopes identity chaining requests: what an interactive sign-in through the
+	// selected client requests for this resource, from the server connection's
+	// scope settings. Empty until a client is selected.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
 	// The vendor's EMA provider order resolved for this endpoint. Identity

@@ -63,7 +63,30 @@ func (s *Service) PrepareEMA(ctx context.Context, p *gen.PrepareEMAPayload) (*ge
 	if err != nil {
 		return nil, err
 	}
+	if err := s.reportConnectionScopes(ctx, in.UserSessionIssuerID, result); err != nil {
+		return nil, err
+	}
 	return preparationAPIView(result), nil
+}
+
+// reportConnectionScopes replaces the scopes recorded at preparation with
+// the ones identity chaining requests, as every read reports them.
+func (s *Service) reportConnectionScopes(ctx context.Context, userSessionIssuerID uuid.UUID, r *PreparationResult) error {
+	if r == nil || r.ClientID == uuid.Nil {
+		return nil
+	}
+	project, org, err := s.preparationTenant(ctx, false)
+	if err != nil {
+		return err
+	}
+	resolution, found, err := ConnectionScopes(ctx, s.db, project, org, userSessionIssuerID, r.ClientID, r.Resource)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve identity chaining scopes").LogError(ctx, s.logger)
+	}
+	if found {
+		r.Scopes = append([]string{}, resolution.Scopes...)
+	}
+	return nil
 }
 
 func (s *Service) ReadEMA(ctx context.Context, p *gen.ReadEMAPayload) (*gen.IdentityChainingPreparation, error) {

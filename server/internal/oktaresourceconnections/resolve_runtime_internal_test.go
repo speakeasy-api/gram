@@ -66,7 +66,7 @@ func TestResolveClientRuntimeScopesAndAttachments(t *testing.T) {
 	require.Equal(t, []string{"pinned"}, scopes)
 	client.IssuerScopeOverride = nil
 	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{}))
-	require.Equal(t, client.IssuerScopesSupported, scopes)
+	require.Equal(t, []string{"read", "write"}, scopes, "OIDC-reserved scopes are never requested")
 
 	// Resource-matched clients use the same trailing-slash normalization as runtime.
 	server.UserSessionIssuerID = uuid.NullUUID{}
@@ -93,13 +93,13 @@ func TestResolveClientBindingsRespectLoginIssuer(t *testing.T) {
 		id, scopes, state := resolveClient(server, binding.Resource, clients, bindings, allClients(remotesessions.ResourceScopes{}))
 		require.Equal(t, "attached", id)
 		require.Equal(t, ClientBindingBound, state)
-		require.Equal(t, []string{"read"}, scopes)
+		require.Equal(t, []string{"fallback"}, scopes)
 	}
 	// Even a foreign binding to the same client must not contribute scopes.
 	foreign.RemoteSessionClientID.UUID = client.ID
 	_, scopes, state := resolveClient(server, binding.Resource, clients, []repo.ListEMABindingsRow{foreign, binding}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, ClientBindingBound, state)
-	require.Equal(t, []string{"read"}, scopes)
+	require.Equal(t, []string{"fallback"}, scopes)
 
 	// With only foreign bindings, use the server's attached fallback client.
 	id, scopes, state := resolveClient(server, binding.Resource, clients, []repo.ListEMABindingsRow{foreign}, allClients(remotesessions.ResourceScopes{}))
@@ -108,7 +108,7 @@ func TestResolveClientBindingsRespectLoginIssuer(t *testing.T) {
 	require.Equal(t, []string{"fallback"}, scopes)
 }
 
-func TestResolveClientAggregatesEffectiveBindingScopes(t *testing.T) {
+func TestResolveClientUsesConnectionScopesForBindings(t *testing.T) {
 	t.Parallel()
 	issuer, project, clientID := uuid.New(), uuid.New(), uuid.New()
 	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project}
@@ -121,7 +121,7 @@ func TestResolveClientAggregatesEffectiveBindingScopes(t *testing.T) {
 		id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, bindings, allClients(remotesessions.ResourceScopes{}))
 		require.Equal(t, "bound", id)
 		require.Equal(t, ClientBindingBound, state)
-		require.Equal(t, []string{"read", "write"}, scopes)
+		require.Equal(t, []string{"read"}, scopes, "recorded binding scopes are not requested")
 	}
 }
 

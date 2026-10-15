@@ -78,6 +78,9 @@ export type IdentityChainingPreparation = {
   remediation: string;
   resource: string;
   retryable: boolean;
+  /**
+   * Scopes identity chaining requests: what an interactive sign-in through the selected client requests for this resource, from the server connection's scope settings. Empty until a client is selected.
+   */
   scopes: Array<string>;
   stage: IdentityChainingPreparationStage;
   /**

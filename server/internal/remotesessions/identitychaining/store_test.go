@@ -593,3 +593,28 @@ func TestStore_SwitchingBackToExternalReplacesSpeakeasySlot(t *testing.T) {
 	require.True(t, ok, "the slot now holds the external credential")
 	require.Equal(t, "external-token", token.Value())
 }
+
+func TestStore_RequestsTheConnectionsScopes(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	q := repo.New(f.db)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
+	_, err := q.UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
+		Scope: []string{"openid", "read", "write"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
+		ClientSecretEncrypted: pgtype.Text{}, TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
+	require.Equal(t, success, outcome)
+	require.Equal(t, []string{"read", "write"}, sel.scopes, "the connection's scopes, not the ones recorded on the binding, without OIDC scopes")
+	require.Equal(t, []string{"openid", "read", "write"}, sel.configuredScopes)
+}
+
+func TestStore_KeepsRecordedScopesForAnUnlinkedClient(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
+	require.Equal(t, success, outcome)
+	require.Equal(t, []string{"read"}, sel.scopes, "a client no sign-in uses has no connection scopes to follow")
+}

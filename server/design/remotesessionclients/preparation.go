@@ -23,7 +23,7 @@ var IdentityChainingPreparation = Type("IdentityChainingPreparation", func() {
 	Attribute("grant_types", ArrayOf(String), "Null means unknown; an empty array means no recorded grants.", func() {
 		Meta("struct:tag:json", "grant_types")
 	})
-	Attribute("scopes", ArrayOf(String))
+	Attribute("scopes", ArrayOf(String), "Scopes identity chaining requests: what an interactive sign-in through the selected client requests for this resource, from the server connection's scope settings. Empty until a client is selected.")
 	Attribute("grant_source", String, "Provenance of recorded grants, not provider trust.")
 	Attribute("ema_providers", shared.EMAProviderOrder, "The vendor's EMA provider order resolved for this endpoint. Identity chaining tries the providers that can serve, in order; entries with unavailable_reason are skipped. Returned by readEMA only.")
 	Required("state", "stage", "remediation", "retryable", "generation", "resource", "scopes", "grant_source")
@@ -42,7 +42,7 @@ func identityChainingMethods() {
 				Attribute("resource", String, "Canonical intended resource URI.", func() { Format(FormatURI); MinLength(1); MaxLength(2048) })
 				if name == "prepareEMA" {
 					Attribute("client_id", String, "Explicit selected client row ID; never inferred.", func() { Format(FormatUUID) })
-					Attribute("scopes", ArrayOf(String), func() { ScopeAttribute("Requested scope tokens.") })
+					Attribute("scopes", ArrayOf(String), func() { ScopeAttribute("Recorded on the binding for compatibility; identity chaining requests the server connection's scopes instead. A scope outside the client's registered scope still reports manual_setup_required.") })
 					Attribute("mechanism", String, func() { Enum("manual", "cimd", "dcr"); Default("manual") })
 					Attribute("token_endpoint_auth_method", String, "Explicit DCR authentication method.", func() { Enum("client_secret_basic", "client_secret_post") })
 					Attribute("resource_metadata", func() {

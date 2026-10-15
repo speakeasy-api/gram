@@ -31,8 +31,8 @@ type selection struct {
 	resource         string
 	scopes           []string
 
-	// configuredScopes is the binding's scope set before OIDC filtering; it
-	// bounds an ID-JAG's scope when filtering left none to request.
+	// configuredScopes is the server connection's scope set before OIDC
+	// filtering; it bounds an ID-JAG's scope when filtering left none to request.
 	configuredScopes []string
 
 	// trustedIssuerID and trustedClientID are the user session issuer's

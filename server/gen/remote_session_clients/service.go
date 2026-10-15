@@ -260,7 +260,10 @@ type IdentityChainingPreparation struct {
 	Resource         string
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	Scopes     []string
+	// Scopes identity chaining requests: what an interactive sign-in through the
+	// selected client requests for this resource, from the server connection's
+	// scope settings. Empty until a client is selected.
+	Scopes []string
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string
 	// The vendor's EMA provider order resolved for this endpoint. Identity
@@ -312,7 +315,9 @@ type PrepareEMAPayload struct {
 	Resource string
 	// Explicit selected client row ID; never inferred.
 	ClientID *string
-	// Requested scope tokens.
+	// Recorded on the binding for compatibility; identity chaining requests the
+	// server connection's scopes instead. A scope outside the client's registered
+	// scope still reports manual_setup_required.
 	Scopes    []string
 	Mechanism string
 	// Explicit DCR authentication method.

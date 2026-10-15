@@ -59,7 +59,7 @@ export type PrepareEMARequestBody = {
    */
   resourceMetadata?: ResourceMetadata | undefined;
   /**
-   * Requested scope tokens.
+   * Recorded on the binding for compatibility; identity chaining requests the server connection's scopes instead. A scope outside the client's registered scope still reports manual_setup_required.
    */
   scopes?: Array<string> | undefined;
   /**

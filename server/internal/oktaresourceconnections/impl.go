@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -492,7 +493,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		for _, scope := range scopesOr(b.RequestedScopes, requestedScopes(c, resourceScopes(c.ID))) {
+		for _, scope := range requestedScopes(c, resourceScopes(c.ID)) {
 			if !slices.Contains(boundScopes, scope) {
 				boundScopes = append(boundScopes, scope)
 			}
@@ -536,8 +537,9 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 	}
 }
 
-// requestedScopes is what a login through c would request today, from the
-// cached resource row; this surface never probes.
+// requestedScopes is what identity chaining through c requests today: a
+// login's scopes from the cached resource row, without OIDC-reserved scopes.
+// This surface never probes.
 func requestedScopes(c repo.ListIssuerClientsRow, resourceScopes remotesessions.ResourceScopes) []string {
 	scopes := (remotesessions.Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
 		ClientScope:             c.Scope,
@@ -545,7 +547,7 @@ func requestedScopes(c repo.ListIssuerClientsRow, resourceScopes remotesessions.
 		IssuerScopesSupported:   c.IssuerScopesSupported,
 		IssuerOmitScopeFallback: c.IssuerOmitScopeFallback.Valid && c.IssuerOmitScopeFallback.Bool,
 	}).RequestedScopes(resourceScopes).Scopes
-	return scopesOr(nil, scopes)
+	return scopesOr(nil, identitychaining.GrantScopes(scopes))
 }
 
 func scopesOr(preferred, fallback []string) []string {
