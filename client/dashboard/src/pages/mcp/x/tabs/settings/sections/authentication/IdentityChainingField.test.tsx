@@ -470,7 +470,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(field(speakeasyOnly, plainIssuer));
     expect(screen.getByRole("combobox")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Manage app" }).getAttribute("href"),
+      screen.getByRole("link", { name: "Manage client" }).getAttribute("href"),
     ).toBe("/rip/issuer/clients/first/overview");
   });
 
@@ -552,13 +552,13 @@ describe("identity chaining vouched for by Speakeasy", () => {
       "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
     );
     const links = within(chain()).getAllByText(
-      /^(Sign-in|Vouched for by|example.com trusts|example.com app)$/,
+      /^(Sign-in|Vouched for by|example.com trusts|Remote session client)$/,
     );
     expect(links.map((link) => link.textContent)).toEqual([
       "Sign-in",
       "Vouched for by",
       "example.com trusts",
-      "example.com app",
+      "Remote session client",
     ]);
     expect(
       within(chain()).getByRole("link", { name: "first" }).getAttribute("href"),

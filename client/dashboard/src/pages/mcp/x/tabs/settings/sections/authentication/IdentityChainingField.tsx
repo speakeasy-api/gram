@@ -886,7 +886,7 @@ export function IdentityChainingField({
           )}
         </ChainLink>
 
-        <ChainLink label={`${vendor} app`} tone={clientTone}>
+        <ChainLink label="Remote session client" tone={clientTone}>
           {candidates.length > 1 ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <ClientPicker
@@ -897,7 +897,7 @@ export function IdentityChainingField({
               />
               {selected && (
                 <SettingsLink to={clientHref(selected)}>
-                  Manage app
+                  Manage client
                 </SettingsLink>
               )}
             </div>
@@ -927,8 +927,8 @@ export function IdentityChainingField({
           )}
           {!publicClient && grantsBlocked && (
             <Text muted small className="block">
-              This app belongs to the organization. An organization admin must
-              confirm its grants first.
+              This client belongs to the organization. An organization admin
+              must confirm its grants first.
             </Text>
           )}
           {!ready &&
@@ -954,7 +954,7 @@ export function IdentityChainingField({
                   <Text small>
                     {cimd
                       ? "Publish these grants in the client's metadata document: "
-                      : `Declare that app ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
+                      : `Declare that client ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
                     {grantDeclaration.grants.join(", ")}
                   </Text>
                 </label>
