@@ -3931,12 +3931,19 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: Linear user session issuer must bind a live client of the provider stamped on its MCP server';
   END IF;
 
-  SELECT count(*) INTO stray FROM mcp_servers
-  WHERE project_id = proj_a
-    AND remote_session_issuer_id
+  -- Joined through the server itself: counting a stamped server anywhere in
+  -- the project, separately from the client binding above, would pass with the
+  -- provider stamped on some other server while the Remote MCP one signs
+  -- nobody in.
+  SELECT count(*) INTO stray FROM mcp_servers s
+  WHERE s.project_id = proj_a
+    AND s.id = demo.det_uuid('gram-demo-mcpserver-linear')
+    AND s.deleted IS FALSE
+    AND s.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-linear')
+    AND s.remote_session_issuer_id
         = demo.det_uuid('gram-demo-remote-identity-provider-linear');
   IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %', stray;
+    RAISE EXCEPTION 'demo seed postflight: the Remote MCP server must be stamped with the Remote MCP identity provider on its own issuer, found % matching rows', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM remote_protected_resources

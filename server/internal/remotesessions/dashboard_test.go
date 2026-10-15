@@ -952,7 +952,9 @@ func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testi
 
 // bindServerIdentityClient creates a client for providerID, owned by the
 // project or, when orgOwned, by the organization, binds it to userIssuerID and
-// restamps the project's MCP servers on that issuer.
+// runs the reconcile every client-binding writer runs, which only clears a
+// server naming a provider that lost its client. It stamps nothing: that is
+// the identity commit's, and bindAndStampServerIdentityClient's, job.
 func bindServerIdentityClient(t *testing.T, ctx context.Context, ti *testInstance, clientID string, providerID, userIssuerID uuid.UUID, orgOwned bool) uuid.UUID {
 	t.Helper()
 	projectID := projectIDFromContext(t, ctx)
