@@ -125,4 +125,48 @@ describe("Servers on a service page", () => {
       screen.getByText("1 server you don’t have access to reaches it."),
     ).toBeTruthy();
   });
+
+  it("flags servers the saved order leaves with nobody to vouch", () => {
+    show(
+      row({
+        isDefaultOrder: false,
+        providers: [
+          {
+            key: "speakeasy",
+            kind: "speakeasy",
+            name: "Speakeasy",
+            placeholder: false,
+            usable: true,
+            unavailable: "",
+            unusedBySignIn: false,
+          },
+        ],
+        serverCount: 2,
+        servers: [
+          server({ signInIssuerId: "okta", signInIssuerName: "Okta" }),
+          server({
+            id: "0198f5b2-0000-7000-8000-000000000002",
+            name: "Wiki",
+            slug: "wiki",
+            status: "not_proven",
+          }),
+        ],
+      }),
+    );
+    expect(screen.getByText("Needs attention")).toBeTruthy();
+    expect(screen.getByText("The order leaves out Okta")).toBeTruthy();
+    expect(screen.queryByText("On and working")).toBeNull();
+    expect(screen.getByText("On, not proven yet")).toBeTruthy();
+  });
+
+  it("never flags a server under the default order", () => {
+    show(
+      row({
+        serverCount: 1,
+        servers: [server({ signInIssuerId: "okta", signInIssuerName: "Okta" })],
+      }),
+    );
+    expect(screen.getByText("On and working")).toBeTruthy();
+    expect(screen.queryByText(/leaves out/)).toBeNull();
+  });
 });

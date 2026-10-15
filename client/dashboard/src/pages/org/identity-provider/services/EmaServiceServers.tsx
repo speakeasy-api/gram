@@ -11,13 +11,28 @@ import { useRoutes } from "@/routes";
 import type { EMAServiceServer } from "@gram/client/models/components/emaserviceserver.js";
 
 import { IDENTITY_CHAINING_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/IdentityChainingSection";
+import {
+  serverDisplayName,
+  strandedReason,
+  strandedServers,
+} from "./emaServiceView";
 import { serverCountLabel, type ServiceRow } from "./useEmaServices";
 
 /** A server's state, in the words its own settings use. */
-function serverStatus(server: EMAServiceServer): {
+function serverStatus(
+  server: EMAServiceServer,
+  stranded: boolean,
+): {
   label: string;
+  reason?: string;
   tone: StatusDotTone;
 } {
+  if (stranded)
+    return {
+      label: "Needs attention",
+      reason: strandedReason(server),
+      tone: "destructive",
+    };
   switch (server.status) {
     case "working":
       return { label: "On and working", tone: "success" };
@@ -31,7 +46,7 @@ function serverStatus(server: EMAServiceServer): {
 /** The server's Enterprise Managed Authorization settings, in its own project. */
 function ServerLink({ server }: { server: EMAServiceServer }): JSX.Element {
   const routes = useRoutes({ projectSlug: server.projectSlug });
-  const name = server.name.trim() || server.slug || "Unnamed server";
+  const name = serverDisplayName(server);
   return (
     <Link
       to={`${routes.mcp.x.settings.href(mcpServerRouteParam(server))}#${IDENTITY_CHAINING_SECTION_ID}`}
@@ -45,6 +60,11 @@ function ServerLink({ server }: { server: EMAServiceServer }): JSX.Element {
 
 /** Which servers reach a service, each linking to where it is turned on or off. */
 export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
+  const stranded = new Set(
+    strandedServers(row.isDefaultOrder ? null : row.providers, row.servers).map(
+      (server) => server.id,
+    ),
+  );
   const columns: Column<EMAServiceServer>[] = [
     {
       key: "server",
@@ -64,22 +84,35 @@ export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
     {
       key: "status",
       header: "Status",
-      width: "220px",
+      width: "260px",
       render: (server) => {
-        const status = serverStatus(server);
+        const status = serverStatus(server, stranded.has(server.id));
         return (
           <span
-            className="flex min-w-0 items-center gap-2"
+            className="flex min-w-0 flex-col"
             title={
               server.lastAcceptedAt
                 ? `${row.name} last accepted a sign-in here ${formatRelativeTime(server.lastAcceptedAt)}`
                 : undefined
             }
           >
-            <StatusDot tone={status.tone} />
-            <Text as="span" small className="truncate">
-              {status.label}
-            </Text>
+            <span className="flex min-w-0 items-center gap-2">
+              <StatusDot tone={status.tone} />
+              <Text as="span" small className="truncate">
+                {status.label}
+              </Text>
+            </span>
+            {status.reason && (
+              <Text
+                as="span"
+                muted
+                small
+                className="truncate pl-4"
+                title={status.reason}
+              >
+                {status.reason}
+              </Text>
+            )}
           </span>
         );
       },

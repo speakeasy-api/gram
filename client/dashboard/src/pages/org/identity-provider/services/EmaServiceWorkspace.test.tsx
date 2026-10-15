@@ -184,8 +184,26 @@ const order = () =>
     .map((item) => item.textContent?.replace(/^\d+/, "").trim());
 const saveButton = () =>
   screen.getByRole("button", { name: "Save order" }) as HTMLButtonElement;
-const fallbackNote =
-  /If Okta can’t or won’t vouch for someone, Speakeasy is tried next/;
+const strandedNote = /nobody to vouch/;
+const oktaServer = {
+  id: "server-okta",
+  name: "Linear (Okta team)",
+  slug: "linear-okta",
+  projectId: "project",
+  projectSlug: "default",
+  projectName: "Default",
+  status: "working" as const,
+  signInIssuerId: "okta",
+  signInIssuerName: "Okta",
+};
+const speakeasyServer = {
+  ...oktaServer,
+  id: "server-speakeasy",
+  name: "Linear (Speakeasy)",
+  slug: "linear-speakeasy",
+  signInIssuerId: undefined,
+  signInIssuerName: undefined,
+};
 
 beforeEach(() => {
   mocks.rows = [linear, notion];
@@ -267,10 +285,8 @@ describe("one service", () => {
         /A saved order applies to every server that reaches Linear/,
       ),
     ).toBeTruthy();
-    expect(screen.getByText(fallbackNote)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Move Speakeasy up" }));
     expect(order()).toEqual(["Speakeasy", "Okta"]);
-    expect(screen.queryByText(fallbackNote)).toBeNull();
     fireEvent.click(saveButton());
     expect(mocks.save).toHaveBeenCalledWith({
       request: {
@@ -298,13 +314,47 @@ describe("one service", () => {
     expect(mocks.invalidate).toHaveBeenCalledWith("services");
   });
 
+  it("names the servers a draft leaves with nobody to vouch, without blocking Save", () => {
+    mocks.rows = [{ ...linear, servers: [oktaServer, speakeasyServer] }];
+    show();
+    expect(screen.queryByText(strandedNote)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Customize order" }));
+    expect(order()).toEqual(["Okta", "Speakeasy"]);
+    expect(screen.queryByText(strandedNote)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Okta" }));
+    expect(
+      screen.getByText(
+        "Linear (Okta team) signs people in through Okta, so this order leaves it with nobody to vouch. Add Okta, or go back to the default.",
+      ),
+    ).toBeTruthy();
+    expect(saveButton().disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Remove Speakeasy" }));
+    expect(screen.queryByText(strandedNote)).toBeNull();
+  });
+
+  it("names the servers a saved order leaves with nobody to vouch", () => {
+    mocks.rows = [
+      {
+        ...linear,
+        isDefaultOrder: false,
+        providers: [okta],
+        servers: [oktaServer, speakeasyServer],
+      },
+    ];
+    show();
+    expect(
+      screen.getByText(
+        "Linear (Speakeasy) uses Speakeasy’s own sign-in, so this order leaves it with nobody to vouch. Add Speakeasy, or go back to the default.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("restores the default from a saved order", () => {
     mocks.rows = [
       { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
     ];
     show();
     expect(screen.getByText("Last worked 1h ago")).toBeTruthy();
-    expect(screen.getByText(fallbackNote)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Use default" }));
     expect(mocks.save).toHaveBeenCalledWith({
       request: {

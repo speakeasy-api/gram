@@ -23,10 +23,12 @@ import { useSetOrganizationRemoteSessionIssuerEMAProvidersMutation } from "@gram
 import {
   DEFAULT_ORDER_RULE,
   PLACEHOLDER_SCOPE,
-  providersBeforeSpeakeasy,
   SPEAKEASY_DEFAULT_SCOPE,
-  speakeasyFallbackNote,
+  serverDisplayName,
+  strandedNotes,
+  strandedServers,
   type ProviderView,
+  type ServerSignIn,
 } from "./emaServiceView";
 
 /** The API's limit on an order's length. */
@@ -60,6 +62,7 @@ export function EmaProviderOrderEditor({
   canEdit,
   canRestore,
   readOnlyReason,
+  servers,
 }: {
   serviceName: string;
   /** Any issuer record naming the service; the API keys the order by it. */
@@ -77,6 +80,8 @@ export function EmaProviderOrderEditor({
   canRestore: boolean;
   /** Why the person can't edit, when they can't. */
   readOnlyReason?: string;
+  /** The servers that reach the service, by the sign-in that decides who can vouch for them. */
+  servers: (ServerSignIn & { name: string; slug: string })[];
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Entry[] | null>(null);
@@ -134,7 +139,12 @@ export function EmaProviderOrderEditor({
     (candidate) => !order.some((entry) => entry.key === candidate.key),
   );
   const unavailable = order.filter((entry) => !available(entry));
-  const fallbackFrom = providersBeforeSpeakeasy(order);
+  const stranded = strandedNotes(
+    strandedServers(custom ? order : null, servers).map((server) => ({
+      ...server,
+      name: serverDisplayName(server),
+    })),
+  );
 
   const save = useSetOrganizationRemoteSessionIssuerEMAProvidersMutation({
     onSuccess: async (result) => {
@@ -201,8 +211,10 @@ export function EmaProviderOrderEditor({
       <SettingsSection.Header>
         <SettingsSection.Title>Identity provider order</SettingsSection.Title>
         <SettingsSection.Description>
-          Which identity provider vouches for people when they connect to{" "}
-          {serviceName}, and which is tried next if one refuses or fails.
+          Which identity providers can vouch for people when they connect to{" "}
+          {serviceName}. Each server uses only the one its sign-in goes through:
+          its identity provider, or Speakeasy for servers on Speakeasy’s own
+          sign-in.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -349,11 +361,12 @@ export function EmaProviderOrderEditor({
                   ))}
                 </ol>
               )}
-              {fallbackFrom.length > 0 && (
-                <Text muted small>
-                  {speakeasyFallbackNote(fallbackFrom)}
-                </Text>
-              )}
+              {order.length > 0 &&
+                stranded.map((note) => (
+                  <Text key={note} small className="block">
+                    {note}
+                  </Text>
+                ))}
               {showEditControls &&
                 (full ? (
                   <Text muted small>

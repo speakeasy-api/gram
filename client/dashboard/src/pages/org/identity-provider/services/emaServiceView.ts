@@ -72,11 +72,14 @@ export function providerView(
     issuer,
     speakeasyIssuerUrl,
     oktaIssuerId,
+    signInName,
   }: {
     issuer: RemoteSessionIssuer | undefined;
     speakeasyIssuerUrl: string | undefined;
     /** The Okta connection's issuer record, when the organization has one. */
     oktaIssuerId?: string;
+    /** The identity provider a server's sign-in goes through, on a server page. */
+    signInName?: string;
   },
 ): ProviderView {
   const base = {
@@ -166,10 +169,17 @@ export function providerView(
         unavailable: "Can’t sign right now",
         fix: "speakeasy",
       };
+    case "not_trusted_by_endpoint":
+      // The fix is the order or the sign-in, not the Speakeasy issuer.
+      return {
+        ...base,
+        name,
+        usable: false,
+        unavailable: `Can’t vouch for people who sign in through ${signInName ?? "an identity provider"}`,
+      };
     case "deleted":
     case "disabled":
     case "not_rolled_out":
-    case "not_trusted_by_endpoint":
     case "setup_required":
     case "verified_domain_required":
       return {
@@ -222,26 +232,95 @@ export function trustInstruction(service: string): string {
   return `In ${service}’s admin settings, find Enterprise Managed Authorization and add this issuer URL. It’s a one-time step Speakeasy can’t do for you, and not every service offers it.`;
 }
 
-/**
- * The external providers an order lists before Speakeasy. Runtime moves on
- * after any failure, so Speakeasy also vouches for people they refuse.
- */
-export function providersBeforeSpeakeasy(
-  order: { kind: EMAProvider["kind"]; name: string }[],
-): string[] {
-  const at = order.findIndex((entry) => entry.kind === "speakeasy");
-  if (at <= 0) return [];
-  return order
-    .slice(0, at)
-    .filter((entry) => entry.kind === "external")
-    .map((entry) => entry.name);
+/** A server's name, else its slug. */
+export function serverDisplayName(server: {
+  name: string;
+  slug: string;
+}): string {
+  return server.name.trim() || server.slug || "Unnamed server";
 }
 
-/** What an order that lists Speakeasy after identity providers does, said plainly. */
-export function speakeasyFallbackNote(names: string[]): string {
-  const who =
-    names.length <= 1
-      ? (names[0] ?? "the identity provider before it")
-      : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
-  return `If ${who} can’t or won’t vouch for someone, Speakeasy is tried next.`;
+/** The sign-in a server's people use, which decides who can vouch for them. */
+export type ServerSignIn = {
+  /** The identity provider the sign-in trusts; absent for Speakeasy's own sign-in. */
+  signInIssuerId?: string;
+  signInIssuerName?: string;
+};
+
+/** One entry of an order, saved or drafted. */
+export type OrderEntry = {
+  kind: EMAProvider["kind"];
+  remoteSessionIssuerId?: string;
+};
+
+/** The sign-in's identity provider by name, or Speakeasy's own sign-in. */
+function signInProviderName(server: ServerSignIn): string {
+  if (!server.signInIssuerId) return "Speakeasy";
+  return server.signInIssuerName?.trim() || "its identity provider";
+}
+
+/**
+ * Whether an order has someone who can vouch for people on a server: Speakeasy
+ * for a server on Speakeasy's own sign-in, the server's own identity provider
+ * for one that signs people in through it. Nobody else can, whatever the order
+ * says. With no saved order (null) each server's own provider vouches, so
+ * every server is covered.
+ */
+export function orderVouchesFor(
+  order: OrderEntry[] | null,
+  server: ServerSignIn,
+): boolean {
+  if (order === null) return true;
+  return order.some((entry) =>
+    server.signInIssuerId
+      ? entry.kind === "external" &&
+        entry.remoteSessionIssuerId === server.signInIssuerId
+      : entry.kind === "speakeasy",
+  );
+}
+
+/** The servers an order leaves with nobody to vouch for their people. */
+export function strandedServers<T extends ServerSignIn>(
+  order: OrderEntry[] | null,
+  servers: T[],
+): T[] {
+  return servers.filter((server) => !orderVouchesFor(order, server));
+}
+
+/** Why a stranded server needs attention, short enough for a table cell. */
+export function strandedReason(server: ServerSignIn): string {
+  return `The order leaves out ${signInProviderName(server)}`;
+}
+
+/**
+ * What an order does to the servers it strands, one line per sign-in, e.g.
+ * "Linear (Okta team) signs people in through Okta, so this order leaves it
+ * with nobody to vouch. Add Okta, or go back to the default."
+ */
+export function strandedNotes(
+  stranded: (ServerSignIn & { name: string })[],
+): string[] {
+  const groups = new Map<string, (ServerSignIn & { name: string })[]>();
+  for (const server of stranded) {
+    const key = server.signInIssuerId ?? "speakeasy";
+    groups.set(key, [...(groups.get(key) ?? []), server]);
+  }
+  return [...groups.values()].flatMap((servers) => {
+    const [first] = servers;
+    if (!first) return [];
+    const provider = signInProviderName(first);
+    const names = joinNames(servers.map((server) => server.name));
+    const one = servers.length === 1;
+    const how = first.signInIssuerId
+      ? `${one ? "signs" : "sign"} people in through ${provider}`
+      : `${one ? "uses" : "use"} Speakeasy’s own sign-in`;
+    return [
+      `${names} ${how}, so this order leaves ${one ? "it" : "them"} with nobody to vouch. Add ${provider}, or go back to the default.`,
+    ];
+  });
+}
+
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }

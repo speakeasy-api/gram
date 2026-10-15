@@ -38,11 +38,10 @@ import { useProtectedResourceMetadata } from "@/lib/remote-identity/queries/useP
 import {
   acceptanceLabel,
   issuerDisplayName,
+  orderVouchesFor,
   providerFixLink,
-  providersBeforeSpeakeasy,
   providerView,
   serviceName,
-  speakeasyFallbackNote,
   trustInstruction,
   type ProviderView,
 } from "@/pages/org/identity-provider/services/emaServiceView";
@@ -84,6 +83,9 @@ import {
 
 type ChainingState = IdentityChainingPreparation["state"];
 type Tone = StatusDotTone;
+
+/** Why Turn on is blocked, or an on server isn't running, said the same way. */
+const NO_VOUCHER = "No identity provider can vouch for people on this server.";
 
 /** A blocked state in plain words, with what to do next. */
 function stateCopy(
@@ -470,21 +472,31 @@ export function IdentityChainingField({
       : "Speakeasy’s own sign-in",
     slug: userSessionIssuer.slug,
   };
-  // An identity provider this sign-in doesn't use is just noise here; the
-  // sign-in line already says why. Speakeasy stays listed: it can be set up.
   const oktaIssuerId = useOktaIssuerId(
     listed.some((provider) => !!provider.unavailableReason),
   );
-  const vouchers = listed
-    .map((provider) =>
-      providerView(provider, {
-        issuer: issuerById(provider.remoteSessionIssuerId),
-        speakeasyIssuerUrl,
-        oktaIssuerId,
-      }),
-    )
-    .filter((row) => !row.unusedBySignIn);
-  const usableVouchers = vouchers.filter((row) => row.usable);
+  const allVouchers = listed.map((provider) =>
+    providerView(provider, {
+      issuer: issuerById(provider.remoteSessionIssuerId),
+      speakeasyIssuerUrl,
+      oktaIssuerId,
+      signInName: trustedIssuerId ? signIn.name : undefined,
+    }),
+  );
+  const usableVouchers = allVouchers.filter((row) => row.usable);
+  // A provider this sign-in doesn't go through is noise while another one
+  // vouches; when none does, it shows greyed with why.
+  const vouchers =
+    usableVouchers.length > 0
+      ? allVouchers.filter((row) => !row.unusedBySignIn)
+      : allVouchers;
+  // A saved order that leaves out the one provider this sign-in goes through.
+  const strandedByOrder =
+    !!order &&
+    !order.isDefault &&
+    !orderVouchesFor(order.providers, {
+      signInIssuerId: trustedIssuerId || undefined,
+    });
   const trusts = usableVouchers.filter(
     (row): row is ProviderView & { issuerUrl: string } => !!row.issuerUrl,
   );
@@ -492,7 +504,6 @@ export function IdentityChainingField({
   const orgAdmin = hasScope("org:admin", organization.id);
   // The vendor already trusts one of these, somewhere in the organization.
   const trusted = trusts.find((row) => row.lastAcceptedAt);
-  const fallbackFrom = providersBeforeSpeakeasy(usableVouchers);
 
   const enable = () => {
     if (
@@ -744,7 +755,30 @@ export function IdentityChainingField({
           )}
           {!ready && noneUsable && (
             <Text muted small className="block">
-              No identity provider can vouch for people on this server yet.
+              {NO_VOUCHER}
+            </Text>
+          )}
+          {noneUsable && strandedByOrder && (
+            <Text small className="block">
+              To fix it,{" "}
+              {orgAdmin ? (
+                <Link
+                  className="underline underline-offset-4"
+                  to={identityHref(emaServiceHref(order.vendorIssuer))}
+                >
+                  change {vendor}’s order
+                </Link>
+              ) : (
+                `ask an organization admin to change ${vendor}’s order`
+              )}{" "}
+              or{" "}
+              <Link
+                className="underline underline-offset-4"
+                to={`#${MCP_SESSIONS_SECTION_ID}`}
+              >
+                change the sign-in in Sessions
+              </Link>
+              .
             </Text>
           )}
           {order && usableVouchers.length > 0 && (
@@ -765,8 +799,6 @@ export function IdentityChainingField({
                     `${vendor}’s saved order`
                   )}
                   .
-                  {fallbackFrom.length > 0 &&
-                    ` ${speakeasyFallbackNote(fallbackFrom)}`}
                 </>
               )}
             </Text>
@@ -1111,8 +1143,7 @@ function chainingStatus({
   if (stalled)
     return {
       title: "On, but not running",
-      detail:
-        "No identity provider can vouch for people on this server right now.",
+      detail: NO_VOUCHER,
       tone: "warning",
     };
   if (ready && lastAccepted)

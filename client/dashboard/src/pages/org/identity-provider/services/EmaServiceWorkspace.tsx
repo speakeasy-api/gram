@@ -175,6 +175,7 @@ export function EmaServiceWorkspace({
             canEdit={permissions.canEdit}
             canRestore={permissions.canRestore}
             readOnlyReason={permissions.readOnlyReason}
+            servers={row.servers}
           />
           <EmaServiceServers row={row} />
         </div>

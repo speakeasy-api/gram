@@ -512,8 +512,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       screen.getByText(
         (_, el) =>
           el?.tagName === "P" &&
-          el.textContent ===
-            "Set by example.com’s saved order. If Okta can’t or won’t vouch for someone, Speakeasy is tried next.",
+          el.textContent === "Set by example.com’s saved order.",
       ),
     ).toBeTruthy();
     expect(
@@ -743,11 +742,113 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(enableButton().disabled).toBe(true);
     expect(
       screen.getByText(
-        "No identity provider can vouch for people on this server yet.",
+        "No identity provider can vouch for people on this server.",
       ),
     ).toBeTruthy();
     fireEvent.click(enableButton());
     expect(state.calls).toEqual([]);
+  });
+
+  it("shows Speakeasy greyed when a saved order leaves a federated server with nobody to vouch", () => {
+    const savedSpeakeasy = {
+      isDefault: false,
+      vendorIssuer: "https://vendor.example.com",
+      providers: [
+        { ...speakeasy, unavailableReason: "not_trusted_by_endpoint" },
+      ],
+    };
+    read.data = { ...unlinked, generation: 0, emaProviders: savedSpeakeasy };
+    render(speakeasyField({ userSessionIssuer: trusting }));
+    expect(vouchers()).toEqual([
+      "SpeakeasyCan’t vouch for people who sign in through Okta",
+    ]);
+    expect(screen.queryByRole("link", { name: "Fix in Speakeasy" })).toBeNull();
+    expect(enableButton().disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "No identity provider can vouch for people on this server.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "change example.com’s order" })
+        .getAttribute("href"),
+    ).toBe(
+      "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "change the sign-in in Sessions" })
+        .getAttribute("href"),
+    ).toBe("#sessions");
+    fireEvent.click(enableButton());
+    expect(state.calls).toEqual([]);
+  });
+
+  it("asks someone who isn't an org admin to have the order changed", () => {
+    state.orgAdmin = false;
+    read.data = {
+      ...unlinked,
+      generation: 0,
+      emaProviders: {
+        isDefault: false,
+        vendorIssuer: "https://vendor.example.com",
+        providers: [
+          { ...speakeasy, unavailableReason: "not_trusted_by_endpoint" },
+        ],
+      },
+    };
+    render(speakeasyField({ userSessionIssuer: trusting }));
+    expect(
+      screen.getByText(
+        /ask an organization admin to change example\.com’s order/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: "change example.com’s order" }),
+    ).toBeNull();
+  });
+
+  it("says an on server stranded by the order isn't running", () => {
+    read.data = {
+      ...bound("first"),
+      emaProviders: {
+        isDefault: false,
+        vendorIssuer: "https://vendor.example.com",
+        providers: [
+          { ...speakeasy, unavailableReason: "not_trusted_by_endpoint" },
+        ],
+      },
+    };
+    render(speakeasyField({ userSessionIssuer: trusting }));
+    expect(screen.getByText("On, but not running")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No identity provider can vouch for people on this server.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "change example.com’s order" }),
+    ).toBeTruthy();
+  });
+
+  it("hides a provider the sign-in doesn't go through while another vouches", () => {
+    read.data = {
+      ...bound("first"),
+      emaProviders: {
+        isDefault: false,
+        vendorIssuer: "https://vendor.example.com",
+        providers: [
+          okta,
+          { ...speakeasy, unavailableReason: "not_trusted_by_endpoint" },
+        ],
+      },
+    };
+    render(speakeasyField({ userSessionIssuer: trusting }));
+    expect(vouchers()).toEqual(["Oktafor people who signed in with Okta"]);
+    expect(
+      screen.queryByRole("link", { name: "change example.com’s order" }),
+    ).toBeNull();
   });
 
   it("says when chaining is on but nobody can vouch right now", () => {
