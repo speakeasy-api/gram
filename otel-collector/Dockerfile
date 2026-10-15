@@ -1,3 +1,3 @@
-FROM otel/opentelemetry-collector-contrib:0.157.0@sha256:f2f01157055a9b2aab9df7118e1f1c9abf345e99b23bc7a2bc791db374a7d0f6
+FROM otel/opentelemetry-collector-contrib:0.161.0-386@sha256:76fd04f2d75922e93e447381bafcd0b78d24f1c5cdcc13f424d9a16f0342c087
 
 COPY config.yaml /etc/otelcol-contrib/config.yaml
