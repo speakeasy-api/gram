@@ -272,12 +272,19 @@ func (s *Service) emaProvidersView(ctx context.Context, logger *slog.Logger, q *
 }
 
 // liveEMAProvidersView runs after the order's transaction releases its
-// locks. A failed readiness read is reported as readiness_unknown: it must
-// never fail a read, or a write that already committed.
+// locks, and stamps each provider's organization-wide acceptance so the field
+// means the same on every response. A failed readiness read is reported as
+// readiness_unknown, and a failed acceptance read leaves acceptance out: it
+// must never fail a read, or a write that already committed.
 func (s *Service) liveEMAProvidersView(ctx context.Context, logger *slog.Logger, organizationID string, order EMAProviderOrder) *types.EMAProviderOrder {
 	order, err := ApplyEMAProviderReadiness(ctx, organizationID, order, s.speakeasyReadiness)
 	if err != nil {
 		logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err))
+	}
+	if accepted, err := VendorEMAAcceptance(ctx, repo.New(s.db), organizationID, order.VendorIssuer); err != nil {
+		logger.WarnContext(ctx, "read ema vendor acceptance", attr.SlogError(err))
+	} else {
+		order = StampEMAProviderLastAccepted(order, accepted)
 	}
 	return EMAProviderOrderView(order)
 }

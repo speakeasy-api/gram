@@ -3556,10 +3556,12 @@ type EMAProviderResponseBody struct {
 	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 	// When the vendor last accepted an assertion from this provider anywhere in
-	// the organization, so the vendor already trusts it. Attributed to the exact
-	// issuer that vouched; the organization-wide default's external entry takes
-	// the newest acceptance of any external issuer. Omitted when the vendor has
-	// never accepted it.
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, or when acceptance
+	// could not be read.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 

@@ -118,9 +118,13 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 			services[vendor] = svc
 		}
 		// Rows arrive organization-level issuer first, then oldest, so the
-		// first record seen is the one setEMAProviders should name.
+		// first record seen is the one setEMAProviders should name; the name
+		// is the first one any record has.
 		if svc.issuerID == uuid.Nil {
-			svc.issuerID, svc.name = row.RemoteSessionIssuerID, row.Name
+			svc.issuerID = row.RemoteSessionIssuerID
+		}
+		if svc.name == "" {
+			svc.name = row.Name
 		}
 		if !row.McpServerID.Valid || !emaBindingSetUp(row.State) {
 			continue

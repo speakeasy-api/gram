@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -84,6 +85,12 @@ func TestReadEMA_ReportsVendorAndBindingAcceptance(t *testing.T) {
 	second := read(other.Resource)
 	require.NotNil(t, second.LastAcceptedAt)
 	require.Equal(t, older.Format(time.RFC3339), *second.LastAcceptedAt)
+
+	named := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGText(auth.ActiveOrganizationID), "idp-org-"+uuid.NewString()[:8], "https://idp.example.com/")
+	issuer, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{SessionToken: nil, ApikeyToken: nil, ID: named.String()})
+	require.NoError(t, err)
+	require.NotNil(t, issuer.EmaProviders)
+	require.Equal(t, older.Format(time.RFC3339), conv.PtrValOr(issuer.EmaProviders.Providers[0].LastAcceptedAt, ""), "the issuer view stamps the same organization-wide acceptance")
 
 	// Moving the vendor to a provider that has never been accepted, and that
 	// this sign-in can't use, leaves the binding unproven.

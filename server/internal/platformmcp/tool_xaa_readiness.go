@@ -203,7 +203,7 @@ type GetXAAReadinessOutput struct {
 type XAAIdentityChaining struct {
 	Served          bool                         `json:"served" jsonschema:"true when exactly one ready binding serves this server's upstream at runtime and at least one EMA provider in the vendor's order can serve now"`
 	NotServedReason *string                      `json:"not_served_reason,omitempty" jsonschema:"why served is false: binding_not_ready (no single ready binding), provider_order_unavailable (the vendor's EMA provider order could not be read; retry), provider_unavailable (no EMA provider in the order can serve now; each provider's unavailable_reason says why), resource_unavailable (resource metadata could not be validated; check the endpoint and its protected-resource metadata, then retry), or not_routable (identity chaining has no route to this server: it has no sign-in issuer, no upstream authorization server or resource, or is tunneled without its issuer); omitted when served, and also when provider availability could not be inspected"`
-	Providers       []XAAEMAProvider             `json:"providers,omitempty" jsonschema:"the vendor's EMA providers in the order identity chaining tries them: by default its trusted external issuer then the organization's Speakeasy issuer when it has one, or the administrator's saved order. Providers that cannot serve are skipped; the rest are tried in turn, with short retries for transient failures, until one succeeds. Omitted when no single ready binding serves the upstream"`
+	Providers       []XAAEMAProvider             `json:"providers,omitempty" jsonschema:"the vendor's EMA providers in the order identity chaining tries them: by default the endpoint's trusted external issuer alone, or the organization's Speakeasy issuer alone when the endpoint trusts none, or else the administrator's saved order. Providers that cannot serve are skipped; the rest are tried in turn, with short retries for transient failures, until one succeeds. Omitted when no single ready binding serves the upstream"`
 	Bindings        []XAAIdentityChainingBinding `json:"bindings"`
 }
 
@@ -211,7 +211,7 @@ type XAAEMAProvider struct {
 	Kind                  string  `json:"kind" jsonschema:"external (an external issuer such as an Okta authorization server) or speakeasy (the organization's internal session issuer)"`
 	RemoteSessionIssuerID *string `json:"remote_session_issuer_id,omitempty" jsonschema:"the external provider's remote session issuer, when it names one"`
 	UnavailableReason     *string `json:"unavailable_reason,omitempty" jsonschema:"why the provider cannot serve now, such as not_trusted_by_endpoint, sign_in_enforcement_required, signing_paused, keyless, verified_domain_required or readiness_unknown; omitted when it can"`
-	LastAcceptedAt        *string `json:"last_accepted_at,omitempty" jsonschema:"when the vendor last accepted an assertion from this provider for this binding, from the newest live cached credential; omitted when none has been accepted"`
+	LastAcceptedAt        *string `json:"last_accepted_at,omitempty" jsonschema:"when the vendor last accepted an assertion from this exact provider anywhere in the organization, from cached credentials that still hold an access token; organization-wide evidence that the vendor trusts the provider, not proof for this server. Omitted when none has been accepted"`
 }
 
 type XAAIdentityChainingBinding struct {

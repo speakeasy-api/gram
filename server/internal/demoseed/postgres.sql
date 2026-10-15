@@ -1910,12 +1910,13 @@ BEGIN
      demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack');
 
   ------------------------------------------------------------------
-  -- Enterprise Managed Authorization (EMA). The workforce sign-in trusts a
-  -- fictional identity provider, Acme Identity, which vouches for people to
-  -- two fictional services behind workforce servers: Acme Tracker has
-  -- accepted it (one retired cached credential dates "Last worked"), Acme
-  -- Wiki is set up but has not accepted yet and carries a saved provider
-  -- order. Speakeasy's own issuer is not seeded: it needs a KMS signing key.
+  -- Enterprise Managed Authorization (EMA). Acme Identity is a fictional
+  -- identity provider that shows historical acceptance on two fictional
+  -- services behind workforce servers; the workforce sign-in deliberately
+  -- does not trust it, so demo sign-in is unaffected. Acme Tracker has
+  -- accepted it (one expired cached credential with invalid ciphertext dates
+  -- "Last worked"), Acme Wiki is set up but has not accepted yet and carries
+  -- a saved provider order. Speakeasy's own issuer is not seeded: it needs a KMS signing key.
   -- Reserved example hosts and invalid ciphertext keep every row inert.
   -- These servers are added after role distribution, so plugins skip them.
   ------------------------------------------------------------------
@@ -2064,9 +2065,9 @@ BEGIN
      'https://mcp.acme-tracker.example/mcp', 'user:' || demo_user_ids[1],
      'binding', demo.det_uuid('gram-demo-ema-binding-tracker'), 1,
      demo.det_uuid('gram-demo-ema-trusted-session'), 'external',
-     ARRAY['issues:read'], ARRAY['issues:read'], NULL,
+     ARRAY['issues:read'], ARRAY['issues:read'], 'DEMO-NOT-VALID-CIPHERTEXT',
      now() - interval '1 hour', now() - interval '2 hours',
-     now() - interval '2 hours', now() - interval '2 hours');
+     now() - interval '2 hours', NULL);
 
   -- A saved order for Acme Wiki, so its service page shows "Use default".
   INSERT INTO remote_session_ema_providers
