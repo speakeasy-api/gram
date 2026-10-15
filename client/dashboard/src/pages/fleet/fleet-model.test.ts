@@ -62,6 +62,7 @@ describe("Fleet attribution", () => {
           joinedAt: now,
           principalUrn: "urn:gram:principal:user:owner",
           roleIds: [],
+          directoryRoleIds: [],
         },
       ],
       observedAssistantActivity: new Map([[assistant.id, now]]),
