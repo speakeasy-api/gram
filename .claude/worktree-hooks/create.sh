@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 
 # Claude Code WorktreeCreate hook. Creates the worktree through Worktrunk so the
-# project hooks in .config/wt.toml run (workinit, then the background stack
-# boot), the same way the OpenCode speakeasy.worktrunk strategy does. Falls back
-# to plain `git worktree add` when `wt` isn't installed.
+# project hooks in .config/wt.toml run, the same way the OpenCode
+# speakeasy.worktrunk strategy does: workinit blocks, then the stack is
+# provisioned in the background and left paused (`mise run wake` resumes it).
+# Falls back to plain `git worktree add`, without any setup, when `wt` isn't
+# installed.
 #
 # stdin: {"name": "<slug>", "cwd": "<dir>", ...}
 # stdout: the worktree path, as the last line. Everything else goes to stderr.
@@ -18,11 +20,16 @@ root=$(dirname "$root")
 dir="$root/.claude/worktrees/$name"
 branch="claude/$name"
 
-# Keep the root checkout on main. `git switch` refuses rather than clobbering
-# local changes, in which case worktree creation carries on with a warning.
+# Keep the root checkout on main. A dirty root is left alone, since `git switch`
+# would carry non-conflicting edits over to main; worktree creation carries on
+# with a warning either way.
 if [[ "$(git -C "$root" branch --show-current)" != "main" ]]; then
-  git -C "$root" switch main >&2 ||
-    echo "Warning: could not switch $root to main" >&2
+  if [[ -n "$(git -C "$root" status --porcelain)" ]]; then
+    echo "Warning: $root has uncommitted changes; not switching it to main" >&2
+  else
+    git -C "$root" switch main >&2 ||
+      echo "Warning: could not switch $root to main" >&2
+  fi
 fi
 
 if command -v wt >/dev/null 2>&1; then
