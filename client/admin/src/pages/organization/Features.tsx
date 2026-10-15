@@ -160,6 +160,11 @@ const PRODUCT_FEATURES = {
     kind: "omitted",
     where: "Dashboard consent settings",
   },
+  // reason: managed in dashboard Gateway settings
+  organization_gateway_disabled: {
+    kind: "omitted",
+    where: "Dashboard Gateway settings",
+  },
 } satisfies Record<FeatureName, ProductFeatureDecision>;
 
 export function FeaturesRoute(): JSX.Element | null {

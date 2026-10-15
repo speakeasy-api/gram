@@ -19,6 +19,8 @@ const (
 	ActionRemoteSessionIssuerUpdate  Action = "remote-session-issuer:update"
 	ActionRemoteSessionIssuerDelete  Action = "remote-session-issuer:delete"
 	ActionRemoteSessionIssuerMigrate Action = "remote-session-issuer:migrate"
+
+	ActionRemoteSessionIssuerUpdateEMAProviders Action = "remote-session-issuer:update_ema_providers"
 )
 
 type LogRemoteSessionIssuerCreateEvent struct {
@@ -237,6 +239,76 @@ func (l *Logger) LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBT
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuerV1})
+}
+
+// RemoteSessionIssuerEMAProviders is a vendor's saved EMA provider order; an
+// empty order means the endpoint's external issuer.
+type RemoteSessionIssuerEMAProviders struct {
+	VendorIssuer string                           `json:"vendor_issuer"`
+	Providers    []RemoteSessionIssuerEMAProvider `json:"providers"`
+}
+
+// RemoteSessionIssuerEMAProvider is one provider in a saved order.
+type RemoteSessionIssuerEMAProvider struct {
+	Kind                    string `json:"kind"`
+	RemoteSessionIssuerID   string `json:"remote_session_issuer_id,omitempty"`
+	InternalSessionIssuerID string `json:"internal_session_issuer_id,omitempty"`
+}
+
+// LogRemoteSessionIssuerUpdateEMAProvidersEvent records a change to the EMA
+// provider order for the vendor the issuer names. The order is organization
+// wide, so the event carries no project.
+type LogRemoteSessionIssuerUpdateEMAProvidersEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RemoteSessionIssuerURN urn.RemoteSessionIssuer
+	Slug                   string
+	IssuerURL              string
+	Name                   *string
+
+	EMAProvidersBefore *RemoteSessionIssuerEMAProviders
+	EMAProvidersAfter  *RemoteSessionIssuerEMAProviders
+}
+
+func (l *Logger) LogRemoteSessionIssuerUpdateEMAProviders(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerUpdateEMAProvidersEvent) error {
+	action := ActionRemoteSessionIssuerUpdateEMAProviders
+
+	beforeSnapshot, err := marshalAuditPayload(event.EMAProvidersBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.EMAProvidersAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RemoteSessionIssuerURN.ID.String(),
+		SubjectType:        string(subjectTypeRemoteSessionIssuer),
+		SubjectDisplayName: conv.ToPGTextEmpty(remoteSessionIssuerDisplayName(event.Name, event.IssuerURL)),
+		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 

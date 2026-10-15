@@ -1,0 +1,1501 @@
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
+
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import type { MouseEvent, ReactElement, ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
+import type { DecideAccessTarget } from "@/components/mcp-approvals/DecideAccessSheet";
+import type { ShadowMCPPolicyDisposition } from "./shadowMCPInventoryStatus";
+import {
+  matchesReviewFilter,
+  observedDate,
+  reviewSortRank,
+} from "./shadowMCPInventoryReview";
+import { ShadowMCPInventoryTable } from "./ShadowMCPInventoryTable";
+import { testAccessSummary } from "./shadowMCPInventoryTestFixtures";
+
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+const mocks = vi.hoisted(() => ({
+  useShadowMCPInventory: vi.fn(),
+  decideAccessSheet: vi.fn(),
+  rowContextMenu: vi.fn(),
+}));
+
+type DecideAccessSheetProps = {
+  target: DecideAccessTarget | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  disposition: ShadowMCPPolicyDisposition | null;
+  members: AccessMember[];
+  roles: Role[];
+  onDecided?: (decision: "approved" | "denied") => void;
+};
+
+vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
+  useShadowMCPInventory: mocks.useShadowMCPInventory,
+}));
+
+// The sheet's own behavior is covered by its dedicated tests; the table test
+// only asserts the wiring, so a marker div records the props it receives.
+vi.mock("@/components/mcp-approvals/DecideAccessSheet", () => ({
+  POLICIES_UNAVAILABLE_REASON:
+    "Policy data could not be loaded — deciding now would not be enforced",
+  DecideAccessSheet: (props: DecideAccessSheetProps) => {
+    mocks.decideAccessSheet(props);
+
+    if (!props.open || !props.target) {
+      return null;
+    }
+
+    return (
+      <div
+        data-approval-request-id={props.target.approvalRequestId}
+        data-canonical-server-url={props.target.canonicalServerUrl}
+        data-display-name={props.target.displayName}
+        data-pending-bypass-request-id={props.target.pendingBypassRequestId}
+        data-testid="decide-access-sheet"
+      />
+    );
+  },
+}));
+
+// Radix context menus need real pointer events; record the actions each row
+// wires up instead so tests can invoke them directly.
+vi.mock("@/components/table-row-context-menu", () => ({
+  TableRowContextMenu: ({
+    actions,
+    children,
+  }: {
+    actions: Array<{ label: string; onClick: () => void }>;
+    children: ReactNode;
+  }) => {
+    mocks.rowContextMenu(actions);
+    return <>{children}</>;
+  },
+}));
+
+vi.mock("@/components/page-layout", () => {
+  const Toolbar = Object.assign(
+    ({ children }: { children: ReactNode }) => (
+      <div role="toolbar">{children}</div>
+    ),
+    {
+      Search: ({
+        onChange,
+        placeholder,
+        value,
+      }: {
+        onChange: (value: string) => void;
+        placeholder?: string;
+        value: string;
+      }) => (
+        <input
+          onChange={(event) => onChange(event.currentTarget.value)}
+          placeholder={placeholder}
+          value={value}
+        />
+      ),
+      Filters: () => <div data-testid="toolbar-filters" />,
+    },
+  );
+
+  return { Page: { Toolbar } };
+});
+
+vi.mock("@/components/mcp-approvals/ReviewRequestSheet", () => ({
+  ReviewRequestSheet: ({
+    request,
+    open,
+    onDecide,
+    decideDisabledReason,
+  }: {
+    request: { id: string; targetRaw: string; requesterCount: number } | null;
+    open: boolean;
+    onDecide: (request: {
+      id: string;
+      targetRaw: string;
+      requesterCount: number;
+    }) => void;
+    decideDisabledReason?: string;
+  }) =>
+    open && request ? (
+      <div
+        data-testid="review-request-sheet"
+        data-request-id={request.id}
+        data-target-raw={request.targetRaw}
+      >
+        <button
+          type="button"
+          disabled={decideDisabledReason !== undefined}
+          title={decideDisabledReason}
+          onClick={() => onDecide(request)}
+        >
+          Decide Access
+        </button>
+      </div>
+    ) : null,
+}));
+
+vi.mock("@/components/ui/Badge", () => ({
+  Badge: Object.assign(
+    ({ children }: { children: ReactNode }) => <span>{children}</span>,
+    {
+      LeftIcon: ({ children }: { children: ReactNode }) => (
+        <span>{children}</span>
+      ),
+      Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+    },
+  ),
+}));
+
+vi.mock("@/components/ui/Button", () => ({
+  Button: Object.assign(
+    ({
+      children,
+      disabled,
+      onClick,
+      ...props
+    }: {
+      children: ReactNode;
+      disabled?: boolean;
+      onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+      [key: string]: unknown;
+    }) => (
+      <button
+        disabled={disabled}
+        onClick={(event) => onClick?.(event)}
+        type="button"
+        {...props}
+      >
+        {children}
+      </button>
+    ),
+    {
+      Icon: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+      LeftIcon: ({ children }: { children: ReactNode }) => (
+        <span>{children}</span>
+      ),
+      Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+    },
+  ),
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
+  Icon: ({ className }: { className?: string; name: string }) => (
+    <span className={className} />
+  ),
+}));
+
+vi.mock("@/components/ui/Table", () => ({
+  Table: Object.assign(
+    ({ children }: { children: ReactNode }) => <table>{children}</table>,
+    {
+      Header: ({
+        columns,
+        onSortChange,
+        sort,
+      }: {
+        columns: Array<{
+          header: ReactNode;
+          id?: string;
+          key: string;
+          sortable?: boolean;
+        }>;
+        onSortChange?: (sort: {
+          id: string;
+          direction: "asc" | "desc";
+        }) => void;
+        sort?: { id: string; direction: "asc" | "desc" } | null;
+      }) => (
+        <thead>
+          <tr>
+            {columns.map((column) => {
+              const columnID = column.id ?? column.key;
+              return (
+                <th key={column.key}>
+                  {column.sortable ? (
+                    <button
+                      onClick={() => {
+                        onSortChange?.({
+                          id: columnID,
+                          direction:
+                            sort?.id === columnID && sort.direction === "asc"
+                              ? "desc"
+                              : "asc",
+                        });
+                      }}
+                    >
+                      {column.header}
+                    </button>
+                  ) : (
+                    column.header
+                  )}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+      ),
+      Body: ({
+        columns,
+        data,
+        handleLoadMore,
+        hasMore,
+        isLoading,
+        noResultsMessage,
+        onRowClick,
+        renderRow,
+        rowKey,
+      }: {
+        columns: Array<{
+          key: string;
+          render?: (row: ShadowMCPInventoryServer) => ReactNode;
+        }>;
+        data: ShadowMCPInventoryServer[];
+        handleLoadMore?: () => void;
+        hasMore?: boolean;
+        isLoading?: boolean;
+        noResultsMessage?: ReactNode;
+        onRowClick?: (row: ShadowMCPInventoryServer) => void;
+        renderRow?: (
+          row: ShadowMCPInventoryServer,
+          rowElement: ReactElement,
+        ) => ReactNode;
+        rowKey: (row: ShadowMCPInventoryServer) => string;
+      }) => (
+        <tbody>
+          {data.map((row) => {
+            const rowElement = (
+              <tr key={rowKey(row)} onClick={() => onRowClick?.(row)}>
+                {columns.map((column) => (
+                  <td key={column.key}>{column.render?.(row)}</td>
+                ))}
+              </tr>
+            );
+
+            return renderRow ? renderRow(row, rowElement) : rowElement;
+          })}
+          {data.length === 0 && noResultsMessage ? (
+            <tr>
+              <td colSpan={columns.length}>{noResultsMessage}</td>
+            </tr>
+          ) : null}
+          {hasMore && handleLoadMore ? (
+            <tr>
+              <td colSpan={columns.length}>
+                <button onClick={handleLoadMore}>
+                  {isLoading ? "Loading" : "Load more"}
+                </button>
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      ),
+    },
+  ),
+}));
+
+vi.mock("@/components/ui/Table/sorting", () => ({
+  sortTableData: (
+    data: ShadowMCPInventoryServer[],
+    columns: Array<{
+      id?: string;
+      key: string;
+      sortValue?: (row: ShadowMCPInventoryServer) => number | string;
+    }>,
+    sort?: { id: string; direction: "asc" | "desc" } | null,
+  ) => {
+    if (!sort) return data;
+    const column = columns.find((c) => (c.id ?? c.key) === sort.id);
+    if (!column?.sortValue) return data;
+
+    return data.slice().sort((a, b) => {
+      const av = column.sortValue!(a);
+      const bv = column.sortValue!(b);
+      const comparison =
+        typeof av === "number" && typeof bv === "number"
+          ? av - bv
+          : String(av).localeCompare(String(bv));
+      return sort.direction === "asc" ? comparison : -comparison;
+    });
+  },
+}));
+
+function inventoryServer(
+  overrides: Partial<ShadowMCPInventoryServer> & {
+    canonicalServerUrl: string;
+  },
+): ShadowMCPInventoryServer {
+  const { canonicalServerUrl, ...rest } = overrides;
+
+  return {
+    access: "none",
+    allowedPolicyIds: [],
+    approvalRequest: undefined,
+    blockedPolicyIds: [],
+    canonicalServerUrl,
+    firstSeen: new Date("2026-01-01T10:00:00Z"),
+    lastCalled: undefined,
+    lastSeen: new Date("2026-01-02T10:00:00Z"),
+    observedUseCount: 0,
+    requestCount: 0,
+    serverName: undefined,
+    serverSlug: "github-example-com-mcp-d8860eea",
+    topUsers: [],
+    // Stdio commands are not URLs; their host is empty.
+    urlHost: URL.canParse(canonicalServerUrl)
+      ? new URL(canonicalServerUrl).host
+      : "",
+    userCount: 0,
+    ...rest,
+    accessSummary:
+      rest.accessSummary ?? testAccessSummary(rest.access ?? "none"),
+  };
+}
+
+type BlockingPolicy = Pick<
+  RiskPolicy,
+  "audienceType" | "audiencePrincipalUrns" | "id" | "name"
+>;
+
+function blockingPolicy(
+  overrides: Partial<BlockingPolicy> = {},
+): BlockingPolicy {
+  return {
+    audiencePrincipalUrns: ["user:all"],
+    audienceType: "everyone",
+    id: "policy-1",
+    name: "Shadow MCP blocking policy",
+    ...overrides,
+  };
+}
+
+function renderInventoryTable(
+  projectID = "project-id-1",
+  shadowMCPPolicies = [blockingPolicy()],
+  roles: Role[] = [],
+  members: AccessMember[] = [],
+  onOpenServer?: (server: ShadowMCPInventoryServer) => void,
+  policiesUnavailable = false,
+) {
+  const queryClient = new QueryClient();
+
+  return render(
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        {/* The status cell explains itself through a tooltip, the way App
+            mounts one around the whole tree. */}
+        <TooltipProvider>
+          <ShadowMCPInventoryTable
+            members={members}
+            onOpenServer={onOpenServer}
+            policiesUnavailable={policiesUnavailable}
+            projectID={projectID}
+            roles={roles}
+            shadowMCPPolicies={shadowMCPPolicies}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+}
+
+function mockShadowMCPInventory({
+  servers = [],
+  isLoading = false,
+  isFetching = false,
+  error = null,
+  nextCursor,
+}: {
+  servers?: ShadowMCPInventoryServer[];
+  isLoading?: boolean;
+  isFetching?: boolean;
+  error?: Error | null;
+  nextCursor?: string;
+} = {}) {
+  mocks.useShadowMCPInventory.mockReturnValue({
+    data: { servers, nextCursor },
+    isFetching,
+    isLoading,
+    refetch: vi.fn(),
+    error,
+  });
+}
+
+function lastDecideAccessSheetProps(): DecideAccessSheetProps {
+  const lastCall = mocks.decideAccessSheet.mock.lastCall as
+    | [DecideAccessSheetProps]
+    | undefined;
+  if (!lastCall) {
+    throw new Error("DecideAccessSheet was not rendered");
+  }
+
+  return lastCall[0];
+}
+
+describe("ShadowMCPInventoryTable", () => {
+  beforeEach(() => {
+    for (const mock of Object.values(mocks)) {
+      mock.mockReset();
+    }
+
+    mockShadowMCPInventory();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders Shadow MCP inventory rows", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "allowed",
+          canonicalServerUrl: "https://github.example.com/mcp",
+          lastCalled: new Date("2026-01-02T11:30:00Z"),
+          observedUseCount: 42,
+          serverName: "GitHub MCP",
+          userCount: 3,
+        }),
+        inventoryServer({
+          // The server computes the verdict now: a URL a deny-by-default
+          // policy blocks arrives as blocked, not as none-plus-page-state.
+          access: "blocked",
+          canonicalServerUrl: "https://unused.example.com/mcp",
+          lastCalled: undefined,
+          lastSeen: new Date("2026-01-03T11:30:00Z"),
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    });
+    expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
+    expect(screen.getByText("Allowed")).toBeTruthy();
+    expect(screen.getByText("Blocked")).toBeTruthy();
+    expect(screen.getByText("42 calls")).toBeTruthy();
+    expect(screen.getByText("3 users")).toBeTruthy();
+    expect(screen.getByText("Never")).toBeTruthy();
+    expect(screen.getByText("https://unused.example.com/mcp")).toBeTruthy();
+    expect(mocks.useShadowMCPInventory).toHaveBeenCalledWith(
+      { projectId: "project-id-1", limit: 50 },
+      undefined,
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it("filters loaded inventory rows by name, hostname, and canonical URL", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://github.example.com/mcp",
+          serverName: "GitHub MCP",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://teams.slack.local/mcp",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://gateway.example.dev/linear/mcp",
+          serverName: "Gateway",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    const search = screen.getByPlaceholderText("Search servers...");
+
+    fireEvent.change(search, { target: { value: "  gItHuB  " } });
+    expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    expect(screen.queryByText("https://teams.slack.local/mcp")).toBeNull();
+
+    fireEvent.change(search, { target: { value: "teams.slack.local" } });
+    expect(screen.getByText("https://teams.slack.local/mcp")).toBeTruthy();
+    expect(screen.queryByText("GitHub MCP")).toBeNull();
+
+    fireEvent.change(search, { target: { value: "/linear/mcp" } });
+    expect(screen.getByText("Gateway")).toBeTruthy();
+    expect(screen.queryByText("https://teams.slack.local/mcp")).toBeNull();
+
+    fireEvent.change(search, { target: { value: "missing" } });
+    expect(screen.getByText("No servers matching “missing”")).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: "" } });
+    expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    expect(screen.getByText("https://teams.slack.local/mcp")).toBeTruthy();
+    expect(screen.getByText("Gateway")).toBeTruthy();
+  });
+
+  it("sorts the filtered inventory rows", () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://zulu.example.com/mcp",
+          serverName: "Zulu Team",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://other.example.com/mcp",
+          serverName: "Other",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://alpha.example.com/mcp",
+          serverName: "Alpha Team",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+    fireEvent.change(screen.getByPlaceholderText("Search servers..."), {
+      target: { value: "team" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Server" }));
+
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Alpha Team")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Zulu Team")).toBeTruthy();
+    expect(screen.queryByText("Other")).toBeNull();
+  });
+
+  it("shows request counts for each Shadow MCP server URL", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://github.example.com/mcp",
+          requestCount: 2,
+          serverName: "GitHub MCP",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://slack.example.com/mcp",
+          requestCount: 0,
+          serverName: "Slack MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    });
+
+    expect(screen.getByText("2 Access Requests")).toBeTruthy();
+    expect(screen.queryByText("0 Access Requests")).toBeFalsy();
+    // A legacy request with no dossier yet is still a pending ask: the row
+    // sorts and filters as awaiting a decision, so its Review cell says so.
+    expect(screen.getAllByText("Awaiting decision")).toHaveLength(1);
+  });
+
+  it("opens the server detail page when an inventory row is clicked", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://github.example.com/mcp",
+          serverName: "GitHub MCP",
+        }),
+      ],
+    });
+    const queryClient = new QueryClient();
+    const onOpenServer = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              members={[]}
+              onOpenServer={(server) => {
+                onOpenServer(server);
+              }}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("GitHub MCP").closest("tr")!);
+
+    expect(onOpenServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canonicalServerUrl: "https://github.example.com/mcp",
+        serverSlug: "github-example-com-mcp-d8860eea",
+      }),
+    );
+  });
+
+  it("opens the decide access sheet from the row context menu action", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://unnamed.example.com/mcp",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("https://unnamed.example.com/mcp")).toBeTruthy();
+    });
+
+    const lastCall = mocks.rowContextMenu.mock.lastCall as
+      | [Array<{ label: string; onClick: () => void }>]
+      | undefined;
+    if (!lastCall) {
+      throw new Error("Row context menu was not rendered");
+    }
+    const actions = lastCall[0];
+    expect(actions.map((action) => action.label)).toEqual(["Decide access"]);
+
+    act(() => {
+      actions[0]!.onClick();
+    });
+
+    const sheet = await screen.findByTestId("decide-access-sheet");
+    expect(sheet.getAttribute("data-canonical-server-url")).toBe(
+      "https://unnamed.example.com/mcp",
+    );
+    expect(sheet.getAttribute("data-display-name")).toBe("unnamed.example.com");
+    expect(sheet.getAttribute("data-approval-request-id")).toBeNull();
+  });
+
+  it("pauses deciding while the policy list is unavailable", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://unnamed.example.com/mcp",
+        }),
+        inventoryServer({
+          canonicalServerUrl: "npx -y example-package",
+          urlHost: "",
+          targetKind: "stdio_command",
+          approvalRequest: {
+            id: "stdio-request-1",
+            requesterCount: 1,
+            status: "requested",
+          },
+        }),
+      ],
+    });
+
+    renderInventoryTable("project-id-1", [], [], [], undefined, true);
+
+    await waitFor(() => {
+      expect(screen.getByText("https://unnamed.example.com/mcp")).toBeTruthy();
+    });
+
+    // Deciding writes grants against the policies the sheet can see; with
+    // the list failed, the row action waits and says why.
+    const calls = mocks.rowContextMenu.mock.calls as Array<
+      [Array<{ label: string; disabled?: boolean; description?: string }>]
+    >;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [actions] of calls) {
+      expect(actions).toEqual([
+        expect.objectContaining({
+          label: "Decide access",
+          disabled: true,
+          description:
+            "Policy data could not be loaded — deciding now would not be enforced",
+        }),
+      ]);
+    }
+
+    // The stdio review still opens, so the evidence can be read, but its
+    // Decide Access button waits too.
+    fireEvent.click(screen.getByText("npx -y example-package").closest("tr")!);
+    const sheet = await screen.findByTestId("review-request-sheet");
+    const decide = within(sheet).getByRole("button", { name: "Decide Access" });
+    expect((decide as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId("decide-access-sheet")).toBeNull();
+  });
+
+  it("renders stdio rows and reviews them in the sheet", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "npx -y example-package",
+          serverName: undefined,
+          urlHost: "",
+          targetKind: "stdio_command",
+          approvalRequest: {
+            id: "stdio-request-1",
+            requesterCount: 1,
+            status: "requested",
+          },
+        }),
+      ],
+    });
+    const onOpenServer = vi.fn<(server: ShadowMCPInventoryServer) => void>();
+
+    renderInventoryTable(
+      "project-id-1",
+      [blockingPolicy()],
+      [],
+      [],
+      onOpenServer,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("npx -y example-package")).toBeTruthy();
+    });
+    expect(
+      screen.getByText("Local command — known only from its access request"),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByText("npx -y example-package").closest("tr")!);
+
+    const sheet = await screen.findByTestId("review-request-sheet");
+    expect(sheet.getAttribute("data-request-id")).toBe("stdio-request-1");
+    expect(sheet.getAttribute("data-target-raw")).toBe(
+      "npx -y example-package",
+    );
+    expect(onOpenServer).not.toHaveBeenCalled();
+  });
+
+  it("hands a stdio review off to the decide access sheet and closes the review on decision", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "npx -y example-package",
+          serverName: undefined,
+          urlHost: "",
+          targetKind: "stdio_command",
+          approvalRequest: {
+            id: "stdio-request-1",
+            requesterCount: 1,
+            status: "requested",
+          },
+        }),
+      ],
+    });
+
+    renderInventoryTable(
+      "project-id-1",
+      [blockingPolicy()],
+      [],
+      [],
+      vi.fn<(server: ShadowMCPInventoryServer) => void>(),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("npx -y example-package")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText("npx -y example-package").closest("tr")!);
+    await screen.findByTestId("review-request-sheet");
+
+    fireEvent.click(screen.getByText("Decide Access"));
+
+    const sheetProps = lastDecideAccessSheetProps();
+    expect(sheetProps.open).toBe(true);
+    expect(sheetProps.target).toEqual({
+      targetKind: "stdio_command",
+      canonicalServerUrl: "npx -y example-package",
+      displayName: "npx -y example-package",
+      approvalRequestId: "stdio-request-1",
+    });
+
+    // A recorded decision resolves the review: the review sheet must not stay
+    // open underneath showing a stale pending request.
+    act(() => sheetProps.onDecided?.("approved"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("review-request-sheet")).toBeNull();
+    });
+  });
+
+  it("closes the decide access sheet when the sheet requests it", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://github.example.com/mcp",
+          serverName: "GitHub MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    });
+
+    const lastCall = mocks.rowContextMenu.mock.calls.at(-1)!;
+    const rowActions = lastCall[0] as Array<{ onClick: () => void }>;
+    act(() => {
+      rowActions[0]!.onClick();
+    });
+    expect(await screen.findByTestId("decide-access-sheet")).toBeTruthy();
+
+    const sheetProps = lastDecideAccessSheetProps();
+    act(() => {
+      sheetProps.onOpenChange(false);
+    });
+
+    expect(screen.queryByTestId("decide-access-sheet")).toBeNull();
+  });
+
+  it("sorts inventory columns and uses call count for Usage", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "allowed",
+          canonicalServerUrl: "https://alpha.example.com/mcp",
+          lastCalled: new Date("2026-01-03T11:30:00Z"),
+          lastSeen: new Date("2026-01-03T11:30:00Z"),
+          observedUseCount: 20,
+          serverName: "Alpha MCP",
+          userCount: 1,
+        }),
+        inventoryServer({
+          canonicalServerUrl: "https://beta.example.com/mcp",
+          lastCalled: new Date("2026-01-02T11:30:00Z"),
+          lastSeen: new Date("2026-01-04T11:30:00Z"),
+          observedUseCount: 1,
+          serverName: "Beta MCP",
+          userCount: 99,
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Beta MCP")).toBeTruthy();
+    });
+
+    for (const header of [
+      "Server",
+      "Status",
+      "Last called",
+      "Last seen",
+      "Usage",
+    ]) {
+      expect(screen.getByRole("button", { name: header })).toBeTruthy();
+    }
+
+    let rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Alpha MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Beta MCP")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Usage" }));
+
+    rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Beta MCP")).toBeTruthy();
+    expect(within(rows[0]!).getByText("1 call")).toBeTruthy();
+    expect(within(rows[0]!).getByText("99 users")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Alpha MCP")).toBeTruthy();
+    expect(within(rows[1]!).getByText("20 calls")).toBeTruthy();
+    expect(within(rows[1]!).getByText("1 user")).toBeTruthy();
+  });
+
+  it("loads more inventory rows through the Moonshine table", async () => {
+    const firstPageServer = inventoryServer({
+      canonicalServerUrl: "https://first.example.com/mcp",
+      serverName: "First MCP",
+    });
+    const secondPageServer = inventoryServer({
+      canonicalServerUrl: "https://second.example.com/mcp",
+      serverName: "Second MCP",
+    });
+    const firstPageResponse = {
+      data: { servers: [firstPageServer], nextCursor: "next-page" },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+    };
+    const secondPageResponse = {
+      data: { servers: [secondPageServer], nextCursor: undefined },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { cursor?: string }) => {
+        if (request.cursor === "next-page") {
+          return secondPageResponse;
+        }
+
+        return firstPageResponse;
+      },
+    );
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("First MCP")).toBeTruthy();
+    });
+    expect(screen.queryByText("Second MCP")).toBeFalsy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Second MCP")).toBeTruthy();
+    });
+    expect(mocks.useShadowMCPInventory).toHaveBeenCalledWith(
+      { projectId: "project-id-1", limit: 50, cursor: "next-page" },
+      undefined,
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it("applies an active search to newly loaded inventory pages", async () => {
+    const firstPageResponse = {
+      data: {
+        servers: [
+          inventoryServer({
+            canonicalServerUrl: "https://first.example.com/mcp",
+            serverName: "First MCP",
+          }),
+        ],
+        nextCursor: "next-page",
+      },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const secondPageResponse = {
+      data: {
+        servers: [
+          inventoryServer({
+            canonicalServerUrl: "https://matching.example.com/mcp",
+            serverName: "Matching MCP",
+          }),
+        ],
+        nextCursor: undefined,
+      },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { cursor?: string }) =>
+        request.cursor === "next-page" ? secondPageResponse : firstPageResponse,
+    );
+
+    renderInventoryTable();
+    fireEvent.change(screen.getByPlaceholderText("Search servers..."), {
+      target: { value: "matching" },
+    });
+
+    expect(screen.getByText("No servers matching “matching”")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Matching MCP")).toBeTruthy();
+    });
+    expect(screen.queryByText("First MCP")).toBeNull();
+    expect(screen.queryByText("No servers matching “matching”")).toBeNull();
+  });
+
+  it("keeps loaded inventory rows visible while loading the next page", async () => {
+    const firstPageServer = inventoryServer({
+      canonicalServerUrl: "https://first.example.com/mcp",
+      serverName: "First MCP",
+    });
+    const firstPageResponse = {
+      data: { servers: [firstPageServer], nextCursor: "next-page" },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const loadingNextPageResponse = {
+      data: undefined,
+      error: null,
+      isFetching: true,
+      isLoading: true,
+      refetch: vi.fn(),
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { cursor?: string }) => {
+        if (request.cursor === "next-page") {
+          return loadingNextPageResponse;
+        }
+
+        return firstPageResponse;
+      },
+    );
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("First MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(screen.getByText("First MCP")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Loading" })).toBeTruthy();
+    expect(
+      screen.queryByText("Shadow MCP inventory could not be loaded"),
+    ).toBeFalsy();
+  });
+
+  it("keeps loaded inventory rows visible and retries after a next page error", async () => {
+    const refetchNextPage = vi.fn();
+    const firstPageServer = inventoryServer({
+      canonicalServerUrl: "https://first.example.com/mcp",
+      serverName: "First MCP",
+    });
+    const firstPageResponse = {
+      data: { servers: [firstPageServer], nextCursor: "next-page" },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const errorNextPageResponse = {
+      data: undefined,
+      error: new Error("next page failed"),
+      isFetching: false,
+      isLoading: false,
+      refetch: refetchNextPage,
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { cursor?: string }) => {
+        if (request.cursor === "next-page") {
+          return errorNextPageResponse;
+        }
+
+        return firstPageResponse;
+      },
+    );
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("First MCP")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(screen.getByText("First MCP")).toBeTruthy();
+    expect(
+      screen.queryByText("Shadow MCP inventory could not be loaded"),
+    ).toBeFalsy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(refetchNextPage).toHaveBeenCalled();
+  });
+
+  it("does not render stale inventory rows when the project changes", async () => {
+    const firstProjectServer = inventoryServer({
+      canonicalServerUrl: "https://first-project.example.com/mcp",
+      serverName: "First Project MCP",
+    });
+    const firstProjectResponse = {
+      data: { servers: [firstProjectServer], nextCursor: undefined },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    const secondProjectLoadingResponse = {
+      data: undefined,
+      error: null,
+      isFetching: true,
+      isLoading: true,
+      refetch: vi.fn(),
+    };
+    mocks.useShadowMCPInventory.mockImplementation(
+      (request: { projectId: string }) => {
+        if (request.projectId === "project-id-2") {
+          return secondProjectLoadingResponse;
+        }
+
+        return firstProjectResponse;
+      },
+    );
+    const queryClient = new QueryClient();
+    const { rerender } = render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              members={[]}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("First Project MCP")).toBeTruthy();
+    });
+
+    rerender(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              members={[]}
+              projectID="project-id-2"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("First Project MCP")).toBeFalsy();
+  });
+
+  it("does not render stale inventory rows when the table is disabled", async () => {
+    const inventoryServerRow = inventoryServer({
+      canonicalServerUrl: "https://enabled.example.com/mcp",
+      serverName: "Enabled MCP",
+    });
+    const enabledResponse = {
+      data: { servers: [inventoryServerRow], nextCursor: undefined },
+      error: null,
+      isFetching: false,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+    mocks.useShadowMCPInventory.mockReturnValue(enabledResponse);
+    const queryClient = new QueryClient();
+    const { rerender } = render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              enabled
+              members={[]}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Enabled MCP")).toBeTruthy();
+    });
+
+    rerender(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              enabled={false}
+              members={[]}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("Enabled MCP")).toBeFalsy();
+  });
+
+  it("carries the pending legacy bypass request into the decide sheet", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://pending.example.com/mcp",
+          approvalRequest: {
+            id: "approval-1",
+            requesterCount: 1,
+            status: "requested",
+          },
+          latestRequest: {
+            id: "legacy-bypass-1",
+            policyId: "policy-1",
+            requestedAt: new Date("2026-01-03T10:00:00Z"),
+            requesterEmail: "alex@example.com",
+            requesterUserId: "user-1",
+          },
+          requestCount: 1,
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("https://pending.example.com/mcp")).toBeTruthy();
+    });
+
+    const lastCall = mocks.rowContextMenu.mock.lastCall as
+      | [Array<{ label: string; onClick: () => void }>]
+      | undefined;
+    if (!lastCall) {
+      throw new Error("Row context menu was not rendered");
+    }
+    act(() => {
+      lastCall[0][0]!.onClick();
+    });
+
+    const sheet = await screen.findByTestId("decide-access-sheet");
+    expect(sheet.getAttribute("data-approval-request-id")).toBe("approval-1");
+    expect(sheet.getAttribute("data-pending-bypass-request-id")).toBe(
+      "legacy-bypass-1",
+    );
+  });
+
+  it("renders the summary's own verdict when it disagrees with the legacy field", async () => {
+    // The rows must render from accessSummary, not the deprecated access
+    // string: a scoped approval reads Restricted with its flavor wording.
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "allowed",
+          accessSummary: {
+            state: "restricted",
+            allowedFor: "selected",
+            blockedFor: "none",
+            blockingDefault: "deny",
+            decision: "approved",
+            decisionCoverage: "full",
+          },
+          canonicalServerUrl: "https://scoped.example.com/mcp",
+          serverName: "Scoped MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Scoped MCP")).toBeTruthy();
+    });
+    // The badge is the verdict. "Restricted" covers several different
+    // postures, so the mechanism behind it has to stay reachable from the
+    // row — and by keyboard, not hover alone, which is why the assertion
+    // opens the tooltip by focusing its trigger.
+    expect(screen.getByText("Restricted")).toBeTruthy();
+    expect(screen.queryByText(/Allowed for selected users/)).toBeNull();
+
+    const trigger = screen
+      .getByText("Restricted")
+      .closest('[data-slot="tooltip-trigger"]');
+    expect(trigger).toBeTruthy();
+    fireEvent.focus(trigger as Element);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/Allowed for selected users/).length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it("renders observed status when blocking is inactive", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "none",
+          canonicalServerUrl: "https://observed.example.com/mcp",
+          serverName: "Observed MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable("project-id-1", []);
+
+    await waitFor(() => {
+      expect(screen.getByText("Observed MCP")).toBeTruthy();
+    });
+    expect(screen.getByText("Observed")).toBeTruthy();
+  });
+});
+
+describe("superseded review rendering", () => {
+  it("shows the Superseded badge on a row whose decision was displaced", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://superseded.example.com/mcp",
+          serverName: "Superseded MCP",
+          approvalRequest: {
+            id: "r-superseded",
+            requesterCount: 0,
+            status: "superseded",
+          },
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Superseded MCP")).toBeTruthy();
+    });
+    expect(screen.getByText("Superseded")).toBeTruthy();
+  });
+});
+
+describe("matchesReviewFilter", () => {
+  const url = "https://filtered.example.com/mcp";
+
+  it("passes every server when no filter is set", () => {
+    expect(
+      matchesReviewFilter(
+        inventoryServer({ canonicalServerUrl: url }),
+        undefined,
+      ),
+    ).toBe(true);
+    expect(
+      matchesReviewFilter(inventoryServer({ canonicalServerUrl: url }), ""),
+    ).toBe(true);
+  });
+
+  it("matches servers by their review status", () => {
+    const requested = inventoryServer({
+      canonicalServerUrl: url,
+      approvalRequest: { id: "r1", requesterCount: 1, status: "requested" },
+    });
+    expect(matchesReviewFilter(requested, "requested")).toBe(true);
+    expect(matchesReviewFilter(requested, "approved")).toBe(false);
+    expect(matchesReviewFilter(requested, "none")).toBe(false);
+  });
+
+  it("matches superseded as its own review state, never as 'none' or a decided one", () => {
+    const superseded = inventoryServer({
+      canonicalServerUrl: url,
+      approvalRequest: { id: "r1", requesterCount: 0, status: "superseded" },
+    });
+    expect(matchesReviewFilter(superseded, "superseded")).toBe(true);
+    expect(matchesReviewFilter(superseded, "approved")).toBe(false);
+    expect(matchesReviewFilter(superseded, "denied")).toBe(false);
+    expect(matchesReviewFilter(superseded, "none")).toBe(false);
+  });
+
+  it("counts a pending legacy bypass request as awaiting a decision", () => {
+    // The server counts only requests still waiting against an enabled
+    // blocking policy, so a row with one is pending whatever its dossier
+    // says — including when it has none.
+    const legacyOnly = inventoryServer({
+      canonicalServerUrl: url,
+      requestCount: 2,
+    });
+    expect(matchesReviewFilter(legacyOnly, "requested")).toBe(true);
+    expect(matchesReviewFilter(legacyOnly, "none")).toBe(false);
+    expect(matchesReviewFilter(legacyOnly, "approved")).toBe(false);
+
+    // A new ask on an approved server reads as both: decided, and waiting.
+    const reopened = inventoryServer({
+      canonicalServerUrl: url,
+      approvalRequest: { id: "r1", requesterCount: 1, status: "approved" },
+      requestCount: 1,
+    });
+    expect(matchesReviewFilter(reopened, "requested")).toBe(true);
+    expect(matchesReviewFilter(reopened, "approved")).toBe(true);
+  });
+
+  it("treats an unreviewed dossier and no review as the same 'none' state", () => {
+    const noReview = inventoryServer({ canonicalServerUrl: url });
+    const unreviewed = inventoryServer({
+      canonicalServerUrl: url,
+      approvalRequest: { id: "r1", requesterCount: 0, status: "unreviewed" },
+    });
+    expect(matchesReviewFilter(noReview, "none")).toBe(true);
+    expect(matchesReviewFilter(unreviewed, "none")).toBe(true);
+    // Neither shape reads as any decided state.
+    expect(matchesReviewFilter(unreviewed, "approved")).toBe(false);
+    expect(matchesReviewFilter(noReview, "requested")).toBe(false);
+  });
+});
+
+describe("reviewSortRank", () => {
+  const url = "https://ranked.example.com/mcp";
+
+  it("sorts pending decisions first, decided next, unreviewed last", () => {
+    const rank = (
+      status?:
+        | "requested"
+        | "approved"
+        | "denied"
+        | "superseded"
+        | "unreviewed",
+    ) =>
+      reviewSortRank(
+        inventoryServer({
+          canonicalServerUrl: url,
+          approvalRequest: status
+            ? { id: "r1", requesterCount: 0, status }
+            : undefined,
+        }),
+      );
+
+    expect(rank("requested")).toBe(0);
+    expect(rank("approved")).toBe(1);
+    expect(rank("denied")).toBe(1);
+    // Superseded is settled review history — an admin deliberately displaced
+    // the decision — so it ranks with the decided states, not the pending
+    // one.
+    expect(rank("superseded")).toBe(1);
+    // An unreviewed dossier is a storage detail, not a state: it ranks with
+    // "no review".
+    expect(rank("unreviewed")).toBe(2);
+    expect(rank(undefined)).toBe(2);
+    expect(rank("requested")).toBeLessThan(rank("approved"));
+    expect(rank("approved")).toBeLessThan(rank("unreviewed"));
+  });
+
+  it("sorts a pending legacy bypass request with the pending decisions", () => {
+    expect(
+      reviewSortRank(
+        inventoryServer({ canonicalServerUrl: url, requestCount: 1 }),
+      ),
+    ).toBe(0);
+    expect(
+      reviewSortRank(
+        inventoryServer({
+          canonicalServerUrl: url,
+          approvalRequest: { id: "r1", requesterCount: 0, status: "denied" },
+          requestCount: 1,
+        }),
+      ),
+    ).toBe(0);
+  });
+});
+
+describe("observedDate", () => {
+  it("treats the zero time as never observed", () => {
+    expect(observedDate(undefined)).toBeUndefined();
+    expect(observedDate(new Date(0))).toBeUndefined();
+    expect(observedDate(new Date(-1))).toBeUndefined();
+  });
+
+  it("passes real telemetry timestamps through", () => {
+    const seen = new Date("2026-01-02T10:00:00Z");
+    expect(observedDate(seen)).toBe(seen);
+  });
+});

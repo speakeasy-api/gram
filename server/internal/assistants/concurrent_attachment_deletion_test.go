@@ -145,7 +145,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				}
 				id := uuid.MustParse(assistantID)
 				require.NoError(t, enableAssistantToolsets(ctx, tx, newTestAuditLogger(), hostedmcp.Actor{UserID: "user-test", Email: nil}, projectID, resolved))
-				require.NoError(t, writeAssistantAttachments(ctx, tx, id, projectID, resolved, true, resolvedServers, true))
+				require.NoError(t, writeAssistantAttachments(ctx, tx, id, projectID, resolved, true, resolvedServers, true, false))
 				counts, err := testrepo.New(tx).CountAssistantAttachments(ctx, testrepo.CountAssistantAttachmentsParams{
 					ProjectID: projectID, AssistantID: id,
 				})

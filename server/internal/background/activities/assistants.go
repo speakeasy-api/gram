@@ -78,6 +78,7 @@ type ExpireAssistantThreadRuntime struct {
 type ReapStuckAssistantRuntimesResult struct {
 	StaleRuntimesStopped int64
 	StaleEventsRequeued  int64
+	IdleRuntimesStopped  int64
 	AffectedAssistantIDs []string
 }
 
@@ -202,6 +203,7 @@ func (a *ReapStuckAssistantRuntimes) Do(ctx context.Context) (*ReapStuckAssistan
 	return &ReapStuckAssistantRuntimesResult{
 		StaleRuntimesStopped: result.StaleRuntimesStopped,
 		StaleEventsRequeued:  result.StaleEventsRequeued,
+		IdleRuntimesStopped:  result.IdleRuntimesStopped,
 		AffectedAssistantIDs: ids,
 	}, nil
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -51,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -133,6 +135,7 @@ type Service struct {
 	orgHosts          *orghost.Resolver // resolves the host of links sent by email
 	audit             *audit.Logger
 	svix              *svix.Svix
+	deliverer         *signins.Deliverer
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -165,6 +168,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		orgHosts:          orgHosts,
 		audit:             auditLogger,
 		svix:              svix,
+		deliverer:         signins.NewDeliverer(logger, noop.NewMeterProvider(), db, nil, sessionMgr, sessionMgr),
 	}
 }
 
@@ -709,6 +713,12 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		attr.UserID(ac.UserID),
 	)
 
+	removalRevokes := s.sessions.SignInEnforced(ctx, ac.ActiveOrganizationID)
+	removedEmail := ""
+	if removalRevokes {
+		removedEmail = s.memberEmail(ctx, payload.UserID)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -743,6 +753,15 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		return oops.E(oops.CodeUnexpected, err, "latch agents after owner membership loss").LogError(ctx, logger)
 	}
 
+	// Removal revokes the member's sign-ins and grants here, as
+	// revokeMemberSignIns does, wherever enforcement is on.
+	var revoked signins.Revoked
+	if removalRevokes {
+		if revoked, err = s.revokeMember(ctx, tx, ac, payload.UserID, removedEmail); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "revoke removed member's sign-ins").LogError(ctx, logger)
+		}
+	}
+
 	if rel.WorkosMembershipID.Valid && rel.WorkosMembershipID.String != "" {
 		if err := s.orgs.DeleteOrganizationMembership(ctx, rel.WorkosMembershipID.String); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "remove user").LogError(ctx, logger)
@@ -757,6 +776,9 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+	if removalRevokes {
+		s.afterMemberRevoked(ctx, ac.ActiveOrganizationID, revoked)
 	}
 
 	return nil
@@ -1769,6 +1791,9 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Taken before authenticating so a sign-out everywhere that lands
+	// meanwhile still ends this session.
+	authenticatedAt := time.Now()
 	idpUser, err := s.invite.AuthenticateWithMagicAuth(ctx, invite.Email)
 	if err != nil {
 		if inviteRequiresNormalLogin(err) {
@@ -1862,6 +1887,37 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Record the sign-in like any other login, so grants from this session
+	// link to it and later revocations reach them.
+	// Magic Auth selects no WorkOS organization; the invite's is the one.
+	workosOrganizationID := idpUser.OrganizationID
+	if workosOrganizationID == "" {
+		if org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, invite.OrganizationID); err == nil && org.WorkosID.Valid {
+			workosOrganizationID = org.WorkosID.String
+		}
+	}
+	recorded := signins.RecordExchange(ctx, s.logger, s.db, signins.ExchangeParams{
+		Flow:                   signins.FlowDashboard,
+		WorkOSOrganizationID:   workosOrganizationID,
+		ExpectedOrganizationID: invite.OrganizationID,
+		UserID:                 gramUserID,
+		WorkOSSessionID:        idpUser.WorkOSSessionID,
+		AuthenticationMethod:   idpUser.AuthenticationMethod,
+		Evidence: signins.Evidence{
+			HostedDomain:       idpUser.Evidence.HostedDomain,
+			TenantID:           idpUser.Evidence.TenantID,
+			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
+			IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+		},
+		Impersonated:    idpUser.ImpersonatorEmail() != "",
+		AuthenticatedAt: authenticatedAt,
+	})
+	if (recorded.Failed || recorded.Revoked) && recorded.OrganizationID != "" && s.sessions.SignInEnforced(ctx, recorded.OrganizationID) {
+		s.logger.ErrorContext(ctx, "invite callback: sign-in could not back a session", attr.SlogOrganizationID(recorded.OrganizationID))
+		redirectError("invite authentication failed")
+		return
+	}
+
 	// Create a Speakeasy session directly. The invitee is already authenticated
 	// by Magic Auth, and the WorkOS session ID is stored for logout revocation.
 	sessionID := uuid.New().String()
@@ -1874,7 +1930,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
 	}
-	if err := s.sessions.StoreSession(ctx, session); err != nil {
+	if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))
 		span.RecordError(err)
 		redirectError("failed to create session")

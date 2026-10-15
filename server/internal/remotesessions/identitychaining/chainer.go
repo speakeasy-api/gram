@@ -11,10 +11,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -37,9 +40,13 @@ const (
 	// allowance.
 	maxAccessLifetime = time.Hour
 
-	// attemptTimeout bounds one acquisition end to end: a delegation refresh,
-	// the token exchange and the redemption.
+	// attemptTimeout bounds one provider's attempt end to end: a delegation
+	// refresh, the token exchange and the redemption.
 	attemptTimeout = 25 * time.Second
+
+	// acquireTimeout bounds the complete acquisition across every provider
+	// in the order, including retries, queueing and token publication.
+	acquireTimeout = 30 * time.Second
 
 	// legTimeout bounds each token endpoint request.
 	legTimeout = 10 * time.Second
@@ -64,6 +71,13 @@ const (
 	// which an unconfigured tenant returns on every attempt.
 	failureTTL = 30 * time.Second
 
+	// recentKeyWindow is how long after a Speakeasy signing key is published
+	// a vendor may still verify against a key set that lacks it: the
+	// activation delay plus one vendor key set refresh. A compromise
+	// replacement signs at once, so its first assertions can be rejected for
+	// an unknown kid until the vendor refetches.
+	recentKeyWindow = internalsessionissuers.ActivationDelay + internalsessionissuers.CacheTTL
+
 	// releaseTimeout bounds the detached single-flight release.
 	releaseTimeout = 2 * time.Second
 
@@ -76,6 +90,9 @@ const (
 	maxClockSkew = time.Minute
 )
 
+// meterAttempts counts identity chaining attempts per EMA provider.
+const meterAttempts = "identity_chaining.attempt"
+
 // Chainer obtains resource-bound downstream access tokens for a human by
 // identity chaining. It is safe for concurrent use.
 type Chainer struct {
@@ -85,20 +102,42 @@ type Chainer struct {
 	locks      cache.Cache
 	observerMu sync.RWMutex
 	observer   Observer
+	attempts   metric.Int64Counter
 }
 
 // New builds a chainer over the challenge manager's egress, tunnel and
 // client-assertion configuration. keys verifies identity provider assertions;
 // locks serializes acquisition across processes and shares failures.
 func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, keys *jwks.KeyResolver, locks cache.Cache) *Chainer {
-	return &Chainer{
+	c := &Chainer{
 		Governor:   *NewGovernor(logger, db, enc, delegation),
 		challenges: challenges,
 		keys:       keys,
 		locks:      locks,
 		observerMu: sync.RWMutex{},
 		observer:   nil,
+		attempts:   nil,
 	}
+	c.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
+		return externalSource{c: c, issuer: p.RemoteSessionIssuerID}
+	}
+	c.SetMeterProvider(noop.NewMeterProvider())
+	return c
+}
+
+// SetMeterProvider records attempts on meterProvider. Call it during wiring,
+// before the chainer serves requests.
+func (c *Chainer) SetMeterProvider(meterProvider metric.MeterProvider) {
+	counter, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining").Int64Counter(
+		meterAttempts,
+		metric.WithDescription("Identity chaining attempts by EMA provider, outcome, whether an earlier provider in the order failed, retries and, when the provider could not serve, why."),
+		metric.WithUnit("{attempt}"),
+	)
+	if err != nil {
+		c.logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterAttempts), attr.SlogError(err))
+		counter, _ = noop.NewMeterProvider().Meter("").Int64Counter(meterAttempts)
+	}
+	c.attempts = counter
 }
 
 // Acquire returns a usable downstream token for the request's upstream, from
@@ -126,15 +165,42 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		attr.SlogRemoteSessionClientID(sel.clientID.String()),
 		attr.SlogOAuthResource(sel.resource),
 	)
-	if outcome = c.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
+	order, outcome := c.providerOrder(ctx, logger, req, sel)
+	if !outcome.Succeeded() {
 		return none, outcome
 	}
-	if outcome = c.checkDelegation(ctx, req, sel); !outcome.Succeeded() {
+	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
+	defer cancel()
+	if token, outcome, ok := c.reuseStored(ctx, logger, req, sel, order); ok {
+		return token, outcome
+	}
+	return c.tryProviders(ctx, logger, "acquire", order, func(ctx context.Context, logger *slog.Logger, p remotesessions.EMAProvider) (Token, Outcome) {
+		return c.acquireFrom(ctx, logger, req, sel, p)
+	})
+}
+
+// acquireFrom obtains a token for sel from one source: a still-valid stored
+// credential, or a fresh issue and redemption under single flight.
+func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider) (Token, Outcome) {
+	var none Token
+	src := c.source(p)
+	sel.provider = p
+	release := func(token Token) (Token, Outcome) { return c.release(ctx, logger, req, sel, src, token) }
+	if outcome := src.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
 		return none, outcome
+	}
+	// The local source's authorization already checks every reuse predicate.
+	// Other sources retain their independent delegation/reuse gate.
+	if _, local := src.(speakeasySource); !local {
+		if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
+			return none, outcome
+		}
 	}
 
+	// Stored credentials are checked against their issuing provider and exact
+	// provenance.
 	if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-		return token, success
+		return release(token)
 	}
 	failureKey := cacheKey("identityChainingFailure", req, sel)
 	var cached Outcome
@@ -151,7 +217,11 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		// statement still rejects stale provenance.
 		logger.WarnContext(ctx, "identity chaining lock unavailable; exchanging without single flight", attr.SlogCacheKey(lockKey), attr.SlogError(err))
 	case !held:
-		return c.awaitConcurrentAcquisition(ctx, logger, req, sel)
+		token, outcome := c.awaitConcurrentAcquisition(ctx, logger, req, sel)
+		if !outcome.Succeeded() {
+			return none, outcome
+		}
+		return release(token)
 	default:
 		lockedAt := c.now()
 		defer o11y.LogDefer(ctx, logger, "release identity chaining lock", func() error {
@@ -166,14 +236,15 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		// A holder that finished while this request waited for the lock
 		// already published its credential.
 		if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-			return token, success
+			return release(token)
 		}
 	}
 
 	attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
 	defer cancel()
 	startedAt := c.now()
-	token, outcome, grantValidated := c.acquire(attemptCtx, logger, req, sel)
+	token, outcome, grantValidated := c.acquire(attemptCtx, logger, req, sel, src)
+	outcome.Provider = src.kind()
 	if !outcome.Succeeded() {
 		logAcquisitionFailure(ctx, logger, outcome)
 		outcome.providerDescription = ""
@@ -182,7 +253,7 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		if err := c.locks.Set(context.WithoutCancel(ctx), attemptKey, attemptResult{Outcome: outcome, FinishedAt: c.now()}, attemptResultTTL); err != nil {
 			logger.WarnContext(ctx, "record identity chaining attempt", attr.SlogCacheKey(attemptKey), attr.SlogError(err))
 		}
-		if outcome.cacheable() {
+		if outcome.cacheable() && !c.signedWithRecentKey(sel, outcome) {
 			if err := c.locks.Set(context.WithoutCancel(ctx), failureKey, outcome, failureTTL); err != nil {
 				logger.WarnContext(ctx, "record identity chaining failure", attr.SlogCacheKey(failureKey), attr.SlogError(err))
 			}
@@ -191,6 +262,7 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 	// After publishing to waiters; the caller waits at most observeTimeout.
 	c.observe(ctx, logger, Observation{
 		OrganizationID:  req.OrganizationID,
+		Provider:        src.kind(),
 		TrustedIssuerID: sel.trustedIssuerID,
 		RemoteIssuerID:  sel.remoteIssuerID,
 		RemoteIssuer:    sel.issuer,
@@ -237,15 +309,29 @@ func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.L
 // make bounded, delimiter-safe keys. The binding generation, the trusted
 // identity provider registration and the audience are part of the identity, so
 // a rebind, changed trust or newly confirmed audience never inherits an
-// earlier failure or lock.
+// earlier failure or lock. External sources keep the key format that predates
+// EMA providers, so old and new processes share single flight during a
+// rolling deploy; other providers are qualified by kind.
 func cacheKey(prefix string, req Request, sel selection) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		req.OrganizationID, req.ProjectID.String(), req.UserSessionIssuerID.String(), req.UserID,
+	parts := []string{req.OrganizationID, req.ProjectID.String(), req.UserSessionIssuerID.String(), req.UserID}
+	if sel.provider.Kind != remotesessions.EMAProviderExternal {
+		parts = append(parts, string(sel.provider.Kind), req.UserSessionJTI, sel.signInID.String(), sel.provider.InternalSessionIssuerID.String(), sel.internalKeyID.String(), sel.internalIssuerVersion.UTC().Format(time.RFC3339Nano))
+	}
+	parts = append(parts,
 		sel.bindingID.String(), strconv.FormatInt(sel.generation, 10),
 		sel.trustedIssuerID.String(), sel.trustedClientID.String(), sel.audience,
 		sel.clientID.String(), sel.resource, strings.Join(sel.scopes, " "),
-	}, "\n")))
+	)
+	digest := sha256.Sum256([]byte(strings.Join(parts, "\n")))
 	return prefix + ":" + hex.EncodeToString(digest[:])
+}
+
+// signedWithRecentKey reports a Speakeasy redemption rejection of an assertion
+// signed by a key the vendor may not have fetched yet. It is not cached, so
+// the next request retries as soon as the vendor sees the key.
+func (c *Chainer) signedWithRecentKey(sel selection, outcome Outcome) bool {
+	return sel.provider.Kind == remotesessions.EMAProviderSpeakeasy && outcome.Stage == StageRedemption &&
+		!sel.internalKeyPublishedAt.IsZero() && c.now().Sub(sel.internalKeyPublishedAt) < recentKeyWindow
 }
 
 // logAcquisitionFailure logs a failed attempt with the provider's error text.

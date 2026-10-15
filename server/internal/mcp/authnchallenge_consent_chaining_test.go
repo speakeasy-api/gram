@@ -237,3 +237,8 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true},
 	}, reqs[0], "a tunneled upstream is judged with its own derived issuer")
 }
+
+func (g *consentGovernor) CheckConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) identitychaining.Outcome {
+	_, outcome := g.Acquire(ctx, req)
+	return outcome
+}

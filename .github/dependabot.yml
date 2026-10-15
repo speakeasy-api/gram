@@ -56,6 +56,10 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+    ignore:
+      # @polar-sh/checkout does not support the next @stripe/* major yet.
+      - dependency-name: "@stripe/*"
+        update-types: ["version-update:semver-major"]
     groups:
       ai-sdk:
         patterns:

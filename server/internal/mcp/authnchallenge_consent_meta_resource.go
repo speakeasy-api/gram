@@ -19,11 +19,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
+
+// chosenMetaMember is the member whose spelling of an upstream URL a
+// credential is qualified to.
+type chosenMetaMember struct {
+	// serverID is the member's mcp_servers id, invalid when no member was
+	// chosen.
+	serverID uuid.NullUUID
+
+	// projectID is the member's own project.
+	projectID uuid.UUID
+}
 
 // resolveMetaMemberResource returns the upstream resource (remote server URL
 // or tunneled resource identifier) of the meta MCP member whose upstream
-// authenticates against remoteSessionIssuerID.
+// authenticates against the client's authorization server, and the member
+// whose spelling of that URL was chosen.
 //
 // Tri-state: ("", true) means members claimed the issuer but no single member
 // wins, and the caller must not fall back to a weaker derivation; ("", false)
@@ -34,17 +47,19 @@ func (s *Service) resolveMetaMemberResource(
 	ctx context.Context,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
-	remoteSessionIssuerID uuid.UUID,
-) (string, bool, error) {
-	candidates, claimed, err := s.claimingMetaMembers(ctx, endpoint, remoteSessionIssuerID)
+	client remotesessions.Client,
+) (string, chosenMetaMember, bool, error) {
+	none := chosenMetaMember{serverID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, projectID: uuid.Nil}
+	candidates, claimed, err := s.claimingMetaMembers(ctx, endpoint, client)
 	if err != nil || !claimed {
-		return "", false, err
+		return "", none, false, err
 	}
 
 	// The resource is sent upstream verbatim: a provider may match it exactly
 	// against its RFC 9728 resource, trailing slash included. Trailing slashes
 	// are ignored only to decide whether members share a destination.
 	resource := ""
+	member := none
 	for _, row := range candidates {
 		upstream := row.UpstreamUrl
 		trimmed := strings.TrimRight(upstream, "/")
@@ -56,43 +71,69 @@ func (s *Service) resolveMetaMemberResource(
 		// shortest, so the result does not depend on member order.
 		case resource != "" && trimmed == strings.TrimRight(resource, "/"):
 			if len(upstream) < len(resource) {
-				resource = upstream
+				resource, member = upstream, chosenMetaMember{serverID: uuid.NullUUID{UUID: row.McpServerID, Valid: true}, projectID: row.ProjectID}
 			}
 		case resource == "":
-			resource = upstream
+			resource, member = upstream, chosenMetaMember{serverID: uuid.NullUUID{UUID: row.McpServerID, Valid: true}, projectID: row.ProjectID}
 		default:
 			// One authorization server, two members: a grant records one resource per
 			// (subject, client), so nothing routes both.
 			logger.WarnContext(ctx, "meta MCP members share an authorization server; credential cannot be qualified to one member",
 				attr.SlogMetaMcpServerID(endpoint.MetaMcpServerID.UUID.String()),
-				attr.SlogRemoteSessionIssuerID(remoteSessionIssuerID.String()),
+				attr.SlogRemoteSessionIssuerID(client.RemoteSessionIssuerID.String()),
 				attr.SlogMcpServerID(row.McpServerID.String()),
 			)
-			return "", true, nil
+			return "", none, true, nil
 		}
 	}
-	return resource, true, nil
+	return resource, member, true, nil
 }
 
-// claimingMetaMembers lists the proxied members authenticating against
-// remoteSessionIssuerID, filtered to those the subject may reach. Claimed is
-// decided before RBAC: an invisible member still claimed the credential.
+// claimingMetaMembers lists the proxied members authenticating against the
+// client's authorization server, filtered to those the subject may reach.
+// Claimed is decided before RBAC: an invisible member still claimed the
+// credential.
+//
+// An organization gateway's members span projects, so a client that a
+// project owns is claimed only by that project's members, the ones whose
+// dispatch routes through it.
 func (s *Service) claimingMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
-	remoteSessionIssuerID uuid.UUID,
+	client remotesessions.Client,
 ) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, bool, error) {
-	if remoteSessionIssuerID == uuid.Nil {
+	if client.RemoteSessionIssuerID == uuid.Nil {
 		return nil, false, nil
 	}
 
-	rows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{
-		MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
-		ProjectID:             endpoint.ProjectID,
-		RemoteSessionIssuerID: uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true},
-	})
-	if err != nil {
-		return nil, false, fmt.Errorf("list meta MCP members for remote session issuer: %w", err)
+	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow
+	if endpoint.IsOrganizationGateway() {
+		organizationRows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionIssuer(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionIssuerParams{
+			OrganizationID:        endpoint.OrganizationID,
+			ProjectID:             client.ProjectID,
+			RemoteSessionIssuerID: uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true},
+		})
+		if err != nil {
+			return nil, false, fmt.Errorf("list organization MCP servers for remote session issuer: %w", err)
+		}
+		// Only servers the gateway serves on this surface claim, as only they
+		// are members of it here.
+		surface := requestNetworkSurface(ctx)
+		for _, row := range organizationRows {
+			if servableOnSurface(row.McpServerNetworkAccessMode, surface) {
+				rows = append(rows, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow(row))
+			}
+		}
+	} else {
+		storedRows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{
+			MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
+			ProjectID:             endpoint.ProjectID,
+			RemoteSessionIssuerID: uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true},
+		})
+		if err != nil {
+			return nil, false, fmt.Errorf("list meta MCP members for remote session issuer: %w", err)
+		}
+		rows = storedRows
 	}
 	if len(rows) == 0 {
 		return nil, false, nil
@@ -132,7 +173,7 @@ func (s *Service) authorizedMetaMembers(
 			// caller, as the runtime snapshot treats it); dropping on a fault
 			// narrows the candidate set and turns ambiguous into a confident
 			// wrong answer.
-			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), endpoint.ProjectID.String())); err != nil {
+			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), row.ProjectID.String())); err != nil {
 				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
 					continue
 				}
@@ -145,4 +186,75 @@ func (s *Service) authorizedMetaMembers(
 		authorized = append(authorized, row)
 	}
 	return authorized, nil
+}
+
+var quietLogger = slog.New(slog.DiscardHandler)
+
+// gatewayMemberResourceScopes reads, for each card on a gateway, the cached
+// resource row of the member a login through that client would read, so the
+// card requests what the login will. A client no single member claims has no
+// entry; a lookup fault logs and leaves the card on its issuer's scopes.
+func (s *Service) gatewayMemberResourceScopes(
+	ctx context.Context,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	clients []remotesessions.Client,
+	discover bool,
+) map[uuid.UUID]remotesessions.ResourceScopes {
+	if !discover || !endpoint.MetaMcpServerID.Valid || challengeState.Subject == nil || len(clients) == 0 {
+		return nil
+	}
+	memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "stamp consent subject for gateway member scopes", attr.SlogError(err))
+		return nil
+	}
+	// Clients on one authorization server, owned by the same project, resolve
+	// to the same member, so each pair is resolved once per render. The
+	// project matters on an organization gateway, where a project's client is
+	// claimed only by that project's members.
+	type claimKey struct {
+		remoteSessionIssuerID uuid.UUID
+		projectID             uuid.UUID
+	}
+	byClaim := make(map[claimKey]memberScopes, len(clients))
+	out := make(map[uuid.UUID]remotesessions.ResourceScopes, len(clients))
+	for _, c := range clients {
+		key := claimKey{remoteSessionIssuerID: c.RemoteSessionIssuerID, projectID: c.ProjectID.UUID}
+		resolved, seen := byClaim[key]
+		if !seen {
+			resolved = s.gatewayMemberScopes(ctx, memberCtx, endpoint, c)
+			byClaim[key] = resolved
+		}
+		if resolved.ok {
+			out[c.ID] = resolved.scopes
+		}
+	}
+	return out
+}
+
+// memberScopes is one authorization server's gateway member row, if any.
+type memberScopes struct {
+	scopes remotesessions.ResourceScopes
+	ok     bool
+}
+
+// gatewayMemberScopes reads the cached resource row of the member a login
+// through c would read. A lookup fault logs and reports none.
+func (s *Service) gatewayMemberScopes(ctx, memberCtx context.Context, endpoint *ResolvedMcpEndpoint, c remotesessions.Client) memberScopes {
+	none := memberScopes{scopes: remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: false}, ok: false}
+	// The connect logs a shared authorization server; every render need not.
+	resource, member, _, err := s.resolveMetaMemberResource(memberCtx, quietLogger, endpoint, c)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve gateway member for consent card", attr.SlogError(err), attr.SlogRemoteSessionClientID(c.ID.String()))
+		return none
+	}
+	if !member.serverID.Valid {
+		return none
+	}
+	scopes, resourceURL, ok := s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, member.projectID, member.serverID, true)
+	if !ok || strings.TrimRight(resourceURL, "/") != strings.TrimRight(resource, "/") {
+		return none
+	}
+	return memberScopes{scopes: scopes, ok: true}
 }

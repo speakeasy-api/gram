@@ -8,26 +8,32 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/events"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -70,6 +76,10 @@ type ProcessWorkOSOrganizationEvents struct {
 	// deprovisioning events can invalidate a user's cached org memberships
 	// instead of waiting out the cache TTL.
 	userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo]
+	// revokedTokens is the access-token revocation cache.
+	revokedTokens signins.TokenRevoker
+	deliverer     *signins.Deliverer
+	flags         feature.Provider
 
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations created from WorkOS events.
@@ -77,14 +87,47 @@ type ProcessWorkOSOrganizationEvents struct {
 }
 
 func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, cacheAdapter cache.Cache, identityMap IdentityMapRefreshSignaler) *ProcessWorkOSOrganizationEvents {
+	revokedTokens := revokedTokenCache{cache: cache.NewTypedObjectCache[chatsessions.RevokedToken](logger.With(attr.SlogCacheNamespace("chat_session_revoked")), cacheAdapter, cache.SuffixNone)}
 	return &ProcessWorkOSOrganizationEvents{
 		db:            db,
 		logger:        logger,
 		workosClient:  workosClient,
 		identityMap:   identityMap,
 		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cacheAdapter, cache.SuffixNone),
+		revokedTokens: revokedTokens,
+		deliverer:     signins.NewDeliverer(logger, noop.NewMeterProvider(), db, revokedTokens, workosClient, nil),
+		flags:         nil,
 
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+	}
+}
+
+// SetSignInEnforcement wires the flags gating sign-in revocation on
+// deprovisioning, and the meter provider and epoch store for deliveries.
+func (p *ProcessWorkOSOrganizationEvents) SetSignInEnforcement(flags feature.Provider, meterProvider metric.MeterProvider, epochs signins.EpochRaiser) {
+	p.flags = flags
+	p.deliverer = signins.NewDeliverer(p.logger, meterProvider, p.db, p.revokedTokens, p.workosClient, epochs)
+}
+
+// deprovisionRevokes decides whether deprovisioning revokes the member's
+// sign-ins. Only an explicit "off" skips it: an unavailable flag decision
+// fails closed, because the event cursor advances and the skip would be
+// permanent.
+func (p *ProcessWorkOSOrganizationEvents) deprovisionRevokes(ctx context.Context, logger *slog.Logger, organizationID string) bool {
+	if p.flags == nil {
+		logger.WarnContext(ctx, "sign-in enforcement flags not configured; revoking on deprovisioning")
+		return true
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, p.flags, feature.FlagSignInEnforcement, organizationID, nil)
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "sign-in enforcement flag unavailable; revoking on deprovisioning", attr.SlogError(err))
+		return true
+	case evaluation == feature.EvaluationIndeterminate:
+		logger.WarnContext(ctx, "sign-in enforcement flag undecided; revoking on deprovisioning")
+		return true
+	default:
+		return evaluation == feature.EvaluationEnabled
 	}
 }
 
@@ -195,9 +238,27 @@ type postCommitEffects struct {
 	// deactivated). Safe to lose: the sync schedule delivers the same
 	// refresh at its next tick.
 	refreshIdentityMap bool
+	// revocationDeliveries are the durable JTI and WorkOS session deliveries
+	// deprovisioning enqueued; the sweep retries whatever this push misses.
+	revocationOrganizationID string
+	revocationDeliveries     []uuid.UUID
+	revokedSignIns           int
+	// revokeSignIns asks the activity to revoke a deprovisioned user's
+	// sign-ins inside the event's transaction, when enforcement is on.
+	revokeSignIns *signInRevocation
+}
+
+type signInRevocation struct {
+	organizationID string
+	userID         string
 }
 
 func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
+	if len(effects.revocationDeliveries) > 0 {
+		p.deliverer.DeliverNow(ctx, []string{effects.revocationOrganizationID}, effects.revocationDeliveries)
+	}
+	signins.RecordRevoked(ctx, signins.RevokeReasonDeprovisioned, effects.revokedSignIns)
+
 	if effects.refreshIdentityMap && p.identityMap != nil {
 		if err := p.identityMap.SignalIdentityMapRefresh(ctx); err != nil {
 			logger.WarnContext(ctx, "failed to signal identity map refresh", attr.SlogError(err))
@@ -271,6 +332,11 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	effects, err := handleOrganizationEvent(ctx, logger, dbtx, workosOrgID, event, p.newOrganizationDefaultHost)
 	if err != nil {
 		return "", err
+	}
+	if r := effects.revokeSignIns; r != nil && p.deprovisionRevokes(ctx, logger, r.organizationID) {
+		if err := revokeDeprovisionedSignIns(ctx, dbtx, *r, &effects); err != nil {
+			return "", err
+		}
 	}
 
 	if _, err := workosrepo.New(dbtx).SetOrganizationSyncLastEventID(ctx, workosrepo.SetOrganizationSyncLastEventIDParams{
@@ -948,4 +1014,26 @@ func ShouldProcessEvent(rowLastEventID *string, rowWorkOSUpdatedAt *time.Time, e
 		return !eventUpdatedAt.Before(*rowWorkOSUpdatedAt)
 	}
 	return eventID > *rowLastEventID
+}
+
+// revokedTokenCache writes the same revocation entries as chatsessions.Manager.
+type revokedTokenCache struct {
+	cache cache.TypedCacheObject[chatsessions.RevokedToken]
+}
+
+func (c revokedTokenCache) RevokeToken(ctx context.Context, jti string) error {
+	if err := c.cache.Store(ctx, chatsessions.RevokedToken{JTI: jti, RevokedAt: time.Now()}); err != nil {
+		return fmt.Errorf("store revoked token: %w", err)
+	}
+	return nil
+}
+
+// SweepSignInRevocations retries one batch of pending sign-in
+// revocation deliveries and returns how many it claimed.
+func (p *ProcessWorkOSOrganizationEvents) SweepSignInRevocations(ctx context.Context) (int, error) {
+	n, err := p.deliverer.Sweep(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("sweep sign-in revocation deliveries: %w", err)
+	}
+	return n, nil
 }

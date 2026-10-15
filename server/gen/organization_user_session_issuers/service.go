@@ -20,12 +20,20 @@ import (
 type Service interface {
 	// Create an organization-owned user_session_issuer. Requires org:admin.
 	CreateIssuer(context.Context, *CreateIssuerPayload) (res *types.UserSessionIssuer, err error)
-	// List organization-owned user_session_issuers. Requires org:read.
+	// List the user_session_issuers in the caller's organization:
+	// organization-owned and project-specific, each project-specific issuer with
+	// its owning project name. Requires org:read.
 	ListIssuers(context.Context, *ListIssuersPayload) (res *ListOrganizationUserSessionIssuersResult, err error)
-	// Get an organization-owned user_session_issuer by id. Requires org:read.
+	// Get any user_session_issuer in the caller's organization, organization-owned
+	// or project-specific, by id. Requires org:read.
 	GetIssuer(context.Context, *GetIssuerPayload) (res *types.UserSessionIssuer, err error)
 	// Update an organization-owned user_session_issuer. Requires org:admin.
 	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *types.UserSessionIssuer, err error)
+	// List the live MCP servers, toolsets, and meta MCP servers attached to a
+	// user_session_issuer in the caller's organization, organization-owned or
+	// project-specific. A toolset served through an MCP server is listed once, as
+	// that server. Requires org:read.
+	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListUserSessionIssuerMcpServersResult, err error)
 	// Report the clients, live sessions, MCP servers, and toolsets affected by
 	// deleting an organization-owned user_session_issuer. Requires org:read.
 	GetIssuerDeletePreflight(context.Context, *GetIssuerDeletePreflightPayload) (res *OrganizationUserSessionIssuerDeletePreflight, err error)
@@ -86,7 +94,7 @@ const ServiceName = "organizationUserSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
+var MethodNames = [14]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "listMcpServers", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
 
 // CreateCimdClientPayload is the payload type of the
 // organizationUserSessionIssuers service createCimdClient method.
@@ -194,6 +202,21 @@ type ListIssuersPayload struct {
 	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
+	Limit *int
+	// Only issuers from one tier: organization-owned (organization) or
+	// project-specific (project). Omitted lists both.
+	Tier         *string
+	SessionToken *string
+}
+
+// ListMcpServersPayload is the payload type of the
+// organizationUserSessionIssuers service listMcpServers method.
+type ListMcpServersPayload struct {
+	// The user_session_issuer whose attached MCP servers are listed.
+	UserSessionIssuerID string
+	// Pagination cursor: id of the last item from the previous page.
+	Cursor *string
+	// Page size (default 50, max 100).
 	Limit        *int
 	SessionToken *string
 }
@@ -210,6 +233,14 @@ type ListOrganizationUserSessionIssuersResult struct {
 // organizationUserSessionIssuers service listCimdClients method.
 type ListUserSessionIssuerCimdClientsResult struct {
 	Items []*types.UserSessionIssuerCimdClient
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
+// ListUserSessionIssuerMcpServersResult is the result type of the
+// organizationUserSessionIssuers service listMcpServers method.
+type ListUserSessionIssuerMcpServersResult struct {
+	Items []*UserSessionIssuerMcpServer
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
 }
@@ -273,6 +304,10 @@ type OrganizationUserSessionIssuerDeletePreflight struct {
 	// Active identity-chaining bindings that must be explicitly unlinked before
 	// deletion.
 	EmaBindingCount int64
+	// True when this is the organization's only organization-level issuer, so
+	// deleting it stops serving the organization gateway its members sign in to.
+	// Does not block deletion.
+	WithdrawsOrganizationGateway bool
 }
 
 // OrganizationUserSessionIssuerMigratePreflight is the result type of the
@@ -302,7 +337,13 @@ type OrganizationUserSessionIssuerMigratePreflight struct {
 	PlatformOwned bool
 	// Configuration differences that do not block the migration. The target's
 	// values become authoritative for future authorization; existing sessions and
-	// refresh tokens are unaffected.
+	// refresh tokens are unaffected. Besides the issuer settings, this reports
+	// authorization_server_mode, use_authentication_host, and issuer_url (the
+	// shared authorization server's issuer identifier, empty when not served)
+	// whenever they differ: repointed MCP servers then direct clients to a
+	// different authorization server, so anything configured with the source's
+	// values, such as an identity provider or a federated platform, must be
+	// updated.
 	Warnings []*UserSessionIssuerFieldMismatch
 	// Stable fingerprint of the current warnings. Empty when there are no
 	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
@@ -359,6 +400,24 @@ type UserSessionIssuerFieldMismatch struct {
 	SourceValue string
 	// The target issuer's rendered value. Empty when unset.
 	TargetValue string
+}
+
+// A live MCP server, toolset, or meta MCP server attached to a
+// user_session_issuer.
+type UserSessionIssuerMcpServer struct {
+	// Which kind of MCP server this is.
+	Kind string
+	// The MCP server, toolset, or meta MCP server id.
+	ID string
+	// The display name.
+	Name string
+	// The MCP server or toolset slug. Absent for meta MCP servers and MCP servers
+	// without one.
+	Slug *string
+	// The owning project id.
+	ProjectID string
+	// The owning project name.
+	ProjectName string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

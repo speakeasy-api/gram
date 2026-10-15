@@ -734,6 +734,7 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	ti.service.WithFeatureProvider(serverKeyFlags())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -799,9 +800,9 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	require.NoError(t, err)
 	require.Len(t, servers, 2)
 	for _, server := range servers {
-		require.False(t, server.McpServerID.Valid, "re-enable keeps writing the toolset key until readers on every pod handle server keys")
+		require.False(t, server.ToolsetID.Valid, "re-enable stores the toolset under its canonical server")
 	}
-	require.Contains(t, []uuid.UUID{servers[0].ToolsetID.UUID, servers[1].ToolsetID.UUID}, uuid.MustParse(second.ID))
+	require.Contains(t, []uuid.UUID{servers[0].McpServerID.UUID, servers[1].McpServerID.UUID}, uuid.MustParse(second.ID))
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
 	require.NoError(t, err)

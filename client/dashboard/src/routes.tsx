@@ -93,6 +93,7 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
+import OrgGateway from "./pages/org/OrgGateway";
 import HeadlessMode from "./pages/org/HeadlessMode";
 import PlatformMCPRedirect from "./pages/org/PlatformMCPRedirect";
 import OrgSkills from "./pages/org/OrgSkills";
@@ -146,7 +147,7 @@ import RiskEventsPage from "./pages/security/RiskEventsPage";
 import {
   ShadowAIRoot,
   ShadowAISectionRedirect,
-  ShadowMCPLegacyRedirect,
+  ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
@@ -1018,7 +1019,9 @@ const ROUTE_STRUCTURE = {
         title: "MCPs",
         url: "mcps",
         component: ShadowAIRoot,
-        indexComponent: ShadowAISectionRedirect,
+        // The MCPs index was the approvals queue; it lands on the MCP
+        // approvals tab of Guardrails rather than the policies list.
+        indexComponent: ShadowMCPIndexRedirect,
         subPages: {
           detail: {
             title: "Shadow MCP Server",
@@ -1038,7 +1041,7 @@ const ROUTE_STRUCTURE = {
     title: "Shadow MCP",
     url: "shadow-mcp",
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPLegacyRedirect,
+    indexComponent: ShadowMCPIndexRedirect,
     subPages: {
       detail: {
         title: "Shadow MCP Server",
@@ -1089,8 +1092,9 @@ const ROUTE_STRUCTURE = {
             title: "Plugin Overview",
             url: "overview",
           },
+          // Keep existing server links working after merging servers into overview.
           servers: {
-            title: "Plugin MCP Servers",
+            title: "Plugin Overview",
             url: "servers",
           },
           skills: {
@@ -1362,6 +1366,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "logs",
     icon: "file-text",
     component: OrgLogs,
+  },
+  gateway: {
+    title: "Gateway",
+    url: "gateway",
+    icon: "network",
+    component: OrgGateway,
   },
   legacyData: {
     title: "Event Feed",

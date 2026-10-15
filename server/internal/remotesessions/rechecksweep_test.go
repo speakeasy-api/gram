@@ -297,7 +297,7 @@ func TestRecheckSweep_PlatformClientSpansEligibleOrganizations(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Two eligible organizations: one binds the client with no endpoint behind it, the other serves it.
+	// Two eligible organizations: one binds the client through its only organization-level issuer, with no stored endpoint behind it, so only its organization gateway presents the grant; the other serves it through a stored endpoint.
 	routelessOrg := createOrganization(t, ctx, ti.conn, slug+"-routeless")
 	routeless, err := testrepo.New(ti.conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
 		OrganizationID:     conv.ToPGText(routelessOrg),
@@ -353,13 +353,33 @@ func TestRecheckSweep_PlatformClientSpansEligibleOrganizations(t *testing.T) {
 		UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, OrganizationIds: claimed.OrganizationIds, SubjectUrn: subject, NowTs: conv.ToPGTimestamptz(window.now),
 	})
 	require.NoError(t, err)
-	require.Len(t, placements, 1)
-	require.Equal(t, slug+"-endpoint", placements[0].Slug)
+	require.Len(t, placements, 2)
+	require.Equal(t, slug+"-endpoint", placements[0].Slug, "stored endpoints are tried before an organization gateway")
 	require.Equal(t, authCtx.ActiveOrganizationID, placements[0].OrganizationID, "the placement names the organization it is served under")
+	require.False(t, placements[0].OrganizationGateway)
+	require.True(t, placements[1].OrganizationGateway)
+	require.Equal(t, slug+"-routeless", placements[1].Slug, "an organization gateway is addressed by its organization's slug")
+	require.Equal(t, routelessOrg, placements[1].OrganizationID)
 
 	placements, err = q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
 		UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, OrganizationIds: []string{routelessOrg}, SubjectUrn: subject, NowTs: conv.ToPGTimestamptz(window.now),
 	})
 	require.NoError(t, err)
-	require.Empty(t, placements, "the routeless organization alone would have hidden the grant")
+	require.Len(t, placements, 1, "the organization gateway alone presents the grant there")
+	require.True(t, placements[0].OrganizationGateway)
+
+	// A second organization-level issuer withdraws the gateway, leaving that
+	// organization nothing to present the grant through.
+	_, err = testrepo.New(ti.conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
+		OrganizationID:     conv.ToPGText(routelessOrg),
+		Slug:               slug + "-routeless-second-usi",
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	placements, err = q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
+		UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, OrganizationIds: []string{routelessOrg}, SubjectUrn: subject, NowTs: conv.ToPGTimestamptz(window.now),
+	})
+	require.NoError(t, err)
+	require.Empty(t, placements, "an organization with no endpoint or gateway would have hidden the grant")
 }

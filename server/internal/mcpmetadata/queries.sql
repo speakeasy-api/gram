@@ -134,6 +134,48 @@ RETURNING id,
           created_at,
           updated_at;
 
+-- name: LockMetadataByBackendID :many
+-- Locks the toolset-keyed row before its server-keyed twin, the order the dependent move takes.
+SELECT id,
+       toolset_id,
+       mcp_server_id,
+       project_id,
+       external_documentation_url,
+       external_documentation_text,
+       logo_id,
+       instructions,
+       header_display_names,
+       default_environment_id,
+       installation_override_url,
+       created_at,
+       updated_at
+FROM mcp_metadata
+WHERE project_id = @project_id
+  AND (toolset_id = @backend_id::uuid OR mcp_server_id = @backend_id::uuid)
+ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
+FOR UPDATE;
+
+-- name: AcquireMetadataBackendLock :exec
+-- Serializes saves for one backend so a save sees a row another save inserted under the other key.
+SELECT pg_advisory_xact_lock(hashtextextended('mcp_metadata:' || (@project_id::uuid)::text || ':' || (@backend_id::uuid)::text, 0));
+
+-- name: DeleteServerKeyedMetadata :execrows
+-- Cascades to the row's mcp_environment_configs.
+DELETE FROM mcp_metadata
+WHERE id = @id
+  AND project_id = @project_id
+  AND mcp_server_id = @mcp_server_id;
+
+-- name: RekeyMetadataToMcpServer :execrows
+-- Same row id, so its mcp_environment_configs stay attached.
+UPDATE mcp_metadata
+SET toolset_id = NULL,
+    mcp_server_id = @mcp_server_id,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND toolset_id = @mcp_server_id;
+
 -- name: GetHeaderDisplayNames :one
 SELECT header_display_names
 FROM mcp_metadata

@@ -49,9 +49,21 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // No ClientID/RedirectURI: a first-party challenge has no MCP client to grant
 // to or redirect back to. Once the user links every card on the consent page,
 // the flow is terminal and the page closes its dashboard-opened tab.
+//
+// On a gateway, a `server` query parameter names the server to connect, and
+// the flow lands on that server's connect page. A gateway tool call links here
+// when a server cannot be reached without the user's sign-in.
 func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	if s.redirectToAuthorizationServer(w, r, endpoint) {
+		return nil
+	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
+
+	focusServer := r.URL.Query().Get("server")
+	if len(focusServer) > maxFocusServerLength {
+		return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
+	}
 
 	csrfToken, err := generateOpaqueToken()
 	if err != nil {
@@ -74,6 +86,8 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
 		AuthorizerUserID:         "",
 		AuthorizerImpersonated:   nil,
+		SignInID:                 nil,
+		FreshLoginForced:         false,
 		AgentAuthorizationTarget: nil,
 		Endpoint:                 endpointRef,
 		ClientID:                 "",
@@ -89,6 +103,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		FirstParty: true,
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
+		FocusServer:     focusServer,
 	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
@@ -120,6 +135,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		ScopesSupported: nil,
 		LoginHint:       "",
 		ScreenHint:      "",
+		Prompt:          "",
 	})
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)

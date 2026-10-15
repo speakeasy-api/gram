@@ -34,6 +34,10 @@ type Client struct {
 	// updateIssuer endpoint.
 	UpdateIssuerDoer goahttp.Doer
 
+	// ListMcpServers Doer is the HTTP client used to make requests to the
+	// listMcpServers endpoint.
+	ListMcpServersDoer goahttp.Doer
+
 	// GetIssuerDeletePreflight Doer is the HTTP client used to make requests to
 	// the getIssuerDeletePreflight endpoint.
 	GetIssuerDeletePreflightDoer goahttp.Doer
@@ -95,6 +99,7 @@ func NewClient(
 		ListIssuersDoer:               doer,
 		GetIssuerDoer:                 doer,
 		UpdateIssuerDoer:              doer,
+		ListMcpServersDoer:            doer,
 		GetIssuerDeletePreflightDoer:  doer,
 		DeleteIssuerDoer:              doer,
 		MoveIssuerDoer:                doer,
@@ -203,6 +208,30 @@ func (c *Client) UpdateIssuer() goa.Endpoint {
 		resp, err := c.UpdateIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "updateIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMcpServers returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service listMcpServers server.
+func (c *Client) ListMcpServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMcpServersRequest(c.encoder)
+		decodeResponse = DecodeListMcpServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMcpServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMcpServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "listMcpServers", err)
 		}
 		return decodeResponse(resp)
 	}
