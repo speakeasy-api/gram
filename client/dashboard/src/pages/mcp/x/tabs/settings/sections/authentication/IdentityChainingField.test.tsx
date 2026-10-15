@@ -156,6 +156,23 @@ describe("identity chaining bound client", () => {
     expect(screen.queryByText("Use this client instead")).toBeNull();
   });
 
+  it("lets the buttons show whether chaining is on", () => {
+    read.data = bound("second");
+    const { rerender } = render(field());
+    expect(screen.getByText("Disable")).toBeTruthy();
+    expect(screen.queryByText("Enabled")).toBeNull();
+    read.data = unlinked;
+    rerender(field());
+    expect(screen.getByText("Enable identity chaining")).toBeTruthy();
+    expect(screen.queryByText("Not enabled")).toBeNull();
+  });
+
+  it("keeps the badge for states the buttons don't explain", () => {
+    read.data = { ...bound("second"), state: "transient_failure" };
+    render(field());
+    expect(screen.getByText("Temporary failure")).toBeTruthy();
+  });
+
   it("makes replacing the bound client explicit", () => {
     read.data = bound("elsewhere");
     render(field());

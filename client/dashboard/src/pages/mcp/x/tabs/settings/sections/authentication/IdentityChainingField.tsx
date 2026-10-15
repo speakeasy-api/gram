@@ -326,8 +326,11 @@ export function IdentityChainingField({
   const pending = read.isFetching || prepare.isPending || unlink.isPending;
   const ready = bound && read.data?.state === "ready";
   const shownState = read.data ? displayedChainingState(read.data) : null;
-  const badge = shownState ? stateBadge(shownState) : null;
   const canUnlink = chainingUnlinkable(read.data);
+  // Enable/Disable already say whether chaining is on.
+  const badgeRedundant =
+    shownState === "unlinked" || (shownState === "ready" && canUnlink);
+  const badge = shownState && !badgeRedundant ? stateBadge(shownState) : null;
   const enableBlocked =
     publicClient ||
     !scopesValid ||
