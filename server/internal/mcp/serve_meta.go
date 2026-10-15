@@ -223,15 +223,18 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		})
 		ctx = context.WithValue(ctx, metaCodeRefreshKey{}, refresh)
 		ctx = context.WithValue(ctx, liveSessionPolicyKey{}, true)
-		credential := sha256.Sum256([]byte(admission.bearer))
-		callerKey := hex.EncodeToString(credential[:])
-		anonymous := admission.bearer == "" && gate.userID == "" && gate.externalUserID == "" && gate.apiKeyID == ""
-		if anonymous {
-			callerKey = anonymousCodeCallerKey(gate.metaServerID, admission.clientSessionID)
+		// Only the issuer gate admits an identity; a bearer an ungated gateway
+		// never checked must not buy its own runner.
+		authCtx, _ := contextvalues.GetAuthContext(ctx)
+		anonymous := !metaServer.UserSessionIssuerID.Valid || authCtx == nil
+		callerKey := anonymousCodeCallerKey(gate.metaServerID, admission.clientSessionID)
+		if !anonymous {
+			credential := sha256.Sum256([]byte(admission.bearer))
+			callerKey = hex.EncodeToString(credential[:])
 		}
 		ctx = context.WithValue(ctx, metaCodeCredentialKey{}, callerKey)
 		ctx = context.WithValue(ctx, metaCodeSessionlessAnonymousKey{}, anonymous && admission.clientSessionID == "")
-		cancellable := metaServer.UserSessionIssuerID.Valid && admission.bearer != ""
+		cancellable := !anonymous
 		sessionScope := "anonymous:" + uuid.NewString()
 		if cancellable {
 			sessionScope = "credential"

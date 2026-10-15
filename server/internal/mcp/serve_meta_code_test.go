@@ -96,3 +96,32 @@ func TestCodeModeAnonymousCallersNeedSessionAndShareBoundedRunners(t *testing.T)
 	require.NotEmpty(t, callers)
 	require.LessOrEqual(t, len(callers), 4, "anonymous sessions share a bounded set of runners")
 }
+
+// TestCodeModeUnverifiedBearerStaysAnonymous pins that an ungated gateway,
+// which never checks the Authorization header, applies the anonymous rules
+// to a caller that sends one: no session is refused, and a fresh bearer per
+// request cannot claim a fresh runner.
+func TestCodeModeUnverifiedBearerStaysAnonymous(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	slug := "code-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+	setGatewayMode(t, ctx, ti, gateway.ID, "code_mode")
+	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil}
+	mcp.SetTestCodeExecutor(ti.service, executor)
+	execute := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}})
+
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, execute, uuid.NewString(), nil)
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), "Mcp-Session-Id")
+	require.Empty(t, executor.callers(), "an unverified bearer must not stand in for an MCP session")
+
+	for range 32 {
+		_, err := servePublicHTTP(t, t.Context(), ti, slug, execute, uuid.NewString(), map[string]string{"Mcp-Session-Id": uuid.NewString()})
+		require.NoError(t, err)
+	}
+	callers := executor.callers()
+	require.NotEmpty(t, callers)
+	require.LessOrEqual(t, len(callers), 4, "unverified bearers share the anonymous runners")
+}
