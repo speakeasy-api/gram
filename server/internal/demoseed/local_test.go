@@ -6,12 +6,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/users"
 )
@@ -96,9 +98,15 @@ func TestLocalFixturesReseed(t *testing.T) {
 
 	opts := LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}
 	codeGatewayMode := func() string {
-		var mode string
-		require.NoError(t, db.QueryRow(ctx, `SELECT discovery_mode FROM meta_mcp_servers WHERE organization_id = $1 AND name = 'Python Code Gateway' AND deleted IS FALSE`, spec.OrgID).Scan(&mode))
-		return mode
+		servers, err := metamcprepo.New(db).ListMetaMCPServers(ctx, metamcprepo.ListMetaMCPServersParams{OrganizationID: spec.OrgID, ProjectID: uuid.MustParse(spec.ProjectID())})
+		require.NoError(t, err)
+		for _, server := range servers {
+			if server.MetaMcpServer.Name == "Python Code Gateway" {
+				return server.MetaMcpServer.DiscoveryMode.String
+			}
+		}
+		require.FailNow(t, "Python Code Gateway not seeded")
+		return ""
 	}
 	for range 2 {
 		seedLocalPostgres(ctx, t, db, spec)
