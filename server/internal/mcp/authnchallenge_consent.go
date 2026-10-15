@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -108,9 +109,12 @@ const consentFormMaxBytes = 1 << 20 // 1 MiB
 type consentTemplateData struct {
 	// ShowDiscoveryMode exposes optional gateway connection settings.
 	ShowDiscoveryMode bool
-	ClientName        string
-	MCPSlug           string
-	MCPRouteBase      string
+	// PrefillDiscoveryMode is the mode this subject chose on its previous
+	// connection; empty selects the gateway default.
+	PrefillDiscoveryMode metamcp.DiscoveryMode
+	ClientName           string
+	MCPSlug              string
+	MCPRouteBase         string
 	// SharedConsentPath is the consent page path on the issuer's shared
 	// authorization server when it is serving the request. Empty when the
 	// endpoint's own authorization server is, whose consent page lives under
@@ -721,6 +725,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		)
 	}
 	inventoryDeferred := consentInventoryDeferred(cards, prefillAttr != "")
+	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
+	var prefillDiscoveryMode metamcp.DiscoveryMode
+	if showDiscoveryMode {
+		prefillDiscoveryMode = s.consentDiscoveryModePrefill(ctx, endpoint, *challengeState.Subject, clientRowID)
+	}
 
 	data := consentTemplateData{
 		ClientName:              clientName,
@@ -743,7 +752,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
 		ShowToolsIsland:         showToolsIsland,
-		ShowDiscoveryMode:       !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint),
+		ShowDiscoveryMode:       showDiscoveryMode,
+		PrefillDiscoveryMode:    prefillDiscoveryMode,
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
