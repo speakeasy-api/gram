@@ -748,8 +748,8 @@
                   class="bg-card border px-2 py-1.5 font-mono text-sm"
                 >
                   <option value="">Use gateway default</option>
-                  <option value="progressive">Progressive</option>
-                  <option value="direct">Direct</option>
+                  <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
+                  <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
                 </select>
                 <p
                   id="discovery-mode-help"
