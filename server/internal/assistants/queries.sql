@@ -3,7 +3,8 @@
 -- recovery only. Idle runtimes are collected separately through
 -- ListIdleAssistantRuntimes, which must poll the runner before stopping. Both
 -- branches cover rows stranded by a dead process, and the next admit
--- recreates the runtime:
+-- recreates the runtime. Stuck `expiring` rows on an idle-expiring backend
+-- are left to the idle sweep, which stops the backend before retiring them:
 --   - 'starting' rows that never transitioned to active within the startup
 --     grace window (server crashed mid-boot).
 --   - 'expiring' rows older than the ExpireThreadRuntime activity's full
@@ -19,7 +20,11 @@ SET
 WHERE deleted IS FALSE
   AND (
     (state = @starting_state AND updated_at < @starting_cutoff)
-    OR (state = @expiring_state AND updated_at < @expiring_cutoff)
+    OR (
+      state = @expiring_state
+      AND updated_at < @expiring_cutoff
+      AND backend <> ALL(@idle_expiring_backends::text[])
+    )
   )
 RETURNING assistant_id;
 
@@ -1363,8 +1368,8 @@ WHERE id = @runtime_id
 -- ErrNoRows means another actor (Stop, reaper, manual API) already finalized
 -- the row; callers must not then call Stop.
 --
--- Rows on an idle-retained backend never match, so their thread workflows
--- exit the expiry loop and leave the runtime warm.
+-- Only rows on an idle-expiring backend match; thread workflows on any other
+-- backend exit the expiry loop and leave the runtime up.
 --
 -- v2 (single-VM-per-assistant) rows pin assistant_thread_id to the admitting
 -- thread, but every thread workflow under the assistant runs its own warm
@@ -1390,7 +1395,7 @@ WHERE id = (
     AND r.state IN (@active_state, @expiring_state)
     AND r.deleted IS FALSE
     AND r.ended IS FALSE
-    AND r.backend <> ALL(@idle_retained_backends::text[])
+    AND r.backend = ANY(@idle_expiring_backends::text[])
   ORDER BY r.runtime_version DESC, r.created_at DESC
   LIMIT 1
 )
@@ -1401,37 +1406,55 @@ WHERE id = (
 RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
 
 -- name: ListIdleAssistantRuntimes :many
--- Active v2 runtimes whose warm window lapsed before @warm_until_before with
--- no thread workflow left to expire them. Rows on an idle-retained backend
--- stay up until their assistant is deleted.
-SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until, a.warm_ttl_seconds
+-- Idle-sweep candidates on an idle-expiring backend:
+--   - `active` v2 rows whose warm window lapsed before @warm_until_before, with
+--     no thread workflow left to expire them.
+--   - `expiring` rows untouched since @expiring_before, whose expire gave up
+--     before stopping the backend.
+-- Assistants with a turn in flight are skipped: warm_until only advances when
+-- a turn ends, so a long turn can outlive its window.
+SELECT r.id, r.project_id, a.warm_ttl_seconds
 FROM assistant_runtimes r
 JOIN assistants a
   ON a.id = r.assistant_id
  AND a.project_id = r.project_id
  AND a.deleted IS FALSE
-WHERE r.state = @active_state
-  AND r.runtime_version = 2
+WHERE r.runtime_version = 2
   AND r.deleted IS FALSE
   AND r.ended IS FALSE
-  AND r.backend <> ALL(@idle_retained_backends::text[])
-  AND r.warm_until < @warm_until_before
-ORDER BY r.warm_until ASC
+  AND r.backend = ANY(@idle_expiring_backends::text[])
+  AND (
+    (r.state = @active_state AND r.warm_until < @warm_until_before)
+    OR (r.state = @expiring_state AND r.updated_at < @expiring_before)
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.assistant_id = r.assistant_id
+      AND e.project_id = r.project_id
+      AND e.deleted IS FALSE
+      AND e.status = @processing_status
+  )
+ORDER BY r.updated_at ASC
 LIMIT @max_rows;
 
 -- name: BeginExpireIdleAssistantRuntime :one
 -- Runtime-id counterpart of BeginExpireAssistantRuntime for the reaper's idle
--- sweep. Only `active` rows move: an `expiring` row already has an expire in
--- flight. ErrNoRows means another actor moved the row first.
+-- sweep. Takes `active` rows, and `expiring` rows untouched since
+-- @expiring_before so a stalled expire is retried rather than left holding the
+-- v2 unique index. ErrNoRows means another actor moved the row first.
 UPDATE assistant_runtimes
 SET
   state = @expiring_state,
   updated_at = clock_timestamp()
 WHERE id = @runtime_id
   AND project_id = @project_id
-  AND state = @active_state
   AND deleted IS FALSE
   AND ended IS FALSE
+  AND (
+    state = @active_state
+    OR (state = @expiring_state AND updated_at < @expiring_before)
+  )
 RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
 
 -- name: RevertExpireAssistantRuntimeToActive :exec
@@ -1482,6 +1505,16 @@ INSERT INTO assistant_runtimes (
   @ended_at,
   @deleted_at
 );
+
+-- name: SetAssistantRuntimeStateForTest :exec
+-- Test fixture: forces a runtime row into a state with a chosen updated_at so
+-- tests can simulate an expire that stalled long ago.
+UPDATE assistant_runtimes
+SET
+  state = @state,
+  updated_at = @updated_at
+WHERE id = @runtime_id
+  AND project_id = @project_id;
 
 -- name: GetAssistantRuntime :one
 SELECT * FROM assistant_runtimes

@@ -107,7 +107,7 @@ WHERE id = (
     AND r.state IN ($4, $1)
     AND r.deleted IS FALSE
     AND r.ended IS FALSE
-    AND r.backend <> ALL($5::text[])
+    AND r.backend = ANY($5::text[])
   ORDER BY r.runtime_version DESC, r.created_at DESC
   LIMIT 1
 )
@@ -123,7 +123,7 @@ type BeginExpireAssistantRuntimeParams struct {
 	ThreadID             uuid.UUID
 	ProjectID            uuid.UUID
 	ActiveState          string
-	IdleRetainedBackends []string
+	IdleExpiringBackends []string
 }
 
 type BeginExpireAssistantRuntimeRow struct {
@@ -142,8 +142,8 @@ type BeginExpireAssistantRuntimeRow struct {
 // ErrNoRows means another actor (Stop, reaper, manual API) already finalized
 // the row; callers must not then call Stop.
 //
-// Rows on an idle-retained backend never match, so their thread workflows
-// exit the expiry loop and leave the runtime warm.
+// Only rows on an idle-expiring backend match; thread workflows on any other
+// backend exit the expiry loop and leave the runtime up.
 //
 // v2 (single-VM-per-assistant) rows pin assistant_thread_id to the admitting
 // thread, but every thread workflow under the assistant runs its own warm
@@ -157,7 +157,7 @@ func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpi
 		arg.ThreadID,
 		arg.ProjectID,
 		arg.ActiveState,
-		arg.IdleRetainedBackends,
+		arg.IdleExpiringBackends,
 	)
 	var i BeginExpireAssistantRuntimeRow
 	err := row.Scan(
@@ -180,17 +180,21 @@ SET
   updated_at = clock_timestamp()
 WHERE id = $2
   AND project_id = $3
-  AND state = $4
   AND deleted IS FALSE
   AND ended IS FALSE
+  AND (
+    state = $4
+    OR (state = $1 AND updated_at < $5)
+  )
 RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
 `
 
 type BeginExpireIdleAssistantRuntimeParams struct {
-	ExpiringState string
-	RuntimeID     uuid.UUID
-	ProjectID     uuid.UUID
-	ActiveState   string
+	ExpiringState  string
+	RuntimeID      uuid.UUID
+	ProjectID      uuid.UUID
+	ActiveState    string
+	ExpiringBefore pgtype.Timestamptz
 }
 
 type BeginExpireIdleAssistantRuntimeRow struct {
@@ -205,14 +209,16 @@ type BeginExpireIdleAssistantRuntimeRow struct {
 }
 
 // Runtime-id counterpart of BeginExpireAssistantRuntime for the reaper's idle
-// sweep. Only `active` rows move: an `expiring` row already has an expire in
-// flight. ErrNoRows means another actor moved the row first.
+// sweep. Takes `active` rows, and `expiring` rows untouched since
+// @expiring_before so a stalled expire is retried rather than left holding the
+// v2 unique index. ErrNoRows means another actor moved the row first.
 func (q *Queries) BeginExpireIdleAssistantRuntime(ctx context.Context, arg BeginExpireIdleAssistantRuntimeParams) (BeginExpireIdleAssistantRuntimeRow, error) {
 	row := q.db.QueryRow(ctx, beginExpireIdleAssistantRuntime,
 		arg.ExpiringState,
 		arg.RuntimeID,
 		arg.ProjectID,
 		arg.ActiveState,
+		arg.ExpiringBefore,
 	)
 	var i BeginExpireIdleAssistantRuntimeRow
 	err := row.Scan(
@@ -2243,49 +2249,64 @@ func (q *Queries) ListColdPendingThreadsForAdmit(ctx context.Context, arg ListCo
 }
 
 const listIdleAssistantRuntimes = `-- name: ListIdleAssistantRuntimes :many
-SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until, a.warm_ttl_seconds
+SELECT r.id, r.project_id, a.warm_ttl_seconds
 FROM assistant_runtimes r
 JOIN assistants a
   ON a.id = r.assistant_id
  AND a.project_id = r.project_id
  AND a.deleted IS FALSE
-WHERE r.state = $1
-  AND r.runtime_version = 2
+WHERE r.runtime_version = 2
   AND r.deleted IS FALSE
   AND r.ended IS FALSE
-  AND r.backend <> ALL($2::text[])
-  AND r.warm_until < $3
-ORDER BY r.warm_until ASC
-LIMIT $4
+  AND r.backend = ANY($1::text[])
+  AND (
+    (r.state = $2 AND r.warm_until < $3)
+    OR (r.state = $4 AND r.updated_at < $5)
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.assistant_id = r.assistant_id
+      AND e.project_id = r.project_id
+      AND e.deleted IS FALSE
+      AND e.status = $6
+  )
+ORDER BY r.updated_at ASC
+LIMIT $7
 `
 
 type ListIdleAssistantRuntimesParams struct {
+	IdleExpiringBackends []string
 	ActiveState          string
-	IdleRetainedBackends []string
 	WarmUntilBefore      pgtype.Timestamptz
+	ExpiringState        string
+	ExpiringBefore       pgtype.Timestamptz
+	ProcessingStatus     string
 	MaxRows              int32
 }
 
 type ListIdleAssistantRuntimesRow struct {
-	ID                  uuid.UUID
-	AssistantThreadID   uuid.UUID
-	AssistantID         uuid.UUID
-	ProjectID           uuid.UUID
-	Backend             string
-	BackendMetadataJson []byte
-	State               string
-	WarmUntil           pgtype.Timestamptz
-	WarmTtlSeconds      int64
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	WarmTtlSeconds int64
 }
 
-// Active v2 runtimes whose warm window lapsed before @warm_until_before with
-// no thread workflow left to expire them. Rows on an idle-retained backend
-// stay up until their assistant is deleted.
+// Idle-sweep candidates on an idle-expiring backend:
+//   - `active` v2 rows whose warm window lapsed before @warm_until_before, with
+//     no thread workflow left to expire them.
+//   - `expiring` rows untouched since @expiring_before, whose expire gave up
+//     before stopping the backend.
+//
+// Assistants with a turn in flight are skipped: warm_until only advances when
+// a turn ends, so a long turn can outlive its window.
 func (q *Queries) ListIdleAssistantRuntimes(ctx context.Context, arg ListIdleAssistantRuntimesParams) ([]ListIdleAssistantRuntimesRow, error) {
 	rows, err := q.db.Query(ctx, listIdleAssistantRuntimes,
+		arg.IdleExpiringBackends,
 		arg.ActiveState,
-		arg.IdleRetainedBackends,
 		arg.WarmUntilBefore,
+		arg.ExpiringState,
+		arg.ExpiringBefore,
+		arg.ProcessingStatus,
 		arg.MaxRows,
 	)
 	if err != nil {
@@ -2295,17 +2316,7 @@ func (q *Queries) ListIdleAssistantRuntimes(ctx context.Context, arg ListIdleAss
 	var items []ListIdleAssistantRuntimesRow
 	for rows.Next() {
 		var i ListIdleAssistantRuntimesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.AssistantThreadID,
-			&i.AssistantID,
-			&i.ProjectID,
-			&i.Backend,
-			&i.BackendMetadataJson,
-			&i.State,
-			&i.WarmUntil,
-			&i.WarmTtlSeconds,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.WarmTtlSeconds); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3313,24 +3324,30 @@ SET
 WHERE deleted IS FALSE
   AND (
     (state = $2 AND updated_at < $3)
-    OR (state = $4 AND updated_at < $5)
+    OR (
+      state = $4
+      AND updated_at < $5
+      AND backend <> ALL($6::text[])
+    )
   )
 RETURNING assistant_id
 `
 
 type ReapStuckAssistantRuntimesParams struct {
-	StoppedState   string
-	StartingState  string
-	StartingCutoff pgtype.Timestamptz
-	ExpiringState  string
-	ExpiringCutoff pgtype.Timestamptz
+	StoppedState         string
+	StartingState        string
+	StartingCutoff       pgtype.Timestamptz
+	ExpiringState        string
+	ExpiringCutoff       pgtype.Timestamptz
+	IdleExpiringBackends []string
 }
 
 // Short-horizon reaper for rows the happy-path can no longer move — crash
 // recovery only. Idle runtimes are collected separately through
 // ListIdleAssistantRuntimes, which must poll the runner before stopping. Both
 // branches cover rows stranded by a dead process, and the next admit
-// recreates the runtime:
+// recreates the runtime. Stuck `expiring` rows on an idle-expiring backend
+// are left to the idle sweep, which stops the backend before retiring them:
 //   - 'starting' rows that never transitioned to active within the startup
 //     grace window (server crashed mid-boot).
 //   - 'expiring' rows older than the ExpireThreadRuntime activity's full
@@ -3345,6 +3362,7 @@ func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckA
 		arg.StartingCutoff,
 		arg.ExpiringState,
 		arg.ExpiringCutoff,
+		arg.IdleExpiringBackends,
 	)
 	if err != nil {
 		return nil, err
@@ -4078,6 +4096,34 @@ func (q *Queries) SetAssistantRuntimeActive(ctx context.Context, arg SetAssistan
 	_, err := q.db.Exec(ctx, setAssistantRuntimeActive,
 		arg.ActiveState,
 		arg.WarmUntil,
+		arg.RuntimeID,
+		arg.ProjectID,
+	)
+	return err
+}
+
+const setAssistantRuntimeStateForTest = `-- name: SetAssistantRuntimeStateForTest :exec
+UPDATE assistant_runtimes
+SET
+  state = $1,
+  updated_at = $2
+WHERE id = $3
+  AND project_id = $4
+`
+
+type SetAssistantRuntimeStateForTestParams struct {
+	State     string
+	UpdatedAt pgtype.Timestamptz
+	RuntimeID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: forces a runtime row into a state with a chosen updated_at so
+// tests can simulate an expire that stalled long ago.
+func (q *Queries) SetAssistantRuntimeStateForTest(ctx context.Context, arg SetAssistantRuntimeStateForTestParams) error {
+	_, err := q.db.Exec(ctx, setAssistantRuntimeStateForTest,
+		arg.State,
+		arg.UpdatedAt,
 		arg.RuntimeID,
 		arg.ProjectID,
 	)
