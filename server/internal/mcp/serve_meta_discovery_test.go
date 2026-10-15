@@ -285,7 +285,7 @@ func TestGatewayDirectGivesQueuedMembersTheirOwnDeadline(t *testing.T) {
 	// Seven members against a concurrency limit of six: the seventh starts
 	// only after a slow member finishes, past half of one shared deadline.
 	slow := func() bool {
-		time.Sleep(time.Second)
+		<-time.After(time.Second)
 		return true
 	}
 	slugs := make([]string, 7)
