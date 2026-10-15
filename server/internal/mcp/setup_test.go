@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 	"github.com/stretchr/testify/require"
@@ -865,4 +866,20 @@ func createTestUser(t *testing.T, ctx context.Context, ti *testInstance, id stri
 	})
 	require.NoError(t, err)
 	return urn.NewUserSubject(id)
+}
+
+// configureServerProviders stamps the upstream authorization server on every
+// MCP server carrying one of userIssuerIDs, from the single provider its
+// clients name. In production each server's provider is written by the
+// identity commit that configures User Identity on it; a fixture that seeds
+// client bindings in SQL never runs that commit.
+func configureServerProviders(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, userIssuerIDs ...uuid.UUID) {
+	t.Helper()
+	stamped, err := testrepo.New(conn).ConfigureMCPServerProvidersFromBindingsFixture(ctx, testrepo.ConfigureMCPServerProvidersFromBindingsFixtureParams{
+		ProjectID:            projectID,
+		UserSessionIssuerIds: userIssuerIDs,
+		OrganizationID:       organizationID,
+	})
+	require.NoError(t, err)
+	require.Positive(t, stamped, "the fixture must configure at least one server, or the test proves nothing")
 }

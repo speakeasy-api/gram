@@ -802,36 +802,123 @@ func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg Li
 	return items, nil
 }
 
-const listMCPServerIDsByUserSessionIssuerID = `-- name: ListMCPServerIDsByUserSessionIssuerID :many
-SELECT id
-FROM mcp_servers
-WHERE project_id = $1
-  AND user_session_issuer_id = $2
-  AND deleted IS FALSE
-ORDER BY id
+const listMCPServerRemoteSessionIssuerBackfill = `-- name: ListMCPServerRemoteSessionIssuerBackfill :many
+WITH servers AS (
+    SELECT s.id,
+           s.project_id,
+           p.organization_id,
+           s.user_session_issuer_id,
+           s.remote_session_issuer_id,
+           rms.url
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    LEFT JOIN remote_mcp_servers AS rms
+      ON rms.id = s.remote_mcp_server_id
+     AND rms.project_id = s.project_id
+     AND rms.deleted IS FALSE
+    WHERE s.deleted IS FALSE
+      AND s.user_session_issuer_id IS NOT NULL
+      AND ($1::text = '' OR p.organization_id = $1::text)
+), cohort AS (
+    SELECT s.user_session_issuer_id, p.organization_id, count(*) AS servers
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    WHERE s.deleted IS FALSE
+      AND s.user_session_issuer_id IS NOT NULL
+    GROUP BY s.user_session_issuer_id, p.organization_id
+), matched AS (
+    SELECT srv.id,
+           (CASE WHEN count(DISTINCT i.id) = 1
+                 THEN (array_agg(DISTINCT i.id))[1]
+            END)::uuid AS remote_session_issuer_id
+    FROM servers AS srv
+    JOIN remote_protected_resources AS rpr
+      ON rpr.project_id = srv.project_id
+     AND rpr.resource_identifier = srv.url
+     AND rpr.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS link
+      ON link.user_session_issuer_id = srv.user_session_issuer_id
+    JOIN remote_session_clients AS c
+      ON c.id = link.remote_session_client_id
+     AND c.deleted IS FALSE
+     AND (c.project_id = srv.project_id
+          OR (c.project_id IS NULL AND c.organization_id = srv.organization_id))
+    JOIN remote_session_issuers AS i
+      ON i.id = c.remote_session_issuer_id
+     AND i.deleted IS FALSE
+     AND i.issuer = ANY (rpr.authorization_servers)
+    GROUP BY srv.id
+)
+SELECT srv.id,
+       srv.project_id,
+       srv.organization_id,
+       srv.user_session_issuer_id,
+       srv.remote_session_issuer_id AS current_remote_session_issuer_id,
+       matched.remote_session_issuer_id AS matched_remote_session_issuer_id,
+       (srv.url IS NOT NULL)::boolean AS remote_backed,
+       cohort.servers AS issuer_server_count
+FROM servers AS srv
+JOIN cohort
+  ON cohort.user_session_issuer_id = srv.user_session_issuer_id
+ AND cohort.organization_id = srv.organization_id
+LEFT JOIN matched
+  ON matched.id = srv.id
+ORDER BY srv.id
 `
 
-type ListMCPServerIDsByUserSessionIssuerIDParams struct {
-	ProjectID           uuid.UUID
-	UserSessionIssuerID uuid.NullUUID
+type ListMCPServerRemoteSessionIssuerBackfillRow struct {
+	ID                           uuid.UUID
+	ProjectID                    uuid.UUID
+	OrganizationID               string
+	UserSessionIssuerID          uuid.NullUUID
+	CurrentRemoteSessionIssuerID uuid.NullUUID
+	MatchedRemoteSessionIssuerID uuid.NullUUID
+	RemoteBacked                 bool
+	IssuerServerCount            int64
 }
 
-// Every live MCP server in the project bound to one user session issuer.
-// A user session issuer is not unique per MCP server, so an operation that
-// mutates the issuer's client binding reaches every server listed here.
-func (q *Queries) ListMCPServerIDsByUserSessionIssuerID(ctx context.Context, arg ListMCPServerIDsByUserSessionIssuerIDParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listMCPServerIDsByUserSessionIssuerID, arg.ProjectID, arg.UserSessionIssuerID)
+// Every live MCP server carrying a user session issuer, with what its own
+// upstream says its provider should be. Read-only: the operator backfill
+// decides and writes, so a plain run explains itself before anything changes.
+//
+// matched_remote_session_issuer_id is the provider derived from the server's
+// own upstream, not from its user session issuer: the server's URL names a
+// protected resource whose RFC 9728 authorization_servers list the issuer of
+// exactly one client bound to the issuer. Resource identifiers are matched
+// exactly, as the serve-time lookup does, since /mcp and /mcp/ may be
+// different resources. remote_session_clients.resource_identifier is
+// deliberately unused: most clients leave it unset.
+//
+// issuer_server_count is how many live servers share the user session issuer
+// across the organization. One means the superseded per-issuer derivation
+// could not have borrowed another server's provider, so the stored value is
+// trustworthy where no metadata match is available.
+func (q *Queries) ListMCPServerRemoteSessionIssuerBackfill(ctx context.Context, organizationID string) ([]ListMCPServerRemoteSessionIssuerBackfillRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServerRemoteSessionIssuerBackfill, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []uuid.UUID
+	var items []ListMCPServerRemoteSessionIssuerBackfillRow
 	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
+		var i ListMCPServerRemoteSessionIssuerBackfillRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.UserSessionIssuerID,
+			&i.CurrentRemoteSessionIssuerID,
+			&i.MatchedRemoteSessionIssuerID,
+			&i.RemoteBacked,
+			&i.IssuerServerCount,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1435,53 +1522,102 @@ func (q *Queries) LockMCPServersByIDs(ctx context.Context, arg LockMCPServersByI
 	return items, nil
 }
 
-const resyncMCPServerRemoteSessionIssuers = `-- name: ResyncMCPServerRemoteSessionIssuers :execrows
-WITH resolved AS (
-    SELECT input.user_session_issuer_id,
-           CASE WHEN count(DISTINCT i.id) = 1
-                THEN (array_agg(DISTINCT i.id))[1]
-           END AS remote_session_issuer_id
-    FROM unnest($3::uuid[]) AS input(user_session_issuer_id)
+const reconcileMCPServerRemoteSessionIssuers = `-- name: ReconcileMCPServerRemoteSessionIssuers :execrows
+WITH scoped AS (
+    SELECT input.user_session_issuer_id AS id
+    FROM unnest($1::uuid[]) AS input(user_session_issuer_id)
     JOIN user_session_issuers AS usi
       ON usi.id = input.user_session_issuer_id
-     AND (usi.project_id = $1::uuid
-          OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
-    LEFT JOIN remote_session_client_user_session_issuers AS link
-           ON link.user_session_issuer_id = input.user_session_issuer_id
-    LEFT JOIN remote_session_clients AS c
-           ON c.id = link.remote_session_client_id
-          AND c.deleted IS FALSE
-          AND (c.project_id = $1::uuid
-               OR (c.project_id IS NULL AND c.organization_id = $2::text))
-    LEFT JOIN remote_session_issuers AS i
-           ON i.id = c.remote_session_issuer_id
-          AND i.deleted IS FALSE
-    GROUP BY input.user_session_issuer_id
+     AND (usi.project_id = $2::uuid
+          OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+), bound AS (
+    SELECT scoped.id AS user_session_issuer_id, i.id AS remote_session_issuer_id
+    FROM scoped
+    JOIN remote_session_client_user_session_issuers AS link
+      ON link.user_session_issuer_id = scoped.id
+    JOIN remote_session_clients AS c
+      ON c.id = link.remote_session_client_id
+     AND c.deleted IS FALSE
+     AND (c.project_id = $2::uuid
+          OR (c.project_id IS NULL AND c.organization_id = $3::text))
+    JOIN remote_session_issuers AS i
+      ON i.id = c.remote_session_issuer_id
+     AND i.deleted IS FALSE
+), derived AS (
+    SELECT scoped.id AS user_session_issuer_id,
+           (CASE WHEN count(DISTINCT bound.remote_session_issuer_id) = 1
+                 THEN (array_agg(DISTINCT bound.remote_session_issuer_id))[1]
+            END)::uuid AS remote_session_issuer_id
+    FROM scoped
+    LEFT JOIN bound ON bound.user_session_issuer_id = scoped.id
+    GROUP BY scoped.id
+), cohort AS (
+    SELECT scoped.id AS user_session_issuer_id, count(*) AS servers
+    FROM scoped
+    JOIN mcp_servers AS sibling
+      ON sibling.user_session_issuer_id = scoped.id
+     AND sibling.deleted IS FALSE
+    JOIN projects AS sibling_project
+      ON sibling_project.id = sibling.project_id
+     AND sibling_project.deleted IS FALSE
+     AND sibling_project.organization_id = $3::text
+    GROUP BY scoped.id
+), target AS (
+    SELECT s.id AS mcp_server_id,
+           CASE
+               -- The configured provider wins while it still has a client, so
+               -- the derivation below can only fill an unset or stale value
+               -- and never overwrite what a commit wrote.
+               WHEN EXISTS (SELECT 1
+                            FROM bound
+                            WHERE bound.user_session_issuer_id = s.user_session_issuer_id
+                              AND bound.remote_session_issuer_id = s.remote_session_issuer_id)
+                   THEN s.remote_session_issuer_id
+               WHEN cohort.servers = 1 THEN derived.remote_session_issuer_id
+           END AS remote_session_issuer_id
+    FROM mcp_servers AS s
+    JOIN scoped ON scoped.id = s.user_session_issuer_id
+    JOIN cohort ON cohort.user_session_issuer_id = scoped.id
+    JOIN derived ON derived.user_session_issuer_id = scoped.id
+    -- Belt and suspenders on the caller's org/project pair agreeing.
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.organization_id = $3::text
+    WHERE s.project_id = $2::uuid
+      AND s.deleted IS FALSE
 )
 UPDATE mcp_servers AS s
-SET remote_session_issuer_id = resolved.remote_session_issuer_id,
+SET remote_session_issuer_id = target.remote_session_issuer_id,
     updated_at = clock_timestamp()
-FROM resolved
-WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
-  AND s.project_id = $1::uuid
-  -- Belt and suspenders on the caller's org/project pair agreeing.
-  AND EXISTS (SELECT 1
-              FROM projects AS p
-              WHERE p.id = s.project_id
-                AND p.organization_id = $2::text)
-  AND s.deleted IS FALSE
-  AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id
+FROM target
+WHERE s.id = target.mcp_server_id
+  AND s.remote_session_issuer_id IS DISTINCT FROM target.remote_session_issuer_id
 `
 
-type ResyncMCPServerRemoteSessionIssuersParams struct {
+type ReconcileMCPServerRemoteSessionIssuersParams struct {
+	UserSessionIssuerIds []uuid.UUID
 	ProjectID            uuid.UUID
 	OrganizationID       string
-	UserSessionIssuerIds []uuid.UUID
 }
 
-// Recomputes mcp_servers.remote_session_issuer_id from the live client
-// bindings on each named user session issuer. Exactly one distinct remote
-// issuer stamps it; none or several leave it NULL and readers fail closed.
+// Keeps mcp_servers.remote_session_issuer_id, the upstream authorization
+// server a server's users sign in to, consistent with the client bindings on
+// each named user session issuer.
+//
+// A configured provider wins while a live client is still bound for it. Losing
+// that client clears the value, which must fail closed rather than route a
+// bearer to an upstream the user cannot sign in to.
+//
+// With no configured provider left, a server alone on its user session issuer
+// takes the single live provider bound there, and is left unset when none or
+// several are. With no other server on the issuer there is nothing to borrow
+// from, and this is the only configuration a toolset-backed or tunneled server
+// has: the per-server identity commit is offered for directly Remote
+// MCP-backed servers only.
+//
+// A server sharing its user session issuer is never derived: its provider is a
+// per-server fact an identity commit writes explicitly, so the clients bound
+// for the other servers on that issuer say nothing about it.
 //
 // Best effort: runs post-commit outside the mutating transaction, so it takes
 // no advisory lock and a raced run merely leaves a stale value, which the
@@ -1492,13 +1628,14 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 // mirror the serve-time credential resolver: the column must never name an
 // issuer that resolver would refuse.
 //
-// Tenancy: the ids arrive from an untenanted join table, so the derivation is
-// pinned to the caller's own project — a foreign id derives no row and writes
-// nothing — and only that project's servers are written. Organization-level
-// clients of the caller's organization count toward the derivation, matching
-// what the attach surface permits.
-func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg ResyncMCPServerRemoteSessionIssuersParams) (int64, error) {
-	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
+// Tenancy: the ids arrive from an untenanted join table, so each one must
+// resolve to an issuer the caller's project can see — a foreign id reaches no
+// row and writes nothing — and only that project's servers are written.
+// Organization-level clients of the caller's organization count, matching what
+// the attach surface permits, and the server count spans the organization so a
+// sibling in another project still blocks the derivation.
+func (q *Queries) ReconcileMCPServerRemoteSessionIssuers(ctx context.Context, arg ReconcileMCPServerRemoteSessionIssuersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reconcileMCPServerRemoteSessionIssuers, arg.UserSessionIssuerIds, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}
@@ -1651,6 +1788,48 @@ func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServer
 	return items, nil
 }
 
+const stampMCPServerRemoteSessionIssuer = `-- name: StampMCPServerRemoteSessionIssuer :execrows
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE s.id = $2
+  AND s.project_id = $3
+  AND s.user_session_issuer_id = $4
+  AND s.deleted IS FALSE
+`
+
+type StampMCPServerRemoteSessionIssuerParams struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.NullUUID
+}
+
+// Writes one MCP server's upstream authorization server: the authorization
+// server its own users sign in to, chosen when an administrator configures
+// User Identity on it. A user session issuer shared by many servers says
+// nothing about which upstream any one of them authenticates against, so this
+// names the server and touches no other row.
+//
+// user_session_issuer_id is the issuer the configuring commit bound its client
+// to. A server moved off that issuer in the meantime matches nothing and the
+// commit is refused rather than stamping a provider its issuer does not bind.
+//
+// The column's foreign key cannot qualify tenancy, so callers must resolve the
+// provider through a tenant-scoped lookup before stamping it.
+func (q *Queries) StampMCPServerRemoteSessionIssuer(ctx context.Context, arg StampMCPServerRemoteSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, stampMCPServerRemoteSessionIssuer,
+		arg.RemoteSessionIssuerID,
+		arg.ID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const syncHostedMCPServer = `-- name: SyncHostedMCPServer :one
 UPDATE mcp_servers
 SET
@@ -1727,6 +1906,15 @@ SET
     slug = $2,
     environment_id = $3,
     user_session_issuer_id = COALESCE($4, user_session_issuer_id),
+    -- A server's upstream authorization server is reached through its user
+    -- session issuer, so moving it to another one drops the provider: the new
+    -- issuer need not bind a client for it. Fail closed and let User Identity
+    -- be configured again rather than keep a provider the issuer cannot serve.
+    remote_session_issuer_id = CASE
+        WHEN $4::uuid IS NOT NULL
+         AND $4::uuid IS DISTINCT FROM user_session_issuer_id THEN NULL
+        ELSE remote_session_issuer_id
+    END,
     remote_mcp_server_id = $5,
     tunneled_mcp_server_id = $6,
     toolset_id = $7,

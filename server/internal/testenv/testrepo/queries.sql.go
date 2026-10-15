@@ -142,6 +142,57 @@ func (q *Queries) ClearRemoteSessionClientKeySetFixture(ctx context.Context, jso
 	return result.RowsAffected(), nil
 }
 
+const configureMCPServerProvidersFromBindingsFixture = `-- name: ConfigureMCPServerProvidersFromBindingsFixture :execrows
+WITH resolved AS (
+    SELECT input.user_session_issuer_id,
+           CASE WHEN count(DISTINCT i.id) = 1
+                THEN (array_agg(DISTINCT i.id))[1]
+           END AS remote_session_issuer_id
+    FROM unnest($2::uuid[]) AS input(user_session_issuer_id)
+    LEFT JOIN remote_session_client_user_session_issuers AS link
+           ON link.user_session_issuer_id = input.user_session_issuer_id
+    LEFT JOIN remote_session_clients AS c
+           ON c.id = link.remote_session_client_id
+          AND c.deleted IS FALSE
+          AND (c.project_id = $1::uuid
+               OR (c.project_id IS NULL AND c.organization_id = $3::text))
+    LEFT JOIN remote_session_issuers AS i
+           ON i.id = c.remote_session_issuer_id
+          AND i.deleted IS FALSE
+    GROUP BY input.user_session_issuer_id
+)
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = resolved.remote_session_issuer_id
+FROM resolved
+WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
+  AND s.project_id = $1::uuid
+  AND s.deleted IS FALSE
+  AND resolved.remote_session_issuer_id IS NOT NULL
+`
+
+type ConfigureMCPServerProvidersFromBindingsFixtureParams struct {
+	ProjectID            uuid.UUID
+	UserSessionIssuerIds []uuid.UUID
+	OrganizationID       string
+}
+
+// Test-only fixture: stamps every live MCP server on the named user session
+// issuers with the single provider bound there, for a fixture that seeds client
+// bindings in SQL and needs the servers configured with them. In production
+// each server's provider is written by the identity commit that configures
+// User Identity on it, one server at a time, so no shipped code derives this.
+//
+// None or several providers leave the value alone: a fixture that means to
+// configure one server of several must name it and use
+// SetMCPServerRemoteSessionIssuerFixture.
+func (q *Queries) ConfigureMCPServerProvidersFromBindingsFixture(ctx context.Context, arg ConfigureMCPServerProvidersFromBindingsFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, configureMCPServerProvidersFromBindingsFixture, arg.ProjectID, arg.UserSessionIssuerIds, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
 UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
@@ -5387,9 +5438,10 @@ type SetMCPServerRemoteSessionIssuerFixtureParams struct {
 	ProjectID             uuid.UUID
 }
 
-// Test-only fixture: stamps the denormalised upstream authorization server on
-// an MCP server. Server creation cannot set it — no client bindings exist yet —
-// so tests seed it after the fact, standing in for the binding resync.
+// Test-only fixture: stamps the upstream authorization server an MCP server's
+// users sign in to. Server creation cannot set it — no client bindings exist
+// yet — so tests seed it after the fact, standing in for the identity commit
+// that configures User Identity on the server.
 //
 // Returns the row count so the caller can insist the stamp landed: one that
 // matched nothing would otherwise let a negative test pass vacuously.

@@ -1449,7 +1449,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
           name: "Elsewhere",
           projectId: "project-2",
           projectName: "Other project",
-          impact: "repoint",
+          impact: "clear",
         },
       ],
       2,
@@ -1520,7 +1520,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     swapClientWithImpact(null);
 
     expect(
-      screen.getByText(/Could not check which other servers share/),
+      screen.getByText(/Could not check which other servers sign in through/),
     ).toBeDefined();
   });
 

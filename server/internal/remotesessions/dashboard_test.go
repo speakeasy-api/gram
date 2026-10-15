@@ -782,35 +782,20 @@ func projectIDFromContext(t *testing.T, ctx context.Context) uuid.UUID {
 	return *authCtx.ProjectID
 }
 
-func TestCommitServerIdentityConfigurationRequiresWriteOnEveryServerSharingTheIssuer(t *testing.T) {
+func TestCommitServerIdentityConfigurationLeavesServersSharingTheIssuerAlone(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	projectID := projectIDFromContext(t, ctx)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "shared-issuer-target")
 
-	// A second MCP server on the same user session issuer. The client binding
-	// this RPC rewrites is keyed by issuer, not by server, so committing on the
-	// target re-stamps this sibling too.
-	siblingRemote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
-		ID:            uuid.New(),
-		ProjectID:     projectID,
-		Name:          conv.ToPGText("shared-issuer-sibling"),
-		Slug:          conv.ToPGText("shared-issuer-sibling"),
-		TransportType: "streamable-http",
-		Url:           "https://mcp.example.com/shared-issuer-sibling",
-	})
-	require.NoError(t, err)
-	sibling, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                  uuid.New(),
-		ProjectID:           projectID,
-		Name:                conv.ToPGText("shared-issuer-sibling"),
-		Slug:                conv.ToPGText("shared-issuer-sibling"),
-		UserSessionIssuerID: conv.ToNullUUID(userIssuerID),
-		RemoteMcpServerID:   conv.ToNullUUID(siblingRemote.ID),
-		Visibility:          "private",
-	})
-	require.NoError(t, err)
+	// A second MCP server on the same user session issuer, as every server on
+	// an organization user session issuer has. The provider is configured on
+	// the named server alone, so write access to it is the whole requirement
+	// and the sibling keeps whatever its own configuration wrote.
+	siblingID := createServerIdentityTargetOnIssuer(t, ctx, ti, "shared-issuer-sibling", userIssuerID)
+	siblingProviderID := createServerIdentityProvider(t, ctx, ti, "shared-issuer-sibling-provider", "", false, []string{"none"})
+	siblingClientID := bindAndStampServerIdentityClient(t, ctx, ti, "shared-issuer-sibling-client", siblingProviderID, userIssuerID, siblingID, false)
 
 	providerID := createServerIdentityProvider(t, ctx, ti, "shared-issuer-provider", "", false, []string{"client_secret_basic"})
 	client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
@@ -822,33 +807,16 @@ func TestCommitServerIdentityConfigurationRequiresWriteOnEveryServerSharingTheIs
 	})
 	require.NoError(t, err)
 
-	payload := func() *gen.CommitServerIdentityConfigurationPayload {
-		return &gen.CommitServerIdentityConfigurationPayload{
-			SessionToken:        nil,
-			ApikeyToken:         nil,
-			ProjectSlugInput:    nil,
-			McpServerID:         targetID.String(),
-			ProviderID:          conv.PtrEmpty(providerID.String()),
-			CreateProvider:      nil,
-			ClientMode:          "existing",
-			RegistrationMethod:  nil,
-			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
-			ClientConfiguration: nil,
-		}
-	}
-
 	targetOnlyCtx := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, targetID.String()))
-	_, err = ti.service.CommitServerIdentityConfiguration(targetOnlyCtx, payload())
-	requireOopsCode(t, err, oops.CodeForbidden)
-
-	bothCtx := withExactAccessGrants(t, ctx, ti.conn,
-		authz.NewGrant(authz.ScopeMCPWrite, targetID.String()),
-		authz.NewGrant(authz.ScopeMCPWrite, sibling.ID.String()),
-	)
-	result, err := ti.service.CommitServerIdentityConfiguration(bothCtx, payload())
+	result, err := ti.service.CommitServerIdentityConfiguration(targetOnlyCtx, existingServerIdentityPayload(targetID, providerID, client.ID))
 	require.NoError(t, err)
 	require.Equal(t, "linked", *result.Status)
 	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
+
+	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectID, targetID))
+	require.Equal(t, conv.ToNullUUID(siblingProviderID), storedIssuer(t, ctx, ti.conn, projectID, siblingID),
+		"the sibling signs in to its own provider, whatever this server is configured with")
+	requireClientBound(t, ctx, ti, siblingClientID, userIssuerID, true)
 }
 
 func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testing.T) {
@@ -953,7 +921,17 @@ func bindServerIdentityClient(t *testing.T, ctx context.Context, ti *testInstanc
 		RemoteSessionClientID: client,
 		UserSessionIssuerID:   userIssuerID,
 	}))
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, activeOrganizationID(t, ctx), projectID, []uuid.UUID{userIssuerID}))
+	require.NoError(t, remotesessions.ReconcileMCPServerRemoteSessionIssuers(ctx, ti.conn, activeOrganizationID(t, ctx), projectID, []uuid.UUID{userIssuerID}))
+	return client
+}
+
+// bindAndStampServerIdentityClient binds a client to the user session issuer
+// and stamps its provider on one server: what a per-server identity commit
+// for that server leaves behind, which a seeded binding alone does not.
+func bindAndStampServerIdentityClient(t *testing.T, ctx context.Context, ti *testInstance, clientID string, providerID, userIssuerID, serverID uuid.UUID, orgOwned bool) uuid.UUID {
+	t.Helper()
+	client := bindServerIdentityClient(t, ctx, ti, clientID, providerID, userIssuerID, orgOwned)
+	stampIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), serverID, providerID)
 	return client
 }
 
@@ -992,7 +970,7 @@ func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientOnOrgIssuerBe
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-replace-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-replace-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-replace-current", "", false, []string{"none"})
-	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-replace-shared-client", currentProviderID, userIssuerID, true)
+	orgClientID := bindAndStampServerIdentityClient(t, ctx, ti, "org-replace-shared-client", currentProviderID, userIssuerID, targetID, true)
 
 	var requests atomic.Int64
 	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -1015,7 +993,7 @@ func TestCommitServerIdentityConfigurationRefusesReplacingClientWithLiveAgentBin
 	ctx, ti := newTestService(t)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "agent-replace-target")
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "agent-replace-current", "", false, []string{"none"})
-	currentClientID := bindServerIdentityClient(t, ctx, ti, "agent-replace-client", currentProviderID, userIssuerID, false)
+	currentClientID := bindAndStampServerIdentityClient(t, ctx, ti, "agent-replace-client", currentProviderID, userIssuerID, targetID, false)
 	seedLiveAgentBinding(t, ctx, ti, currentClientID, userIssuerID)
 
 	var requests atomic.Int64
@@ -1072,7 +1050,7 @@ func TestCommitServerIdentityConfigurationReplacesProjectClientOnOrgIssuer(t *te
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-project-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-project-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-project-current", "", false, []string{"none"})
-	projectClientID := bindServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, userIssuerID, false)
+	projectClientID := bindAndStampServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, userIssuerID, targetID, false)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:       nil,
@@ -1126,73 +1104,114 @@ func manualExistingProviderIdentityPayload(targetID, providerID uuid.UUID, clien
 	return payload
 }
 
-func TestCommitServerIdentityConfigurationReplacesClientWhenServerIssuerColumnIsStale(t *testing.T) {
+func TestCommitServerIdentityConfigurationKeepsAnotherProvidersClientBound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "stale-column-target")
-	currentProviderID := createServerIdentityProvider(t, ctx, ti, "stale-column-current", "", false, []string{"none"})
-	currentClientID := createServerIdentityClient(t, ctx, ti, "stale-column-current-client", currentProviderID, false)
-	// Bound without the restamp, so the server's denormalized column stays NULL.
+	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "other-provider-target")
+	otherProviderID := createServerIdentityProvider(t, ctx, ti, "other-provider-current", "", false, []string{"none"})
+	otherClientID := createServerIdentityClient(t, ctx, ti, "other-provider-current-client", otherProviderID, false)
+	// Bound to the issuer without being configured on this server, which is
+	// what a sibling server's provider looks like from here.
 	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: currentClientID,
+		RemoteSessionClientID: otherClientID,
 		UserSessionIssuerID:   userIssuerID,
 	}))
 	require.Equal(t, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
-	nextProviderID := createServerIdentityProvider(t, ctx, ti, "stale-column-next", "", false, []string{"none"})
+	nextProviderID := createServerIdentityProvider(t, ctx, ti, "other-provider-next", "", false, []string{"none"})
 
-	result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(targetID, nextProviderID, "stale-column-next-client"))
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(targetID, nextProviderID, "other-provider-next-client"))
 	require.NoError(t, err)
 	nextClientID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
 
-	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, false)
+	requireClientBound(t, ctx, ti, otherClientID, userIssuerID, true)
 	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, true)
 	require.Equal(t, conv.ToNullUUID(nextProviderID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }
 
-func TestCommitServerIdentityConfigurationRefusesAmbiguousCurrentProviderBeforeDCR(t *testing.T) {
+func TestCommitServerIdentityConfigurationConfiguresOneServerOfSeveralOnTheIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "ambiguous-target")
-	firstProviderID := createServerIdentityProvider(t, ctx, ti, "ambiguous-first", "", false, []string{"none"})
-	secondProviderID := createServerIdentityProvider(t, ctx, ti, "ambiguous-second", "", false, []string{"none"})
-	firstClientID := bindServerIdentityClient(t, ctx, ti, "ambiguous-first-client", firstProviderID, userIssuerID, false)
-	secondClientID := bindServerIdentityClient(t, ctx, ti, "ambiguous-second-client", secondProviderID, userIssuerID, false)
+	projectID := projectIDFromContext(t, ctx)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "per-server-issuer")
+	firstID := createServerIdentityTargetOnIssuer(t, ctx, ti, "per-server-first", userIssuerID)
+	secondID := createServerIdentityTargetOnIssuer(t, ctx, ti, "per-server-second", userIssuerID)
 
-	var requests atomic.Int64
-	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	t.Cleanup(registrationServer.Close)
-	nextProviderID := createServerIdentityProvider(t, ctx, ti, "ambiguous-next", registrationServer.URL, false, []string{"client_secret_basic"})
+	// AIM-577: the issuer already binds a client for the first server. The
+	// superseded per-issuer derivation called a second provider ambiguous and
+	// refused the commit before it could even be configured.
+	firstProviderID := createServerIdentityProvider(t, ctx, ti, "per-server-first-provider", "", false, []string{"none"})
+	firstClientID := bindAndStampServerIdentityClient(t, ctx, ti, "per-server-first-client", firstProviderID, userIssuerID, firstID, false)
+	secondProviderID := createServerIdentityProvider(t, ctx, ti, "per-server-second-provider", "", false, []string{"none"})
 
-	_, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, nextProviderID))
-	requireOopsCode(t, err, oops.CodeConflict)
-	require.ErrorContains(t, err, "more than one Remote Identity Provider")
-	require.Zero(t, requests.Load(), "the refusal must come before an upstream client is registered")
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(secondID, secondProviderID, "per-server-second-client"))
+	require.NoError(t, err)
+	secondClientID, err := uuid.Parse(result.Client.ID)
+	require.NoError(t, err)
+
 	requireClientBound(t, ctx, ti, firstClientID, userIssuerID, true)
 	requireClientBound(t, ctx, ti, secondClientID, userIssuerID, true)
+	require.Equal(t, conv.ToNullUUID(firstProviderID), storedIssuer(t, ctx, ti.conn, projectID, firstID))
+	require.Equal(t, conv.ToNullUUID(secondProviderID), storedIssuer(t, ctx, ti.conn, projectID, secondID))
 }
 
-func TestCommitServerIdentityConfigurationReplacesClientForSameProvider(t *testing.T) {
+func TestCommitServerIdentityConfigurationKeepsAProviderASiblingServerStillUses(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "shared-provider-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "shared-provider-target", userIssuerID)
+	siblingID := createServerIdentityTargetOnIssuer(t, ctx, ti, "shared-provider-sibling", userIssuerID)
+
+	// Both servers sign in to one provider through one client, which is the
+	// only client the issuer holds for it. Moving this server off it must not
+	// unbind the client the sibling still signs in through.
+	sharedProviderID := createServerIdentityProvider(t, ctx, ti, "shared-provider", "", false, []string{"none"})
+	sharedClientID := bindAndStampServerIdentityClient(t, ctx, ti, "shared-provider-client", sharedProviderID, userIssuerID, targetID, false)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, sharedProviderID)
+	nextProviderID := createServerIdentityProvider(t, ctx, ti, "shared-provider-next", "", false, []string{"none"})
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(targetID, nextProviderID, "shared-provider-next-client"))
+	require.NoError(t, err)
+
+	requireClientBound(t, ctx, ti, sharedClientID, userIssuerID, true)
+	require.Equal(t, conv.ToNullUUID(nextProviderID), storedIssuer(t, ctx, ti.conn, projectID, targetID))
+	require.Equal(t, conv.ToNullUUID(sharedProviderID), storedIssuer(t, ctx, ti.conn, projectID, siblingID))
+	require.Equal(t, result.Provider.ID, nextProviderID.String())
+}
+
+func TestCommitServerIdentityConfigurationReusesTheProvidersBoundClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "same-provider-target")
 	providerID := createServerIdentityProvider(t, ctx, ti, "same-provider", "", false, []string{"none"})
-	currentClientID := bindServerIdentityClient(t, ctx, ti, "same-provider-current-client", providerID, userIssuerID, false)
+	currentClientID := bindAndStampServerIdentityClient(t, ctx, ti, "same-provider-current-client", providerID, userIssuerID, targetID, false)
 
-	result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(targetID, providerID, "same-provider-next-client"))
+	// A user session issuer holds at most one client per provider, and several
+	// servers may sign in through it, so an automatic setup binds the client
+	// that is already there instead of registering a second one.
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, currentClientID.String(), result.Client.ID)
+	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, true)
+	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectID, targetID))
+
+	// Hand-entered credentials name a client of their own, so they take the
+	// bound one's place rather than being discarded for it. The provider keeps
+	// a client, so the server's upstream is unchanged and its users sign in
+	// again.
+	result, err = ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(targetID, providerID, "same-provider-next-client"))
 	require.NoError(t, err)
 	nextClientID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
-
 	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, false)
 	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, true)
-	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
+	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectID, targetID))
 }
 
 func TestCommitServerIdentityConfigurationPersistsProviderReportedClientIDIssuedAt(t *testing.T) {

@@ -129,7 +129,10 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 }
 
 // authorizeServerIdentityTarget loads the MCP server and requires write access
-// to it and to every server sharing its user session issuer.
+// to it. No other server sharing its user session issuer is reached: the
+// provider is stamped on the named server alone, and the client of the
+// provider it moves off is released only when no other server signs in
+// through it.
 func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, req serverIdentityRequest) (mcpserversrepo.McpServer, error) {
 	mcpRepo := mcpserversrepo.New(s.db)
 	target, err := mcpRepo.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
@@ -146,25 +149,6 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, target.ID.String(), target.ProjectID.String())}
 	if req.createProvider != nil || req.clientMode != serverIdentityClientModeExisting {
 		checks = append(checks, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
-	}
-	// A user session issuer is not unique to one MCP server. The client binding
-	// this commit rewrites is keyed by issuer, and ResyncMCPServerRemoteSessionIssuers
-	// re-stamps every server carrying that issuer, so write access to the named
-	// target alone would let a caller repoint its siblings.
-	if target.UserSessionIssuerID.Valid {
-		sharing, err := mcpRepo.ListMCPServerIDsByUserSessionIssuerID(ctx, mcpserversrepo.ListMCPServerIDsByUserSessionIssuerIDParams{
-			ProjectID:           *authCtx.ProjectID,
-			UserSessionIssuerID: target.UserSessionIssuerID,
-		})
-		if err != nil {
-			return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "list MCP servers sharing the user session issuer").LogError(ctx, logger)
-		}
-		for _, id := range sharing {
-			if id == target.ID {
-				continue
-			}
-			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
-		}
 	}
 	if err := s.authz.Require(ctx, checks...); err != nil {
 		return mcpserversrepo.McpServer{}, err
@@ -231,9 +215,10 @@ func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger,
 	return &out
 }
 
-// plan describes the request as an identity plan: the server's current
-// clients are replaced by the requested one. registrationResource is what a
-// registered client without scopes will discover at login.
+// plan describes the request as an identity plan for one server: the client of
+// the provider that server signs in to today is replaced by the requested one,
+// and the requested provider is stamped on the server. registrationResource is
+// what a registered client without scopes will discover at login.
 func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
 	provider := UseProvider(r.providerID)
 	if r.createProvider != nil {
@@ -275,9 +260,10 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 			ActorIsPlatformAdmin: authCtx.IsAdmin,
 		},
 		UserSessionIssuerID: target.UserSessionIssuerID.UUID,
+		MCPServerID:         uuid.NullUUID{UUID: target.ID, Valid: true},
 		Provider:            provider,
 		Client:              client,
-		Bound:               ReplaceBound,
+		Bound:               ReplaceServerBound,
 		ResourceDisplay:     nil,
 	}
 }
@@ -293,9 +279,8 @@ func serverIdentityRegistrationResult(reg Registration) *gen.CommitServerIdentit
 
 // recheckServerIdentityTarget locks the MCP server and refuses the commit if
 // its Remote MCP source or user session issuer moved, or the source went away,
-// since they were read. The denormalized remote_session_issuer_id is not
-// compared: the commit reads the current provider from the live bindings, and
-// the post-commit restamp of that column can lag a concurrent commit.
+// since they were read. remote_session_issuer_id is not compared: the commit
+// rereads it under this same lock and overwrites it.
 func recheckServerIdentityTarget(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, target mcpserversrepo.McpServer) error {
 	locked, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
 		ID:        target.ID,

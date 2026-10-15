@@ -55,7 +55,7 @@ describe("groupByImpact", () => {
     const groups = groupByImpact([
       server("g", "client_removed"),
       server("a", "resignin"),
-      server("b", "repoint"),
+      server("b", "clear"),
       server("c", "resignin"),
     ]);
 
@@ -65,7 +65,7 @@ describe("groupByImpact", () => {
         servers.map((entry) => entry.id),
       ]),
     ).toEqual([
-      ["repoint", ["b"]],
+      ["clear", ["b"]],
       ["resignin", ["a", "c"]],
       ["client_removed", ["g"]],
     ]);

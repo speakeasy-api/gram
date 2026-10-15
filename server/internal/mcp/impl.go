@@ -285,9 +285,14 @@ type oauthTokenInputs struct {
 // securityKeys would forward an arbitrary bearer upstream. This mirrors
 // routeUpstreamToken's fail-closed posture for the proxied-MCP backends,
 // which can route by the credential's grant-time resource — toolset dispatch
-// has no equivalent qualified identity yet. The multi-token state is
-// reachable: the one_per_issuer index that used to cap a user_session_issuer
-// at one client was dropped in AIS-137.
+// has no equivalent qualified identity yet.
+//
+// A backstop rather than the first line of defence: the callers resolve by the
+// server's own upstream authorization server (resolveEndpointAccessTokens) or
+// by the gateway member's (hostedMemberTokens), both of which yield at most
+// one entry. It still stands for a legacy /mcp toolset endpoint, which has no
+// MCP server row to name a provider, and for any future caller that passes the
+// issuer-wide map.
 func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID]remotesessions.UpstreamToken) ([]oauthTokenInputs, error) {
 	if len(tokens) > 1 {
 		return nil, fmt.Errorf("issuer-gated endpoint resolved %d remote-session upstream tokens; per-tool routing requires a security-scheme-to-issuer mapping (AGE-3285)", len(tokens))

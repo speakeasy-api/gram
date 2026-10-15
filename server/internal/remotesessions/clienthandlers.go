@@ -514,9 +514,9 @@ func (s *Service) finalizeClientCreate(
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Post-commit and best-effort: a failed recompute leaves a stale value the
+	// Post-commit and best-effort: a failed reconcile leaves a stale value the
 	// next binding change heals, not a failed create.
-	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs)
+	BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs)
 
 	view, err := s.clientView(created, userIssuerIDs)
 	if err != nil {
@@ -1008,9 +1008,9 @@ func (s *Service) commitClientAttachmentChange(
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Post-commit and best-effort: a failed recompute leaves a stale value the
+	// Post-commit and best-effort: a failed reconcile leaves a stale value the
 	// next binding change heals, not a failed request.
-	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs)
+	BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs)
 
 	return afterView, nil
 }
@@ -1072,7 +1072,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	}
 
 	// Read the bindings before the purge removes them, so the post-commit
-	// resync knows which issuers to recompute.
+	// reconcile knows which issuers to visit.
 	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
 		RemoteSessionClientID: clientID,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
@@ -1122,7 +1122,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	// revoke: post-commit, bounded, never surfaced to the caller.
 	s.revoker.RevokeAllDetached(ctx, revokedCredentials(cascaded))
 
-	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, boundUserIssuerIDs)
+	BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, boundUserIssuerIDs)
 
 	return nil
 }

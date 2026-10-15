@@ -8,17 +8,15 @@ import {
 import { mcpServerDisplayName } from "@/pages/security/risk-outcome";
 
 const IMPACT_COPY: Record<SharedIssuerImpact, string> = {
-  repoint:
-    "These servers share this user session issuer, and this change moves them to a different upstream authorization server:",
   clear:
-    "These servers share this user session issuer, and this change leaves either no providers or multiple providers linked, so they lose their upstream authorization server until exactly one provider is linked:",
+    "These servers sign in through the provider this change unlinks, so they lose their sign-in until a client for it is linked again:",
   resignin:
-    "These servers share this user session issuer, and the client is replaced for all of them. Everyone signed in to them will have to sign in again:",
+    "These servers sign in through the provider whose client this change replaces. Everyone signed in to them will have to sign in again:",
   client_removed:
     "These gateways share this user session issuer and lose a client their members sign in through. Those members stop working until a client for their provider is linked again:",
 };
 
-/** Names the servers that a change on a shared user session issuer would affect. */
+/** Names the servers that lose a provider client this change unlinks. */
 export function RepointedServersNotice({
   impact,
   projectId,
@@ -37,15 +35,15 @@ export function RepointedServersNotice({
   if (impact.failed) {
     return (
       <Alert variant="warning" dismissible={false}>
-        Could not check which other servers share this user session issuer. This
-        change may alter the upstream authorization server they use.
+        Could not check which other servers sign in through the providers this
+        change unlinks. This change may remove their sign-in.
       </Alert>
     );
   }
   const groups = groupByImpact(impact.servers);
   if (groups.length === 0 && impact.hiddenCount === 0) return null;
-  const upstreamMoves = impact.servers.some(
-    (server) => server.impact === "repoint" || server.impact === "clear",
+  const losesUpstream = impact.servers.some(
+    (server) => server.impact === "clear",
   );
   return (
     <Alert variant="warning" dismissible={false}>
@@ -76,11 +74,10 @@ export function RepointedServersNotice({
           Ask someone with access to every server on it to make this change.
         </Text>
       )}
-      {upstreamMoves && (
+      {losesUpstream && (
         <Text small className="block">
-          One user session issuer serves one upstream. To leave them unchanged,
-          move this server to a dedicated user session issuer under Sessions
-          first.
+          To leave them signed in, link a client for their provider again
+          afterwards from its Remote Identity Provider settings.
         </Text>
       )}
     </Alert>

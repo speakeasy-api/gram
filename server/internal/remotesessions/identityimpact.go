@@ -1,8 +1,9 @@
 // identityimpact.go previews which MCP servers and gateways a client binding
 // change on a user session issuer would affect, so the dashboard can name them
-// before the change is made. It mirrors ResyncMCPServerRemoteSessionIssuers: a
-// server's upstream is the single live provider among the clients its project
-// can see.
+// before the change is made. A server's upstream is the provider that server
+// itself names, so a change reaches it only by removing that provider's
+// client: the issuer's other clients belong to the other servers sharing it,
+// and no change moves a server from one provider to another behind its back.
 
 package remotesessions
 
@@ -30,7 +31,6 @@ const (
 	identityChangeAttach  = "attach"
 	identityChangeDetach  = "detach"
 
-	identityImpactRepoint       = "repoint"
 	identityImpactClear         = "clear"
 	identityImpactResignin      = "resignin"
 	identityImpactClientRemoved = "client_removed"
@@ -59,45 +59,48 @@ type identityChange struct {
 	added   *impactClient
 }
 
-// impactOf classifies what the change does to a server in projectID, or ""
-// when nothing.
-func (c identityChange) impactOf(projectID uuid.UUID) string {
-	var current, next []uuid.UUID
-	clientRemoved := false
-	for _, client := range c.bound {
-		if !client.visibleTo(projectID) || client.providerDeleted {
-			continue
-		}
-		current = append(current, client.providerID)
-		if c.removed[client.id] {
-			clientRemoved = true
-			continue
-		}
-		next = append(next, client.providerID)
-	}
-	if c.added != nil && c.added.visibleTo(projectID) {
-		next = append(next, c.added.providerID)
-	}
-	before, after := derivedProvider(current), derivedProvider(next)
-	switch {
-	case before != after && after == uuid.Nil:
-		return identityImpactClear
-	case before != after:
-		return identityImpactRepoint
-	case clientRemoved:
-		return identityImpactResignin
-	default:
+// impactOf classifies what the change does to a server in projectID that signs
+// in through serverProvider, or "" when nothing. Only that provider's client
+// matters: the server's upstream is the one it names, so clients of other
+// providers on the same user session issuer leave it alone. A server with no
+// provider has no upstream to lose.
+func (c identityChange) impactOf(projectID uuid.UUID, serverProvider uuid.NullUUID) string {
+	if !serverProvider.Valid {
 		return ""
 	}
+	removed := false
+	for _, client := range c.bound {
+		if client.providerID != serverProvider.UUID || !client.visibleTo(projectID) || client.providerDeleted {
+			continue
+		}
+		if c.removed[client.id] {
+			removed = true
+		}
+	}
+	if !removed {
+		return ""
+	}
+	// A replacement for the same provider keeps the upstream and invalidates
+	// the sessions through the old client; anything else leaves no client for
+	// the provider the server names, so it loses its upstream entirely.
+	if c.added != nil && c.added.visibleTo(projectID) && c.added.providerID == serverProvider.UUID {
+		return identityImpactResignin
+	}
+	return identityImpactClear
 }
 
 // gatewayImpactOf is what the change does to a gateway in projectID. A gateway
-// binds one client per member provider, so only an unbound client affects it.
+// offers one client per member provider, so it loses a member's sign-in only
+// when a client is unbound and nothing takes its place for that provider.
 func (c identityChange) gatewayImpactOf(projectID uuid.UUID) string {
 	for _, client := range c.bound {
-		if c.removed[client.id] && client.visibleTo(projectID) && !client.providerDeleted {
-			return identityImpactClientRemoved
+		if !c.removed[client.id] || !client.visibleTo(projectID) || client.providerDeleted {
+			continue
 		}
+		if c.added != nil && c.added.visibleTo(projectID) && c.added.providerID == client.providerID {
+			continue
+		}
+		return identityImpactClientRemoved
 	}
 	return ""
 }
@@ -114,18 +117,6 @@ func (c identityChange) touchesOrgClient() bool {
 		}
 	}
 	return false
-}
-
-// derivedProvider is the single distinct provider, else uuid.Nil.
-func derivedProvider(providers []uuid.UUID) uuid.UUID {
-	derived := uuid.Nil
-	for _, id := range providers {
-		if derived != uuid.Nil && id != derived {
-			return uuid.Nil
-		}
-		derived = id
-	}
-	return derived
 }
 
 func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetServerIdentityImpactPayload) (*gen.ServerIdentityImpactResult, error) {
@@ -157,7 +148,8 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		return nil, oops.E(oops.CodeBadRequest, nil, "detach takes no provider_id or client_id").LogError(ctx, logger)
 	}
 
-	if err := s.authorizeServerIdentityImpact(ctx, logger, projectID, userIssuerID, targetID); err != nil {
+	target, err := s.authorizeServerIdentityImpact(ctx, logger, projectID, userIssuerID, targetID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -186,7 +178,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		change.bound = append(change.bound, impactClient{id: row.ID, projectID: row.ProjectID, providerID: row.RemoteSessionIssuerID, providerDeleted: row.ProviderDeleted})
 	}
 
-	if err := s.planIdentityChange(ctx, q, projectID, orgID, !userIssuer.ProjectID.Valid, payload.Change, providerID, clientID, &change); err != nil {
+	if err := s.planIdentityChange(ctx, q, projectID, orgID, !userIssuer.ProjectID.Valid, payload.Change, providerID, clientID, impactTarget{id: targetID, provider: target.RemoteSessionIssuerID}, userIssuerID, &change); err != nil {
 		return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
 	}
 
@@ -214,7 +206,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		if targetID.Valid && row.ID == targetID.UUID {
 			continue
 		}
-		impact := change.impactOf(row.ProjectID)
+		impact := change.impactOf(row.ProjectID, row.RemoteSessionIssuerID)
 		if impact == "" && !countAllHidden {
 			continue
 		}
@@ -264,39 +256,51 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 
 // authorizeServerIdentityImpact requires what making the change requires: write
 // access to the server it is made from, or to the project for a change made
-// without one.
-func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slog.Logger, projectID, userIssuerID uuid.UUID, targetID uuid.NullUUID) error {
+// without one. It returns the loaded server, whose own provider is what the
+// change is previewed against.
+func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slog.Logger, projectID, userIssuerID uuid.UUID, targetID uuid.NullUUID) (mcpserversrepo.McpServer, error) {
+	var none mcpserversrepo.McpServer
 	if !targetID.Valid {
-		return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil})
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+			return none, err
+		}
+		return none, nil
 	}
 	target, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        targetID.UUID,
 		ProjectID: projectID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return oops.E(oops.CodeNotFound, err, "MCP server not found").LogError(ctx, logger)
+		return none, oops.E(oops.CodeNotFound, err, "MCP server not found").LogError(ctx, logger)
 	}
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
+		return none, oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
 	}
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpGrantResourceID(target.ID, target.ToolsetID), projectID.String())); err != nil {
-		return err
+		return none, err
 	}
 	if !target.UserSessionIssuerID.Valid || target.UserSessionIssuerID.UUID != userIssuerID {
-		return oops.E(oops.CodeBadRequest, nil, "MCP server does not use this user session issuer").LogError(ctx, logger)
+		return none, oops.E(oops.CodeBadRequest, nil, "MCP server does not use this user session issuer").LogError(ctx, logger)
 	}
-	return nil
+	return target, nil
+}
+
+// impactTarget is the server a change is made from: the one the preview
+// excludes, and whose own provider decides what the change replaces.
+type impactTarget struct {
+	id       uuid.NullUUID
+	provider uuid.NullUUID
 }
 
 // planIdentityChange fills change.removed and change.added the way the
-// matching write would: the commit's ReplaceBound, a plain attach, or detaching
-// every client the caller's project sees. It applies the writes' org-wide
-// binding refusal.
-func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, orgID string, userIssuerOrgLevel bool, kind string, providerID, clientID uuid.NullUUID, change *identityChange) error {
+// matching write would: the commit's ReplaceServerBound, a plain attach, or
+// detaching every client the caller's project sees. It applies the writes'
+// org-wide binding refusal.
+func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, orgID string, userIssuerOrgLevel bool, kind string, providerID, clientID uuid.NullUUID, target impactTarget, userIssuerID uuid.UUID, change *identityChange) error {
 	var visible []repo.RemoteSessionClient
 	for _, client := range change.bound {
 		if client.visibleTo(projectID) {
-			visible = append(visible, repo.RemoteSessionClient{ID: client.id, ProjectID: client.projectID, RemoteSessionIssuerID: client.providerID}) //nolint:exhaustruct // Only the fields replacedClients reads.
+			visible = append(visible, repo.RemoteSessionClient{ID: client.id, ProjectID: client.projectID, RemoteSessionIssuerID: client.providerID}) //nolint:exhaustruct // Only the fields decideServerBound reads.
 		}
 	}
 	if kind == identityChangeDetach {
@@ -348,7 +352,7 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 	}
 
 	if kind == identityChangeReplace {
-		replaced, err := replacedClients(visible, conv.Ternary(providerID.Valid || clientID.Valid, added.providerID, uuid.Nil), conv.Ternary(clientID.Valid, added.id, uuid.Nil))
+		replaced, err := s.replacedServerClients(ctx, q, orgID, userIssuerID, target, visible, conv.Ternary(providerID.Valid || clientID.Valid, added.providerID, uuid.Nil), conv.Ternary(clientID.Valid, added.id, uuid.Nil))
 		if err != nil {
 			return err
 		}
@@ -360,6 +364,49 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 		}
 	}
 	return nil
+}
+
+// replacedServerClients is what the matching per-server commit would unbind,
+// decided by the same rules: the clients of the provider the target server is
+// moving off, and only when no other server in the organization still signs in
+// through them. Without a target the change belongs to the Remote Identity
+// Provider settings, which replace nothing.
+//
+// The commit's client choice is not on the wire, so a client id reads as
+// linking that client and its absence as an automatic registration. A commit
+// entering credentials by hand for a provider whose client is already bound is
+// refused rather than reusing it, which the preview reports as no impact.
+func (s *Service) replacedServerClients(ctx context.Context, q *repo.Queries, orgID string, userIssuerID uuid.UUID, target impactTarget, visible []repo.RemoteSessionClient, providerID, keep uuid.UUID) ([]repo.RemoteSessionClient, error) {
+	if !target.id.Valid {
+		return nil, nil
+	}
+	kind := clientRegister
+	if keep != uuid.Nil {
+		kind = clientLink
+	}
+	decision, err := decideServerBound(visible, kind, providerID, keep, target.provider)
+	if err != nil {
+		return nil, err
+	}
+	// The superseded client always goes; the released one only when no other
+	// server in the organization still signs in through its provider.
+	unbound := decision.superseded
+	if len(decision.release) == 0 {
+		return unbound, nil
+	}
+	others, err := q.CountOrganizationMCPServersWithRemoteSessionIssuer(ctx, repo.CountOrganizationMCPServersWithRemoteSessionIssuerParams{
+		UserSessionIssuerID:   uuid.NullUUID{UUID: userIssuerID, Valid: true},
+		RemoteSessionIssuerID: target.provider,
+		ExcludedMcpServerID:   target.id.UUID,
+		OrganizationID:        orgID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count MCP servers sharing the provider: %w", err)
+	}
+	if others > 0 {
+		return unbound, nil
+	}
+	return append(unbound, decision.release...), nil
 }
 
 func mcpGrantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {

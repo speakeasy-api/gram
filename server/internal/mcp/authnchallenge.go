@@ -1095,6 +1095,18 @@ func (s *Service) isWorkloadSessionBearer(token string) bool {
 	return err == nil && subject.Kind == urn.SessionSubjectKindWorkload
 }
 
+// checkEndpointAccessTokens validates that subject has what this endpoint
+// needs connected. A server naming its own upstream authorization server is
+// checked against that provider alone: the clients its user session issuer
+// binds for the other servers sharing it are not what reaching this one
+// requires.
+func (s *Service) checkEndpointAccessTokens(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) error {
+	if endpoint.RemoteSessionIssuerID.Valid {
+		return s.remoteChallengeMgr.CheckServerAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, endpoint.RemoteSessionIssuerID.UUID, subject) //nolint:wrapcheck // Callers classify the sentinels.
+	}
+	return s.remoteChallengeMgr.CheckAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject) //nolint:wrapcheck // Callers classify the sentinels.
+}
+
 func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	endpoint := authentication.endpoint
 
@@ -1114,11 +1126,24 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	// The Speakeasy credential is valid in every rejection below; only the upstream
 	// remote session behind it is not. The specific broken upstream and the
 	// answer its token endpoint gave are logged by remotesessions.
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	tokens, err := s.resolveEndpointAccessTokens(ctx, endpoint, authentication.subject)
 	if err != nil {
 		return nil, s.rejectRemoteSession(ctx, w, authentication, err)
 	}
 	return tokens, nil
+}
+
+// resolveEndpointAccessTokens is the all-or-nothing resolution a direct
+// endpoint needs. A server that names its own upstream authorization server
+// resolves only that provider's client: the clients its user session issuer
+// binds for the other servers sharing it are not what reaching this one
+// requires, and leaving them in would refuse the whole request as soon as the
+// caller has not connected one of them.
+func (s *Service) resolveEndpointAccessTokens(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	if endpoint.RemoteSessionIssuerID.Valid {
+		return s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, endpoint.RemoteSessionIssuerID.UUID, subject) //nolint:wrapcheck // Callers classify the sentinels.
+	}
+	return s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject) //nolint:wrapcheck // Callers classify the sentinels.
 }
 
 // rejectRemoteSession answers a ResolveAccessTokens failure. The Speakeasy

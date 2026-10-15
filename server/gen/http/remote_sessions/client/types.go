@@ -2050,11 +2050,11 @@ type ServerIdentityImpactServerResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The name of the owning project.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
-	// repoint: its upstream authorization server changes to another single
-	// provider. clear: it is left with no single provider and loses its upstream.
-	// resignin: its upstream is unchanged but its client is replaced, so everyone
-	// signs in again. client_removed: a gateway loses a provider client its
-	// members sign in through.
+	// clear: the client of the provider it signs in to is removed and nothing
+	// replaces it, so it loses its upstream. resignin: its upstream is unchanged
+	// but that provider's client is replaced, so everyone signs in again.
+	// client_removed: a gateway loses a provider client its members sign in
+	// through.
 	Impact *string `form:"impact,omitempty" json:"impact,omitempty" xml:"impact,omitempty"`
 }
 
@@ -5864,8 +5864,8 @@ func ValidateServerIdentityImpactServerResponseBody(body *ServerIdentityImpactSe
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.Impact != nil {
-		if !(*body.Impact == "repoint" || *body.Impact == "clear" || *body.Impact == "resignin" || *body.Impact == "client_removed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.impact", *body.Impact, []any{"repoint", "clear", "resignin", "client_removed"}))
+		if !(*body.Impact == "clear" || *body.Impact == "resignin" || *body.Impact == "client_removed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.impact", *body.Impact, []any{"clear", "resignin", "client_removed"}))
 		}
 	}
 	return

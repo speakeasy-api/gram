@@ -150,8 +150,8 @@ export function RemoteMcpIdentitySectionBody({
   const siblingMcpServers = linkedServers.filter(
     (server) => server.id !== target.permissionResourceId,
   );
-  // Identity stays locked on a shared source — one server must not repoint the
-  // binding for its siblings — but headers do not inherit that lock.
+  // Identity stays locked on a shared source — servers fronting one remote
+  // source share its credentials — but headers do not inherit that lock.
   const headersReadOnly =
     siblingsQuery.isLoading || siblingsQuery.isError || !canWrite;
   // Held until the issuer is classified: an organization-wide one could make
@@ -360,9 +360,10 @@ export function RemoteMcpIdentitySectionBody({
   const destructive =
     leavingUser || leavingAgent || replacingSelf || replacingClient;
 
-  // The upstream authorization server is derived per user session issuer, so
-  // changing this server's clients can re-point every server sharing the
-  // issuer, in any project for an organization issuer.
+  // This server's upstream is configured on this server, so saving only moves
+  // this one. Removing User Identity unlinks every client the project can see
+  // on the issuer, which does reach the servers signing in through them, in any
+  // project for an organization issuer.
   const savingUserIdentity = selectedMode === "user" && userDraft.canSave;
   const sharedIssuerId = target.userSessionIssuerId;
   let impactRequest: GetServerIdentityImpactRequest | null = null;
@@ -385,7 +386,7 @@ export function RemoteMcpIdentitySectionBody({
     };
   }
   const sharedIssuerImpact = useSharedIssuerImpact(impactRequest);
-  const repointLookupPending = sharedIssuerImpact.pending;
+  const impactLookupPending = sharedIssuerImpact.pending;
   const needsConfirm =
     destructive || needsSharedIssuerConfirm(sharedIssuerImpact);
 
@@ -922,7 +923,7 @@ export function RemoteMcpIdentitySectionBody({
                 Finish the User Identity change, or cancel it, to save.
               </Text>
             ) : null}
-            {repointLookupPending ? (
+            {impactLookupPending ? (
               <Text small muted>
                 Checking other servers on this user session issuer…
               </Text>
@@ -964,7 +965,7 @@ export function RemoteMcpIdentitySectionBody({
                     !canSave ||
                     savePending ||
                     (identityReadOnly && !pinOnlyChange) ||
-                    repointLookupPending
+                    impactLookupPending
                   }
                   onClick={() => {
                     if (needsConfirm) setConfirmOpen(true);
@@ -1026,7 +1027,7 @@ export function RemoteMcpIdentitySectionBody({
                 savePending ||
                 !canWrite ||
                 rbacLoading ||
-                repointLookupPending ||
+                impactLookupPending ||
                 sharedIssuerChangeBlocked(sharedIssuerImpact)
               }
               onClick={() => void performSave()}

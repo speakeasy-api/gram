@@ -327,7 +327,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
           name: "Elsewhere",
           projectId: "project-2",
           projectName: "Other project",
-          impact: "repoint",
+          impact: "clear",
         },
       ],
       hiddenServerCount: 1,

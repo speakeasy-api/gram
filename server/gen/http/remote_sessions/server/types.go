@@ -1929,11 +1929,11 @@ type ServerIdentityImpactServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The name of the owning project.
 	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
-	// repoint: its upstream authorization server changes to another single
-	// provider. clear: it is left with no single provider and loses its upstream.
-	// resignin: its upstream is unchanged but its client is replaced, so everyone
-	// signs in again. client_removed: a gateway loses a provider client its
-	// members sign in through.
+	// clear: the client of the provider it signs in to is removed and nothing
+	// replaces it, so it loses its upstream. resignin: its upstream is unchanged
+	// but that provider's client is replaced, so everyone signs in again.
+	// client_removed: a gateway loses a provider client its members sign in
+	// through.
 	Impact string `form:"impact" json:"impact" xml:"impact"`
 }
 

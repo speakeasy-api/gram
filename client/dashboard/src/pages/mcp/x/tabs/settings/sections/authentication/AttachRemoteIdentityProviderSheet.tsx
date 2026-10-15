@@ -666,8 +666,9 @@ export function AttachRemoteIdentityProviderSheet({
     clientId,
   ]);
 
-  // Linking another provider changes the upstream derived for every server
-  // sharing this user session issuer, in any project for an organization one.
+  // Linking another provider reaches a server sharing this user session issuer
+  // only when it unlinks the client that server signs in through, in any
+  // project for an organization issuer.
   const sharedIssuerId = userSessionIssuer?.id;
   const sharedIssuerImpact = useSharedIssuerImpact(
     open && sharedIssuerId && submittable
@@ -683,16 +684,16 @@ export function AttachRemoteIdentityProviderSheet({
         }
       : null,
   );
-  const repointLookupPending = sharedIssuerImpact.pending;
-  const [confirmRepointOpen, setConfirmRepointOpen] = useState(false);
+  const impactLookupPending = sharedIssuerImpact.pending;
+  const [confirmImpactOpen, setConfirmImpactOpen] = useState(false);
   useEffect(() => {
-    setConfirmRepointOpen(false);
+    setConfirmImpactOpen(false);
   }, [open]);
 
   const handleSubmit = () => {
     if (!submittable || submitting || logoUploading) return;
     if (needsSharedIssuerConfirm(sharedIssuerImpact)) {
-      setConfirmRepointOpen(true);
+      setConfirmImpactOpen(true);
       return;
     }
     attachMutation.mutate();
@@ -938,7 +939,7 @@ export function AttachRemoteIdentityProviderSheet({
                 !submittable ||
                 submitting ||
                 logoUploading ||
-                repointLookupPending
+                impactLookupPending
               }
               onClick={handleSubmit}
             >
@@ -949,7 +950,7 @@ export function AttachRemoteIdentityProviderSheet({
           </SheetFooter>
         </SheetContent>
       </Sheet>
-      <Dialog open={confirmRepointOpen} onOpenChange={setConfirmRepointOpen}>
+      <Dialog open={confirmImpactOpen} onOpenChange={setConfirmImpactOpen}>
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>Change the upstream of other servers?</Dialog.Title>
@@ -964,7 +965,7 @@ export function AttachRemoteIdentityProviderSheet({
           <Dialog.Footer>
             <Button
               variant="secondary"
-              onClick={() => setConfirmRepointOpen(false)}
+              onClick={() => setConfirmImpactOpen(false)}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
@@ -972,11 +973,11 @@ export function AttachRemoteIdentityProviderSheet({
               variant="destructive-primary"
               disabled={
                 submitting ||
-                repointLookupPending ||
+                impactLookupPending ||
                 sharedIssuerChangeBlocked(sharedIssuerImpact)
               }
               onClick={() => {
-                setConfirmRepointOpen(false);
+                setConfirmImpactOpen(false);
                 attachMutation.mutate();
               }}
             >

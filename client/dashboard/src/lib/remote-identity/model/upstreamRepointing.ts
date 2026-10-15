@@ -39,8 +39,10 @@ function refusalMessage(error: unknown): string | undefined {
 
 /**
  * Asks the server which other servers, in any project, a client binding
- * change on the user session issuer would re-point, clear or sign out. Pass
- * null when nothing about the bindings changes.
+ * change on the user session issuer would leave without an upstream or sign
+ * out. Each server's upstream is configured on that server, so only removing
+ * the client of its own provider reaches it. Pass null when nothing about the
+ * bindings changes.
  */
 export function useSharedIssuerImpact(
   request: GetServerIdentityImpactRequest | null,
@@ -101,12 +103,7 @@ export function sharedIssuerChangeBlocked(
 export function groupByImpact(
   servers: readonly ServerIdentityImpactServer[],
 ): Array<[SharedIssuerImpact, ServerIdentityImpactServer[]]> {
-  const order: SharedIssuerImpact[] = [
-    "repoint",
-    "clear",
-    "resignin",
-    "client_removed",
-  ];
+  const order: SharedIssuerImpact[] = ["clear", "resignin", "client_removed"];
   return order
     .map((impact): [SharedIssuerImpact, ServerIdentityImpactServer[]] => [
       impact,

@@ -103,7 +103,7 @@ func attachmentTestClients(t *testing.T, conn *pgxpool.Pool, principal Principal
 // attachmentTestCommit commits an attachment the way attachLocked does, with
 // already-registered credentials standing in for dynamic registration: reuse a
 // stored issuer when the flow may, otherwise create one in the commit.
-func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachmentService, principal Principal, project ResolvedProject, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, clientID, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) error {
+func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachmentService, principal Principal, project ResolvedProject, userSessionIssuerID uuid.UUID, mcpServerID uuid.NullUUID, metadata remotesessions.DiscoveredIssuerMetadata, clientID, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) error {
 	t.Helper()
 	ctx := t.Context()
 	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
@@ -120,6 +120,7 @@ func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachme
 			ActorDisplayName: nil,
 		},
 		UserSessionIssuerID: userSessionIssuerID,
+		MCPServerID:         mcpServerID,
 		Provider:            provider,
 		Client: remotesessions.ManualClient(remotesessions.ClientCredentials{
 			ClientID:                clientID,
@@ -170,7 +171,7 @@ func TestSharedAuthorizationServerDoesNotShareResourceBranding(t *testing.T) {
 
 	usiA := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	usiB := attachmentTestUserSessionIssuer(t, conn, project.ID)
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiA, metadata, "client-a", resourceA.Resource, resourceA))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiA, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-a", resourceA.Resource, resourceA))
 
 	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
@@ -178,7 +179,7 @@ func TestSharedAuthorizationServerDoesNotShareResourceBranding(t *testing.T) {
 	require.Equal(t, "Remote identity provider", issuer.Name.String)
 	require.False(t, issuer.ServiceDocumentation.Valid)
 	require.False(t, issuer.OpPolicyUri.Valid)
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiB, metadata, "client-b", resourceB.Resource, resourceB))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiB, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-b", resourceB.Resource, resourceB))
 
 	clientsB := attachmentTestClients(t, conn, principal, project, usiB)
 	require.Len(t, clientsB, 1)
@@ -205,7 +206,7 @@ func TestAttachmentStoresNothingFromMismatchedResourceDocument(t *testing.T) {
 
 	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	sibling := attachmentTestResource("https://example.test/mcp/a", "Resource A", "https://a.example.test/policy")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, attachmentTestIssuerMetadata("https://auth.example.test"), "client-b", "https://example.test/mcp/b", sibling))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, attachmentTestIssuerMetadata("https://auth.example.test"), "client-b", "https://example.test/mcp/b", sibling))
 
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
@@ -227,9 +228,9 @@ func TestReattachRefreshesResourceDisplayOnExistingClient(t *testing.T) {
 	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
 	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	first := attachmentTestResource("https://a.example.test/mcp", "Resource A", "https://a.example.test/policy")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", first.Resource, first))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-a", first.Resource, first))
 	renamed := attachmentTestResource("https://a.example.test/mcp", "Resource A v2", "")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", renamed.Resource, renamed))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-a", renamed.Resource, renamed))
 
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
@@ -289,7 +290,7 @@ func TestAttachmentStampsMCPServerRemoteSessionIssuer(t *testing.T) {
 	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
 
 	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", resource.Resource, resource))
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
 
 	issuer, _, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
@@ -312,7 +313,7 @@ func TestAttachmentFailureLeavesNoIssuer(t *testing.T) {
 	testenv.RejectWritesTo(t, ctx, conn, "remote_session_clients")
 
 	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
-	require.Error(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", resource.Resource, resource))
+	require.Error(t, attachmentTestCommit(t, service, principal, project, usi, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, "client-a", resource.Resource, resource))
 
 	_, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
@@ -361,7 +362,7 @@ func attachmentTestRegister(t *testing.T, service *CatalogIdentityProviderAttach
 	ctx := t.Context()
 	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
-	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
+	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
 	require.NoError(t, commit.Preflight(ctx))
 	reg, err := commit.Register(ctx)
 	require.NoError(t, err)

@@ -46,15 +46,15 @@ type Service interface {
 	// Preview which other MCP servers and gateways a client binding change on a
 	// user session issuer would affect, across every project in the organization
 	// for an organization-level issuer. Each server's upstream authorization
-	// server is derived from the clients it can see (its own project's and
-	// organization-level ones), so a server is listed when that derivation changes
-	// (repoint or clear) or when a client it uses is replaced (resignin). A
-	// gateway is listed when a client it can see is unbound (client_removed). The
-	// target server is excluded. A change the commit would refuse, such as one
-	// that touches an organization-level client on an organization-level issuer,
-	// is refused here too. Requires mcp:write on mcp_server_id when given,
-	// otherwise project:write. Servers the caller cannot read are counted in
-	// hidden_server_count and never named.
+	// server is configured on that server, so a server is listed only when the
+	// change removes the client of its own provider: it loses its upstream
+	// (clear), or the same provider's client is replaced and everyone signs in
+	// again (resignin). A gateway is listed when a client it can see is unbound
+	// (client_removed). The target server is excluded. A change the commit would
+	// refuse, such as one that touches an organization-level client on an
+	// organization-level issuer, is refused here too. Requires mcp:write on
+	// mcp_server_id when given, otherwise project:write. Servers the caller cannot
+	// read are counted in hidden_server_count and never named.
 	GetServerIdentityImpact(context.Context, *GetServerIdentityImpactPayload) (res *ServerIdentityImpactResult, err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
 	// and user_session_issuer_id instead lists only the ordinary human caller's
@@ -418,11 +418,11 @@ type ServerIdentityImpactServer struct {
 	ProjectID string
 	// The name of the owning project.
 	ProjectName string
-	// repoint: its upstream authorization server changes to another single
-	// provider. clear: it is left with no single provider and loses its upstream.
-	// resignin: its upstream is unchanged but its client is replaced, so everyone
-	// signs in again. client_removed: a gateway loses a provider client its
-	// members sign in through.
+	// clear: the client of the provider it signs in to is removed and nothing
+	// replaces it, so it loses its upstream. resignin: its upstream is unchanged
+	// but that provider's client is replaced, so everyone signs in again.
+	// client_removed: a gateway loses a provider client its members sign in
+	// through.
 	Impact string
 }
 

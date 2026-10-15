@@ -263,7 +263,11 @@ func TestCreateMcpServer_AttachesOrganizationUserSessionIssuer(t *testing.T) {
 	require.Equal(t, issuerID, *created.UserSessionIssuerID)
 }
 
-func TestCreateMcpServer_ResolvesRemoteIssuerForSelectedOrganizationIssuer(t *testing.T) {
+// A new server on an organization issuer another server already uses does not
+// inherit whatever client that issuer binds: the client belongs to the servers
+// configured with it, and this one has no sign-in until an administrator
+// configures User Identity on it (AIM-577).
+func TestCreateMcpServer_LeavesRemoteIssuerUnsetOnASharedOrganizationIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -305,8 +309,17 @@ func TestCreateMcpServer_ResolvesRemoteIssuerForSelectedOrganizationIssuer(t *te
 		UserSessionIssuerID:   userIssuer.ID,
 	}))
 
-	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	userIssuerID := userIssuer.ID.String()
+	siblingRemoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	_, err = ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name:                "organization authenticated sibling",
+		RemoteMcpServerID:   &siblingRemoteID,
+		UserSessionIssuerID: &userIssuerID,
+		Visibility:          types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
 		Name:                "organization authenticated server",
 		RemoteMcpServerID:   &remoteID,
@@ -319,8 +332,8 @@ func TestCreateMcpServer_ResolvesRemoteIssuerForSelectedOrganizationIssuer(t *te
 		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, remoteIssuer.ID, stored.RemoteSessionIssuerID.UUID)
-	require.True(t, stored.RemoteSessionIssuerID.Valid)
+	require.False(t, stored.RemoteSessionIssuerID.Valid)
+	require.NotEqual(t, remoteIssuer.ID, stored.RemoteSessionIssuerID.UUID)
 }
 
 func TestCreateMcpServer_RejectsForeignOrganizationUserSessionIssuer(t *testing.T) {

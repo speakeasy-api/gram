@@ -44,7 +44,7 @@ var _ = Service("remoteSessions", func() {
 	})
 
 	Method("getServerIdentityImpact", func() {
-		Description("Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.")
+		Description("Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is configured on that server, so a server is listed only when the change removes the client of its own provider: it loses its upstream (clear), or the same provider's client is replaced and everyone signs in again (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.")
 
 		Payload(func() {
 			Extend(ServerIdentityImpactForm)
@@ -194,7 +194,7 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 })
 
 var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
-	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: the bound clients of other providers (or of the same provider, for a client swap) are unbound and the chosen client is bound. attach binds one more client and unbinds nothing. detach unbinds every client the caller's project can see. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider.")
+	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: the chosen client is bound, and the client of the provider mcp_server_id signs in to today is unbound when no other server in the organization still signs in through it. attach binds one more client and unbinds nothing. detach unbinds every client the caller's project can see. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider.")
 
 	Attribute("user_session_issuer_id", String, "The user session issuer whose client bindings change.", func() {
 		Format(FormatUUID)
@@ -226,8 +226,8 @@ var ServerIdentityImpactServer = Type("ServerIdentityImpactServer", func() {
 	Attribute("slug", String, "The MCP server slug. Gateways have none.")
 	Attribute("project_id", String, "The owning project.", func() { Format(FormatUUID) })
 	Attribute("project_name", String, "The name of the owning project.")
-	Attribute("impact", String, "repoint: its upstream authorization server changes to another single provider. clear: it is left with no single provider and loses its upstream. resignin: its upstream is unchanged but its client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.", func() {
-		Enum("repoint", "clear", "resignin", "client_removed")
+	Attribute("impact", String, "clear: the client of the provider it signs in to is removed and nothing replaces it, so it loses its upstream. resignin: its upstream is unchanged but that provider's client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.", func() {
+		Enum("clear", "resignin", "client_removed")
 	})
 
 	Required("id", "kind", "project_id", "project_name", "impact")

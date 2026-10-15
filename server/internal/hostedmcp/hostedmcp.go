@@ -93,7 +93,7 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 }
 
 // SyncDeferringIssuerResync is Sync without the project-wide remote-session issuer resync; the caller must
-// run remotesessions.ResyncMCPServerRemoteSessionIssuers for the old and new issuers before commit.
+// run remotesessions.ReconcileMCPServerRemoteSessionIssuers for the old and new issuers before commit.
 func SyncDeferringIssuerResync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error) {
 	return syncHosted(ctx, tx, auditLogger, actor, toolset, nil, false)
 }
@@ -504,7 +504,7 @@ func resyncIssuersIf(ctx context.Context, tx pgx.Tx, enabled bool, toolset tools
 	return resyncIssuers(ctx, tx, toolset, issuers...)
 }
 
-// resyncIssuers recomputes the derived remote_session_issuer_id for each issuer touched.
+// resyncIssuers reconciles each touched issuer's servers with their client bindings.
 func resyncIssuers(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset, issuers ...uuid.NullUUID) error {
 	ids := make([]uuid.UUID, 0, len(issuers))
 	for _, id := range issuers {
@@ -515,7 +515,7 @@ func resyncIssuers(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset,
 	if len(ids) == 0 {
 		return nil
 	}
-	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, ids); err != nil {
+	if err := remotesessions.ReconcileMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, ids); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resync hosted MCP remote session issuer")
 	}
 	return nil

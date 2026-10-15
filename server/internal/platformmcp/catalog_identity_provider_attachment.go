@@ -170,7 +170,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	}
 	registrationResource.ScopesSupported = append([]string(nil), resourceMetadata.ScopesSupported...)
 	registrationResource.Live = true
-	commit := s.identity.Prepare(attachmentIdentityPlan(principal, project, registrationID, registration.UserSessionIssuerID.UUID, metadata, existing, reuse, remote.Url, resourceMetadata, registrationResource))
+	commit := s.identity.Prepare(attachmentIdentityPlan(principal, project, registrationID, registration.UserSessionIssuerID.UUID, registration.McpServerID, metadata, existing, reuse, remote.Url, resourceMetadata, registrationResource))
 	if err := commit.Preflight(ctx); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("check identity-provider attachment", err)
 	}
@@ -278,13 +278,14 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 }
 
 // attachmentIdentityPlan describes the attachment's identity write: the
-// discovered provider (or the reusable stored one) and a client this flow
-// registers itself. Dynamic registration stays the path for a provider where
+// discovered provider (or the reusable stored one), a client this flow
+// registers itself, and the registration's MCP server, which the commit stamps
+// with the provider. Dynamic registration stays the path for a provider where
 // this flow can use it, so existing attachments are unchanged; otherwise a
 // provider is set up through a Client ID Metadata Document when it supports
 // one, the same path the dashboard's automatic setup takes. A provider offering
 // neither leaves the registration needing manual setup.
-func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata, registrationResource remotesessions.ResourceScopes) remotesessions.IdentityPlan {
+func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID uuid.UUID, mcpServerID uuid.NullUUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata, registrationResource remotesessions.ResourceScopes) remotesessions.IdentityPlan {
 	var provider remotesessions.ProviderChoice
 	var allowCIMD bool
 	if reuse {
@@ -302,7 +303,11 @@ func attachmentIdentityPlan(principal Principal, project ResolvedProject, regist
 			ActorDisplayName: nil,
 		},
 		UserSessionIssuerID: userSessionIssuerID,
-		Provider:            provider,
+		// The registration's own MCP server. The provider this attaches is
+		// that server's upstream, not the user session issuer's, which other
+		// servers in the organization share.
+		MCPServerID: mcpServerID,
+		Provider:    provider,
 		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
 			// No copied scope: login discovers what to request live, and the
 			// registration names what that login would request.

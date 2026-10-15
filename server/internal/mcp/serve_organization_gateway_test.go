@@ -265,7 +265,7 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(otherSlug), ProjectID: otherProject.ID})
 	require.NoError(t, err)
 	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{otherServer.UserSessionIssuerID.UUID, fx.issuerID})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, otherProject.ID, []uuid.UUID{otherServer.UserSessionIssuerID.UUID}))
+	configureServerProviders(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, otherServer.UserSessionIssuerID.UUID)
 
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(t.Context(), testenv.NewLogger(t), fx.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)
@@ -396,7 +396,7 @@ func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *tes
 	hidden := "hidden-" + uuid.NewString()[:8]
 	createConsentRemoteClient(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, reachable, "", []uuid.UUID{grantedIssuer, fx.issuerID})
 	createConsentRemoteClient(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, hidden, "", []uuid.UUID{deniedIssuer, fx.issuerID})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{grantedIssuer, deniedIssuer}))
+	configureServerProviders(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, grantedIssuer, deniedIssuer)
 
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(t.Context(), testenv.NewLogger(t), fx.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)

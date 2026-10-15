@@ -5276,8 +5276,10 @@ WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_sess
 
 -- name: ListOrganizationMCPServersForUserSessionIssuer :many
 -- Live MCP servers on one user session issuer in every project of the
--- organization, for the binding-change impact preview.
-SELECT s.id, s.project_id, s.name, s.slug, s.toolset_id, p.name AS project_name
+-- organization, for the binding-change impact preview. Each row carries the
+-- server's own stamped provider, which is what decides whether the change
+-- reaches it: the issuer's other clients say nothing about its upstream.
+SELECT s.id, s.project_id, s.name, s.slug, s.toolset_id, s.remote_session_issuer_id, p.name AS project_name
 FROM mcp_servers AS s
 JOIN projects AS p ON p.id = s.project_id
 WHERE s.user_session_issuer_id = @user_session_issuer_id
@@ -5291,7 +5293,7 @@ ORDER BY p.name, s.id;
 -- organization can see: project-owned clients of the organization's projects
 -- and organization-level clients. Each server's derivation then keeps only its
 -- own project's and the organization-level ones, as
--- ResyncMCPServerRemoteSessionIssuers does. Clients of a deleted provider stay
+-- ReconcileMCPServerRemoteSessionIssuers does. Clients of a deleted provider stay
 -- in the list, as the commit's ListRemoteSessionClientsByProjectIDForUserSessionIssuer
 -- keeps them; provider_deleted drops them from the derivation only.
 SELECT c.id, c.project_id, c.remote_session_issuer_id, i.deleted AS provider_deleted
@@ -5308,6 +5310,23 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
                   WHERE p.id = c.project_id
                     AND p.organization_id = @organization_id::text))
 ORDER BY c.id;
+
+-- name: CountOrganizationMCPServersWithRemoteSessionIssuer :one
+-- Live MCP servers in the organization that sign in to one provider through
+-- one user session issuer, excluding the server a commit is configuring. A
+-- per-server identity commit releases the client of the provider it moves off
+-- only when this is zero: the provider's other servers keep signing in through
+-- that client, and unbinding it would strand them.
+SELECT count(*)
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+WHERE s.user_session_issuer_id = @user_session_issuer_id
+  AND s.remote_session_issuer_id = @remote_session_issuer_id
+  AND s.id <> @excluded_mcp_server_id
+  AND p.organization_id = @organization_id::text
+  AND s.deleted IS FALSE;
 
 -- name: ListOrganizationGatewaysForUserSessionIssuer :many
 -- Live gateways on one user session issuer in every project of the

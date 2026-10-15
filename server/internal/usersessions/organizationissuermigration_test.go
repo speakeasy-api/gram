@@ -596,7 +596,10 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	mcpServerAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: mcpServerID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
-	require.False(t, mcpServerAfter.RemoteSessionIssuerID.Valid, "two distinct target upstream issuers must fail closed")
+	// The target issuer binds another provider's client too, for the servers
+	// configured with it. This server keeps the provider configured on it,
+	// whose client the migration moved onto the target with it.
+	require.Equal(t, conv.ToNullUUID(remoteIssuer.ID), mcpServerAfter.RemoteSessionIssuerID)
 }
 
 func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {

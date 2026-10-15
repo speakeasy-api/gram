@@ -10,16 +10,15 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * repoint: its upstream authorization server changes to another single provider. clear: it is left with no single provider and loses its upstream. resignin: its upstream is unchanged but its client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
+ * clear: the client of the provider it signs in to is removed and nothing replaces it, so it loses its upstream. resignin: its upstream is unchanged but that provider's client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
  */
 export const ServerIdentityImpactServerImpact = {
-  Repoint: "repoint",
   Clear: "clear",
   Resignin: "resignin",
   ClientRemoved: "client_removed",
 } as const;
 /**
- * repoint: its upstream authorization server changes to another single provider. clear: it is left with no single provider and loses its upstream. resignin: its upstream is unchanged but its client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
+ * clear: the client of the provider it signs in to is removed and nothing replaces it, so it loses its upstream. resignin: its upstream is unchanged but that provider's client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
  */
 export type ServerIdentityImpactServerImpact = ClosedEnum<
   typeof ServerIdentityImpactServerImpact
@@ -48,7 +47,7 @@ export type ServerIdentityImpactServer = {
    */
   id: string;
   /**
-   * repoint: its upstream authorization server changes to another single provider. clear: it is left with no single provider and loses its upstream. resignin: its upstream is unchanged but its client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
+   * clear: the client of the provider it signs in to is removed and nothing replaces it, so it loses its upstream. resignin: its upstream is unchanged but that provider's client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.
    */
   impact: ServerIdentityImpactServerImpact;
   /**

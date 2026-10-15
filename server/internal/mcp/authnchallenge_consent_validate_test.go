@@ -992,7 +992,7 @@ func TestServeConsentAction_ValidateStandaloneTunneledBackend(t *testing.T) {
 	endpoint.McpServerID = conv.ToNullUUID(server.ID)
 
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-tunnel", "", []uuid.UUID{shared})
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared}))
+	configureServerProviders(t, ctx, ti.conn, projectID, orgID, shared)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-aim204-tunnel", "")
 
 	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: "", mu: sync.Mutex{}, forwards: nil, forwardBodies: nil}
