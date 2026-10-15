@@ -159,6 +159,40 @@ func TestCodeModeUnverifiedBearerStaysAnonymous(t *testing.T) {
 	require.LessOrEqual(t, len(callers), 4, "unverified bearers share the anonymous runners")
 }
 
+func TestCodeModeDescriptionOmitsMembersWithNoPermittedTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	mcp.SetTestCodeExecutor(ti.service, &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil})
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	slug := "code-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
+	upstream := newRecordingUpstream(t, "ping")
+	approvedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Approved tools", "approved", 0, upstream.url)
+	otherID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Other tools", "other", 1, upstream.url)
+	selection, err := toolfilter.NewSessionSelection("meta_mcp_server:"+gateway.ID.String(), uuid.New(), []toolfilter.AllowEntry{
+		{Type: toolfilter.AllowTypeTool, Name: "approved--ping", Mode: nil, Tools: nil},
+	})
+	require.NoError(t, err)
+	members := map[string]uuid.UUID{"approved": approvedID, "other": otherID}
+
+	list := func(token string) string {
+		t.Helper()
+		w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), token, nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+		require.Contains(t, w.Body.String(), `"name":"execute"`)
+		return w.Body.String()
+	}
+	body := list(mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode, selection, members))
+	require.Contains(t, body, `approved--`)
+	require.NotContains(t, body, `other--`)
+
+	body = list(mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode, nil, nil))
+	require.Contains(t, body, `approved--`)
+	require.Contains(t, body, `other--`)
+}
+
 // mintGatewayTestSession stores a gateway session with an explicit discovery
 // mode and an optional tool selection, returning its bearer token.
 func mintGatewayTestSession(t *testing.T, ctx context.Context, ti *testInstance, gatewayID, issuerID uuid.UUID, slug string, mode metamcp.DiscoveryMode, selection *toolfilter.SessionSelection, members map[string]uuid.UUID) string {

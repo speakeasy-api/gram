@@ -198,6 +198,29 @@ func TestCodeBridgeHonorsToolSelection(t *testing.T) {
 	require.Error(t, err, "a callback cannot reach a tool outside the selection")
 }
 
+func TestCodeBridgeOmitsMembersWithNoPermittedTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Approved", "approved", 0, upstream.url)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Other", "other", 1, upstream.url)
+	selection, err := toolfilter.NewSessionSelection("meta_mcp_server:"+gateway.ID.String(), uuid.New(), []toolfilter.AllowEntry{
+		{Type: toolfilter.AllowTypeTool, Name: "approved--ping", Mode: nil, Tools: nil},
+	})
+	require.NoError(t, err)
+
+	servers, _, err := mcp.NewTestMetaCodeBackend(t, ctx, ti.service, gateway.ID, selection).Members(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []codemode.Server{{Slug: "approved", Name: "Approved"}}, servers)
+
+	servers, _, err = mcp.NewTestMetaCodeBackend(t, ctx, ti.service, gateway.ID, nil).Members(ctx)
+	require.NoError(t, err)
+	require.Len(t, servers, 2, "an unrestricted session keeps every member")
+}
+
 // TestCodeBridgeRefusesChangedDefinitionOrDestination pins the fingerprint
 // check at dispatch: a call reads the member's catalog once and dispatches
 // through that read, and a member now served by a different backend is
