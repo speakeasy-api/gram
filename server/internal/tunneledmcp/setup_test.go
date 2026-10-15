@@ -65,11 +65,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-tunneledmcp-test"), billingClient)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-	// Custom domains and tunneled servers need a current paid tier; the billing
-	// stub reports no tier, so set it explicitly.
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = string(billing.TierEnterprise)
+	// Tunneled servers need a paid tier and the billing stub reports none.
+	requireAuthContext(t, ctx).AccountType = string(billing.TierEnterprise)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), nil, redisClient)

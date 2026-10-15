@@ -33,7 +33,7 @@ func (s *StubClient) getLocalCustomerTier(ctx context.Context, orgID string) (*T
 		return nil, false, fmt.Errorf("check local account profiles: %w", err)
 	}
 	// Without a fixture, report no tier so reconciliation keeps the persisted
-	// tier: fresh signups stay free instead of being promoted to legacy Pro.
+	// tier.
 	if !exists {
 		return nil, false, nil
 	}

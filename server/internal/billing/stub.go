@@ -50,8 +50,7 @@ func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, 
 		}
 		return tier, active, nil
 	}
-	// Report no tier so reconciliation keeps the persisted tier. Legacy Pro is
-	// never granted to new organizations.
+	// Report no tier so reconciliation keeps the persisted tier.
 	return nil, false, nil
 }
 
