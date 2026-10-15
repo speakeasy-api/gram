@@ -405,3 +405,50 @@ func TestGetMcpServer_PrimaryEndpointWithoutServerURL(t *testing.T) {
 	require.Equal(t, conv.PtrEmpty(endpoint.ID.String()), got.PrimaryEndpointID)
 	require.Nil(t, got.PrimaryEndpointURL)
 }
+
+func TestCreateAndUpdateMcpServer_ResponsesCarrySummary(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	withSummaryServerURL(t, ti)
+	orgID, projectID := summaryAuth(t, ctx)
+
+	toolset := seedSummaryToolset(t, ctx, ti, orgID, projectID, []urn.Tool{
+		urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets"),
+		urn.NewTool(urn.ToolKindExternalMCP, "acme", "proxy"),
+	})
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "summary create", ToolsetID: conv.PtrEmpty(toolset.ID.String()), Visibility: types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.Toolset)
+	require.Equal(t, toolset.ID.String(), created.Toolset.ID)
+	require.Equal(t, 1, created.Toolset.ToolCount)
+	require.Equal(t, []string{"acme"}, created.Toolset.ExternalMcpSlugs)
+	require.Nil(t, created.PrimaryEndpointID, "a new server has no endpoint yet")
+
+	endpoint := seedSummaryEndpoint(t, ctx, ti, projectID, uuid.MustParse(created.ID), uuid.NullUUID{})
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, ToolsetID: conv.PtrEmpty(toolset.ID.String()), Visibility: types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Toolset)
+	require.Equal(t, 1, updated.Toolset.ToolCount)
+	require.Equal(t, conv.PtrEmpty(endpoint.ID.String()), updated.PrimaryEndpointID)
+	require.Equal(t, platformURL(endpoint.Slug), updated.PrimaryEndpointURL)
+	require.Equal(t, conv.PtrEmpty(endpoint.Slug), updated.PlatformEndpointSlug)
+
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, projectID).String()
+	remote, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "summary remote create", RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	requireNoEnrichment(t, remote)
+
+	remoteEndpoint := seedSummaryEndpoint(t, ctx, ti, projectID, uuid.MustParse(remote.ID), uuid.NullUUID{})
+	remoteUpdated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: remote.ID, RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.Nil(t, remoteUpdated.Toolset)
+	require.Equal(t, conv.PtrEmpty(remoteEndpoint.ID.String()), remoteUpdated.PrimaryEndpointID)
+}
