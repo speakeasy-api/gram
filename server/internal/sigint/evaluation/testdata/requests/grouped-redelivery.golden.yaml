@@ -1,7 +1,6 @@
 - model: jev-latest
   state:
     role: ROLE_USER
-    content: null
     parts:
       - text: Please help with a failed payment
   questions:
@@ -15,11 +14,9 @@
   state:
     messages:
       - role: ROLE_USER
-        content: null
         parts:
           - text: First context
       - role: ROLE_USER
-        content: null
         parts:
           - text: Please help with a failed payment
     target_message_index: 1
@@ -46,11 +43,9 @@
   state:
     messages:
       - role: ROLE_USER
-        content: null
         parts:
           - text: First context
       - role: ROLE_USER
-        content: null
         parts:
           - text: Please help with a failed payment
     target_message_index: 1
@@ -67,7 +62,6 @@
 - model: jev-latest
   state:
     role: ROLE_USER
-    content: null
     parts:
       - text: Please help with a failed payment
   questions:
@@ -81,11 +75,9 @@
   state:
     messages:
       - role: ROLE_USER
-        content: null
         parts:
           - text: Corrected context
       - role: ROLE_USER
-        content: null
         parts:
           - text: Please help with a failed payment
     target_message_index: 1
@@ -112,11 +104,9 @@
   state:
     messages:
       - role: ROLE_USER
-        content: null
         parts:
           - text: Corrected context
       - role: ROLE_USER
-        content: null
         parts:
           - text: Please help with a failed payment
     target_message_index: 1

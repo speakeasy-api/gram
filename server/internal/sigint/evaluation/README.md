@@ -98,7 +98,9 @@ evaluate immediately. Late imports and timestamp corrections affect subsequent
 evaluations; retries resolve current history under the same target reading identity.
 
 State is `{messages: [{role, content, parts}, ...], target_message_index: N-1}`,
-where N is the actual message count. Messages run oldest to newest with the target
+where N is the actual message count. The `content` field is omitted when no original
+structured payload is present; row-local text, tool calls and attachments use `parts`.
+Messages run oldest to newest with the target
 last. Every question explicitly instructs the classifier to classify only that
 target and use the preceding messages as evidence. Initial eligibility checks the
 incoming event's creation type and user/assistant role; the persisted target must

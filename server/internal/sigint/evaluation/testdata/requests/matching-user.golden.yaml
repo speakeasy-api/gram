@@ -1,7 +1,6 @@
 - model: jev-latest
   state:
     role: ROLE_USER
-    content: null
     parts:
       - text: Please help with a failed payment
   questions:

@@ -2,15 +2,12 @@
   state:
     messages:
       - role: ROLE_USER
-        content: null
         parts:
           - text: The first failed charge was this morning.
       - role: ROLE_USER
-        content: null
         parts:
           - text: Our billing payments are failing. Sign-in still works.
       - role: ROLE_ASSISTANT
-        content: null
         parts:
           - text: Checking the invoice.
           - tool_call:
@@ -18,7 +15,6 @@
               id: call-invoice
               name: lookup_invoice
       - role: ROLE_TOOL
-        content: null
         parts:
           - text: 'Payment declined: retry required.'
       - role: ROLE_ASSISTANT
