@@ -136,7 +136,11 @@ func registerTurnOffMCPSignInTool(reg *Registrar, registrations *RegistrationSer
 				ProjectSlug: input.ProjectSlug, RegistrationID: input.RegistrationID,
 				SignInConfigured: false, ProviderURL: result.ProviderURL,
 				Applied: true, SignsInToNothing: result.Removed,
-				OtherServersKeepTheClient: !result.ClientUnbound,
+				// ClientUnbound false means this removal released nothing,
+				// which covers both another server keeping the client and
+				// there having been no client to release. Only the read-back
+				// tells those apart, so neither is claimed here.
+				OtherServersKeepTheClient: false,
 				PeopleMustSignInAgain:     result.ClientUnbound,
 				NextAction:                "none",
 				Message:                   "This MCP server's sign-in was turned off. Checking the result afterwards did not work, so tell the user it is done and that its current state could not be read back; do not call this tool again for it.",

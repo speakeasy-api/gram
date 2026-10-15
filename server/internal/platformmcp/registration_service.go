@@ -410,7 +410,16 @@ func (s *RegistrationService) PreviewIdentityProviderRemoval(ctx context.Context
 
 // RemoveIdentityProvider turns one registered MCP server's sign-in off, only
 // while the server is still in the state expectedVersion names.
+//
+// Charged against the same budget as the attachment it reverses: both reach
+// the identity commit and either can be driven in a loop by an agent.
 func (s *RegistrationService) RemoveIdentityProvider(ctx context.Context, principal Principal, projectSlug, registrationID, expectedVersion string) (SignInRemovalResult, error) {
+	if s == nil || !s.budgets.SetupStart.valid() {
+		return SignInRemovalResult{}, ErrIdentityProviderAttachmentUnavailable
+	}
+	if err := s.budgets.SetupStart.Allow(ctx, principal); err != nil {
+		return SignInRemovalResult{}, err
+	}
 	project, parsedID, err := s.identityProviderTarget(ctx, principal, projectSlug, registrationID)
 	if err != nil {
 		return SignInRemovalResult{}, err

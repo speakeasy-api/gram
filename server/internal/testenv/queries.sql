@@ -891,7 +891,8 @@ WITH resolved AS (
     LEFT JOIN remote_session_issuers AS i
            ON i.id = c.remote_session_issuer_id
           AND i.deleted IS FALSE
-          AND (i.project_id IS NULL OR i.project_id = @project_id::uuid)
+          AND (i.project_id IS NULL
+               OR (i.project_id = @project_id::uuid AND c.project_id = @project_id::uuid))
     GROUP BY input.user_session_issuer_id
 )
 UPDATE mcp_servers AS s

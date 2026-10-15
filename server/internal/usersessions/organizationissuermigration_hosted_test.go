@@ -304,8 +304,9 @@ func TestOrganizationUserSessionIssuerMigrateFallsBackWhenHostedSyncRejects(t *t
 }
 
 // migrateWithRemoteBinding migrates two hosted wrappers and a free server
-// sharing a project, each configured with the same upstream authorization
-// server, and returns the providers they name afterwards.
+// sharing a project, each configured with its own upstream authorization
+// server, and returns what each should name afterwards alongside what each
+// actually names.
 func migrateWithRemoteBinding(t *testing.T) (expected, migrated []uuid.NullUUID) {
 	t.Helper()
 	ctx, ti := newTestService(t)
