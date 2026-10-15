@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,7 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -283,12 +285,17 @@ func (s *Service) listPlatformToolsetTools(
 		return s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, feature, featureCache)
 	}
 
+	grantedScopes := s.grantedPlatformToolScopes(ctx, authCtx, toolset.Tools)
+
 	tools := make([]*toolListEntry, 0, len(toolset.Tools))
 	for _, extra := range toolset.Tools {
 		if extra.Executor == nil {
 			continue
 		}
 		if !available(extra.RequiredFeature) {
+			continue
+		}
+		if extra.RequiredScope != "" && !grantedScopes[extra.RequiredScope] {
 			continue
 		}
 		entry := toolToListEntry(extra.Executor.Descriptor().ToTool(*authCtx.ProjectID))
@@ -343,6 +350,9 @@ func (s *Service) callPlatformToolsetTool(
 	}
 	if !s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, matched.RequiredFeature, nil) {
 		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogError(ctx, s.logger)
+	}
+	if matched.RequiredScope != "" && !s.grantedPlatformToolScopes(ctx, authCtx, []platformtools.ExternalTool{matched})[matched.RequiredScope] {
+		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogWarn(ctx, s.logger)
 	}
 
 	desc := matched.Executor.Descriptor()
@@ -551,6 +561,39 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 	}
 
 	return oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, args...)
+}
+
+// grantedPlatformToolScopes reports which of the tools' required scopes the
+// caller holds on the active project. One FindMatched call covers the batch,
+// so a hidden tool leaves a filter record for diagnosis without recording a
+// denied requirement: a tool the caller cannot use is simply not offered.
+// Any failure hides every scope-gated tool.
+func (s *Service) grantedPlatformToolScopes(ctx context.Context, authCtx *contextvalues.AuthContext, tools []platformtools.ExternalTool) map[string]bool {
+	granted := map[string]bool{}
+	if authCtx.ProjectID == nil {
+		return granted
+	}
+	scopes := make([]string, 0, len(tools))
+	checks := make([]authz.Check, 0, len(tools))
+	for _, tool := range tools {
+		if tool.RequiredScope == "" || slices.Contains(scopes, tool.RequiredScope) {
+			continue
+		}
+		scopes = append(scopes, tool.RequiredScope)
+		checks = append(checks, authz.Check{Scope: authz.Scope(tool.RequiredScope), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	}
+	if len(checks) == 0 {
+		return granted
+	}
+	matched, err := s.authz.FindMatched(ctx, checks)
+	if err != nil {
+		s.logger.WarnContext(ctx, "match platform tool scopes; hiding scope-gated tools", attr.SlogError(err))
+		return granted
+	}
+	for i, scope := range scopes {
+		granted[scope] = matched[i]
+	}
+	return granted
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on
