@@ -170,7 +170,8 @@ describe("ConsentToolsApp", () => {
     await screen.findByText(/Tools load after you give access/);
     expect(button.disabled).toBe(false);
     expect(button.dataset["consentSelfReady"]).toBe("true");
-    expect(screen.getByText("Retry")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Load tools" })).toBeTruthy();
+    expect(screen.queryByText("Retry")).toBeNull();
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
     expect(formFieldValues("tool_inventory_id")).toEqual([]);
   });

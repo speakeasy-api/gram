@@ -502,7 +502,7 @@
     }
     if (state === "ready") {
       status.className = "text-xs text-muted-foreground";
-      status.textContent = "Ready to connect after authorization";
+      status.textContent = "Automatically connects when you give access";
       return;
     }
     if (state === "rejected") {

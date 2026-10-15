@@ -155,7 +155,7 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 	}
 	switch outcome.Reason {
 	case identitychaining.ReasonConsentRequired:
-		return consentChainCheckResult{Status: chainCheckReady, Message: "Ready to connect after authorization"}
+		return consentChainCheckResult{Status: chainCheckReady, Message: "Automatically connects when you give access"}
 	case identitychaining.ReasonSuccess:
 		return chainCheckConnectedResult
 	case identitychaining.ReasonInvalidGrant, identitychaining.ReasonAccessDenied, identitychaining.ReasonScopePolicyDenied,
