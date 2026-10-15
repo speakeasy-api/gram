@@ -2085,6 +2085,11 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
+      # The hooks-go target's compile step resolves the root Go module's
+      # dependencies, including test dependencies.
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
+
       - name: Test generated artifact conflict resolution
         run: mise run test:gen-resolve
 
