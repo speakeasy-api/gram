@@ -813,7 +813,7 @@ func TestAgentEventRowFromLogReadsWhatTheHooksEndpointRecords(t *testing.T) {
 	record := logEventTestRecord("record-1", "org-1", "codex")
 	record.SetEventName("PostToolUse")
 	record.SetAttributes([]*otelv1.LogRecord_KeyValue{
-		logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), dialect.HooksLogScopeName),
+		logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), dialect.HooksLogScope),
 		logEventTestKV("gram.event.source", "hook"),
 		logEventTestKV("gram.hook.event", "PostToolUse"),
 		logEventTestKV("gram.hook.source", "codex"),

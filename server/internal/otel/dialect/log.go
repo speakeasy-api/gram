@@ -44,11 +44,13 @@ type LogDialect interface {
 	ExternalOrgID(record *otelv1.InboundLogRecord) (key string, val string, err error)
 }
 
+// HooksLogScope is the scope the hooks ingest endpoint republishes its telemetry rows under.
+const HooksLogScope = "github.com/speakeasy-api/gram/server/internal/hooks"
+
 var logDialects = []LogDialect{
 	ClaudeCodeLog{},
 	CodexLog{},
 	GatewayLog{SemconvLog: SemconvLog{}},
-	HooksLog{},
 }
 
 func ForLog(record *otelv1.InboundLogRecord) LogDialect {

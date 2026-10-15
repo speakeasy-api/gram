@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -74,6 +76,21 @@ func teeTestPayload(idempotencyKey string) *gen.IngestPayload {
 	return payload
 }
 
+// teeAgentAttributes runs the agent attribute enrichers over a published
+// record, as the transform does, and indexes what they wrote by key.
+func teeAgentAttributes(t *testing.T, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
+	t.Helper()
+	out := map[attribute.Key]attribute.Value{}
+	for _, enricher := range enrich.LogAgentAttributes() {
+		attrs, err := enricher.Enrich(t.Context(), record)
+		require.NoError(t, err)
+		for _, kv := range attrs {
+			out[kv.Key] = kv.Value
+		}
+	}
+	return out
+}
+
 func teeStringAttr(t *testing.T, record *otelv1.InboundLogRecord, key string) string {
 	t.Helper()
 	return teeAttrByKey(t, record.GetAttributes(), key).GetStringValue()
@@ -100,7 +117,7 @@ func TestTeeCanonicalHookPublishesWhatTheIngestEdgeWould(t *testing.T) {
 	require.Equal(t, []byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}, record.GetTraceId())
 	require.Equal(t, []byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}, record.GetSpanId())
 	require.Nil(t, record.GetBody())
-	require.Equal(t, dialect.HooksLogScopeName, record.GetScope().GetName())
+	require.Equal(t, dialect.HooksLogScope, record.GetScope().GetName())
 	require.Equal(t, "codex", teeAttrByKey(t, record.GetResource().GetAttributes(), string(attr.ServiceNameKey)).GetStringValue())
 	require.Equal(t, "1.2.3", teeAttrByKey(t, record.GetResource().GetAttributes(), string(attr.ServiceVersionKey)).GetStringValue())
 	require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
@@ -262,7 +279,7 @@ func TestIngest_TeesToolCallIntoEventFeed(t *testing.T) {
 	response := published.byRecordID(t, hookIngestRecordID("idem-tee-2", 0))
 	for _, record := range []*otelv1.InboundLogRecord{request, response} {
 		require.NoError(t, otelsvc.ValidateInboundLogRecord(record))
-		require.Equal(t, dialect.HooksLogScopeName, record.GetScope().GetName())
+		require.Equal(t, dialect.HooksLogScope, record.GetScope().GetName())
 		require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
 		require.Equal(t, authCtx.ActiveOrganizationID, record.GetProvenance().GetOrganizationId())
 		require.Equal(t, authCtx.ProjectID.String(), record.GetProvenance().GetProjectId())
@@ -278,23 +295,16 @@ func TestIngest_TeesToolCallIntoEventFeed(t *testing.T) {
 		require.NotZero(t, record.GetObservedTimeUnixNano())
 	}
 
-	// The cross-package contract: the dialect names what the tee published.
+	// The cross-package contract: the enrichers name what the tee published.
 	require.Equal(t, "PreToolUse", request.GetEventName())
 	require.Equal(t, "tool.requested", teeStringAttr(t, request, string(attr.HookCanonicalEventTypeKey)))
-	_, eventType, err := dialect.ForLog(request).EventType(request)
-	require.NoError(t, err)
-	require.Equal(t, dialect.EventTypeToolCall, eventType)
+	require.Equal(t, dialect.EventTypeToolCall, teeAgentAttributes(t, request)[enrich.AgentEventTypeKey].AsString())
 
 	require.Equal(t, "PostToolUse", response.GetEventName())
-	_, eventType, err = dialect.ForLog(response).EventType(response)
-	require.NoError(t, err)
-	require.Equal(t, dialect.EventTypeToolCallResult, eventType)
-	_, outcome, err := dialect.ForLog(response).Outcome(response)
-	require.NoError(t, err)
-	require.Equal(t, dialect.OutcomeOK, outcome)
-	_, nanos, err := dialect.ForLog(response).DurationNano(response)
-	require.NoError(t, err)
-	require.Equal(t, int64(750_000_000), nanos)
+	columns := teeAgentAttributes(t, response)
+	require.Equal(t, dialect.EventTypeToolCallResult, columns[enrich.AgentEventTypeKey].AsString())
+	require.Equal(t, dialect.OutcomeOK, columns[enrich.AgentOutcomeKey].AsString())
+	require.Equal(t, int64(750_000_000), columns[enrich.AgentDurationNanoKey].AsInt64())
 	require.JSONEq(t, `{"stdout":"README.md"}`, teeStringAttr(t, response, string(attr.GenAIToolCallResultKey)), "tool IO rides along when the org keeps it")
 }
 
@@ -343,9 +353,7 @@ func TestIngest_TeesEveryEventKindTheDialectClassifies(t *testing.T) {
 		t.Helper()
 		record, ok := byName[name]
 		require.True(t, ok, "no record named %s among %v", name, slices.Sorted(maps.Keys(byName)))
-		_, eventType, err := dialect.ForLog(record).EventType(record)
-		require.NoError(t, err)
-		return eventType
+		return teeAgentAttributes(t, record)[enrich.AgentEventTypeKey].AsString()
 	}
 	require.Equal(t, dialect.EventTypeToolCall, classify("BeforeMCPExecution"))
 	require.Equal(t, "cursor", teeStringAttr(t, byName["BeforeMCPExecution"], string(attr.HookSourceKey)))

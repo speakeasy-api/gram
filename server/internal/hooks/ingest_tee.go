@@ -110,7 +110,7 @@ func (s *Service) teeCanonicalHookToEventFeed(
 			resourceAttrs = append(resourceAttrs, semconv.ServiceVersion(version))
 		}
 	}
-	logger := otelpub.NewLogger(s.otelLogPublisher, resource.NewSchemaless(resourceAttrs...), dialect.HooksLogScopeName)
+	logger := otelpub.NewLogger(s.otelLogPublisher, resource.NewSchemaless(resourceAttrs...), dialect.HooksLogScope)
 	idempotencyKey := conv.PtrValOr(payload.IdempotencyKey, "")
 	ctx = otelpub.WithTenant(context.WithoutCancel(ctx), orgID, authCtx.ProjectID.String())
 

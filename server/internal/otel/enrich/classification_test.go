@@ -93,7 +93,7 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 
 	t.Run("a hook row the hooks endpoint republished is typed by its hook event, on the hook source", func(t *testing.T) {
 		t.Parallel()
-		record := inboundTestLog(dialect.HooksLogScopeName, "codex", "PostToolUse",
+		record := inboundTestLog(dialect.HooksLogScope, "codex", "PostToolUse",
 			logStringAttribute("gram.hook.source", "codex"),
 			logStringAttribute("gram.tool.name", "shell"),
 		)
@@ -114,16 +114,16 @@ func TestLogClassificationLeavesLifecycleHookRowsUntyped(t *testing.T) {
 
 	enricher := &logClassification{}
 
-	attrs := enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "claude-code", "SessionStart", logStringAttribute("gram.hook.source", "claude-code")))
+	attrs := enriched(t, enricher, inboundTestLog(dialect.HooksLogScope, "claude-code", "SessionStart", logStringAttribute("gram.hook.source", "claude-code")))
 	require.NotContains(t, attrs, AgentEventTypeKey)
 	require.Equal(t, "SessionStart", attrs[AgentRawEventNameKey].AsString())
 	require.Equal(t, "claude-code", attrs[AgentSurfaceKey].AsString())
 
-	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "x", "SessionStart", logStringAttribute("gram.hook.source", "my-custom-agent-7")))
+	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScope, "x", "SessionStart", logStringAttribute("gram.hook.source", "my-custom-agent-7")))
 	require.NotContains(t, attrs, AgentEventTypeKey)
 	require.Equal(t, "my-custom-agent-7", attrs[AgentSurfaceKey].AsString(), "the surface is whatever the endpoint resolved")
 
-	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "codex", "PostToolUse", logStringAttribute("gram.hook.source", "codex")))
+	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScope, "codex", "PostToolUse", logStringAttribute("gram.hook.source", "codex")))
 	require.Equal(t, dialect.EventTypeToolCallResult, attrs[AgentEventTypeKey].AsString())
 }
 
