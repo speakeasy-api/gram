@@ -33,6 +33,12 @@ func resolveUserEmail(ctx context.Context, typed any) string {
 		return email
 	}
 	base := agenthooks.EventOf(typed)
+	// All Anthropic surfaces share the Claude provider, including Cowork.
+	if base.Provider == agenthooks.ProviderClaudeCode {
+		if email := strings.TrimSpace(os.Getenv("CLAUDE_CODE_USER_EMAIL")); validEmail(email) {
+			return email
+		}
+	}
 	if base.Provider == agenthooks.ProviderCodex && base.Kind == agenthooks.KindSessionStart {
 		if email := codexAppServerEmail(ctx); email != "" {
 			return email
