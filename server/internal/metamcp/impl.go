@@ -473,7 +473,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	// server row sharing the gateway's issuer cannot keep naming a provider the
 	// issuer no longer binds a client for.
 	if rewiredIssuer {
-		remotesessions.BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID.UUID})
+		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID.UUID})
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
@@ -963,7 +963,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	// server row sharing the gateway's issuer cannot keep naming a provider the
 	// issuer no longer binds a client for.
 	if wiredGatewayIssuer {
-		remotesessions.BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
+		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, metaID, false)
 
@@ -1189,7 +1189,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	// Bring any server row sharing the gateway's issuer back in line with what
 	// this binding change left, matching the add path's post-commit reconcile.
 	if wiredGatewayIssuer {
-		remotesessions.BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
+		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, meta.ID, false)
 

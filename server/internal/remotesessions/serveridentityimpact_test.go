@@ -226,6 +226,66 @@ func TestGetServerIdentityImpactUsesTheCommitsClientMode(t *testing.T) {
 	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
 }
 
+// AIM-577: the disable preview is the disable's own decision. Previewing it as
+// an issuer-wide detach warned that unrelated servers would lose their
+// identity, let an unrelated organization-owned client refuse it, and counted
+// unreadable siblings that blocked a valid server-local operation.
+func TestGetServerIdentityImpactDisableIsServerScoped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "impact-disable-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-disable-target", userIssuerID)
+	siblingID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-disable-sibling", userIssuerID)
+
+	ownProviderID := createServerIdentityProvider(t, ctx, ti, "impact-disable-own", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-disable-own-client", ownProviderID, userIssuerID, targetID, false)
+	siblingProviderID := createServerIdentityProvider(t, ctx, ti, "impact-disable-sibling-provider", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-disable-sibling-client", siblingProviderID, userIssuerID, siblingID, false)
+
+	// Only this server's provider is unbound, so no other server is named and
+	// the sibling's own client cannot make the disable look dangerous.
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "disable", nil, nil))
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
+	require.Zero(t, result.HiddenServerCount)
+
+	// An organization-owned client of another provider is not this disable's
+	// to touch, so it neither refuses nor counts.
+	orgProviderID := createServerIdentityProvider(t, ctx, ti, "impact-disable-org", "", false, []string{"none"})
+	bindServerIdentityClient(t, ctx, ti, "impact-disable-org-client", orgProviderID, userIssuerID, true)
+	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "disable", nil, nil))
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
+	require.Zero(t, result.HiddenServerCount)
+
+	// The detach the Remote Identity Provider settings perform still reports
+	// every server it would reach, which is the operation it describes.
+	_, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "detach", nil, nil))
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
+}
+
+// A server sharing its provider's client keeps it, so the disable reaches
+// nothing and the preview says so.
+func TestGetServerIdentityImpactDisableKeepsASharedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "impact-disable-shared-issuer")
+	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-disable-shared-target", userIssuerID)
+	siblingID := createServerIdentityTargetOnIssuer(t, ctx, ti, "impact-disable-shared-sibling", userIssuerID)
+	providerID := createServerIdentityProvider(t, ctx, ti, "impact-disable-shared-provider", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "impact-disable-shared-client", providerID, userIssuerID, targetID, false)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, providerID)
+
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "disable", nil, nil))
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
+	require.Zero(t, result.HiddenServerCount)
+}
+
 func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 	t.Parallel()
 

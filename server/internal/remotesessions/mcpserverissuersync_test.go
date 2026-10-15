@@ -105,10 +105,10 @@ func stampIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectI
 
 func reconcile(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, userIssuerIDs ...uuid.UUID) {
 	t.Helper()
-	require.NoError(t, remotesessions.ReconcileMCPServerRemoteSessionIssuers(ctx, conn, organizationID, projectID, userIssuerIDs))
+	require.NoError(t, remotesessions.ClearUnboundMCPServerRemoteSessionIssuers(ctx, conn, organizationID, projectID, userIssuerIDs))
 }
 
-func TestReconcileMCPServerRemoteSessionIssuers(t *testing.T) {
+func TestClearUnboundMCPServerRemoteSessionIssuers(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -118,21 +118,19 @@ func TestReconcileMCPServerRemoteSessionIssuers(t *testing.T) {
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
-	t.Run("a server alone on its issuer takes the provider bound there", func(t *testing.T) {
+	t.Run("a server alone on its issuer is not configured from its clients", func(t *testing.T) {
 		t.Parallel()
 
-		// The per-server identity commit is offered for directly Remote
-		// MCP-backed servers only, so this is the whole configuration a
-		// toolset-backed or tunneled server has. With no other server on the
-		// issuer there is nothing to borrow from.
+		// Nothing derives this column. A server signing in to nothing stays
+		// that way until an operator configures it, which is what makes a
+		// disable durable, and the identity commit accepts every backend so a
+		// toolset-backed or tunneled server has that surface too.
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sweep-solo")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sweep-solo")
-		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "a fresh server names no provider")
+		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sweep-solo")
 
-		_, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sweep-solo")
 		reconcile(t, ctx, ti.conn, orgID, projectID, userIssuerID)
-
-		require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID))
+		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 	})
 
 	t.Run("a provider that still has a client is left alone", func(t *testing.T) {
@@ -152,9 +150,9 @@ func TestReconcileMCPServerRemoteSessionIssuers(t *testing.T) {
 	t.Run("a server sharing its issuer is never derived", func(t *testing.T) {
 		t.Parallel()
 
-		// With a sibling on the issuer, a server with no provider configured
-		// gains one only from an explicit identity commit — never from
-		// whichever client happens to be bound for its sibling.
+		// A server with no provider configured gains one only from an explicit
+		// identity commit — never from whichever client happens to be bound
+		// for its sibling.
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sweep-noderive")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sweep-noderive")
 		seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sweep-noderive-sibling")
@@ -351,7 +349,7 @@ func TestReconcileMCPServerRemoteSessionIssuers(t *testing.T) {
 		reconcile(t, ctx, ti.conn, orgID, projectID, userIssuerID, uuid.New())
 		require.Equal(t, first, storedIssuer(t, ctx, ti.conn, projectID, serverID))
 
-		require.NoError(t, remotesessions.ReconcileMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, nil), "an empty set is a no-op, not an error")
+		require.NoError(t, remotesessions.ClearUnboundMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, nil), "an empty set is a no-op, not an error")
 	})
 
 	t.Run("a reconcile without a tenant scope is rejected", func(t *testing.T) {
@@ -364,18 +362,75 @@ func TestReconcileMCPServerRemoteSessionIssuers(t *testing.T) {
 
 		// A missing scope is a caller bug and must not read as "every tenant" —
 		// even with the empty id set that would otherwise short-circuit.
-		require.Error(t, remotesessions.ReconcileMCPServerRemoteSessionIssuers(ctx, ti.conn, "", projectID, []uuid.UUID{userIssuerID}))
-		require.Error(t, remotesessions.ReconcileMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, uuid.Nil, []uuid.UUID{userIssuerID}))
-		require.Error(t, remotesessions.ReconcileMCPServerRemoteSessionIssuers(ctx, ti.conn, "", uuid.Nil, nil))
+		require.Error(t, remotesessions.ClearUnboundMCPServerRemoteSessionIssuers(ctx, ti.conn, "", projectID, []uuid.UUID{userIssuerID}))
+		require.Error(t, remotesessions.ClearUnboundMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, uuid.Nil, []uuid.UUID{userIssuerID}))
+		require.Error(t, remotesessions.ClearUnboundMCPServerRemoteSessionIssuers(ctx, ti.conn, "", uuid.Nil, nil))
 		require.Equal(t, uuid.NullUUID{UUID: unboundProvider, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID),
 			"a rejected reconcile must not have written anything")
 	})
 }
 
+// Addendum to AIM-577's review: the clear reads its candidates and then
+// writes, so a configuration committed in between must win. A shared server's
+// explicitly configured provider is not something a later pass can
+// reconstruct, so losing it would be permanent.
+func TestClearMCPServerRemoteSessionIssuerLosesToAConfigurationCommit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-clear-cas")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "clear-cas")
+	seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "clear-cas-sibling")
+	gone := seedUnboundRemoteIssuer(t, ctx, ti.conn, projectID, orgID, "rsi-clear-cas-gone")
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, gone)
+
+	q := mcpserversrepo.New(ti.conn)
+	stale, err := q.ListMCPServerRemoteSessionIssuersToClear(ctx, mcpserversrepo.ListMCPServerRemoteSessionIssuersToClearParams{
+		UserSessionIssuerIds: []uuid.UUID{userIssuerID},
+		OrganizationID:       orgID,
+		ProjectID:            projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, stale, 1, "the server names a provider with no client")
+
+	// A commit configures the server, and binds a client for what it chose,
+	// after the candidates were read.
+	_, configured := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-clear-cas-configured")
+	rows, err := q.StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(configured),
+		ID:                    serverID,
+		ProjectID:             projectID,
+		UserSessionIssuerID:   conv.ToNullUUID(userIssuerID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rows)
+
+	cleared, err := q.ClearMCPServerRemoteSessionIssuerIfUnchanged(ctx, mcpserversrepo.ClearMCPServerRemoteSessionIssuerIfUnchangedParams{
+		ID:                            stale[0].ID,
+		ProjectID:                     projectID,
+		OrganizationID:                orgID,
+		ObservedRemoteSessionIssuerID: stale[0].RemoteSessionIssuerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), cleared, "the clear must not overwrite the provider committed after its read")
+	require.Equal(t, conv.ToNullUUID(configured), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+
+	// Run end to end, as the post-commit pass does: the server keeps what the
+	// commit configured, because its client is bound.
+	reconcile(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+	require.Equal(t, conv.ToNullUUID(configured), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+}
+
 // The operator backfill reads every server, decides, then writes. An
 // administrator configuring User Identity in between is the authority on their
-// own server, so the write is conditional on the provider the read observed
-// and loses that race instead of reverting it.
+// own server, so the write is conditional on the provider and the row version
+// the read observed and loses that race instead of reverting it.
 func TestRepairMCPServerRemoteSessionIssuerIfUnchanged(t *testing.T) {
 	t.Parallel()
 
@@ -389,36 +444,67 @@ func TestRepairMCPServerRemoteSessionIssuerIfUnchanged(t *testing.T) {
 	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-repair")
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "repair")
 	observed := seedUnboundRemoteIssuer(t, ctx, ti.conn, projectID, orgID, "rsi-repair-observed")
-	configured := seedUnboundRemoteIssuer(t, ctx, ti.conn, projectID, orgID, "rsi-repair-configured")
 	repaired := seedUnboundRemoteIssuer(t, ctx, ti.conn, projectID, orgID, "rsi-repair-target")
 	stampIssuer(t, ctx, ti.conn, projectID, serverID, observed)
 
-	repair := func(observed, next uuid.NullUUID) int64 {
+	read := func() mcpserversrepo.McpServer {
+		server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+			ID:        serverID,
+			ProjectID: projectID,
+		})
+		require.NoError(t, err)
+		return server
+	}
+	repair := func(from mcpserversrepo.McpServer, next uuid.NullUUID) int64 {
 		rows, err := mcpserversrepo.New(ti.conn).RepairMCPServerRemoteSessionIssuerIfUnchanged(ctx, mcpserversrepo.RepairMCPServerRemoteSessionIssuerIfUnchangedParams{
 			RemoteSessionIssuerID:         next,
 			ID:                            serverID,
 			ProjectID:                     projectID,
 			UserSessionIssuerID:           conv.ToNullUUID(userIssuerID),
-			ObservedRemoteSessionIssuerID: observed,
+			ObservedRemoteSessionIssuerID: from.RemoteSessionIssuerID,
+			ObservedUpdatedAt:             from.UpdatedAt,
 		})
 		require.NoError(t, err)
 		return rows
 	}
 
-	// An identity commit lands between the read and the write.
-	stampIssuer(t, ctx, ti.conn, projectID, serverID, configured)
-	require.Equal(t, int64(0), repair(conv.ToNullUUID(observed), conv.ToNullUUID(repaired)),
+	// The identity commit's own write, which advances the row version the way
+	// a real save does; the fixture stamp above does not.
+	configure := func(provider uuid.UUID) {
+		rows, err := mcpserversrepo.New(ti.conn).StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+			RemoteSessionIssuerID: conv.ToNullUUID(provider),
+			ID:                    serverID,
+			ProjectID:             projectID,
+			UserSessionIssuerID:   conv.ToNullUUID(userIssuerID),
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), rows)
+	}
+
+	// An identity commit changing the provider lands between read and write.
+	before := read()
+	configure(repaired)
+	require.Equal(t, int64(0), repair(before, conv.ToNullUUID(observed)),
 		"a write against a stale provider must not land")
-	require.Equal(t, conv.ToNullUUID(configured), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+	require.Equal(t, conv.ToNullUUID(repaired), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+
+	// And one that re-saves the provider the row already named: the value is
+	// unchanged, so only the version tells the backfill it lost the race.
+	before = read()
+	configure(repaired)
+	require.Equal(t, before.RemoteSessionIssuerID, read().RemoteSessionIssuerID, "the save kept the same provider")
+	require.Equal(t, int64(0), repair(before, uuid.NullUUID{UUID: uuid.Nil, Valid: false}),
+		"an explicit save that keeps the provider must still win")
+	require.Equal(t, conv.ToNullUUID(repaired), storedIssuer(t, ctx, ti.conn, projectID, serverID))
 
 	// Against what is actually stored it lands, including a clear.
-	require.Equal(t, int64(1), repair(conv.ToNullUUID(configured), conv.ToNullUUID(repaired)))
-	require.Equal(t, conv.ToNullUUID(repaired), storedIssuer(t, ctx, ti.conn, projectID, serverID))
-	require.Equal(t, int64(1), repair(conv.ToNullUUID(repaired), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
+	require.Equal(t, int64(1), repair(read(), conv.ToNullUUID(observed)))
+	require.Equal(t, conv.ToNullUUID(observed), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+	require.Equal(t, int64(1), repair(read(), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
 	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 
 	// An unset provider is matched as unset, not skipped.
-	require.Equal(t, int64(1), repair(uuid.NullUUID{UUID: uuid.Nil, Valid: false}, conv.ToNullUUID(repaired)))
+	require.Equal(t, int64(1), repair(read(), conv.ToNullUUID(repaired)))
 	require.Equal(t, conv.ToNullUUID(repaired), storedIssuer(t, ctx, ti.conn, projectID, serverID))
 }
 

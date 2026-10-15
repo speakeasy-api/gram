@@ -607,14 +607,30 @@ func (s *recordingRegistrationStore) IssueSetupHandoff(_ context.Context, _ Prin
 }
 
 type recordingIdentityProviderAttachment struct {
-	calls  int
-	result CatalogIdentityProviderAttachmentResult
-	err    error
+	calls      int
+	result     CatalogIdentityProviderAttachmentResult
+	err        error
+	preview    SignInRemovalPreview
+	removal    SignInRemovalResult
+	removeErr  error
+	previewErr error
+	previews   int
+	removals   int
 }
 
 func (a *recordingIdentityProviderAttachment) Attach(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID) (CatalogIdentityProviderAttachmentResult, error) {
 	a.calls++
 	return a.result, a.err
+}
+
+func (a *recordingIdentityProviderAttachment) PreviewSignInRemoval(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID) (SignInRemovalPreview, error) {
+	a.previews++
+	return a.preview, a.previewErr
+}
+
+func (a *recordingIdentityProviderAttachment) RemoveSignIn(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID) (SignInRemovalResult, error) {
+	a.removals++
+	return a.removal, a.removeErr
 }
 
 type allowOperationLimiter struct{}

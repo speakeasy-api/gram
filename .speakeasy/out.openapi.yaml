@@ -52865,6 +52865,7 @@ paths:
               - replace
               - attach
               - detach
+              - disable
             type: string
         - allowEmptyValue: true
           description: The Remote Identity Provider of the client being bound. Omit for a new provider.

@@ -384,10 +384,13 @@ export function RemoteMcpIdentitySectionBody({
   const sharedIssuerId = target.userSessionIssuerId;
   let impactRequest: GetServerIdentityImpactRequest | null = null;
   if (sharedIssuerId && leavingUser) {
+    // The disable the Save performs, not an issuer-wide detach: it unbinds
+    // this server's provider's client and only when no other server signs in
+    // through it, so an unrelated client cannot warn, refuse or block it.
     impactRequest = {
       userSessionIssuerId: sharedIssuerId,
       mcpServerId: target.mcpServerId,
-      change: "detach",
+      change: "disable",
     };
   } else if (sharedIssuerId && savingUserIdentity && userDraft.selected) {
     impactRequest = {
@@ -425,6 +428,11 @@ export function RemoteMcpIdentitySectionBody({
     await disableIdentity.mutateAsync({
       request: { disableServerIdentityConfigurationForm: { mcpServerId } },
     });
+    // The server row is what says which provider it signs in to, and a shared
+    // client stays bound, so the client list alone would still read as
+    // connected. Refresh the target before anything else in this save can
+    // fail and leave the panel deriving identity from a stale provider.
+    await target.invalidate(queryClient);
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
       invalidateAllGetRemoteMcpServerScopes(queryClient),

@@ -28,6 +28,7 @@ export const Change = {
   Replace: "replace",
   Attach: "attach",
   Detach: "detach",
+  Disable: "disable",
 } as const;
 /**
  * The kind of binding change.

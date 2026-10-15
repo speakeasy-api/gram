@@ -961,7 +961,7 @@ func bindServerIdentityClient(t *testing.T, ctx context.Context, ti *testInstanc
 		RemoteSessionClientID: client,
 		UserSessionIssuerID:   userIssuerID,
 	}))
-	require.NoError(t, remotesessions.ReconcileMCPServerRemoteSessionIssuers(ctx, ti.conn, activeOrganizationID(t, ctx), projectID, []uuid.UUID{userIssuerID}))
+	require.NoError(t, remotesessions.ClearUnboundMCPServerRemoteSessionIssuers(ctx, ti.conn, activeOrganizationID(t, ctx), projectID, []uuid.UUID{userIssuerID}))
 	return client
 }
 

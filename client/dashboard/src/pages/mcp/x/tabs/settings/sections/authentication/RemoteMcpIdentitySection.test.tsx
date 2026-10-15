@@ -1291,10 +1291,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("dialog")).toBeDefined();
     expect(mocks.disableIdentity).not.toHaveBeenCalled();
+    // The preview is the disable this Save performs, not an issuer-wide
+    // detach: an unrelated client on the issuer must not warn or block it.
     expect(mocks.impact).toHaveBeenLastCalledWith(
       expect.objectContaining({
         userSessionIssuerId: "user-session-issuer-1",
-        change: "detach",
+        mcpServerId: "mcp-server-1",
+        change: "disable",
       }),
       expect.objectContaining({ enabled: true }),
     );
@@ -1312,6 +1315,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
       }),
     );
     expect(mocks.detach).not.toHaveBeenCalled();
+    // The server row is what says which provider it signs in to. A shared
+    // client stays bound, so without this refresh the panel would keep
+    // deriving identity from the provider it just stopped using.
+    await waitFor(() => expect(target.invalidate).toHaveBeenCalled());
   });
 
   it("shows a connected client with its sign-ins, scopes and settings", () => {

@@ -208,20 +208,28 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 }
 
 // checkServerIdentityRequest checks what only this flow knows about: the MCP
-// server must be directly Remote MCP-backed, and a new provider's form and
-// logo must be valid.
+// server must have a user session issuer to bind the client to, a Remote MCP
+// source it names must still exist, and a new provider's form and logo must be
+// valid.
+//
+// Every backend is accepted. This is the only writer of a server's provider,
+// so restricting it to directly Remote MCP-backed servers would leave a
+// toolset-backed or tunneled server with no way to be configured at all — the
+// gap a derivation used to paper over by guessing from the issuer's clients.
 func (s *Service) checkServerIdentityRequest(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, req *serverIdentityRequest, target mcpserversrepo.McpServer) error {
-	if !target.RemoteMcpServerID.Valid || !target.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeBadRequest, nil, "MCP server must be directly Remote MCP-backed and have a user session issuer").LogError(ctx, logger)
+	if !target.UserSessionIssuerID.Valid {
+		return oops.E(oops.CodeBadRequest, nil, "MCP server must have a user session issuer").LogError(ctx, logger)
 	}
-	if _, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
-		ID:        target.RemoteMcpServerID.UUID,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "Remote MCP source not found").LogError(ctx, logger)
+	if target.RemoteMcpServerID.Valid {
+		if _, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
+			ID:        target.RemoteMcpServerID.UUID,
+			ProjectID: *authCtx.ProjectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeNotFound, err, "Remote MCP source not found").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeUnexpected, err, "get Remote MCP source").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "get Remote MCP source").LogError(ctx, logger)
 	}
 	if req.createProvider == nil {
 		return nil
@@ -346,11 +354,13 @@ func recheckServerIdentityTarget(ctx context.Context, tx pgx.Tx, projectID uuid.
 	if locked.RemoteMcpServerID != target.RemoteMcpServerID || locked.UserSessionIssuerID != target.UserSessionIssuerID {
 		return identityRefusal(ErrIdentityConflict, nil, "MCP server identity configuration changed while preparing the request")
 	}
-	if _, err := remotemcprepo.New(tx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: locked.RemoteMcpServerID.UUID, ProjectID: projectID}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return identityRefusal(ErrIdentityNotFound, err, "Remote MCP source not found")
+	if locked.RemoteMcpServerID.Valid {
+		if _, err := remotemcprepo.New(tx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: locked.RemoteMcpServerID.UUID, ProjectID: projectID}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return identityRefusal(ErrIdentityNotFound, err, "Remote MCP source not found")
+			}
+			return fmt.Errorf("get Remote MCP source: %w", err)
 		}
-		return fmt.Errorf("get Remote MCP source: %w", err)
 	}
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 func disablePayload(mcpServerID uuid.UUID) *gen.DisableServerIdentityConfigurationPayload {
@@ -41,6 +42,40 @@ func TestDisableServerIdentityUnbindsTheLastServersClient(t *testing.T) {
 
 	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, targetID).Valid)
 	requireClientBound(t, ctx, ti, clientID, userIssuerID, false)
+}
+
+// AIM-577: the cleared state is the configuration, so nothing may put a
+// provider back. A lone server on an issuer binding two providers used to have
+// the second one derived onto it by the post-commit pass, which reported a
+// successful disable and left the server signing people in to a provider
+// nobody chose.
+func TestDisableServerIdentityStaysDisabledWithAnotherProviderBound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	orgID := activeOrganizationID(t, ctx)
+	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "disable-sole-target")
+
+	providerID := createServerIdentityProvider(t, ctx, ti, "disable-sole-provider", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "disable-sole-client", providerID, userIssuerID, targetID, false)
+	// A second provider's client on the same issuer, with this server the only
+	// one on it.
+	otherProviderID := createServerIdentityProvider(t, ctx, ti, "disable-sole-other", "", false, []string{"none"})
+	otherClientID := bindServerIdentityClient(t, ctx, ti, "disable-sole-other-client", otherProviderID, userIssuerID, false)
+
+	result, err := ti.service.DisableServerIdentityConfiguration(ctx, disablePayload(targetID))
+	require.NoError(t, err)
+	require.Equal(t, providerID.String(), conv.PtrValOr(result.ProviderID, ""))
+	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, targetID).Valid,
+		"the disabled server must not be handed the other bound provider")
+
+	// And it stays disabled through the pass every client-binding write runs,
+	// which only ever takes a provider away.
+	require.NoError(t, remotesessions.ClearUnboundMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
+	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, targetID).Valid,
+		"no pass may configure a disabled server from whatever else its issuer binds")
+	requireClientBound(t, ctx, ti, otherClientID, userIssuerID, true)
 }
 
 func TestDisableServerIdentityKeepsAClientASiblingUses(t *testing.T) {

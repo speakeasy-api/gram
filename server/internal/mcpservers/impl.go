@@ -234,7 +234,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	// there, so a server created on a dedicated issuer that already has one is
 	// configured from the start. Reload so the view reports what landed.
 	if ids.UserSessionIssuerID.Valid {
-		remotesessions.BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
+		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
 		refreshed, refreshErr := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        server.ID,
 			ProjectID: *authCtx.ProjectID,
@@ -908,7 +908,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// new issuer does not bind, or derives one when the server is alone there.
 	// Reload so the view reports what landed.
 	if ids.UserSessionIssuerID.Valid {
-		remotesessions.BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
+		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
 		refreshed, refreshErr := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        serverID,
 			ProjectID: *authCtx.ProjectID,

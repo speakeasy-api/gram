@@ -516,7 +516,7 @@ func (s *Service) finalizeClientCreate(
 
 	// Post-commit and best-effort: a failed reconcile leaves a stale value the
 	// next binding change heals, not a failed create.
-	BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs)
+	BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs)
 
 	view, err := s.clientView(created, userIssuerIDs)
 	if err != nil {
@@ -1008,9 +1008,9 @@ func (s *Service) commitClientAttachmentChange(
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// Post-commit and best-effort: a failed reconcile leaves a stale value the
-	// next binding change heals, not a failed request.
-	BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs)
+	// Post-commit and best-effort: a failed write leaves a stale value the next
+	// binding change heals, not a failed request.
+	BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs)
 
 	return afterView, nil
 }
@@ -1122,7 +1122,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	// revoke: post-commit, bounded, never surfaced to the caller.
 	s.revoker.RevokeAllDetached(ctx, revokedCredentials(cascaded))
 
-	BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, boundUserIssuerIDs)
+	BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, boundUserIssuerIDs)
 
 	return nil
 }

@@ -140,16 +140,18 @@ func backfillServerRemoteIssuers(ctx context.Context, db serverRemoteIssuersDB, 
 			}
 			continue
 		}
-		// Conditional on the provider this run read: an administrator
-		// configuring User Identity on the server in the meantime is the
-		// authority on it, and this write loses that race rather than
-		// reverting it.
+		// Conditional on the provider and the row version this run read: an
+		// administrator configuring User Identity on the server in the
+		// meantime is the authority on it, including a save that configures
+		// the provider it already named, and this write loses that race
+		// rather than reverting it.
 		written, err := q.RepairMCPServerRemoteSessionIssuerIfUnchanged(ctx, mcpserversrepo.RepairMCPServerRemoteSessionIssuerIfUnchangedParams{
 			RemoteSessionIssuerID:         target.provider,
 			ID:                            row.ID,
 			ProjectID:                     row.ProjectID,
 			UserSessionIssuerID:           row.UserSessionIssuerID,
 			ObservedRemoteSessionIssuerID: row.CurrentRemoteSessionIssuerID,
+			ObservedUpdatedAt:             row.ObservedUpdatedAt,
 		})
 		if err != nil {
 			return report, fmt.Errorf("repair MCP server remote session issuer: %w", err)

@@ -1214,8 +1214,8 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 		if change == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("change", "query string"))
 		}
-		if !(change == "replace" || change == "attach" || change == "detach") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("change", change, []any{"replace", "attach", "detach"}))
+		if !(change == "replace" || change == "attach" || change == "detach" || change == "disable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("change", change, []any{"replace", "attach", "detach", "disable"}))
 		}
 		providerIDRaw := qp.Get("provider_id")
 		if providerIDRaw != "" {

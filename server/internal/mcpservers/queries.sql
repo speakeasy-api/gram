@@ -613,9 +613,12 @@ WHERE s.id = @id
 -- The backfill decides from a read of every server and writes afterwards, so
 -- an administrator can configure User Identity on one of them in between. That
 -- commit is the authority on its own server, and matching the server, project
--- and user session issuer would not notice it. Comparing the provider makes
--- the write lose that race instead of silently reverting it; the caller counts
--- the skipped rows.
+-- and user session issuer would not notice it.
+--
+-- updated_at is the version every write to the row advances, including a save
+-- that configures the provider it already named — which comparing the provider
+-- alone would read as unchanged and overwrite. The caller counts the rows this
+-- skips.
 UPDATE mcp_servers AS s
 SET remote_session_issuer_id = @remote_session_issuer_id,
     updated_at = clock_timestamp()
@@ -623,31 +626,14 @@ WHERE s.id = @id
   AND s.project_id = @project_id
   AND s.user_session_issuer_id = @user_session_issuer_id
   AND s.remote_session_issuer_id IS NOT DISTINCT FROM @observed_remote_session_issuer_id
+  AND s.updated_at = @observed_updated_at
   AND s.deleted IS FALSE;
 
--- name: ReconcileMCPServerRemoteSessionIssuers :execrows
--- Keeps mcp_servers.remote_session_issuer_id, the upstream authorization
--- server a server's users sign in to, consistent with the client bindings on
--- each named user session issuer.
---
--- A configured provider wins while a live client is still bound for it. Losing
--- that client clears the value, which must fail closed rather than route a
--- bearer to an upstream the user cannot sign in to.
---
--- With no configured provider left, a server alone on its user session issuer
--- takes the single live provider bound there, and is left unset when none or
--- several are. With no other server on the issuer there is nothing to borrow
--- from, and this is the only configuration a toolset-backed or tunneled server
--- has: the per-server identity commit is offered for directly Remote
--- MCP-backed servers only.
---
--- A server sharing its user session issuer is never derived: its provider is a
--- per-server fact an identity commit writes explicitly, so the clients bound
--- for the other servers on that issuer say nothing about it.
---
--- Best effort: runs post-commit outside the mutating transaction, so it takes
--- no advisory lock and a raced run merely leaves a stale value, which the
--- consent-time lookup degrades on and the next run heals.
+-- name: ListMCPServerRemoteSessionIssuersToClear :many
+-- Live MCP servers on the named user session issuers whose configured upstream
+-- authorization server has no live client bound there, with the provider each
+-- one names. The caller clears them one row at a time against the provider
+-- read here, so a configuration committed in between is not overwritten.
 --
 -- Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
 -- removal signal; the column's ON DELETE SET NULL never fires. The filters
@@ -656,79 +642,66 @@ WHERE s.id = @id
 --
 -- Tenancy: the ids arrive from an untenanted join table, so each one must
 -- resolve to an issuer the caller's project can see — a foreign id reaches no
--- row and writes nothing — and only that project's servers are written.
--- Organization-level clients of the caller's organization count, matching what
--- the attach surface permits, and the server count spans the organization so a
--- sibling in another project still blocks the derivation.
-WITH scoped AS (
-    SELECT input.user_session_issuer_id AS id
-    FROM unnest(@user_session_issuer_ids::uuid[]) AS input(user_session_issuer_id)
-    JOIN user_session_issuers AS usi
-      ON usi.id = input.user_session_issuer_id
-     AND (usi.project_id = @project_id::uuid
-          OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
-), bound AS (
-    SELECT scoped.id AS user_session_issuer_id, i.id AS remote_session_issuer_id
-    FROM scoped
-    JOIN remote_session_client_user_session_issuers AS link
-      ON link.user_session_issuer_id = scoped.id
-    JOIN remote_session_clients AS c
-      ON c.id = link.remote_session_client_id
-     AND c.deleted IS FALSE
-     AND (c.project_id = @project_id::uuid
-          OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
-    JOIN remote_session_issuers AS i
-      ON i.id = c.remote_session_issuer_id
-     AND i.deleted IS FALSE
-), derived AS (
-    SELECT scoped.id AS user_session_issuer_id,
-           (CASE WHEN count(DISTINCT bound.remote_session_issuer_id) = 1
-                 THEN (array_agg(DISTINCT bound.remote_session_issuer_id))[1]
-            END)::uuid AS remote_session_issuer_id
-    FROM scoped
-    LEFT JOIN bound ON bound.user_session_issuer_id = scoped.id
-    GROUP BY scoped.id
-), cohort AS (
-    SELECT scoped.id AS user_session_issuer_id, count(*) AS servers
-    FROM scoped
-    JOIN mcp_servers AS sibling
-      ON sibling.user_session_issuer_id = scoped.id
-     AND sibling.deleted IS FALSE
-    JOIN projects AS sibling_project
-      ON sibling_project.id = sibling.project_id
-     AND sibling_project.deleted IS FALSE
-     AND sibling_project.organization_id = @organization_id::text
-    GROUP BY scoped.id
-), target AS (
-    SELECT s.id AS mcp_server_id,
-           CASE
-               -- The configured provider wins while it still has a client, so
-               -- the derivation below can only fill an unset or stale value
-               -- and never overwrite what a commit wrote.
-               WHEN EXISTS (SELECT 1
-                            FROM bound
-                            WHERE bound.user_session_issuer_id = s.user_session_issuer_id
-                              AND bound.remote_session_issuer_id = s.remote_session_issuer_id)
-                   THEN s.remote_session_issuer_id
-               WHEN cohort.servers = 1 THEN derived.remote_session_issuer_id
-           END AS remote_session_issuer_id
-    FROM mcp_servers AS s
-    JOIN scoped ON scoped.id = s.user_session_issuer_id
-    JOIN cohort ON cohort.user_session_issuer_id = scoped.id
-    JOIN derived ON derived.user_session_issuer_id = scoped.id
-    -- Belt and suspenders on the caller's org/project pair agreeing.
-    JOIN projects AS p
-      ON p.id = s.project_id
-     AND p.organization_id = @organization_id::text
-    WHERE s.project_id = @project_id::uuid
-      AND s.deleted IS FALSE
-)
+-- row — and only that project's servers are listed. Organization-level clients
+-- of the caller's organization count, matching what the attach surface
+-- permits.
+SELECT s.id, s.remote_session_issuer_id
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = @organization_id::text
+WHERE s.user_session_issuer_id = ANY (@user_session_issuer_ids::uuid[])
+  AND s.project_id = @project_id::uuid
+  AND s.deleted IS FALSE
+  AND s.remote_session_issuer_id IS NOT NULL
+  AND EXISTS (SELECT 1
+              FROM user_session_issuers AS usi
+              WHERE usi.id = s.user_session_issuer_id
+                AND (usi.project_id = @project_id::uuid
+                     OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text)))
+  AND NOT EXISTS (SELECT 1
+                  FROM remote_session_client_user_session_issuers AS link
+                  JOIN remote_session_clients AS c
+                    ON c.id = link.remote_session_client_id
+                   AND c.deleted IS FALSE
+                   AND (c.project_id = @project_id::uuid
+                        OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+                  JOIN remote_session_issuers AS i
+                    ON i.id = c.remote_session_issuer_id
+                   AND i.deleted IS FALSE
+                  WHERE link.user_session_issuer_id = s.user_session_issuer_id
+                    AND i.id = s.remote_session_issuer_id)
+ORDER BY s.id;
+
+-- name: ClearMCPServerRemoteSessionIssuerIfUnchanged :execrows
+-- Clears one server's upstream authorization server, and only while it still
+-- names the provider the caller observed and that provider still has no live
+-- client bound to the server's user session issuer.
+--
+-- Both halves are the write's own, not a snapshot's. A configuration commit
+-- racing this clear changes the provider, or binds a client for it, between
+-- the read and the write; comparing a value computed from the earlier read
+-- would overwrite that commit, and a shared server's explicitly configured
+-- provider is not something a later pass can reconstruct.
 UPDATE mcp_servers AS s
-SET remote_session_issuer_id = target.remote_session_issuer_id,
+SET remote_session_issuer_id = NULL,
     updated_at = clock_timestamp()
-FROM target
-WHERE s.id = target.mcp_server_id
-  AND s.remote_session_issuer_id IS DISTINCT FROM target.remote_session_issuer_id;
+WHERE s.id = @id
+  AND s.project_id = @project_id::uuid
+  AND s.deleted IS FALSE
+  AND s.remote_session_issuer_id = @observed_remote_session_issuer_id
+  AND NOT EXISTS (SELECT 1
+                  FROM remote_session_client_user_session_issuers AS link
+                  JOIN remote_session_clients AS c
+                    ON c.id = link.remote_session_client_id
+                   AND c.deleted IS FALSE
+                   AND (c.project_id = @project_id::uuid
+                        OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+                  JOIN remote_session_issuers AS i
+                    ON i.id = c.remote_session_issuer_id
+                   AND i.deleted IS FALSE
+                  WHERE link.user_session_issuer_id = s.user_session_issuer_id
+                    AND i.id = s.remote_session_issuer_id);
 
 -- name: ListMCPServerRemoteSessionIssuerBackfill :many
 -- Every live MCP server carrying a user session issuer, with what its own
@@ -753,6 +726,7 @@ WITH servers AS (
            p.organization_id,
            s.user_session_issuer_id,
            s.remote_session_issuer_id,
+           s.updated_at,
            rms.url
     FROM mcp_servers AS s
     JOIN projects AS p
@@ -802,6 +776,7 @@ SELECT srv.id,
        srv.organization_id,
        srv.user_session_issuer_id,
        srv.remote_session_issuer_id AS current_remote_session_issuer_id,
+       srv.updated_at AS observed_updated_at,
        matched.remote_session_issuer_id AS matched_remote_session_issuer_id,
        (srv.url IS NOT NULL)::boolean AS remote_backed,
        cohort.servers AS issuer_server_count

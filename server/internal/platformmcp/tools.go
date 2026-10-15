@@ -382,6 +382,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableCatalogRegistrationTool(reg)
 		registerUnavailableRemoteRegistrationTool(reg)
 		registerUnavailableIdentityProviderTool(reg)
+		registerUnavailableTurnOffMCPSignInTool(reg)
 	} else {
 		registerCatalogRegistrationTool(reg, registrations, onboarding)
 		if registrations.directRemoteInspector == nil {
@@ -390,6 +391,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			registerRemoteRegistrationTool(reg, registrations, onboarding)
 		}
 		registerIdentityProviderTool(reg, registrations)
+		registerTurnOffMCPSignInTool(reg, registrations)
 	}
 	if registrations == nil || registrations.lifecycleMetadata == nil {
 		registerUnavailableLifecycleMetadataTool(reg)

@@ -241,7 +241,7 @@ var DisableServerIdentityConfigurationResult = Type("DisableServerIdentityConfig
 })
 
 var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
-	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: the chosen client is bound, and the client of the provider mcp_server_id signs in to today is unbound when no other server in the organization still signs in through it. attach binds one more client and unbinds nothing. detach unbinds every client the caller's project can see. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider. client_mode is the mode the matching commit would run in, which decides whether a client already bound for the chosen provider is reused or replaced; omitting it assumes auto.")
+	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: the chosen client is bound, and the client of the provider mcp_server_id signs in to today is unbound when no other server in the organization still signs in through it. attach binds one more client and unbinds nothing. detach unbinds every client the caller's project can see, which is what the Remote Identity Provider settings do. disable mirrors disableServerIdentityConfiguration: it unbinds the client of the provider mcp_server_id signs in to, and only when no other server in the organization still signs in through it, so it reaches no other server at all. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider. client_mode is the mode the matching commit would run in, which decides whether a client already bound for the chosen provider is reused or replaced; omitting it assumes auto.")
 
 	Attribute("user_session_issuer_id", String, "The user session issuer whose client bindings change.", func() {
 		Format(FormatUUID)
@@ -250,7 +250,7 @@ var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("change", String, "The kind of binding change.", func() {
-		Enum("replace", "attach", "detach")
+		Enum("replace", "attach", "detach", "disable")
 	})
 	Attribute("provider_id", String, "The Remote Identity Provider of the client being bound. Omit for a new provider.", func() {
 		Format(FormatUUID)

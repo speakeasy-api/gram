@@ -282,8 +282,8 @@ func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUs
 	var change string
 	{
 		change = remoteSessionsGetServerIdentityImpactChange
-		if !(change == "replace" || change == "attach" || change == "detach") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("change", change, []any{"replace", "attach", "detach"}))
+		if !(change == "replace" || change == "attach" || change == "detach" || change == "disable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("change", change, []any{"replace", "attach", "detach", "disable"}))
 		}
 		if err != nil {
 			return nil, err

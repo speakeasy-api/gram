@@ -555,7 +555,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		}
 	}
 	for _, projectID := range mcpServerProjectIDs {
-		if err := remotesessions.ReconcileMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{source.ID, target.ID}); err != nil {
+		if err := remotesessions.ClearUnboundMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{source.ID, target.ID}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resync MCP server remote session issuers").LogError(ctx, logger)
 		}
 	}

@@ -48,6 +48,9 @@ type DisableServerIdentityResult struct {
 // user session issuer, then the client rows a detach touches. Taking the
 // issuer lock is also what makes the "last server using it" read safe against
 // a concurrent identity commit, which holds the same lock.
+//
+// The cleared state is durable: nothing derives this column on a schedule, and
+// the post-commit pass here only ever takes a provider away.
 func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope IdentityScope, userIssuerID, mcpServerID uuid.UUID) (DisableServerIdentityResult, error) {
 	var none DisableServerIdentityResult
 	if scope.OrganizationID == "" || scope.ProjectID == uuid.Nil || userIssuerID == uuid.Nil || mcpServerID == uuid.Nil {
@@ -152,7 +155,7 @@ func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope Ide
 	if err := tx.Commit(ctx); err != nil {
 		return none, fmt.Errorf("commit disable transaction: %w", err)
 	}
-	BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, c.logger, c.db, scope.OrganizationID, scope.ProjectID, []uuid.UUID{userIssuerID})
+	BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, c.logger, c.db, scope.OrganizationID, scope.ProjectID, []uuid.UUID{userIssuerID})
 	return DisableServerIdentityResult{Provider: provider, ClientUnbound: unbound}, nil
 }
 

@@ -30,6 +30,7 @@ const (
 	identityChangeReplace = "replace"
 	identityChangeAttach  = "attach"
 	identityChangeDetach  = "detach"
+	identityChangeDisable = "disable"
 
 	identityImpactClear         = "clear"
 	identityImpactClientRemoved = "client_removed"
@@ -142,8 +143,11 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, logger)
 	}
-	if payload.Change == identityChangeDetach && (providerID.Valid || clientID.Valid) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "detach takes no provider_id or client_id").LogError(ctx, logger)
+	if (payload.Change == identityChangeDetach || payload.Change == identityChangeDisable) && (providerID.Valid || clientID.Valid) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "detach and disable take no provider_id or client_id").LogError(ctx, logger)
+	}
+	if payload.Change == identityChangeDisable && !targetID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "disable requires mcp_server_id").LogError(ctx, logger)
 	}
 
 	target, err := s.authorizeServerIdentityImpact(ctx, logger, projectID, userIssuerID, targetID)
@@ -296,15 +300,42 @@ type impactTarget struct {
 }
 
 // planIdentityChange fills change.removed and change.added the way the
-// matching write would: the commit's ReplaceServerBound, a plain attach, or
-// detaching every client the caller's project sees. It applies the writes'
-// org-wide binding refusal.
+// matching write would: the commit's ReplaceServerBound, a plain attach, the
+// per-server disable, or detaching every client the caller's project sees. It
+// applies the writes' org-wide binding refusal.
 func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, orgID string, userIssuerOrgLevel bool, kind string, providerID, clientID uuid.NullUUID, clientMode clientChoiceKind, target impactTarget, userIssuerID uuid.UUID, change *identityChange) error {
 	var visible []repo.RemoteSessionClient
 	for _, client := range change.bound {
 		if client.visibleTo(projectID) {
 			visible = append(visible, repo.RemoteSessionClient{ID: client.id, ProjectID: client.projectID, RemoteSessionIssuerID: client.providerID}) //nolint:exhaustruct // Only the fields decideServerBound reads.
 		}
+	}
+	if kind == identityChangeDisable {
+		// What the per-server disable unbinds: the clients of the provider the
+		// target signs in to, and only when no other server in the
+		// organization still signs in through it. Nothing is bound in its
+		// place, so the preview names only servers losing their sign-in — and
+		// an unrelated client of another provider cannot refuse it.
+		if !target.provider.Valid {
+			return nil
+		}
+		shared, err := s.providerServedByAnotherServer(ctx, q, orgID, userIssuerID, target, target.provider.UUID)
+		if err != nil {
+			return err
+		}
+		if shared {
+			return nil
+		}
+		for _, client := range visible {
+			if client.RemoteSessionIssuerID != target.provider.UUID {
+				continue
+			}
+			if err := refuseOrgWideBinding(userIssuerOrgLevel, client.ProjectID); err != nil {
+				return err
+			}
+			change.removed[client.ID] = true
+		}
+		return nil
 	}
 	if kind == identityChangeDetach {
 		for _, client := range visible {

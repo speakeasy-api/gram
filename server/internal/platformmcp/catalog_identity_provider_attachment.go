@@ -54,6 +54,41 @@ type CatalogIdentityProviderAttachmentResult struct {
 // OAuth code, token, or other credential.
 type CatalogIdentityProviderAttachment interface {
 	Attach(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogIdentityProviderAttachmentResult, error)
+	PreviewSignInRemoval(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (SignInRemovalPreview, error)
+	RemoveSignIn(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (SignInRemovalResult, error)
+}
+
+// SignInRemovalPreview is what turning a server's sign-in off would do, read
+// without changing anything: the same decision the removal makes.
+type SignInRemovalPreview struct {
+	// Configured reports that the server signs in to a provider today. False
+	// means the removal has nothing to do.
+	Configured bool
+
+	// ProviderURL is the issuer of the provider it signs in to, empty when it
+	// signs in to none. Non-secret.
+	ProviderURL string
+
+	// ClientStaysBound reports that the provider's OAuth client is kept
+	// because another MCP server in the organization still signs in through
+	// it. False means removal unbinds it, which signs out everyone holding a
+	// session through it.
+	ClientStaysBound bool
+}
+
+// SignInRemovalResult is what turning a server's sign-in off left in place.
+type SignInRemovalResult struct {
+	// Removed reports that the server now signs in to nothing. True also for a
+	// server that already did, which makes a retry safe.
+	Removed bool
+
+	// ProviderURL is the issuer of the provider it signed in to, empty when it
+	// signed in to none.
+	ProviderURL string
+
+	// ClientUnbound reports that the provider's OAuth client was unbound,
+	// which signs out everyone holding a session through it.
+	ClientUnbound bool
 }
 
 type CatalogIdentityProviderAttachmentService struct {
@@ -469,4 +504,94 @@ func optionalString(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+// PreviewSignInRemoval reads what turning the registration's server sign-in
+// off would do, and changes nothing. It answers from the server's own
+// configured provider, so the preview and the removal agree on which client is
+// at stake and whether another server keeps it bound.
+func (s *CatalogIdentityProviderAttachmentService) PreviewSignInRemoval(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (SignInRemovalPreview, error) {
+	server, issuer, err := s.signInRemovalTarget(ctx, principal, project, registrationID)
+	if err != nil {
+		return SignInRemovalPreview{}, err
+	}
+	if !server.RemoteSessionIssuerID.Valid {
+		return SignInRemovalPreview{Configured: false, ProviderURL: "", ClientStaysBound: false}, nil
+	}
+	provider, err := remotesessionsrepo.New(s.db).GetRemoteSessionIssuerByID(ctx, remotesessionsrepo.GetRemoteSessionIssuerByIDParams{
+		ID:                    server.RemoteSessionIssuerID.UUID,
+		ProjectID:             conv.ToNullUUID(project.ID),
+		OrganizationID:        conv.ToPGText(principal.OrganizationID),
+		IncludeOrganizational: true,
+		IncludeGlobal:         true,
+	})
+	if err != nil {
+		return SignInRemovalPreview{}, fmt.Errorf("load configured sign-in provider: %w", err)
+	}
+	others, err := remotesessionsrepo.New(s.db).CountOrganizationMCPServersWithRemoteSessionIssuer(ctx, remotesessionsrepo.CountOrganizationMCPServersWithRemoteSessionIssuerParams{
+		UserSessionIssuerID:   conv.ToNullUUID(issuer),
+		RemoteSessionIssuerID: server.RemoteSessionIssuerID,
+		ExcludedMcpServerID:   server.ID,
+		OrganizationID:        principal.OrganizationID,
+	})
+	if err != nil {
+		return SignInRemovalPreview{}, fmt.Errorf("count MCP servers sharing the sign-in provider: %w", err)
+	}
+	return SignInRemovalPreview{Configured: true, ProviderURL: provider.Issuer, ClientStaysBound: others > 0}, nil
+}
+
+// RemoveSignIn turns the registration's server sign-in off through the same
+// operation the dashboard runs, so its refusals, audit and client-preservation
+// rules are the ones that apply.
+func (s *CatalogIdentityProviderAttachmentService) RemoveSignIn(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (SignInRemovalResult, error) {
+	preview, err := s.PreviewSignInRemoval(ctx, principal, project, registrationID)
+	if err != nil {
+		return SignInRemovalResult{}, err
+	}
+	server, issuer, err := s.signInRemovalTarget(ctx, principal, project, registrationID)
+	if err != nil {
+		return SignInRemovalResult{}, err
+	}
+	result, err := s.identity.DisableServerIdentity(ctx, remotesessions.IdentityScope{
+		OrganizationID:       principal.OrganizationID,
+		ProjectID:            project.ID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+		ActorDisplayName:     nil,
+		ActorIsPlatformAdmin: false,
+	}, issuer, server.ID)
+	if err != nil {
+		return SignInRemovalResult{}, attachmentCommitError("turn off MCP server sign-in", err)
+	}
+	return SignInRemovalResult{Removed: true, ProviderURL: preview.ProviderURL, ClientUnbound: result.ClientUnbound}, nil
+}
+
+// signInRemovalTarget resolves the registration's MCP server and the user
+// session issuer it signs in through, refusing a registration that has no
+// server to act on.
+func (s *CatalogIdentityProviderAttachmentService) signInRemovalTarget(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (mcpserversrepo.McpServer, uuid.UUID, error) {
+	var none mcpserversrepo.McpServer
+	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return none, uuid.Nil, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return none, uuid.Nil, fmt.Errorf("load platform mcp registration: %w", err)
+	}
+	if !registration.McpServerID.Valid || !registration.UserSessionIssuerID.Valid {
+		return none, uuid.Nil, ErrRegistrationInvalid
+	}
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        registration.McpServerID.UUID,
+		ProjectID: project.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return none, uuid.Nil, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return none, uuid.Nil, fmt.Errorf("load registered MCP server: %w", err)
+	}
+	if !server.UserSessionIssuerID.Valid || server.UserSessionIssuerID.UUID != registration.UserSessionIssuerID.UUID {
+		return none, uuid.Nil, ErrRegistrationInvalid
+	}
+	return server, registration.UserSessionIssuerID.UUID, nil
 }

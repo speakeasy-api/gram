@@ -1175,7 +1175,7 @@ func (c *IdentityCommit) Commit(ctx context.Context, tx *IdentityTx) (IdentityRe
 		return IdentityResult{}, fmt.Errorf("commit identity transaction: %w", err)
 	}
 	tx.committed = true
-	BestEffortReconcileMCPServerRemoteSessionIssuers(ctx, c.committer.logger, c.committer.db, c.plan.Scope.OrganizationID, c.plan.Scope.ProjectID, []uuid.UUID{c.plan.UserSessionIssuerID})
+	BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, c.committer.logger, c.committer.db, c.plan.Scope.OrganizationID, c.plan.Scope.ProjectID, []uuid.UUID{c.plan.UserSessionIssuerID})
 	return c.result, nil
 }
 
