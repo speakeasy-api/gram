@@ -181,7 +181,7 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|get-server-scopes|set-server-scope-pin|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delegation-status|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (prepare-ema|read-ema|unlink-ema|create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-new-client-callback-url|get-remote-session-client|delete-remote-session-client)",
-		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|set-ema-providers|fetch-issuer-metadata|refresh-issuer-metadata)",
+		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|set-ema-providers|list-ema-services|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
@@ -2846,6 +2846,9 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersSetEMAProvidersFlags            = flag.NewFlagSet("set-ema-providers", flag.ExitOnError)
 		organizationRemoteSessionIssuersSetEMAProvidersBodyFlag         = organizationRemoteSessionIssuersSetEMAProvidersFlags.String("body", "REQUIRED", "")
 		organizationRemoteSessionIssuersSetEMAProvidersSessionTokenFlag = organizationRemoteSessionIssuersSetEMAProvidersFlags.String("session-token", "", "")
+
+		organizationRemoteSessionIssuersListEMAServicesFlags            = flag.NewFlagSet("list-ema-services", flag.ExitOnError)
+		organizationRemoteSessionIssuersListEMAServicesSessionTokenFlag = organizationRemoteSessionIssuersListEMAServicesFlags.String("session-token", "", "")
 
 		organizationRemoteSessionIssuersFetchIssuerMetadataFlags            = flag.NewFlagSet("fetch-issuer-metadata", flag.ExitOnError)
 		organizationRemoteSessionIssuersFetchIssuerMetadataBodyFlag         = organizationRemoteSessionIssuersFetchIssuerMetadataFlags.String("body", "REQUIRED", "")
@@ -5670,6 +5673,7 @@ func ParseEndpoint(
 	organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerMigratePreflightUsage
 	organizationRemoteSessionIssuersMigrateIssuerFlags.Usage = organizationRemoteSessionIssuersMigrateIssuerUsage
 	organizationRemoteSessionIssuersSetEMAProvidersFlags.Usage = organizationRemoteSessionIssuersSetEMAProvidersUsage
+	organizationRemoteSessionIssuersListEMAServicesFlags.Usage = organizationRemoteSessionIssuersListEMAServicesUsage
 	organizationRemoteSessionIssuersFetchIssuerMetadataFlags.Usage = organizationRemoteSessionIssuersFetchIssuerMetadataUsage
 	organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.Usage = organizationRemoteSessionIssuersRefreshIssuerMetadataUsage
 
@@ -8074,6 +8078,9 @@ func ParseEndpoint(
 
 			case "set-ema-providers":
 				epf = organizationRemoteSessionIssuersSetEMAProvidersFlags
+
+			case "list-ema-services":
+				epf = organizationRemoteSessionIssuersListEMAServicesFlags
 
 			case "fetch-issuer-metadata":
 				epf = organizationRemoteSessionIssuersFetchIssuerMetadataFlags
@@ -11151,6 +11158,9 @@ func ParseEndpoint(
 			case "set-ema-providers":
 				endpoint = c.SetEMAProviders()
 				data, err = organizationremotesessionissuersc.BuildSetEMAProvidersPayload(*organizationRemoteSessionIssuersSetEMAProvidersBodyFlag, *organizationRemoteSessionIssuersSetEMAProvidersSessionTokenFlag)
+			case "list-ema-services":
+				endpoint = c.ListEMAServices()
+				data, err = organizationremotesessionissuersc.BuildListEMAServicesPayload(*organizationRemoteSessionIssuersListEMAServicesSessionTokenFlag)
 			case "fetch-issuer-metadata":
 				endpoint = c.FetchIssuerMetadata()
 				data, err = organizationremotesessionissuersc.BuildFetchIssuerMetadataPayload(*organizationRemoteSessionIssuersFetchIssuerMetadataBodyFlag, *organizationRemoteSessionIssuersFetchIssuerMetadataSessionTokenFlag, *organizationRemoteSessionIssuersFetchIssuerMetadataApikeyTokenFlag)
@@ -24199,7 +24209,8 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    set-ema-providers: Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint's configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.`)
+	fmt.Fprintln(os.Stderr, `    set-ema-providers: Replace the EMA providers the vendor authorization server this issuer names accepts, the providers that may issue ID-JAGs for it. They are stored as an ordered list, but each endpoint can use only the provider its sign-in goes through: the sign-in's trusted external issuer, or the organization's Speakeasy issuer for a sign-in that trusts none. So the list acts as the set of accepted providers, and its order does not change who vouches; a list that leaves out an endpoint's provider leaves that endpoint with nobody to vouch. An empty list restores the derived default, which accepts every provider: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization's Speakeasy issuer when it has one. The list applies organization-wide to every issuer with the same canonical issuer URL. With expected_providers, the write happens only while the saved list still matches it. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.`)
+	fmt.Fprintln(os.Stderr, `    list-ema-services: List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and the MCP servers that chain through it: counts include every server, the list only those the caller has mcp:read on. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    fetch-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    refresh-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -24445,7 +24456,7 @@ func organizationRemoteSessionIssuersSetEMAProvidersUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint's configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.`)
+	fmt.Fprintln(os.Stderr, `Replace the EMA providers the vendor authorization server this issuer names accepts, the providers that may issue ID-JAGs for it. They are stored as an ordered list, but each endpoint can use only the provider its sign-in goes through: the sign-in's trusted external issuer, or the organization's Speakeasy issuer for a sign-in that trusts none. So the list acts as the set of accepted providers, and its order does not change who vouches; a list that leaves out an endpoint's provider leaves that endpoint with nobody to vouch. An empty list restores the derived default, which accepts every provider: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization's Speakeasy issuer when it has one. The list applies organization-wide to every issuer with the same canonical issuer URL. With expected_providers, the write happens only while the saved list still matches it. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -24453,7 +24464,25 @@ func organizationRemoteSessionIssuersSetEMAProvidersUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers set-ema-providers --body '{\n      \"providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers set-ema-providers --body '{\n      \"expected_providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersListEMAServicesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers list-ema-services", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and the MCP servers that chain through it: counts include every server, the list only those the caller has mcp:read on. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers list-ema-services --session-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersFetchIssuerMetadataUsage() {

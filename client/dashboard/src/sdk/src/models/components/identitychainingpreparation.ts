@@ -55,7 +55,7 @@ export type IdentityChainingPreparation = {
    */
   clientId?: string | undefined;
   /**
-   * The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
+   * The EMA providers one vendor authorization server accepts, saved or default. They are stored as an ordered list that identity chaining tries in turn, but each endpoint can use only the provider its sign-in goes through, so the list acts as the set of accepted providers.
    */
   emaProviders?: EMAProviderOrder | undefined;
   /**
@@ -72,6 +72,10 @@ export type IdentityChainingPreparation = {
    */
   grantTypes: Array<string> | null;
   issuer?: string | undefined;
+  /**
+   * When the vendor last accepted an assertion for this binding from any provider, so chaining has worked for it. Omitted when it never has. Returned by readEMA only.
+   */
+  lastAcceptedAt?: Date | undefined;
   /**
    * Safe next action without provider bodies or credentials.
    */
@@ -110,6 +114,9 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
     grant_source: z.string(),
     grant_types: z.nullable(z.array(z.string())),
     issuer: z.optional(z.string()),
+    last_accepted_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     remediation: z.string(),
     resource: z.string(),
     retryable: z.boolean(),
@@ -125,6 +132,7 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
       "external_client_id": "externalClientId",
       "grant_source": "grantSource",
       "grant_types": "grantTypes",
+      "last_accepted_at": "lastAcceptedAt",
     });
   }),
 );

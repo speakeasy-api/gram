@@ -42,6 +42,7 @@ import (
 func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
+	useSpeakeasySignIn(t, f.db, f.req)
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tp := testenv.NewTracerProvider(t)

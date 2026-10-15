@@ -541,6 +541,19 @@ that URL.
       is an invalid ciphertext, so any request would fail with the
       administrator misconfiguration error.
 
+30. **Enterprise Managed Authorization**
+    - Open **Team → IDP and SSO → Identity providers**. The Services table
+      lists Acme Tracker (default order, "Each server's own identity
+      provider", Last worked 2h ago) and Acme Wiki (saved order: Acme
+      Identity, Not accepted yet), one server each.
+    - Open Acme Wiki's page. It shows Acme Identity's issuer URL
+      `https://login.acme-identity.example` to copy, and the saved order with
+      **Use default**.
+    - **MCP → Acme Tracker → Settings** has no Enterprise Managed
+      Authorization section: `acme-workforce` does not trust Acme Identity,
+      on purpose, so interactive sign-in through it (GitHub, the organization
+      gateway) keeps working.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
