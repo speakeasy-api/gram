@@ -1929,11 +1929,12 @@ type RemoteSessionIssuerResponseBody struct {
 type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
-	// No order is saved. An endpoint whose sign-in trusts an external issuer uses
-	// that issuer alone; one that trusts none uses the organization's Speakeasy
-	// issuer when it has one.
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	// The saved providers in order, or the derived default described by is_default.
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 

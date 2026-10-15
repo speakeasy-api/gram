@@ -12,11 +12,11 @@ import {
 
 export type SetEMAProvidersRequestBody = {
   /**
-   * The saved order the caller started from, empty for the default. When given and the saved order no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Omit to replace the order unconditionally.
+   * The saved list the caller started from, in its stored order, empty for the default. When given and the saved list no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Omit to replace the list unconditionally.
    */
   expectedProviders?: Array<EMAProviderInput> | undefined;
   /**
-   * Providers in the order they are tried, at most 10; each at most once. An empty list restores the derived default.
+   * The accepted providers, at most 10; each at most once. Stored in the given order, though each endpoint uses only the one its sign-in goes through. An empty list restores the derived default.
    */
   providers: Array<EMAProviderInput>;
   /**

@@ -7,7 +7,7 @@
 
 package types
 
-// One EMA provider in a vendor's order.
+// One EMA provider a vendor accepts.
 type EMAProvider struct {
 	// external or speakeasy.
 	Kind string

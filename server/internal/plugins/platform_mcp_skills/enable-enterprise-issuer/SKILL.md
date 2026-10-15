@@ -71,7 +71,7 @@ organization has a Speakeasy issuer, servers that use Speakeasy's own sign-in
 (their sign-in trusts no external identity provider) use it by default.
 Speakeasy vouches only for those servers: a server that signs people in through
 an external identity provider such as Okta is vouched for only by that
-provider, even when a saved order lists Speakeasy. Changing a server's sign-in
+provider, even when the service accepts Speakeasy. Changing a server's sign-in
 is a separate trust change requiring
 the user's explicit authorization; do not change ordinary employee SSO login
 settings or replace an existing trusted issuer automatically.
@@ -80,16 +80,18 @@ If the user wants to configure an MCP connection too, use `list_projects`,
 `find_mcp`, and `get_mcp` to identify an exact project and MCP server. Follow its
 supported setup handoff and obtain separate authorization for any provider or
 binding changes. This workflow cannot choose Speakeasy as an MCP server's
-enterprise authorization provider. With no saved order the EMA provider order is derived:
+enterprise authorization provider. With nothing saved the service accepts every
+identity provider, and who vouches is derived:
 the server's trusted external identity provider alone, or the organization's Speakeasy issuer when the sign-in trusts none.
-An organization admin changes that order on the dashboard's **Organization** →
-**IDP and SSO** → **Identity providers** → **Services** page for the vendor, or
-through the organization's `setEMAProviders` management API. Saving a provider
-list needs the provider-order rollout; restoring the default needs only
-organization admin. Each server uses only the providers in the order that its
-sign-in goes through, so a saved order that leaves out a server's provider
-leaves that server with nobody to vouch; the dashboard flags such servers as
-needing attention. The MCP server's **Settings** page
+An organization admin chooses which identity providers a service accepts on the
+dashboard's **Organization** → **IDP and SSO** → **Identity providers** →
+**Services** page for the vendor, or through the organization's
+`setEMAProviders` management API. The choice is stored as an ordered list, but
+each server uses only the provider its sign-in goes through, so the list acts
+as the set of accepted providers. Saving a provider list needs the
+provider-list rollout; restoring the default needs only organization admin. A
+saved list that leaves out a server's provider leaves that server with nobody
+to vouch; the dashboard flags such servers as needing attention. The MCP server's **Settings** page
 turns enterprise-managed authorization on or off for that server and shows the
 sign-in, who vouches, and what the vendor has to trust.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for

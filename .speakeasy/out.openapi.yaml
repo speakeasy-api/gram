@@ -39014,7 +39014,7 @@ paths:
         name: RefreshOrganizationRemoteSessionIssuerMetadata
   /rpc/organizationRemoteSessionIssuers.setEMAProviders:
     post:
-      description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization''s Speakeasy issuer when it has one. Identity chaining moves to the next provider after any failure, so a saved order that lists Speakeasy after an external issuer lets Speakeasy vouch when that issuer refuses someone. The order applies organization-wide to every issuer with the same canonical issuer URL. With expected_providers, the write happens only while the saved order still matches it. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
+      description: 'Replace the EMA providers the vendor authorization server this issuer names accepts, the providers that may issue ID-JAGs for it. They are stored as an ordered list, but each endpoint can use only the provider its sign-in goes through: the sign-in''s trusted external issuer, or the organization''s Speakeasy issuer for a sign-in that trusts none. So the list acts as the set of accepted providers, and its order does not change who vouches; a list that leaves out an endpoint''s provider leaves that endpoint with nobody to vouch. An empty list restores the derived default, which accepts every provider: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization''s Speakeasy issuer when it has one. The list applies organization-wide to every issuer with the same canonical issuer URL. With expected_providers, the write happens only while the saved list still matches it. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
       operationId: setOrganizationRemoteSessionIssuerEMAProviders
       parameters:
         - allowEmptyValue: true
@@ -87558,7 +87558,7 @@ components:
             - signing_paused
             - sign_in_enforcement_required
             - readiness_unknown
-      description: One EMA provider in a vendor's order.
+      description: One EMA provider a vendor accepts.
       required:
         - kind
     EMAProviderInput:
@@ -87582,16 +87582,16 @@ components:
       properties:
         is_default:
           type: boolean
-          description: No order is saved. An endpoint whose sign-in trusts an external issuer uses that issuer alone; one that trusts none uses the organization's Speakeasy issuer when it has one.
+          description: Nothing is saved, so every provider is accepted. An endpoint whose sign-in trusts an external issuer uses that issuer alone; one that trusts none uses the organization's Speakeasy issuer when it has one.
         providers:
           type: array
           items:
             $ref: '#/components/schemas/EMAProvider'
-          description: The saved providers in order, or the derived default described by is_default.
+          description: The saved providers in their stored order, or the derived default described by is_default.
         vendor_issuer:
           type: string
           description: The vendor authorization server issuer, canonicalized.
-      description: The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
+      description: The EMA providers one vendor authorization server accepts, saved or default. They are stored as an ordered list that identity chaining tries in turn, but each endpoint can use only the provider its sign-in goes through, so the list acts as the set of accepted providers.
       required:
         - vendor_issuer
         - is_default
@@ -104184,12 +104184,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EMAProviderInput'
-          description: The saved order the caller started from, empty for the default. When given and the saved order no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Omit to replace the order unconditionally.
+          description: The saved list the caller started from, in its stored order, empty for the default. When given and the saved list no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Omit to replace the list unconditionally.
         providers:
           type: array
           items:
             $ref: '#/components/schemas/EMAProviderInput'
-          description: Providers in the order they are tried, at most 10; each at most once. An empty list restores the derived default.
+          description: The accepted providers, at most 10; each at most once. Stored in the given order, though each endpoint uses only the one its sign-in goes through. An empty list restores the derived default.
         remote_session_issuer_id:
           type: string
           description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.

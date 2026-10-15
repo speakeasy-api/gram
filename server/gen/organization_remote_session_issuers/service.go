@@ -83,20 +83,21 @@ type Service interface {
 	// organization-level issuer, and an organization-level issuer may migrate onto
 	// another organization-level issuer. Requires org:admin.
 	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
-	// Replace the ordered list of EMA providers that issue ID-JAGs for the vendor
-	// authorization server this issuer names. Identity chaining tries the
-	// providers that can serve and that the endpoint's authorization server
-	// trusts, in order, retrying transient failures briefly before moving to the
-	// next, until one succeeds. An empty list restores the derived default: an
-	// endpoint whose sign-in trusts an external issuer uses that issuer alone, and
-	// one that trusts none uses the organization's Speakeasy issuer when it has
-	// one. Identity chaining moves to the next provider after any failure, so a
-	// saved order that lists Speakeasy after an external issuer lets Speakeasy
-	// vouch when that issuer refuses someone. The order applies organization-wide
-	// to every issuer with the same canonical issuer URL. With expected_providers,
-	// the write happens only while the saved order still matches it. Requires
-	// org:admin and the ema-providers rollout; restoring the default only needs
-	// org:admin. Not available from support or impersonated sessions.
+	// Replace the EMA providers the vendor authorization server this issuer names
+	// accepts, the providers that may issue ID-JAGs for it. They are stored as an
+	// ordered list, but each endpoint can use only the provider its sign-in goes
+	// through: the sign-in's trusted external issuer, or the organization's
+	// Speakeasy issuer for a sign-in that trusts none. So the list acts as the set
+	// of accepted providers, and its order does not change who vouches; a list
+	// that leaves out an endpoint's provider leaves that endpoint with nobody to
+	// vouch. An empty list restores the derived default, which accepts every
+	// provider: an endpoint whose sign-in trusts an external issuer uses that
+	// issuer alone, and one that trusts none uses the organization's Speakeasy
+	// issuer when it has one. The list applies organization-wide to every issuer
+	// with the same canonical issuer URL. With expected_providers, the write
+	// happens only while the saved list still matches it. Requires org:admin and
+	// the ema-providers rollout; restoring the default only needs org:admin. Not
+	// available from support or impersonated sessions.
 	SetEMAProviders(context.Context, *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error)
 	// List every service identity chaining reaches in the caller's organization:
 	// each vendor authorization server that any identity chaining binding or saved
@@ -518,13 +519,15 @@ type SetEMAProvidersPayload struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID string
-	// Providers in the order they are tried, at most 10; each at most once. An
+	// The accepted providers, at most 10; each at most once. Stored in the given
+	// order, though each endpoint uses only the one its sign-in goes through. An
 	// empty list restores the derived default.
 	Providers []*types.EMAProviderInput
-	// The saved order the caller started from, empty for the default. When given
-	// and the saved order no longer matches it, nothing is written and the request
-	// fails with conflict, so a stale editor never overwrites another
-	// administrator's change. Omit to replace the order unconditionally.
+	// The saved list the caller started from, in its stored order, empty for the
+	// default. When given and the saved list no longer matches it, nothing is
+	// written and the request fails with conflict, so a stale editor never
+	// overwrites another administrator's change. Omit to replace the list
+	// unconditionally.
 	ExpectedProviders []*types.EMAProviderInput
 	SessionToken      *string
 }

@@ -245,13 +245,15 @@ type SetEMAProvidersRequestBody struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// Providers in the order they are tried, at most 10; each at most once. An
+	// The accepted providers, at most 10; each at most once. Stored in the given
+	// order, though each endpoint uses only the one its sign-in goes through. An
 	// empty list restores the derived default.
 	Providers []*EMAProviderInputRequestBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
-	// The saved order the caller started from, empty for the default. When given
-	// and the saved order no longer matches it, nothing is written and the request
-	// fails with conflict, so a stale editor never overwrites another
-	// administrator's change. Omit to replace the order unconditionally.
+	// The saved list the caller started from, in its stored order, empty for the
+	// default. When given and the saved list no longer matches it, nothing is
+	// written and the request fails with conflict, so a stale editor never
+	// overwrites another administrator's change. Omit to replace the list
+	// unconditionally.
 	ExpectedProviders []*EMAProviderInputRequestBody `form:"expected_providers,omitempty" json:"expected_providers,omitempty" xml:"expected_providers,omitempty"`
 }
 
@@ -792,11 +794,12 @@ type MigrateIssuerResponseBody struct {
 type SetEMAProvidersResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved. An endpoint whose sign-in trusts an external issuer uses
-	// that issuer alone; one that trusts none uses the organization's Speakeasy
-	// issuer when it has one.
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The saved providers in order, or the derived default described by is_default.
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
@@ -3558,11 +3561,12 @@ type RefreshIssuerMetadataGatewayErrorResponseBody struct {
 type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved. An endpoint whose sign-in trusts an external issuer uses
-	// that issuer alone; one that trusts none uses the organization's Speakeasy
-	// issuer when it has one.
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The saved providers in order, or the derived default described by is_default.
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 

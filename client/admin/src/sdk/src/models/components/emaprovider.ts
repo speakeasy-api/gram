@@ -43,7 +43,7 @@ export const UnavailableReason = {
 export type UnavailableReason = ClosedEnum<typeof UnavailableReason>;
 
 /**
- * One EMA provider in a vendor's order.
+ * One EMA provider a vendor accepts.
  */
 export type EMAProvider = {
   /**
