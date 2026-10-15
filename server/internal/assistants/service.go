@@ -148,6 +148,11 @@ const (
 	// runtimeIdleSweepRevertTimeout bounds the detached write that hands a
 	// failed sweep row back to `active` for the next tick.
 	runtimeIdleSweepRevertTimeout = 5 * time.Second
+	// runtimeExpireStatusTimeout bounds the runner /state poll inside an
+	// expire, so a hung runner still leaves the rest of the caller's budget
+	// for the backend Stop that tears it down. A healthy runner answers in
+	// well under a second.
+	runtimeExpireStatusTimeout = 5 * time.Second
 	// busyRuntimeRecheckSeconds is the warm window handed back when the
 	// runner reports a turn in flight and the assistant's own TTL is zero, so
 	// a busy runtime is re-checked later instead of stopped mid-turn.
@@ -3628,7 +3633,9 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 // polls the runner's idle clock and either reverts the row to `active` with
 // the remaining warm window, or stops the backend and retires the row.
 func (s *ServiceCore) expireRuntime(ctx context.Context, runtimeRecord assistantRuntimeRecord, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
-	status, statusErr := s.runtime.Status(ctx, runtimeRecord)
+	statusCtx, cancelStatus := context.WithTimeout(ctx, runtimeExpireStatusTimeout)
+	status, statusErr := s.runtime.Status(statusCtx, runtimeRecord)
+	cancelStatus()
 	if statusErr != nil {
 		// Runtime is already gone or unhealthy — fall through to Stop so the
 		// row + backend resources get cleaned up.

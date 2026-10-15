@@ -965,6 +965,31 @@ func TestServiceCoreReapStuckRuntimesRetriesFailedIdleExpire(t *testing.T) {
 	require.EqualValues(t, 2, stopCalls.Load())
 }
 
+func TestServiceCoreReapStuckRuntimesStopsHungRunner(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_hung_runner")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "reap-idle-hung")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-hung","pod_ip":"10.0.0.1"}`)
+	lapseRuntimeWarmWindow(t, conn, projectID, runtimeID)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:     runtimeBackendGKE,
+		statusHangs: true,
+		stopCalls:   &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.IdleRuntimesStopped, "a runner whose /state hangs must still be torn down")
+	require.EqualValues(t, 1, stopCalls.Load())
+}
+
 func TestServiceCoreReapStuckRuntimesStopsBackendOfStalledExpire(t *testing.T) {
 	t.Parallel()
 
@@ -2719,16 +2744,19 @@ type testRuntimeBackend struct {
 	interruptThreadID *atomic.Pointer[uuid.UUID]
 	statusResult      RuntimeBackendStatus
 	statusErr         error
-	stopErr           error
-	stopCalls         *atomic.Int64
-	reapCalls         *atomic.Int64
-	reapErr           error
-	reapMachineCalls  *atomic.Int64
-	reapMachineErr    error
-	imageRef          string
-	recycleResult     RuntimeBackendRecycleResult
-	recycleErr        error
-	recycleCalls      *atomic.Int64
+	// statusHangs makes Status block until its context ends, like a runner
+	// whose /state never answers.
+	statusHangs      bool
+	stopErr          error
+	stopCalls        *atomic.Int64
+	reapCalls        *atomic.Int64
+	reapErr          error
+	reapMachineCalls *atomic.Int64
+	reapMachineErr   error
+	imageRef         string
+	recycleResult    RuntimeBackendRecycleResult
+	recycleErr       error
+	recycleCalls     *atomic.Int64
 	// recycleFn, when set, replaces the canned recycleResult/recycleErr so a
 	// test can mutate DB state mid-sweep (e.g. expire the row) before the
 	// service persists the outcome.
@@ -2798,16 +2826,23 @@ func (t testRuntimeBackend) InterruptTurn(_ context.Context, _ assistantRuntimeR
 	return t.interruptResult, nil
 }
 
-func (t testRuntimeBackend) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+func (t testRuntimeBackend) Status(ctx context.Context, _ assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	if t.statusHangs {
+		<-ctx.Done()
+		return RuntimeBackendStatus{}, ctx.Err()
+	}
 	if t.statusErr != nil {
 		return RuntimeBackendStatus{}, t.statusErr
 	}
 	return t.statusResult, nil
 }
 
-func (t testRuntimeBackend) Stop(context.Context, assistantRuntimeRecord) error {
+func (t testRuntimeBackend) Stop(ctx context.Context, _ assistantRuntimeRecord) error {
 	if t.stopCalls != nil {
 		t.stopCalls.Add(1)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	return t.stopErr
 }
