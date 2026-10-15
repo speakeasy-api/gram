@@ -351,9 +351,10 @@ Consent screens offer the tool picker. On the Acme Agent Gateway it groups the m
 
 ### Python code mode
 
-**Python Code Gateway** has a stored `code_mode` default and two hosted members.
-Inspect exposes one native `execute`, its generated description and prefixes,
-and a Python editor with results, printed output and nested calls. New explicit
-Code selections require a configured runtime. Without one, the stored default
-remains visible and Inspect reports that execution is unavailable. Shared demo definitions are inert; use local fixtures
+**Python Code Gateway** has two hosted members. The shared demo org has no code
+runtime, so the shared seed stores it as Progressive. The local seed switches it
+to `code_mode`. There, Inspect exposes one native `execute`, its generated
+description and prefixes, and a Python editor with results, printed output and
+nested calls. New explicit Code selections require a configured runtime. Without
+one, a stored `code_mode` gateway or connection is served in Progressive mode. Shared demo definitions are inert; use local fixtures
 for actual calls. Follow check 32 in `seed/demo/verify.md`.

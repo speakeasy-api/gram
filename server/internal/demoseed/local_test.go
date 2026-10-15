@@ -95,9 +95,16 @@ func TestLocalFixturesReseed(t *testing.T) {
 	blob := assetstest.NewTestBlobStore(t)
 
 	opts := LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}
+	codeGatewayMode := func() string {
+		var mode string
+		require.NoError(t, db.QueryRow(ctx, `SELECT discovery_mode FROM meta_mcp_servers WHERE organization_id = $1 AND name = 'Python Code Gateway' AND deleted IS FALSE`, spec.OrgID).Scan(&mode))
+		return mode
+	}
 	for range 2 {
 		seedLocalPostgres(ctx, t, db, spec)
+		require.Equal(t, "progressive", codeGatewayMode(), "the shared seed has no code runtime to serve Code Mode")
 		require.NoError(t, RunLocalFixtures(ctx, logger, db, blob, nil, opts))
+		require.Equal(t, "code_mode", codeGatewayMode())
 	}
 
 	seedUserID := devidentity.DeterministicUserID(testDeveloperEmail)
