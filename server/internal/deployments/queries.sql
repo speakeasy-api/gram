@@ -731,24 +731,6 @@ INSERT INTO functions_access (
 )
 RETURNING id;
 
--- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
-VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier, @selected_remotes)
-ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
-DO UPDATE SET
-  registry_id = EXCLUDED.registry_id,
-  name = EXCLUDED.name,
-  registry_server_specifier = EXCLUDED.registry_server_specifier,
-  selected_remotes = EXCLUDED.selected_remotes,
-  updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at;
-
--- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at
-FROM external_mcp_attachments
-WHERE deployment_id = @deployment_id AND deleted IS FALSE
-ORDER BY created_at ASC;
-
 -- name: InsertDeployment :one
 -- Inserts a minimal deployment row and returns its ID without the conflict
 -- handling of CreateDeployment.

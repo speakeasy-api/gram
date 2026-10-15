@@ -53,7 +53,6 @@ func requireOrElse(acc error, node string, prop string, condition bool, err erro
 func validateUpserts(
 	openAPIv3ToUpsert []upsertOpenAPIv3,
 	functionsToUpsert []upsertFunctions,
-	externalMCPsToUpsert []upsertExternalMCP,
 ) (err error) {
 	for i, a := range openAPIv3ToUpsert {
 		node := fmt.Sprintf("openapi/%d", i)
@@ -77,11 +76,6 @@ func validateUpserts(
 
 		err = requireOrElse(err, node, "runtime", a.runtime != "", ErrRequired)
 		err = requireOrElse(err, node, "runtime", functions.IsSupportedRuntime(a.runtime), newErrUnsupported(supportedRuntimes.String()))
-	}
-
-	for i, e := range externalMCPsToUpsert {
-		node := fmt.Sprintf("external_mcp/%d", i)
-		err = requireOrElse(err, node, "registry_id", e.registryID.Valid, ErrRequired)
 	}
 
 	return err

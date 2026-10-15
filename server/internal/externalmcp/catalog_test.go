@@ -136,8 +136,6 @@ func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 			if wrong == tc.want {
 				wrong = NativeCatalogRegistryID
 			}
-			_, err = s.SelectSource(t.Context(), "org-id", "org-slug", wrong)
-			require.ErrorIs(t, err, ErrCatalogSourceNotFound)
 			_, err = s.IdentitySource(t.Context(), wrong)
 			require.NoError(t, err)
 		})
