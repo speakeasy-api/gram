@@ -203,9 +203,10 @@ function trialingHeadline(on: string | null): string {
   return `Trial — converts to pay as you go on ${on}`;
 }
 
-// ponytail: periods under two days are the post-checkout UTC-midnight stub
-// (checkout never leaves one longer than about a day). A monthly period is
-// never that short, so its end date stays — including one that ends tomorrow.
+// Checkout anchors the first paid month to the next UTC midnight, so the
+// period right after activation is only that short interval. Two days is
+// longer than that interval and shorter than any real month, so the end date
+// stays once the subscription is on a monthly period.
 const INITIAL_PAYG_PERIOD_MAX_MS = 2 * 24 * 60 * 60 * 1000;
 
 function isInitialPaygBillingInterval(
@@ -224,8 +225,6 @@ function activeDetail(
   end: Date | null | undefined,
 ): string {
   const on = formatBillingDate(end);
-  // The stub's end is the next UTC midnight, not the monthly renewal. Naming
-  // it reads as a month that ends tomorrow, or a fee due immediately.
   if (on !== null && isInitialPaygBillingInterval(start, end)) {
     return "You're billed monthly for what you use.";
   }
