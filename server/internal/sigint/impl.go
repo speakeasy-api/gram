@@ -31,7 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/sigint/inputconfig"
+	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -490,9 +490,9 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 	}
 
 	mode := string(payload.Mode)
-	strategy := string(conv.PtrValOr(payload.InputStrategy, types.SigintInputStrategy(inputconfig.SingleMessage)))
-	windowSize := conv.PtrValOr(payload.WindowSize, inputconfig.DefaultWindowSize)
-	if err := inputconfig.Validate(strategy, windowSize); err != nil {
+	strategy := string(conv.PtrValOr(payload.InputStrategy, types.SigintInputStrategy(evaluation.InputStrategySingleMessage)))
+	windowSize := conv.PtrValOr(payload.WindowSize, evaluation.DefaultWindowSize)
+	if err := evaluation.ValidateInputConfiguration(strategy, windowSize); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor message context")
 	}
 
@@ -691,7 +691,7 @@ func (s *Service) UpdateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		InputStrategy:   conv.ToPGText(string(conv.PtrValOr(payload.InputStrategy, types.SigintInputStrategy(beforeRow.InputStrategy)))),
 		WindowSize:      pgtype.Int4{Int32: conv.SafeInt32(conv.PtrValOr(payload.WindowSize, int(beforeRow.WindowSize))), Valid: true},
 	}
-	if err := inputconfig.Validate(params.InputStrategy.String, int(params.WindowSize.Int32)); err != nil {
+	if err := evaluation.ValidateInputConfiguration(params.InputStrategy.String, int(params.WindowSize.Int32)); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor message context")
 	}
 

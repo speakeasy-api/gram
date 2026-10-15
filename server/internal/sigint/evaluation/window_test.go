@@ -13,7 +13,6 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
-	"github.com/speakeasy-api/gram/server/internal/sigint/inputconfig"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -67,7 +66,7 @@ func TestWindowGroupsSensorsAndKeepsReadingIdentityOnRedelivery(t *testing.T) {
 		sensor.ID = string(rune('a' + i))
 		sensor.Signals = sensor.Signals[:1]
 		if size > 1 {
-			sensor.InputStrategy, sensor.WindowSize = inputconfig.SlidingWindow, size
+			sensor.InputStrategy, sensor.WindowSize = InputStrategySlidingWindow, size
 		}
 		definitions = append(definitions, sensor)
 	}
@@ -99,8 +98,8 @@ func TestWindowOlderInvalidContentDoesNotPreventSmallerReading(t *testing.T) {
 	t.Parallel()
 	m := message()
 	definitions := partialSensors()
-	definitions[0].InputStrategy, definitions[0].WindowSize = inputconfig.SlidingWindow, 5
-	definitions[1].InputStrategy, definitions[1].WindowSize = inputconfig.SlidingWindow, 2
+	definitions[0].InputStrategy, definitions[0].WindowSize = InputStrategySlidingWindow, 5
+	definitions[1].InputStrategy, definitions[1].WindowSize = InputStrategySlidingWindow, 2
 	c := classifiertest.NewMock(t)
 	c.On("Classify", mock.Anything, mock.Anything).Return(partialResult(false)).Once()
 	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
@@ -117,7 +116,7 @@ func TestWindowHistoryFailureRetriesAfterPublishingTargetOnly(t *testing.T) {
 	t.Parallel()
 	m := message()
 	definitions := partialSensors()
-	definitions[0].InputStrategy = inputconfig.SlidingWindow
+	definitions[0].InputStrategy = InputStrategySlidingWindow
 	c := classifiertest.NewMock(t)
 	c.On("Classify", mock.Anything, mock.Anything).Return(partialResult(false)).Once()
 	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
@@ -160,7 +159,7 @@ func TestWindowDefinitionHashIncludesStrategyAndSize(t *testing.T) {
 	sensor := sensors()[0]
 	a, ok := compileSensor(sensor)
 	require.True(t, ok)
-	sensor.InputStrategy = inputconfig.SlidingWindow
+	sensor.InputStrategy = InputStrategySlidingWindow
 	b, ok := compileSensor(sensor)
 	require.True(t, ok)
 	sensor.WindowSize = 10

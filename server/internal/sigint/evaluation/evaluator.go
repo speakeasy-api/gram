@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/celeval"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/sigint/inputconfig"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
 
@@ -152,7 +151,7 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	// Ascending sizes let small windows succeed even when older content is invalid
 	// or a larger window exceeds the aggregate content budget.
 	var retry error
-	for size := 1; size <= inputconfig.MaxWindowSize; size++ {
+	for size := 1; size <= MaxWindowSize; size++ {
 		var sensors []compiledSensor
 		for _, sensor := range compiled {
 			if sensor.windowSize == size {

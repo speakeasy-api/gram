@@ -1,14 +1,13 @@
-// Package inputconfig defines sensor message-context configuration.
-package inputconfig
+package evaluation
 
 import "fmt"
 
 const (
-	// SingleMessage classifies only the target's content.
-	SingleMessage = "single_message"
+	// InputStrategySingleMessage classifies only the target's content.
+	InputStrategySingleMessage = "single_message"
 
-	// SlidingWindow supplies timestamp-ordered context ending at the target.
-	SlidingWindow = "sliding_window"
+	// InputStrategySlidingWindow supplies timestamp-ordered context ending at the target.
+	InputStrategySlidingWindow = "sliding_window"
 
 	// DefaultWindowSize includes the target and up to four preceding messages.
 	DefaultWindowSize = 5
@@ -20,9 +19,9 @@ const (
 	MaxWindowSize = 10
 )
 
-// Validate checks explicit, effective values at every authoring boundary.
-func Validate(strategy string, size int) error {
-	if strategy != SingleMessage && strategy != SlidingWindow {
+// ValidateInputConfiguration checks effective sensor message-context settings.
+func ValidateInputConfiguration(strategy string, size int) error {
+	if strategy != InputStrategySingleMessage && strategy != InputStrategySlidingWindow {
 		return fmt.Errorf("unknown sensor input strategy %q", strategy)
 	}
 	if size < MinWindowSize || size > MaxWindowSize {

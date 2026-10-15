@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/sigint/inputconfig"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
@@ -224,7 +223,7 @@ func (in *conversationInput) resolveMessage(ctx context.Context, row repo.LoadEv
 
 func (in *conversationInput) ResolveWindow(ctx context.Context, size int) (classifier.Entry, error) {
 	var empty classifier.Entry
-	if err := inputconfig.Validate(inputconfig.SlidingWindow, size); err != nil {
+	if err := ValidateInputConfiguration(InputStrategySlidingWindow, size); err != nil {
 		return empty, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}
 	target, err := in.Resolve(ctx)
@@ -235,7 +234,7 @@ func (in *conversationInput) ResolveWindow(ctx context.Context, size int) (class
 		if in.history == nil {
 			return empty, fmt.Errorf("%w: conversation history unavailable", ErrInvalidInput)
 		}
-		in.historyRows, in.historyErr = in.history.LoadHistory(ctx, in.message.GetOrganizationId(), uuid.MustParse(in.message.GetProjectId()), in.stored, inputconfig.MaxWindowSize-1)
+		in.historyRows, in.historyErr = in.history.LoadHistory(ctx, in.message.GetOrganizationId(), uuid.MustParse(in.message.GetProjectId()), in.stored, MaxWindowSize-1)
 		in.historyLoaded = true
 	}
 	if in.historyErr != nil {

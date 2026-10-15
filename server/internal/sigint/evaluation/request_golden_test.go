@@ -10,19 +10,18 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/sigint/inputconfig"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestSingleMessageModelRequestGolden(t *testing.T) {
 	t.Parallel()
-	assertConversationModelRequest(t, inputconfig.SingleMessage)
+	assertConversationModelRequest(t, InputStrategySingleMessage)
 }
 
 func TestSlidingWindowModelRequestGolden(t *testing.T) {
 	t.Parallel()
-	assertConversationModelRequest(t, inputconfig.SlidingWindow)
+	assertConversationModelRequest(t, InputStrategySlidingWindow)
 }
 
 func assertConversationModelRequest(t *testing.T, strategy string) {

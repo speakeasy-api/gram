@@ -9,7 +9,6 @@ import (
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
-	"github.com/speakeasy-api/gram/server/internal/sigint/inputconfig"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
 
@@ -36,13 +35,13 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	var compiled compiledSensor
 	strategy := sensor.InputStrategy
 	if strategy == "" {
-		strategy = inputconfig.SingleMessage
+		strategy = InputStrategySingleMessage
 	}
 	size := sensor.WindowSize
 	if size == 0 {
-		size = inputconfig.DefaultWindowSize
+		size = DefaultWindowSize
 	}
-	if inputconfig.Validate(strategy, size) != nil {
+	if ValidateInputConfiguration(strategy, size) != nil {
 		return compiled, false
 	}
 	compiled.windowSize = 1
@@ -58,7 +57,7 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	}
 	compiled.slug = sensor.Slug
 	framing := *sensor.Instructions
-	if strategy == inputconfig.SlidingWindow {
+	if strategy == InputStrategySlidingWindow {
 		compiled.windowSize = size
 		framing = windowInstructions + framing
 	}
