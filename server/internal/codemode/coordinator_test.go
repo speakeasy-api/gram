@@ -3,6 +3,7 @@ package codemode
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -33,7 +34,11 @@ func (s *scriptedOwners) Get(_ context.Context, _ string, value any) error {
 	if read.err != nil {
 		return read.err
 	}
-	*value.(*string) = read.owner
+	owner, ok := value.(*string)
+	if !ok {
+		return fmt.Errorf("scripted owner read into %T", value)
+	}
+	*owner = read.owner
 	return nil
 }
 
