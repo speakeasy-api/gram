@@ -56,10 +56,6 @@ func TestDeploymentsService_EvolveDropsExternalMCPAttachments(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.Deployment.ExternalMcps)
-
-	attachments, err := repo.New(ti.conn).ListDeploymentExternalMCPs(ctx, uuid.MustParse(result.Deployment.ID))
-	require.NoError(t, err)
-	require.Empty(t, attachments)
 }
 
 func TestDeploymentsService_RedeployDropsExternalMCPAttachments(t *testing.T) {
@@ -77,8 +73,4 @@ func TestDeploymentsService_RedeployDropsExternalMCPAttachments(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, depID.String(), result.Deployment.ID)
 	require.Empty(t, result.Deployment.ExternalMcps)
-
-	attachments, err := repo.New(ti.conn).ListDeploymentExternalMCPs(ctx, uuid.MustParse(result.Deployment.ID))
-	require.NoError(t, err)
-	require.Empty(t, attachments)
 }
