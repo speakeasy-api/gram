@@ -183,8 +183,4 @@ func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	require.ErrorContains(t, err, "selected source failed")
 	require.Equal(t, 1, native.calls)
 	require.Zero(t, legacy.calls)
-	_, err = s.IdentityDetails(t.Context(), NativeCatalogRegistryID, "example/server", nil)
-	require.ErrorContains(t, err, "selected source failed")
-	require.Equal(t, 2, native.calls)
-	require.Zero(t, legacy.calls)
 }

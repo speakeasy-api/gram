@@ -25,8 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -54,8 +52,6 @@ type ProcessDeployment struct {
 	assetStorage   assets.BlobStore
 	projects       *projectsRepo.Queries
 	billingRepo    billing.Repository
-	externalmcp    *externalmcpRepo.Queries
-	catalog        *externalmcp.CatalogService
 }
 
 func NewProcessDeployment(
@@ -67,7 +63,6 @@ func NewProcessDeployment(
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	billingRepo billing.Repository,
-	catalog *externalmcp.CatalogService,
 ) *ProcessDeployment {
 	return &ProcessDeployment{
 		logger:         logger,
@@ -84,8 +79,6 @@ func NewProcessDeployment(
 		resources:      resourcesRepo.New(db),
 		projects:       projectsRepo.New(db),
 		billingRepo:    billingRepo,
-		externalmcp:    externalmcpRepo.New(db),
-		catalog:        catalog,
 	}
 }
 
@@ -102,13 +95,12 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 
 	numOpenAPISources := len(deployment.Openapiv3Assets)
 	numFunctionSources := len(deployment.FunctionsAssets)
-	numExternalMCPs := len(deployment.ExternalMcps)
 
 	logErr := p.repo.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
 		DeploymentID:   deploymentID,
 		ProjectID:      projectID,
 		Event:          "log:info",
-		Message:        fmt.Sprintf("Processing deployment: %d OpenAPI sources, %d function sources, %d external MCP servers", numOpenAPISources, numFunctionSources, numExternalMCPs),
+		Message:        fmt.Sprintf("Processing deployment: %d OpenAPI sources, %d function sources", numOpenAPISources, numFunctionSources),
 		AttachmentID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		AttachmentType: conv.ToPGTextEmpty(""),
 	})
@@ -123,10 +115,6 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	}
 
 	if err := p.doOpenAPIv3(ctx, workers, projectID, deploymentID, orgData.Slug, orgData.ProjectSlug, deployment); err != nil {
-		return err
-	}
-
-	if err := p.doExternalMCPs(ctx, workers, projectID, deploymentID, orgData.Slug, orgData.ProjectSlug); err != nil {
 		return err
 	}
 
@@ -186,23 +174,11 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		})
 	}
 
-	// Get external MCPs to check if deployment has any
-	externalMCPs, err := p.repo.ListDeploymentExternalMCPs(ctx, deploymentID)
-	if err != nil {
-		err = oops.E(oops.CodeUnexpected, err, "failed to read list of external mcps in deployment").LogError(ctx, p.logger)
-		return temporal.NewApplicationErrorWithOptions("deployment external mcps could not be verified", "deployment_error", temporal.ApplicationErrorOptions{
-			NonRetryable: true,
-			Cause:        err,
-		})
-	}
-
 	// If there were documents to process in this deployment but no tools were created then we consider this a failure.
-	// External MCPs don't produce tools at deployment time - they're expanded at runtime.
 	expectsTools := len(deployment.Openapiv3Assets) > 0 || len(deployment.FunctionsAssets) > 0
 	hasTools := len(tools) > 0 || len(functionTools) > 0
 	hasResources := len(functionResources) > 0
-	hasExternalMCPs := len(externalMCPs) > 0
-	if expectsTools && !hasTools && !hasResources && !hasExternalMCPs {
+	if expectsTools && !hasTools && !hasResources {
 		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").LogError(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("empty deployment was not expected", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
@@ -412,43 +388,6 @@ func (p *ProcessDeployment) doFunctions(
 			}
 
 			return err
-		})
-	}
-
-	return nil
-}
-
-func (p *ProcessDeployment) doExternalMCPs(
-	ctx context.Context,
-	pool *pool.ErrorPool,
-	projectID uuid.UUID,
-	deploymentID uuid.UUID,
-	orgSlug string,
-	projectSlug string,
-) error {
-	externalMCPs, err := p.repo.ListDeploymentExternalMCPs(ctx, deploymentID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error listing external mcps for deployment").LogError(ctx, p.logger)
-	}
-
-	for _, mcp := range externalMCPs {
-		pool.Go(func() error {
-			processor := externalmcp.NewToolExtractor(p.logger, p.guardianPolicy, p.db, p.catalog)
-
-			return processor.Do(ctx, externalmcp.ToolExtractorTask{
-				OrgSlug:      orgSlug,
-				ProjectSlug:  projectSlug,
-				ProjectID:    projectID,
-				DeploymentID: deploymentID,
-				MCP: externalmcp.ToolExtractorTaskMCPServer{
-					AttachmentID:            mcp.ID,
-					RegistryID:              mcp.RegistryID,
-					Name:                    mcp.Name,
-					Slug:                    mcp.Slug,
-					RegistryServerSpecifier: mcp.RegistryServerSpecifier,
-					SelectedRemotes:         mcp.SelectedRemotes,
-				},
-			})
 		})
 	}
 

@@ -1345,7 +1345,7 @@ func TestCreateDeployment_FunctionsDeploymentLogs(t *testing.T) {
 	}
 
 	// Verify aggregate deployment summary log
-	require.Contains(t, messages, "Processing deployment: 0 OpenAPI sources, 1 function sources, 0 external MCP servers")
+	require.Contains(t, messages, "Processing deployment: 0 OpenAPI sources, 1 function sources")
 
 	// Verify functions start/end logs
 	var foundFunctionsStart, foundFunctionsEnd bool
