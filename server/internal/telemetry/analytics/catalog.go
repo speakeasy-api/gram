@@ -140,6 +140,9 @@ type Field struct {
 	// Lookup names the lookup every read of this dimension folds Expr through;
 	// empty reads it as reported.
 	Lookup string
+	// Typeahead is the agent_events column a dimension's values are listed
+	// from, read off Source.Observations. Empty lists them from Source.Rows.
+	Typeahead string
 }
 
 // Dataset is a logical entity at a declared grain. It owns a source query,
@@ -158,25 +161,7 @@ type Dataset struct {
 	// row's event time, used for bucketing and for ordering row lists.
 	TimeExpr string
 	Fields   []Field
-	// Source builds the dataset's source query for one tenancy and window.
-	Source SourceQuery
-	// Values builds the rows a dimension's values are listed from: the same
-	// fold as Source, over observations that skip the redelivery collapse.
-	// The collapse sorts the whole window in memory, and a filter bar asks
-	// for every field's values on page load, so the listing must not pay
-	// for it. Folding over a redelivered record is harmless, since every
-	// fold keeps the latest value or a min or max. What the listing gives up
-	// is a retraction: a value a later copy of a record withdrew can still
-	// be offered. Empty reads Source.
-	Values SourceQuery
-}
-
-// valuesSource is the source a values listing reads.
-func (d *Dataset) valuesSource() SourceQuery {
-	if d.Values != nil {
-		return d.Values
-	}
-	return d.Source
+	Source   Source
 }
 
 // MaxTimeRangeDays is the longest window this dataset can answer honestly:
@@ -296,7 +281,7 @@ func (d *Dataset) validate(lookups map[string]struct{}) error {
 	if d.TimeExpr == "" {
 		return fmt.Errorf("catalog: dataset %q has no time expression", d.Name)
 	}
-	if d.Source == nil {
+	if d.Source.Key == "" {
 		return fmt.Errorf("catalog: dataset %q has no source query", d.Name)
 	}
 	if len(d.Fields) == 0 {

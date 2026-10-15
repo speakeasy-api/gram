@@ -83,7 +83,6 @@ func TestDescribeDatasetsCarriesFieldDescriptions(t *testing.T) {
 			{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: "", Lookup: ""},
 		},
 		Source: sessionsSource,
-		Values: nil,
 	}))
 	require.Len(t, described, 1)
 	require.NotNil(t, described[0].Fields[0].Description)

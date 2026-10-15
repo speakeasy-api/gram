@@ -29,7 +29,6 @@ func lookupTestCatalog(t *testing.T) *Catalog {
 				{Name: "plain", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "plain", Description: "", Lookup: ""},
 			},
 			Source: toolCallsSource,
-			Values: nil,
 		},
 	)
 	require.NoError(t, err)

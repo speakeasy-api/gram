@@ -81,7 +81,6 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: ""},
 			},
 			Source: sessionsSource,
-			Values: nil,
 		}
 	}
 
@@ -105,7 +104,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		}, want: "cannot be a string"},
 		{name: "it rejects a duplicate field", mutate: func(d *Dataset) { d.Fields = append(d.Fields, d.Fields[0]) }, want: "twice"},
 		{name: "it rejects a field named like the time bucket", mutate: func(d *Dataset) { d.Fields[0].Name = timeBucketColumn }, want: "time bucket"},
-		{name: "it rejects a dataset with no source query", mutate: func(d *Dataset) { d.Source = nil }, want: "no source query"},
+		{name: "it rejects a dataset with no source query", mutate: func(d *Dataset) { d.Source = Source{} }, want: "no source query"},
 		{name: "it rejects an unknown kind", mutate: func(d *Dataset) { d.Kind = "table" }, want: "unknown kind"},
 		{name: "it rejects a dataset with no grain", mutate: func(d *Dataset) { d.Grain = "" }, want: "no grain"},
 		{name: "it rejects an empty dataset name", mutate: func(d *Dataset) { d.Name = "" }, want: "empty name"},
@@ -199,7 +198,7 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 	}
 
 	for _, ds := range Default.Datasets() {
-		query, args, err := ds.Source(qc).ToSql()
+		query, args, err := ds.Source.Rows(qc).ToSql()
 		require.NoError(t, err, ds.Name)
 		require.Contains(t, query, "LIMIT 1 BY organization_id, project_id, record_id", ds.Name)
 		require.Contains(t, query, "GROUP BY organization_id, project_id", ds.Name)
@@ -219,12 +218,12 @@ func TestToolCallPredicatesShareOneVocabulary(t *testing.T) {
 
 	qc := QueryContext{Tenant: Tenant{OrganizationID: "org", ProjectID: "project"}, Window: Window{FromUnixNano: 1, ToUnixNano: 2}}
 
-	sessions, _, err := sessionsSource(qc).ToSql()
+	sessions, _, err := sessionsSource.Rows(qc).ToSql()
 	require.NoError(t, err)
 	require.Contains(t, sessions, toolCallEventTypesSQL)
 	require.Equal(t, "event_type IN ('tool_call', 'tool_call_result', 'tool_decision')", toolCallEventTypesSQL)
 
-	_, args, err := toolCallsSource(qc).ToSql()
+	_, args, err := toolCallsSource.Rows(qc).ToSql()
 	require.NoError(t, err)
 	for _, eventType := range toolCallEventTypes {
 		require.Contains(t, args, eventType)
@@ -241,7 +240,7 @@ func TestDatasetWindowIsBoundedByItsTableRetention(t *testing.T) {
 	require.Equal(t, MaxEventTimeRangeDays, ToolCalls.MaxTimeRangeDays())
 	require.Equal(t, int64(MaxEventTimeRangeDays)*nanosPerDay, Sessions.MaxTimeRangeNanos())
 
-	metric := &Dataset{Name: "spend", Kind: KindMetric, Grain: "measurement", Description: "", TimeExpr: "t", Fields: nil, Source: nil, Values: nil}
+	metric := &Dataset{Name: "spend", Kind: KindMetric, Grain: "measurement", Description: "", TimeExpr: "t", Fields: nil, Source: Source{}}
 	require.Equal(t, MaxMetricTimeRangeDays, metric.MaxTimeRangeDays())
 	require.Equal(t, MaxTimeRangeDays, metric.MaxTimeRangeDays(), "the metric limit is the ceiling")
 }
@@ -269,4 +268,23 @@ func TestRetentionLimitsMatchTheSchema(t *testing.T) {
 
 	require.Equal(t, MaxEventTimeRangeDays, ttl("agent_events"), "agent_events TTL drifted from the catalog's event limit")
 	require.Equal(t, MaxMetricTimeRangeDays, ttl("agent_metrics"), "agent_metrics TTL drifted from the catalog's metric limit")
+}
+
+// TestDimensionValuesSkipTheCollapse: a filter bar lists every dimension's
+// values on page load, so none of them may sort the window.
+func TestDimensionValuesSkipTheCollapse(t *testing.T) {
+	t.Parallel()
+
+	tenant := Tenant{OrganizationID: "org", ProjectID: "proj"}
+	for _, ds := range Default.Datasets() {
+		for _, field := range ds.Fields {
+			if field.Role != RoleDimension {
+				continue
+			}
+			require.NotEmpty(t, field.Typeahead, "%s.%s", ds.Name, field.Name)
+			plan, err := CompileValues(Default, tenant, nil, ValuesRequest{Dataset: ds.Name, Dimension: field.Name, FromUnixNano: 1, ToUnixNano: 2, Limit: 0})
+			require.NoError(t, err)
+			require.NotContains(t, plan.SQL, "LIMIT 1 BY", "%s.%s", ds.Name, field.Name)
+		}
+	}
 }

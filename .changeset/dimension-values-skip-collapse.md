@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Filter dropdowns on Explore dashboards load again on projects with a lot of agent activity. Listing a field's values no longer sorts every event in the window first, which ran ClickHouse out of memory when a page loaded several filters at once.
+Filter dropdowns on Explore dashboards load again on projects with a lot of agent activity. A field's values now come straight from the recorded events instead of the fully folded rows, so the dropdown can also list a value that a later event replaced, such as a session's earlier model.
