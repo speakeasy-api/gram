@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
   issuers: [] as { id: string; name: string; issuer: string }[],
 }));
 vi.mock("./EmaServiceServers", () => ({
-  EmaServiceServers: () => <h3>Servers</h3>,
+  EmaServiceServers: () => <h3>Affected servers</h3>,
 }));
 vi.mock("./useEmaServices", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./useEmaServices")>()),
