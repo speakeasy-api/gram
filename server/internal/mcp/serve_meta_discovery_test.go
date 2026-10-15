@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -235,4 +237,39 @@ func TestGatewayDirectListsReachableMembersWhenOneIsDown(t *testing.T) {
 	require.Contains(t, w.Body.String(), member.slug+"--alpha")
 	require.NotContains(t, w.Body.String(), downSlug+"--")
 	require.NotContains(t, w.Body.String(), `"error"`)
+}
+
+func TestGatewayDirectDescribesMembersConcurrently(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	// Each listing waits until both are in flight, so a sequential describe
+	// times out the first member.
+	var inFlight atomic.Int32
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	barrier := func() bool {
+		if inFlight.Add(1) >= 2 {
+			releaseOnce.Do(func() { close(release) })
+		}
+		select {
+		case <-release:
+			return true
+		case <-time.After(5 * time.Second):
+			return false
+		}
+	}
+	slugs := []string{"first-" + uuid.NewString()[:8], "second-" + uuid.NewString()[:8]}
+	for i, memberSlug := range slugs {
+		upstream := newListingUpstream(t, []any{map[string]any{"name": "ping", "inputSchema": map[string]any{"type": "object"}}}, barrier)
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Member "+memberSlug, memberSlug, int32(i+1), upstream)
+	}
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), slugs[0]+"--ping")
+	require.Contains(t, w.Body.String(), slugs[1]+"--ping")
 }
