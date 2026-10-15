@@ -17,17 +17,12 @@ func (*logClassification) Name() string {
 
 func (*logClassification) Enrich(_ context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
 	d := dialect.ForLog(record)
-	surface := stated(d.Surface(record))
-	if isGatewayRecord(record) {
-		// The surface is whatever MCP client made the call.
-		surface = inboundLogAttributeString(record, string(attr.McpClientNameKey))
-	}
 	return classify(
 		inboundLogSource(record),
 		stated(d.EventName(record)),
 		stated(d.EventType(record)),
 		inboundLogAttributeString(record, string(attr.ProviderKey)),
 		stated(d.Provider(record)),
-		surface,
+		stated(d.Surface(record)),
 	), nil
 }

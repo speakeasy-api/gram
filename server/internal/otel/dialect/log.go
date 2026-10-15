@@ -44,12 +44,10 @@ type LogDialect interface {
 	ExternalOrgID(record *otelv1.InboundLogRecord) (key string, val string, err error)
 }
 
-// GatewayLogScope is the scope the MCP gateway emits its tool call records under.
-const GatewayLogScope = "github.com/speakeasy-api/gram/server/internal/mcp"
-
 var logDialects = []LogDialect{
 	ClaudeCodeLog{},
 	CodexLog{},
+	GatewayLog{SemconvLog: SemconvLog{}},
 }
 
 func ForLog(record *otelv1.InboundLogRecord) LogDialect {
