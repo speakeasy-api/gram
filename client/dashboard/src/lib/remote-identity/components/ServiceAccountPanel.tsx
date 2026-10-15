@@ -5,11 +5,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/HoverCard";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
@@ -22,7 +17,7 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Info, KeyRound, Settings } from "lucide-react";
+import { ChevronDown, KeyRound, Settings } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import type { AgentCredentialFields } from "../drafts/useCredentialDraft";
@@ -477,73 +472,6 @@ function SigningKeySteps({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
-        <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-          Client ID
-          <HoverCard openDelay={150}>
-            <HoverCardTrigger asChild>
-              <button
-                type="button"
-                aria-label="How the client ID options differ"
-                className="hover:text-foreground inline-flex"
-              >
-                <Info aria-hidden="true" className="size-3.5" />
-              </button>
-            </HoverCardTrigger>
-            <HoverCardContent
-              align="start"
-              className="flex w-96 flex-col gap-3"
-            >
-              <div className="flex flex-col gap-1">
-                <Text small className="font-medium">
-                  Provider-created
-                </Text>
-                <Text muted small>
-                  You create an app in {providerName}, and {providerName} issues
-                  its client ID. Paste that ID here and pick a key set from your
-                  KMS. Speakeasy gives you a key set URL to add to the app.
-                </Text>
-              </div>
-              <div className="flex flex-col gap-1">
-                <Text small className="font-medium">
-                  Speakeasy-created
-                </Text>
-                <Text muted small>
-                  Speakeasy creates the client and publishes a client ID
-                  metadata document describing it, including where its public
-                  keys live. Needs a provider that supports it.
-                </Text>
-              </div>
-            </HoverCardContent>
-          </HoverCard>
-        </span>
-        <RadioCardGroup
-          aria-label="Client ID"
-          size="sm"
-          showIndicator={false}
-          orientation="horizontal"
-          value="provider"
-          disabled={disabled || created !== null}
-          className="grid-cols-1 sm:grid-cols-2"
-        >
-          <RadioCard value="provider" title="Provider-created">
-            Create the app in {providerName} first.
-          </RadioCard>
-          <RadioCard
-            value="speakeasy"
-            disabled
-            title={
-              <span className="flex flex-wrap items-center gap-2">
-                Speakeasy-created
-                <AvailabilityBadge />
-              </span>
-            }
-          >
-            Generate the client in Speakeasy and load it via CIMD.
-          </RadioCard>
-        </RadioCardGroup>
-      </div>
-
       <ol aria-label="Signing key setup" className="bg-card border">
         <li className="flex gap-3 border-b px-4 py-3.5">
           <StepMarker index={1} done={false} />
