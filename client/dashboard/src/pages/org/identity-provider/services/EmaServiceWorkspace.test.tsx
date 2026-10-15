@@ -267,9 +267,7 @@ describe("one service", () => {
   it("gives the issuer URL to paste once per identity provider, and says who the default entries cover", () => {
     show();
     expect(
-      screen.getByText(
-        /Linear has to trust each identity provider once/,
-      ),
+      screen.getByText(/Linear has to trust each identity provider once/),
     ).toBeTruthy();
     const rows = trustRows();
     expect(rows[0]?.textContent).toContain(
