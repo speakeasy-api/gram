@@ -9,7 +9,7 @@ const AgentOwnerSelf = "self"
 func AgentCreationChecks(callerUserID, ownerUserID string) []Check {
 	checks := []Check{{
 		Scope: ScopeAgentCreate, ResourceKind: ResourceKindAgentOwner,
-		ResourceID: ownerUserID, Dimensions: nil, selectorMatch: selectorMatchStrict,
+		ResourceID: ownerUserID, Dimensions: nil, selectorMatch: selectorMatchAgentOwnerID,
 	}}
 	if callerUserID == ownerUserID {
 		checks = append(checks, Check{

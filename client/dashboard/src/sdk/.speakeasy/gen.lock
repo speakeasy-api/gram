@@ -115,6 +115,7 @@ trackedFiles:
   src/funcs/agentsGet.ts: {}
   src/funcs/agentsList.ts: {}
   src/funcs/agentsListDelegableGrants.ts: {}
+  src/funcs/agentsListEligibleOwners.ts: {}
   src/funcs/agentsListPolicyGrants.ts: {}
   src/funcs/agentsListSessions.ts: {}
   src/funcs/agentsReassign.ts: {}
@@ -865,6 +866,7 @@ trackedFiles:
   src/models/components/admitworkloadsubjectform.ts: {}
   src/models/components/agentdelegatedgrant.ts: {}
   src/models/components/agentdelegatedpolicy.ts: {}
+  src/models/components/agenteligibleowner.ts: {}
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
@@ -2422,6 +2424,7 @@ trackedFiles:
   src/models/operations/launcherjudge.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listagentdelegablegrants.ts: {}
+  src/models/operations/listagenteligibleowners.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
   src/models/operations/listagents.ts: {}
   src/models/operations/listagentsessions.ts: {}
@@ -2861,6 +2864,8 @@ trackedFiles:
   src/react-query/admitWorkloadSubject.ts: {}
   src/react-query/agent.core.ts: {}
   src/react-query/agent.ts: {}
+  src/react-query/agentEligibleOwners.core.ts: {}
+  src/react-query/agentEligibleOwners.ts: {}
   src/react-query/agentPlugins.core.ts: {}
   src/react-query/agentPlugins.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
@@ -8790,6 +8795,15 @@ examples:
       responses:
         "200":
           application/json: [{"effect": "allow", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "risk_policy"}}]
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAgentEligibleOwners:
+    speakeasy-default-list-agent-eligible-owners:
+      responses:
+        "200":
+          application/json: [{"display_name": "Keenan13", "user_id": "<id>"}]
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

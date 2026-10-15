@@ -47,6 +47,20 @@ SELECT EXISTS (
     AND metadata->>'operation_id' = @operation_id::text
 ) AS recorded;
 
+-- name: HasAdminAgentCreationInitialization :one
+-- This audit operation is a durable, organization-wide completion receipt.
+-- Deleting a grant must never make the initialization eligible to run again.
+SELECT EXISTS (
+  SELECT 1 FROM audit_logs
+  WHERE organization_id = @organization_id
+    AND project_id IS NULL
+    AND actor_type = 'system'
+    AND actor_id = @actor_id
+    AND action = 'access_role:update'
+    AND subject_type = 'access_role'
+    AND subject_slug = 'admin'
+) AS recorded;
+
 -- name: GetLatestOpenRouterSpendCapAuditOperation :one
 SELECT
   COALESCE(latest.operation_id, '')::text AS operation_id,

@@ -5,6 +5,14 @@ import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type { ServerGroup } from "./serverMerge";
 import type { AssistantGroup } from "./useOrgAssistants";
 
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({
+    data: { members: [] },
+    isPending: false,
+    isError: false,
+  }),
+}));
+
 const mocks = vi.hoisted(() => ({
   inventory: {
     groups: [] as ServerGroup[],
@@ -82,6 +90,24 @@ beforeEach(() => {
   };
 });
 afterEach(cleanup);
+
+it("preserves a blanket owner deny when generic panels are restricted", () => {
+  const onChangeSelectors = vi.fn<() => void>();
+  render(
+    <GrantRuleDrawerContent
+      resourceType="agent_owner"
+      scope="agent:create"
+      selectors={null}
+      onChangeSelectors={onChangeSelectors}
+      isDeny
+      allowedPanels={["servers"]}
+    />,
+  );
+  expect(screen.getByRole("combobox").textContent).toContain(
+    "Anyone in the organization",
+  );
+  expect(onChangeSelectors).not.toHaveBeenCalled();
+});
 
 describe("grant rule server list", () => {
   it("says the inventory is loading rather than empty while it is pending", () => {

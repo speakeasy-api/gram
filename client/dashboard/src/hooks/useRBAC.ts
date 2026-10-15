@@ -242,6 +242,18 @@ export function canCreateAgentForInGrants(
   ownerUserId: string,
 ): boolean {
   if (!callerUserId || !ownerUserId) return false;
+  // A concrete user ID spelled "self" is not the caller-relative target.
+  // Drop relative selectors for that check, but preserve wildcard grants.
+  if (ownerUserId === "self" && callerUserId !== ownerUserId) {
+    const concreteGrants = grants.map((grant) => ({
+      ...grant,
+      selectors: grant.selectors?.filter((s) => s.resourceId !== "self"),
+      directSelectors: grant.directSelectors?.filter(
+        (s) => s.resourceId !== "self",
+      ),
+    }));
+    return hasScopeInGrants(concreteGrants, "agent:create", ownerUserId);
+  }
   const owners =
     callerUserId === ownerUserId ? [ownerUserId, "self"] : [ownerUserId];
   return hasScopeInGrants(grants, "agent:create", owners);

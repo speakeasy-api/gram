@@ -21,6 +21,9 @@ type selectorMatchMode int
 const (
 	selectorMatchNormal selectorMatchMode = iota
 	selectorMatchStrict
+	// selectorMatchAgentOwnerID excludes the relative self target when matching
+	// a concrete owner ID, even when that user's literal ID is "self".
+	selectorMatchAgentOwnerID
 )
 
 // WithStrictSelectorMatch returns a copy that only accepts grants whose every
@@ -32,7 +35,10 @@ func (c Check) WithStrictSelectorMatch() Check {
 }
 
 func (c Check) matchesAllowSelector(selector Selector) bool {
-	if c.selectorMatch == selectorMatchStrict {
+	if c.selectorMatch == selectorMatchAgentOwnerID && selector[SelectorKeyResourceID] == AgentOwnerSelf {
+		return false
+	}
+	if c.selectorMatch != selectorMatchNormal {
 		return selector.StrictMatches(c.selector())
 	}
 	return selector.Matches(c.selector())

@@ -20,6 +20,10 @@ type Service interface {
 	ListSessions(context.Context, *ListSessionsPayload) (res *ListSessionsResult, err error)
 	// RevokeSession implements revokeSession.
 	RevokeSession(context.Context, *RevokeSessionPayload) (err error)
+	// List only active same-organization owners for whom this ordinary human
+	// session may create an agent. Requires live agent:create eligibility, not
+	// directory-read access. Creation revalidates eligibility and membership.
+	ListEligibleOwners(context.Context, *ListEligibleOwnersPayload) (res []*AgentEligibleOwner, err error)
 	// List implements list.
 	List(context.Context, *ListPayload) (res []*ManagedAgent, err error)
 	// Create implements create.
@@ -74,7 +78,15 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [18]string{"listSessions", "revokeSession", "listEligibleOwners", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+
+type AgentEligibleOwner struct {
+	// Active same-organization owner permitted by the caller's live agent creation
+	// grants
+	UserID string
+	// Owner display name
+	DisplayName string
+}
 
 type AgentLifecycle string
 
@@ -210,6 +222,12 @@ type ListDelegableGrantsPayload struct {
 	ToolsetIds []string
 	// First-class agent identifier
 	AgentID string
+}
+
+// ListEligibleOwnersPayload is the payload type of the agents service
+// listEligibleOwners method.
+type ListEligibleOwnersPayload struct {
+	SessionToken *string
 }
 
 // ListPayload is the payload type of the agents service list method.

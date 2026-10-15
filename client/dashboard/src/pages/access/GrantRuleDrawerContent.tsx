@@ -132,11 +132,14 @@ export function GrantRuleDrawerContent({
   // Auto-switch to first allowed panel when current panel isn't permitted.
   // Fires on mount when allowedPanels constrains the picker (e.g. exception rules).
   useEffect(() => {
+    // Owner rules have their own modes, not the generic project/server panels.
+    // In particular, opening a blanket owner deny must not empty its selectors.
+    if (resourceType === "agent_owner") return;
     if (!allowedPanels || allowedPanels.length === 0) return;
     if (allowedPanels.includes(activePanel)) return;
     switchPanel(allowedPanels[0]!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allowedPanels?.join(",")]);
+  }, [resourceType, allowedPanels?.join(",")]);
 
   // Derive allowed project/server IDs from the allow rule's selectors.
   // When an exception picker is open, only show resources the allow rule covers.

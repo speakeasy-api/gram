@@ -105,6 +105,21 @@ func BuildRevokeSessionPayload(agentsRevokeSessionBody string, agentsRevokeSessi
 	return v, nil
 }
 
+// BuildListEligibleOwnersPayload builds the payload for the agents
+// listEligibleOwners endpoint from CLI flags.
+func BuildListEligibleOwnersPayload(agentsListEligibleOwnersSessionToken string) (*agents.ListEligibleOwnersPayload, error) {
+	var sessionToken *string
+	{
+		if agentsListEligibleOwnersSessionToken != "" {
+			sessionToken = &agentsListEligibleOwnersSessionToken
+		}
+	}
+	v := &agents.ListEligibleOwnersPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListPayload builds the payload for the agents list endpoint from CLI
 // flags.
 func BuildListPayload(agentsListSessionToken string) (*agents.ListPayload, error) {

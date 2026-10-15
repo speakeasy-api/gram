@@ -360,6 +360,29 @@ function sel(overrides: Partial<Selector> = {}): Selector {
 // --- computeRuleLabel ---
 
 describe("computeRuleLabel", () => {
+  it.each([
+    { owners: null, label: "Anyone in the organization" },
+    { owners: ["*"], label: "Anyone in the organization" },
+    { owners: [], label: "Select people…" },
+    { owners: ["self"], label: "Each role holder" },
+    { owners: ["user-a"], label: "1 selected person" },
+    { owners: ["user-a", "user-b"], label: "2 selected people" },
+    {
+      owners: ["self", "user-a"],
+      label: "Each role holder and 1 selected person",
+    },
+    {
+      owners: ["self", "user-a", "user-b"],
+      label: "Each role holder and 2 selected people",
+    },
+  ])("labels owner selections as $label", ({ owners, label }) => {
+    const selectors =
+      owners?.map((resourceId) =>
+        sel({ resourceKind: "agent_owner", resourceId }),
+      ) ?? null;
+    expect(computeRuleLabel(selectors, "agent_owner", projects)).toBe(label);
+  });
+
   it("null selectors (mcp) → All servers", () => {
     expect(computeRuleLabel(null, "mcp", projects)).toBe("All servers");
   });

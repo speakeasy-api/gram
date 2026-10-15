@@ -86,7 +86,7 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 		authz.ScopeRiskPolicyBypass, authz.ScopeRiskPolicyBlock,
 		authz.ScopeChatRead, authz.ScopeChatWrite,
 		authz.ScopeLogRead,
-		authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer,
+		authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentCreate, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer,
 		scopeMCPApprovalReadTombstone, scopeMCPApprovalDecideTombstone,
 	}
 	for _, scope := range unsafe {

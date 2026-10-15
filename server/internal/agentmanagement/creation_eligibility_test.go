@@ -9,7 +9,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -28,6 +30,7 @@ func TestAgentCreationEligibilityTargetsTheIntendedOwner(t *testing.T) {
 		{name: "write does not grant provisioning", scope: authz.ScopeAgentWrite, target: "*", owner: "employee"},
 		{name: "self", scope: authz.ScopeAgentCreate, target: authz.AgentOwnerSelf, owner: "caller", allowed: true},
 		{name: "self cannot provision", scope: authz.ScopeAgentCreate, target: authz.AgentOwnerSelf, owner: "employee"},
+		{name: "self cannot provision literal self owner", scope: authz.ScopeAgentCreate, target: authz.AgentOwnerSelf, owner: "self"},
 		{name: "specified owner without recipient eligibility", scope: authz.ScopeAgentCreate, target: "employee", owner: "employee", allowed: true},
 		{name: "specified owner is not self", scope: authz.ScopeAgentCreate, target: "employee", owner: "caller"},
 		{name: "specified owner is not another employee", scope: authz.ScopeAgentCreate, target: "employee", owner: "other"},
@@ -36,16 +39,21 @@ func TestAgentCreationEligibilityTargetsTheIntendedOwner(t *testing.T) {
 		{name: "cross organization", scope: authz.ScopeAgentCreate, target: "*", owner: "foreign"},
 		{name: "targeted cross organization", scope: authz.ScopeAgentCreate, target: "foreign", owner: "foreign"},
 		{name: "absent owner", scope: authz.ScopeAgentCreate, target: "*", owner: "absent"},
+		{name: "inactive recipient membership", scope: authz.ScopeAgentCreate, target: "*", owner: "inactive"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			conn := newTestDB(t)
 			seedOrganization(t, conn, "org-create")
 			seedOrganization(t, conn, "org-foreign")
-			for _, user := range []string{"caller", "employee", "other"} {
+			for _, user := range []string{"caller", "employee", "other", "self"} {
 				seedOrganizationUser(t, conn, "org-create", user)
 			}
 			seedOrganizationUser(t, conn, "org-foreign", "foreign")
+			seedOrganizationUser(t, conn, "org-create", "inactive")
+			require.NoError(t, orgrepo.New(conn).DeleteOrganizationUserRelationship(t.Context(), orgrepo.DeleteOrganizationUserRelationshipParams{
+				OrganizationID: "org-create", UserID: conv.ToPGText("inactive"),
+			}))
 			ctx := validatedHumanContext(t, "org-create", "caller")
 			if tc.scope != "" {
 				seedGrant(t, ctx, conn, "org-create", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), tc.scope, tc.target)

@@ -9,6 +9,7 @@ import { agentsDeletePolicyGrant } from "../funcs/agentsDeletePolicyGrant.js";
 import { agentsGet } from "../funcs/agentsGet.js";
 import { agentsList } from "../funcs/agentsList.js";
 import { agentsListDelegableGrants } from "../funcs/agentsListDelegableGrants.js";
+import { agentsListEligibleOwners } from "../funcs/agentsListEligibleOwners.js";
 import { agentsListPolicyGrants } from "../funcs/agentsListPolicyGrants.js";
 import { agentsListSessions } from "../funcs/agentsListSessions.js";
 import { agentsReassign } from "../funcs/agentsReassign.js";
@@ -20,6 +21,7 @@ import { agentsSuspend } from "../funcs/agentsSuspend.js";
 import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AgentEligibleOwner } from "../models/components/agenteligibleowner.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
 import { AgentPolicyGrantForm } from "../models/components/agentpolicygrantform.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
@@ -47,6 +49,10 @@ import {
   ListAgentDelegableGrantsRequest,
   ListAgentDelegableGrantsSecurity,
 } from "../models/operations/listagentdelegablegrants.js";
+import {
+  ListAgentEligibleOwnersRequest,
+  ListAgentEligibleOwnersSecurity,
+} from "../models/operations/listagenteligibleowners.js";
 import {
   ListAgentPolicyGrantsRequest,
   ListAgentPolicyGrantsSecurity,
@@ -204,6 +210,25 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Array<AgentPolicyGrantForm>> {
     return unwrapAsync(agentsListDelegableGrants(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listEligibleOwners agents
+   *
+   * @remarks
+   * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.
+   */
+  async listEligibleOwners(
+    request?: ListAgentEligibleOwnersRequest | undefined,
+    security?: ListAgentEligibleOwnersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Array<AgentEligibleOwner>> {
+    return unwrapAsync(agentsListEligibleOwners(
       this,
       request,
       security,

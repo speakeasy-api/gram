@@ -11,6 +11,34 @@ import {
 } from "./useRBAC";
 
 describe("owner-scoped agent creation", () => {
+  it("does not confuse a concrete owner ID with the relative self selector", () => {
+    const selfOnly = [
+      {
+        scope: "agent:create",
+        selectors: [{ resourceKind: "agent_owner", resourceId: "self" }],
+      },
+    ];
+    expect(canCreateAgentForInGrants(selfOnly, "user-a", "self")).toBe(false);
+    expect(
+      canCreateAgentForInGrants(
+        [
+          {
+            scope: "agent:create",
+            selectors: [{ resourceKind: "agent_owner", resourceId: "*" }],
+          },
+        ],
+        "user-a",
+        "self",
+      ),
+    ).toBe(true);
+    expect(
+      canCreateAgentForInGrants(
+        [{ scope: "agent:create" }, { ...selfOnly[0], effect: "deny" }],
+        "user-a",
+        "self",
+      ),
+    ).toBe(true);
+  });
   it("limits self grants to the caller", () => {
     const grants = [
       {

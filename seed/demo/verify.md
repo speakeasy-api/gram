@@ -26,6 +26,20 @@ verify those as an ordinary human in the local organization, not through imperso
 
 ## Checks
 
+### Owner-scoped agent creation
+
+In the shared demo, open **Roles & Permissions** → **Roles**. Inspect each role's
+**Platform access** tab and **Create agents** target: Engineer shows **Each role
+holder**, Collaborator shows one selected demo member, and Temporary Escalation
+shows **Anyone in the organization**. Demo visitors cannot create agents or save
+role changes.
+
+In the writable local organization after `mise run seed`, open each of these
+roles as an ordinary administrator. Save, close, and reopen the role editor;
+confirm the same three targets persist, including the selected member's identity.
+Only mark the PAGES.md row verified after both the read-only demo check and local
+save/reopen check pass.
+
 ### Signals Intelligence
 
 Open `/signals-intelligence` in the seeded project with the organization's

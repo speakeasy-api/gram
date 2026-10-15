@@ -77,19 +77,34 @@ It requires a validated ordinary human session and locks both active organizatio
 memberships. The recipient needs no creation permission, and provisioning has no
 second `agent:write` gate. Initial policy containment and atomic auditing still apply.
 
-Admin receives organization-wide creation, including immutable Admin roles whose
-stored grants predate this scope. Member and custom roles do not gain it
+The creation form uses a dedicated eligible-owner list authorized by
+`agent:create`, not the general member directory. It returns only active members
+the caller may create for; neither `org:read` nor `project:read` is required.
+
+New Admin roles receive organization-wide creation. Existing Admin roles need
+the [one-time creation-grant backfill](../server/cmd/tools/migrations/ADMIN_AGENT_CREATION_BACKFILL.md)
+before rollout; creation grants are persisted,
+not synthesized when permissions load. Member and custom roles do not gain it
 automatically. Use the existing role editor's **Create agents** row to grant
 eligibility. Removing it prevents only new creation: intrinsic owner management
 and independently authorized connections retain their own authorization paths.
 Agents cannot hold this permission at runtime.
 
-Platform MCP assessment: no new tool. This outcome requires a validated human
-session creating an agent for an exact owner; general agent management rejects
-MCP and machine authentication. Existing access-role mutation tools accept only
-bounded MCP-access rules, not general role capabilities. Widening them to this
-workflow would bypass their contract. Server authorization tests and dashboard
-owner-selection tests verify the boundary.
+Built-in role names and descriptions are immutable, but their grants can be
+edited. Removing `agent:create` from Admin therefore remains effective, just as
+removing it from a custom role does. Routine role seeding does not restore it.
+
+Platform MCP assessment: no new tool for agent creation or creation-role configuration.
+Creating an agent requires a validated human session for an exact owner; general
+agent management rejects MCP and machine authentication. Configuring creation
+eligibility is a separate administrator outcome, intentionally available only
+through the existing general role editor and management API in this change.
+Existing Platform MCP access-role mutation tools accept only bounded MCP-access
+rules, not general role capabilities. Extending those tools would broaden their
+delegation contract, so they must not accept or replace owner-creation grants.
+The same omission applies to external callers and managed assistants. Server
+authorization and role round-trip tests, plus dashboard owner-selection tests,
+verify the shipped boundary.
 
 ### Scope
 
@@ -657,13 +672,15 @@ Admin defaults include `assistant:read` and `assistant:write`; Member defaults i
 
 System roles are seeded when an organization is provisioned, and the first user is assigned the Admin role. WorkOS organization reconciliation also seeds the defaults as an idempotent backstop. System roles are not meant to be edited like custom roles. Changing their default grants is a product behavior change and should be treated carefully, especially for existing organizations.
 
-## Dashboard Grant Reference
+### Agent creation grant reference
 
 | Agent creation action                                      | Required permission         | Target and behavior                                                                                                                                                         |
 | ---------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Create a new agent                                         | `agent:create`              | `agent_owner` selector: `self`, a specified user ID, or `*`. Owner choices are filtered to permitted members; the server validates both memberships. No `agent:write` gate. |
 | Configure creation eligibility in the existing role editor | `org:admin`                 | The same role assignment and save flow as other permissions. Adding creation defaults to self-owned agents.                                                                 |
 | Manage an already-owned agent                              | Current unblocked ownership | Independent of creation eligibility. The inventory and management controls remain available when creation is removed.                                                       |
+
+## Dashboard Grant Reference
 
 Embedded onboarding configuration requires `org:admin` independently of task assignment. Distributing servers additionally requires `project:write` and `mcp:write`; Anthropic observability requires `project:read`. These gates target the SDK request project (the route project, then explicit `projectSlug` query parameter, then `default`), not the preferred project in the sidebar. Missing projects or grants show a handoff message without mounting protected configuration queries. Entitlement checks remain unchanged.
 

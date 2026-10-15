@@ -107,6 +107,12 @@ var OwnerProfile = Type("AgentOwnerProfile", func() {
 
 })
 
+var EligibleOwner = Type("AgentEligibleOwner", func() {
+	Required("user_id", "display_name")
+	Attribute("user_id", String, "Active same-organization owner permitted by the caller's live agent creation grants")
+	Attribute("display_name", String, "Owner display name")
+})
+
 var Agent = Type("ManagedAgent", func() {
 	Required("id", "owner_user_id", "name", "lifecycle", "permissions", "created_at", "updated_at")
 	Attribute("id", String, func() { Format(FormatUUID) })
@@ -127,6 +133,20 @@ var _ = Service("agents", func() {
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 	sessionMethods()
+
+	Method("listEligibleOwners", func() {
+		Description("List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.")
+		Meta("openapi:operationId", "listAgentEligibleOwners")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEligibleOwners")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentEligibleOwners"}`)
+		Payload(func() { security.SessionPayload() })
+		Result(ArrayOf(EligibleOwner))
+		HTTP(func() {
+			GET("/rpc/agents.listEligibleOwners")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
 
 	Method("list", func() {
 		Meta("openapi:operationId", "listAgents")

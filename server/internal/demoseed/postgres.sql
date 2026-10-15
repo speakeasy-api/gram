@@ -4207,14 +4207,18 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 3 GitHub Check Access grants, found %', stray;
   END IF;
 
-  SELECT count(*) INTO stray FROM principal_grants
-  WHERE organization_id = demo_org AND scope = 'agent:create'
-    AND selectors->>'resource_kind' = 'agent_owner'
-    AND principal_urn IN (
-      SELECT 'role:organization:' || r.id FROM organization_roles r
-      WHERE r.organization_id = demo_org
-        AND r.workos_slug IN ('engineer', 'collaborator', 'temporary-escalation')
-    );
+  SELECT count(*) INTO stray FROM principal_grants g
+  JOIN organization_roles r ON g.principal_urn = 'role:organization:' || r.id
+  WHERE g.organization_id = demo_org AND r.organization_id = demo_org
+    AND g.scope = 'agent:create'
+    AND g.selectors = jsonb_build_object(
+      'resource_kind', 'agent_owner',
+      'resource_id', CASE r.workos_slug
+        WHEN 'engineer' THEN 'self'
+        WHEN 'collaborator' THEN demo_user_ids[2]
+        WHEN 'temporary-escalation' THEN '*'
+      END)
+    AND r.workos_slug IN ('engineer', 'collaborator', 'temporary-escalation');
   IF stray <> 3 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 3 owner-scoped agent creation grants, found %', stray;
   END IF;

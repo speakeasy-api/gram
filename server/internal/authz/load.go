@@ -50,9 +50,9 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 	return withSystemRoleDefaults(grantRows, defaults), nil
 }
 
-// systemRoleDefaults supplies immutable built-in-role capabilities absent from
-// persisted grants. Assistant defaults apply to Admin and Member; agent creation
-// applies only to Admin. Custom roles and individual users never gain defaults.
+// systemRoleDefaults supplies historical assistant capabilities absent from
+// persisted built-in-role grants. Creation eligibility is persisted so removing
+// it from a role remains effective. Custom roles and users never gain defaults.
 func systemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal, grants []Grant) (map[string][]Scope, error) {
 	missing := make(map[string]struct{})
 	for _, principal := range principals {
@@ -63,10 +63,7 @@ func systemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []ur
 		hasAssistant := slices.ContainsFunc(grants, func(grant Grant) bool {
 			return grant.PrincipalUrn == key && ResourceKindForScope(grant.Scope) == ResourceKindAssistant
 		})
-		hasCreate := slices.ContainsFunc(grants, func(grant Grant) bool {
-			return grant.PrincipalUrn == key && grant.Scope == ScopeAgentCreate
-		})
-		if !hasAssistant || !hasCreate {
+		if !hasAssistant {
 			missing[key] = struct{}{}
 		}
 	}
@@ -87,7 +84,7 @@ func systemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []ur
 		}
 		for _, grant := range roleGrants {
 			scope := Scope(grant.Scope)
-			isDefault := ResourceKindForScope(scope) == ResourceKindAssistant || scope == ScopeAgentCreate
+			isDefault := ResourceKindForScope(scope) == ResourceKindAssistant
 			alreadyPresent := slices.ContainsFunc(grants, func(existing Grant) bool {
 				return existing.PrincipalUrn == key && (existing.Scope == scope || (ResourceKindForScope(scope) == ResourceKindAssistant && ResourceKindForScope(existing.Scope) == ResourceKindAssistant))
 			})

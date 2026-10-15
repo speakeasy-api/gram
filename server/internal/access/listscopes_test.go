@@ -48,6 +48,7 @@ func TestService_ListScopes(t *testing.T) {
 	require.Nil(t, bySlug[string(authz.ScopeLogRead)].ExclusionScope)
 	require.Equal(t, "agent_owner", bySlug[string(authz.ScopeAgentCreate)].ResourceType)
 	require.False(t, bySlug[string(authz.ScopeAgentCreate)].AgentEligible)
+	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeAgentCreate)].Visibility)
 	for _, scope := range []authz.Scope{authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer} {
 		require.Equal(t, "agent", bySlug[string(scope)].ResourceType)
 		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)

@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useMembers } from "@gram/client/react-query/members.js";
+import { useAgentEligibleOwners } from "@gram/client/react-query/agentEligibleOwners.js";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
@@ -270,18 +270,27 @@ function CreateAgent({
   // Project leads once one is available; an explicit pick always wins.
   const scope: AgentScope =
     chosenScope ?? (project.id ? "project" : "organization");
-  const { user } = useSession();
-  const { hasScope, canCreateAgentFor } = useRBAC();
-  const members = useMembers(undefined, undefined, {
-    enabled: hasScope("org:read") || hasScope("project:read"),
-  });
-  const owners = (members.data?.members ?? []).filter(
-    (member) => member.id !== user.id && canCreateAgentFor(member.id),
+  const { user, session } = useSession();
+  const { hasScope, canCreateAgentFor, isLoading: grantsLoading } = useRBAC();
+  // Creation eligibility is independent of permission to browse the directory.
+  const eligibleOwners = useAgentEligibleOwners(
+    { gramSession: session },
+    undefined,
+    {
+      enabled: !disabled && !grantsLoading && hasScope("agent:create"),
+      throwOnError: false,
+    },
+  );
+  const owners = (eligibleOwners.data ?? []).filter(
+    (owner) => owner.userId !== user.id && canCreateAgentFor(owner.userId),
   );
   const canCreateForSelf = canCreateAgentFor(user.id);
   const [chosenOwner, setChosenOwner] = useState<string | null>(null);
+  const defaultOwner = canCreateForSelf ? user.id : (owners[0]?.userId ?? "");
+  // Recheck a previous selection against live grants as well as filtering the
+  // cached choices: losing permission must also remove its selected label.
   const ownerUserId =
-    chosenOwner ?? (canCreateForSelf ? user.id : (owners[0]?.id ?? ""));
+    chosenOwner && canCreateAgentFor(chosenOwner) ? chosenOwner : defaultOwner;
   const allowedOwner = canCreateAgentFor(ownerUserId);
   const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
@@ -357,32 +366,38 @@ function CreateAgent({
             </SelectTrigger>
             <SelectContent>
               {canCreateForSelf && <SelectItem value={user.id}>You</SelectItem>}
-              {owners.map((member) => (
-                <SelectItem key={member.id} value={member.id}>
-                  {member.name || member.email}
+              {owners.map((owner) => (
+                <SelectItem key={owner.userId} value={owner.userId}>
+                  {owner.displayName}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {members.isFetching && (
+          {(grantsLoading || eligibleOwners.isFetching) && (
             <Text muted small>
               Loading available owners…
             </Text>
           )}
-          {members.isError && (
+          {eligibleOwners.isError && (
             <div role="alert">
               <Text small>Unable to load available owners.</Text>
-              <Button variant="tertiary" onClick={() => void members.refetch()}>
+              <Button
+                variant="tertiary"
+                onClick={() => void eligibleOwners.refetch()}
+              >
                 Retry
               </Button>
             </div>
           )}
-          {!allowedOwner && !members.isFetching && (
-            <Text small>
-              Ask an organization admin for permission to create agents for the
-              intended owner. Your existing agents remain available.
-            </Text>
-          )}
+          {!allowedOwner &&
+            !grantsLoading &&
+            !eligibleOwners.isFetching &&
+            !eligibleOwners.isError && (
+              <Text small>
+                Ask an organization admin for permission to create agents for
+                the intended owner. Your existing agents remain available.
+              </Text>
+            )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="agent-name">Agent name</Label>

@@ -21,6 +21,7 @@ type Server struct {
 	Mounts              []*MountPoint
 	ListSessions        http.Handler
 	RevokeSession       http.Handler
+	ListEligibleOwners  http.Handler
 	List                http.Handler
 	Create              http.Handler
 	Get                 http.Handler
@@ -67,6 +68,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListSessions", "GET", "/rpc/agents.listSessions"},
 			{"RevokeSession", "POST", "/rpc/agents.revokeSession"},
+			{"ListEligibleOwners", "GET", "/rpc/agents.listEligibleOwners"},
 			{"List", "GET", "/rpc/agents.list"},
 			{"Create", "POST", "/rpc/agents.create"},
 			{"Get", "GET", "/rpc/agents.get"},
@@ -85,6 +87,7 @@ func New(
 		},
 		ListSessions:        NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
 		RevokeSession:       NewRevokeSessionHandler(e.RevokeSession, mux, decoder, encoder, errhandler, formatter),
+		ListEligibleOwners:  NewListEligibleOwnersHandler(e.ListEligibleOwners, mux, decoder, encoder, errhandler, formatter),
 		List:                NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
 		Create:              NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
 		Get:                 NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
@@ -110,6 +113,7 @@ func (s *Server) Service() string { return "agents" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListSessions = m(s.ListSessions)
 	s.RevokeSession = m(s.RevokeSession)
+	s.ListEligibleOwners = m(s.ListEligibleOwners)
 	s.List = m(s.List)
 	s.Create = m(s.Create)
 	s.Get = m(s.Get)
@@ -134,6 +138,7 @@ func (s *Server) MethodNames() []string { return agents.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListSessionsHandler(mux, h.ListSessions)
 	MountRevokeSessionHandler(mux, h.RevokeSession)
+	MountListEligibleOwnersHandler(mux, h.ListEligibleOwners)
 	MountListHandler(mux, h.List)
 	MountCreateHandler(mux, h.Create)
 	MountGetHandler(mux, h.Get)
@@ -239,6 +244,59 @@ func NewRevokeSessionHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "revokeSession")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListEligibleOwnersHandler configures the mux to serve the "agents"
+// service "listEligibleOwners" endpoint.
+func MountListEligibleOwnersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agents.listEligibleOwners", f)
+}
+
+// NewListEligibleOwnersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "listEligibleOwners" endpoint.
+func NewListEligibleOwnersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListEligibleOwnersRequest(mux, decoder)
+		encodeResponse = EncodeListEligibleOwnersResponse(encoder)
+		encodeError    = EncodeListEligibleOwnersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listEligibleOwners")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
 		payload, err := decodeRequest(r)
 		if err != nil {

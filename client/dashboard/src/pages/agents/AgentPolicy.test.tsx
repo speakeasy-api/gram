@@ -20,6 +20,21 @@ import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ScopeRule } from "@/pages/access/types";
 import AgentsPage from "./Agents";
 
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => true,
+    canCreateAgentFor: (ownerId: string) => ownerId === mocks.userId,
+    isLoading: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/agentEligibleOwners.js", () => ({
+  useAgentEligibleOwners: () => ({
+    data: [],
+    isFetching: false,
+    isError: false,
+  }),
+}));
+
 const mocks = vi.hoisted(() => ({
   params: new URLSearchParams(),
   navigate: vi.fn(),
@@ -318,6 +333,7 @@ describe("Creating an agent with permissions", () => {
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
     expect(createdAgentForm()).toEqual({
       name: "Release assistant",
+      ownerUserId: "user_owner",
       projectId: "project_one",
       policyGrants: [
         {
@@ -391,6 +407,7 @@ describe("Creating an agent with permissions", () => {
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
     expect(createdAgentForm()).toEqual({
       name: "Bare",
+      ownerUserId: "user_owner",
       projectId: "project_one",
     });
   });
@@ -425,6 +442,7 @@ describe("Creating an agent with permissions", () => {
       mocks.createAgent.mock.calls[1]?.[0].request.createAgentForm,
     ).toEqual({
       name: "Retryable",
+      ownerUserId: "user_owner",
       projectId: "project_one",
       policyGrants: [
         {

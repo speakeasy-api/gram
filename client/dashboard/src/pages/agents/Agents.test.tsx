@@ -69,6 +69,12 @@ const mocks = vi.hoisted(() => ({
   projectId: "00000000-0000-4000-8000-000000000001",
   createMutate: vi.fn(),
   creationOwners: ["user_owner"] as string[],
+  grantsLoading: false,
+  ownerQuery: vi.fn(),
+  ownersFetching: false,
+  ownersError: false,
+  retryOwners: vi.fn(),
+  directoryRead: true,
   impersonatorEmail: undefined as string | undefined,
   user: {
     id: "user_owner",
@@ -126,28 +132,32 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: () => true,
+    hasScope: (scope: string) =>
+      scope === "agent:create"
+        ? mocks.creationOwners.length > 0
+        : mocks.directoryRead,
     hasAnyScope: () => mocks.creationOwners.length > 0,
     hasAllScopes: () => mocks.creationOwners.length > 0,
     canCreateAgentFor: (id: string) => mocks.creationOwners.includes(id),
-    isLoading: false,
+    isLoading: mocks.grantsLoading,
   }),
 }));
-vi.mock("@gram/client/react-query/members.js", () => ({
-  useMembers: () => ({
-    data: {
-      members: [
-        { id: "user_other", name: "Other Owner", email: "other@example.test" },
+vi.mock("@gram/client/react-query/agentEligibleOwners.js", () => ({
+  useAgentEligibleOwners: (...args: unknown[]) => {
+    mocks.ownerQuery(...args);
+    return {
+      data: [
+        { userId: "user_other", displayName: "Other Owner" },
         {
-          id: "user_denied",
-          name: "Unpermitted Owner",
-          email: "denied@example.test",
+          userId: "user_denied",
+          displayName: "Unpermitted Owner",
         },
       ],
-    },
-    isFetching: false,
-    isError: false,
-  }),
+      isFetching: mocks.ownersFetching,
+      isError: mocks.ownersError,
+      refetch: mocks.retryOwners,
+    };
+  },
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mocks.sdkClient(),
@@ -236,6 +246,10 @@ beforeEach(() => {
   mocks.impersonatorEmail = undefined;
   mocks.scopeOverride = null;
   mocks.creationOwners = ["user_owner"];
+  mocks.grantsLoading = false;
+  mocks.ownersFetching = false;
+  mocks.ownersError = false;
+  mocks.directoryRead = true;
   mocks.agents[0]!.ownerUserId = "user_owner";
   mocks.agents[0]!.ownerProfile = undefined;
   vi.clearAllMocks();
@@ -466,16 +480,74 @@ describe("Agent creation eligibility", () => {
   });
   it("provisions for an allowed owner without self-creation permission", () => {
     mocks.creationOwners = ["user_other"];
+    mocks.directoryRead = false;
     mocks.params = new URLSearchParams("create=true");
     setup();
+    expect(mocks.ownerQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      expect.objectContaining({ enabled: true }),
+    );
     fireEvent.change(screen.getByLabelText("Agent name"), {
       target: { value: "Provisioned" },
     });
+    fireEvent.click(screen.getByRole("combobox", { name: "Owner" }));
+    expect(screen.getByRole("option", { name: "Other Owner" })).toBeTruthy();
+    expect(screen.queryByText("Unpermitted Owner")).toBeNull();
+    fireEvent.click(screen.getByRole("option", { name: "Other Owner" }));
     fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
     expect(
       mocks.createMutate.mock.calls[0]?.[0].request.createAgentForm.ownerUserId,
     ).toBe("user_other");
-    expect(screen.queryByText("Unpermitted Owner")).toBeNull();
+  });
+  it("removes a cached owner and their selected label when permission is lost", () => {
+    mocks.creationOwners = ["user_owner", "user_other"];
+    mocks.params = new URLSearchParams("create=true");
+    const view = setup();
+    fireEvent.click(screen.getByRole("combobox", { name: "Owner" }));
+    fireEvent.click(screen.getByRole("option", { name: "Other Owner" }));
+    expect(
+      screen.getByRole("combobox", { name: "Owner" }).textContent,
+    ).toContain("Other Owner");
+    mocks.creationOwners = ["user_owner"];
+    view.rerenderPage();
+    expect(
+      screen.getByRole("combobox", { name: "Owner" }).textContent,
+    ).toContain("You");
+    expect(screen.queryByText("Other Owner")).toBeNull();
+    fireEvent.click(screen.getByRole("combobox", { name: "Owner" }));
+    expect(screen.queryByRole("option", { name: "Other Owner" })).toBeNull();
+  });
+  it("waits for grants before reporting creation is denied", () => {
+    mocks.creationOwners = [];
+    mocks.grantsLoading = true;
+    mocks.params = new URLSearchParams("create=true");
+    const view = setup();
+    expect(screen.getByText("Loading available owners…")).toBeTruthy();
+    expect(screen.queryByText(/Ask an organization admin/)).toBeNull();
+    mocks.grantsLoading = false;
+    view.rerenderPage();
+    expect(screen.getByText(/Ask an organization admin/)).toBeTruthy();
+  });
+  it("does not report a denial while available owners are loading", () => {
+    mocks.creationOwners = [];
+    mocks.ownersFetching = true;
+    mocks.params = new URLSearchParams("create=true");
+    setup();
+    expect(screen.getByText("Loading available owners…")).toBeTruthy();
+    expect(screen.queryByText(/Ask an organization admin/)).toBeNull();
+  });
+  it("offers a retry rather than a denial when owner discovery fails", () => {
+    mocks.creationOwners = [];
+    mocks.ownersError = true;
+    mocks.params = new URLSearchParams("create=true");
+    setup();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Unable to load available owners.",
+    );
+    expect(screen.queryByText(/Ask an organization admin/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.retryOwners).toHaveBeenCalledOnce();
   });
 });
 

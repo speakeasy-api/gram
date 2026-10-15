@@ -39,7 +39,7 @@ const state = vi.hoisted(() => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
   useProject: () => ({ id: "project-a", slug: "project-slug" }),
-  useSession: () => ({ session: "session-a" }),
+  useSession: () => ({ session: "session-a", user: { id: "user_example" } }),
   useIsPlatformAdmin: () => false,
 }));
 vi.mock("@gram/client/react-query/grants.js", () => ({

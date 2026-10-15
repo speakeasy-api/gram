@@ -17,6 +17,11 @@ func RevokeSessionAgentsPath() string {
 	return "/rpc/agents.revokeSession"
 }
 
+// ListEligibleOwnersAgentsPath returns the URL path to the agents service listEligibleOwners HTTP endpoint.
+func ListEligibleOwnersAgentsPath() string {
+	return "/rpc/agents.listEligibleOwners"
+}
+
 // ListAgentsPath returns the URL path to the agents service list HTTP endpoint.
 func ListAgentsPath() string {
 	return "/rpc/agents.list"

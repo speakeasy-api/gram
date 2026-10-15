@@ -1226,6 +1226,7 @@ function PlatformMatrix({
                 <AppliesTo
                   grants={grants}
                   defs={[scope]}
+                  actionLabel={copy.label}
                   resourceType={area.resourceType}
                   projects={projects}
                   onEditRule={onEditRule}
@@ -1248,6 +1249,7 @@ function PlatformMatrix({
 function AppliesTo({
   grants,
   defs,
+  actionLabel,
   resourceType,
   projects,
   onEditRule,
@@ -1255,6 +1257,7 @@ function AppliesTo({
 }: {
   grants: Grants;
   defs: (ScopeDefinition | undefined)[];
+  actionLabel?: string;
   resourceType: ScopeDefinition["resourceType"];
   projects: ProjectRef[];
   onEditRule: (scope: Scope, ruleIndex: number) => void;
@@ -1268,7 +1271,7 @@ function AppliesTo({
       scope: def.slug as Scope,
       index,
       blocked: rule.effect === "deny",
-      level: position === 0 ? "View" : "Manage",
+      level: actionLabel ?? (position === 0 ? "View" : "Manage"),
       label: computeRuleLabel(rule.selectors, type, projects),
       everywhere: rule.selectors === null,
     }));
