@@ -74,6 +74,10 @@ func (f *fakeStripeWebhookClient) CreateCheckoutSession(context.Context, stripec
 	return nil, errors.New("not implemented")
 }
 
+func (*fakeStripeWebhookClient) PublishableKey() string {
+	return ""
+}
+
 func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
 	f.checkoutCalls.Add(1)
 	return f.checkout, f.checkoutError

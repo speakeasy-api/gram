@@ -50,8 +50,8 @@ type Service interface {
 	CreateCustomerSession(context.Context, *CreateCustomerSessionPayload) (res string, err error)
 	// Create a checkout link for upgrading to the business plan
 	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
-	// Create a Stripe Checkout link for starting PAYG billing
-	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res string, err error)
+	// Create an embedded Stripe Checkout session for starting PAYG billing
+	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res *StripeEmbeddedCheckout, err error)
 	// Get the live lifecycle state of the organization's Stripe PAYG subscription
 	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *StripeSubscription, err error)
 	// Get exact billable usage and estimated cost for the organization's live paid
@@ -400,6 +400,15 @@ type SpendProduct struct {
 	CostUsd string
 	// Dense UTC daily product buckets, including in-progress and future days
 	Buckets []*SpendBucket
+}
+
+// StripeEmbeddedCheckout is the result type of the usage service
+// createStripeCheckout method.
+type StripeEmbeddedCheckout struct {
+	// Client secret Stripe.js uses to mount embedded Checkout
+	ClientSecret string
+	// Stripe publishable key used to load Stripe.js
+	PublishableKey string
 }
 
 // StripeSubscription is the result type of the usage service

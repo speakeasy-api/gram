@@ -129,6 +129,14 @@ var InferenceSpendCap = Type("InferenceSpendCap", func() {
 	Required("key_type", "credits_used", "monthly_credits", "disabled")
 })
 
+// StripeEmbeddedCheckout is what the dashboard needs to mount embedded Checkout.
+var StripeEmbeddedCheckout = Type("StripeEmbeddedCheckout", func() {
+	Attribute("client_secret", String, "Client secret Stripe.js uses to mount embedded Checkout")
+	Attribute("publishable_key", String, "Stripe publishable key used to load Stripe.js")
+
+	Required("client_secret", "publishable_key")
+})
+
 // StripeSubscription reports the live lifecycle state of the organization's
 // Stripe PAYG subscription.
 var StripeSubscription = Type("StripeSubscription", func() {
@@ -571,13 +579,13 @@ var _ = Service("usage", func() {
 	})
 
 	Method("createStripeCheckout", func() {
-		Description("Create a Stripe Checkout link for starting PAYG billing")
+		Description("Create an embedded Stripe Checkout session for starting PAYG billing")
 
 		Payload(func() {
 			security.SessionPayload()
 		})
 
-		Result(String)
+		Result(StripeEmbeddedCheckout)
 
 		HTTP(func() {
 			POST("/rpc/usage.createStripeCheckout")

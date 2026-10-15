@@ -344,13 +344,13 @@ func (c *Client) CreateCheckout(ctx context.Context, p *CreateCheckoutPayload) (
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CreateStripeCheckout(ctx context.Context, p *CreateStripeCheckoutPayload) (res string, err error) {
+func (c *Client) CreateStripeCheckout(ctx context.Context, p *CreateStripeCheckoutPayload) (res *StripeEmbeddedCheckout, err error) {
 	var ires any
 	ires, err = c.CreateStripeCheckoutEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(string), nil
+	return ires.(*StripeEmbeddedCheckout), nil
 }
 
 // GetStripeSubscription calls the "getStripeSubscription" endpoint of the

@@ -415,6 +415,7 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	set.String("environment", "", "")
 	set.String("stripe-api-key", "", "")
+	set.String("stripe-publishable-key", "", "")
 	set.String("stripe-webhook-secret", "", "")
 	set.String("stripe-price-id-tum", "", "")
 	set.String("stripe-price-id-mcp-egress", "", "")

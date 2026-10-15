@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   provisionCatalog,
   preflightLocalSetup,
+  publishableKeyFromStripeCLI,
   setupStripe,
 } from "./setup.mts";
 import { execFileSync } from "node:child_process";
@@ -237,6 +238,7 @@ test("orchestration shares credentials and preflights before remote writes", asy
           "STRIPE_PRICE_ID_MCP_EGRESS",
           "STRIPE_PRICE_ID_RISK_SCANS",
           "STRIPE_PRICE_ID_TUM",
+          "STRIPE_PUBLISHABLE_KEY",
           "STRIPE_WEBHOOK_SECRET",
         ]);
         assert.equal(
@@ -248,6 +250,7 @@ test("orchestration shares credentials and preflights before remote writes", asy
             assert.equal(value, "existing_risk");
         }
         assert.equal(settings.STRIPE_API_KEY, key);
+        assert.equal(settings.STRIPE_PUBLISHABLE_KEY, "");
         assert.equal(settings.STRIPE_WEBHOOK_SECRET, "whsec_synthetic");
         assert.equal(settings.STRIPE_PRICE_ID_MCP_EGRESS, mcpEgressPrice.id);
         assert.equal(settings.STRIPE_PRICE_ID_RISK_SCANS, riskScansPrice.id);
@@ -757,3 +760,22 @@ for (const [first, second] of [
     });
   }
 }
+
+test("reads the Stripe CLI test-mode publishable key", () => {
+  assert.equal(
+    publishableKeyFromStripeCLI(
+      "test_mode_publishable_key = 'pk_test_example123'\ntest_mode_api_key = 'sk_test_example'",
+    ),
+    "pk_test_example123",
+  );
+  assert.equal(
+    publishableKeyFromStripeCLI(
+      "test_mode_pub_key = 'pk_test_older123'\ntest_mode_api_key = 'sk_test_example'",
+    ),
+    "pk_test_older123",
+  );
+  assert.equal(
+    publishableKeyFromStripeCLI("test_mode_api_key = sk_test_only"),
+    "",
+  );
+});

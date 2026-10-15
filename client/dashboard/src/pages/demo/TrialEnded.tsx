@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PaygCheckoutMount } from "@/components/billing/payg-checkout-mount";
 import { useStartPaygCheckout } from "@/components/billing/use-start-payg-checkout";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +25,11 @@ type TrialEndedChoice = "payg" | "sales";
 export default function TrialEnded(): JSX.Element {
   const { session } = useSessionData();
   const trialNow = useTrialNow(session?.trial);
+
+  if (session?.whitelisted) {
+    const slug = session.organization?.slug;
+    return <Navigate to={slug ? `/${slug}/billing` : "/"} replace />;
+  }
 
   if (getTrialLifecycleFromDates(session?.trial, trialNow) !== "expired") {
     return <Navigate to="/" replace />;
@@ -191,6 +197,10 @@ function ExpiredTrialEnded(): JSX.Element {
           </div>
         </Card.Footer>
       </Card>
+      <PaygCheckoutMount
+        session={paygCheckout.session}
+        onClose={paygCheckout.dismissCheckout}
+      />
       <BookingCalendarModal {...modalProps} />
     </AuthShell>
   );

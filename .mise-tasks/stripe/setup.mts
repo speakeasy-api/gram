@@ -237,19 +237,36 @@ function assertPortalConfiguration(configuration: StripePortalConfiguration) {
   );
 }
 
-async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
+// Current CLI builds print test_mode_publishable_key. Older builds print
+// test_mode_pub_key. Either name is the sandbox publishable key.
+const stripePublishableKeyPattern =
+  /(?:test_mode_publishable_key|test_mode_pub_key)\s*=\s*['"]?(pk_test_[A-Za-z0-9_]+)/;
+
+export function publishableKeyFromStripeCLI(configList: string): string {
+  return configList.match(stripePublishableKeyPattern)?.[1] ?? "";
+}
+
+async function resolveSecretKey(): Promise<{
+  key: string;
+  prompted: boolean;
+  publishableKey: string;
+}> {
   const fromEnv = process.env.STRIPE_API_KEY;
   if (fromEnv && fromEnv !== "unset") {
-    return { key: fromEnv, prompted: false };
+    // The saved secret may belong to a different Stripe account than the CLI
+    // login, so do not pair it with the CLI publishable key.
+    return { key: fromEnv, prompted: false, publishableKey: "" };
   }
 
-  // An authenticated Stripe CLI carries a short-lived test-mode key. Use it
-  // for provisioning, the server and listener; persist it consistently. It
-  // expires (typically after 90 days), so this is not durable readiness.
   const cliConfig = await $({
     nothrow: true,
     quiet: true,
   })`stripe config --list`;
+  const publishableKey = publishableKeyFromStripeCLI(cliConfig.stdout);
+
+  // An authenticated Stripe CLI carries a short-lived test-mode key. Use it
+  // for provisioning, the server and listener; persist it consistently. It
+  // expires (typically after 90 days), so this is not durable readiness.
   const cliKey = cliConfig.stdout.match(
     /test_mode_api_key\s*=\s*['"]?((?:sk|rk)_test_[A-Za-z0-9_]+)/,
   )?.[1];
@@ -257,7 +274,7 @@ async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
     log.info(
       "Using the CLI test key for all local Stripe clients. CLI keys expire (typically after 90 days). After expiry, replace the saved key with `mise set --prompt --file mise.local.toml STRIPE_API_KEY` and rerun setup. CLI reauthentication alone does not replace the saved key.",
     );
-    return { key: cliKey, prompted: false };
+    return { key: cliKey, prompted: false, publishableKey };
   }
 
   if (!process.stdin.isTTY) {
@@ -283,7 +300,7 @@ async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
     outro("Cancelled.");
     process.exit(1);
   }
-  return { key: entered, prompted: true };
+  return { key: entered, prompted: true, publishableKey: "" };
 }
 
 async function resolveWebhookSecret(key: string): Promise<string> {
@@ -684,7 +701,7 @@ export async function provisionCatalog(key: string) {
 
 interface SetupDependencies {
   preflight: () => Promise<void>;
-  resolveKey: () => Promise<{ key: string }>;
+  resolveKey: () => Promise<{ key: string; publishableKey?: string }>;
   webhookSecret: (key: string) => Promise<string>;
   provision: typeof provisionCatalog;
   persist: (settings: Record<string, string>) => Promise<void>;
@@ -692,7 +709,7 @@ interface SetupDependencies {
 
 export async function setupStripe(deps: SetupDependencies) {
   await deps.preflight();
-  const { key } = await deps.resolveKey();
+  const { key, publishableKey } = await deps.resolveKey();
   if (!/^(sk|rk)_test_[A-Za-z0-9_]+$/.test(key)) {
     throw new Error("Only Stripe sandbox/test-mode keys are accepted.");
   }
@@ -724,7 +741,7 @@ export async function setupStripe(deps: SetupDependencies) {
       }
     }
   }
-  await deps.persist({
+  const settings: Record<string, string> = {
     STRIPE_API_KEY: key,
     STRIPE_PRICE_ID_TUM: price.id,
     STRIPE_PRICE_ID_MCP_EGRESS: mcpEgressPrice.id,
@@ -742,7 +759,11 @@ export async function setupStripe(deps: SetupDependencies) {
     STRIPE_METER_EVENT_NAME_RISK_LLM_ANALYZER: riskScansMeter.event_name,
     STRIPE_PORTAL_CONFIGURATION_ID: portalConfiguration.id,
     STRIPE_WEBHOOK_SECRET: webhookSecret,
-  });
+  };
+  // Always write the key this run resolved, including empty, so a publishable
+  // key from an earlier account cannot sit next to a different secret.
+  settings.STRIPE_PUBLISHABLE_KEY = publishableKey ?? "";
+  await deps.persist(settings);
 }
 
 /** Worktree-only safety: no database, organization or feature-flag access. */

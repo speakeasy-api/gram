@@ -29,6 +29,7 @@ import { PaygBillingSummary } from "../models/components/paygbillingsummary.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
 import { SpendBreakdownResponse } from "../models/components/spendbreakdownresponse.js";
 import { SpendCap } from "../models/components/spendcap.js";
+import { StripeEmbeddedCheckout } from "../models/components/stripeembeddedcheckout.js";
 import { StripeSubscription } from "../models/components/stripesubscription.js";
 import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
 import { UsageTiers } from "../models/components/usagetiers.js";
@@ -168,13 +169,13 @@ export class Usage extends ClientSDK {
    * createStripeCheckout usage
    *
    * @remarks
-   * Create a Stripe Checkout link for starting PAYG billing
+   * Create an embedded Stripe Checkout session for starting PAYG billing
    */
   async createStripeCheckout(
     request?: CreateStripeCheckoutRequest | undefined,
     security?: CreateStripeCheckoutSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<string> {
+  ): Promise<StripeEmbeddedCheckout> {
     return unwrapAsync(usageCreateStripeCheckout(
       this,
       request,

@@ -30376,7 +30376,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
-	fmt.Fprintln(os.Stderr, `    create-stripe-checkout: Create a Stripe Checkout link for starting PAYG billing`)
+	fmt.Fprintln(os.Stderr, `    create-stripe-checkout: Create an embedded Stripe Checkout session for starting PAYG billing`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Get the live lifecycle state of the organization's Stripe PAYG subscription`)
 	fmt.Fprintln(os.Stderr, `    get-payg-billing-summary: Get exact billable usage and estimated cost for the organization's live paid Stripe service period`)
 	fmt.Fprintln(os.Stderr, `    create-stripe-portal-session: Create a Stripe customer portal session for the organization's PAYG subscription`)
@@ -30627,7 +30627,7 @@ func usageCreateStripeCheckoutUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a Stripe Checkout link for starting PAYG billing`)
+	fmt.Fprintln(os.Stderr, `Create an embedded Stripe Checkout session for starting PAYG billing`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
