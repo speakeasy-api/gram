@@ -36,6 +36,11 @@ func TestCatalogMatchesTheCatalogAsShipped(t *testing.T) {
 		{VendorKey: "skydive", URL: "https://www.skydive.com/api/v1/external-oauth/client-metadata", DisplayName: "Skydive", Enabled: true},
 		{VendorKey: "opencode", URL: "https://opencode.ai/oauth/opencode/client.json", DisplayName: "opencode", Enabled: true},
 		{VendorKey: "github", URL: "https://github.com/copilot/cli/client-metadata.json", DisplayName: "GitHub Copilot CLI", Enabled: true},
+		{VendorKey: "conductor", URL: "https://api.conductor.build/oauth/client-metadata.json", DisplayName: "Conductor", Enabled: true},
+		{VendorKey: "vercel", URL: "https://connect.vercel.com/connectors/*", DisplayName: "Vercel Connect (connectors)", Enabled: true},
+		{VendorKey: "linear", URL: "https://linear.app/.well-known/oauth-client-metadata/mcp.json", DisplayName: "Linear", Enabled: true},
+		{VendorKey: "lovable", URL: "https://api.lovable.dev/.well-known/oauth-client", DisplayName: "Lovable", Enabled: true},
+		{VendorKey: "google", URL: "https://antigravity.google/oauth/client-metadata.json", DisplayName: "Google Antigravity", Enabled: true},
 	}
 
 	require.Equal(t, expected, Catalog())

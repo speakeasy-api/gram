@@ -340,6 +340,47 @@ func BuildGetWorkUnitsTrendPayload(chatGetWorkUnitsTrendFrom string, chatGetWork
 	return v, nil
 }
 
+// BuildLoadChatOverviewPayload builds the payload for the chat
+// loadChatOverview endpoint from CLI flags.
+func BuildLoadChatOverviewPayload(chatLoadChatOverviewID string, chatLoadChatOverviewSessionToken string, chatLoadChatOverviewProjectSlugInput string, chatLoadChatOverviewChatSessionsToken string, chatLoadChatOverviewApikeyToken string) (*chat.LoadChatOverviewPayload, error) {
+	var id string
+	{
+		id = chatLoadChatOverviewID
+	}
+	var sessionToken *string
+	{
+		if chatLoadChatOverviewSessionToken != "" {
+			sessionToken = &chatLoadChatOverviewSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatLoadChatOverviewProjectSlugInput != "" {
+			projectSlugInput = &chatLoadChatOverviewProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatLoadChatOverviewChatSessionsToken != "" {
+			chatSessionsToken = &chatLoadChatOverviewChatSessionsToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if chatLoadChatOverviewApikeyToken != "" {
+			apikeyToken = &chatLoadChatOverviewApikeyToken
+		}
+	}
+	v := &chat.LoadChatOverviewPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
 func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string, chatLoadChatApikeyToken string) (*chat.LoadChatPayload, error) {

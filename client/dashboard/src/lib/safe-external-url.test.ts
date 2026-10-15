@@ -128,16 +128,16 @@ describe("authPageHref", () => {
   });
 
   it("carries a path-form destination, query included", () => {
-    expect(authPageHref("/sign-up", "/~/watchdog?range=7d")).toBe(
-      "/sign-up?redirect=%2F~%2Fwatchdog%3Frange%3D7d",
+    expect(authPageHref("/sign-up", "/@self/watchdog?range=7d")).toBe(
+      "/sign-up?redirect=%2F%40self%2Fwatchdog%3Frange%3D7d",
     );
   });
 
   it("normalizes an absolute same-origin destination to a path", () => {
-    const absolute = new URL("/~/watchdog?range=7d", window.location.origin)
+    const absolute = new URL("/@self/watchdog?range=7d", window.location.origin)
       .href;
     expect(authPageHref("/login", absolute)).toBe(
-      "/login?redirect=%2F~%2Fwatchdog%3Frange%3D7d",
+      "/login?redirect=%2F%40self%2Fwatchdog%3Frange%3D7d",
     );
   });
 

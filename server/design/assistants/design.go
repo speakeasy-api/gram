@@ -82,6 +82,30 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 	})
 
+	Method("upgradeAssistantIdentity", func() {
+		Description("Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.")
+		Payload(func() {
+			Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
+			Attribute("agent_id", String, "An existing agent of the project to use instead of creating one. Requires owning the agent or agent:authorize on it.", func() { Format(FormatUUID) })
+			Attribute("agent_name", String, "The name of the new agent. Cannot be combined with agent_id.", func() {
+				MinLength(1)
+				MaxLength(120)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(shared.Assistant)
+		HTTP(func() {
+			POST("/rpc/assistants.upgradeIdentity")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "upgradeAssistantIdentity")
+		Meta("openapi:extension:x-speakeasy-name-override", "upgradeIdentity")
+	})
+
 	Method("updateAssistant", func() {
 		Description("Update an assistant.")
 
@@ -253,8 +277,8 @@ var CreateAssistantForm = Type("CreateAssistantForm", func() {
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
 	Attribute("instructions", String, "The system instructions for the assistant.")
-	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Toolsets available to the assistant.")
-	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers attached directly to the assistant (remote- or tunnelled-backed).")
+	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.")
+	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.")
 	Attribute("warm_ttl_seconds", Int, "Optional warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Optional maximum active warm runtimes.")
 	Attribute("status", String, "Optional initial status.", func() {
@@ -271,8 +295,8 @@ var UpdateAssistantForm = Type("UpdateAssistantForm", func() {
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
 	Attribute("instructions", String, "The system instructions for the assistant.")
-	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Toolsets available to the assistant.")
-	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers attached directly to the assistant (remote- or tunnelled-backed).")
+	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.")
+	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.")
 	Attribute("warm_ttl_seconds", Int, "Warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Maximum active warm runtimes.")
 	Attribute("status", String, "The assistant status.", func() {

@@ -48,13 +48,20 @@ function ScopeGatedTopLevelItem({
   item,
   scope = ["project:read"],
   resourceId,
+  projectId,
 }: {
   item: AppRoute;
   scope?: Scope | Scope[];
   resourceId?: string;
+  projectId?: string;
 }) {
   return (
-    <RequireScope scope={scope} resourceId={resourceId} level="section">
+    <RequireScope
+      scope={scope}
+      resourceId={resourceId}
+      projectId={projectId}
+      level="section"
+    >
       <SidebarMenuItem>
         <NavButton
           title={item.title}
@@ -93,6 +100,9 @@ export function AppSidebar({
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
   const isAgentManagementEnabled = navAccess.has(routes.agents.url);
+  const isSignalsIntelligenceEnabled = navAccess.has(
+    routes.signalsIntelligence.url,
+  );
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
   // highlight and the page header always agree on the area. "Organization"
@@ -105,12 +115,13 @@ export function AppSidebar({
   const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
   const accessFor = (
     route: AppRoute,
-  ): { scope?: Scope[]; resourceId?: string } => {
+  ): { scope?: Scope[]; resourceId?: string; projectId?: string } => {
     const entry = navAccess.get(route.url);
     return entry
       ? {
           scope: entry.scope.length > 0 ? entry.scope : undefined,
           resourceId: entry.resourceId,
+          projectId: entry.projectId,
         }
       : { scope: ["project:read"] };
   };
@@ -264,7 +275,6 @@ export function AppSidebar({
                   ]),
               { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.shadowAI, ...accessFor(routes.shadowAI) },
             ]}
           />
 
@@ -275,7 +285,13 @@ export function AppSidebar({
             items={[
               { item: routes.costs, ...accessFor(routes.costs) },
               ...(isExploreEnabled
-                ? [{ item: routes.explore, ...accessFor(routes.explore) }]
+                ? [
+                    { item: routes.explore, ...accessFor(routes.explore) },
+                    {
+                      item: routes.dashboards,
+                      ...accessFor(routes.dashboards),
+                    },
+                  ]
                 : []),
               { item: routes.insights, ...accessFor(routes.insights) },
               ...(navAccess.has(routes.fleet.url)
@@ -285,6 +301,14 @@ export function AppSidebar({
                 item: routes.agentSessions,
                 ...accessFor(routes.agentSessions),
               },
+              ...(isSignalsIntelligenceEnabled
+                ? [
+                    {
+                      item: routes.signalsIntelligence,
+                      ...accessFor(routes.signalsIntelligence),
+                    },
+                  ]
+                : []),
               ...(isOrgMemoryEnabled
                 ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
                 : []),

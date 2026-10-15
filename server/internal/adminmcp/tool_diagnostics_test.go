@@ -17,14 +17,14 @@ import (
 
 type recordingDiagnosticsReader struct {
 	*recordingProjectReader
-	onboardingInput *gen.GetOrganizationOnboardingPayload
-	onboarding      *gen.AdminOnboardingConfiguration
+	onboardingInput *gen.GetOrganizationOnboardingPlaybookPayload
+	onboarding      *gen.AdminOrganizationOnboardingPlaybook
 	serversInput    *gen.ListProjectMcpServersPayload
 	servers         *gen.AdminListProjectMcpServersResult
 	err             error
 }
 
-func (r *recordingDiagnosticsReader) GetOrganizationOnboarding(_ context.Context, input *gen.GetOrganizationOnboardingPayload) (*gen.AdminOnboardingConfiguration, error) {
+func (r *recordingDiagnosticsReader) GetOrganizationOnboardingPlaybook(_ context.Context, input *gen.GetOrganizationOnboardingPlaybookPayload) (*gen.AdminOrganizationOnboardingPlaybook, error) {
 	r.onboardingInput = input
 	return r.onboarding, r.err
 }
@@ -70,7 +70,7 @@ func testDiagnosticsReads() *recordingDiagnosticsReader {
 	projectReads.project = &gen.AdminProjectDetail{ID: testProjectID, OrganizationID: "org-a"}
 	return &recordingDiagnosticsReader{
 		recordingProjectReader: projectReads,
-		onboarding:             &gen.AdminOnboardingConfiguration{OrganizationID: "org-a"},
+		onboarding:             &gen.AdminOrganizationOnboardingPlaybook{OrganizationID: "org-a"},
 		servers:                &gen.AdminListProjectMcpServersResult{},
 	}
 }
@@ -78,10 +78,14 @@ func testDiagnosticsReads() *recordingDiagnosticsReader {
 func TestOrganizationOnboardingExactTargetAndRedactedProjection(t *testing.T) {
 	t.Parallel()
 	reads := testDiagnosticsReads()
-	preset := "guided"
-	reads.onboarding.Preset = &preset
-	reads.onboarding.Tasks = []*gen.AdminOnboardingTask{{Key: "connect", Title: "customer-authored private title", Description: "private description", Hidden: true}}
-	reads.onboarding.Presets = []*gen.AdminOnboardingPreset{{Key: "guided", VisibleTaskKeys: []string{"connect"}}}
+	// The id and the slug differ so the projection is seen to pick the slug.
+	useCaseID, useCase, useCaseName := "use-case-uuid-a", "distribution", "Distribution"
+	reads.onboarding.Playbook = &gen.AdminOnboardingPlaybook{
+		ID: "playbook-a", UseCaseID: &useCaseID, UseCaseSlug: &useCase, UseCaseName: &useCaseName,
+		Name: "staff-authored playbook name", Description: "private playbook description", IsDefault: true,
+		Steps: []*gen.AdminOnboardingPlaybookStep{{Slug: "platform-mcp", Title: "customer-facing step title"}},
+	}
+	reads.onboarding.Applicability = []*gen.AdminOnboardingStepApplicability{{Slug: "platform-mcp", Title: "customer-facing step title", Applies: false, Reason: "private stack reason"}}
 	status, body, data := callDiagnosticReadTool(t, reads, "get_organization_onboarding", `{"organization_id":"org-a"}`)
 	require.Equal(t, http.StatusOK, status)
 	require.Equal(t, "org-a", reads.recordingOrganizationReader.getInput.IDOrSlug)
@@ -90,13 +94,31 @@ func TestOrganizationOnboardingExactTargetAndRedactedProjection(t *testing.T) {
 	var output OrganizationOnboardingOutput
 	require.NoError(t, json.Unmarshal(data, &output))
 	require.Equal(t, OrganizationOnboardingOutput{
-		OrganizationID: "org-a", Preset: &preset,
-		Tasks:   []OnboardingTask{{Key: "connect", Hidden: true}},
-		Presets: []OnboardingPreset{{Key: "guided", VisibleTaskKeys: []string{"connect"}}},
+		OrganizationID: "org-a",
+		Playbook:       &OnboardingPlaybook{ID: "playbook-a", UseCase: &useCase, Default: true, Custom: false},
+		Steps:          []OnboardingStep{{Slug: "platform-mcp", Applies: false}},
 	}, output)
-	require.NotContains(t, body, "customer-authored private title")
-	require.NotContains(t, body, "private description")
+	require.NotContains(t, body, "staff-authored playbook name")
+	require.NotContains(t, body, "private playbook description")
+	require.NotContains(t, body, "customer-facing step title")
+	require.NotContains(t, body, "private stack reason")
+	require.NotContains(t, body, useCaseName)
 	require.NotContains(t, body, "admin_session_token")
+
+	// An organization's own playbook is reported as custom, and one that
+	// belongs to another organization is never reported at all.
+	reads = testDiagnosticsReads()
+	other := "org-b"
+	reads.onboarding.Playbook = &gen.AdminOnboardingPlaybook{ID: "playbook-b", OrganizationID: &other}
+	_, body, _ = callDiagnosticReadTool(t, reads, "get_organization_onboarding", `{"organization_id":"org-a"}`)
+	require.Contains(t, body, `"isError":true`)
+	own := "org-a"
+	reads.onboarding.Playbook = &gen.AdminOnboardingPlaybook{ID: "playbook-b", OrganizationID: &own}
+	_, _, data = callDiagnosticReadTool(t, reads, "get_organization_onboarding", `{"organization_id":"org-a"}`)
+	var ownOutput OrganizationOnboardingOutput
+	require.NoError(t, json.Unmarshal(data, &ownOutput))
+	require.Equal(t, &OnboardingPlaybook{ID: "playbook-b", UseCase: nil, Default: false, Custom: true}, ownOutput.Playbook)
+	require.Empty(t, ownOutput.Steps)
 }
 
 func TestListProjectMCPServersExactTargetAndRedactedProjection(t *testing.T) {

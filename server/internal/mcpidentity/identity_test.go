@@ -101,7 +101,7 @@ func TestValidatorBoundaryWorkloadSessionReplacesEarlierProvenance(t *testing.T)
 func TestZeroValidatorBoundaryDoesNotClearProvenanceForWorkload(t *testing.T) {
 	t.Parallel()
 
-	stamped := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context())
+	stamped := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context(), "key_test")
 
 	var inert mcpidentity.ValidatorBoundary
 	subject := urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main")
@@ -127,7 +127,7 @@ func TestValidatorBoundaryNonUserStrategiesCannotCarryUser(t *testing.T) {
 		ctx  func() context.Context
 	}{
 		{want: mcpidentity.KindAssistant, ctx: func() context.Context { return boundary.StampAssistant(t.Context()) }},
-		{want: mcpidentity.KindAPIKey, ctx: func() context.Context { return boundary.StampAPIKey(t.Context()) }},
+		{want: mcpidentity.KindAPIKey, ctx: func() context.Context { return boundary.StampAPIKey(t.Context(), "key_test") }},
 		{want: mcpidentity.KindChatSession, ctx: func() context.Context { return boundary.StampChatSession(t.Context()) }},
 	}
 	for _, tt := range tests {
@@ -157,7 +157,7 @@ func TestValidatorBoundaryStampAgent(t *testing.T) {
 	require.Equal(t, id.String(), identity.AgentID())
 	require.Empty(t, identity.UserID())
 	// A subsequent non-agent credential must not retain an earlier agent claim.
-	identity, ok = mcpidentity.FromContext(boundary.StampAPIKey(boundary.StampAgent(t.Context(), id)))
+	identity, ok = mcpidentity.FromContext(boundary.StampAPIKey(boundary.StampAgent(t.Context(), id), "key_test"))
 	require.True(t, ok)
 	require.Equal(t, mcpidentity.KindAPIKey, identity.Kind())
 	require.Empty(t, identity.AgentID())

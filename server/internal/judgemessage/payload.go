@@ -15,6 +15,8 @@ const (
 	// one: without it an oversized payload can blow the judge model's context
 	// window, producing an error that a fail-open policy turns into an allow.
 	maxPayloadBodyLen = 16000
+	// maxPayloadToolIdentityLen bounds each tool identity field in runes.
+	maxPayloadToolIdentityLen = 256
 	// maxPayloadRenderedToolCall caps how many tool calls a single multi-call
 	// message renders. Oversized call lists keep head and tail calls, and set
 	// tool_calls_truncated.
@@ -59,9 +61,11 @@ type Payload struct {
 }
 
 type ToolPayload struct {
-	MCPServer   string `json:"mcp_server,omitempty"`
-	MCPFunction string `json:"mcp_function,omitempty"`
-	Name        string `json:"name,omitempty"`
+	// IdentityTruncated marks altered name or MCP identity fields.
+	IdentityTruncated bool   `json:"identity_truncated,omitempty"`
+	MCPServer         string `json:"mcp_server,omitempty"`
+	MCPFunction       string `json:"mcp_function,omitempty"`
+	Name              string `json:"name,omitempty"`
 }
 
 type ToolCallPayload struct {
@@ -209,11 +213,14 @@ func payloadDescriptors(messageType message.Type) (producedBy, bodyKind string) 
 }
 
 func payloadTool(name, mcpServer, mcpFunction string) *ToolPayload {
+	name, nameTruncated := truncatePayloadBody(name, maxPayloadToolIdentityLen)
+	mcpServer, serverTruncated := truncatePayloadBody(mcpServer, maxPayloadToolIdentityLen)
+	mcpFunction, functionTruncated := truncatePayloadBody(mcpFunction, maxPayloadToolIdentityLen)
 	if mcpServer != "" || mcpFunction != "" {
-		return &ToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: ""}
+		return &ToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: "", IdentityTruncated: serverTruncated || functionTruncated}
 	}
 	if name != "" {
-		return &ToolPayload{MCPServer: "", MCPFunction: "", Name: name}
+		return &ToolPayload{MCPServer: "", MCPFunction: "", Name: name, IdentityTruncated: nameTruncated}
 	}
 	return nil
 }

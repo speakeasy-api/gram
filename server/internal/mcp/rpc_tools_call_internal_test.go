@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -139,4 +140,21 @@ func TestRecordToolCallErrorStatus_IgnoresUnclassifiedErrors(t *testing.T) {
 	recordToolCallErrorStatus(t.Context(), rw, errors.New("connection reset by peer"))
 
 	require.Equal(t, http.StatusOK, rw.statusCode)
+}
+
+func TestDiscardWithheldBodyPreventsTelemetryContent(t *testing.T) {
+	t.Parallel()
+
+	rw := &toolCallResponseWriter{
+		statusCode: http.StatusOK,
+		headers:    make(http.Header),
+		body:       bytes.NewBufferString("person@example.com"),
+	}
+
+	discardWithheldBody(rw.body)
+	attrs := tm.HTTPLogAttributes{}
+	attrs.RecordResponseBodyContent(rw.body.Bytes())
+
+	require.Zero(t, rw.body.Len())
+	require.NotContains(t, attrs, attr.GenAIToolCallResultKey)
 }

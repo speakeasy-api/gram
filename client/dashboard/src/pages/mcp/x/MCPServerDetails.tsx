@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
@@ -12,6 +13,8 @@ import {
 } from "@/lib/utils";
 import { getMcpServerArgs, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import type {
   McpServer,
   McpServerVisibility,
@@ -42,11 +45,14 @@ import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
   activeTabFromPath,
   initialTabFromHash,
+  isCanonicalHostedWrapper,
   isLegacyAuthenticationTabPath,
   isLegacyToolsTabPath,
   mcpServerTabHref,
   MCP_SERVER_TAB_URLS,
+  toolsetTabForServerPath,
 } from "./MCPServerDetailsRouting";
+import { mcpDetailTabHref } from "../MCPDetailsRouting";
 import { InspectTab } from "./tabs/InspectTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { MCP_AGENT_SETUP_SECTION_ID } from "./tabs/settings/sections/AgentSetupSection";
@@ -54,11 +60,16 @@ import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authenti
 import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./tabs/settings/sections/PublicAccessSection";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { GuardrailsTab } from "./tabs/guardrails/GuardrailsTab";
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
+  const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
+  const mcpScoped = mcpScopedFlag.status === "enabled";
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const tabContentRef = useTabScrollReset(activeTab);
@@ -77,6 +88,25 @@ export default function MCPServerDetails(): JSX.Element {
   });
 
   const mcpServerId = mcpServer?.id ?? "";
+
+  const toolsetTab = toolsetTabForServerPath(
+    location.pathname,
+    idOrSlug,
+    location.hash,
+  );
+  const canonicalWrapper =
+    mcpServer !== undefined &&
+    toolsetTab !== undefined &&
+    isCanonicalHostedWrapper(mcpServer);
+  const gramProject = useProjectSlugForRequests();
+  const { data: toolsetsResult, isLoading: isLoadingToolsets } =
+    useListToolsets({ gramProject }, undefined, {
+      enabled: canonicalWrapper,
+      throwOnError: false,
+    });
+  const wrappedToolsetSlug = canonicalWrapper
+    ? toolsetsResult?.toolsets.find((t) => t.id === mcpServer?.toolsetId)?.slug
+    : undefined;
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
@@ -100,6 +130,14 @@ export default function MCPServerDetails(): JSX.Element {
   }
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
+  }
+  if (wrappedToolsetSlug && toolsetTab) {
+    return (
+      <Navigate
+        to={mcpDetailTabHref(routes, wrappedToolsetSlug, toolsetTab)}
+        replace
+      />
+    );
   }
   if (legacyAuthenticationPath) {
     return (
@@ -141,6 +179,7 @@ export default function MCPServerDetails(): JSX.Element {
     );
   }
   const renderTabContent = () => {
+    if (canonicalWrapper && isLoadingToolsets) return null;
     switch (activeTab) {
       case "overview":
         return (
@@ -174,7 +213,7 @@ export default function MCPServerDetails(): JSX.Element {
                   scope kind as toolset-backed ones (see selector.go), so
                   MCPTeamAccessTab is reused as-is with the mcp_server's
                   id as the resource id. No `tools` prop because the
-                  Remote MCP backend doesn't expose a Gram-side tool
+                  Remote MCP backend doesn't expose a Speakeasy-side tool
                   catalog. */}
                 <MCPTeamAccessTab
                   resourceId={mcpServer.id}
@@ -182,6 +221,19 @@ export default function MCPServerDetails(): JSX.Element {
                 />
               </RequireScope>
             </RequireScope>
+          )
+        );
+      case "guardrails":
+        // Wait out the flag lookup rather than bouncing a deep link to it.
+        if (mcpScopedFlag.status === "loading") return null;
+        return mcpServer && mcpScoped && !mcpServer.unproxiedMcpServerId ? (
+          <GuardrailsTab mcpServer={mcpServer} />
+        ) : (
+          mcpServer && (
+            <Navigate
+              to={mcpServerTabHref(routes, idOrSlug, "overview")}
+              replace
+            />
           )
         );
       case "sessions":
@@ -309,7 +361,7 @@ export function MCPServerStatusDropdown({
   const routes = useRoutes();
   const publicAccessHref = `${mcpServerTabHref(routes, mcpServerRouteParam(server), "settings")}#${MCP_PUBLIC_ACCESS_SECTION_ID}`;
 
-  // Unproxied servers have no Gram-hosted endpoint for disabled/private to
+  // Unproxied servers have no Speakeasy-hosted endpoint for disabled/private to
   // gate — the vendor's own server is reachable regardless of this setting —
   // so there's nothing to toggle. Still show the record's actual stored
   // value (not a hardcoded "Public") so this can't drift from what Settings
@@ -348,7 +400,7 @@ export function MCPServerStatusDropdown({
               key={option.value}
               disabled={optionBlocked}
               onSelect={() => {
-                if (publicBlocked) return;
+                if (optionBlocked) return;
                 updateVisibility(option.value);
               }}
               className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
@@ -452,13 +504,15 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
+  // These controls offer no public state for hosted servers; their visibility stays on the toolset page.
+  const canWrite = hasScope("mcp:write") && !isCanonicalHostedWrapper(server);
   const queryClient = useQueryClient();
   const update = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllResourceAudience(queryClient, { refetchType: "all" }),
         // Enabling a disabled server (e.g. disabled -> private) auto-attaches
         // it to the Default plugin server-side, which the plugin banner's
         // membership check and publish-freshness state need to pick up.

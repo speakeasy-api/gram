@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 type mockPaygChatKeyProvisioner struct {
@@ -200,8 +201,7 @@ func setupProductionPaygChatKeyReconciler(t *testing.T, causes []string) (*activ
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 	return activities.NewReconcilePaygOpenRouterChatKey(testenv.NewLogger(t), db, production), db, organizationID, recorder
 }
@@ -581,31 +581,12 @@ func TestRefreshOpenRouterInternalKeyHoldsBillingLockAcrossUpstreamPatch(t *test
 		require.FailNow(t, "legacy Security inference key refresh did not reach upstream PATCH")
 	}
 
-	contender, err := db.Acquire(t.Context())
-	require.NoError(t, err)
-	defer contender.Release()
-	lockDone := make(chan error, 1)
-	go func() {
-		queries := activitiesrepo.New(contender)
-		lockErr := queries.AcquireOpenRouterKeyBillingLock(t.Context(), activitiesrepo.AcquireOpenRouterKeyBillingLockParams{
-			KeyType:        string(openrouter.KeyTypeInternal),
-			OrganizationID: organizationID,
-		})
-		if lockErr == nil {
-			_, lockErr = queries.ReleaseOpenRouterKeyBillingLock(t.Context(), activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{
-				KeyType:        string(openrouter.KeyTypeInternal),
-				OrganizationID: organizationID,
-			})
-		}
-		lockDone <- lockErr
-	}()
-
-	select {
-	case lockErr := <-lockDone:
-		require.NoError(t, lockErr)
-		require.FailNow(t, "billing lock was released before upstream PATCH completed")
-	case <-time.After(150 * time.Millisecond):
-	}
+	probe := testenv.BeginTx(t, t.Context(), db)
+	testenv.SetLockTimeout(t, t.Context(), probe, 50*time.Millisecond)
+	params := usagerepo.AcquireOpenRouterBillingLockParams{KeyType: string(openrouter.KeyTypeInternal), OrganizationID: organizationID}
+	err := usagerepo.New(probe).AcquireOpenRouterBillingLock(t.Context(), params)
+	testenv.RequireLockNotAvailable(t, err)
+	require.NoError(t, probe.Rollback(t.Context()))
 
 	release()
 	select {
@@ -614,11 +595,9 @@ func TestRefreshOpenRouterInternalKeyHoldsBillingLockAcrossUpstreamPatch(t *test
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "legacy Security inference key refresh did not finish")
 	}
-	select {
-	case lockErr := <-lockDone:
-		require.NoError(t, lockErr)
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "billing writer did not acquire released lock")
-	}
+	probe = testenv.BeginTx(t, t.Context(), db)
+	testenv.SetLockTimeout(t, t.Context(), probe, time.Second)
+	require.NoError(t, usagerepo.New(probe).AcquireOpenRouterBillingLock(t.Context(), params))
+	require.NoError(t, probe.Rollback(t.Context()))
 	provisioner.AssertExpectations(t)
 }

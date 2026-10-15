@@ -25,11 +25,6 @@ import (
 // with a key from its set; detaching the set leaves it declaring a method it
 // cannot execute, which fails at the counterparty's token endpoint as an
 // opaque 401 rather than here.
-//
-// Unreachable until AIM-156 adds private_key_jwt to tokenEndpointAuthMethodEnum.
-// That ordering is deliberate: the guard lands before the value it guards is
-// selectable, so there is never a window where an administrator can choose a
-// method Gram cannot execute.
 func requireDetachableKeySet(client repo.RemoteSessionClient) error {
 	if TokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String) != TokenEndpointAuthMethodPrivateKeyJWT {
 		return nil
@@ -78,6 +73,18 @@ func interpretClientLock(ctx context.Context, logger *slog.Logger, err error) er
 	return nil
 }
 
+// refuseGlobalPrivateKeyJWT refuses private_key_jwt on a global
+// (platform-admin) client, which can never hold a key set: those rows carry a
+// NULL organization_id by construction, and
+// remote_session_clients_json_web_key_set_id_check forbids a set without one.
+func refuseGlobalPrivateKeyJWT(method *string) error {
+	if method == nil || TokenEndpointAuthMethod(*method) != TokenEndpointAuthMethodPrivateKeyJWT {
+		return nil
+	}
+
+	return oops.E(oops.CodeConflict, nil, "global clients cannot use private_key_jwt: a JSON Web Key Set belongs to an organization, and global clients have none")
+}
+
 // requirePrivateKeyJWTKeySet is the converse of requireDetachableKeySet: a
 // client cannot declare private_key_jwt without a set to sign with, in the same
 // way that requireDetachableKeySet stops the set being taken away afterwards.
@@ -89,17 +96,10 @@ func interpretClientLock(ctx context.Context, logger *slog.Logger, err error) er
 // LockRemoteSessionClientForAuthMethodWrite on the client row first, which is
 // what actually makes the pair hold.
 //
-// existing is the set the client already holds. On a create that is always the
-// zero value, because a client is born without one: the link is attached
-// through attachKeySet after the fact, so declaring private_key_jwt up front is
-// always a refusal. On a global (platform-admin) client it is also always the
-// zero value, permanently — those rows carry a NULL organization_id by
-// construction and remote_session_clients_json_web_key_set_id_check forbids a
-// set without one.
-//
-// Unreachable until AIM-156 adds private_key_jwt to tokenEndpointAuthMethodEnum;
-// Goa rejects the value at the boundary until then. See
-// TokenEndpointAuthMethodPrivateKeyJWT.
+// existing is the set the client already holds. On a create it is the set the
+// create form names, already resolved by resolveCreateKeySet, so declaring
+// private_key_jwt without one is a refusal. Global clients use
+// refuseGlobalPrivateKeyJWT instead, because they can never hold a set.
 func requirePrivateKeyJWTKeySet(method *string, existing uuid.NullUUID) error {
 	if method == nil || TokenEndpointAuthMethod(*method) != TokenEndpointAuthMethodPrivateKeyJWT {
 		return nil
@@ -109,5 +109,5 @@ func requirePrivateKeyJWTKeySet(method *string, existing uuid.NullUUID) error {
 		return nil
 	}
 
-	return oops.E(oops.CodeConflict, nil, "private_key_jwt requires an attached JSON Web Key Set; attach one before selecting this authentication method")
+	return oops.E(oops.CodeConflict, nil, "private_key_jwt requires a JSON Web Key Set; pass json_web_key_set_id on create, or attach one before selecting this authentication method")
 }

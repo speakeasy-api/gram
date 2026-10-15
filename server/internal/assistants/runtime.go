@@ -232,6 +232,8 @@ func runtimeRequestContext(parent context.Context, maxTimeSeconds int, fallback 
 // assistant-scoped JWT from the /turn request, so the auth token is not
 // included.
 type threadBootstrap struct {
+	AssistantID    string             `json:"assistant_id"`
+	ProjectID      string             `json:"project_id"`
 	Model          string             `json:"model"`
 	Instructions   string             `json:"instructions,omitempty"`
 	CompletionsURL string             `json:"completions_url"`
@@ -470,6 +472,9 @@ var ErrRuntimeUnhealthy = errors.New("assistant runtime unhealthy")
 // fail the event and leave the VM warm to handle subsequent events.
 var ErrCompletionFailed = errors.New("assistant completion failed")
 
+// ErrRuntimeInvocationBusy is backpressure, not a failed execution attempt.
+var ErrRuntimeInvocationBusy = errors.New("assistant invocation busy")
+
 // ErrHistoryCorrupted signals the upstream provider rejected the replayed
 // transcript as malformed or oversize. Distinct from ErrCompletionFailed:
 // trimming history and retrying typically clears it, so callers self-heal
@@ -514,11 +519,15 @@ var runnerHistoryRejectMarkers = []string{
 // is in the chain) the VM is alive and must not be torn down on its own; only
 // a transport failure — or a 5xx we cannot attribute to a deterministic cause —
 // is treated as unhealthy. "provider error" is agentkit-provider-openrouter's
-// prefix; "completion failed" is Gram's gateway-stamped variant;
-// chat.IsHistoryCorrupted detects the Gram marker stamped on upstream 400/422.
+// prefix; "completion failed" is Speakeasy's gateway-stamped variant;
+// chat.IsHistoryCorrupted detects the Speakeasy marker stamped on upstream 400/422.
 func classifyTurnError(err error) error {
 	if err == nil {
 		return nil
+	}
+	var busy *runtimeResponseError
+	if errors.As(err, &busy) && busy.StatusCode == http.StatusTooManyRequests && busy.Body == ErrRuntimeInvocationBusy.Error() {
+		return ErrRuntimeInvocationBusy
 	}
 	if chat.IsHistoryCorrupted(err) {
 		return ErrHistoryCorrupted
@@ -554,6 +563,7 @@ const (
 	turnOutcomeRuntimeUnhealthyExhausted turnOutcome = "runtime_unhealthy_exhausted"
 	turnOutcomeHistoryCorrupted          turnOutcome = "history_corrupted"
 	turnOutcomeCompletionFailed          turnOutcome = "completion_failed"
+	turnOutcomeIdentityRejected          turnOutcome = "identity_rejected"
 	turnOutcomeTransient                 turnOutcome = "transient"
 )
 
@@ -567,6 +577,8 @@ func turnErrorBucket(err error) turnOutcome {
 		return turnOutcomeHistoryCorrupted
 	case errors.Is(err, ErrCompletionFailed):
 		return turnOutcomeCompletionFailed
+	case errors.Is(err, ErrTurnIdentity):
+		return turnOutcomeIdentityRejected
 	default:
 		return turnOutcomeTransient
 	}

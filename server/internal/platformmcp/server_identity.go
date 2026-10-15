@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/google/uuid"
@@ -24,15 +25,25 @@ type serverIdentity struct {
 	// never left unscoped.
 	mcpServerID string
 
-	// toolsetSlug is the hosted toolset the server fronts. It is empty for a
-	// remote, tunneled, or unproxied server, and for a toolset that more than
-	// one configured server wraps, where the slug cannot single one out.
+	// mcpSlug is the configured slug, or empty when the server has none. The
+	// Tool Logs matcher stamps it as the target id of a proxied call and falls
+	// back to the configured id when it is empty, so a trace-level read needs
+	// both spellings to match one server's rows.
+	mcpSlug string
+
+	// toolsetSlug is the hosted toolset the server fronts. It is empty unless
+	// the server hosts the toolset (see ListPlatformMCPServerIdentities) and is
+	// the only configured server that does.
 	//
 	// Emptiness matters: the summary reads treat an empty slug as "no filter",
 	// so a caller that passes it through unchecked gets the whole project's
 	// numbers back under one MCP's name. Every use of this value must handle
 	// the empty case rather than forwarding it.
 	toolsetSlug string
+
+	// toolsetShared marks a toolsetSlug that other servers' calls also carry,
+	// so only reads that can exclude their server ids may match it.
+	toolsetShared bool
 
 	// urlSuffixes is how the server appears in the URL a hook-observed client
 	// called, or empty when the server has no slug.
@@ -90,10 +101,11 @@ func (s *DiagnosticsService) serverIdentity(ctx context.Context, organizationID,
 		return serverIdentity{}, fmt.Errorf("parse mcp id: %w", err)
 	}
 	id := parsedMCP.String()
-	servers, err := s.listConfiguredServers(ctx, organizationID, projectID)
+	rows, err := s.listServerIdentityRows(ctx, organizationID, projectID)
 	if err != nil {
 		return serverIdentity{}, err
 	}
+	servers := configuredServers(rows)
 	var target *servernames.ConfiguredServer
 	for i := range servers {
 		if servers[i].ID == id {
@@ -120,10 +132,84 @@ func (s *DiagnosticsService) serverIdentity(ctx context.Context, organizationID,
 	}
 	return serverIdentity{
 		mcpServerID: id,
+		mcpSlug:     target.Slug,
 		toolsetSlug: toolsetSlug,
+		toolsetShared: slices.ContainsFunc(rows, func(row platformrepo.ListPlatformMCPServerIdentitiesRow) bool {
+			return row.ToolsetShared && row.McpServerID.String() == id
+		}),
 		urlSuffixes: mcpURLSuffixes(target.Slug),
 		toolSources: servernames.NewResolver(servers).ReportedNames(id),
 	}, nil
+}
+
+// toolLogsTargets is how a trace-level read narrows to one configured server.
+// The Tool Logs query classifies each row by target type and matches an
+// identity only under the type it can occur as, so the selectors are kept
+// apart rather than pooled.
+type toolLogsTargets struct {
+	// mcpServerTargetIDs match proxied calls, which the matcher folds onto the
+	// server slug, or the configured id when it has no slug, under the hosted
+	// or tunneled target type.
+	mcpServerTargetIDs []string
+	// hostedToolsetSlugs match calls that arrived at a hosted toolset directly,
+	// and hook-observed calls whose URL resolved to it.
+	hostedToolsetSlugs []string
+}
+
+// empty reports that nothing reliable identifies the server. It is load
+// bearing: the Tool Logs query treats an absent target selector as "no
+// filter", so forwarding empty selectors would read the whole project under
+// one server's name.
+func (t toolLogsTargets) empty() bool {
+	return len(t.mcpServerTargetIDs) == 0 && len(t.hostedToolsetSlugs) == 0
+}
+
+// toolLogsTargets narrows a trace-level read to this server by the identities
+// the platform itself stamped: the target id a matcher folds a proxied call
+// onto, and the toolset slug a direct or URL-resolved call carries.
+//
+// The configured slug is deliberately one of them and must stay. It is trusted
+// for where it is matched rather than for how it reads: the matcher stamps it
+// as a proxied call's target id, and the query admits it only under the hosted
+// and tunneled target types, which nothing client-side can choose. Removing it
+// on the grounds that it looks like a name would silently stop attributing
+// this server's own proxied traffic.
+//
+// What is dropped is toolSources, which outcomeParams and activeCountsParams
+// do pass, and that omission is the point. Those are the display name and
+// every other spelling only an agent vouched for, and a row matched by them is
+// a shadow row whose target id is whatever the calling app said. Including
+// them would attribute a personal server that happens to share this server's
+// name to the corporate one. A trace-level read hands back the calls
+// themselves rather than a count, so a stray row is somebody else's tool call
+// history rather than an inflated number. Hook-observed calls this server can
+// be held to are unaffected, because the query classifies a call whose URL
+// resolved under the toolset slug rather than as shadow.
+func (id serverIdentity) toolLogsTargets() toolLogsTargets {
+	return toolLogsTargets{
+		mcpServerTargetIDs: appendUnique(nil, id.mcpSlug, id.mcpServerID),
+		hostedToolsetSlugs: id.toolLogsToolsetSlugs(),
+	}
+}
+
+// toolLogsToolsetSlugs is empty for a shared slug: the Tool Logs query
+// classifies by slug before server id, so it cannot leave other servers out.
+func (id serverIdentity) toolLogsToolsetSlugs() []string {
+	if id.toolsetShared {
+		return nil
+	}
+	return nonEmpty(id.toolsetSlug)
+}
+
+// appendUnique appends each non-empty candidate not already present.
+func appendUnique(values []string, candidates ...string) []string {
+	for _, candidate := range candidates {
+		if candidate == "" || slices.Contains(values, candidate) {
+			continue
+		}
+		values = append(values, candidate)
+	}
+	return values
 }
 
 // serverNameResolver indexes every configured server in the project by the
@@ -139,6 +225,14 @@ func (s *DiagnosticsService) serverNameResolver(ctx context.Context, organizatio
 // listConfiguredServers lists the project's live configured servers with every
 // name each can be reported under.
 func (s *DiagnosticsService) listConfiguredServers(ctx context.Context, organizationID, projectID string) ([]servernames.ConfiguredServer, error) {
+	rows, err := s.listServerIdentityRows(ctx, organizationID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return configuredServers(rows), nil
+}
+
+func (s *DiagnosticsService) listServerIdentityRows(ctx context.Context, organizationID, projectID string) ([]platformrepo.ListPlatformMCPServerIdentitiesRow, error) {
 	parsedProject, err := uuid.Parse(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("parse project id: %w", err)
@@ -150,7 +244,7 @@ func (s *DiagnosticsService) listConfiguredServers(ctx context.Context, organiza
 	if err != nil {
 		return nil, fmt.Errorf("list mcp server identities: %w", err)
 	}
-	return configuredServers(rows), nil
+	return rows, nil
 }
 
 // configuredServers folds the one-row-per-membership listing into one entry

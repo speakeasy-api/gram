@@ -30,7 +30,7 @@ describe("deriveIdentityMode", () => {
     ).toBe("user");
   });
 
-  it("derives Agent Identity only from a static Authorization header", () => {
+  it("derives Service Account only from a static Authorization header", () => {
     expect(
       deriveIdentityMode(0, [
         header({ name: " authorization ", value: "***" }),
@@ -90,7 +90,7 @@ describe("authorizationHeaderGuard", () => {
 });
 
 describe("findPassThroughAuthorizationHeader", () => {
-  it("separates legacy pass-through Authorization from Agent Identity", () => {
+  it("separates legacy pass-through Authorization from Service Account", () => {
     const passThrough = header({
       name: "Authorization",
       value: undefined,

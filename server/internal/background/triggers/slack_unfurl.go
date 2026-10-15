@@ -13,17 +13,15 @@ import (
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
-// maxSlackUnfurlLinks caps how many Gram links a single link_shared event can
+// maxSlackUnfurlLinks caps how many Speakeasy links a single link_shared event can
 // unfurl. Slack itself delivers at most a handful of links per event; the cap
 // bounds the chat.unfurl payload if a message pastes many dashboard URLs.
 const maxSlackUnfurlLinks = 10
 
 // unfurlSlackGramLinks answers a Slack link_shared event with a chat.unfurl
-// call for every shared link that points at the Gram dashboard, attaching the
-// Speakeasy logo (the dashboard favicon, so Slack shows the same mark as
-// browser tabs and crawler link previews) and a title derived from the URL
-// path. Best-effort, mirroring ackSlackThreadStatus: a failure here only
-// costs the link preview.
+// call for every shared link that points at the Speakeasy dashboard, attaching the
+// Speakeasy sticker and a title derived from the URL path. Best-effort,
+// mirroring ackSlackThreadStatus: a failure here only costs the link preview.
 //
 // Titles are computed purely from the URL (humanized path slugs) — never from
 // database lookups — so an unfurl reveals nothing beyond what the pasted URL
@@ -58,13 +56,17 @@ func (a *App) unfurlSlackGramLinks(ctx context.Context, instance triggerrepo.Tri
 	}
 
 	unfurls := make(map[string]any)
-	iconURL := a.siteURL.JoinPath("favicon.png").String()
+	// The sticker is the opaque Speakeasy mark already served for cross-site
+	// embedding. Slack's image proxy rejects favicon.svg, and favicon.png is a
+	// black glyph on transparency, so on Slack's dark theme the context image
+	// disappears and reads as a broken icon.
+	iconURL := a.siteURL.JoinPath("external", "sticker-logo.png").String()
 	for _, link := range linkEvent.Links {
 		if len(unfurls) >= maxSlackUnfurlLinks {
 			break
 		}
 		parsed, err := url.Parse(link.URL)
-		if err != nil || !strings.EqualFold(parsed.Hostname(), a.siteURL.Hostname()) {
+		if err != nil || !a.isDashboardHost(parsed.Hostname()) {
 			continue
 		}
 		unfurls[link.URL] = map[string]any{
@@ -92,6 +94,16 @@ func (a *App) unfurlSlackGramLinks(ctx context.Context, instance triggerrepo.Tri
 	}); err != nil {
 		a.logger.WarnContext(ctx, "unfurl slack gram links", attr.SlogError(err))
 	}
+}
+
+// isDashboardHost reports whether host serves the Speakeasy dashboard: the site URL
+// host or one of the extra first-party platform hosts.
+func (a *App) isDashboardHost(host string) bool {
+	if strings.EqualFold(host, a.siteURL.Hostname()) {
+		return true
+	}
+	_, ok := a.platformHosts[strings.ToLower(host)]
+	return ok
 }
 
 // opaqueSlugPattern matches path segments that carry no human meaning: UUIDs,

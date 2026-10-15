@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -32,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -545,9 +545,14 @@ func (l *LocalRunner) ensureRunnerBinary(ctx context.Context) (string, error) {
 		}
 
 		l.binaryPath = filepath.Join(binDir, localRunnerBinaryName)
+		root, err := testenv.FindRepoRoot(ctx)
+		if err != nil {
+			l.binaryErr = fmt.Errorf("locate local runner source: %w", err)
+			return
+		}
 		//nolint:gosec // builds the checked-out local runner from a fixed repo-relative package path.
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", l.binaryPath, "./functions/cmd/runner")
-		cmd.Dir = localFunctionsRepoRoot()
+		cmd := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", l.binaryPath, "./functions/cmd/runner")
+		cmd.Dir = root
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			l.binaryErr = fmt.Errorf("build local runner binary: %w\n%s", err, string(output))
@@ -707,11 +712,6 @@ func waitForLocalRunner(ctx context.Context, client *guardian.HTTPClient, health
 	}
 
 	return fmt.Errorf("timed out waiting for local runner health endpoint")
-}
-
-func localFunctionsRepoRoot() string {
-	_, filename, _, _ := runtime.Caller(0)
-	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
 }
 
 func waitForLocalRunnerAddrFile(ctx context.Context, path string) (string, error) {

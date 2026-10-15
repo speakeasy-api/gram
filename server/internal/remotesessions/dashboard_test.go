@@ -41,14 +41,15 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 	require.NoError(t, err)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       nil,
-		CreateProvider:   serverIdentityProviderForm("manual-provider", nil, false),
-		ClientMode:       "manual",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("manual-provider", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("manual-client"),
 			ClientSecret:            conv.PtrEmpty("manual-secret"),
@@ -92,6 +93,7 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 	require.NoError(t, err)
 	require.Equal(t, issuerAuditBefore+1, issuerAuditAfter)
 	require.Equal(t, clientAuditBefore+1, clientAuditAfter)
+	requireLatestClientCreateSnapshot(t, ctx, ti, result.Client.ID)
 }
 
 func TestCommitServerIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
@@ -164,6 +166,129 @@ func TestCommitServerIdentityConfigurationAutoRegistersOnceWithDCR(t *testing.T)
 	require.NoError(t, err)
 	require.True(t, stored.RemoteSessionClient.ClientSecretEncrypted.Valid)
 	require.NotEqual(t, "registered-secret", stored.RemoteSessionClient.ClientSecretEncrypted.String)
+}
+
+// An automatically registered client stores no scope, but its registration
+// still names what logins discover for the server's protected resource.
+func TestCommitServerIdentityConfigurationNamesDiscoveredScopesAtRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-discovered-target")
+	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), closedTargetURL("dcr-discovered-target"), protectedResourceSeed{scopesSupported: []string{"files:read", "files:write"}})
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "discovered-client",
+			"client_secret":              "discovered-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-discovered-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "files:read files:write", requestedScope.Load())
+
+	clientID, err := uuid.Parse(result.Client.ID)
+	require.NoError(t, err)
+	stored, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ProjectID:      projectIDFromContext(t, ctx),
+		OrganizationID: activeOrganizationID(t, ctx),
+		ID:             clientID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, stored.RemoteSessionClient.Scope, "the discovered scopes are not stored on the client")
+}
+
+// With no resource row the registration names what the login would then
+// request: the provider's scope override.
+func TestCommitServerIdentityConfigurationNamesProviderScopesWithoutResourceRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-override-target")
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "override-client",
+			"client_secret":              "override-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-override-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+	_, err := repo.New(ti.conn).UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
+		ScopeOverride: []string{"tickets:read"},
+		ID:            providerID,
+		ProjectID:     conv.ToNullUUID(projectIDFromContext(t, ctx)),
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "tickets:read", requestedScope.Load())
+}
+
+// A cached row past its last-good window does not decide: registration reads
+// the resource live, as the first login will.
+func TestCommitServerIdentityConfigurationReadsTheResourceLiveAtRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	resource, hits := fakeResource(t, []string{"files:read", "files:write"})
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dcr-live-target-issuer")
+	targetID := createServerIdentityTargetAt(t, ctx, ti, "dcr-live-target", resource.URL, userIssuerID)
+	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), resource.URL, protectedResourceSeed{scopesSupported: []string{"old:read"}, fetchedAgo: 8 * 24 * time.Hour})
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "live-client",
+			"client_secret":              "live-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-live-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "files:read files:write", requestedScope.Load())
+	require.EqualValues(t, 1, hits.Load())
 }
 
 func TestCommitServerIdentityConfigurationReturnsDCRRefusalWithoutChangingState(t *testing.T) {
@@ -321,6 +446,7 @@ func TestCommitServerIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *tes
 		ProviderID:          conv.PtrEmpty(providerID.String()),
 		CreateProvider:      nil,
 		ClientMode:          "existing",
+		RegistrationMethod:  nil,
 		ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 		ClientConfiguration: nil,
 	})
@@ -330,14 +456,15 @@ func TestCommitServerIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *tes
 	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
 
 	_, err = ti.service.CommitServerIdentityConfiguration(restrictedCtx, &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       nil,
-		CreateProvider:   serverIdentityProviderForm("denied-provider", nil, false),
-		ClientMode:       "manual",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("denied-provider", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("denied-client"),
 			ClientSecret:            nil,
@@ -357,6 +484,7 @@ func TestCommitServerIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *tes
 		ProviderID:          conv.PtrEmpty(providerID.String()),
 		CreateProvider:      nil,
 		ClientMode:          "existing",
+		RegistrationMethod:  nil,
 		ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 		ClientConfiguration: nil,
 	})
@@ -373,14 +501,15 @@ func TestCommitServerIdentityConfigurationAllowsDuplicateClientIDs(t *testing.T)
 
 	create := func(targetID uuid.UUID) *gen.CommitServerIdentityConfigurationPayload {
 		return &gen.CommitServerIdentityConfigurationPayload{
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-			McpServerID:      targetID.String(),
-			ProviderID:       conv.PtrEmpty(providerID.String()),
-			CreateProvider:   nil,
-			ClientMode:       "manual",
-			ExistingClientID: nil,
+			SessionToken:       nil,
+			ApikeyToken:        nil,
+			ProjectSlugInput:   nil,
+			McpServerID:        targetID.String(),
+			ProviderID:         conv.PtrEmpty(providerID.String()),
+			CreateProvider:     nil,
+			ClientMode:         "manual",
+			RegistrationMethod: nil,
+			ExistingClientID:   nil,
 			ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 				ClientID:                conv.PtrEmpty("shared-upstream-client-id"),
 				ClientSecret:            nil,
@@ -406,14 +535,15 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "replace-target")
 
 	initial, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       nil,
-		CreateProvider:   serverIdentityProviderForm("replace-initial-provider", nil, false),
-		ClientMode:       "manual",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("replace-initial-provider", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("replace-initial-client"),
 			ClientSecret:            nil,
@@ -446,6 +576,7 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 		ProviderID:          conv.PtrEmpty(replacementProviderID.String()),
 		CreateProvider:      nil,
 		ClientMode:          "existing",
+		RegistrationMethod:  nil,
 		ExistingClientID:    conv.PtrEmpty(replacementClient.ID.String()),
 		ClientConfiguration: nil,
 	})
@@ -505,13 +636,14 @@ func TestCommitServerIdentityConfigurationLocksUserSessionIssuerBeforeReplacingB
 			ProviderID:          conv.PtrEmpty(providerID.String()),
 			CreateProvider:      nil,
 			ClientMode:          "existing",
+			RegistrationMethod:  nil,
 			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 			ClientConfiguration: nil,
 		})
 		done <- err
 	}()
 
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
 	select {
 	case err := <-done:
 		require.Fail(t, "atomic configuration completed while another transaction held the user-session-issuer binding lock", "%v", err)
@@ -529,7 +661,19 @@ func createServerIdentityTarget(t *testing.T, ctx context.Context, ti *testInsta
 	return createServerIdentityTargetOnIssuer(t, ctx, ti, slug, userIssuerID), userIssuerID
 }
 
+// createServerIdentityTargetOnIssuer serves from loopback port 0, which no
+// listener can hold, so the live resource read at registration fails fast
+// without leaving the host.
 func createServerIdentityTargetOnIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string, userIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	return createServerIdentityTargetAt(t, ctx, ti, slug, closedTargetURL(slug), userIssuerID)
+}
+
+func closedTargetURL(slug string) string {
+	return "http://127.0.0.1:0/" + slug
+}
+
+func createServerIdentityTargetAt(t *testing.T, ctx context.Context, ti *testInstance, slug, serverURL string, userIssuerID uuid.UUID) uuid.UUID {
 	t.Helper()
 	projectID := projectIDFromContext(t, ctx)
 	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
@@ -538,7 +682,7 @@ func createServerIdentityTargetOnIssuer(t *testing.T, ctx context.Context, ti *t
 		Name:          conv.ToPGText(slug),
 		Slug:          conv.ToPGText(slug),
 		TransportType: "streamable-http",
-		Url:           "https://mcp.example.com/" + slug,
+		Url:           serverURL,
 	})
 	require.NoError(t, err)
 	target, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
@@ -576,14 +720,15 @@ func createServerIdentityProvider(t *testing.T, ctx context.Context, ti *testIns
 
 func autoServerIdentityPayload(targetID, providerID uuid.UUID) *gen.CommitServerIdentityConfigurationPayload {
 	return &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       conv.PtrEmpty(providerID.String()),
-		CreateProvider:   nil,
-		ClientMode:       "auto",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         conv.PtrEmpty(providerID.String()),
+		CreateProvider:     nil,
+		ClientMode:         "auto",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                nil,
 			ClientSecret:            nil,
@@ -686,6 +831,7 @@ func TestCommitServerIdentityConfigurationRequiresWriteOnEveryServerSharingTheIs
 			ProviderID:          conv.PtrEmpty(providerID.String()),
 			CreateProvider:      nil,
 			ClientMode:          "existing",
+			RegistrationMethod:  nil,
 			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 			ClientConfiguration: nil,
 		}
@@ -777,13 +923,14 @@ func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testi
 			ProviderID:          conv.PtrEmpty(providerID.String()),
 			CreateProvider:      nil,
 			ClientMode:          "existing",
+			RegistrationMethod:  nil,
 			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 			ClientConfiguration: nil,
 		})
 		done <- err
 	}()
 
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
 	select {
 	case err := <-done:
 		require.Fail(t, "atomic configuration completed while another transaction held the provider row", "%v", err)
@@ -928,14 +1075,15 @@ func TestCommitServerIdentityConfigurationReplacesProjectClientOnOrgIssuer(t *te
 	projectClientID := bindServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, userIssuerID, false)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       nil,
-		CreateProvider:   serverIdentityProviderForm("org-project-next", nil, false),
-		ClientMode:       "manual",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("org-project-next", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("org-project-next-client"),
 			ClientSecret:            conv.PtrEmpty("org-project-next-secret"),
@@ -965,6 +1113,7 @@ func existingServerIdentityPayload(targetID, providerID, clientID uuid.UUID) *ge
 		ProviderID:          conv.PtrEmpty(providerID.String()),
 		CreateProvider:      nil,
 		ClientMode:          "existing",
+		RegistrationMethod:  nil,
 		ExistingClientID:    conv.PtrEmpty(clientID.String()),
 		ClientConfiguration: nil,
 	}
@@ -1122,4 +1271,65 @@ func TestCommitServerIdentityConfigurationFallsBackToNowWhenProviderOmitsClientI
 	// usable timestamp rather than a zero one.
 	require.True(t, stored.RemoteSessionClient.ClientIDIssuedAt.Valid)
 	require.True(t, stored.RemoteSessionClient.ClientIDIssuedAt.Time.UTC().After(before))
+}
+
+func TestCommitServerIdentityConfigurationAutoUsesDCRWhenRequested(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-requested-target")
+	var requests atomic.Int64
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "dcr-requested-client",
+			"client_secret":              "dcr-requested-secret",
+			"token_endpoint_auth_method": "client_secret_post",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+
+	// The provider is CIMD-capable (it supports CIMD and accepts the public
+	// "none" method), so without the request auto mode would pick CIMD and
+	// never reach the registration endpoint.
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-requested-provider", registrationServer.URL, true, []string{"none", "client_secret_post"})
+	payload := autoServerIdentityPayload(targetID, providerID)
+	payload.RegistrationMethod = conv.PtrEmpty("dcr")
+	payload.ClientConfiguration.TokenEndpointAuthMethod = conv.PtrEmpty("client_secret_post")
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), requests.Load())
+	require.Equal(t, "dcr", *result.RegistrationMethod)
+	require.Equal(t, "dcr-requested-client", result.Client.ClientID)
+}
+
+func TestCommitServerIdentityConfigurationRejectsRegistrationMethodOutsideAuto(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "method-manual-target")
+
+	_, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("method-manual-provider", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: conv.PtrEmpty("dcr"),
+		ExistingClientID:   nil,
+		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
+			ClientID:                conv.PtrEmpty("manual-client"),
+			ClientSecret:            nil,
+			TokenEndpointAuthMethod: conv.PtrEmpty("none"),
+			Scope:                   nil,
+			Audience:                nil,
+		},
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }

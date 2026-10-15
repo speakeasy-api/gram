@@ -15,8 +15,8 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Operator visibility into remote_sessions Gram is holding on a principal's
-// behalf. Read + revoke; sessions are written by
+// Operator visibility into remote_sessions Speakeasy is holding on a
+// principal's behalf. Read + revoke; sessions are written by
 // /mcp/{slug}/remote_login_callback and the silent-refresh path.
 // access_token_encrypted and refresh_token_encrypted are never returned. Also
 // hosts composite dashboard operations that configure a single MCP server's
@@ -43,6 +43,19 @@ type Service interface {
 	// additionally requires project:write. Unsupported automatic registration
 	// returns manual_setup_required without changing local state.
 	CommitServerIdentityConfiguration(context.Context, *CommitServerIdentityConfigurationPayload) (res *CommitServerIdentityConfigurationResult, err error)
+	// Preview which other MCP servers and gateways a client binding change on a
+	// user session issuer would affect, across every project in the organization
+	// for an organization-level issuer. Each server's upstream authorization
+	// server is derived from the clients it can see (its own project's and
+	// organization-level ones), so a server is listed when that derivation changes
+	// (repoint or clear) or when a client it uses is replaced (resignin). A
+	// gateway is listed when a client it can see is unbound (client_removed). The
+	// target server is excluded. A change the commit would refuse, such as one
+	// that touches an organization-level client on an organization-level issuer,
+	// is refused here too. Requires mcp:write on mcp_server_id when given,
+	// otherwise project:write. Servers the caller cannot read are counted in
+	// hidden_server_count and never named.
+	GetServerIdentityImpact(context.Context, *GetServerIdentityImpactPayload) (res *ServerIdentityImpactResult, err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
 	// and user_session_issuer_id instead lists only the ordinary human caller's
 	// eligible sessions for an agent they own, without requiring project read
@@ -50,6 +63,12 @@ type Service interface {
 	// and refresh_token_encrypted are never returned — only metadata
 	// (access_expires_at, refresh_expires_at, scopes).
 	ListRemoteSessions(context.Context, *ListRemoteSessionsPayload) (res *ListRemoteSessionsResult, err error)
+	// Count the distinct people (user subjects) holding a live remote_session
+	// minted through one remote_session_client. Scoped like listRemoteSessions:
+	// only sessions whose issuer, client and remote issuer are reachable from the
+	// caller's project count; API-key and anonymous subjects do not. A client
+	// shared by several MCP servers counts people across all of them.
+	CountRemoteSessions(context.Context, *CountRemoteSessionsPayload) (res *CountRemoteSessionsResult, err error)
 	// Drop a remote_session row. The next /mcp call by that principal triggers a
 	// fresh authn challenge.
 	RevokeRemoteSession(context.Context, *RevokeRemoteSessionPayload) (err error)
@@ -75,7 +94,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "listRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [8]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -106,6 +125,10 @@ type CommitServerIdentityConfigurationPayload struct {
 	ExistingClientID *string
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfiguration
+	// Auto mode only. cimd (the default) prefers a Client ID Metadata Document
+	// when the provider supports one and falls back to dynamic client
+	// registration; dcr always uses dynamic client registration.
+	RegistrationMethod *string
 }
 
 // CommitServerIdentityConfigurationResult is the result type of the
@@ -135,6 +158,23 @@ type CommitServerIdentityConfigurationResult struct {
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
 	Failure *ServerIdentityRegistrationFailure
+}
+
+// CountRemoteSessionsPayload is the payload type of the remoteSessions service
+// countRemoteSessions method.
+type CountRemoteSessionsPayload struct {
+	// The remote_session_client whose sessions to count.
+	RemoteSessionClientID string
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+}
+
+// CountRemoteSessionsResult is the result type of the remoteSessions service
+// countRemoteSessions method.
+type CountRemoteSessionsResult struct {
+	// Distinct user subjects with a live remote_session through the client.
+	Subjects int64
 }
 
 // Form for creating a remote_session_issuer.
@@ -228,6 +268,11 @@ type CreateRemoteSessionIssuerForm struct {
 	// authorize redirect in place of the resolved scope set. Omit or send an empty
 	// array to leave it unset.
 	ScopeOverride []string
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit to leave it unset: such a login requests the provider's whole
+	// scopes_supported.
+	OmitScopeFallback *bool
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers
 	// with invalid_target is retried once without it. Set false to never send it.
@@ -242,6 +287,25 @@ type DetachBindingPayload struct {
 	ID                  string
 	SessionToken        *string
 	ProjectSlugInput    *string
+}
+
+// GetServerIdentityImpactPayload is the payload type of the remoteSessions
+// service getServerIdentityImpact method.
+type GetServerIdentityImpactPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The user session issuer whose client bindings change.
+	UserSessionIssuerID string
+	// The MCP server the change is made from. Excluded from the result.
+	McpServerID *string
+	// The kind of binding change.
+	Change string
+	// The Remote Identity Provider of the client being bound. Omit for a new
+	// provider.
+	ProviderID *string
+	// An existing client being bound. Omit for a new client.
+	ClientID *string
 }
 
 // ListBindingsPayload is the payload type of the remoteSessions service
@@ -327,6 +391,39 @@ type ServerIdentityClientConfiguration struct {
 	Scope []string
 	// Optional upstream OAuth audience.
 	Audience *string
+}
+
+// ServerIdentityImpactResult is the result type of the remoteSessions service
+// getServerIdentityImpact method.
+type ServerIdentityImpactResult struct {
+	// Affected MCP servers the caller can read.
+	Servers []*ServerIdentityImpactServer
+	// MCP servers and gateways the caller cannot read; they are not named. When
+	// the change touches an organization-level client this counts every such
+	// server on the issuer, affected or not.
+	HiddenServerCount int
+}
+
+// An MCP server or gateway a proposed binding change affects.
+type ServerIdentityImpactServer struct {
+	// The MCP server or gateway id.
+	ID string
+	// Whether this is an MCP server or a gateway.
+	Kind string
+	// The MCP server or gateway name.
+	Name *string
+	// The MCP server slug. Gateways have none.
+	Slug *string
+	// The owning project.
+	ProjectID string
+	// The name of the owning project.
+	ProjectName string
+	// repoint: its upstream authorization server changes to another single
+	// provider. clear: it is left with no single provider and loses its upstream.
+	// resignin: its upstream is unchanged but its client is replaced, so everyone
+	// signs in again. client_removed: a gateway loses a provider client its
+	// members sign in through.
+	Impact string
 }
 
 // A completed automatic registration failure using the bounded OAuth

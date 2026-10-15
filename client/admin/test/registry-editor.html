@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Registry editor browser fixture</title>
+  </head>
+  <body>
+    <div id="root" style="height: 600px; display: flex"></div>
+    <script type="module">
+      import React from "react";
+      import { createRoot } from "react-dom/client";
+      import RegistryJsonEditor from "../src/pages/registry/RegistryJsonEditor.tsx";
+      import { registryJsonDiagnostics } from "../src/pages/registry/RegistryJsonSchema.ts";
+      import { jsonDefaults } from "monaco-editor/languages/features/json/register.js";
+      import * as monaco from "monaco-editor/editor/editor.api";
+      import "../src/index.css";
+
+      // Negative control: the browser test must detect a real worker request
+      // when remote schema requests are explicitly enabled.
+      if (new URL(location.href).searchParams.has("remote")) {
+        jsonDefaults.setDiagnosticsOptions({
+          ...registryJsonDiagnostics,
+          enableSchemaRequest: true,
+        });
+      }
+      function Fixture() {
+        const [value, onChange] = React.useState(
+          '{"$schema":"https://registry-schema.invalid/record.json","server":{"name":3}}',
+        );
+        return React.createElement(RegistryJsonEditor, {
+          value,
+          onChange,
+          onBlur() {},
+          disabled: false,
+          invalid: false,
+          describedBy: "feedback",
+          issues: [],
+        });
+      }
+      monaco.editor.onDidChangeMarkers(() => {
+        document.body.dataset.diagnostics = String(
+          monaco.editor.getModelMarkers({}).length,
+        );
+      });
+      createRoot(document.getElementById("root")).render(
+        React.createElement(Fixture),
+      );
+    </script>
+  </body>
+</html>

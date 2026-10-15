@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -95,6 +96,10 @@ func TestInviteCallback_FirstUserInvitedByPlatformAdminArmsTrial(t *testing.T) {
 	require.Equal(t, "platform_admin_invite", ti.posthog.events[0].properties["created_via"])
 	require.Len(t, ti.posthog.identified, 1)
 	require.Equal(t, "platform_admin_invite", ti.posthog.identified[0].properties["created_via"])
+
+	signIn, err := signins.LiveSignInForSession(ctx, ti.conn, organizationID, "user_01INVITEE", "session_01INVITE")
+	require.NoError(t, err)
+	require.True(t, signIn.Valid, "the invite sign-in is recorded like any other login")
 
 	storedInvite, err := orgrepo.New(ti.conn).GetInvitationByID(ctx, invite.ID)
 	require.NoError(t, err)
@@ -276,6 +281,8 @@ func TestInviteCallback_TrialBundleFailureRollsBackAcceptance(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, organizationID))
+	entitlementsBefore, err := testrepo.New(ti.conn).CountOrganizationFeaturesFixture(ctx, organizationID)
+	require.NoError(t, err)
 	rawToken, invite := seedInviteCallbackInvite(t, ctx, ti, "trial-bundle-failure", organizationID, authCtx.UserID, authz.SystemRoleAdmin)
 	auditsBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
@@ -305,7 +312,7 @@ func TestInviteCallback_TrialBundleFailureRollsBackAcceptance(t *testing.T) {
 	require.True(t, org.Whitelisted)
 	entitlementRows, err := testrepo.New(ti.conn).CountOrganizationFeaturesFixture(ctx, organizationID)
 	require.NoError(t, err)
-	require.Zero(t, entitlementRows)
+	require.Equal(t, entitlementsBefore, entitlementRows, "failed acceptance must not change pre-existing onboarding features")
 	auditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
 	require.Equal(t, auditsBefore, auditsAfter)

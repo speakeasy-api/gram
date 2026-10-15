@@ -13,7 +13,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	env, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
+	env, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatal(err)
 	}

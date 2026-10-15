@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -234,9 +235,11 @@ type testInstance struct {
 	completionClient             openrouter.CompletionClient
 	cacheDeletes                 *countingCache
 	chConn                       clickhouse.Conn
+	findingEvidence              *risk.MCPFindingEvidenceStore
 	// assetStorage backs content-part reads on the ClickHouse reveal path.
-	assetStorage  blobio.Reader
-	riskPublisher gcp.Publisher[*meteringv1.MeterReading]
+	assetStorage     blobio.Reader
+	riskPublisher    gcp.Publisher[*meteringv1.MeterReading]
+	platformToolsets map[string]platformtools.Toolset
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -268,6 +271,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
+	findingEvidence := risk.NewMCPFindingEvidenceStore(conn, testenv.NewEncryptionClient(t))
 
 	judge := &stubJudge{evaluate: nil}
 
@@ -288,7 +292,9 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		cacheDeletes:     cacheAdapter,
 		chConn:           chConn,
 		assetStorage:     assetstest.NewTestBlobStore(t),
+		findingEvidence:  findingEvidence,
 		riskPublisher:    nil,
+		platformToolsets: platformtools.BuildToolsets(platformtools.ToolsetDependencies{}),
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
@@ -296,11 +302,11 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	if ti.riskPublisher == nil {
 		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.MeterReading]()
 	}
-	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
+	ti.service = risk.NewService(logger, tracerProvider, ti.conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher))
+	}, ti.findingEvidence, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher), ti.platformToolsets)
 
 	return ctx, ti
 }

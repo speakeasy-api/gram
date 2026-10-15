@@ -30,6 +30,18 @@ export const ClientMode = {
 export type ClientMode = ClosedEnum<typeof ClientMode>;
 
 /**
+ * Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.
+ */
+export const RegistrationMethod = {
+  Cimd: "cimd",
+  Dcr: "dcr",
+} as const;
+/**
+ * Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.
+ */
+export type RegistrationMethod = ClosedEnum<typeof RegistrationMethod>;
+
+/**
  * A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.
  */
 export type CommitServerIdentityConfigurationForm = {
@@ -57,11 +69,20 @@ export type CommitServerIdentityConfigurationForm = {
    * An existing Remote Identity Provider visible to the target project.
    */
   providerId?: string | undefined;
+  /**
+   * Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.
+   */
+  registrationMethod?: RegistrationMethod | undefined;
 };
 
 /** @internal */
 export const ClientMode$outboundSchema: z.ZodMiniEnum<typeof ClientMode> = z
   .enum(ClientMode);
+
+/** @internal */
+export const RegistrationMethod$outboundSchema: z.ZodMiniEnum<
+  typeof RegistrationMethod
+> = z.enum(RegistrationMethod);
 
 /** @internal */
 export type CommitServerIdentityConfigurationForm$Outbound = {
@@ -71,6 +92,7 @@ export type CommitServerIdentityConfigurationForm$Outbound = {
   existing_client_id?: string | undefined;
   mcp_server_id: string;
   provider_id?: string | undefined;
+  registration_method?: string | undefined;
 };
 
 /** @internal */
@@ -88,6 +110,7 @@ export const CommitServerIdentityConfigurationForm$outboundSchema:
       existingClientId: z.optional(z.string()),
       mcpServerId: z.string(),
       providerId: z.optional(z.string()),
+      registrationMethod: z.optional(RegistrationMethod$outboundSchema),
     }),
     z.transform((v) => {
       return remap$(v, {
@@ -97,6 +120,7 @@ export const CommitServerIdentityConfigurationForm$outboundSchema:
         existingClientId: "existing_client_id",
         mcpServerId: "mcp_server_id",
         providerId: "provider_id",
+        registrationMethod: "registration_method",
       });
     }),
   );

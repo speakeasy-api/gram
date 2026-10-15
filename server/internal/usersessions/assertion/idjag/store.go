@@ -10,6 +10,6 @@ import (
 type Store interface {
 	// TrustedIssuer returns the issuer explicitly linked to a user session issuer.
 	TrustedIssuer(ctx context.Context, organizationID string, userSessionIssuerID uuid.UUID) (TrustedIssuer, error)
-	// ResolveUser maps an asserted email address to an active Gram user.
+	// ResolveUser maps an asserted email address to an active Speakeasy user.
 	ResolveUser(ctx context.Context, organizationID, email string) (string, error)
 }

@@ -13,8 +13,10 @@ import { organizationRemoteSessionIssuersList } from "../funcs/organizationRemot
 import { organizationRemoteSessionIssuersMigrate } from "../funcs/organizationRemoteSessionIssuersMigrate.js";
 import { organizationRemoteSessionIssuersMove } from "../funcs/organizationRemoteSessionIssuersMove.js";
 import { organizationRemoteSessionIssuersRefreshMetadata } from "../funcs/organizationRemoteSessionIssuersRefreshMetadata.js";
+import { organizationRemoteSessionIssuersSetEMAProviders } from "../funcs/organizationRemoteSessionIssuersSetEMAProviders.js";
 import { organizationRemoteSessionIssuersUpdate } from "../funcs/organizationRemoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { EMAProviderOrder } from "../models/components/emaproviderorder.js";
 import { MigrateOrganizationRemoteSessionIssuerResult } from "../models/components/migrateorganizationremotesessionissuerresult.js";
 import { OrganizationIssuerDeletePreflight } from "../models/components/organizationissuerdeletepreflight.js";
 import { OrganizationIssuerMigratePreflight } from "../models/components/organizationissuermigratepreflight.js";
@@ -67,6 +69,10 @@ import {
   RefreshOrganizationRemoteSessionIssuerMetadataRequest,
   RefreshOrganizationRemoteSessionIssuerMetadataSecurity,
 } from "../models/operations/refreshorganizationremotesessionissuermetadata.js";
+import {
+  SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+  SetOrganizationRemoteSessionIssuerEMAProvidersSecurity,
+} from "../models/operations/setorganizationremotesessionissueremaproviders.js";
 import {
   UpdateOrganizationRemoteSessionIssuerRequest,
   UpdateOrganizationRemoteSessionIssuerSecurity,
@@ -286,7 +292,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * refreshIssuerMetadata organizationRemoteSessionIssuers
    *
    * @remarks
-   * Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.
+   * Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.
    */
   async refreshMetadata(
     request: RefreshOrganizationRemoteSessionIssuerMetadataRequest,
@@ -296,6 +302,27 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerRefresh> {
     return unwrapAsync(organizationRemoteSessionIssuersRefreshMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setEMAProviders organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint's configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.
+   */
+  async setEMAProviders(
+    request: SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+    security?:
+      | SetOrganizationRemoteSessionIssuerEMAProvidersSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<EMAProviderOrder> {
+    return unwrapAsync(organizationRemoteSessionIssuersSetEMAProviders(
       this,
       request,
       security,

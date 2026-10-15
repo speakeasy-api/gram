@@ -1,6 +1,7 @@
 package metering_test
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -70,6 +71,9 @@ func TestEnqueuePersistsDeterministicReadings(t *testing.T) {
 
 	rows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
+	rows = slices.DeleteFunc(rows, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&meteringv1.MeterReading{}))
+	})
 	require.Len(t, rows, 3)
 
 	messages := make(map[string]*meteringv1.MeterReading, len(rows))
@@ -151,6 +155,9 @@ func TestEnqueueRejectsMixedOrganizationBatchAtomically(t *testing.T) {
 
 	rows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
+	rows = slices.DeleteFunc(rows, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&meteringv1.MeterReading{}))
+	})
 	require.Empty(t, rows)
 }
 
@@ -166,6 +173,9 @@ func TestEnqueueRejectsZeroReading(t *testing.T) {
 
 	rows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
+	rows = slices.DeleteFunc(rows, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&meteringv1.MeterReading{}))
+	})
 	require.Empty(t, rows)
 }
 
@@ -192,6 +202,9 @@ func TestEnqueueRollsBackWithCallerTransaction(t *testing.T) {
 
 	rows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
+	rows = slices.DeleteFunc(rows, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&meteringv1.MeterReading{}))
+	})
 	require.Empty(t, rows)
 }
 

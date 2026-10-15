@@ -6,8 +6,12 @@ import {
   mcpServerVisibilityUpdateForm,
 } from "@/lib/mcp-server-visibility";
 import { mcpServerRouteParam } from "@/lib/sources";
+import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useRoutes } from "@/routes";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type {
+  McpServer,
+  McpServerVisibility,
+} from "@gram/client/models/components/mcpserver.js";
 import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
@@ -36,8 +40,9 @@ function verbsFor(server: McpServer, canWrite: boolean): Verb[] {
  * Toolset-backed mcp_servers rows are not listed on their own so hosted
  * servers aren't doubled (see the TODO(AGE-1902) note in the MCP page), but
  * they are the rows that carry a hosted server's visibility: each toolset
- * candidate reads its linked row's state and flips that row on
- * enable/disable. A toolset with no linked row is open-only.
+ * candidate reads its linked row's state and flips that row on disable, and
+ * on enable unless it is a hosted wrapper, whose enable opens the toolset
+ * page. A toolset with no linked row is open-only.
  *
  * Verbs are gated per server (`hasScope("mcp:write", <grant resource>)`),
  * the same check the server's own pages apply, so a grant scoped to some
@@ -88,8 +93,13 @@ export function useMcpServerCandidates({
     const canWrite = (server: McpServer) =>
       hasScope("mcp:write", server.toolsetId ?? server.id);
 
-    const setVisibility = async (server: McpServer, verb: Verb) => {
-      const visibility = verb === "enable" ? "private" : "disabled";
+    // `offerUndo` is false for the undo itself, so the toasts do not loop.
+    const applyVisibility = async (
+      server: McpServer,
+      visibility: McpServerVisibility,
+      offerUndo: boolean,
+    ) => {
+      let previous: McpServerVisibility = server.visibility;
       try {
         // The update replaces the whole record, so it is built from the row
         // as it is now rather than from the cached one the list rendered
@@ -99,6 +109,7 @@ export function useMcpServerCandidates({
           ...buildGetMcpServerQuery(client, { id: server.id }),
           staleTime: 0,
         });
+        previous = latest.visibility;
         if (latest.visibility !== visibility) {
           await updateMcpServer({
             request: {
@@ -117,9 +128,34 @@ export function useMcpServerCandidates({
         );
         throw error;
       }
-      await invalidateMcpServerQueries(queryClient);
-      toast.success(mcpServerVisibilityToast(visibility));
+      // The toast comes before the cache refresh, and never waits on it: the
+      // update has already landed, so a sibling query that is slow to refetch
+      // or fails outright must not delay or swallow the only confirmation the
+      // user gets — which is also the only place Undo is offered.
+      // Undo restores the visibility the server actually had, which is not
+      // always the opposite verb: disabling a public server and undoing it
+      // must put it back to public, not to private.
+      toast.success(
+        mcpServerVisibilityToast(visibility),
+        offerUndo && previous !== visibility
+          ? {
+              action: {
+                label: "Undo",
+                onClick: () => {
+                  // applyVisibility toasts its own failure and rethrows, so
+                  // the rejection is consumed here rather than surfacing as
+                  // an unhandled one.
+                  void applyVisibility(server, previous, false).catch(() => {});
+                },
+              },
+            }
+          : undefined,
+      );
+      void invalidateMcpServerQueries(queryClient).catch(() => {});
     };
+
+    const setVisibility = (server: McpServer, verb: Verb) =>
+      applyVisibility(server, verb === "enable" ? "private" : "disabled", true);
 
     const toolsetCandidates: LauncherCandidate[] = toolsets.map((toolset) => {
       const linked = byToolsetId.get(toolset.id);
@@ -133,7 +169,14 @@ export function useMcpServerCandidates({
         icon: "network",
         group: GROUP,
         run: (verb) => {
-          if (linked && (verb === "enable" || verb === "disable")) {
+          // Enabling a hosted server picks private or public, with its warnings, on the toolset page.
+          const hostedEnable =
+            verb === "enable" && !!linked && isCanonicalHostedWrapper(linked);
+          if (
+            linked &&
+            !hostedEnable &&
+            (verb === "enable" || verb === "disable")
+          ) {
             return setVisibility(linked, verb);
           }
           routes.mcp.details.goTo(toolset.slug);

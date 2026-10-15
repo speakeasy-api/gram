@@ -6,19 +6,26 @@
 
 set -e
 
+# The SDK generator is installed as speakeasy-sdks (see mise.toml). mise only
+# applies rename_exe on install, so an install made before the rename still
+# serves the old speakeasy name. Reinstall it once in that case.
+if mise which speakeasy >/dev/null 2>&1; then
+  mise install --force "github:speakeasy-api/speakeasy" >&2
+fi
+
 # The Speakeasy CLI version is baked into every generated artifact (gen.lock,
 # workflow.lock, the SDK_METADATA userAgent), so generating with anything other
-# than the pinned version produces churn CI rejects. `speakeasy run` re-execs
+# than the pinned version produces churn CI rejects. `speakeasy-sdks run` re-execs
 # into the version named by speakeasyVersion in .speakeasy/workflow.yaml, so a
 # system-wide install (Homebrew, `go install`) ahead of the mise shim on PATH
 # still generates with the pinned version.
 generate() {
-  # CI=true keeps `speakeasy run` non-interactive. It used to also matter
+  # CI=true keeps `speakeasy-sdks run` non-interactive. It used to also matter
   # because the TypeScript target compiled the SDK by invoking pnpm, which
   # prompts to purge node_modules and aborts without a TTY; since the SDK was
   # inlined, gen.yaml sets compileCommand to `true` and no package manager is
   # invoked at all.
-  CI=true speakeasy run "$@" --skip-versioning --skip-upload-spec --minimal
+  CI=true speakeasy-sdks run "$@" --skip-versioning --skip-upload-spec --minimal
 }
 
 check_inputs() {

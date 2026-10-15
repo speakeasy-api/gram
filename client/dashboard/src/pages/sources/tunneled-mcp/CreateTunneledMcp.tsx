@@ -17,6 +17,12 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
+import { NewServerGuardrailSection } from "@/pages/security/server-guardrails/NewServerGuardrailSection";
+import {
+  guardrailFailureMessage,
+  useNewServerGuardrail,
+  type NewServerGuardrailOutcome,
+} from "@/pages/security/server-guardrails/useNewServerGuardrail";
 import { RESOURCE_IDENTIFIER_EXPLAINER } from "./copy";
 import { useCreateTunneledMcpSource } from "./hooks";
 import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
@@ -62,6 +68,9 @@ function CreateTunneledMcpForm() {
   const routes = useRoutes();
   const createSource = useCreateTunneledMcpSource();
   const issuerQuery = useEffectiveUserSessionIssuers();
+  const newGuardrail = useNewServerGuardrail();
+  const [guardrailOutcome, setGuardrailOutcome] =
+    useState<NewServerGuardrailOutcome | null>(null);
   const [name, setName] = useState("");
   const [resourceIdentifier, setResourceIdentifier] = useState("");
   const [touched, setTouched] = useState(false);
@@ -78,6 +87,7 @@ function CreateTunneledMcpForm() {
     creationLocked ||
     createSource.isPending ||
     validateDisplayName(name) !== null ||
+    !newGuardrail.validation.ok ||
     issuerQuery.isLoading ||
     issuerQuery.isError ||
     selectedIssuer === "";
@@ -87,6 +97,7 @@ function CreateTunneledMcpForm() {
     if (creationLocked) return;
     setTouched(true);
     if (validateDisplayName(name) !== null) return;
+    if (!newGuardrail.validation.ok) return;
 
     try {
       const result = await createSource.mutateAsync({
@@ -99,6 +110,13 @@ function CreateTunneledMcpForm() {
       });
       setCreated(result);
       toast.success("Tunneled MCP server added");
+      // Attempted only now that the server exists; a failure keeps the server
+      // and is reported on the confirmation screen.
+      const outcome = await newGuardrail.createFor(result.mcpServer);
+      setGuardrailOutcome(outcome);
+      if (outcome.status === "failed") {
+        toast.error(guardrailFailureMessage(outcome), { duration: 12000 });
+      }
     } catch (error) {
       const message =
         error instanceof Error
@@ -118,6 +136,31 @@ function CreateTunneledMcpForm() {
       >
         <Stack gap={6}>
           <GatewayAttachmentStatus flow={flow} />
+          {guardrailOutcome?.status === "failed" ? (
+            <Stack gap={2}>
+              <Alert variant="error" dismissible={false}>
+                {guardrailFailureMessage(guardrailOutcome)}
+              </Alert>
+              <div>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    routes.mcp.x.guardrails.goTo(
+                      mcpServerRouteParam(created.mcpServer),
+                    )
+                  }
+                >
+                  <Button.Text>Open Guardrails</Button.Text>
+                </Button>
+              </div>
+            </Stack>
+          ) : null}
+          {guardrailOutcome?.status === "created" ? (
+            <Alert variant="success" dismissible={false}>
+              Guardrail &quot;{guardrailOutcome.name}&quot; created. Review it
+              under the server&apos;s Guardrails tab.
+            </Alert>
+          ) : null}
           <div className="border p-5">
             <Text variant="subheading" className="mb-3">
               Tunnel key
@@ -289,6 +332,11 @@ function CreateTunneledMcpForm() {
               ) : null}
             </Stack>
           </fieldset>
+          <NewServerGuardrailSection
+            guardrail={newGuardrail}
+            serverName={name.trim() || "this server"}
+            disabled={creationLocked || createSource.isPending}
+          />
           <GatewayAttachmentStatus flow={flow} />
           {createSource.isError && (
             <Alert variant="error" dismissible={false}>

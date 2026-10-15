@@ -71,7 +71,7 @@ func (l *Logger) LogBulkDeduped(ctx context.Context, hashKey attr.Key, params []
 // telemetry_logs and minus in-batch repeats, preserving order and keeping the
 // first occurrence of each fingerprint.
 func (l *Logger) dropIngestedDuplicates(ctx context.Context, hashKey attr.Key, params []LogParams) ([]LogParams, error) {
-	if l.chConn == nil || len(params) == 0 {
+	if len(params) == 0 {
 		return params, nil
 	}
 

@@ -248,7 +248,7 @@ func TestPollRejectedByProviderSeesThroughWrappedSyncErrors(t *testing.T) {
 	syncErr := &aiintegrations.SyncError{
 		Op: "sync anthropic compliance",
 		Stages: []aiintegrations.SyncStageError{{
-			Stage: "discover_activities",
+			Stage: "discover_chats",
 			Err:   fmt.Errorf("list anthropic compliance activities: %w", httpErr),
 		}},
 		Progress: aiintegrations.ComplianceSyncProgress{
@@ -275,7 +275,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	syncErr := &aiintegrations.SyncError{
 		Op: "sync anthropic compliance",
 		Stages: []aiintegrations.SyncStageError{{
-			Stage: "discover_activities",
+			Stage: "discover_chats",
 			Err:   discoverErr,
 		}},
 		Progress: aiintegrations.ComplianceSyncProgress{
@@ -300,7 +300,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.Contains(t, appErr.Message(), "provider=anthropic_compliance")
 	require.Contains(t, appErr.Message(), fmt.Sprintf("attempt=5/%d", PollUsageMaxAttempts))
 
-	require.Contains(t, appErr.Message(), "[discover_activities] list anthropic compliance activities: 503 Service Unavailable")
+	require.Contains(t, appErr.Message(), "[discover_chats] list anthropic compliance activities: 503 Service Unavailable")
 	require.Contains(t, appErr.Message(), "(progress:")
 
 	require.True(t, appErr.HasDetails())
@@ -310,7 +310,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.Equal(t, aiintegrations.ProviderAnthropicCompliance, details.Provider)
 	require.Equal(t, int32(5), details.Attempt)
 	require.Len(t, details.Stages, 1)
-	require.Equal(t, "discover_activities", details.Stages[0].Stage)
+	require.Equal(t, "discover_chats", details.Stages[0].Stage)
 	require.Contains(t, details.Stages[0].Error, "503 Service Unavailable")
 
 	// The original causes stay reachable for errors.Is/errors.As callers.
@@ -400,6 +400,35 @@ func TestNewPollFailureErrorExpandsShareableCauses(t *testing.T) {
 	require.ErrorAs(t, err, &appErr)
 	require.Contains(t, appErr.Message(), "sync codex cost data: import cost logs")
 	require.Contains(t, appErr.Message(), "import cost logs: download failed")
+}
+
+// A provider rejection or outage on the schedule row is the provider's
+// failure, not Speakeasy's, so the activity succeeds and one misconfigured
+// integration cannot fill activity-failure alerting.
+func TestFinalizePollFailureKeepsProviderFailuresOffTheActivity(t *testing.T) {
+	t.Parallel()
+
+	configID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	rejection := fmt.Errorf("sync chatgpt conversation data: %w",
+		&codexapi.HTTPError{StatusCode: 403, Status: "403 Forbidden", Body: `{"detail":"API key not authorized for enterprise logs"}`})
+	outage := fmt.Errorf("sync codex cost data: %w",
+		&guardian.RetriesExhaustedError{Method: "GET", URL: "https://api.chatgpt.com", Attempts: 5, StatusCode: 500, Body: "", Err: nil})
+
+	require.NoError(t, finalizePollFailure(configID, aiintegrations.ProviderChatGPTCompliance, 1, true, false, true, rejection))
+	require.NoError(t, finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, 1, false, true, true, outage))
+
+	// Unrecorded failures still fail: Temporal is the only place they show.
+	var appErr *temporal.ApplicationError
+	err := finalizePollFailure(configID, aiintegrations.ProviderChatGPTCompliance, 1, true, false, false, rejection)
+	require.ErrorAs(t, err, &appErr)
+	require.True(t, appErr.NonRetryable())
+
+	// So do failures that are ours to explain, on every attempt.
+	ours := errors.New("decode codex compliance cost log")
+	require.Error(t, finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, 1, false, false, false, ours))
+	err = finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, PollUsageMaxAttempts, false, false, true, ours)
+	require.ErrorAs(t, err, &appErr)
+	require.False(t, appErr.NonRetryable())
 }
 
 func TestNewPollFailureErrorMarksAuthFailuresNonRetryable(t *testing.T) {

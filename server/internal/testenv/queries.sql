@@ -249,6 +249,10 @@ WHERE public_id = @public_id;
 -- name: CountPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox;
 
+-- name: CountPublishOutboxRowsByTopic :one
+SELECT COUNT(*) FROM publish_outbox
+WHERE organization_id = @organization_id AND topic = @topic;
+
 -- name: ListPublishOutboxRows :many
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, retry_after, locked_until, lease_token, created_at
@@ -497,19 +501,6 @@ UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
 WHERE id = @id;
 
--- name: InsertLegacyDenyPrincipalGrantFixture :exec
--- Test-only fixture for exercising allow-only writes against legacy rows.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id, @principal_urn, @scope, 'deny', @selectors);
-
--- name: GetPrincipalGrantEffectFixture :one
-SELECT effect
-FROM principal_grants
-WHERE organization_id = @organization_id
-  AND principal_urn = @principal_urn
-  AND scope = @scope
-  AND selectors = @selectors;
-
 -- name: InsertChatContentPartFixture :one
 -- Test-only fixture: seeds a minimal chat content part so tests can anchor a
 -- risk_results row to it.
@@ -541,6 +532,21 @@ WHERE id = @id;
 UPDATE platform_mcp_setup_handoffs
 SET expires_at = clock_timestamp() - interval '1 second'
 WHERE id = @id;
+
+-- name: ExpirePlatformMCPOperationReceiptFixture :one
+-- Test-only fixture expiring an idempotency receipt by the database clock,
+-- the clock both the replay pre-check and the locked path judge expiry with.
+UPDATE platform_mcp_operation_receipts
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+RETURNING expires_at;
+
+-- name: ListPlatformMCPOperationReceiptIDsFixture :many
+-- Test-only inspection of which receipts an organization still holds.
+SELECT id
+FROM platform_mcp_operation_receipts
+WHERE organization_id = @organization_id
+ORDER BY id;
 
 -- name: GetPlatformMCPReadinessFingerprintFixture :one
 -- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
@@ -720,17 +726,6 @@ INSERT INTO trials (organization_id, tier, created_at, ends_at)
 SELECT deleted.organization_id, @tier, @created_at, @ends_at
 FROM deleted;
 
--- name: IsQueryBlockedOnLockFixture :one
--- Test-only synchronization: reports whether a matching active query is waiting on a lock.
-SELECT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_stat_activity
-    WHERE datname = current_database()
-      AND state = 'active'
-      AND wait_event_type = 'Lock'
-      AND query LIKE @query_pattern::text
-);
-
 -- name: TryAcquireOpenRouterKeyBillingLockFixture :one
 -- Test-only non-blocking probe of the production OpenRouter billing lock key.
 SELECT pg_try_advisory_lock(
@@ -873,6 +868,21 @@ WHERE id = @id
 -- Test-only fixture: associates an organization with a Stripe customer.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id);
+
+-- name: SetUserSessionIssuerAuthorizationServerModeFixture :execrows
+-- Test-only fixture that switches an issuer's authorization server mode and
+-- pinned issuer URL, ahead of a management API that sets them. Project-scoped
+-- issuers carry no organization_id, so their tenancy is read through the
+-- project.
+UPDATE user_session_issuers AS issuer
+SET authorization_server_mode = @authorization_server_mode,
+    pinned_issuer_url = sqlc.narg('pinned_issuer_url')
+WHERE issuer.id = @issuer_id
+  AND issuer.deleted IS FALSE
+  AND COALESCE(
+    issuer.organization_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = issuer.project_id)
+  ) = @organization_id::text;
 
 -- name: SetMCPServerNetworkAccessModeFixture :execrows
 -- Test-only fixture for building a pre-existing non-public row so update tests
@@ -1024,6 +1034,9 @@ INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
 VALUES (@id, @project_id, @toolset_id, @visibility)
 RETURNING id;
 
+-- name: SetMCPServerVisibilityFixture :exec
+UPDATE mcp_servers SET visibility = @visibility WHERE id = @id AND project_id = @project_id;
+
 -- name: CreateMCPServerCatalogueFixtures :execrows
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
 SELECT
@@ -1081,6 +1094,13 @@ WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
 
+-- name: SetAPIKeyExpiresAtFixture :exec
+-- Fast-forwards or rewinds an API key's expiry so tests can observe the
+-- authentication boundary a credential rotation's grace window creates.
+UPDATE api_keys
+SET expires_at = @expires_at
+WHERE key_hash = @key_hash;
+
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
 SELECT
@@ -1109,12 +1129,19 @@ RETURNING id;
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
 VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject);
 
+-- name: CreateWorkloadIdentityRuleFixture :exec
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @match_kind);
+
+-- name: CreateWorkloadAgentAssignmentFixture :exec
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @match_kind, @agent_id);
+
 -- name: SoftDeleteWorkloadIssuerFixture :execrows
 UPDATE workload_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id;
-
 
 -- Shared attachment fixtures exercise authorization boundaries in remote-session,
 -- issuer-gate, and user-session projection tests.
@@ -1456,11 +1483,9 @@ WHERE c.id = @remote_session_client_id
   AND i.id = c.remote_session_issuer_id
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id::text));
 
--- TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
--- accept, which no production path can produce. private_key_jwt arrives with
--- AIM-156; until then planting the value directly is the only way to exercise
--- requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
--- it.
+-- TEST FIXTURE ONLY. Plants a token_endpoint_auth_method directly, bypassing
+-- the management API's key-set checks, so tests can build states those checks
+-- (requireDetachableKeySet, requirePrivateKeyJWTKeySet) must then refuse.
 -- name: ForceRemoteSessionClientAuthMethodFixture :execrows
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = @token_endpoint_auth_method
@@ -1473,6 +1498,21 @@ WHERE id = @id
 UPDATE remote_session_clients
 SET client_secret_expires_at = sqlc.narg('client_secret_expires_at'),
     upstream_rejected_at = sqlc.narg('upstream_rejected_at'),
+    updated_at = clock_timestamp()
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.deleted IS FALSE
+  AND remote_session_clients.project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND (remote_session_clients.organization_id IS NULL OR remote_session_clients.organization_id = @organization_id)
+  AND (remote_session_clients.organization_id = @organization_id AND remote_session_clients.project_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = @organization_id));
+
+-- name: ForceRemoteSessionClientCredentialOwnerFixture :execrows
+-- Test fixture: sets who owns a client's upstream credential, which no
+-- application query changes after creation. A 'self' owner must satisfy
+-- remote_session_clients_credential_owner_check, so the client needs a
+-- confidential token endpoint auth method first.
+UPDATE remote_session_clients
+SET credential_owner = @credential_owner,
     updated_at = clock_timestamp()
 WHERE remote_session_clients.id = @id
   AND remote_session_clients.deleted IS FALSE
@@ -1525,7 +1565,8 @@ WHERE remote_session_issuers.id = @id
 -- name: SetPreparationFixtureIssuerCapability :exec
 UPDATE remote_session_issuers
 SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer']
+    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer'],
+    metadata_fetched_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureClientGrants :exec
@@ -1585,6 +1626,29 @@ UPDATE user_session_issuers SET trusted_remote_session_issuer_id = @issuer_id WH
 -- Test-only revocation of organization-scoped delegation authority.
 UPDATE organization_metadata SET disabled_at = clock_timestamp()
 WHERE id = @organization_id::text;
+
+-- name: TombstoneInternalSessionIssuerFixture :exec
+-- Test-only tombstone of an organization's internal session issuer.
+UPDATE internal_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id::text;
+
+-- name: SoftDeleteExternalCredentialFixture :exec
+-- Test-only soft delete of an external credential in its tier: a NULL
+-- organization_id names the platform tier.
+UPDATE external_credentials SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND project_id IS NULL;
+
+-- name: SetGcpIamCredentialServiceAccountFixture :exec
+-- Test-only re-point of a credential's impersonated account in its tier,
+-- tombstones included: a NULL organization_id names the platform tier.
+UPDATE gcp_iam_credentials AS gic SET impersonate_service_account = sqlc.narg(impersonate_service_account)::text
+FROM external_credentials AS ec
+WHERE gic.external_credential_id = @external_credential_id
+  AND ec.id = gic.external_credential_id
+  AND ec.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND ec.project_id IS NULL;
 
 -- name: RevokeDelegationUserIssuersFixture :exec
 -- Test-only revocation of organization-scoped delegation authority.
@@ -1651,6 +1715,22 @@ UPDATE remote_session_issuers SET client_id_metadata_document_supported = true, 
 -- name: SetPreparationFixtureCIMDURI :exec
 UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
 
+-- name: SetPreparationFixtureConfidentialClient :execrows
+-- Identity chaining refuses public clients: make a fixture client authenticate
+-- with private_key_jwt against a key set, and its issuer accept that method.
+WITH issuer AS (
+    UPDATE remote_session_issuers
+    SET token_endpoint_auth_methods_supported = array_append(array_remove(token_endpoint_auth_methods_supported, 'private_key_jwt'), 'private_key_jwt')
+    WHERE remote_session_issuers.id = @remote_session_issuer_id AND remote_session_issuers.project_id = @project_id
+    RETURNING remote_session_issuers.id
+)
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = @json_web_key_set_id, client_secret_encrypted = NULL,
+    organization_id = @organization_id
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.project_id = @project_id
+  AND remote_session_clients.remote_session_issuer_id IN (SELECT issuer.id FROM issuer);
+
 -- name: MovePreparationFixtureClientProject :execrows
 UPDATE remote_session_clients SET project_id = @target_project_id
 WHERE id = @id AND project_id = @project_id;
@@ -1674,3 +1754,277 @@ AND p.proname IN ('validate_remote_session_ema_binding_scope', 'guard_remote_ses
 -- Test fixture: represent a binding created without application lifecycle defaults.
 UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
 WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id;
+
+-- name: SetUserLifecycleFixture :exec
+-- Test-only fixture: independently controls local/provider deletion and login
+-- timestamps, including restoring local state without clearing provider deletion.
+-- Users are global identities and have no project_id.
+UPDATE users
+SET deleted_at = sqlc.narg('deleted_at')::timestamptz,
+    workos_deleted_at = sqlc.narg('workos_deleted_at')::timestamptz,
+    last_login = sqlc.narg('last_login')::timestamptz
+WHERE id = @id;
+
+-- name: CountBackendsBlockedByFixture :one
+-- Follow queued row-lock waiters as well as the direct holder; UNION deduplicates paths.
+WITH RECURSIVE blocked(pid) AS (
+    SELECT pid FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database() AND @holder_pid::integer = ANY(pg_blocking_pids(pid))
+    UNION
+    SELECT activity.pid FROM pg_catalog.pg_stat_activity AS activity
+    JOIN blocked AS blocker ON blocker.pid = ANY(pg_blocking_pids(activity.pid))
+    WHERE activity.datname = current_database()
+)
+SELECT count(*) FROM blocked;
+
+-- name: IsQueryBlockedByFixture :one
+WITH RECURSIVE blocked(pid) AS (
+    SELECT pid FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database() AND @holder_pid::integer = ANY(pg_blocking_pids(pid))
+    UNION
+    SELECT activity.pid FROM pg_catalog.pg_stat_activity AS activity
+    JOIN blocked AS blocker ON blocker.pid = ANY(pg_blocking_pids(activity.pid))
+    WHERE activity.datname = current_database()
+)
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_stat_activity AS activity
+    JOIN blocked USING (pid)
+    WHERE activity.state = 'active' AND activity.wait_event_type = 'Lock'
+      AND activity.query LIKE @query_pattern::text
+);
+
+-- name: SetLocalLockTimeoutFixture :one
+SELECT set_config('lock_timeout', @timeout::text, true);
+
+-- name: LockToolsetNowaitFixture :one
+SELECT id FROM toolsets WHERE project_id = @project_id AND slug = @slug AND deleted IS FALSE FOR UPDATE NOWAIT;
+
+-- name: LockToolsetNoKeyUpdateFixture :one
+-- Parks a writer that wants the toolset row's FOR UPDATE lock while still
+-- allowing rows that reference the toolset to be inserted.
+--
+-- FOR UPDATE is the wrong tool for that: it conflicts with the FOR KEY SHARE
+-- lock PostgreSQL takes on the referenced row for a foreign key, so holding it
+-- also blocks attaching an mcp_servers row to this toolset — and a test that
+-- needs to do exactly that while a writer waits deadlocks itself. FOR NO KEY
+-- UPDATE conflicts with FOR UPDATE but not with FOR KEY SHARE, which is the
+-- combination an interleaving test needs.
+SELECT id FROM toolsets WHERE project_id = @project_id AND slug = @slug AND deleted IS FALSE FOR NO KEY UPDATE NOWAIT;
+
+-- name: LockMCPServerRowNowaitFixture :one
+-- Probes whether anyone currently holds the MCP server row lock, without
+-- waiting. Used to assert lock ORDER: a writer parked on the toolset row must
+-- not already be holding this one, or the two rows are taken in opposite
+-- orders by different paths and the pair can deadlock.
+SELECT id FROM mcp_servers WHERE id = @id AND project_id = @project_id AND deleted IS FALSE FOR UPDATE NOWAIT;
+
+-- name: LockMCPServerRowFixture :one
+-- Holds the row lock a dashboard edit of this MCP server would take, so a test
+-- can prove a writer pins the server-to-toolset binding before deciding what
+-- to change.
+SELECT id FROM mcp_servers WHERE id = @id AND project_id = @project_id AND deleted IS FALSE FOR UPDATE;
+
+-- name: RepointMCPServerToolsetFixture :one
+-- Moves an MCP server onto a different backing toolset, which is what
+-- UpdateMCPServer does to toolset_id. Used to stage the race where the target
+-- of a tool-exposure change moves after it was read.
+--
+-- The target toolset is resolved through toolsets scoped to the same project
+-- and organization, not taken on trust from the caller. mcp_servers.toolset_id
+-- has no composite constraint pairing it with project_id, so an unscoped
+-- version of this fixture could manufacture exactly the cross-project and
+-- cross-organization binding this workflow exists to refuse — and a test
+-- fixture that can build an impossible state makes the suite prove nothing.
+UPDATE mcp_servers AS m
+SET toolset_id = (
+        SELECT t.id
+        FROM toolsets AS t
+        JOIN projects AS p
+          ON p.id = t.project_id
+         AND p.organization_id = t.organization_id
+         AND p.deleted IS FALSE
+        WHERE t.id = @toolset_id
+          AND t.project_id = @project_id
+          AND t.organization_id = @organization_id
+          AND t.deleted IS FALSE
+    ),
+    updated_at = clock_timestamp()
+WHERE m.id = @id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  -- Refuses rather than nulling the backend when the target does not resolve
+  -- in this tenancy: the exclusivity CHECK requires exactly one backend, so a
+  -- fixture that silently cleared it would fail far from the real cause.
+  AND EXISTS (
+      SELECT 1 FROM toolsets AS t
+      WHERE t.id = @toolset_id
+        AND t.project_id = @project_id
+        AND t.organization_id = @organization_id
+        AND t.deleted IS FALSE
+  )
+RETURNING m.id;
+
+-- name: LockExternalOAuthMetadataNowaitFixture :one
+SELECT id FROM external_oauth_server_metadata WHERE id = @id AND project_id = @project_id FOR UPDATE NOWAIT;
+
+-- name: AcquireTestLockFixture :exec
+-- Transaction-scoped advisory locks for testing the synchronization helpers themselves.
+SELECT pg_advisory_xact_lock(@key::bigint);
+
+-- name: LockPublishOutboxRowFixture :one
+SELECT id FROM publish_outbox WHERE id = @id AND organization_id = @organization_id FOR UPDATE;
+
+-- name: GetAdvisoryLockHolderFixture :one
+-- Resolve a service-owned session lock by its exact application key.
+SELECT locks.pid::integer FROM pg_catalog.pg_locks AS locks
+WHERE locks.locktype = 'advisory' AND locks.granted
+  AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+  AND locks.classid = ((hashtextextended(@key::text, 0) >> 32) & 4294967295)::oid
+  AND locks.objid = (hashtextextended(@key::text, 0) & 4294967295)::oid
+  AND locks.objsubid = 1;
+
+-- name: CountAdvisoryLockWaitersFixture :one
+-- Count sessions blocked on an advisory lock by its exact application key.
+SELECT count(*)::integer FROM pg_catalog.pg_locks AS locks
+WHERE locks.locktype = 'advisory' AND NOT locks.granted
+  AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+  AND locks.classid = ((hashtextextended(@key::text, 0) >> 32) & 4294967295)::oid
+  AND locks.objid = (hashtextextended(@key::text, 0) & 4294967295)::oid
+  AND locks.objsubid = 1;
+
+-- name: BackendPIDFixture :one
+-- Identify a holder exposed only through a transaction-enlisted query interface.
+SELECT pg_backend_pid();
+
+-- name: InsertDeploymentAssetFixture :exec
+INSERT INTO assets (id, project_id, organization_id, name, url, kind, content_type, content_length, sha256)
+VALUES (@id, @project_id, @organization_id, @name, @url, @kind, @content_type, 1, @sha256);
+
+-- name: InsertCompletedDeploymentFixture :exec
+WITH created AS (
+  INSERT INTO deployments (id, user_id, project_id, organization_id, idempotency_key)
+  VALUES (@id, @user_id, @project_id, @organization_id, @idempotency_key)
+  RETURNING id
+)
+INSERT INTO deployment_statuses (deployment_id, status)
+SELECT id, 'completed' FROM created;
+
+-- name: InsertDeploymentFunctionFixture :exec
+INSERT INTO deployments_functions (id, deployment_id, asset_id, name, slug, runtime)
+VALUES (@id, @deployment_id, @asset_id, @name, @slug, @runtime);
+
+-- name: InsertFunctionToolDefinitionFixture :exec
+INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, function_id, runtime, name, description)
+VALUES (@tool_urn, @project_id, @deployment_id, @function_id, @runtime, @name, @description);
+
+-- name: InsertToolsetVersionFixture :exec
+-- Tenant-scoped on purpose: the insert only lands when the named toolset
+-- really belongs to the named project and organization, so a fixture cannot
+-- reach across tenants the way a bare toolset id would let it.
+INSERT INTO toolset_versions (toolset_id, version, tool_urns)
+SELECT t.id, @version, @tool_urns::TEXT[]
+FROM toolsets t
+WHERE t.id = @toolset_id
+  AND t.project_id = @project_id
+  AND t.organization_id = @organization_id
+  AND t.deleted IS FALSE;
+-- name: DeleteRetainedCatalogSourcesFixture :exec
+DELETE FROM mcp_registries;
+
+-- name: InsertRetainedLegacyCatalogSourceFixture :exec
+INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Legacy catalog','https://legacy.example.test','pulse_v0_1','pulse_server_credentials',true,'certified','pulse');
+
+-- name: SetRemoteSessionIssuerOmitScopeFallbackFixture :execrows
+-- Scoped to the issuer's own tier: NULL project and organization name a global issuer.
+UPDATE remote_session_issuers
+SET omit_scope_fallback = @omit_scope_fallback
+WHERE id = @id
+  AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;
+
+-- name: SetOrganizationVerifiedDomainsFixture :exec
+UPDATE organization_metadata
+SET verified_domains = @verified_domains::text[]
+WHERE id = @id;
+
+-- name: SeedInternalSessionIssuerFixture :one
+-- An organization's Speakeasy issuer over an existing key set, for tests that
+-- reference the issuer row without signing.
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id)
+VALUES (@organization_id, @issuer, @json_web_key_set_id)
+RETURNING id;
+
+-- name: DisableInternalSessionIssuerFixture :execrows
+UPDATE internal_session_issuers
+SET disabled_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
+
+-- name: WithdrawJsonWebKeyKeepingUpdatedAtFixture :execrows
+-- Soft-deletes one key without moving its updated_at, so a test can show a
+-- cache notices a key change that leaves every timestamp unchanged.
+UPDATE json_web_keys
+SET deleted_at = updated_at
+WHERE organization_id = @organization_id AND kid = @kid AND deleted IS FALSE;
+
+-- name: CountWaitingAdvisoryLocksFixture :one
+-- Advisory lock requests still waiting, so a test can tell a writer blocked.
+SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
+WHERE locktype = 'advisory' AND NOT granted
+  AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database());
+
+-- name: CountMcpMetadataForBackendIDFixture :one
+SELECT count(*)
+FROM mcp_metadata
+WHERE project_id = @project_id
+  AND (toolset_id = @backend_id::uuid OR mcp_server_id = @backend_id::uuid);
+
+-- name: RekeyMcpMetadataToMcpServerFixture :execrows
+UPDATE mcp_metadata
+SET toolset_id = NULL, mcp_server_id = toolset_id
+WHERE project_id = @project_id
+  AND toolset_id = @toolset_id;
+
+-- name: SetMcpMetadataHeaderDisplayNamesFixture :execrows
+UPDATE mcp_metadata
+SET header_display_names = @header_display_names
+WHERE id = @id
+  AND project_id = @project_id;
+
+-- name: CountPendingSignInRevocationDeliveries :one
+SELECT count(*)
+FROM sign_in_revocation_deliveries
+WHERE organization_id = @organization_id
+  AND delivered_at IS NULL;
+
+-- name: SeedInternalSessionIssuerSignInMethodsFixture :exec
+-- Plants an organization's internal session issuer limited to the given
+-- sign-in tiers, skipping the KMS provisioning the real enable performs.
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES (@organization_id, 'gcp_iam', @name || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT @organization_id, credential.id, 'gcp_kms', 'RS256', @name || '-key' FROM credential
+    RETURNING id
+), key_set AS (
+    INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+    SELECT @organization_id, key.id, @name FROM key
+    RETURNING id
+)
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id, allowed_sign_in_methods, allowed_microsoft_tenant_ids)
+SELECT @organization_id, @issuer, key_set.id, sqlc.narg(allowed_sign_in_methods)::text[], sqlc.narg(allowed_microsoft_tenant_ids)::text[] FROM key_set;
+
+-- name: MakeSignInRevocationDeliveriesDueFixture :exec
+-- Skips the backoff so a test can retry failed deliveries at once.
+UPDATE sign_in_revocation_deliveries
+SET next_attempt_at = NULL,
+    claimed_until = NULL
+WHERE organization_id = @organization_id
+  AND delivered_at IS NULL;
+
+-- name: ListSignInRevocationDeliveriesFixture :many
+SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until, delivered_at
+FROM sign_in_revocation_deliveries
+WHERE organization_id = @organization_id
+ORDER BY created_at, id;

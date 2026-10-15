@@ -17,6 +17,16 @@ func SubmitClientIDIdentityProviderConnectionsPath() string {
 	return "/rpc/identityProviderConnections.submitClientId"
 }
 
+// ReplaceClientSecretIdentityProviderConnectionsPath returns the URL path to the identityProviderConnections service replaceClientSecret HTTP endpoint.
+func ReplaceClientSecretIdentityProviderConnectionsPath() string {
+	return "/rpc/identityProviderConnections.replaceClientSecret"
+}
+
+// SetSetupMethodIdentityProviderConnectionsPath returns the URL path to the identityProviderConnections service setSetupMethod HTTP endpoint.
+func SetSetupMethodIdentityProviderConnectionsPath() string {
+	return "/rpc/identityProviderConnections.setSetupMethod"
+}
+
 // VerifyIdentityProviderConnectionsPath returns the URL path to the identityProviderConnections service verify HTTP endpoint.
 func VerifyIdentityProviderConnectionsPath() string {
 	return "/rpc/identityProviderConnections.verify"

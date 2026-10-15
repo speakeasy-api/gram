@@ -168,6 +168,7 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		Tools:          req.Tools,
 		ToolChoice:     req.ToolChoice,
 		Temperature:    temp,
+		MaxTokens:      req.MaxTokens,
 		ResponseFormat: nil,
 		Reasoning:      req.Reasoning,
 		CacheControl:   req.CacheControl,
@@ -551,9 +552,10 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 	// Optional system prompt
 	if req.SystemPrompt != "" {
 		messages = append(messages, or.CreateChatMessagesSystem(or.ChatSystemMessage{
-			Role:    or.ChatSystemMessageRoleSystem,
-			Content: or.CreateChatSystemMessageContentStr(req.SystemPrompt),
-			Name:    nil,
+			ConfigurationUpdate: nil,
+			Role:                or.ChatSystemMessageRoleSystem,
+			Content:             or.CreateChatSystemMessageContentStr(req.SystemPrompt),
+			Name:                nil,
 		}))
 	}
 
@@ -576,6 +578,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		Tools:                     nil,
 		ToolChoice:                nil,
 		Temperature:               req.Temperature,
+		MaxTokens:                 req.MaxTokens,
 		Model:                     req.Model,
 		Stream:                    false,
 		UsageSource:               req.UsageSource,
@@ -1074,11 +1077,13 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 
 	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
+		SessionID:      nil,
+		Trace:          nil,
 		Model:          model,
 		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
 		EncodingFormat: nil,
 		Dimensions:     dimensions,
-		User:           nil,
+		User:           &orgID,
 		Provider:       nil,
 		InputType:      nil,
 	})

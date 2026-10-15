@@ -97,26 +97,38 @@ function CurrentTaskSteps({
 
 function WizardRail({
   tasks,
+  groups,
   currentKey,
   disabled,
   onPick,
 }: {
+  /** The cards to walk, in order. */
   tasks: SetupTask[];
+  /** The groups those cards may sit under, by key. */
+  groups: Map<string, SetupTask>;
   currentKey: string | undefined;
   /** Mirrors WizardNav: no moves while a completion is settling. */
   disabled: boolean;
   onPick: (task: SetupTask) => void;
 }): JSX.Element {
-  const railSteps: Step[] = tasks.map((task) => ({
-    id: task.key,
-    title: task.title,
-    description: task.description,
-    status: task.status === "done" ? "done" : undefined,
-    detail:
-      task.key === currentKey ? (
-        <CurrentTaskSteps disabled={disabled} />
-      ) : undefined,
-  }));
+  // Groups are not rows of their own: the first card under a group carries
+  // the group's title as a section label, so the rail reads as one outline.
+  const railSteps: Step[] = tasks.map((task, index) => {
+    const group = task.parentKey ? groups.get(task.parentKey) : undefined;
+    const firstOfGroup =
+      group !== undefined && tasks[index - 1]?.parentKey !== task.parentKey;
+    return {
+      id: task.key,
+      title: task.title,
+      description: task.description,
+      section: firstOfGroup ? group.title : undefined,
+      status: task.status === "done" ? "done" : undefined,
+      detail:
+        task.key === currentKey ? (
+          <CurrentTaskSteps disabled={disabled} />
+        ) : undefined,
+    };
+  });
   const currentStep = tasks.findIndex((task) => task.key === currentKey);
   const doneCount = tasks.filter((task) => task.status === "done").length;
 
@@ -207,13 +219,24 @@ function SetupWizardInner(): JSX.Element {
   const actionInFlight = useRef(false);
   const [actionSettling, setActionSettling] = useState(false);
 
-  const tasks = setupTasks.data?.tasks ?? [];
+  // The walk is over cards. A group has no card of its own: it names the
+  // section its cards sit in, and its status follows theirs.
+  const listed = setupTasks.data?.tasks ?? [];
+  const tasks = listed.filter((task) => !task.group);
+  const groups = new Map(
+    listed.filter((task) => task.group).map((task) => [task.key, task]),
+  );
 
-  // ?task= names the card on screen, as a URL slug. Without one — or with one that names nothing
-  // here — resume at the first card still open; every card done lands on the
-  // last so the reader can see they are finished.
+  // ?task= names the card on screen, as a URL slug. Without one — or with one
+  // that names nothing here — resume at the first card still open; every card
+  // done lands on the last so the reader can see they are finished. A group's
+  // name opens its first open card.
   const requestedKey = setupTaskKeyForSlug(searchParams.get(TASK_PARAM) ?? "");
-  const requested = tasks.find((task) => task.key === requestedKey);
+  const requestedCards = groups.has(requestedKey ?? "")
+    ? tasks.filter((task) => task.parentKey === requestedKey)
+    : tasks.filter((task) => task.key === requestedKey);
+  const requested =
+    requestedCards.find((task) => task.status !== "done") ?? requestedCards[0];
   const firstOpen = tasks.find((task) => task.status !== "done");
   const current = requested ?? firstOpen ?? tasks[tasks.length - 1];
   const prerequisiteMessage = current?.blockedBy.length
@@ -393,6 +416,7 @@ function SetupWizardInner(): JSX.Element {
         <JourneyLayout
           rail={
             <WizardRail
+              groups={groups}
               tasks={tasks}
               currentKey={current?.key}
               disabled={settling}

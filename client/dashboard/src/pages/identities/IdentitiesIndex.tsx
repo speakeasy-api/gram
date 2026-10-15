@@ -1,3 +1,4 @@
+import { IdentitySyncCallout } from "@/components/setup-empty-state";
 import {
   buildEmployees,
   type Employee,
@@ -32,8 +33,6 @@ import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
@@ -364,12 +363,10 @@ function IdentitiesIndexContent(): JSX.Element {
   const sdk = useSdkClient();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
-  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
-    agentManagementFlag.status === "enabled" &&
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
     !session.impersonatorEmail &&
@@ -477,10 +474,11 @@ function IdentitiesIndexContent(): JSX.Element {
   );
 
   const counts = useMemo(() => {
-    const tally = { enrolled: 0, noAccount: 0, agent: 0 };
+    const tally = { enrolled: 0, noAccount: 0, agent: 0, people: 0 };
     for (const identity of identities) {
       if (identity.status === "enrolled") tally.enrolled += 1;
       const kind = identityKindOf(identity);
+      if (kind === "person") tally.people += 1;
       if (kind === "person" && !identityHasAccount(identity)) {
         tally.noAccount += 1;
       }
@@ -700,6 +698,9 @@ function IdentitiesIndexContent(): JSX.Element {
         {/* The section stacks its body children at 8px, which reads as one
             block: the tiles, the controls and the table are three things. */}
         <div className="flex flex-col gap-4">
+          {!rosterLoading && !rosterFailed && counts.people <= 1 && (
+            <IdentitySyncCallout />
+          )}
           <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
             {rosterLoading ? (
               <>

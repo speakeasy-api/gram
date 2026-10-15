@@ -76,7 +76,7 @@ func TestOperationReceiptFromRowPreservesRegistrationAssociation(t *testing.T) {
 func TestNewRegistrationStoreRequiresDatabase(t *testing.T) {
 	t.Parallel()
 
-	store, err := NewRegistrationStore(nil, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	store, err := NewRegistrationStore(nil)
 	require.ErrorIs(t, err, ErrRegistrationInvalid)
 	require.Nil(t, store)
 }

@@ -18,6 +18,9 @@ vi.mock(
     }),
   }),
 );
+vi.mock("./OktaServerSuggestions", () => ({
+  OktaServerSuggestions: () => <div data-testid="okta-server-suggestions" />,
+}));
 afterEach(cleanup);
 
 function show(
@@ -129,6 +132,18 @@ it.each([0, 7])(
     expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
   },
 );
+
+it("mounts the server suggestions above the snapshot", () => {
+  show("succeeded");
+  const suggestions = screen.getByTestId("okta-server-suggestions");
+  const snapshot = screen.getByRole("region", {
+    name: "Identity provider applications",
+  });
+  expect(
+    suggestions.compareDocumentPosition(snapshot) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
 
 it("does not force an empty snapshot to table width", () => {
   show("succeeded");

@@ -1,0 +1,24 @@
+edition = "2024";
+
+package gram.role_distribution.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1;roledistributionv1";
+
+// Internal event: role_distribution.setup_requested_v1.
+// Exactly one of role_urn, global_role_id, or bootstrap_organization_id is required.
+// role_urn requires a nonblank organization_id and an empty cursor.
+// global_role_id and bootstrap_organization_id require an empty organization_id;
+// cursor is optional for continuation of these expansion targets.
+message RoleDistributionSetupRequestedV1 {
+  string organization_id = 1;
+  string role_urn = 2;
+  string global_role_id = 3;
+  string bootstrap_organization_id = 4;
+  string cursor = 5;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {seconds: 604800}
+  };
+}

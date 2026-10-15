@@ -51,6 +51,7 @@ function renderField(
     onEdit?: () => void;
     onDelete?: () => void;
     allowAdditionalProviders?: boolean;
+    isError?: boolean;
   } = {},
 ) {
   return render(
@@ -58,6 +59,7 @@ function renderField(
       <RemoteIdentityProvidersField
         associatedIssuers={issuers}
         isLoading={false}
+        isError={handlers.isError}
         allowAdditionalProviders={handlers.allowAdditionalProviders ?? true}
         projectId="project-1"
         onAdd={vi.fn<() => void>()}
@@ -76,6 +78,24 @@ describe("RemoteIdentityProvidersField", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it("reports a failed lookup instead of the empty state", () => {
+    renderField([], { isError: true });
+
+    expect(
+      screen.getByText(/Failed to load the connected services/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /add provider/i })).toBeNull();
+  });
+
+  it("keeps the providers that loaded when another fails", () => {
+    renderField([issuer()], { isError: true });
+
+    expect(screen.getByText("Acme Identity")).toBeTruthy();
+    expect(
+      screen.getByText(/Failed to load the connected services/),
+    ).toBeTruthy();
   });
 
   // The gateway (meta MCP) case attaches one provider per member vendor, so

@@ -73,7 +73,7 @@ func (s *Service) loadSpendBreakdownWindow(ctx context.Context, organizationID s
 		return time.Time{}, time.Time{}, time.Time{}, nil, oops.E(oops.CodeUnexpected, err, "get billing metadata for spend breakdown").LogError(ctx, s.logger)
 	}
 	cycles := BillingCycles(queriedAt, int(meta.BillingCycleAnchorDay), tumHistoryCycles)
-	from, to, err := resolveMeterUsageWindow(payload.From, payload.To, cycles[len(cycles)-1])
+	from, to, err := ResolveMeterUsageWindow(payload.From, payload.To, cycles[len(cycles)-1])
 	if err != nil {
 		if boundaryErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return time.Time{}, time.Time{}, time.Time{}, nil, boundaryErr.LogWarn(ctx, s.logger)

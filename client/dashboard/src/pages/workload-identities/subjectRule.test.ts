@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
-import { subjectRuleWarning } from "./subjectRule";
+import {
+  buildAdmitValues,
+  inferMatchKind,
+  MAX_SUBJECT_BYTES,
+  subjectRuleWarning,
+} from "./subjectRule";
 
 const STEM = "wimse://identity.example.com/org/acme/agent/";
 
@@ -52,4 +57,68 @@ it("warns when the stem ends in whitespace before its star", () => {
   const warning = subjectRuleWarning("wildcard", `${STEM} *`);
 
   expect(warning).toContain("whitespace");
+});
+
+it("reads the match kind off the subject", () => {
+  expect(inferMatchKind(`${STEM}a-1`)).toBe("exact");
+  expect(inferMatchKind(`${STEM}*`)).toBe("wildcard");
+  expect(inferMatchKind("")).toBe("exact");
+  expect(inferMatchKind("  ")).toBe("exact");
+});
+
+it("reads a misplaced star as a wildcard, so the message names the real problem", () => {
+  // Lossless, because an exact subject may never contain a star — the server
+  // refuses one outright. So a star anywhere means a wildcard was intended, and
+  // reporting a misplaced terminator is more useful than reporting a literal.
+  expect(inferMatchKind("wimse://x/*/agent/a-1")).toBe("wildcard");
+  expect(subjectRuleWarning("wildcard", "wimse://x/*/agent/a-1")).toContain(
+    'must end in "*"',
+  );
+  // A bare star still says what it would do, rather than being read as exact.
+  expect(inferMatchKind("*")).toBe("wildcard");
+  expect(subjectRuleWarning("wildcard", "*")).toContain("bare");
+});
+
+it("submits the platform's issuer URL and the subject as it will be stored", () => {
+  const values = buildAdmitValues(
+    {
+      subject: `  ${STEM}*  `,
+      name: "Agent fleet",
+      tags: ["slack"],
+      agentId: "22222222-2222-2222-2222-222222222222",
+    },
+    "https://identity.example.com",
+  );
+
+  expect(values).toEqual({
+    issuer: "https://identity.example.com",
+    subject: `${STEM}*`,
+    matchKind: "wildcard",
+    name: "Agent fleet",
+    tags: ["slack"],
+    agentId: "22222222-2222-2222-2222-222222222222",
+  });
+});
+
+it("submits an exact subject as exact", () => {
+  expect(
+    buildAdmitValues(
+      { subject: `${STEM}a-1`, name: "", tags: [], agentId: "agent" },
+      "https://identity.example.com",
+    ).matchKind,
+  ).toBe("exact");
+});
+
+it("refuses a subject longer than the server can store, counting bytes", () => {
+  expect(subjectRuleWarning("exact", "a".repeat(MAX_SUBJECT_BYTES))).toBeNull();
+  expect(
+    subjectRuleWarning("exact", "a".repeat(MAX_SUBJECT_BYTES + 1)),
+  ).toContain("too long");
+  // "é" is one character but two bytes, so half the limit in them is already over.
+  expect(
+    subjectRuleWarning(
+      "exact",
+      "é".repeat(Math.ceil((MAX_SUBJECT_BYTES + 1) / 2)),
+    ),
+  ).toContain("too long");
 });

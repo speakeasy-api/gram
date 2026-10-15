@@ -14,6 +14,10 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 const mocks = vi.hoisted(() => ({
   admin: true,
   enabled: true,
+  issuerAvailable: false,
+  issuerQuery: undefined as
+    | { data?: { state: string; issuer?: string }; isError?: boolean }
+    | undefined,
   ema: vi.fn(),
   slack: vi.fn(),
   features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
@@ -42,9 +46,15 @@ vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
     </div>
   ),
 }));
-vi.mock("./identity-provider/EnterpriseManagedAuth", () => ({
-  EnterpriseManagedAuth: () => {
-    mocks.ema();
+vi.mock("./identity-provider/useEnterpriseIssuer", () => ({
+  useEnterpriseIssuer: () =>
+    mocks.issuerQuery ?? {
+      data: mocks.issuerAvailable ? { state: "setup_required" } : undefined,
+    },
+}));
+vi.mock("./identity-provider/IdentityProviders", () => ({
+  IdentityProviders: (props: unknown) => {
+    mocks.ema(props);
     return <div>EMA workspace</div>;
   },
 }));
@@ -135,6 +145,8 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.admin = true;
   mocks.enabled = true;
+  mocks.issuerAvailable = false;
+  mocks.issuerQuery = undefined;
   mocks.onboarding = {
     domainVerified: false,
     ssoConfigured: false,
@@ -170,15 +182,15 @@ describe("identity top-level tabs", () => {
     expect(
       screen.getByRole("link", { name: "Single sign-on" }).getAttribute("href"),
     ).toBe("?tab=sso");
-    const ema = screen.getByRole("link", { name: "Enterprise Managed Auth" });
-    expect(ema.getAttribute("href")).toBe("?tab=enterprise-managed-auth");
+    const ema = screen.getByRole("link", { name: "Identity providers" });
+    expect(ema.getAttribute("href")).toBe("?tab=identity-providers");
     expect(ema.getAttribute("data-stage")).toBe("preview");
     expect(mocks.ema).not.toHaveBeenCalled();
     expect(mocks.features).toHaveBeenCalled();
   });
 
   it("mounts EMA without fetching employee SSO features", () => {
-    show("?tab=enterprise-managed-auth");
+    show("?tab=identity-providers");
     expect(screen.getByText("EMA workspace")).toBeTruthy();
     expect(mocks.features).not.toHaveBeenCalled();
   });
@@ -187,14 +199,59 @@ describe("identity top-level tabs", () => {
     "requires %s before mounting EMA",
     (gate) => {
       mocks[gate] = false;
-      show("?tab=enterprise-managed-auth&provider=okta&view=setup");
+      show("?tab=identity-providers&provider=okta&view=setup");
       expect(
-        screen.queryByRole("link", { name: "Enterprise Managed Auth" }),
+        screen.queryByRole("link", { name: "Identity providers" }),
       ).toBeNull();
       expect(mocks.ema).not.toHaveBeenCalled();
       expect(mocks.features).toHaveBeenCalled();
     },
   );
+
+  it("lists the Speakeasy provider when the issuer is offered without the Okta rollout", () => {
+    mocks.enabled = false;
+    mocks.issuerAvailable = true;
+    show("?tab=identity-providers");
+    expect(
+      screen.getByRole("link", { name: "Identity providers" }),
+    ).toBeTruthy();
+    expect(mocks.ema).toHaveBeenCalledWith({
+      showExternal: false,
+      showSpeakeasy: true,
+    });
+  });
+
+  it.each([
+    [
+      "an existing issuer reports unavailable",
+      { data: { state: "unavailable", issuer: "https://issuer.example.com" } },
+    ],
+    ["its status failed to load", { isError: true }],
+  ])("keeps the Speakeasy provider reachable when %s", (_, query) => {
+    mocks.enabled = false;
+    mocks.issuerQuery = query;
+    show("?tab=identity-providers");
+    expect(mocks.ema).toHaveBeenCalledWith({
+      showExternal: false,
+      showSpeakeasy: true,
+    });
+  });
+
+  it("hides the Speakeasy provider when the issuer is not offered", () => {
+    mocks.enabled = false;
+    mocks.issuerQuery = { data: { state: "unavailable" } };
+    show("?tab=identity-providers");
+    expect(
+      screen.queryByRole("link", { name: "Identity providers" }),
+    ).toBeNull();
+  });
+
+  it("keeps the issuer off the Single sign-on tab", () => {
+    mocks.issuerAvailable = true;
+    show();
+    expect(screen.queryByText(/Enterprise Managed Authorization/)).toBeNull();
+    expect(mocks.ema).not.toHaveBeenCalled();
+  });
 
   it("falls back to SSO for arbitrary unsupported tabs", () => {
     show("?tab=bogus");

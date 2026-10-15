@@ -3,7 +3,28 @@ package proxy
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
+
+// IsDeniedPassThroughSource reports whether an inbound header may not be used
+// as a pass-through source.
+//
+// isSkippedRequestHeader already refuses to copy Cookie upstream because it
+// carries the dashboard's gram_session rather than any intent toward the
+// remote server. A configured header reads the inbound request directly, so
+// without this it could carry that same cookie upstream under any name it
+// likes and walk straight around that decision.
+//
+// Authorization is deliberately absent: forwarding the caller's own upstream
+// credential is what pass-through identity is for.
+func IsDeniedPassThroughSource(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "cookie", "set-cookie", "proxy-authorization":
+		return true
+	default:
+		return false
+	}
+}
 
 // ConfiguredHeader describes how a single outgoing header sent to the remote
 // MCP server is populated. Exactly one of StaticValue or ValueFromRequestHeader
@@ -32,6 +53,15 @@ type ConfiguredHeader struct {
 func (h ConfiguredHeader) Resolve(userReq *http.Request) (string, error) {
 	switch {
 	case h.ValueFromRequestHeader != "":
+		if IsDeniedPassThroughSource(h.ValueFromRequestHeader) {
+			// Never read the source. An optional row is dropped rather than
+			// failing every request to a server that still carries one; a
+			// required row cannot be satisfied, so the request is refused.
+			if !h.IsRequired {
+				return "", nil
+			}
+			return "", fmt.Errorf("header %q cannot be populated from request header %q", h.Name, h.ValueFromRequestHeader)
+		}
 		value := userReq.Header.Get(h.ValueFromRequestHeader)
 		if value == "" && h.IsRequired {
 			return "", fmt.Errorf("required header %q missing from request (pass-through from %q)", h.Name, h.ValueFromRequestHeader)

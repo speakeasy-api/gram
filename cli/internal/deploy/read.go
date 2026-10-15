@@ -37,7 +37,7 @@ func (sr *SourceReader) readRemote(ctx context.Context) (io.ReadCloser, int64, e
 		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", "gram-cli/1.0")
+	req.Header.Set("User-Agent", "speakeasy-cli/1.0")
 	req.Header.Set("Accept", "application/yaml, application/json, text/yaml, text/plain, */*")
 
 	resp, err := sharedRetryHTTPClient.Do(req)

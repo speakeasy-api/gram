@@ -7,6 +7,7 @@ import {
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
 
+import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -19,7 +20,8 @@ import {
   AgentSetupSection,
   MCP_AGENT_SETUP_SECTION_ID,
 } from "./sections/AgentSetupSection";
-import { BrandingSection } from "./sections/BrandingSection";
+import { CallerIdentitySection } from "./sections/CallerIdentitySection";
+import { GeneralSection } from "./sections/GeneralSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
 import {
@@ -32,29 +34,18 @@ import {
   ResourceIdentifierSection,
 } from "./sections/ResourceIdentifierSection";
 import type { SourceBackedDeleteTarget } from "./sections/sourceDelete";
-import {
-  MCP_SOURCE_NAME_SECTION_ID,
-  RemoteSourceNameSection,
-  TunneledSourceNameSection,
-} from "./sections/SourceNameSection";
 import { RemoteMcpSessionsSection } from "./sections/RemoteMcpSessionsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 import {
   MCP_TUNNEL_KEY_SECTION_ID,
   TunnelKeySection,
 } from "./sections/TunnelKeySection";
-import {
-  MCP_UPSTREAM_URL_SECTION_ID,
-  UpstreamUrlSection,
-} from "./sections/UpstreamUrlSection";
 
 // Every section that can be deep-linked from elsewhere in the dashboard
 // (readiness bar, visibility picker, rate-limit hint, connections panel).
 const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_SERVER_URL_SECTION_ID,
   MCP_AUTHENTICATION_SECTION_ID,
-  MCP_SOURCE_NAME_SECTION_ID,
-  MCP_UPSTREAM_URL_SECTION_ID,
   MCP_RESOURCE_IDENTIFIER_SECTION_ID,
   MCP_PUBLIC_ACCESS_SECTION_ID,
   MCP_TUNNEL_KEY_SECTION_ID,
@@ -98,6 +89,7 @@ export function SettingsTab({
   const hasSourceSections =
     !!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId;
   const remoteMcpServerId = mcpServer.remoteMcpServerId;
+  const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
 
   // The source rows behind this server. Each section edits the source
   // directly, so they are fetched once here rather than per section.
@@ -142,20 +134,19 @@ export function SettingsTab({
   if (remoteMcpServerId) {
     return (
       <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
-        <BrandingSection
-          mcpServer={mcpServer}
-          title="Display"
-          description="Customize how this Remote MCP server appears in the dashboard and on its installation page."
-        />
-        {remoteMcpServer ? (
-          <Fragment key={remoteMcpServer.id}>
-            <RemoteSourceNameSection remoteMcpServer={remoteMcpServer} />
-            <UpstreamUrlSection remoteMcpServer={remoteMcpServer} />
-          </Fragment>
+        {/* Held until the source settles: arriving later would remount the
+            form around its Remote URL and drop anything already typed. */}
+        {remoteMcpServer || remoteQuery.isError ? (
+          <GeneralSection
+            mcpServer={mcpServer}
+            remoteMcpServer={remoteMcpServer}
+          />
         ) : null}
-        {/* Upstream headers live inside Identity's Custom Headers disclosure
-            they are governed by the identity choice, not a peer of it. */}
-        <AuthenticationSection mcpServer={mcpServer} />
+        {/* Identity sits directly under General: it is the first decision a
+            remote server needs. Upstream headers live inside its Custom
+            Headers disclosure; they are governed by the identity choice, not
+            a peer of it. */}
+        <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
           endpoints={endpoints}
@@ -163,7 +154,7 @@ export function SettingsTab({
           mcpServer={mcpServer}
         />
         <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
-        <RemoteMcpSessionsSection mcpServer={mcpServer} />
+        <RemoteMcpSessionsSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
         <ToolFilteringSection mcpServer={mcpServer} />
         <DangerZoneSection
           mcpServer={mcpServer}
@@ -181,13 +172,7 @@ export function SettingsTab({
   // result from the previous source must not land on the next one.
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
-      <BrandingSection mcpServer={mcpServer} />
-      {tunneledMcpServer ? (
-        <TunneledSourceNameSection
-          key={tunneledMcpServer.id}
-          tunneledMcpServer={tunneledMcpServer}
-        />
-      ) : null}
+      <GeneralSection mcpServer={mcpServer} />
       {isUnproxied ? null : (
         <>
           <ServerUrlSection
@@ -199,10 +184,11 @@ export function SettingsTab({
           <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
         </>
       )}
-      <AuthenticationSection mcpServer={mcpServer} />
+      <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
       {tunneledMcpServer ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
+          <CallerIdentitySection />
           <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
           <PublicRateLimitsSection
             tunneledMcpServerId={tunneledMcpServer.id}

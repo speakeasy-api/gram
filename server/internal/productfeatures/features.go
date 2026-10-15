@@ -33,7 +33,7 @@ const (
 	FeaturePlatformMCP Feature = "platform_mcp"
 
 	// FeatureCustomerManagedEncryptionKeys gates the organization's ability to bring its
-	// own cloud KMS keys: the external credentials Gram uses to reach them and,
+	// own cloud KMS keys: the external credentials Speakeasy uses to reach them and,
 	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which
 	// covers model provider API keys.
 	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"
@@ -54,13 +54,20 @@ const (
 	// FeatureNetworkIngress is the durable staff-managed entitlement for private
 	// network ingress. It is never included in default bundles or demo seed data.
 	FeatureNetworkIngress Feature = "network_ingress"
+	// FeatureSignalsIntelligence gates signals intelligence configuration access.
+	FeatureSignalsIntelligence Feature = "signals_intelligence"
+	// FeatureOrganizationGatewayDisabled turns the organization gateway off:
+	// while set, every gateway route answers 404. Stored inverted so the
+	// gateway stays on for every organization that never touched it.
+	FeatureOrganizationGatewayDisabled Feature = "organization_gateway_disabled"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set
 // requires a platform admin in addition to org:admin on the target
 // organization. The org-settable cases are the toggles organization admins
 // manage themselves through the dashboard's organization settings (Logs,
-// Skills content upload, consent tool filtering, Platform MCP access); every
+// Skills content upload, consent tool filtering, Platform MCP access, the
+// organization gateway); every
 // other settable feature is a staff-managed entitlement, and features missing
 // a case fail closed so a new feature cannot silently become self-serve.
 func (f Feature) RequiresPlatformAdmin() bool {
@@ -72,7 +79,8 @@ func (f Feature) RequiresPlatformAdmin() bool {
 		FeatureHooksFailOpen,
 		FeatureSkillCaptureMetadataOnly,
 		FeatureConsentToolFiltering,
-		FeaturePlatformMCP:
+		FeaturePlatformMCP,
+		FeatureOrganizationGatewayDisabled:
 		return false
 	default:
 		return true

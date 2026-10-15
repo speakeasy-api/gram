@@ -10,6 +10,7 @@ export type ResourceType =
   | "project"
   | "environment"
   | "skill"
+  | "assistant"
   | "mcp"
   | "risk_policy"
   | "chat";
@@ -69,6 +70,18 @@ export const SCOPE_DEFS: {
     description: "Create and modify skills within projects",
   },
   {
+    scope: "assistant:read",
+    label: "assistant:read",
+    resourceType: "assistant",
+    description: "View and use assistants within projects",
+  },
+  {
+    scope: "assistant:write",
+    label: "assistant:write",
+    resourceType: "assistant",
+    description: "Create and modify assistants within projects",
+  },
+  {
     scope: "mcp:read",
     label: "mcp:read",
     resourceType: "mcp",
@@ -110,6 +123,12 @@ export const SCOPE_DEFS: {
     resourceType: "chat",
     description: "Read all agent session transcripts",
   },
+  {
+    scope: "log:read",
+    label: "log:read",
+    resourceType: "project",
+    description: "View a project's tool-call logs and traces",
+  },
 ];
 
 export const GROUP_ORDER: { key: ResourceType; label: string }[] = [
@@ -117,6 +136,7 @@ export const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "project", label: "Project" },
   { key: "environment", label: "Environments" },
   { key: "skill", label: "Skills" },
+  { key: "assistant", label: "Assistants" },
   { key: "mcp", label: "MCP" },
   { key: "risk_policy", label: "Risk Policies" },
   { key: "chat", label: "Agent Sessions" },

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"math"
 	"math/big"
-	"net/url"
 	"strings"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
@@ -35,9 +35,13 @@ type WeeklyUsageSummaryTarget struct {
 	OrganizationID   string
 	OrganizationName string
 	OrganizationSlug string
-	AccountType      string
-	AlertEmail       string
-	AnchorDay        int
+	// DefaultHost is the organization's recorded default host. Targets from
+	// sweeps started before it was carried leave it empty, which links to the
+	// legacy host.
+	DefaultHost string
+	AccountType string
+	AlertEmail  string
+	AnchorDay   int
 }
 
 // SendWeeklyUsageSummaryArgs carries one send. RunTime is the sweep's
@@ -58,17 +62,17 @@ type WeeklyUsageSummary struct {
 	spendRepo *chrepo.Queries
 	repo      *repo.Queries
 	emails    *email.Service
-	siteURL   *url.URL
+	orgHosts  *orghost.Resolver
 }
 
-func NewWeeklyUsageSummary(logger *slog.Logger, db *pgxpool.Pool, meterReadConn clickhouse.Conn, emails *email.Service, siteURL *url.URL) *WeeklyUsageSummary {
+func NewWeeklyUsageSummary(logger *slog.Logger, db *pgxpool.Pool, meterReadConn clickhouse.Conn, emails *email.Service, orgHosts *orghost.Resolver) *WeeklyUsageSummary {
 	return &WeeklyUsageSummary{
 		logger:    logger.With(attr.SlogComponent("weekly_usage_summary")),
 		db:        db,
 		spendRepo: chrepo.New(meterReadConn),
 		repo:      repo.New(db),
 		emails:    emails,
-		siteURL:   siteURL,
+		orgHosts:  orgHosts,
 	}
 }
 
@@ -86,6 +90,7 @@ func (a *WeeklyUsageSummary) ListTargets(ctx context.Context) ([]WeeklyUsageSumm
 			OrganizationID:   row.OrganizationID,
 			OrganizationName: row.OrganizationName,
 			OrganizationSlug: row.OrganizationSlug,
+			DefaultHost:      conv.FromPGTextOrEmpty[string](row.DefaultHost),
 			AccountType:      row.GramAccountType,
 			AlertEmail:       conv.FromPGTextOrEmpty[string](row.AlertEmail),
 			AnchorDay:        int(row.BillingCycleAnchorDay),
@@ -160,8 +165,8 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 	}
 
 	viewUsageURL := ""
-	if a.siteURL != nil {
-		viewUsageURL = a.siteURL.JoinPath(target.OrganizationSlug, "billing").String()
+	if siteURL := a.orgHosts.SiteURL(conv.ToPGTextEmpty(target.DefaultHost)); siteURL != nil {
+		viewUsageURL = siteURL.JoinPath(target.OrganizationSlug, "billing").String()
 	}
 
 	showEstimatedSpend := accountType == string(billing.TierPayg)

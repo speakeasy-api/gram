@@ -45,7 +45,7 @@ func testIdentityContext(t *testing.T, kind mcpidentity.Kind, userID string) con
 	case mcpidentity.KindAnonymous:
 		return stampValidatedSession(t, boundary, urn.NewAnonymousSubject("session"))
 	case mcpidentity.KindAPIKey:
-		return boundary.StampAPIKey(t.Context())
+		return boundary.StampAPIKey(t.Context(), "key_test")
 	case mcpidentity.KindAssistant:
 		return boundary.StampAssistant(t.Context())
 	case mcpidentity.KindAgent:

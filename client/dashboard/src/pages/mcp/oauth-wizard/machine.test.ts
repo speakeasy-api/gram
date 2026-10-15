@@ -550,7 +550,7 @@ describe("oauthWizardMachine - external happy path", () => {
     });
   });
 
-  it("walks source to Gram-hosted to submitting without a slug", async () => {
+  it("walks source to Speakeasy-hosted to submitting without a slug", async () => {
     let submitted: AddExternalOAuthInput | undefined;
     const services = {
       ...happyServices(),
@@ -638,7 +638,7 @@ describe("oauthWizardMachine - external happy path", () => {
     expect(actor.getSnapshot().context.error).toBeNull();
   });
 
-  it("keeps invalid manual JSON in the Gram-hosted editor", () => {
+  it("keeps invalid manual JSON in the Speakeasy-hosted editor", () => {
     const actor = makeActor(baseInput);
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });

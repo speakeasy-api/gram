@@ -2,7 +2,8 @@
 // /mcp/{slug} endpoints. This surface answers MCP 2026-07-28 — including the
 // sessionless server/discover method and per-request protocol-version
 // declarations — and exposes the fixed meta MCP tool contract (list_servers,
-// describe_server, describe_tools, execute_tool). Hosted (toolset-backed)
+// describe_server, describe_tools, execute_tool, connection_status) plus the
+// one MCP Apps resource connection_status renders with. Hosted (toolset-backed)
 // members serve the full drill-down through the in-process tool dispatch;
 // proxied (remote/tunneled) members through their own upstream sessions.
 
@@ -52,9 +53,29 @@ type metaGateContext struct {
 	// agentID is set only when this request is an agent gateway, which
 	// derives its members from the caller's delegated policy instead of
 	// stored membership rows.
-	agentID         uuid.UUID
-	organizationID  string
-	tokens          map[uuid.UUID]remotesessions.UpstreamToken
+	agentID uuid.UUID
+	// organizationGateway is set only when this request is an organization
+	// gateway, which derives its members from the signed-in user's access
+	// across the organization instead of stored membership rows.
+	organizationGateway bool
+	organizationID      string
+	// tokens is the upstream token map every member routes from, unless
+	// projectTokens is set.
+	tokens map[uuid.UUID]remotesessions.UpstreamToken
+	// projectTokens resolves upstream tokens per member project instead of
+	// tokens, for an organization gateway whose members span projects. Read
+	// both through memberTokens.
+	projectTokens *projectTokenCache
+	// userSessionIssuerID is the gated endpoint's issuer; uuid.Nil when ungated.
+	userSessionIssuerID uuid.UUID
+	// connectRoot is the gateway's root URL, under which each member has a
+	// connect page a signed-in person opens to connect it. Empty when nobody
+	// signs in to the gateway in a browser: ungated and agent gateways.
+	connectRoot string
+	// chainUpstream acquires a member's upstream token by identity chaining
+	// when routing finds none. Set only on the tools/call dispatch copy, so
+	// describe and consent probes never exchange; nil otherwise.
+	chainUpstream   func(ctx context.Context, upstreamResource string) (string, error)
 	toolSelection   *toolfilter.SessionSelection
 	authenticated   bool
 	sessionID       string
@@ -63,11 +84,27 @@ type metaGateContext struct {
 	externalUserID  string
 	apiKeyID        string
 	protocolVersion mcpversions.Resolution
+	// connectURL is the gateway's browser connect page; empty when ungated.
+	connectURL string
 }
 
-func shouldRecordMetaMCPNetworkRequest(agentID uuid.UUID) bool {
-	// Agent gateways are synthetic and have no network access panel to feed.
-	return agentID == uuid.Nil
+// metaMembership names where a meta request's members come from. The zero
+// value is a stored gateway, whose members are its meta_mcp_server_members
+// rows.
+type metaMembership struct {
+	// agentID is set for an agent gateway: its members are what the agent's
+	// delegated policy reaches.
+	agentID uuid.UUID
+
+	// organization is set for an organization gateway: its members are what
+	// the signed-in user can reach across the organization.
+	organization bool
+}
+
+// derived reports whether members come from the caller's access rather than
+// from stored membership rows.
+func (m metaMembership) derived() bool {
+	return m.agentID != uuid.Nil || m.organization
 }
 
 // serveResolvedMetaMCPEndpoint terminates MCP for a meta-MCP-backed
@@ -75,39 +112,42 @@ func shouldRecordMetaMCPNetworkRequest(agentID uuid.UUID) bool {
 // then dispatches the JSON-RPC request. Only POST reaches here — GET/DELETE
 // on /mcp/{slug} stay with their existing handlers, which treat meta-backed
 // endpoints as having no proxied stream and no upstream session.
-// agentID is the agent whose grants define membership, or uuid.Nil for a
-// stored gateway whose members come from meta_mcp_server_members.
+// membership says where the members come from. resolvedEndpoint is the
+// issuer-gate endpoint for a gateway that has no mcp_endpoints row behind it,
+// and nil for one that does.
 func (s *Service) serveResolvedMetaMCPEndpoint(
 	w http.ResponseWriter,
 	r *http.Request,
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	metaServer *metamcprepo.MetaMcpServer,
-	agentID uuid.UUID,
+	membership metaMembership,
+	resolvedEndpoint *ResolvedMcpEndpoint,
 ) error {
 	ctx := r.Context()
 
-	if shouldRecordMetaMCPNetworkRequest(agentID) {
+	// Derived gateways are synthetic and have no network access panel to feed.
+	if !membership.derived() {
 		s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, uuid.Nil, metaServer.ID, metaServer.OrganizationID)
 	}
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
 
-	// Stamped provisionally with the surface's newest revision so responses
-	// that bail before body parsing still carry a version; once the request
-	// is parsed it is re-stamped with the revision in effect.
 	supportedMeta := mcpversions.SupportedMetaServer()
-	w.Header().Set(mcpversions.HTTPHeader, supportedMeta[len(supportedMeta)-1])
 
 	prepared := prepareMCPRequest(w, r, metamcp.MaxBodyBytes, supportedMeta)
 
 	req := prepared.request
 	resolution := prepared.protocolVersion
-	if req.Method == "initialize" {
+	if initializeNegotiable(&req, resolution) {
 		// A conforming initialize declares nothing, so Resolve lands on the
 		// default; the negotiated answer is what actually governs the
-		// exchange (the write-back Resolution sanctions).
+		// exchange (the write-back Resolution sanctions). Without a handshake
+		// revision the provisional value stands and dispatch rejects the
+		// method.
 		params, _, _ := parseInitializeParams(req.Params)
-		resolution.InEffect = mcpversions.Negotiate(params.ProtocolVersion, supportedMeta)
+		if negotiated, ok := mcpversions.Negotiate(params.ProtocolVersion, supportedMeta); ok {
+			resolution.InEffect = negotiated
+		}
 	}
 	// Both halves the error wrapper needs, published together: an error
 	// escaping this handler has to echo the id the client sent and be encoded
@@ -122,11 +162,11 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	if prepared.readyForProtocolVersionValidation() {
 		validationErr := validateMetaDeclaredProtocolVersion(&req, r.Header.Get(mcpversions.HTTPHeader))
-		if validationErr != nil {
-			w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
+		if validationErr == nil {
+			validationErr = validateRequestMetadata(r.Header, &req, resolution)
 		}
 		handled, err := s.handleProtocolVersionValidation(
-			ctx,
+			r,
 			logger,
 			w,
 			&req,
@@ -140,11 +180,28 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	}
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
+	var gateProjectTokens *projectTokenCache
 	var gateToolSelection *toolfilter.SessionSelection
-	if metaServer.UserSessionIssuerID.Valid {
-		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")
+	switch {
+	case !metaServer.UserSessionIssuerID.Valid:
+	case membership.organization:
+		// Members span projects, so credentials resolve per member project
+		// when a member first needs them rather than once for the gateway.
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
-			return err
+			return fmt.Errorf("authenticate organization gateway: %w", err)
+		}
+		ctx = newCtx
+		r = r.WithContext(ctx)
+		gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
+		gateToolSelection = toolSelection
+	default:
+		if resolvedEndpoint == nil {
+			built, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")
+			if err != nil {
+				return err
+			}
+			resolvedEndpoint = built
 		}
 		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
@@ -161,26 +218,43 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if err := validateMCPRequestEnvelope(ctx, logger, prepared, oops.CodeRequestTooLarge, "meta mcp request body exceeds 1 MiB"); err != nil {
 		return err
 	}
-	w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
-
+	connectURL, connectRoot := "", ""
+	if metaServer.UserSessionIssuerID.Valid && resolvedEndpoint != nil {
+		root, err := resolvedEndpoint.RootURL(s.BaseURLForRequest(r))
+		if err != nil {
+			logger.WarnContext(ctx, "build gateway connect url", attr.SlogError(err))
+		} else {
+			connectURL = root + "/connect/first-party"
+			if membership.agentID == uuid.Nil {
+				connectRoot = root
+			}
+		}
+	}
 	gate := &metaGateContext{
 		projectID:    mcpEndpoint.ProjectID,
 		metaServerID: metaServer.ID,
-		// Nil for a stored gateway, whose members come from
+		// Both unset for a stored gateway, whose members come from
 		// meta_mcp_server_members rather than from a caller's grants.
-		agentID:        agentID,
-		organizationID: metaServer.OrganizationID,
-		tokens:         gateTokens,
-		toolSelection:  gateToolSelection,
-		authenticated:  false,
-		sessionID:      parseMcpSessionID(r.Header),
-		chatID:         r.Header.Get("Gram-Chat-ID"),
-		userID:         "",
-		externalUserID: "",
-		apiKeyID:       "",
+		agentID:             membership.agentID,
+		organizationGateway: membership.organization,
+		organizationID:      metaServer.OrganizationID,
+		tokens:              gateTokens,
+		projectTokens:       gateProjectTokens,
+		// Uninitialized when ungated, which disables identity chaining.
+		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
+		connectRoot:         connectRoot,
+		chainUpstream:       nil,
+		toolSelection:       gateToolSelection,
+		authenticated:       false,
+		sessionID:           parseMcpSessionID(r.Header),
+		chatID:              r.Header.Get("Gram-Chat-ID"),
+		userID:              "",
+		externalUserID:      "",
+		apiKeyID:            "",
 		// Member dispatch carries this InEffect verbatim; nothing on the
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion: resolution,
+		connectURL:      connectURL,
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
 	// identity-auth ladder, so ungated meta endpoints serve anonymously —
@@ -193,11 +267,11 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		// authenticated = the caller's org owns the endpoint's project,
 		// unlocking gram environments for hosted-member execution.
 		//
-		// An agent gateway has no endpoint project to own, and its key was
+		// A derived gateway has no endpoint project to own, and its caller was
 		// already authenticated against this organization before dispatch. It
 		// is authenticated by construction; leaving it false would list a
 		// granted private member and then fail to drill into it.
-		if agentID != uuid.Nil {
+		if membership.derived() {
 			gate.authenticated = authCtx.ActiveOrganizationID == metaServer.OrganizationID
 		} else if authCtx.ActiveOrganizationID != "" {
 			projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
@@ -217,7 +291,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	// surface does. Without it a client that sent no Mcp-Session-Id gets a
 	// freshly minted id on every request, and nothing it does later can be
 	// tied back to the identity it reported at initialize.
-	if req.Method == "initialize" {
+	if initializeNegotiable(&req, resolution) {
 		w.Header().Set("Mcp-Session-Id", gate.sessionID)
 	}
 
@@ -253,50 +327,55 @@ func (s *Service) handleMetaMCPRequest(
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
-			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, time.Since(start))
+			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, "", time.Since(start))
 		}()
 	}
 
+	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer()) {
+		return nil, unavailableMethod(req)
+	}
+
 	switch req.Method {
-	case "ping":
+	case mcpversions.MethodPing:
 		return handlePing(ctx, logger, req.ID, serverInfoMetaServer)
-	case "initialize":
+	case mcpversions.MethodInitialize:
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
-	case "server/discover":
-		return s.handleMetaServerDiscover(ctx, logger, metaServer, req)
-	case "notifications/initialized", "notifications/cancelled":
+	case mcpversions.MethodServerDiscover:
+		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer), mcpversions.SupportedMetaServer())
+	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		return s.listMetaServerTools(ctx, logger, req)
-	case "tools/call":
+	case mcpversions.MethodToolsCall:
 		return s.callMetaServerTool(ctx, logger, mcpEndpoint, metaServer, gate, req)
+	case mcpversions.MethodResourcesList:
+		return handleMetaResourcesList(ctx, logger, req)
+	case mcpversions.MethodResourcesRead:
+		return handleMetaResourcesRead(ctx, logger, req)
 	default:
-		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
+		return nil, unavailableMethod(req)
 	}
 }
-
-// unparseableVersionPlaceholder stands in for a declared protocol version
-// whose raw bytes did not survive sanitization: error messages must never
-// echo hostile bytes back to the client.
-const unparseableVersionPlaceholder = "(unparseable)"
-
-// metaProtocolVersionMetaKey is the params-level `_meta` member carrying MCP
-// 2026-07-28's per-request protocol-version declaration.
-const metaProtocolVersionMetaKey = "io.modelcontextprotocol/protocolVersion"
 
 // validateMetaDeclaredProtocolVersion enforces MCP 2026-07-28's per-request
 // version declaration on the meta surface. A declaration may arrive in the
 // MCP-Protocol-Version header, the params-level
-// io.modelcontextprotocol/protocolVersion _meta key, or both; conflicting,
-// unparseable, or unserved declarations — anything outside the served set,
+// io.modelcontextprotocol/protocolVersion _meta member, or both; conflicting,
+// malformed, or unserved declarations — anything outside the served set,
 // matching what server/discover advertises — produce deterministic
-// structured errors naming the served set. Only a genuinely absent declaration is
-// accepted, for backward compatibility with handshake-based clients per the
+// structured errors. Only a genuinely absent declaration is accepted, for
+// backward compatibility with handshake-based clients per the
 // specification's versioning rules — a declaration that is present but
 // unsanitizable (or not a string at all) is a malformed value, not an
 // absent one.
+//
+// A malformed declaration follows the MCP 2026-07-28 rules for its carrier:
+// HeaderMismatch (-32020) for a header with invalid characters,
+// InvalidParams (-32602) for a malformed _meta member. The response follows
+// the other declaration when it names a recognized revision, and
+// [mcpversions.Latest] otherwise.
 func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) error {
-	if req.Method == "initialize" {
+	if initializeNegotiable(req, mcpversions.Resolve(headerValue, mcpversions.SupportedMetaServer())) {
 		return nil
 	}
 
@@ -307,38 +386,34 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 	// telling "absent" from "present but malformed" needs the member's raw
 	// bytes, and WireMeta's tolerant decode zeroes a mis-typed member, which
 	// would silently read here as absent. Non-object params or _meta still
-	// leave the map nil, matching ParseMeta's tolerance.
-	var params struct {
-		Meta map[string]json.RawMessage `json:"_meta"`
-	}
-	if len(req.Params) > 0 {
-		_ = json.Unmarshal(req.Params, &params)
-	}
+	// leave the members nil, matching ParseMeta's tolerance.
+	meta, _ := rawRequestMeta(req.Params)
 	var metaRaw string
-	if raw, ok := params.Meta[metaProtocolVersionMetaKey]; ok {
-		if err := json.Unmarshal(raw, &metaRaw); err != nil {
-			// Present but not a string: a malformed declaration. JSON null
-			// decodes as a no-op and stays "absent".
-			return invalidMetaProtocolVersionError(req, unparseableVersionPlaceholder)
-		}
+	metaMalformed := false
+	if raw, ok := meta[metaProtocolVersionKey]; ok {
+		// Present but not a string is malformed. JSON null decodes as a
+		// no-op and stays "absent".
+		metaMalformed = json.Unmarshal(raw, &metaRaw) != nil
 	}
 	metaDeclared := strings.TrimSpace(metaRaw) != ""
 	metaVersion := mcpversions.Sanitize(metaRaw)
+	metaMalformed = metaMalformed || (metaDeclared && metaVersion == "")
 
 	if headerDeclared && headerVersion == "" {
-		return invalidMetaProtocolVersionError(req, unparseableVersionPlaceholder)
+		return &declarationError{
+			revision: declarationRevision(metaVersion),
+			err:      headerMismatchError(req.ID, fmt.Sprintf("%s header is malformed", mcpversions.HTTPHeader)),
+		}
 	}
-	if metaDeclared && metaVersion == "" {
-		return invalidMetaProtocolVersionError(req, unparseableVersionPlaceholder)
+	if metaMalformed {
+		return &declarationError{
+			revision: declarationRevision(headerVersion),
+			err:      invalidMetaError(req.ID, fmt.Sprintf("_meta member %q must be a protocol version string", metaProtocolVersionKey)),
+		}
 	}
 
 	if headerDeclared && metaDeclared && headerVersion != metaVersion {
-		return &oops.MCPError{
-			ID:      req.ID,
-			Code:    oops.MCPCodeInvalidRequest,
-			Message: fmt.Sprintf("conflicting protocol version declarations: MCP-Protocol-Version header %q does not match the request _meta declaration %q", headerVersion, metaVersion),
-			Data:    nil,
-		}
+		return conflictingProtocolVersionError(req.ID, headerVersion, metaVersion)
 	}
 
 	declared := conv.Default(headerVersion, metaVersion)
@@ -347,19 +422,6 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 	}
 
 	return nil
-}
-
-// invalidMetaProtocolVersionError preserves the meta surface's malformed
-// declaration behavior separately from a well-formed but unsupported version.
-// declared must be sanitized or the fixed placeholder; raw hostile bytes are
-// never echoed to the client.
-func invalidMetaProtocolVersionError(req *rawRequest, declared string) *oops.MCPError {
-	return &oops.MCPError{
-		ID:      req.ID,
-		Code:    oops.MCPCodeInvalidRequest,
-		Message: fmt.Sprintf("invalid protocol version declaration %q; supported versions: %s", declared, strings.Join(mcpversions.SupportedMetaServer(), ", ")),
-		Data:    nil,
-	}
 }
 
 func (s *Service) handleMetaInitialize(
@@ -390,54 +452,14 @@ func (s *Service) handleMetaInitialize(
 	s.metrics.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
 
 	result := &result[initializeResult]{
-		ID: req.ID,
-		Result: initializeResult{
-			ProtocolVersion: negotiated,
-			Capabilities: map[string]json.RawMessage{
-				"tools": json.RawMessage("{}"),
-			},
-			ServerInfo:   serverInfoMetaServer,
-			Instructions: metamcp.ResolveInstructions(conv.FromPGText[string](metaServer.Instructions)),
-		},
+		ID:             req.ID,
+		Result:         describeMetaServer(metaServer).initializeResult(negotiated),
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize initialize response").LogError(ctx, logger)
-	}
-	return bs, nil
-}
-
-func (s *Service) handleMetaServerDiscover(
-	ctx context.Context,
-	logger *slog.Logger,
-	metaServer *metamcprepo.MetaMcpServer,
-	req *rawRequest,
-) (json.RawMessage, error) {
-	hints := cacheHintsCallerUniform
-	if metaServer.UserSessionIssuerID.Valid {
-		// Custom instructions are protected by the issuer gate even when
-		// every authorized caller receives the same self-description.
-		hints = cacheHintsCallerVarying
-	}
-
-	result := &result[metamcp.DiscoverResult]{
-		ID: req.ID,
-		Result: metamcp.DiscoverResult{
-			ProtocolVersions: mcpversions.SupportedMetaServer(),
-			Capabilities: map[string]json.RawMessage{
-				"tools": json.RawMessage("{}"),
-			},
-			ServerInfo:   serverInfoMetaServer,
-			Instructions: metamcp.ResolveInstructions(conv.FromPGText[string](metaServer.Instructions)),
-		},
-		serverIdentity: serverInfoMetaServer,
-		cacheHints:     hints,
-	}
-	bs, err := json.Marshal(result)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize server/discover response").LogError(ctx, logger)
 	}
 	return bs, nil
 }
@@ -453,6 +475,12 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 			Annotations: nil,
 			Meta:        nil,
 		})
+		if tool.Name == metamcp.ToolConnectionStatus {
+			tools[len(tools)-1].Meta = map[string]any{
+				"ui":             map[string]any{"resourceUri": metamcp.ConnectionStatusResourceURI},
+				"ui/resourceUri": metamcp.ConnectionStatusResourceURI,
+			}
+		}
 	}
 
 	bs, err := json.Marshal(&result[toolsListResultTools]{
@@ -460,7 +488,7 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 		Result:         toolsListResultTools{Tools: tools},
 		serverIdentity: serverInfoMetaServer,
 		// The gateway tool contract is fixed and consults neither the endpoint
-		// nor the meta server, so every caller receives the same four tools.
+		// nor the meta server, so every caller receives the same tools.
 		cacheHints: cacheHintsCallerUniform,
 	})
 	if err != nil {
@@ -486,7 +514,7 @@ func (s *Service) callMetaServerTool(
 	}
 
 	switch params.Name {
-	case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool:
+	case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool, metamcp.ToolConnectionStatus:
 	default:
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
 	}
@@ -495,15 +523,15 @@ func (s *Service) callMetaServerTool(
 
 	// One snapshot per request: every meta MCP tool answers from the same
 	// member set, so a membership mutation lands between requests, never
-	// inside one. An agent gateway has no stored membership — its members are
-	// whatever its delegated policy still reaches at this instant — so a
+	// inside one. A derived gateway has no stored membership — its members
+	// are whatever the caller's access still reaches at this instant — so a
 	// revoked grant lands between requests the same way.
 	var (
 		members []metaMember
 		err     error
 	)
-	if gate.agentID != uuid.Nil {
-		ctx, members, err = s.resolveAgentMemberSnapshot(ctx, logger, gate.organizationID)
+	if gate.agentID != uuid.Nil || gate.organizationGateway {
+		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID)
 	} else {
 		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
 	}
@@ -522,6 +550,8 @@ func (s *Service) callMetaServerTool(
 		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolDescribeTools:
 		body, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
+	case metamcp.ToolConnectionStatus:
+		body, err = s.handleMetaConnectionStatusCall(ctx, logger, gate, members, req)
 	default:
 		// execute_tool is deliberately not logged here: the member dispatch
 		// writes the single tool_call row, stamped with this gateway's id.

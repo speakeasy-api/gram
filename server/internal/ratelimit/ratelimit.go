@@ -1,4 +1,4 @@
-// Package ratelimit is Gram's shared token-bucket rate limiter. A Limiter binds
+// Package ratelimit is Speakeasy's shared token-bucket rate limiter. A Limiter binds
 // one named Rate and enforces it across many keys (per-org, per-assistant, …)
 // through a Redis Store, so the cap holds fleet-wide instead of per-replica —
 // the limitation of the hand-rolled in-memory limiters this package replaces.

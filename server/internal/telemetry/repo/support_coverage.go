@@ -102,7 +102,7 @@ type SurfaceShadowRow struct {
 // both the server URL and the hook_source per trace.
 //
 // "Shadow" means a URL shadow_mcp_inventory_urls knows about, which keeps the
-// Gram-hosted exclusion in one place.
+// Speakeasy-hosted exclusion in one place.
 //
 // Servers are not counted here: two aliases of one surface produce two rows
 // for the same server, and only the caller owns the fold that collapses them.

@@ -1,8 +1,8 @@
 /* Platform identity is consistent whether platforms appear as rows or columns. */
 .support-platform-header {
-  --platform-hue: 210;
-  --platform-saturation: 30%;
-  --platform-lightness: 88%;
+  --platform-hue: 145;
+  --platform-saturation: 25%;
+  --platform-lightness: 87%;
   background: hsl(
     var(--platform-hue) var(--platform-saturation) var(--platform-lightness)
   );
@@ -38,11 +38,6 @@
   --platform-hue: 210;
   --platform-saturation: 60%;
   --platform-lightness: 84%;
-}
-.support-platform-header[data-vendor="Others"] {
-  --platform-hue: 145;
-  --platform-saturation: 25%;
-  --platform-lightness: 87%;
 }
 
 @media (prefers-color-scheme: dark) {

@@ -86,7 +86,7 @@ type RuntimeBackend interface {
 // runtimeLivenessChecker is implemented by backends that can cheaply and
 // authoritatively determine whether a runtime's backing resource still
 // exists. The stuck-runtime janitor uses it to reconcile resources removed
-// outside Gram without imposing provider API scans on every backend.
+// outside Speakeasy without imposing provider API scans on every backend.
 type runtimeLivenessChecker interface {
 	RuntimeExists(ctx context.Context, runtime assistantRuntimeRecord) (bool, error)
 }

@@ -101,6 +101,37 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 	require.JSONEq(t, `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"tools/unknown: Method not found","data":{"code":"typed_code"}}}`, string(data))
 }
 
+func TestMCPError_MarshalJSONFor_ID(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		revision string
+		id       mcpjsonrpc.ID
+		want     string
+	}{
+		{name: "handshake null", revision: mcpversions.Version20251125, id: mcpjsonrpc.NullID(), want: "null"},
+		{name: "unresolved null", id: mcpjsonrpc.NullID(), want: "null"},
+		{name: "per-request null", revision: mcpversions.Version20260728, id: mcpjsonrpc.NullID()},
+		{name: "per-request unset", revision: mcpversions.Version20260728},
+		{name: "per-request zero", revision: mcpversions.Version20260728, id: mcpjsonrpc.NumberID(0), want: "0"},
+		{name: "per-request empty string", revision: mcpversions.Version20260728, id: mcpjsonrpc.StringID(""), want: `""`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := &MCPError{ID: tc.id, Code: MCPCodeInvalidParams}
+			bs, marshalErr := err.MarshalJSONFor(tc.revision)
+			require.NoError(t, marshalErr)
+			var response struct {
+				ID json.RawMessage `json:"id"`
+			}
+			require.NoError(t, json.Unmarshal(bs, &response))
+			require.Equal(t, tc.want, string(response.ID))
+		})
+	}
+}
+
 func TestCodeMCPCode(t *testing.T) {
 	t.Parallel()
 
@@ -216,7 +247,7 @@ func TestCodeMCPCodeFor_UnresolvedRevisionIsLegacy(t *testing.T) {
 }
 
 // TestCodeMCPCodeFor_OnlyResourceNotFoundIsRevisionConditional guards the
-// scope of the branch. Gram's other server-defined codes sit in the range
+// scope of the branch. Speakeasy's other server-defined codes sit in the range
 // 2026-07-28 designates legacy, but only -32002 is a MUST NOT; the rest stay
 // legal to emit and must not be quietly remapped alongside it.
 func TestCodeMCPCodeFor_OnlyResourceNotFoundIsRevisionConditional(t *testing.T) {
@@ -239,7 +270,7 @@ func TestCodeMCPCodeFor_OnlyResourceNotFoundIsRevisionConditional(t *testing.T) 
 }
 
 // TestNewMCPErrorFromCause_ModernRevisionReplacesRetiredResourceNotFound
-// covers the in-handler write path, which is where Gram's general not-found —
+// covers the in-handler write path, which is where Speakeasy's general not-found —
 // an unknown tool, toolset, or endpoint — reaches the wire.
 func TestNewMCPErrorFromCause_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T) {
 	t.Parallel()
@@ -307,7 +338,7 @@ func TestNewMCPErrorFromCause_KeepsExplicitRetiredCodeOnLegacyRevision(t *testin
 // TestMCPErrHandle_ModernRevisionUsesMandatedStatusForRemappedNotFound covers
 // the coupling between the two halves of this path. Once the wire code is
 // revision-aware, the status has to follow it: a not-found answers -32602 on a
-// modern request, and answering that with the Gram code's 404 would tell a
+// modern request, and answering that with the Speakeasy code's 404 would tell a
 // dual-era client the method is unimplemented, since a 404 carrying a JSON-RPC
 // body is precisely that signal.
 func TestMCPErrHandle_ModernRevisionUsesMandatedStatusForRemappedNotFound(t *testing.T) {
@@ -386,7 +417,7 @@ func TestMCPErrHandle_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T
 }
 
 // TestMCPErrHandle_UnmandatedCodesKeepGramStatusOnModernRevision pins the
-// statuses that must survive the modern branch. None of these Gram codes maps
+// statuses that must survive the modern branch. None of these Speakeasy codes maps
 // to a wire code 2026-07-28 assigns a status to, so each keeps the status this
 // path has always answered. The 401 is the one that would hurt most to lose:
 // it carries the challenge an MCP client needs to begin OAuth discovery, and
@@ -422,7 +453,7 @@ func TestMCPErrHandle_UnmandatedCodesKeepGramStatusOnModernRevision(t *testing.T
 // TestMCPErrHandle_ModernRevisionUsesMandatedStatusForNullID covers the case
 // the two error paths previously disagreed on. A message naming no request
 // still gets the status its condition mandates: this path has no 200 to fall
-// back to, so skipping the override here would leave the Gram code's 404 on a
+// back to, so skipping the override here would leave the Speakeasy code's 404 on a
 // -32602 body and tell a dual-era client the method is unimplemented.
 func TestMCPErrHandle_ModernRevisionUsesMandatedStatusForNullID(t *testing.T) {
 	t.Parallel()
@@ -443,11 +474,11 @@ func TestMCPErrHandle_ModernRevisionUsesMandatedStatusForNullID(t *testing.T) {
 
 	var response map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Nil(t, response["id"])
+	require.NotContains(t, response, "id")
 }
 
 // TestMCPErrHandle_ModernRevisionMapsNotImplementedToNotFound covers the one
-// override that moves a status the specification names for a reason. Gram
+// override that moves a status the specification names for a reason. Speakeasy
 // answers an unimplemented feature with 501, but the wire code is -32601, and
 // 404 carrying that code is what lets a dual-era client tell a modern server
 // missing a method from a legacy server missing the endpoint.
@@ -456,7 +487,7 @@ func TestMCPErrHandle_ModernRevisionMapsNotImplementedToNotFound(t *testing.T) {
 	logger, _ := captureLogger()
 
 	require.Equal(t, http.StatusNotImplemented, StatusCodes[CodeNotImplemented],
-		"this test's premise: the Gram status differs from the mandated one")
+		"this test's premise: the Speakeasy status differs from the mandated one")
 
 	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
@@ -474,14 +505,14 @@ func TestMCPErrHandle_ModernRevisionMapsNotImplementedToNotFound(t *testing.T) {
 }
 
 // TestMCPErrHandle_ModernRevisionMapsInvalidToBadRequest covers the other
-// status the override moves: Gram answers an invalid payload with 422, and
+// status the override moves: Speakeasy answers an invalid payload with 422, and
 // -32602 mandates 400.
 func TestMCPErrHandle_ModernRevisionMapsInvalidToBadRequest(t *testing.T) {
 	t.Parallel()
 	logger, _ := captureLogger()
 
 	require.Equal(t, http.StatusUnprocessableEntity, StatusCodes[CodeInvalid],
-		"this test's premise: the Gram status differs from the mandated one")
+		"this test's premise: the Speakeasy status differs from the mandated one")
 
 	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
@@ -527,4 +558,28 @@ func TestMCPErrHandle_LegacyRevisionKeepsGramStatusesForMandatedCodes(t *testing
 
 		require.Equal(t, tt.want, rec.Code, "code %s", tt.code)
 	}
+}
+
+func TestNewMissingRequiredClientCapabilityError_MarshalsSpecShape(t *testing.T) {
+	t.Parallel()
+
+	mcpErr := NewMissingRequiredClientCapabilityError(mcpjsonrpc.NumberID(7), map[string]json.RawMessage{
+		"elicitation": json.RawMessage(`{}`),
+	})
+
+	bs, err := json.Marshal(mcpErr)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"jsonrpc": "2.0",
+		"id": 7,
+		"error": {
+			"code": -32021,
+			"message": "Missing required client capability",
+			"data": {"requiredCapabilities": {"elicitation": {}}}
+		}
+	}`, string(bs))
+
+	status, ok := mcpErr.Code.MandatedHTTPStatus()
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, status)
 }

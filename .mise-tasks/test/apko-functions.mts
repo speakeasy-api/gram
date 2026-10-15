@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Run safety tests on an apko-built gram function image"
 //MISE dir="{{ config_root }}/functions"

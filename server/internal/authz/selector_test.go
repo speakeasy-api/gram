@@ -260,6 +260,26 @@ func TestValidateSelector_agentRequiresAgentResourceKind(t *testing.T) {
 	}), `requires resource_kind="agent"`)
 }
 
+func TestResourceKindForScope_assistantScopes(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantRead))
+	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantBlockedRead))
+	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantWrite))
+	require.Equal(t, ResourceKindAssistant, ResourceKindForScope(ScopeAssistantBlockedWrite))
+}
+
+func TestValidateSelector_assistantUsesProjectIDWithAssistantResourceKind(t *testing.T) {
+	t.Parallel()
+
+	projectID := "0196cbd1-9328-74e7-b7bb-6e5357565573"
+	selector := NewSelector(ScopeAssistantRead, projectID)
+	require.Equal(t, ResourceKindAssistant, selector[SelectorKeyResourceKind])
+	require.Equal(t, projectID, selector[SelectorKeyResourceID])
+	require.NoError(t, ValidateSelector(ScopeAssistantRead, selector))
+	require.ErrorContains(t, ValidateSelector(ScopeAssistantWrite, NewSelector(ScopeProjectWrite, projectID)), `requires resource_kind="assistant"`)
+}
+
 func TestValidateSelector_skillRequiresSkillResourceKind(t *testing.T) {
 	t.Parallel()
 

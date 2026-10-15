@@ -349,14 +349,15 @@ func TestCommitServerIdentityCreateProviderAcceptsLoopbackAndNormalizesArrays(t 
 
 func manualServerIdentityPayload(targetID uuid.UUID, form *sessionsgen.CreateRemoteSessionIssuerForm) *sessionsgen.CommitServerIdentityConfigurationPayload {
 	return &sessionsgen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       nil,
-		CreateProvider:   form,
-		ClientMode:       "manual",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     form,
+		ClientMode:         "manual",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &sessionsgen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("manual-client"),
 			ClientSecret:            nil,

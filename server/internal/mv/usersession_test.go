@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -291,4 +292,51 @@ func TestBuildUserSessionView_NoBoundClientReportsNoCredentialFields(t *testing.
 
 	require.Nil(t, got.ClientCredentialKind)
 	require.Nil(t, got.ClientTokenEndpointAuthMethod)
+	require.Nil(t, got.ClientName)
+}
+
+func TestBuildUserSessionView_NamesDashboardMint(t *testing.T) {
+	t.Parallel()
+
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:               uuid.New(),
+		SubjectUrn:       urn.NewUserSubject("user-123"),
+		Jti:              "jti-dashboard",
+		RefreshExpiresAt: ts(time.Now()),
+		ExpiresAt:        ts(time.Now()),
+		CreatedAt:        ts(time.Now()),
+		UpdatedAt:        ts(time.Now()),
+		IssuerSlug:       "my-issuer",
+		DashboardMint:    true,
+	}
+
+	got := BuildUserSessionView(row, nil, nil)
+
+	require.Nil(t, got.UserSessionClientID)
+	require.Nil(t, got.ClientCredentialKind)
+	require.NotNil(t, got.ClientName)
+	require.Equal(t, sessiontokens.FirstPartyClientName, *got.ClientName)
+}
+
+func TestBuildUserSessionView_RegisteredNameWinsOverDashboardMint(t *testing.T) {
+	t.Parallel()
+
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:                  uuid.New(),
+		UserSessionClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		SubjectUrn:          urn.NewUserSubject("user-123"),
+		Jti:                 "jti-registered",
+		RefreshExpiresAt:    ts(time.Now()),
+		ExpiresAt:           ts(time.Now()),
+		CreatedAt:           ts(time.Now()),
+		UpdatedAt:           ts(time.Now()),
+		IssuerSlug:          "my-issuer",
+		ClientName:          pgtype.Text{String: "Claude Code", Valid: true},
+		DashboardMint:       true,
+	}
+
+	got := BuildUserSessionView(row, nil, nil)
+
+	require.NotNil(t, got.ClientName)
+	require.Equal(t, "Claude Code", *got.ClientName)
 }

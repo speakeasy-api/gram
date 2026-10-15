@@ -62,6 +62,23 @@ func TestMCPScopeAppliesToolRuleAndAllServersOverrides(t *testing.T) {
 	require.False(t, selected.Applies(serverID, "list", nil, nil))
 }
 
+func TestMCPScopeAppliesWildcardToolsIgnoresToolRule(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	scope := &MCPScope{
+		ToolAnnotations: []string{"readOnlyHint"},
+		Servers: []MCPServerScope{{
+			MCPServerID: serverID,
+			Tools:       []string{AllToolsWildcard},
+		}},
+	}
+
+	require.True(t, scope.Applies(serverID, "delete_everything", nil, nil),
+		"wildcard tools match unconditionally, bypassing the annotation rule")
+	require.True(t, scope.Applies(serverID, "anything", nil, nil))
+}
+
 func TestUnmarshalMCPScopeNormalizesEmptyAndFailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -136,7 +153,7 @@ func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 		UpdatedAt:            pgtype.Timestamptz{Time: updatedAt, Valid: true},
 	}
 
-	got := Project(row, nil, &Progress{Total: 7, Analyzed: 9})
+	got := Project(row, nil)
 	require.Equal(t, row.ID, got.ID)
 	require.Equal(t, []string{}, got.AudiencePrincipalURNs)
 	require.NotNil(t, got.ShadowMCPDisposition)
@@ -145,10 +162,6 @@ func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 	require.InDelta(t, threshold, *got.PresidioScoreThreshold, 0)
 	require.Equal(t, []string{"example.com"}, got.ApprovedEmailDomains)
 	require.Equal(t, []DetectionScope{{Category: "secrets", ScopeInclude: new(`kind == "user_message"`)}}, got.DetectionScopes)
-	require.NotNil(t, got.PendingMessages)
-	require.Equal(t, int64(0), *got.PendingMessages)
-	require.NotNil(t, got.TotalMessages)
-	require.Equal(t, int64(7), *got.TotalMessages)
 	require.Equal(t, createdAt, got.CreatedAt)
 	require.Equal(t, updatedAt, got.UpdatedAt)
 	require.NotNil(t, got.ModelConfig)
@@ -170,21 +183,19 @@ func TestAuditSnapshotRemovesPrompt(t *testing.T) {
 	require.Equal(t, &prompt, policy.Prompt)
 }
 
-func TestProjectToleratesMalformedConfigAndOmitsListProgress(t *testing.T) {
+func TestProjectToleratesMalformedConfig(t *testing.T) {
 	t.Parallel()
 
 	got := Project(repo.RiskPolicy{
 		Action:         "flag",
 		AnalyzerConfig: []byte(`{"broken"`),
 		ModelConfig:    []byte(`{"broken"`),
-	}, []string{"user:one"}, nil)
+	}, []string{"user:one"})
 
 	require.Nil(t, got.PresidioScoreThreshold)
 	require.Nil(t, got.ApprovedEmailDomains)
 	require.Nil(t, got.DetectionScopes)
 	require.Nil(t, got.ModelConfig)
-	require.Nil(t, got.PendingMessages)
-	require.Nil(t, got.TotalMessages)
 	require.Equal(t, []string{"user:one"}, got.AudiencePrincipalURNs)
 	require.Nil(t, got.ShadowMCPDisposition)
 }

@@ -14,6 +14,10 @@ export type AccessMember = {
    */
   department?: string | undefined;
   /**
+   * Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.
+   */
+  directoryRoleIds: Array<string>;
+  /**
    * Email address.
    */
   email: string;
@@ -42,7 +46,7 @@ export type AccessMember = {
    */
   principalUrn: string;
   /**
-   * All role IDs assigned to this member.
+   * Role IDs assigned directly to this member.
    */
   roleIds: Array<string>;
 };
@@ -52,6 +56,7 @@ export const AccessMember$inboundSchema: z.ZodMiniType<AccessMember, unknown> =
   z.pipe(
     z.object({
       department: z.optional(z.string()),
+      directory_role_ids: z.array(z.string()),
       email: z.string(),
       groups: z.optional(z.array(z.string())),
       id: z.string(),
@@ -66,6 +71,7 @@ export const AccessMember$inboundSchema: z.ZodMiniType<AccessMember, unknown> =
     }),
     z.transform((v) => {
       return remap$(v, {
+        "directory_role_ids": "directoryRoleIds",
         "joined_at": "joinedAt",
         "photo_url": "photoUrl",
         "principal_urn": "principalUrn",

@@ -6,6 +6,7 @@ import {
 } from "@gram/client/models/components/logfilter.js";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 import { normalizeUserEmailFilter } from "./observeUserFilters";
+import { allMemberRoleIds } from "@/lib/member-roles";
 
 const validPresets: DateRangePreset[] = [
   "15m",
@@ -54,7 +55,7 @@ export function resolveRoleEmails(
   if (roleIds.length === 0) return [];
   const roleSet = new Set(roleIds);
   const emails = members
-    .filter((m) => m.roleIds.some((id) => roleSet.has(id)))
+    .filter((m) => allMemberRoleIds(m).some((id) => roleSet.has(id)))
     .map((m) => normalizeUserEmailFilter(m.email))
     .filter(Boolean);
   return [...new Set(emails)];

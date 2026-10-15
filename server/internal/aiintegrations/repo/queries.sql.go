@@ -1019,7 +1019,7 @@ func (q *Queries) RecordPollSuccessKeepWatermark(ctx context.Context, arg Record
 	return err
 }
 
-const recordUsagePollFailure = `-- name: RecordUsagePollFailure :exec
+const recordUsagePollFailure = `-- name: RecordUsagePollFailure :execrows
 UPDATE ai_integration_syncs
 SET next_poll_after = $1,
     last_poll_error = $2,
@@ -1047,15 +1047,20 @@ type RecordUsagePollFailureParams struct {
 // and, when pause_after is positive and the new count reaches it, pauses the
 // schedule so candidate selection stops re-enqueueing it. Callers pass a zero
 // pause_after for failures that should never pause (e.g. transient errors).
-func (q *Queries) RecordUsagePollFailure(ctx context.Context, arg RecordUsagePollFailureParams) error {
-	_, err := q.db.Exec(ctx, recordUsagePollFailure,
+// Returns rows updated, so callers can tell a recorded failure from one that
+// matched no schedule (a config or sync deleted mid-poll).
+func (q *Queries) RecordUsagePollFailure(ctx context.Context, arg RecordUsagePollFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordUsagePollFailure,
 		arg.NextPollAfter,
 		arg.LastPollError,
 		arg.PauseAfter,
 		arg.AiIntegrationConfigID,
 		arg.Schedule,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recordUsagePollSuccess = `-- name: RecordUsagePollSuccess :exec

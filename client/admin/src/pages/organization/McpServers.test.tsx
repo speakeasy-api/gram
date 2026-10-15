@@ -102,7 +102,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("McpServers", () => {
   it("starts on the oldest project and writes its id into the address", async () => {
@@ -140,7 +143,14 @@ describe("McpServers", () => {
     await screen.findByRole("cell", { name: /Linear/ });
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Server URL", "Visibility", "Source", "Created"]);
+    ).toEqual([
+      "Name",
+      "Server URL",
+      "Visibility",
+      "Source",
+      "Created",
+      "Open",
+    ]);
 
     const [, linear, legacy] = screen.getAllByRole("row");
     expect(
@@ -153,6 +163,7 @@ describe("McpServers", () => {
       "Public",
       "Remote",
       shortDate(LINEAR.created_at),
+      "",
     ]);
     // No address is a dash, not an empty copy button.
     expect(
@@ -165,12 +176,13 @@ describe("McpServers", () => {
       "Private",
       "Legacy toolset",
       shortDate(LEGACY.created_at),
+      "",
     ]);
     expect(screen.getByText("2 MCP servers")).toBeTruthy();
   });
 
-  it("copies a server's URL", async () => {
-    await renderRouteTree(routeTree, {
+  it("copies a server's URL without leaving the list", async () => {
+    const { router } = await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}/mcp-servers?project=${OLDEST.id}`,
     });
 
@@ -186,6 +198,35 @@ describe("McpServers", () => {
     expect(
       screen.getByRole("button", { name: "Linear server URL copied" }),
     ).toBeTruthy();
+    // The button sits in a row that links, and the row leaves it alone.
+    expect(router.state.location.pathname).toBe(
+      `/organizations/${ORG.slug}/mcp-servers`,
+    );
+  });
+
+  it("links each server to its health page in the selected project", async () => {
+    // The health page reads through the generated client, which fetches.
+    // Held open, so the navigation asserted here makes no real request.
+    const fetch = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetch);
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/mcp-servers?project=${OLDEST.id}`,
+    });
+
+    const link = await screen.findByRole("link", { name: "Linear" });
+    expect(link.getAttribute("href")).toBe(
+      `/organizations/${ORG.slug}/mcp-servers/${LINEAR.id}?project=${OLDEST.id}`,
+    );
+
+    // Anywhere on the row goes there too.
+    fireEvent.click(screen.getByRole("cell", { name: "Remote" }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/organizations/${ORG.slug}/mcp-servers/${LINEAR.id}`,
+      ),
+    );
+    expect(router.state.location.search).toEqual({ project: OLDEST.id });
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
 
   it("switches project from the picker and replaces the address", async () => {

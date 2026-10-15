@@ -77,26 +77,10 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 	results := make([]gcp.PublishResult, 0, len(findings))
 	ruleIDs := make([]string, 0, len(findings))
 
-	// Occurrence counter per base id: a batch can legitimately carry findings
-	// whose id inputs are identical (e.g. two tool calls in one message hitting
-	// the same cli_destructive rule, or two calls to the same shadow MCP server
-	// — Match is the tool/server name and positions are zero). Without a
-	// discriminator they'd publish under one id and ClickHouse's uniqExact(id)
-	// would collapse distinct persisted findings. Suffixing only repeats keeps
-	// every previously-minted id stable while making re-publishes of the same
-	// finding set deterministic (finding order follows tool-call order, which
-	// is stable for a given message). Note this discriminator changed observed
-	// counts for the stream sources too (llm_judge, prompt_injection): colliding
-	// findings that previously collapsed to one ClickHouse row now count as N.
-	occurrences := make(map[uuid.UUID]int, len(findings))
+	ids := FindingIDs(meta, findings)
 
-	for _, finding := range findings {
-		baseID := deterministicFindingID(meta, finding)
-		id := baseID
-		if n := occurrences[baseID]; n > 0 {
-			id = duplicateFindingID(baseID, n)
-		}
-		occurrences[baseID]++
+	for i, finding := range findings {
+		id := ids[i]
 		startPos := conv.SafeInt32(finding.StartPos)
 		endPos := conv.SafeInt32(finding.EndPos)
 		surface := FindingSurface(finding.Source, finding.Field, finding.Path)
@@ -137,6 +121,28 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 	}
 
 	return results, ruleIDs
+}
+
+// FindingIDs returns the deterministic ClickHouse IDs for a finding batch.
+//
+// Repeats of the same base id (e.g. two tool calls hitting the same
+// cli_destructive rule, where Match is the tool name and positions are zero)
+// get an occurrence suffix so ClickHouse's uniqExact(id) does not collapse
+// them. Only repeats are suffixed, so previously minted ids stay stable and
+// re-publishing the same batch is deterministic.
+func FindingIDs(meta FindingMetadata, findings []Finding) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(findings))
+	occurrences := make(map[uuid.UUID]int, len(findings))
+	for _, finding := range findings {
+		baseID := deterministicFindingID(meta, finding)
+		id := baseID
+		if n := occurrences[baseID]; n > 0 {
+			id = duplicateFindingID(baseID, n)
+		}
+		occurrences[baseID]++
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // duplicateFindingID derives the id for the n-th repeat (n >= 1) of a finding

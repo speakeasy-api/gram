@@ -112,6 +112,7 @@ func buildPubSubValues(ctx context.Context, logger *slog.Logger, topics []Desire
 	}
 
 	return pubSubValuesDocument{
+		Storage: buildStorageValues(subs),
 		PubSub: pubSubValues{
 			Enabled:       true,
 			APIs:          []string{pubsubAPI},

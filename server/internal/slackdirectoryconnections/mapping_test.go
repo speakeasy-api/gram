@@ -287,7 +287,7 @@ func TestMappingPublicationSeesCommittedConfirmation(t *testing.T) {
 	go func() {
 		done <- syncer(f, profileSnapshot("deactivated", "person", "example@demo.getgram.ai", "Changed")).Run(ctx, syncRequest(f, c), nil)
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, f.db)
+	testenv.WaitForBackendsBlockedBy(t, ctx, f.db, testenv.BackendPID(tx), 1)
 	require.NoError(t, q.ConfirmSlackIdentityMapping(ctx, repo.ConfirmSlackIdentityMappingParams{OrganizationID: f.auth.ActiveOrganizationID, SlackTeamID: m.WorkspaceID, SlackUserID: m.SlackUserID, UserID: f.auth.UserID}))
 	require.NoError(t, q.AdvanceSlackMappingRevision(ctx, repo.AdvanceSlackMappingRevisionParams{OrganizationID: f.auth.ActiveOrganizationID, ID: uuid.MustParse(m.ID)}))
 	require.NoError(t, tx.Commit(ctx))
@@ -311,7 +311,7 @@ func TestMappingPublicationSeesCommittedUnmap(t *testing.T) {
 	go func() {
 		done <- syncer(f, profileSnapshot("deactivated", "person", "example@demo.getgram.ai", "Changed")).Run(ctx, syncRequest(f, c), nil)
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, f.db)
+	testenv.WaitForBackendsBlockedBy(t, ctx, f.db, testenv.BackendPID(tx), 1)
 	require.NoError(t, q.RevokeSlackIdentityMapping(ctx, repo.RevokeSlackIdentityMappingParams{OrganizationID: f.auth.ActiveOrganizationID, SlackTeamID: m.WorkspaceID, SlackUserID: m.SlackUserID}))
 	require.NoError(t, q.AdvanceSlackMappingRevision(ctx, repo.AdvanceSlackMappingRevisionParams{OrganizationID: f.auth.ActiveOrganizationID, ID: uuid.MustParse(m.ID)}))
 	require.NoError(t, tx.Commit(ctx))
@@ -331,7 +331,7 @@ func TestMappingWaitsForTargetDeactivation(t *testing.T) {
 	require.NoError(t, q.DeactivateSlackMappingPersonForTest(ctx, repo.DeactivateSlackMappingPersonForTestParams{OrganizationID: f.auth.ActiveOrganizationID, UserID: conv.ToPGText(person)}))
 	done := make(chan error, 1)
 	go func() { _, err := f.service.SetMapping(ctx, mappingRequest(m, &person)); done <- err }()
-	testenv.WaitForBlockedBackend(t, ctx, f.db)
+	testenv.WaitForBackendsBlockedBy(t, ctx, f.db, testenv.BackendPID(tx), 1)
 	require.NoError(t, tx.Commit(ctx))
 	require.ErrorContains(t, awaitMappingResult(t, done), "Choose an active person")
 	require.Nil(t, readMapping(t, ctx, f, m.ID).Mapping)
@@ -480,4 +480,27 @@ func TestDisconnectForgetsRevokedMappings(t *testing.T) {
 	remaining, err := repo.New(f.db).CountSlackIdentityMappingsForTest(ctx, f.auth.ActiveOrganizationID)
 	require.NoError(t, err)
 	require.Zero(t, remaining)
+}
+
+func TestResolveSlackMappingUserIsTenantAndWorkspaceScoped(t *testing.T) {
+	t.Parallel()
+	ctx, f, _, member := mappingFixture(t)
+	_, err := f.service.SetMapping(ctx, mappingRequest(member, &f.auth.UserID))
+	require.NoError(t, err)
+	q := repo.New(f.db)
+	params := repo.ResolveSlackMappingUserParams{OrganizationID: f.auth.ActiveOrganizationID, SlackTeamID: "TEXAMPLE01", SlackUserID: "UEXAMPLE01"}
+	user, err := q.ResolveSlackMappingUser(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, f.auth.UserID, user)
+	params.OrganizationID = "other-organization"
+	_, err = q.ResolveSlackMappingUser(ctx, params)
+	require.Error(t, err)
+	params.OrganizationID = f.auth.ActiveOrganizationID
+	params.SlackTeamID = "other-workspace"
+	_, err = q.ResolveSlackMappingUser(ctx, params)
+	require.Error(t, err)
+	params.SlackTeamID = "TEXAMPLE01"
+	params.SlackUserID = "unmapped"
+	_, err = q.ResolveSlackMappingUser(ctx, params)
+	require.Error(t, err)
 }

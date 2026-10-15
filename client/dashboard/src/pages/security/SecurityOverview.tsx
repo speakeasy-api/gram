@@ -338,7 +338,7 @@ function SecurityOverviewContent() {
         `Findings in current range: ${overview.findings}.`,
         `Messages scanned: ${overview.messagesScanned}.`,
         `Flagged sessions: ${overview.flaggedSessions}.`,
-        "Available risk tools: listRiskResultsForAgent (finding-level, match is redacted to <redacted len=N sha=XXXXXXXX>), listRiskResultsByChat (chat-level rollups), listRiskPolicies, getRiskPolicyStatus, listShadowMCPApprovals.",
+        "Available risk tools: listRiskResultsForAgent (finding-level, match is redacted to <redacted len=N sha=XXXXXXXX>), listRiskResultsByChat (chat-level rollups), listRiskPolicies, listShadowMCPApprovals.",
         "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
       ].join(" ")
     : null;

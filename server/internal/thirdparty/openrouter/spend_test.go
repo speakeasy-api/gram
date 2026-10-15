@@ -45,7 +45,6 @@ func newSpendTestClient(t *testing.T, handler http.Handler) *OpenRouter {
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 	client.baseURL = server.URL
 	return client

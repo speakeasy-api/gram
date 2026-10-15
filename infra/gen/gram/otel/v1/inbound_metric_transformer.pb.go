@@ -70,11 +70,10 @@ var File_gram_otel_v1_inbound_metric_transformer_proto protoreflect.FileDescript
 
 const file_gram_otel_v1_inbound_metric_transformer_proto_rawDesc = "" +
 	"\n" +
-	"-gram/otel/v1/inbound_metric_transformer.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"V\n" +
-	"\x18InboundMetricTransformer::\x92\xb5\x186\x12\x04\b\x80\xf5$\x18\x00\"\x02\b<2\b\n" +
+	"-gram/otel/v1/inbound_metric_transformer.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"R\n" +
+	"\x18InboundMetricTransformer:6\x92\xb5\x182\x12\x04\b\x80\xf5$\x18\x00\"\x02\b<2\b\n" +
 	"\x02\b\n" +
-	"\x12\x02\b<J\x02\x10\n" +
-	"R\x1agram.otel.v1.InboundMetricB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
+	"\x12\x02\b<R\x1agram.otel.v1.InboundMetricB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"
 
 var file_gram_otel_v1_inbound_metric_transformer_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_otel_v1_inbound_metric_transformer_proto_goTypes = []any{

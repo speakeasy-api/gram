@@ -10,7 +10,7 @@ import { SetupTask, SetupTask$inboundSchema } from "./setuptask.js";
 
 export type ListSetupTasksResult = {
   /**
-   * Setup tasks in catalog order.
+   * Setup tasks in catalog order. A group precedes the cards under it.
    */
   tasks: Array<SetupTask>;
 };

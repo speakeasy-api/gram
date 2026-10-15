@@ -548,3 +548,37 @@ func TestService_ListDirectoryRoleMappings_LeavesOutHighCardinalityAttributeKeys
 	})
 	require.NoError(t, err)
 }
+
+func TestService_ListAudienceOptions_CountsDirectoryMappedRoleMembers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", "Sales User", "user_sales", "membership_sales")
+	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", `{"department_name":"Sales"}`)
+
+	key := "department_name"
+	value := "Sales"
+	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+		SourceKind:     directoryRoleMappingSourceAttribute,
+		AttributeKey:   &key,
+		AttributeValue: &value,
+		RoleUrn:        builder,
+	})
+	require.NoError(t, err)
+
+	options, err := ti.service.ListAudienceOptions(ctx, &gen.ListAudienceOptionsPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	var count *int64
+	for _, option := range options.Options {
+		if option.PrincipalUrn == builder {
+			count = option.MemberCount
+		}
+	}
+	require.Equal(t, new(int64(1)), count)
+}

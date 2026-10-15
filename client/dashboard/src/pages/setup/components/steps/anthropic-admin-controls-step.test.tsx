@@ -50,18 +50,25 @@ vi.mock("../platform-setup-flow", () => ({
   PlatformSetupFlow: ({
     platformId,
     heldBack,
+    orgHeldBack,
     onStatusChange,
     apiKeys,
   }: {
     apiKeys?: unknown;
     platformId: string;
     heldBack?: string;
+    orgHeldBack?: string;
     onStatusChange: (status: string) => void;
   }) => {
     keyMocks.flow(platformId, apiKeys);
     return (
       <div>
         <p>{heldBack ?? `Steps for ${platformId}`}</p>
+        {orgHeldBack ? (
+          <p>
+            {platformId} org rollout: {orgHeldBack}
+          </p>
+        ) : null}
         <button onClick={() => onStatusChange("complete")}>
           Connect {platformId}
         </button>
@@ -123,7 +130,7 @@ describe("AnthropicAdminControlsStep", () => {
     expect(screen.getByText("Steps for cursor")).toBeTruthy();
   });
 
-  it("calls out that Cowork reports nothing until its toggle is on", () => {
+  it("calls out that Cowork hook delivery needs runtime verification", () => {
     publishStatus.current = {
       data: {
         connected: true,
@@ -136,9 +143,7 @@ describe("AnthropicAdminControlsStep", () => {
 
     expect(screen.getByText("Turn Cowork on before you chat")).toBeTruthy();
     expect(
-      screen.getByText(
-        /switch the Claude Cowork toggle on, then send a message/,
-      ),
+      screen.getByText(/Start a new Cowork session and run a tool/),
     ).toBeTruthy();
   });
 
@@ -160,9 +165,10 @@ describe("AnthropicAdminControlsStep", () => {
     expect(screen.getAllByText("Complete")).toHaveLength(1);
   });
 
-  it("holds the instructions back when the repo has no collaborators", () => {
-    // Claude.ai syncs the repo through its own GitHub App and cannot read one
-    // it has no access to, so the platform flows wait on that too.
+  it("holds back only the GitHub-synced org rollouts when the repo has no collaborators", () => {
+    // Cowork's GitHub App and Cursor's import read the repo through GitHub, so
+    // their org rollouts wait on a collaborator. Claude Code clones through
+    // Speakeasy's proxy and the personal-plan paths use it or a ZIP.
     publishStatus.current = {
       data: {
         connected: true,
@@ -174,7 +180,10 @@ describe("AnthropicAdminControlsStep", () => {
 
     renderStep();
 
-    expect(screen.getAllByText(/Add a collaborator/)).toHaveLength(3);
+    expect(screen.getAllByText(/Add a collaborator/)).toHaveLength(2);
+    expect(screen.getByText(/^claude-cowork org rollout:/)).toBeTruthy();
+    expect(screen.getByText(/^cursor org rollout:/)).toBeTruthy();
+    expect(screen.getByText("Steps for claude")).toBeTruthy();
   });
 
   it("proceeds when the collaborator check could not be read", () => {

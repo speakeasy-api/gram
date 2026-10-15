@@ -115,7 +115,7 @@ export class McpServers extends ClientSDK {
    * deleteMcpServer mcpServers
    *
    * @remarks
-   * Delete an MCP server
+   * Delete an MCP server. A toolset's own hosted server (its id equals the toolset id) is disabled instead, as turning MCP off on the toolset does, and stays listed with visibility disabled. Other servers, including other toolset-backed ones, are deleted.
    */
   async delete(
     request: DeleteMcpServerRequest,
@@ -153,7 +153,7 @@ export class McpServers extends ClientSDK {
    * getMcpServer mcpServers
    *
    * @remarks
-   * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
+   * Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.
    */
   async get(
     request?: GetMcpServerRequest | undefined,

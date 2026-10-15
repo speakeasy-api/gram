@@ -3,6 +3,7 @@ import { mergeUserSummaries } from "@/components/observe/mergeUserSummaries";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
+import { allMemberRoleIds } from "@/lib/member-roles";
 
 type EmployeeStatus = "enrolled" | "not_enrolled";
 
@@ -148,7 +149,7 @@ function summaryEmail(summary: UserSummary): string {
 
 // groupSummariesByMember routes each usage summary to the org member it
 // belongs to. A member's telemetry can split across identity keys: their
-// opaque user_id (e.g. Gram MCP tool calls that carry no email), their
+// opaque user_id (e.g. Speakeasy MCP tool calls that carry no email), their
 // directory email (Claude/Cursor usage), and linked provider-account emails
 // (personal-account usage imports). Match all three — otherwise a token-less,
 // email-less id summary shadows the member's token-bearing email summaries,
@@ -281,8 +282,9 @@ export function buildEmployees(
     );
     // Display fields (last activity) come from the most-recent matched summary.
     const primary = mostRecentSummary(matched);
+    const roleIds = allMemberRoleIds(member);
     const role =
-      member.roleIds
+      roleIds
         .map((id) => roleNameById.get(id))
         .filter(Boolean)
         .join(", ") || "Unknown";
@@ -305,7 +307,7 @@ export function buildEmployees(
       accounts,
       mostRecentAccount: mostRecentAccount(accounts),
       hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
-      roleIds: member.roleIds,
+      roleIds,
       department: member.department ?? "",
       teams: member.groups ?? [],
     };

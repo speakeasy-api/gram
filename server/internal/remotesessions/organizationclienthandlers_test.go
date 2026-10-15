@@ -231,6 +231,46 @@ func TestUpdateClient(t *testing.T) {
 	require.Nil(t, recleared.Audience)
 }
 
+func TestUpdateClient_LegacyCallbackURLRequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-legacycb-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-legacycb-usi")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-legacycb-client")
+
+	legacy := func(enabled bool) *orgclientsgen.UpdateClientPayload {
+		return &orgclientsgen.UpdateClientPayload{
+			SessionToken:      nil,
+			ApikeyToken:       nil,
+			ID:                clientID,
+			LegacyCallbackURL: &enabled,
+		}
+	}
+
+	_, err := ti.service.UpdateClient(ctx, legacy(true))
+	requireOopsCode(t, err, oops.CodeForbidden)
+	unchanged, err := ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{SessionToken: nil, ApikeyToken: nil, ID: clientID})
+	require.NoError(t, err)
+	require.False(t, unchanged.LegacyCallbackURL, "a refused update must not change the flag")
+
+	adminCtx := withAdmin(t, ctx)
+	enabled, err := ti.service.UpdateClient(adminCtx, legacy(true))
+	require.NoError(t, err)
+	require.True(t, enabled.LegacyCallbackURL)
+
+	// An update that omits the field leaves compatibility mode alone.
+	audience := "https://api.example.com"
+	kept, err := ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{SessionToken: nil, ApikeyToken: nil, ID: clientID, Audience: &audience})
+	require.NoError(t, err)
+	require.True(t, kept.LegacyCallbackURL)
+
+	migrated, err := ti.service.UpdateClient(adminCtx, legacy(false))
+	require.NoError(t, err)
+	require.False(t, migrated.LegacyCallbackURL)
+}
+
 func TestUpdateClientRejectsInvalidIdentityProviderConfiguration(t *testing.T) {
 	t.Parallel()
 

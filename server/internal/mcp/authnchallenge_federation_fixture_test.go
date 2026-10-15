@@ -41,14 +41,16 @@ type federationTokenRequest struct {
 
 type federationProvider struct {
 	*httptest.Server
-	signer         jose.Signer
-	jwks           jose.JSONWebKeySet
-	mu             sync.Mutex
-	codes          map[string]federationToken
-	issued         map[string]bool
-	requests       []federationTokenRequest
-	errors         []error
-	metadataIssuer string // Optional issuer override for live configuration drift tests.
+	signer                    jose.Signer
+	jwks                      jose.JSONWebKeySet
+	mu                        sync.Mutex
+	codes                     map[string]federationToken
+	issued                    map[string]bool
+	requests                  []federationTokenRequest
+	errors                    []error
+	metadataIssuer            string // Optional issuer override for live configuration drift tests.
+	unsupportedResponseIssuer bool
+	discoveries               int
 }
 
 func newFederationProvider(t *testing.T) *federationProvider {
@@ -89,6 +91,12 @@ func (p *federationProvider) issueCode(t *testing.T, code string, token federati
 	p.codes[code] = token
 }
 
+func (p *federationProvider) discoveryCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.discoveries
+}
+
 func (p *federationProvider) exchangeCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -102,11 +110,13 @@ func (p *federationProvider) serveHTTP(issuer string, w http.ResponseWriter, r *
 	case "/.well-known/openid-configuration", "/changed/.well-known/openid-configuration":
 		p.mu.Lock()
 		metadataIssuer := p.metadataIssuer
+		supportsResponseIssuer := !p.unsupportedResponseIssuer
+		p.discoveries++
 		p.mu.Unlock()
 		if metadataIssuer == "" {
 			metadataIssuer = issuer
 		}
-		response = map[string]any{"issuer": metadataIssuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "jwks_uri": issuer + "/jwks", "response_types_supported": []string{"code"}, "subject_types_supported": []string{"public"}, "id_token_signing_alg_values_supported": []string{"ES256"}, "token_endpoint_auth_methods_supported": []string{"client_secret_basic"}, "code_challenge_methods_supported": []string{"S256"}, "authorization_response_iss_parameter_supported": true}
+		response = map[string]any{"issuer": metadataIssuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "jwks_uri": issuer + "/jwks", "response_types_supported": []string{"code"}, "subject_types_supported": []string{"public"}, "id_token_signing_alg_values_supported": []string{"ES256"}, "token_endpoint_auth_methods_supported": []string{"client_secret_basic"}, "code_challenge_methods_supported": []string{"S256"}, "authorization_response_iss_parameter_supported": supportsResponseIssuer}
 	case "/jwks":
 		response = p.jwks
 	case "/token":
@@ -171,11 +181,11 @@ func TestFederatedLoginCredentialRotation(t *testing.T) {
 		err = remotesessionsrepo.New(ti.conn).SetOrganizationRemoteSessionClientCredentialsFixture(ctx, remotesessionsrepo.SetOrganizationRemoteSessionClientCredentialsFixtureParams{ID: clientID, OrganizationID: conv.ToPGText(organizationID), ClientID: pgtype.Text{String: "", Valid: false}, ClientSecretEncrypted: conv.ToPGText(rotated)})
 		require.NoError(t, err)
 		rejected := httptest.NewRecorder()
-		require.NoError(t, ti.service.HandleIDPCallback(rejected, oldCallback))
+		require.NoError(t, ti.service.HandleIDPCallback(rejected, routeIDPCallback(oldCallback)))
 		failure := assertFederationErrorRedirect(t, rejected)
 		require.Equal(t, "server_error", failure.Query().Get("error"))
 		require.Zero(t, provider.exchangeCount())
-		require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), oldCallback), "rejected old state is single-use")
+		require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), routeIDPCallback(oldCallback)), "rejected old state is single-use")
 		require.Zero(t, provider.exchangeCount())
 
 		// A fresh flow binds both the new configuration and its own nonce/code.
@@ -185,7 +195,7 @@ func TestFederatedLoginCredentialRotation(t *testing.T) {
 		bootstrap := httptest.NewRequest(http.MethodGet, start.Header().Get("Location"), nil).WithContext(ctx)
 		require.Len(t, start.Result().Cookies(), 1)
 		bootstrap.AddCookie(start.Result().Cookies()[0])
-		require.NoError(t, ti.service.HandleIDPCallback(begin, bootstrap))
+		require.NoError(t, ti.service.HandleIDPCallback(begin, routeIDPCallback(bootstrap)))
 		upstream, err := url.Parse(begin.Header().Get("Location"))
 		require.NoError(t, err)
 		id, nonce := upstream.Query().Get("state"), upstream.Query().Get("nonce")
@@ -195,7 +205,7 @@ func TestFederatedLoginCredentialRotation(t *testing.T) {
 		require.Equal(t, "S256", upstream.Query().Get("code_challenge_method"))
 		provider.issueCode(t, "rotated-one-use-code", federationToken{challenge: upstream.Query().Get("code_challenge"), nonce: nonce, email: mockidp.MockUserEmail, issuer: provider.URL, verified: true, secret: "rotated-secret"})
 		query := url.Values{"state": {id}, "code": {"rotated-one-use-code"}, "iss": {provider.URL}}
-		callback := httptest.NewRequest(http.MethodGet, ti.serverURL.String()+"/mcp/idp_callback?"+query.Encode(), nil).WithContext(ctx)
+		callback := httptest.NewRequest(http.MethodGet, ti.serverURL.String()+"/mcp/idp_callback/"+clientID.String()+"?"+query.Encode(), nil).WithContext(ctx)
 		callback.AddCookie(start.Result().Cookies()[0])
 		// Shared completion assertions prove success, no retention, and no replay.
 		return callback, nonce, id

@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * What backs the server. toolset_only is a toolset with no mcp_servers row.
  */
-export const Source = {
+export const AdminMcpServerSource = {
   Toolset: "toolset",
   Remote: "remote",
   Tunneled: "tunneled",
@@ -22,12 +22,12 @@ export const Source = {
 /**
  * What backs the server. toolset_only is a toolset with no mcp_servers row.
  */
-export type Source = ClosedEnum<typeof Source>;
+export type AdminMcpServerSource = ClosedEnum<typeof AdminMcpServerSource>;
 
 /**
  * The visibility of the server.
  */
-export const Visibility = {
+export const AdminMcpServerVisibility = {
   Disabled: "disabled",
   Private: "private",
   Public: "public",
@@ -35,7 +35,9 @@ export const Visibility = {
 /**
  * The visibility of the server.
  */
-export type Visibility = ClosedEnum<typeof Visibility>;
+export type AdminMcpServerVisibility = ClosedEnum<
+  typeof AdminMcpServerVisibility
+>;
 
 /**
  * MCP server surfaced to admin operators. Covers both server models: mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.
@@ -53,7 +55,7 @@ export type AdminMcpServer = {
   /**
    * What backs the server. toolset_only is a toolset with no mcp_servers row.
    */
-  source: Source;
+  source: AdminMcpServerSource;
   /**
    * The URL clients connect to. Omitted when the server has no routable address.
    */
@@ -61,17 +63,18 @@ export type AdminMcpServer = {
   /**
    * The visibility of the server.
    */
-  visibility: Visibility;
+  visibility: AdminMcpServerVisibility;
 };
 
 /** @internal */
-export const Source$inboundSchema: z.ZodMiniEnum<typeof Source> = z.enum(
-  Source,
-);
+export const AdminMcpServerSource$inboundSchema: z.ZodMiniEnum<
+  typeof AdminMcpServerSource
+> = z.enum(AdminMcpServerSource);
 
 /** @internal */
-export const Visibility$inboundSchema: z.ZodMiniEnum<typeof Visibility> = z
-  .enum(Visibility);
+export const AdminMcpServerVisibility$inboundSchema: z.ZodMiniEnum<
+  typeof AdminMcpServerVisibility
+> = z.enum(AdminMcpServerVisibility);
 
 /** @internal */
 export const AdminMcpServer$inboundSchema: z.ZodMiniType<
@@ -85,9 +88,9 @@ export const AdminMcpServer$inboundSchema: z.ZodMiniType<
     ),
     id: z.string(),
     name: z.string(),
-    source: Source$inboundSchema,
+    source: AdminMcpServerSource$inboundSchema,
     url: z.optional(z.string()),
-    visibility: Visibility$inboundSchema,
+    visibility: AdminMcpServerVisibility$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

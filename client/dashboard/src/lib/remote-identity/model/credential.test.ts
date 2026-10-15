@@ -138,3 +138,24 @@ describe("credentialPreview", () => {
     );
   });
 });
+
+describe("credentialFromHeader with a readable Basic value", () => {
+  it("round-trips through the two fields the form edits", () => {
+    const encoded = encodeBasicCredential("ada", "l0vel:ace");
+    const credential = credentialFromHeader(header(`Basic ${encoded}`));
+
+    // Only the first colon separates the parts; RFC 7617 lets the password
+    // contain more of them.
+    expect(credential.format).toBe("basic");
+    expect(credential.username).toBe("ada");
+    expect(credential.password).toEqual({ kind: "set", value: "l0vel:ace" });
+    expect(credentialToAuthorizationValue(credential)).toBe(`Basic ${encoded}`);
+  });
+
+  it("leaves the fields empty when the payload is malformed", () => {
+    const credential = credentialFromHeader(header("Basic !!!not-base64!!!"));
+
+    expect(credential.username).toBe(EMPTY_AGENT_CREDENTIAL.username);
+    expect(credential.password).toEqual(EMPTY_AGENT_CREDENTIAL.password);
+  });
+});

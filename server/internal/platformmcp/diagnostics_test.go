@@ -49,11 +49,13 @@ func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
 	registrars = append(registrars, unavailable)
 	live := newRegistrar(newTestMCPServer())
 	registerDiagnosticsTools(live, nil)
+	registerToolUsageSummaryTool(live, nil)
 	registerRecentToolCallTools(live, nil)
+	registerToolCallSearchTools(live, nil)
 	registrars = append(registrars, live)
 
 	for _, registrar := range registrars {
-		for _, name := range []string{"get_project_overview", "get_mcp_diagnostics", "list_recent_tool_calls"} {
+		for _, name := range []string{"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_attribute_keys"} {
 			descriptor := descriptorByName(t, registrar, name)
 			require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
 			require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
@@ -61,6 +63,14 @@ func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
 			require.NotNil(t, descriptor.Annotations)
 			require.True(t, descriptor.Annotations.ReadOnlyHint)
 		}
+
+		// Individual calls are the Tool Logs list, so they need log:read.
+		recent := descriptorByName(t, registrar, "list_recent_tool_calls")
+		require.Equal(t, ExternalAuthorizationMember, recent.Meta.Authorization)
+		require.Equal(t, ProjectScopeExplicit, recent.Meta.ProjectScope)
+		require.Equal(t, discoveryLogRead, recent.Meta.DiscoveryScopes)
+		require.NotNil(t, recent.Annotations)
+		require.True(t, recent.Annotations.ReadOnlyHint)
 	}
 }
 
@@ -160,6 +170,10 @@ func (diagnosticsProjectReader) GetMCP(context.Context, Principal, GetMCPInput) 
 }
 
 func (diagnosticsProjectReader) ResolveProjectRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
+	return ResolvedProject{}, nil
+}
+
+func (diagnosticsProjectReader) ResolveProjectLogRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
 	return ResolvedProject{}, nil
 }
 

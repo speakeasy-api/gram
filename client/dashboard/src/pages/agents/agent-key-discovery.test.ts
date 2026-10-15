@@ -101,23 +101,28 @@ describe("scoped credential discovery", () => {
       },
     ]);
   });
-  it("accumulates pinned candidates from every successful batch in order", async () => {
-    const inventory = hostedInventory(DISCOVERY_BATCH_SIZE + 1);
-    const listDelegableGrants = vi.fn(
-      async ({ toolsetIds }: { toolsetIds?: string[] }) =>
-        (toolsetIds ?? []).map((id) => pinned(id, "project_one")),
-    );
-    const grants = await discoverKeyServerGrants(
-      { listDelegableGrants },
-      "agent_example",
-      inventory,
-      signal(),
-    );
-    expect(listDelegableGrants).toHaveBeenCalledTimes(2);
-    expect(grants.map((grant) => grant.selector.resourceId)).toEqual(
-      inventory.map((server) => server.resourceId),
-    );
-  });
+  it.each([DISCOVERY_BATCH_SIZE + 1, 1767])(
+    "accumulates %i resources in bounded batches rather than one request per server",
+    async (count) => {
+      const inventory = hostedInventory(count);
+      const listDelegableGrants = vi.fn(
+        async ({ toolsetIds }: { toolsetIds?: string[] }) =>
+          (toolsetIds ?? []).map((id) => pinned(id, "project_one")),
+      );
+      const grants = await discoverKeyServerGrants(
+        { listDelegableGrants },
+        "agent_example",
+        inventory,
+        signal(),
+      );
+      expect(listDelegableGrants).toHaveBeenCalledTimes(
+        Math.ceil(count / DISCOVERY_BATCH_SIZE),
+      );
+      expect(grants.map((grant) => grant.selector.resourceId)).toEqual(
+        inventory.map((server) => server.resourceId),
+      );
+    },
+  );
   it("splits large inventories into sequential batches and rejects if one fails", async () => {
     const inventory = hostedInventory(DISCOVERY_BATCH_SIZE + 50);
     let inFlight = 0;

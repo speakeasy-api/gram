@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 )
 
 // CustomDomainHealthCheckMaxAttempts is shared by Temporal and final-attempt detection.
@@ -46,7 +46,7 @@ type CustomDomainHealth struct {
 	expectedTarget   string
 	expectedARecords []netip.Addr
 	emails           *email.Service
-	siteURL          *url.URL
+	orgHosts         *orghost.Resolver
 }
 
 type ListCustomDomainsForHealthCheckArgs struct {
@@ -73,7 +73,7 @@ type NotifyCustomDomainUnhealthyArgs struct {
 	CheckedAt      time.Time
 }
 
-func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, emails *email.Service, siteURL *url.URL, guardianPolicy *guardian.Policy) *CustomDomainHealth {
+func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, emails *email.Service, orgHosts *orghost.Resolver, guardianPolicy *guardian.Policy) *CustomDomainHealth {
 	probe := func(ctx context.Context, domain string) error {
 		return errors.New("custom domain https probe is not configured")
 	}
@@ -91,7 +91,7 @@ func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure
 		expectedTarget:   expectedTarget,
 		expectedARecords: expectedARecords,
 		emails:           emails,
-		siteURL:          siteURL,
+		orgHosts:         orgHosts,
 	}
 }
 
@@ -321,13 +321,13 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 	organizationID := args.OrganizationID
 	repository := customdomainsrepo.New(c.db)
 
+	organization, err := repository.GetOrganizationForHealthNotification(ctx, organizationID)
+	if err != nil {
+		return fmt.Errorf("get organization for custom domain health notification: %w", err)
+	}
 	domainLink := ""
-	if c.siteURL != nil {
-		slug, err := repository.GetOrganizationSlugForHealthNotification(ctx, organizationID)
-		if err != nil {
-			return fmt.Errorf("get organization slug for custom domain health notification: %w", err)
-		}
-		domainLink = c.siteURL.JoinPath(slug, "domains").String()
+	if siteURL := c.orgHosts.SiteURL(organization.DefaultHost); siteURL != nil {
+		domainLink = siteURL.JoinPath(organization.Slug, "domains").String()
 	}
 
 	recipients, resolutionErr := authz.ResolveOrganizationAdminEmails(ctx, c.db, organizationID)

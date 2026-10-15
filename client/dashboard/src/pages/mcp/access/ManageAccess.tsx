@@ -9,7 +9,6 @@ import {
 } from "@/components/member-facepile";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -23,8 +22,12 @@ import { useOrgRoutes } from "@/routes";
 import { useNavigate } from "react-router";
 import type { SetResourceAudienceEntry } from "@gram/client/models/components/setresourceaudienceentry.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
+import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useSetResourceAudienceMutation } from "@gram/client/react-query/setResourceAudience.js";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import { invalidateAllPlugin } from "@gram/client/react-query/plugin.js";
+import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,6 +37,7 @@ import {
   Pencil,
   PencilOff,
   Plus,
+  Shield,
   Trash2,
   User,
 } from "lucide-react";
@@ -44,8 +48,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { cn } from "@/lib/utils";
-import { useMemo, useState, type ComponentProps, type JSX } from "react";
+import { useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
+import { RolePluginLinks } from "./RolePluginLinks";
+import type { ResourceAudienceRolePlugin } from "@gram/client/models/components/resourceaudienceroleplugin.js";
 import { AddAudienceDialog } from "./AddAudienceDialog";
 import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
@@ -54,6 +60,8 @@ import { pageCount, pageOf } from "./manageAccessState";
 import {
   accessSummary,
   buildAccessRows,
+  cappingBlocks,
+  keptIndividually,
   reachableTools,
   inheritedGrants,
   scopeState,
@@ -72,8 +80,9 @@ import {
   revokeScopeWrite,
   type AudienceWrite,
 } from "./accessWrites";
-import { RoleLink } from "./RoleLink";
-import { ownRules, LEVEL_VERB } from "./serverAudience";
+import { PrincipalBadge } from "./PrincipalBadge";
+import { RoleLink } from "@/components/role-link";
+import { isUnnarrowed, ownRules, LEVEL_VERB } from "./serverAudience";
 
 /** Narrowing the tool dialog is currently editing, and the row it belongs to. */
 interface NarrowingTarget {
@@ -102,6 +111,7 @@ export function ManageAccess({
   version,
   toolCatalog,
   isLoading,
+  rolePlugins,
 }: {
   resourceId: string;
   resourceName?: string;
@@ -111,6 +121,7 @@ export function ManageAccess({
   /** The server's tools, when this backend exposes a catalogue. */
   toolCatalog?: ToolSelectionTool[];
   isLoading: boolean;
+  rolePlugins?: ResourceAudienceRolePlugin[];
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
@@ -120,11 +131,10 @@ export function ManageAccess({
   // same gate as a disabled state so it cannot be clicked without the scope.
   const { hasAnyScope } = useRBAC();
   const canManage = hasAnyScope(["org:admin"]);
+  const showPlugins = canManage && rolePlugins !== undefined;
   const [page, setPage] = useState(0);
-  // Which kind of principal the picker is open for. People and agents are
-  // different enough — one is a person in the directory, one is a credentialed
-  // agent — that the button asks first rather than mixing them in one list.
-  const [adding, setAdding] = useState<"user" | "agent" | null>(null);
+  // Which kind of principal the picker is open for.
+  const [adding, setAdding] = useState<"user" | "agent" | "role" | null>(null);
   const [narrowing, setNarrowing] = useState<NarrowingTarget | null>(null);
   // The row whose removal is waiting to be confirmed, when the write is not
   // the plain deletion the button looks like.
@@ -150,21 +160,25 @@ export function ManageAccess({
 
   const direct = useMemo(() => ownRules(entries), [entries]);
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
-  // People a block already reaches, named by the block itself rather than
-  // read off the rows: someone with no rule of their own here has no row,
-  // and granting them access would write a rule the block cancels.
-  const cancelled = useMemo(() => {
-    const byUser = new Map<string, string>();
+
+  // Agents a role's or everyone's unnarrowed connect block reaches. Unlike a
+  // person's, an agent's own rule here does not outrank that block, so the
+  // agent picker withholds them rather than writing a rule that does nothing.
+  const agentBlockedReason = useMemo(() => {
+    const byAgent = new Map<string, string>();
+    let everyone: string | undefined;
     for (const entry of entries) {
-      if (entry.level !== "blocked") continue;
-      if ((entry.tools ?? []).length || (entry.dispositions ?? []).length) {
-        continue;
-      }
-      for (const memberId of entry.memberIds ?? []) {
-        if (!byUser.has(memberId)) byUser.set(memberId, entry.displayName);
+      if (entry.level !== "blocked" || !isUnnarrowed(entry)) continue;
+      if (entry.kind === "agent") continue;
+      if (entry.kind === "everyone") everyone ??= entry.displayName;
+      for (const agentId of entry.agentIds ?? []) {
+        if (!byAgent.has(agentId)) byAgent.set(agentId, entry.displayName);
       }
     }
-    return byUser;
+    return (principalUrn: string): string | undefined => {
+      const by = byAgent.get(principalUrn.replace(/^agent:/, "")) ?? everyone;
+      return by ? `Blocked by ${by} on this server` : undefined;
+    };
   }, [entries]);
 
   // Rules covering every server, which a rule added here cannot narrow.
@@ -178,7 +192,14 @@ export function ManageAccess({
 
   const setAudience = useSetResourceAudienceMutation({
     onSuccess: async () => {
-      await invalidateAllResourceAudience(queryClient);
+      // Check access answers from the same rules, so an open answer is redone.
+      await Promise.all([
+        invalidateAllResourceAudience(queryClient),
+        invalidateAllExplainResourceAccess(queryClient),
+        invalidateAllRoles(queryClient),
+        invalidateAllPlugin(queryClient),
+        invalidateAllPlugins(queryClient),
+      ]);
       setAdding(null);
     },
     // The server refuses some writes for a reason worth reading — blocking
@@ -238,11 +259,7 @@ export function ManageAccess({
       ? new Set(reachableTools(cell, toolCatalog ?? []) ?? [])
       : null;
     const limitedBy = capped
-      ? cell.blocks.find(
-          (block) =>
-            block.principalUrn !== row.principalUrn ||
-            block.appliesTo !== "resource",
-        )?.displayName
+      ? cappingBlocks(row, cell)[0]?.displayName
       : undefined;
 
     setNarrowing({
@@ -268,7 +285,8 @@ export function ManageAccess({
 
   // Removing a rule this page owns is what the button says it is. Removing a
   // principal an organization-wide rule still reaches is not: it writes a
-  // block, which outranks every grant. Only that case is worth a dialog.
+  // block, which outranks every grant but the ones people were given here by
+  // name. Only that case is worth a dialog.
   const removeRow = (row: AccessRow) => {
     if (inheritedGrants(row).length === 0) {
       applyWrite(revokeRowWrite(direct, row, resourceName));
@@ -294,10 +312,8 @@ export function ManageAccess({
     <div>
       <Card.Dashboard
         title="Manage access to this server"
-        // Rows run edge to edge under the header, like the dashboard's other
-        // list cards, and the title bar sits tight above them.
+        // Rows run edge to edge under the header.
         bodyClassName="p-0"
-        headerClassName="py-2.5"
         action={
           <RequireScope
             scope="org:admin"
@@ -326,6 +342,10 @@ export function ManageAccess({
                   <User className="h-4 w-4" />
                   Person
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setAdding("role")}>
+                  <Shield className="h-4 w-4" />
+                  Role
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setAdding("agent")}>
                   <Bot className="h-4 w-4" />
                   Agent
@@ -342,11 +362,27 @@ export function ManageAccess({
             </Text>
           </div>
         ) : (
-          <div className="grid grid-cols-[minmax(0,18rem)_minmax(0,1fr)_auto_auto]">
+          <div
+            className={cn(
+              "grid",
+              showPlugins
+                ? "grid-cols-[auto_repeat(3,minmax(0,1fr))_max-content_auto]"
+                : "grid-cols-[auto_repeat(2,minmax(0,1fr))_max-content_auto]",
+            )}
+          >
+            <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2 text-xs">
+              <span>Type</span>
+              <span>Name</span>
+              <span>Access</span>
+              {showPlugins && <span>Distributed via</span>}
+              <span>Members</span>
+              <span />
+            </div>
             {visible.map((row) => (
               <PrincipalRow
                 key={row.principalUrn}
                 row={row}
+                rolePlugins={showPlugins ? rolePlugins : undefined}
                 faces={row.memberIds
                   .map((id) => facesById.get(id))
                   .filter((member) => member !== undefined)}
@@ -421,6 +457,9 @@ export function ManageAccess({
       {removing && (
         <RemoveAudienceDialog
           row={removing}
+          keptBy={keptIndividually(removing, rows, toolCatalog ?? []).map(
+            (row) => row.displayName,
+          )}
           serverName={resourceName}
           pending={setAudience.isPending}
           onConfirm={confirmRemove}
@@ -430,21 +469,28 @@ export function ManageAccess({
 
       {adding && (
         <AddAudienceDialog
-          title={adding === "agent" ? "Grant agent access" : "Grant access"}
+          title={
+            adding === "agent"
+              ? "Grant agent access"
+              : adding === "role"
+                ? "Grant role access"
+                : "Grant access"
+          }
           description={
             adding === "agent"
               ? `Give agents access to ${resourceName ?? "this server"} only. An agent still cannot do more here than its own policy and its owner allow.`
-              : `Give people access to ${resourceName ?? "this server"} only. To give a role access, edit the role.`
+              : adding === "role"
+                ? `Give roles access to ${resourceName ?? "this server"} only.`
+                : `Give people access to ${resourceName ?? "this server"} only.`
           }
           kinds={[adding]}
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
+          blockedReason={adding === "agent" ? agentBlockedReason : undefined}
           // A principal an organization-wide rule already covers cannot be
           // narrowed by adding a rule here — grants add, they never subtract
-          // — so say what it already has instead of offering a no-op.
-          blockedFrom={[...cancelled].map(([userId, by]) => ({
-            principalUrn: `user:${userId}`,
-            reason: `Blocked by ${by} on this server`,
-          }))}
+          // — so say what it already has instead of offering a no-op. People
+          // a role's or everyone's block reaches stay on offer: their own rule
+          // here outranks that block.
           alreadyReaches={orgWide
             // A narrowed organization rule leaves room to grant more here, so
             // only unrestricted ones make a principal unaddable.
@@ -474,6 +520,7 @@ export function ManageAccess({
  */
 function PrincipalRow({
   row,
+  rolePlugins,
   faces,
   catalog,
   onAllow,
@@ -487,6 +534,7 @@ function PrincipalRow({
   pending,
 }: {
   row: AccessRow;
+  rolePlugins?: ResourceAudienceRolePlugin[];
   /** The people a role reaches, for the facepile on its row. */
   faces: FacepileMember[];
   /** The server's tools, for resolving what a rule and a block leave. */
@@ -513,9 +561,11 @@ function PrincipalRow({
   return (
     <div className="border-border col-span-full grid grid-cols-subgrid border-b last:border-b-0">
       <div className="col-span-full grid grid-cols-subgrid items-center gap-x-6 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
+        <div>
           <PrincipalBadge kind={row.kind} />
-          <span className="truncate font-medium">
+        </div>
+        <div className="min-w-0">
+          <span className="block truncate font-medium">
             {userId ? (
               <IdentityLink identifier={{ userId }}>
                 {row.displayName}
@@ -533,6 +583,19 @@ function PrincipalRow({
         <Text muted small className="min-w-0 truncate">
           {accessSummary(row, catalog)}
         </Text>
+
+        {canManage && rolePlugins !== undefined && (
+          <div className="min-w-0">
+            {row.kind === "role" ? (
+              <RolePluginLinks
+                principalUrn={row.principalUrn}
+                plugins={rolePlugins}
+              />
+            ) : (
+              <span className="text-muted-foreground text-sm">—</span>
+            )}
+          </div>
+        )}
 
         {/* Who a role reaches, as the faces themselves: an administrator
             checks that before changing what the role can do, and "2 members"
@@ -800,33 +863,6 @@ function ownDestructiveBlockOnly(row: AccessRow): boolean {
     (own.tools ?? []).length === 0 &&
     (own.dispositions ?? []).length === 1 &&
     (own.dispositions ?? []).includes("destructive")
-  );
-}
-
-/** What kind of thing a row names, so a role does not read as a person. */
-const PRINCIPAL_BADGE: Record<
-  string,
-  { label: string; variant: ComponentProps<typeof Badge>["variant"] }
-> = {
-  role: { label: "Role", variant: "warning" },
-  user: { label: "Person", variant: "information" },
-  agent: { label: "Agent", variant: "information" },
-  everyone: { label: "Everyone", variant: "neutral" },
-  directory_group: { label: "Group", variant: "neutral" },
-  directory_attribute: { label: "Attribute", variant: "neutral" },
-};
-
-function PrincipalBadge({
-  kind,
-}: {
-  kind: AccessRow["kind"];
-}): JSX.Element | null {
-  const badge = PRINCIPAL_BADGE[kind];
-  if (!badge) return null;
-  return (
-    <Badge variant={badge.variant} size="sm">
-      {badge.label}
-    </Badge>
   );
 }
 

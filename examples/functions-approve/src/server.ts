@@ -1,11 +1,14 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import * as mcp from "@gram-ai/functions/mcp";
+import * as mcp from "@speakeasy-api/functions/mcp";
 
 import pkg from "../package.json" with { type: "json" };
-import gram from "./gram.ts";
+import functions from "./functions.ts";
 
 async function run() {
-  const server = mcp.fromGram(gram, { name: pkg.name, version: pkg.version });
+  const server = mcp.fromFunctions(functions, {
+    name: pkg.name,
+    version: pkg.version,
+  });
 
   console.error("Starting MCP server with stdio...");
   const stdio = new StdioServerTransport();

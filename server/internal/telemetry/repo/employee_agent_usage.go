@@ -26,7 +26,7 @@ type SearchEmployeeAgentUsageParams struct {
 // accept:
 //
 //   - Scope is canonical observed agent usage only — Claude Code, Codex, Cursor,
-//     Claude Chat, and LiteLLM — matching the costs/billing pages. Gram-hosted chat
+//     Claude Chat, and LiteLLM — matching the costs/billing pages. Speakeasy-hosted chat
 //     completions and duplicate usage-metric rows are excluded.
 //   - Users are keyed by email. Identities that never carry an email in the
 //     window are absent here; surface them via ListEmaillessIdentities.
@@ -116,7 +116,7 @@ type ListEmaillessIdentitiesParams struct {
 	TimeStart     int64 // inclusive window start, unix nanoseconds
 	TimeEnd       int64 // inclusive window end, unix nanoseconds
 	Limit         int
-	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// ExcludedHookSources drops rows whose hook_source names a Speakeasy-hosted
 	// completion surface, so a platform-side completion carrying a user_id
 	// but no email cannot surface a phantom identity in the enrollment
 	// directory. Never include the empty string here.

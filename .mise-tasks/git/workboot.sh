@@ -50,13 +50,7 @@ mise run stop || true
 # accepts queries, and several worktree stacks may be booting at once. At 30s
 # infra:start gives up mid-initdb and zero aborts before migrations run,
 # leaving the daemons pointed at an empty database.
-#
-# PRESIDIO_READINESS_TIMEOUT=0 skips the shared analyzer's health wait, which
-# is up to 90s of pure latency here: nothing in the boot path consumes Presidio
-# synchronously (only background Temporal risk activities do, and they already
-# retry), and infra:start treats the wait as advisory anyway. An interactive
-# `./zero` keeps the wait so its success message stays honest.
-if INFRA_READINESS_TIMEOUT=300 PRESIDIO_READINESS_TIMEOUT=0 ./zero --agent; then
+if INFRA_READINESS_TIMEOUT=300 ./zero --agent; then
     pause_stack
     exit 0
 fi

@@ -328,3 +328,9 @@ WHERE e.deployment_id = (SELECT id FROM target_deployment)
  AND e.deleted IS FALSE
 ORDER BY t.id DESC;
 
+
+-- name: SetMCPRegistryEnabledFixture :exec
+UPDATE mcp_registries SET enabled = @enabled WHERE id = @id;
+
+-- name: SetMCPRegistryURLFixture :exec
+UPDATE mcp_registries SET url = @url WHERE id = @id;

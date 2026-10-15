@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -99,7 +100,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return UserSessionIssuerView(row), nil
+	return s.issuerView(ctx, row), nil
 }
 
 // Patches an issuer; nil fields are no-ops.
@@ -207,7 +208,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return afterView, nil
+	return s.issuerView(ctx, updated), nil
 }
 
 // Lists issuers; keyset paginated by id (descending).
@@ -275,7 +276,7 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 
 	items := make([]*types.UserSessionIssuer, len(rows))
 	for i, row := range rows {
-		items[i] = UserSessionIssuerView(row)
+		items[i] = s.issuerView(ctx, row)
 	}
 
 	var nextCursor *string
@@ -339,7 +340,7 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		}
 	}
 
-	return UserSessionIssuerView(row), nil
+	return s.issuerView(ctx, row), nil
 }
 
 // Soft-deletes an issuer and cascades to its user_sessions and
@@ -464,6 +465,10 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 // UserSessionIssuerView projects an issuer row onto the API view. Exported so
 // the Platform MCP admission tools build the same audit snapshots this service
 // writes, rather than a second, drifting projection of the same row.
+//
+// It holds only what the row stores. Where a shared authorization server is
+// served depends on the deployment's hosts too, so issuerView adds it to
+// responses and audit snapshots leave it out.
 func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
 	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
 	// The EFFECTIVE mode, never the raw column: an issuer that has never had
@@ -471,24 +476,81 @@ func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 	// API — including the audit snapshots built from this view — should never
 	// have to know the unset state exists.
 	mode, _ := admission.ResolveMode(row.ClientIDMetadataAdmissionMode.String, row.ClientIDMetadataAdmissionMode.Valid)
+	// Likewise the effective authorization server mode: the column is not
+	// constrained, and any value but 'shared' serves per-endpoint
+	// authorization servers.
+	authorizationServerMode := authserver.ModeEndpoint
+	if authserver.IssuerInSharedMode(row) {
+		authorizationServerMode = authserver.ModeShared
+	}
 	projectID := ""
 	if row.ProjectID.Valid {
 		projectID = row.ProjectID.UUID.String()
 	}
 
 	return &types.UserSessionIssuer{
-		ID:                            row.ID.String(),
-		ProjectID:                     projectID,
-		OrganizationID:                conv.FromPGTextOrEmpty[string](row.OrganizationID),
-		Slug:                          row.Slug,
-		AuthnChallengeMode:            row.AuthnChallengeMode,
-		SessionDurationHours:          int(dur / time.Hour),
-		ClientIDMetadataAdmissionMode: string(mode),
-		TrustedRemoteSessionIssuerID:  conv.FromNullableUUID(row.TrustedRemoteSessionIssuerID),
-		TrustedRemoteSessionClientID:  conv.FromNullableUUID(row.TrustedRemoteSessionClientID),
-		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                                   row.ID.String(),
+		ProjectID:                            projectID,
+		OrganizationID:                       conv.FromPGTextOrEmpty[string](row.OrganizationID),
+		Slug:                                 row.Slug,
+		AuthnChallengeMode:                   row.AuthnChallengeMode,
+		SessionDurationHours:                 int(dur / time.Hour),
+		ClientIDMetadataAdmissionMode:        string(mode),
+		TrustedRemoteSessionIssuerID:         conv.FromNullableUUID(row.TrustedRemoteSessionIssuerID),
+		TrustedRemoteSessionClientID:         conv.FromNullableUUID(row.TrustedRemoteSessionClientID),
+		AuthorizationServerMode:              string(authorizationServerMode),
+		UseAuthenticationHost:                row.UseAuthenticationHost,
+		IssuerURLPinned:                      authserver.IssuerURLPinned(row),
+		IssuerURL:                            nil,
+		TokenEndpoint:                        nil,
+		AuthorizationServerUnavailableReason: nil,
+		ProjectName:                          nil,
+		AuthenticationHostAvailable:          nil,
+		CreatedAt:                            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+// authorizationServerUnavailableReason is why a shared issuer's authorization
+// server is not served. Its values are the API's
+// authorization_server_unavailable_reason enum.
+type authorizationServerUnavailableReason string
+
+const (
+	// authorizationServerPinnedIssuerURLInvalid is a pinned issuer URL that is
+	// not the issuer's own shared authorization server.
+	authorizationServerPinnedIssuerURLInvalid authorizationServerUnavailableReason = "pinned_issuer_url_invalid"
+
+	// authorizationServerHostNotServed is a shared authorization server on a
+	// host the deployment does not serve.
+	authorizationServerHostNotServed authorizationServerUnavailableReason = "host_not_served"
+)
+
+// issuerView is the response view of an issuer: UserSessionIssuerView plus
+// where its shared authorization server is served, derived from the same hosts
+// the MCP service serves it on.
+func (s *Service) issuerView(ctx context.Context, row repo.UserSessionIssuer) *types.UserSessionIssuer {
+	view := UserSessionIssuerView(row)
+	view.AuthenticationHostAvailable = new(s.sharedHosts.AuthenticationHostAvailable())
+	if !authserver.IssuerInSharedMode(row) {
+		return view
+	}
+
+	server, err := s.sharedHosts.SharedAuthorizationServer(row)
+	switch {
+	case err == nil:
+		view.IssuerURL = &server.IssuerURL
+		view.TokenEndpoint = &server.TokenEndpoint
+	case errors.Is(err, authserver.ErrPinnedIssuerURLInvalid):
+		view.AuthorizationServerUnavailableReason = new(string(authorizationServerPinnedIssuerURLInvalid))
+	case errors.Is(err, authserver.ErrHostNotServed):
+		view.AuthorizationServerUnavailableReason = new(string(authorizationServerHostNotServed))
+	default:
+		// No reason the API can name: the issuer reads as shared with neither
+		// its authorization server nor why it is unavailable.
+		s.logger.WarnContext(ctx, "derive user session issuer shared authorization server", attr.SlogError(err))
+	}
+	return view
 }
 
 // pageLimit clamps the user-supplied limit into the documented range and

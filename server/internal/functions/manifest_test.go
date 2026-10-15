@@ -212,3 +212,68 @@ func TestManifestToolV0_UnmarshalMissingTagsIsNil(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &tool))
 	require.Nil(t, tool.Tags)
 }
+
+func TestValidateManifestToolV0_RejectsReservedVariableNames(t *testing.T) {
+	t.Parallel()
+
+	tool := ManifestToolV0{
+		Name:        "lookup",
+		Description: "Look something up",
+		InputSchema: nil,
+		Variables: map[string]*ManifestVariableAttributeV0{
+			"API_KEY":      {Description: nil},
+			"NAME":         {Description: nil},
+			"PARAM_REGION": {Description: nil},
+		},
+		AuthInput:   &ManifestAuthInputAttributeV0{Type: "oauth2", Variable: "METHOD", GramEmail: false},
+		Annotations: nil,
+		Tags:        nil,
+		Meta:        nil,
+	}
+
+	err := validateManifestToolV0(tool)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `variable name "NAME" is reserved`)
+	require.Contains(t, err.Error(), `variable name "PARAM_REGION" is reserved`)
+	require.Contains(t, err.Error(), `variable name "METHOD" is reserved`)
+	require.NotContains(t, err.Error(), "API_KEY")
+}
+
+func TestValidateManifestToolV0_AllowsNamesSharingAReservedPrefix(t *testing.T) {
+	t.Parallel()
+
+	tool := ManifestToolV0{
+		Name:        "lookup",
+		Description: "Look something up",
+		InputSchema: nil,
+		Variables: map[string]*ManifestVariableAttributeV0{
+			"NAMESPACE":    {Description: nil},
+			"PARAMS_TOKEN": {Description: nil},
+		},
+		AuthInput:   nil,
+		Annotations: nil,
+		Tags:        nil,
+		Meta:        nil,
+	}
+
+	require.NoError(t, validateManifestToolV0(tool))
+}
+
+func TestValidateManifestResourceV0_RejectsReservedVariableNames(t *testing.T) {
+	t.Parallel()
+
+	resource := ManifestResourceV0{
+		Name:        "doc",
+		URI:         "file:///doc",
+		Description: "A document",
+		MimeType:    nil,
+		Title:       nil,
+		Variables: map[string]*ManifestVariableAttributeV0{
+			"name": {Description: nil},
+		},
+		Meta: nil,
+	}
+
+	err := validateManifestResourceV0(resource)
+	require.ErrorContains(t, err, `variable name "name" is reserved`)
+}

@@ -108,9 +108,6 @@ func (s *Service) prepareAgentSessionContext(ctx context.Context, endpoint *Reso
 	if !ok || authCtx == nil || subject.Kind != urn.SessionSubjectKindAgent {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if enabled, _, _ := s.agentAuthorizationRollout(ctx, s.logger, endpoint); !enabled {
-		return ctx, oops.C(oops.CodeNotFound)
-	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, subject.ID)
 	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, authCtx, actor, contextvalues.PrincipalCredential{
 		AuthorizerUserID:       credential.AuthorizerUserID,

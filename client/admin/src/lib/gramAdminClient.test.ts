@@ -1,5 +1,8 @@
 /// <reference types="node" />
 
+import { SDKValidationError } from "@gram/admin-client/models/errors/sdkvalidationerror";
+import { ResponseValidationError } from "@gram/admin-client/models/errors/responsevalidationerror";
+
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -12,8 +15,11 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   return { ...actual, useMutation };
 });
 
+import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
-import type { SetOrganizationOnboardingRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingrequestbody";
+import type { SetOrganizationOnboardingStackRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingstackrequestbody";
+import type { SetStripeSubscriptionRequestBody } from "@gram/admin-client/models/components/setstripesubscriptionrequestbody";
+import type { AdminGetStripeSubscriptionCandidateRequest } from "@gram/admin-client/models/operations/admingetstripesubscriptioncandidate";
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 
 import {
@@ -40,17 +46,31 @@ afterEach(() => {
 
 describe("generated admin boundary", () => {
   it("accepts only request arguments at the public boundary", () => {
+    expectTypeOf(boundary.inferenceKeysQuery).parameters.toEqualTypeOf<
+      [organizationID: string]
+    >();
+    expectTypeOf(boundary.repairInferenceKey).parameters.toEqualTypeOf<
+      [request: RepairInferenceKeyRequestBody]
+    >();
     expectTypeOf(boundary.adminSessionQuery).parameters.toEqualTypeOf<[]>();
     expectTypeOf(boundary.setAdminOrganizationFeature).parameters.toEqualTypeOf<
       [request: SetOrganizationFeatureRequestBody]
     >();
-    expectTypeOf(boundary.organizationOnboardingQuery).parameters.toEqualTypeOf<
-      [organizationId: string]
+    expectTypeOf(
+      boundary.organizationOnboardingStackQuery,
+    ).parameters.toEqualTypeOf<[organizationId: string]>();
+    expectTypeOf(
+      boundary.setAdminOrganizationOnboardingStack,
+    ).parameters.toEqualTypeOf<
+      [request: SetOrganizationOnboardingStackRequestBody]
+    >();
+    expectTypeOf(boundary.setStripeSubscription).parameters.toEqualTypeOf<
+      [request: SetStripeSubscriptionRequestBody]
     >();
     expectTypeOf(
-      boundary.setAdminOrganizationOnboarding,
+      boundary.getStripeSubscriptionCandidate,
     ).parameters.toEqualTypeOf<
-      [request: SetOrganizationOnboardingRequestBody]
+      [request: AdminGetStripeSubscriptionCandidateRequest]
     >();
   });
 
@@ -150,22 +170,8 @@ describe("generated admin boundary", () => {
   it("keeps onboarding reads and writes same-origin and maps the generated contract", async () => {
     const body = {
       organization_id: "org_explicit",
-      preset: "gateway",
-      tasks: [
-        {
-          key: "create-marketplace",
-          title: "Create marketplace",
-          description: "Publish marketplace",
-          hidden: false,
-        },
-      ],
-      presets: [
-        {
-          key: "gateway",
-          title: "Gateway",
-          visible_task_keys: ["create-marketplace", "distribute-servers"],
-        },
-      ],
+      vendors: [{ vendor: "Anthropic", plan_slug: "anthropic-team" }],
+      mdm_vendor: "jamf",
     };
     const fetch = vi.fn().mockImplementation(() =>
       Promise.resolve(
@@ -177,20 +183,14 @@ describe("generated admin boundary", () => {
     );
     vi.stubGlobal("fetch", fetch);
     const controller = new AbortController();
-    const query = boundary.organizationOnboardingQuery("org_explicit");
+    const query = boundary.organizationOnboardingStackQuery("org_explicit");
     const config = await query.queryFn?.({
       signal: controller.signal,
     } as never);
     expect(config).toMatchObject({
       organizationId: "org_explicit",
-      preset: "gateway",
-      presets: [
-        {
-          key: "gateway",
-          title: "Gateway",
-          visibleTaskKeys: ["create-marketplace", "distribute-servers"],
-        },
-      ],
+      vendors: [{ vendor: "Anthropic", planSlug: "anthropic-team" }],
+      mdmVendor: "jamf",
     });
     const read = fetch.mock.calls[0]![0] as Request;
     expect(new URL(read.url).searchParams.get("organization_id")).toBe(
@@ -201,8 +201,8 @@ describe("generated admin boundary", () => {
 
     const request = {
       organizationId: "org_explicit",
-      visibleTaskKeys: ["create-marketplace"],
-      preset: "gateway",
+      vendors: [{ vendor: "Anthropic", planSlug: "anthropic-team" }],
+      mdmVendor: "jamf",
       serverURL: "http://untrusted.example.test",
       options: {
         serverURL: "http://untrusted.example.test",
@@ -210,18 +210,20 @@ describe("generated admin boundary", () => {
       },
     } as const;
     await expect(
-      boundary.setAdminOrganizationOnboarding(request as never),
+      boundary.setAdminOrganizationOnboardingStack(request as never),
     ).resolves.toEqual(config);
     const write = fetch.mock.calls[1]![0] as Request;
     expect(write.method).toBe("POST");
     expect(await write.json()).toEqual({
       organization_id: "org_explicit",
-      visible_task_keys: ["create-marketplace"],
-      preset: "gateway",
+      vendors: [{ vendor: "Anthropic", plan_slug: "anthropic-team" }],
+      mdm_vendor: "jamf",
     });
     for (const sent of [read, write]) {
       expect(new URL(sent.url).origin).toBe(window.location.origin);
-      expect(new URL(sent.url).pathname).toBe("/admin/organization.onboarding");
+      expect(new URL(sent.url).pathname).toBe(
+        "/admin/organization.onboardingStack",
+      );
       expect(sent.credentials).toBe("same-origin");
       expect(sent.headers.has("Authorization")).toBe(false);
       expect(sent.headers.has("Cookie")).toBe(false);
@@ -484,6 +486,88 @@ describe("organization writes through the generated client", () => {
     });
   });
 
+  it("loads a Stripe subscription candidate through the generated client", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "sub_placeholder_1",
+          customer_id: "cus_placeholder_1",
+          status: "active",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      boundary.getStripeSubscriptionCandidate({
+        organizationId: "org one",
+        stripeSubscriptionId: "sub_placeholder_1",
+      }),
+    ).resolves.toEqual({
+      id: "sub_placeholder_1",
+      customerId: "cus_placeholder_1",
+      status: "active",
+    });
+
+    const request = fetch.mock.calls[0]![0] as Request;
+    const url = new URL(request.url);
+    expect(url.pathname).toBe(
+      "/admin/organization.stripeSubscriptionCandidate",
+    );
+    expect(url.searchParams.get("organization_id")).toBe("org one");
+    expect(url.searchParams.get("stripe_subscription_id")).toBe(
+      "sub_placeholder_1",
+    );
+    expect(request.method).toBe("GET");
+  });
+
+  it("posts the subscription id to the set path", async () => {
+    const fetch = stubFetch();
+
+    await expect(
+      boundary.setStripeSubscription({
+        organizationId: WIRE.id,
+        stripeSubscriptionId: "sub_placeholder_1",
+      }),
+    ).resolves.toEqual(RECORD);
+
+    expect(await requestOf(fetch)).toEqual({
+      path: "/admin/organization.setStripeSubscription",
+      method: "POST",
+      contentType: "application/json",
+      body: {
+        organization_id: WIRE.id,
+        stripe_subscription_id: "sub_placeholder_1",
+      },
+    });
+  });
+
+  it("redirects an expired session on a subscription write", async () => {
+    vi.resetModules();
+    const freshBoundary = await import("@/lib/gramAdminClient");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(unauthorizedBody, {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const href = vi.spyOn(window.location, "href", "set");
+
+    await expect(
+      freshBoundary.setStripeSubscription({
+        organizationId: WIRE.id,
+        stripeSubscriptionId: "sub_placeholder_1",
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+
+    expect(freshBoundary.isRedirectingToLogin()).toBe(true);
+    expect(href).toHaveBeenCalledOnce();
+  });
+
   // A record write takes the login redirect on a 401 like every read of the
   // record does. The start is the exception below.
   it("redirects an expired session on a record write", async () => {
@@ -569,6 +653,8 @@ describe("organizationFromSdk", () => {
         slug: "placeholder-one",
         accountType: "enterprise",
         workosId: "org_workos_placeholder",
+        workosDashboardUrl:
+          "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder",
         stripeCustomerId: "cus_placeholder",
         stripeSubscriptionId: "sub_placeholder",
         whitelisted: true,
@@ -589,6 +675,8 @@ describe("organizationFromSdk", () => {
       slug: "placeholder-one",
       account_type: "enterprise",
       workos_id: "org_workos_placeholder",
+      workos_dashboard_url:
+        "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder",
       stripe_customer_id: "cus_placeholder",
       stripe_subscription_id: "sub_placeholder",
       whitelisted: true,
@@ -626,6 +714,7 @@ describe("organizationFromSdk", () => {
     expect(record.trial_converted_at).toBeUndefined();
     expect(record.trial_demoted_at).toBeUndefined();
     expect(record.workos_id).toBeUndefined();
+    expect(record.workos_dashboard_url).toBeUndefined();
     expect(record.stripe_customer_id).toBeUndefined();
     expect(record.creation_source).toBeUndefined();
   });
@@ -654,4 +743,343 @@ it("serves issuer logos through the generated same-origin image operation", asyn
   expect(new URL(request.url).origin).toBe(window.location.origin);
   expect(request.headers.has("gram-session")).toBe(false);
   expect(request.headers.has("Authorization")).toBe(false);
+});
+
+it.each([
+  ["useCreateRegistryEntryMutation", { dataJson: "{}" }],
+  [
+    "useSaveRegistryEntryMutation",
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      dataJson: "{}",
+      updatedAt: "opaque",
+    },
+  ],
+  [
+    "useSetRegistryEntryPublishedMutation",
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      updatedAt: "opaque",
+      published: false,
+    },
+  ],
+] as const)(
+  "redirects expired registry sessions for %s",
+  async (hook, request) => {
+    vi.resetModules();
+    const fresh = await import("@/lib/gramAdminClient");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(unauthorizedBody, {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const href = vi.spyOn(window.location, "href", "set");
+    fresh[hook]();
+    const options = useMutation.mock.lastCall![0];
+    await expect(
+      options.mutationFn({
+        request,
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    expect(fresh.isRedirectingToLogin()).toBe(true);
+    expect(href).toHaveBeenCalledOnce();
+  },
+);
+
+it.each([401, 503])(
+  "keeps repair same-origin without retries and preserves HTTP %s errors",
+  async (status) => {
+    vi.resetModules();
+    const fresh = await import("@/lib/gramAdminClient");
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(unauthorizedBody, {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const href = vi.spyOn(window.location, "href", "set");
+    await expect(
+      fresh.repairInferenceKey({
+        organizationId: "org_placeholder",
+        keyType: "chat",
+        confirmation: "I know what I'm doing",
+        removeCauses: ["admin_lock"],
+        reason: "BUG-123",
+        serverURL: "https://untrusted.example.test",
+        options: {
+          serverURL: "https://untrusted.example.test",
+          retries: { strategy: "backoff" },
+          fetchOptions: {
+            credentials: "include",
+            headers: { Authorization: "forged" },
+          },
+        },
+      } as never),
+    ).rejects.toMatchObject({ statusCode: status });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const request = fetch.mock.calls[0]![0] as Request;
+    expect(request.url).toBe(
+      `${window.location.origin}/admin/organization.repairInferenceKey`,
+    );
+    expect(request.credentials).toBe("same-origin");
+    expect(request.headers.has("Authorization")).toBe(false);
+    expect(request.headers.has("Cookie")).toBe(false);
+    expect(await request.json()).toEqual({
+      organization_id: "org_placeholder",
+      key_type: "chat",
+      confirmation: "I know what I'm doing",
+      remove_causes: ["admin_lock"],
+      reason: "BUG-123",
+    });
+    expect(fresh.isRedirectingToLogin()).toBe(status === 401);
+    expect(href).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+  },
+);
+
+describe("generated inference key operations", () => {
+  it("posts exact removal-only repair payload without inventing usage", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const response = {
+      key: {
+        key_type: "internal",
+        monthly_credits: 100,
+        disabled: false,
+        disable_causes: [],
+        disable_causes_classified: true,
+        cause_diagnostics: [],
+      },
+      reconciliation_pending: true,
+    };
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const result = await boundary.repairInferenceKey({
+      organizationId: "org_1",
+      keyType: "internal",
+      removeCauses: ["admin_lock"],
+      confirmation: "I know what I'm doing",
+      reason: "BUG-123",
+    });
+    expect(result).toEqual({
+      key: {
+        keyType: "internal",
+        monthlyCredits: 100,
+        disabled: false,
+        disableCauses: [],
+        disableCausesClassified: true,
+        causeDiagnostics: [],
+      },
+      reconciliationPending: true,
+    });
+    expect(result.key).not.toHaveProperty("creditsUsed");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const request = fetch.mock.calls[0]![0] as Request;
+    expect(request.url).toBe(
+      `${window.location.origin}/admin/organization.repairInferenceKey`,
+    );
+    expect(request.method).toBe("POST");
+    expect(request.credentials).toBe("same-origin");
+    expect(request.headers.has("Authorization")).toBe(false);
+    expect(request.headers.has("Cookie")).toBe(false);
+    expect(await request.json()).toEqual({
+      organization_id: "org_1",
+      key_type: "internal",
+      remove_causes: ["admin_lock"],
+      confirmation: "I know what I'm doing",
+      reason: "BUG-123",
+    });
+  });
+
+  it.each([
+    { confirmation: "almost" },
+    { removeCauses: ["unknown_lock"] },
+    { keyType: "unknown" },
+  ])("rejects invalid repair input before fetching: %j", async (invalid) => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      boundary.repairInferenceKey({
+        organizationId: "org_placeholder",
+        keyType: "chat",
+        removeCauses: ["admin_lock"],
+        confirmation: "I know what I'm doing",
+        reason: "BUG-123",
+        ...invalid,
+      } as never),
+    ).rejects.toThrow(SDKValidationError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed successful repair responses at the SDK boundary", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ key: {}, reconciliation_pending: true }), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(
+      boundary.repairInferenceKey({
+        organizationId: "org_placeholder",
+        keyType: "chat",
+        removeCauses: ["admin_lock"],
+        confirmation: "I know what I'm doing",
+        reason: "BUG-123",
+      }),
+    ).rejects.toThrow(ResponseValidationError);
+  });
+});
+
+describe("generated inference key reads", () => {
+  const wireKey = {
+    key_type: "chat",
+    credits_used: 0,
+    monthly_credits: 100,
+    disabled: true,
+    disable_causes_classified: true,
+  };
+
+  it("reads the exact organization same-origin and preserves optional and unknown causes", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          { ...wireKey, disable_causes: [] },
+          wireKey,
+          { ...wireKey, disable_causes_classified: false },
+          {
+            ...wireKey,
+            disable_causes: ["future_lock"],
+            cause_diagnostics: [
+              {
+                cause: "future_lock",
+                description: "Unknown policy",
+                removable: false,
+                blocked_reason: "Unsupported cause",
+              },
+            ],
+          },
+        ]),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const query = boundary.inferenceKeysQuery("org/id & value");
+    if (typeof query.queryFn !== "function")
+      throw new Error("Missing query function");
+    const result = await query.queryFn({
+      signal: new AbortController().signal,
+    } as never);
+    expect(result).toEqual([
+      {
+        keyType: "chat",
+        creditsUsed: 0,
+        monthlyCredits: 100,
+        disabled: true,
+        disableCausesClassified: true,
+        disableCauses: [],
+      },
+      {
+        keyType: "chat",
+        creditsUsed: 0,
+        monthlyCredits: 100,
+        disabled: true,
+        disableCausesClassified: true,
+      },
+      {
+        keyType: "chat",
+        creditsUsed: 0,
+        monthlyCredits: 100,
+        disabled: true,
+        disableCausesClassified: false,
+      },
+      {
+        keyType: "chat",
+        creditsUsed: 0,
+        monthlyCredits: 100,
+        disabled: true,
+        disableCausesClassified: true,
+        disableCauses: ["future_lock"],
+        causeDiagnostics: [
+          {
+            cause: "future_lock",
+            description: "Unknown policy",
+            removable: false,
+            blockedReason: "Unsupported cause",
+          },
+        ],
+      },
+    ]);
+    expect(fetch).toHaveBeenCalledOnce();
+    const request = fetch.mock.calls[0]![0] as Request;
+    const url = new URL(request.url);
+    expect(url.origin).toBe(window.location.origin);
+    expect(url.pathname).toBe("/admin/organization.inferenceKeys");
+    expect([...url.searchParams]).toEqual([
+      ["organization_id", "org/id & value"],
+    ]);
+    expect(request.method).toBe("GET");
+    expect(request.credentials).toBe("same-origin");
+    expect(request.headers.has("Authorization")).toBe(false);
+    expect(request.headers.has("Cookie")).toBe(false);
+  });
+
+  it.each([
+    { ...wireKey, disable_causes_classified: undefined },
+    { ...wireKey, credits_used: "unknown" },
+    { ...wireKey, disable_causes: null },
+  ])(
+    "rejects malformed read state rather than assuming classification: %j",
+    async (key) => {
+      const fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify([key]), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const query = boundary.inferenceKeysQuery("org_placeholder");
+      if (typeof query.queryFn !== "function")
+        throw new Error("Missing query function");
+      await expect(
+        query.queryFn?.({ signal: new AbortController().signal } as never),
+      ).rejects.toThrow(ResponseValidationError);
+      expect(fetch).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([401, 403, 503])(
+    "preserves read HTTP %s errors and only redirects on unauthorized",
+    async (status) => {
+      vi.resetModules();
+      const fresh = await import("@/lib/gramAdminClient");
+      const fetch = vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(unauthorizedBody, {
+            status,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const href = vi.spyOn(window.location, "href", "set");
+      const query = fresh.inferenceKeysQuery("org_placeholder");
+      if (typeof query.queryFn !== "function")
+        throw new Error("Missing query function");
+      await expect(
+        query.queryFn?.({ signal: new AbortController().signal } as never),
+      ).rejects.toMatchObject({ statusCode: status });
+      expect(fresh.isRedirectingToLogin()).toBe(status === 401);
+      expect(href).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+    },
+  );
 });

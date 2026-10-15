@@ -32,6 +32,11 @@ func LogoutAuthPath() string {
 	return "/rpc/auth.logout"
 }
 
+// LogoutEverywhereAuthPath returns the URL path to the auth service logoutEverywhere HTTP endpoint.
+func LogoutEverywhereAuthPath() string {
+	return "/rpc/auth.logoutEverywhere"
+}
+
 // RegisterAuthPath returns the URL path to the auth service register HTTP endpoint.
 func RegisterAuthPath() string {
 	return "/rpc/auth.register"
@@ -40,4 +45,14 @@ func RegisterAuthPath() string {
 // InfoAuthPath returns the URL path to the auth service info HTTP endpoint.
 func InfoAuthPath() string {
 	return "/rpc/auth.info"
+}
+
+// TransferOutAuthPath returns the URL path to the auth service transferOut HTTP endpoint.
+func TransferOutAuthPath() string {
+	return "/rpc/auth.transferOut"
+}
+
+// TransferInAuthPath returns the URL path to the auth service transferIn HTTP endpoint.
+func TransferInAuthPath() string {
+	return "/rpc/auth.transferIn"
 }

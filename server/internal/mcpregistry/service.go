@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 )
 
@@ -23,6 +26,7 @@ type Entry struct {
 	ID                   uuid.UUID
 	Data                 json.RawMessage
 	Published            bool
+	PublishedAt          time.Time
 	CreatedAt, UpdatedAt time.Time
 }
 
@@ -50,6 +54,9 @@ type Page struct {
 const ListPageByteBudget = 8 << 20
 
 type Service struct {
+	logger    *slog.Logger
+	auth      *auth.Auth
+	authz     *authz.Engine
 	db        *pgxpool.Pool
 	validator *Validator
 }
@@ -61,7 +68,7 @@ var ErrInvalidCursor = errors.New("invalid registry cursor")
 var ErrInvalidListOptions = errors.New("invalid registry list options")
 
 func New(db *pgxpool.Pool, v *Validator) *Service {
-	return &Service{db: db, validator: v}
+	return &Service{db: db, validator: v, auth: nil, authz: nil, logger: nil}
 }
 
 func (s *Service) Ready(ctx context.Context) error {
@@ -84,7 +91,7 @@ func entry(row repo.McpRegistryEntry, err error) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
-	return Entry{ID: row.ID, Data: row.Data, Published: row.Published, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}, nil
+	return Entry{ID: row.ID, Data: row.Data, Published: row.Published, PublishedAt: row.PublishedAt.Time, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}, nil
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (Entry, error) {
@@ -166,4 +173,12 @@ func (s *Service) List(ctx context.Context, opts ListOptions) (Page, error) {
 		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
 	return page, nil
+}
+
+func (s *Service) Validate(data json.RawMessage) []Issue { return s.validator.Validate(data) }
+
+// ValidateStored applies the stored-record contract, as discovery and
+// publishing do.
+func (s *Service) ValidateStored(data json.RawMessage) []Issue {
+	return s.validator.ValidateStored(data)
 }

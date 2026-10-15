@@ -30,13 +30,18 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   // compliance import — distinct surfaces from the Codex agent, split at
   // ingest by hook_source so they stay separable in the summaries.
   chatgpt: "ChatGPT",
+  "chatgpt-desktop": "ChatGPT Desktop",
   "chatgpt-work": "ChatGPT Work",
   opencode: "opencode",
   pi: "Pi",
   openclaw: "OpenClaw",
   litellm: "LiteLLM",
-  copilot: "Copilot",
-  "github-copilot": "Copilot",
+  // Copilot hooks emit CLI sessions; Microsoft Copilot is a separate product.
+  copilot: "Copilot CLI",
+  "github-copilot": "Copilot CLI",
+  "copilot-cli": "Copilot CLI",
+  "github-copilot-cli": "Copilot CLI",
+  "microsoft-copilot": "Microsoft Copilot",
   gemini: "Gemini",
   glean: "Glean",
   bedrock: "AWS Bedrock",

@@ -5,6 +5,8 @@ import (
 	. "goa.design/goa/v3/dsl"
 	"goa.design/goa/v3/expr"
 
+	_ "github.com/speakeasy-api/gram/server/design/registryclient"
+
 	_ "github.com/speakeasy-api/gram/server/design/about"
 	_ "github.com/speakeasy-api/gram/server/design/access"
 	_ "github.com/speakeasy-api/gram/server/design/admin"
@@ -21,12 +23,12 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/chat"
 	_ "github.com/speakeasy-api/gram/server/design/chatsessions"
 	_ "github.com/speakeasy-api/gram/server/design/cliauth"
+	_ "github.com/speakeasy-api/gram/server/design/dashboards"
 	_ "github.com/speakeasy-api/gram/server/design/dataexports"
 	_ "github.com/speakeasy-api/gram/server/design/deployments"
 	_ "github.com/speakeasy-api/gram/server/design/deviceintegrations"
 	_ "github.com/speakeasy-api/gram/server/design/domains"
 	_ "github.com/speakeasy-api/gram/server/design/environments"
-	_ "github.com/speakeasy-api/gram/server/design/explore"
 	_ "github.com/speakeasy-api/gram/server/design/external"
 	_ "github.com/speakeasy-api/gram/server/design/externalcredentials"
 	_ "github.com/speakeasy-api/gram/server/design/externalkeys"
@@ -37,6 +39,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/identityproviderconnections"
 	_ "github.com/speakeasy-api/gram/server/design/instances"
 	_ "github.com/speakeasy-api/gram/server/design/integrations"
+	_ "github.com/speakeasy-api/gram/server/design/internalsessionissuers"
 	_ "github.com/speakeasy-api/gram/server/design/jsonwebkeysets"
 	_ "github.com/speakeasy-api/gram/server/design/keys"
 	_ "github.com/speakeasy-api/gram/server/design/killswitches"
@@ -45,11 +48,13 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/mcpapproval"
 	_ "github.com/speakeasy-api/gram/server/design/mcpendpoints"
 	_ "github.com/speakeasy-api/gram/server/design/mcpmetadata"
+	_ "github.com/speakeasy-api/gram/server/design/mcpregistry"
 	_ "github.com/speakeasy-api/gram/server/design/mcpservers"
 	_ "github.com/speakeasy-api/gram/server/design/metamcp"
 	_ "github.com/speakeasy-api/gram/server/design/modelkeys"
 	_ "github.com/speakeasy-api/gram/server/design/networkingress"
 	_ "github.com/speakeasy-api/gram/server/design/oktaresourceconnections"
+	_ "github.com/speakeasy-api/gram/server/design/oktaserversuggestions"
 	_ "github.com/speakeasy-api/gram/server/design/organizations"
 	_ "github.com/speakeasy-api/gram/server/design/otel"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
@@ -69,6 +74,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/remotesessions"
 	_ "github.com/speakeasy-api/gram/server/design/resources"
 	_ "github.com/speakeasy-api/gram/server/design/risk"
+	_ "github.com/speakeasy-api/gram/server/design/sigint"
 	_ "github.com/speakeasy-api/gram/server/design/skillefficacy"
 	_ "github.com/speakeasy-api/gram/server/design/skills"
 	_ "github.com/speakeasy-api/gram/server/design/spendrules"
@@ -87,18 +93,19 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/usersessionissuerscimdclients"
 	_ "github.com/speakeasy-api/gram/server/design/usersessions"
 	_ "github.com/speakeasy-api/gram/server/design/variations"
+	_ "github.com/speakeasy-api/gram/server/design/widgets"
 	_ "github.com/speakeasy-api/gram/server/design/workloadpolicy"
 )
 
 var _ = API("gram", func() {
-	Title("Gram API Description")
-	Description("Gram is the tools platform for AI agents")
+	Title("Speakeasy API Description")
+	Description("Speakeasy is the tools platform for AI agents")
 	Meta("openapi:example", "false")
 	Randomizer(expr.NewDeterministicRandomizer())
 
 	Server("gram", func() {
 		Host("production", func() {
-			Description("Gram production API base URL")
+			Description("Speakeasy production API base URL")
 			URI("https://app.getgram.ai")
 		})
 	})

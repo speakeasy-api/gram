@@ -1,6 +1,10 @@
 import type { ElementsConfig } from "@/elements/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/utils", () => ({
+  getServerURL: () => "https://ai.speakeasy.com",
+}));
+
 describe("getApiUrl", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -41,22 +45,22 @@ describe("getApiUrl", () => {
     expect(getApiUrl(config)).toBe("https://env.example.com");
   });
 
-  it("falls back to default URL when both config.api.url and __GRAM_API_URL__ are not set", async () => {
+  it("falls back to the server URL when both config.api.url and __GRAM_API_URL__ are not set", async () => {
     const getApiUrl = await loadGetApiUrl("");
     const config: ElementsConfig = {
       projectSlug: "test",
     };
 
-    expect(getApiUrl(config)).toBe("https://app.getgram.ai");
+    expect(getApiUrl(config)).toBe("https://ai.speakeasy.com");
   });
 
-  it("falls back to default URL when __GRAM_API_URL__ is undefined", async () => {
+  it("falls back to the server URL when __GRAM_API_URL__ is undefined", async () => {
     const getApiUrl = await loadGetApiUrl(undefined);
     const config: ElementsConfig = {
       projectSlug: "test",
     };
 
-    expect(getApiUrl(config)).toBe("https://app.getgram.ai");
+    expect(getApiUrl(config)).toBe("https://ai.speakeasy.com");
   });
 
   it("skips empty string config.api.url and uses __GRAM_API_URL__", async () => {

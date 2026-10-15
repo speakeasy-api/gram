@@ -17,7 +17,7 @@ export function useUpstreamProbe(
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
-    { enabled: enabled && remoteMcpServerId !== "" },
+    { enabled: enabled && remoteMcpServerId !== "", throwOnError: false },
   );
   const url = sourceQuery.data?.url;
   const probeQuery = useQuery({
@@ -29,6 +29,7 @@ export function useUpstreamProbe(
       });
     },
     enabled: enabled && !!url,
+    throwOnError: false,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });

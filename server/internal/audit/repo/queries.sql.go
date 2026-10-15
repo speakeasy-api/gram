@@ -226,7 +226,7 @@ WITH filtered_logs AS (
     -- Flags actor ids that appear as user actors, so callers can restrict
     -- user-specific treatment (e.g. Speakeasy staff masking) to them.
     BOOL_OR(actor_type = 'user')::boolean AS is_user_actor,
-    BOOL_OR(COALESCE(acting_surface = 'admin', FALSE))::boolean AS is_admin_actor
+    BOOL_OR(COALESCE(acting_surface IN ('admin', 'admin_mcp'), FALSE))::boolean AS is_admin_actor
   FROM filtered_logs
   GROUP BY actor_id
 ), latest_actor_names AS (

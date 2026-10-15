@@ -24,7 +24,6 @@ import {
 } from "@/lib/gramAdminApi";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { FeatureName } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
-import { Onboarding } from "./Onboarding";
 
 type EnabledProductFeatureKey = Extract<
   keyof ProductFeatures,
@@ -97,6 +96,13 @@ const PRODUCT_FEATURES = {
     description:
       "Enables agent session portability for the device agent: session sharing links, move reporting with lineage, and picker title enrichment.",
   },
+  signals_intelligence: {
+    kind: "toggle",
+    enabledKey: "signalsIntelligenceEnabled",
+    label: "Signals Intelligence",
+    description:
+      "Enables the Signals intelligence configuration dashboard for this organization.",
+  },
   sso: {
     kind: "toggle",
     enabledKey: "ssoEnabled",
@@ -154,6 +160,11 @@ const PRODUCT_FEATURES = {
     kind: "omitted",
     where: "Dashboard consent settings",
   },
+  // reason: managed in dashboard Gateway settings
+  organization_gateway_disabled: {
+    kind: "omitted",
+    where: "Dashboard Gateway settings",
+  },
 } satisfies Record<FeatureName, ProductFeatureDecision>;
 
 export function FeaturesRoute(): JSX.Element | null {
@@ -167,7 +178,6 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
   return (
     <div className="space-y-6">
       <ProductFeatures org={org} />
-      <Onboarding organizationId={org.id} />
       <ChatAnalysis org={org} />
     </div>
   );

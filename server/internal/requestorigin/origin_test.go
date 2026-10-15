@@ -65,6 +65,35 @@ func TestHTTPSBaseURL(t *testing.T) {
 	}
 }
 
+func TestPlatformHostBaseURL(t *testing.T) {
+	t.Parallel()
+
+	const serverURL = "https://app.example.com"
+	const fallback = "https://site.example.com"
+	for _, test := range []struct {
+		name   string
+		origin *Origin
+		want   string
+	}{
+		{name: "no origin", origin: nil, want: fallback},
+		{name: "extra platform host", origin: &Origin{Surface: SurfacePlatform, BaseURL: "https://ai.example.com"}, want: "https://ai.example.com"},
+		{name: "server host", origin: &Origin{Surface: SurfacePlatform, BaseURL: serverURL}, want: fallback},
+		{name: "server host with trailing slash", origin: &Origin{Surface: SurfacePlatform, BaseURL: serverURL + "/"}, want: fallback},
+		{name: "empty base URL", origin: &Origin{Surface: SurfacePlatform, BaseURL: ""}, want: fallback},
+		{name: "custom domain", origin: &Origin{Surface: SurfaceCustomDomain, BaseURL: "https://custom.example.com"}, want: fallback},
+		{name: "private network", origin: &Origin{Surface: SurfacePrivateNetwork, BaseURL: "https://private.example.com"}, want: fallback},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			if test.origin != nil {
+				ctx = WithContext(ctx, *test.origin)
+			}
+			require.Equal(t, test.want, PlatformHostBaseURL(ctx, serverURL, fallback))
+		})
+	}
+}
+
 func TestContext(t *testing.T) {
 	t.Parallel()
 

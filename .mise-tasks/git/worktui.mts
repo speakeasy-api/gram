@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Interactive TUI over `wt status`: live boot states, per-worktree logs, multi-select remove"
 //MISE dir="{{ config_root }}"

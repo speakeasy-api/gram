@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	CreateRiskPolicy               goa.Endpoint
 	ListRiskPolicies               goa.Endpoint
+	ListMCPPlatformToolsets        goa.Endpoint
 	ListRiskPoliciesForMcpServer   goa.Endpoint
 	ListBuiltinExclusions          goa.Endpoint
 	GetRiskPolicy                  goa.Endpoint
@@ -28,18 +29,21 @@ type Endpoints struct {
 	ListRiskResults                goa.Endpoint
 	ListRiskResultsForAgent        goa.Endpoint
 	UnmaskRiskResult               goa.Endpoint
+	RevealRiskResultPayload        goa.Endpoint
 	ListRiskResultsByChat          goa.Endpoint
 	MarkRiskResultsFalsePositive   goa.Endpoint
 	UnmarkRiskResultsFalsePositive goa.Endpoint
 	ListDismissedRiskResults       goa.Endpoint
 	GetRiskOverview                goa.Endpoint
 	ListRiskCategories             goa.Endpoint
+	ListRiskPresets                goa.Endpoint
+	SuggestRiskPolicy              goa.Endpoint
 	CompileExpr                    goa.Endpoint
 	GetRiskUserBreakdown           goa.Endpoint
 	GetRiskRuleBreakdown           goa.Endpoint
 	GetRiskSignals                 goa.Endpoint
+	GetRiskMcpServerCounts         goa.Endpoint
 	GetRiskAnalysisStatus          goa.Endpoint
-	GetRiskPolicyStatus            goa.Endpoint
 	CreateRiskPolicyBypassRequest  goa.Endpoint
 	AcknowledgeRiskPolicyChallenge goa.Endpoint
 	GetRiskPolicyChallenge         goa.Endpoint
@@ -76,6 +80,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		CreateRiskPolicy:               NewCreateRiskPolicyEndpoint(s, a.APIKeyAuth),
 		ListRiskPolicies:               NewListRiskPoliciesEndpoint(s, a.APIKeyAuth),
+		ListMCPPlatformToolsets:        NewListMCPPlatformToolsetsEndpoint(s, a.APIKeyAuth),
 		ListRiskPoliciesForMcpServer:   NewListRiskPoliciesForMcpServerEndpoint(s, a.APIKeyAuth),
 		ListBuiltinExclusions:          NewListBuiltinExclusionsEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicy:                  NewGetRiskPolicyEndpoint(s, a.APIKeyAuth),
@@ -86,18 +91,21 @@ func NewEndpoints(s Service) *Endpoints {
 		ListRiskResults:                NewListRiskResultsEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
 		UnmaskRiskResult:               NewUnmaskRiskResultEndpoint(s, a.APIKeyAuth),
+		RevealRiskResultPayload:        NewRevealRiskResultPayloadEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsByChat:          NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
 		MarkRiskResultsFalsePositive:   NewMarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
 		UnmarkRiskResultsFalsePositive: NewUnmarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
 		ListDismissedRiskResults:       NewListDismissedRiskResultsEndpoint(s, a.APIKeyAuth),
 		GetRiskOverview:                NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
 		ListRiskCategories:             NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
+		ListRiskPresets:                NewListRiskPresetsEndpoint(s, a.APIKeyAuth),
+		SuggestRiskPolicy:              NewSuggestRiskPolicyEndpoint(s, a.APIKeyAuth),
 		CompileExpr:                    NewCompileExprEndpoint(s, a.APIKeyAuth),
 		GetRiskUserBreakdown:           NewGetRiskUserBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskSignals:                 NewGetRiskSignalsEndpoint(s, a.APIKeyAuth),
+		GetRiskMcpServerCounts:         NewGetRiskMcpServerCountsEndpoint(s, a.APIKeyAuth),
 		GetRiskAnalysisStatus:          NewGetRiskAnalysisStatusEndpoint(s, a.APIKeyAuth),
-		GetRiskPolicyStatus:            NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
 		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
 		AcknowledgeRiskPolicyChallenge: NewAcknowledgeRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyChallenge:         NewGetRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
@@ -132,6 +140,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRiskPolicy = m(e.CreateRiskPolicy)
 	e.ListRiskPolicies = m(e.ListRiskPolicies)
+	e.ListMCPPlatformToolsets = m(e.ListMCPPlatformToolsets)
 	e.ListRiskPoliciesForMcpServer = m(e.ListRiskPoliciesForMcpServer)
 	e.ListBuiltinExclusions = m(e.ListBuiltinExclusions)
 	e.GetRiskPolicy = m(e.GetRiskPolicy)
@@ -142,18 +151,21 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRiskResults = m(e.ListRiskResults)
 	e.ListRiskResultsForAgent = m(e.ListRiskResultsForAgent)
 	e.UnmaskRiskResult = m(e.UnmaskRiskResult)
+	e.RevealRiskResultPayload = m(e.RevealRiskResultPayload)
 	e.ListRiskResultsByChat = m(e.ListRiskResultsByChat)
 	e.MarkRiskResultsFalsePositive = m(e.MarkRiskResultsFalsePositive)
 	e.UnmarkRiskResultsFalsePositive = m(e.UnmarkRiskResultsFalsePositive)
 	e.ListDismissedRiskResults = m(e.ListDismissedRiskResults)
 	e.GetRiskOverview = m(e.GetRiskOverview)
 	e.ListRiskCategories = m(e.ListRiskCategories)
+	e.ListRiskPresets = m(e.ListRiskPresets)
+	e.SuggestRiskPolicy = m(e.SuggestRiskPolicy)
 	e.CompileExpr = m(e.CompileExpr)
 	e.GetRiskUserBreakdown = m(e.GetRiskUserBreakdown)
 	e.GetRiskRuleBreakdown = m(e.GetRiskRuleBreakdown)
 	e.GetRiskSignals = m(e.GetRiskSignals)
+	e.GetRiskMcpServerCounts = m(e.GetRiskMcpServerCounts)
 	e.GetRiskAnalysisStatus = m(e.GetRiskAnalysisStatus)
-	e.GetRiskPolicyStatus = m(e.GetRiskPolicyStatus)
 	e.CreateRiskPolicyBypassRequest = m(e.CreateRiskPolicyBypassRequest)
 	e.AcknowledgeRiskPolicyChallenge = m(e.AcknowledgeRiskPolicyChallenge)
 	e.GetRiskPolicyChallenge = m(e.GetRiskPolicyChallenge)
@@ -298,6 +310,65 @@ func NewListRiskPoliciesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.ListRiskPolicies(ctx, p)
+	}
+}
+
+// NewListMCPPlatformToolsetsEndpoint returns an endpoint function that calls
+// the method "listMCPPlatformToolsets" of service "risk".
+func NewListMCPPlatformToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListMCPPlatformToolsetsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListMCPPlatformToolsets(ctx, p)
 	}
 }
 
@@ -891,6 +962,65 @@ func NewUnmaskRiskResultEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 	}
 }
 
+// NewRevealRiskResultPayloadEndpoint returns an endpoint function that calls
+// the method "revealRiskResultPayload" of service "risk".
+func NewRevealRiskResultPayloadEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevealRiskResultPayloadPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RevealRiskResultPayload(ctx, p)
+	}
+}
+
 // NewListRiskResultsByChatEndpoint returns an endpoint function that calls the
 // method "listRiskResultsByChat" of service "risk".
 func NewListRiskResultsByChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -1245,6 +1375,124 @@ func NewListRiskCategoriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 	}
 }
 
+// NewListRiskPresetsEndpoint returns an endpoint function that calls the
+// method "listRiskPresets" of service "risk".
+func NewListRiskPresetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRiskPresetsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRiskPresets(ctx, p)
+	}
+}
+
+// NewSuggestRiskPolicyEndpoint returns an endpoint function that calls the
+// method "suggestRiskPolicy" of service "risk".
+func NewSuggestRiskPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SuggestRiskPolicyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SuggestRiskPolicy(ctx, p)
+	}
+}
+
 // NewCompileExprEndpoint returns an endpoint function that calls the method
 // "compileExpr" of service "risk".
 func NewCompileExprEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -1481,6 +1729,65 @@ func NewGetRiskSignalsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 	}
 }
 
+// NewGetRiskMcpServerCountsEndpoint returns an endpoint function that calls
+// the method "getRiskMcpServerCounts" of service "risk".
+func NewGetRiskMcpServerCountsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRiskMcpServerCountsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRiskMcpServerCounts(ctx, p)
+	}
+}
+
 // NewGetRiskAnalysisStatusEndpoint returns an endpoint function that calls the
 // method "getRiskAnalysisStatus" of service "risk".
 func NewGetRiskAnalysisStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -1537,65 +1844,6 @@ func NewGetRiskAnalysisStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.GetRiskAnalysisStatus(ctx, p)
-	}
-}
-
-// NewGetRiskPolicyStatusEndpoint returns an endpoint function that calls the
-// method "getRiskPolicyStatus" of service "risk".
-func NewGetRiskPolicyStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetRiskPolicyStatusPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"producer"},
-		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{"producer"},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-		return s.GetRiskPolicyStatus(ctx, p)
 	}
 }
 

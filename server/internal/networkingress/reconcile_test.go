@@ -181,6 +181,52 @@ func TestNetworkIngressExecutorRetainsCleanupUntilAbsent(t *testing.T) {
 	ti.create(t, ctx)
 }
 
+func TestNetworkIngressExecutorSurfacesRejectedCredentialsDuringCleanup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	id := uuid.MustParse(ti.create(t, ctx).ID)
+	require.NoError(t, ti.service.DeleteIngress(ctx, &gen.DeleteIngressPayload{}))
+	deleteErr := fmt.Errorf("%w: Tailnet", k8s.ErrNetworkIngressProviderCredentialsRejected)
+	provider := lifecycleProvider{apply: nil, observe: nil, delete: func(context.Context, k8s.NetworkIngressResourceNames) error {
+		return deleteErr
+	}}
+	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
+	require.NoError(t, err)
+	executor := networkingress.NewExecutor(ti.conn, nil, registry, networkingress.ExecutorOptions{})
+
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	var failure *networkingress.ReconcileError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, "provider_credentials_rejected", failure.Code)
+	require.False(t, failure.Retryable, "a human must fix the credentials; retrying cannot help")
+	result, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, result.Ingress)
+	require.Equal(t, "deleting", result.Ingress.Status)
+	require.Equal(t, "provider_credentials_rejected", *result.Ingress.LastError)
+
+	deleteErr = k8s.ErrNetworkIngressDeletionPending
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.ErrorContains(t, err, "deletion_pending")
+	result, err = ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.Nil(t, result.Ingress.LastError, "progressing teardown clears the blocker")
+
+	deleteErr = fmt.Errorf("%w: Tailnet", k8s.ErrNetworkIngressProviderCredentialsRejected)
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.ErrorContains(t, err, "provider_credentials_rejected")
+	result, err = ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, result.Ingress.LastError)
+	require.Equal(t, "provider_credentials_rejected", *result.Ingress.LastError)
+	deleteErr = nil
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.NoError(t, err)
+	row, err := repo.New(ti.conn).GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.False(t, row.LastError.Valid, "completed teardown clears the blocker")
+}
+
 func TestNetworkIngressExecutorGateClosesBeforeApply(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

@@ -448,10 +448,10 @@ func TestServePublic_MetaEndpoint_ListServers_ExcludesSluglessMember(t *testing.
 	require.Empty(t, listed.Servers)
 }
 
-// A notification carrying a bad protocol-version declaration is dropped, not
-// answered: JSON-RPC 2.0 forbids responding to notifications, even with an
-// error.
-func TestServePublic_MetaEndpoint_NotificationWithBadVersionIsDropped(t *testing.T) {
+// A notification declaring an unsupported revision is refused with an HTTP
+// error status, as every revision requires for a notification the server
+// cannot accept, under a null id because it answers no request.
+func TestServePublic_MetaEndpoint_NotificationWithUnsupportedVersionIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -468,11 +468,10 @@ func TestServePublic_MetaEndpoint_NotificationWithBadVersionIsDropped(t *testing
 	require.NoError(t, err)
 
 	w, err := servePublicHTTP(t, ctx, ti, slug, body, "", map[string]string{
-		mcpversions.HTTPHeader: "2031-01-01",
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	require.Equal(t, http.StatusAccepted, w.Code, "body=%s", w.Body.String())
-	require.Empty(t, w.Body.String())
+	requireRefusedNotification(t, w, unservedProtocolVersion, mcpversions.SupportedMetaServer())
 }
 
 // Challenge-resumption arms of the meta endpoint resolver, driven through
@@ -884,7 +883,7 @@ func TestServePublic_MetaEndpoint_ToolSelectionSessionRejected(t *testing.T) {
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, slug, issuerID)
 	seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
 
-	subject := urn.NewUserSubject("selection-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "selection-user-"+uuid.NewString())
 	bearer, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
@@ -904,6 +903,7 @@ func TestServePublic_MetaEndpoint_ToolSelectionSessionRejected(t *testing.T) {
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
 		ToolSelection:       selection,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -936,7 +936,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_MultiCredentialSessio
 
 	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-a", "", []uuid.UUID{sharedIssuerID})
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-b", "", []uuid.UUID{sharedIssuerID})
-	subject := urn.NewUserSubject("multicred-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "multicred-user-"+uuid.NewString())
 	insertRemoteSessionAccessToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-a", time.Now().Add(time.Hour))
 	insertRemoteSessionAccessToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-b", time.Now().Add(time.Hour))
 

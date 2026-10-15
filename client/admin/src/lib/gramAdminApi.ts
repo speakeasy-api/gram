@@ -1,10 +1,13 @@
+import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
+import { GramError } from "@gram/admin-client/models/errors/gramerror";
+
 import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
 
 export { isRedirectingToLogin } from "@/lib/gramAdminClient";
 
-// Gram admin API client.
+// Speakeasy admin API client.
 //
-// This app is served from the same origin as the Gram admin API (the admin
+// This app is served from the same origin as the Speakeasy admin API (the admin
 // Ingress puts both behind one host), so every path below is relative
 // and the `gram_admin` session cookie rides along as a first-party cookie.
 //
@@ -30,6 +33,10 @@ export class GramAdminError extends Error {
 // verb phrase the handler passed to oops.E, such as "list organizations"
 // (server/internal/admin/impl.go:343, surfaced by pp.go:83), which reads worse
 // than the status line. So trust the body below 500 and nowhere else.
+//
+// Generated ServiceError puts that verb on Error.message for every status, so
+// a 5xx from the SDK has to be rewritten to the status line the handwritten
+// client already used.
 export function errorMessage(e: unknown): string {
   if (
     e instanceof GramAdminError &&
@@ -39,6 +46,9 @@ export function errorMessage(e: unknown): string {
   ) {
     const message = (e.body as { message?: unknown }).message;
     if (typeof message === "string" && message) return message;
+  }
+  if (e instanceof GramError && e.statusCode >= 500) {
+    return `gram admin ${e.statusCode} ${e.rawResponse.statusText || "Internal Server Error"}`;
   }
   return e instanceof Error ? e.message : String(e);
 }
@@ -149,7 +159,7 @@ async function gramAdminSend(path: string, init?: RequestInit): Promise<void> {
 
 // Identity of the admin operator that owns the current session. The backend
 // reads it from the OIDC session record, so it names the identity-provider
-// account that signed in to this app, not any Gram customer account.
+// account that signed in to this app, not any Speakeasy customer account.
 export type AdminSessionInfo = {
   email: string;
   name?: string;
@@ -253,6 +263,9 @@ export type AdminOrganization = {
   slug: string;
   account_type: string;
   workos_id?: string;
+  // Absent unless the organization is linked to WorkOS and the deployment knows
+  // its WorkOS environment.
+  workos_dashboard_url?: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
   whitelisted: boolean;
@@ -608,22 +621,6 @@ export function listOrganizationMembers(
   );
 }
 
-type AdminInferenceKeyResponse = {
-  key_type: string;
-  credits_used: number;
-  monthly_credits: number;
-  disabled: boolean;
-  disable_causes?: string[];
-  disable_causes_classified: boolean;
-};
-
-export type AdminInferenceKey = Omit<
-  AdminInferenceKeyResponse,
-  "disable_causes"
-> & {
-  disable_causes: string[] | null;
-};
-
 export type AdminChatAnalysisJudge = "work_units" | "business_memory";
 
 export type AdminOrganizationChatAnalysisSettings = {
@@ -682,27 +679,12 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
-export async function getInferenceKeys(
-  organizationID: string,
-): Promise<AdminInferenceKey[]> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  const keys = await gramAdminFetch<AdminInferenceKeyResponse[]>(
-    `/admin/organization.inferenceKeys?${qs}`,
-  );
-  return keys.map((key) => ({
-    ...key,
-    disable_causes: key.disable_causes_classified
-      ? (key.disable_causes ?? [])
-      : null,
-  }));
-}
+export type AdminInferenceKeyType = RepairInferenceKeyRequestBody["keyType"];
 
-export type AdminInferenceKeyType = "chat" | "internal";
-
-export type AdminInferenceKeyLimit = Pick<
-  AdminInferenceKey,
-  "key_type" | "monthly_credits"
->;
+export type AdminInferenceKeyLimit = {
+  key_type: string;
+  monthly_credits: number;
+};
 
 export function setInferenceKeyMonthlyLimit(input: {
   organizationID: string;
@@ -815,5 +797,49 @@ export function resumeStripeSubscription(
   return updateStripeSubscription(
     "/admin/organization.resumeStripeSubscription",
     organizationID,
+  );
+}
+
+export type AdminUserOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  disabled_at?: string;
+};
+export type AdminUser = {
+  id: string;
+  display_name: string;
+  email: string;
+  last_login?: string;
+  organizations: AdminUserOrganization[];
+  organization_count: number;
+};
+export type AdminListUsersResult = {
+  users: AdminUser[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export type AdminListUserOrganizationsResult = {
+  organizations: AdminUserOrganization[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export function listUsers(
+  params: { q?: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUsersResult> {
+  return gramAdminFetch(`/admin/users.list?${toSearchParams(params)}`, {
+    signal,
+  });
+}
+export function listUserOrganizations(
+  params: { user_id: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUserOrganizationsResult> {
+  return gramAdminFetch(
+    `/admin/users.organizations.list?${toSearchParams(params)}`,
+    { signal },
   );
 }

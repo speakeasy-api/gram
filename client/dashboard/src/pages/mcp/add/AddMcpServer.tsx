@@ -1,7 +1,7 @@
 import { InputDialog } from "@/components/input-dialog";
 import { SettingsPage, SettingsSection } from "@/components/page-templates";
 import { Card } from "@/components/ui/Card";
-import { useIconConfetti } from "@/components/icon-confetti";
+import { useIconDither } from "@/components/icon-dither";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -49,7 +49,7 @@ function AddOptionCard({
   title,
   description,
 }: AddOption): JSX.Element {
-  const { canvasRef, start, stop } = useIconConfetti();
+  const { canvasRef, start, stop } = useIconDither();
   const body = (
     <Card.Entity
       icon={icon}

@@ -3,6 +3,7 @@ package authz
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
@@ -176,4 +177,35 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, projectIDs)
+}
+
+func TestLoadGrantsAddsAssistantDefaultsOnlyForCanonicalSystemRole(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	organizationID := "org_canonical_assistant_defaults"
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, SeedSystemRoleGrants(ctx, conn, organizationID))
+
+	q := accessrepo.New(conn)
+	adminRole, err := q.GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
+	require.NoError(t, err)
+	admin := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+adminRole.ID.String())
+	_, err = q.DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   admin,
+	})
+	require.NoError(t, err)
+
+	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{admin})
+	require.NoError(t, err)
+	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+
+	grants, err = LoadGrants(ctx, conn, organizationID, []urn.Principal{
+		urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString()),
+	})
+	require.NoError(t, err)
+	require.False(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
 }

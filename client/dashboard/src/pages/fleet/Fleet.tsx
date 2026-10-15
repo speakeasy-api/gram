@@ -79,7 +79,6 @@ function FleetPage(): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
   const access = useKillswitchAccess();
-  const agentFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   const assistantFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
   const [params] = useSearchParams();
   const q = params.get("q") ?? "";
@@ -107,7 +106,7 @@ function FleetPage(): JSX.Element {
     (value: string) => update({ q: value || null, offset: null }, true),
     [update],
   );
-  const agents = useReadableAgents(agentFlag.status === "enabled", 30_000);
+  const agents = useReadableAgents(true, 30_000);
   const assistants = useAssistantsList(
     { gramProject: project.slug },
     undefined,
@@ -259,7 +258,7 @@ function FleetPage(): JSX.Element {
     refreshWindow();
     void Promise.all([
       chats.refetch(),
-      ...(agentFlag.status === "enabled" ? [agents.refetch()] : []),
+      agents.refetch(),
       ...(assistantFlag.status === "enabled" ? [assistants.refetch()] : []),
       ...(hasScope("org:read") ? [members.refetch()] : []),
       ...(access.canAccess && agentIds.length ? [badges.refetch()] : []),
@@ -283,7 +282,6 @@ function FleetPage(): JSX.Element {
       }
       hideToolbar
       primaryAction={
-        agentFlag.status === "enabled" &&
         organization.slug !== DEMO_ORG_SLUG ? (
           <Link to={routes.agents.href()}>
             <Button variant="secondary">Manage agent identities</Button>
@@ -387,12 +385,6 @@ function FleetPage(): JSX.Element {
           <p className="text-muted-foreground text-sm">
             Only your own captured sessions are shown. Other inventory follows
             your identity permissions.
-          </p>
-        )}
-        {agentFlag.status !== "enabled" && (
-          <p className="text-muted-foreground text-sm">
-            Registered-agent inventory is unavailable. Captured sessions and
-            permitted restrictions remain accessible.
           </p>
         )}
         {restrictions && access.canAccess && (

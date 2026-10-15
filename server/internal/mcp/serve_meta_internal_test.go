@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -24,7 +25,7 @@ func TestMetaServerDiscover_InstructionsAndCacheScope(t *testing.T) {
 				Instructions:        instructions,
 				UserSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: gated},
 			}
-			bs, err := (&Service{}).handleMetaServerDiscover(t.Context(), testenv.NewLogger(t), meta, &rawRequest{ID: mcpjsonrpc.NumberID(7)})
+			bs, err := handleServerDiscover(t.Context(), testenv.NewLogger(t), mcpjsonrpc.NumberID(7), describeMetaServer(meta), mcpversions.SupportedMetaServer())
 			require.NoError(t, err)
 			var response struct {
 				Result struct {

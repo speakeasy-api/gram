@@ -15,12 +15,12 @@ type Group struct {
 	Name string `json:"name"`
 }
 
-// UserProfile is the current directory state associated with a Gram user.
+// UserProfile is the current directory state associated with a Speakeasy user.
 type UserProfile struct {
 	// ID is the internal identifier for the selected directory user row.
 	ID uuid.UUID
 
-	// UserID is the Gram user identifier linked to the directory profile.
+	// UserID is the Speakeasy user identifier linked to the directory profile.
 	UserID string
 
 	// ExternalID is the user identifier assigned by the directory provider.

@@ -9,29 +9,31 @@ import {
 } from "@/components/ui/HoverCard";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
-import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
+import {
+  invalidateAllGetRemoteMcpServerScopes,
+  useGetRemoteMcpServerScopes,
+} from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import type { GetServerIdentityImpactRequest } from "@gram/client/models/operations/getserveridentityimpact.js";
 import {
   invalidateAllRemoteMcpServerHeaders,
   useRemoteMcpServerHeaders,
 } from "@gram/client/react-query/remoteMcpServerHeaders.js";
-import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowUpRight,
-  ChevronDown,
-  Loader2,
-  TriangleAlert,
-} from "lucide-react";
+import { ChevronDown, Loader2, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -47,10 +49,13 @@ import {
 import { HeadersSection } from "../HeadersSection";
 import { useCatalogHeaderSuggestions } from "../useCatalogHeaderSuggestions";
 import { useHeaderDrafts } from "@/lib/remote-identity";
-import { AgentIdentityRow } from "@/lib/remote-identity";
 import { identityModeCards } from "@/lib/remote-identity";
 import { useAgentCredentialDraft } from "@/lib/remote-identity";
-import { AuthRow } from "./AuthRow";
+import { RequestedScopesSummary } from "./RequestedScopesSummary";
+import { ResourceScopePinField } from "./ResourceScopePinField";
+import { useResourceScopePin } from "./resourceScopePin";
+import { IdentityChainingField } from "./IdentityChainingField";
+import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
   deriveIdentityMode,
@@ -63,6 +68,20 @@ import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { useUpstreamProbe } from "@/lib/remote-identity";
 import { UserIdentityRow } from "@/lib/remote-identity";
 import { useUserIdentityDraft } from "@/lib/remote-identity";
+import {
+  isOAuthFormat,
+  oauthFormatOf,
+  ServiceAccountPanel,
+  useCustomerManagedKeys,
+  useServiceAccountClientDraft,
+  type ServiceAccountFormat,
+} from "@/lib/remote-identity";
+import {
+  invalidateSharedIssuerImpact,
+  needsSharedIssuerConfirm,
+  sharedIssuerChangeBlocked,
+  useSharedIssuerImpact,
+} from "@/lib/remote-identity/model/upstreamRepointing";
 
 export function RemoteMcpIdentitySectionBody({
   target,
@@ -78,7 +97,7 @@ export function RemoteMcpIdentitySectionBody({
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
     undefined,
-    { enabled: remoteMcpServerId !== "" },
+    { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
   const {
     items: clients,
@@ -89,7 +108,28 @@ export function RemoteMcpIdentitySectionBody({
     { userSessionIssuerId: target.userSessionIssuerId ?? undefined },
     { enabled: !!target.userSessionIssuerId },
   );
-  const { data: issuersResult } = useRemoteSessionIssuers();
+  const {
+    data: userSessionIssuer,
+    isLoading: issuerLoading,
+    isError: issuerError,
+  } = useUserSessionIssuer(
+    { id: target.userSessionIssuerId ?? undefined },
+    undefined,
+    { enabled: !!target.userSessionIssuerId, throwOnError: false },
+  );
+  // On an organization-level issuer, a binding to an organization-owned
+  // client is shared by every project's servers on that issuer, so the server
+  // refuses to replace it from one project (ErrIdentityOrgWideBinding).
+  // Project-owned clients stay editable, so only that case locks the panel.
+  const organizationIssuer = userSessionIssuer?.projectId === "";
+  const orgSharedClient = organizationIssuer
+    ? clients.find((linked) => linked.projectId === "")
+    : undefined;
+  const chainingFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
+  const chainingIssuer =
+    chainingFlag.status === "enabled"
+      ? identityChainingIssuer(userSessionIssuer)
+      : undefined;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -114,8 +154,14 @@ export function RemoteMcpIdentitySectionBody({
   // binding for its siblings — but headers do not inherit that lock.
   const headersReadOnly =
     siblingsQuery.isLoading || siblingsQuery.isError || !canWrite;
+  // Held until the issuer is classified: an organization-wide one could make
+  // Save fail with ErrIdentityOrgWideBinding, so neither a pending nor a
+  // failed lookup may leave the controls open.
   const identityReadOnly =
     sharedSource ||
+    !!orgSharedClient ||
+    issuerLoading ||
+    issuerError ||
     siblingsQuery.isLoading ||
     siblingsQuery.isError ||
     !canWrite;
@@ -123,9 +169,20 @@ export function RemoteMcpIdentitySectionBody({
   const authorizationHeader = findStaticAuthorizationHeader(headers);
   const passThroughAuthorization = findPassThroughAuthorizationHeader(headers);
   const identityQueryError = headersQuery.isError || clientsError;
+  // A service account client (credential_owner self) is bound the same way as
+  // a per-user one, but it is the Service Account choice: one credential every
+  // caller shares, obtained by the client rather than pasted as a header.
+  const selfClient = clients.find(
+    (linked) => linked.credentialOwner === "self",
+  );
+  const subjectClients = clients.filter(
+    (linked) => linked.credentialOwner !== "self",
+  );
   const actualMode = identityQueryError
     ? null
-    : deriveIdentityMode(clients.length, headers);
+    : selfClient
+      ? "agent"
+      : deriveIdentityMode(subjectClients.length, headers);
   const loading =
     headersQuery.isLoading || clientsLoading || siblingsQuery.isLoading;
   const identityResolved = !loading && !identityQueryError;
@@ -187,8 +244,7 @@ export function RemoteMcpIdentitySectionBody({
     mcpServerId: target.permissionResourceId,
     remoteMcpServerId,
     upstreamUrl: sourceQuery.data?.url,
-    issuers: issuersResult?.result.items ?? [],
-    linkedClients: clients,
+    linkedClients: subjectClients,
     configured: actualMode === "user",
     enabled: identityResolved && selectedMode === "user",
   });
@@ -199,6 +255,57 @@ export function RemoteMcpIdentitySectionBody({
     createHeader,
     updateHeader,
   });
+  const clientDraft = useServiceAccountClientDraft({
+    mcpServerId: target.permissionResourceId,
+    boundClient: selfClient,
+    enabled: selectedMode === "agent",
+  });
+  const { entitled: customerManagedKeys } = useCustomerManagedKeys();
+  const [formatPick, setFormatPick] = useState<ServiceAccountFormat | null>(
+    null,
+  );
+  const saFormat: ServiceAccountFormat =
+    formatPick ??
+    (selfClient
+      ? oauthFormatOf(selfClient)
+      : agentDraft.format === "client-credentials"
+        ? "bearer"
+        : agentDraft.format);
+  const oauthFormat =
+    selectedMode === "agent" && isOAuthFormat(saFormat) ? saFormat : null;
+  const oauthSelected = oauthFormat !== null;
+
+  // The pin belongs to the server's protected resource; the panel shows it to
+  // writers with a bound client, and scopes.canPin says if they may change it.
+  const scopePin = useResourceScopePin({
+    mcpServerId: target.permissionResourceId,
+    enabled: canWrite && identityResolved && actualMode === "user",
+  });
+  const scopePinSlot =
+    canWrite && selectedMode === "user" && userDraft.connected;
+  // Pinning is off for the org, so the picker can do nothing.
+  const scopePinUnusable = !!scopePin.data && !scopePin.data.discoveryEnabled;
+  const showScopePin = scopePinSlot && !!scopePin.data && !scopePinUnusable;
+  const scopePinDirty = showScopePin && scopePin.dirty;
+  // Writers get the same answer in the pin's status line when the pin shows.
+  // mcp:write satisfies mcp:read, but a read block applies independently.
+  const canRead =
+    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
+  const showScopesSummary =
+    canRead &&
+    (!scopePinSlot || scopePinUnusable) &&
+    identityResolved &&
+    actualMode === "user" &&
+    selectedMode === "user" &&
+    userDraft.connectedClientId !== null;
+  const scopesSummaryQuery = useGetRemoteMcpServerScopes(
+    { mcpServerId: target.permissionResourceId },
+    undefined,
+    {
+      enabled: showScopesSummary && target.permissionResourceId !== "",
+      throwOnError: false,
+    },
+  );
 
   const detachIssuer = useDetachUserSessionIssuerMutation();
 
@@ -213,8 +320,74 @@ export function RemoteMcpIdentitySectionBody({
   // leaving User means unbinding the client and leaving Agent means deleting
   // the credential; both are what Save has to do, not the card click.
   const leavingUser = actualMode === "user" && selectedMode !== "user";
-  const leavingAgent = actualMode === "agent" && selectedMode !== "agent";
-  const destructive = leavingUser || leavingAgent;
+  // An OAuth client takes a static credential's place rather than sitting
+  // beside it, so the confirmation says replace, not remove. Only a client
+  // Save binds, or one already bound, does: an unfinished form replaces
+  // nothing.
+  const replacingCredential =
+    !!oauthFormat &&
+    !!authorizationHeader &&
+    (clientDraft.canSave(oauthFormat) || clientDraft.showingBound(oauthFormat));
+  // A server can carry a bound client and a leftover static credential at
+  // once, and the client wins the derived mode. No Identity has to clear both
+  // or the credential alone would make the server read as Agent again — and
+  // unlike under User, nothing overrides it on the way upstream. Under a bound
+  // service account client, only a leftover credential is left behind.
+  const leavingAgent =
+    (actualMode === "agent" &&
+      selectedMode !== "agent" &&
+      (!selfClient || !!authorizationHeader)) ||
+    (selectedMode === "none" && !!authorizationHeader) ||
+    replacingCredential;
+  // Moving off the service account client to a static credential or to no
+  // identity unbinds it. Another OAuth client, or User Identity, replaces it
+  // in the same commit that binds the new one.
+  const leavingSelf =
+    !!selfClient &&
+    (selectedMode === "none" || (selectedMode === "agent" && !oauthSelected));
+  // No Identity removes the client with nothing in its place.
+  const removingSelf = leavingSelf && selectedMode === "none";
+  // Staying on User but saving a different client swaps out the one people
+  // signed in through, so they all have to sign in again.
+  const replacingClient = selectedMode === "user" && userDraft.replacesClient;
+  // Another OAuth client, or User Identity, takes the service account
+  // client's place: the commit that binds the new client unbinds it.
+  const replacingSelf =
+    leavingSelf ||
+    (!!selfClient &&
+      (selectedMode === "user" ||
+        (!!oauthFormat && clientDraft.canSave(oauthFormat))));
+  const destructive =
+    leavingUser || leavingAgent || replacingSelf || replacingClient;
+
+  // The upstream authorization server is derived per user session issuer, so
+  // changing this server's clients can re-point every server sharing the
+  // issuer, in any project for an organization issuer.
+  const savingUserIdentity = selectedMode === "user" && userDraft.canSave;
+  const sharedIssuerId = target.userSessionIssuerId;
+  let impactRequest: GetServerIdentityImpactRequest | null = null;
+  if (sharedIssuerId && leavingUser) {
+    impactRequest = {
+      userSessionIssuerId: sharedIssuerId,
+      mcpServerId: target.mcpServerId,
+      change: "detach",
+    };
+  } else if (sharedIssuerId && savingUserIdentity && userDraft.selected) {
+    impactRequest = {
+      userSessionIssuerId: sharedIssuerId,
+      mcpServerId: target.mcpServerId,
+      change: "replace",
+      providerId: userDraft.selected.isNew ? undefined : userDraft.selected.id,
+      clientId:
+        userDraft.choice === "existing"
+          ? (userDraft.existingClientId ?? undefined)
+          : undefined,
+    };
+  }
+  const sharedIssuerImpact = useSharedIssuerImpact(impactRequest);
+  const repointLookupPending = sharedIssuerImpact.pending;
+  const needsConfirm =
+    destructive || needsSharedIssuerConfirm(sharedIssuerImpact);
 
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
@@ -231,13 +404,24 @@ export function RemoteMcpIdentitySectionBody({
         },
       });
     }
-    await invalidateAllRemoteSessionClients(queryClient);
+    await Promise.all([
+      invalidateAllRemoteSessionClients(queryClient),
+      invalidateAllGetRemoteMcpServerScopes(queryClient),
+      invalidateSharedIssuerImpact(queryClient),
+    ]);
     return true;
   };
 
   const removeAgentCredential = async (): Promise<boolean> => {
     if (!authorizationHeader) return false;
-    await deleteHeader.mutateAsync({ request: { id: authorizationHeader.id } });
+    // Under No Identity the row is editable in Custom Headers. When the draft
+    // has already dropped it, the header save deletes it; deleting it here
+    // first would fail that save on a row that is gone and strand the rest.
+    const headerId = authorizationHeader.id;
+    if (!headerDrafts.drafts.some((draft) => draft.id === headerId)) {
+      return false;
+    }
+    await deleteHeader.mutateAsync({ request: { id: headerId } });
     const refreshed = await invalidateHeaders();
     if (!refreshed) {
       toast.warning("Credential removed, but headers could not be refreshed.");
@@ -245,29 +429,151 @@ export function RemoteMcpIdentitySectionBody({
     return true;
   };
 
+  // The Authorization row is managed while Service Account is selected, so
+  // it never reaches the header drafts and has to be deleted directly.
+  const deleteStaticCredential = async (): Promise<void> => {
+    if (!authorizationHeader) return;
+    await deleteHeader.mutateAsync({
+      request: { id: authorizationHeader.id },
+    });
+    await invalidateHeaders();
+  };
+
+  const detachSelfClient = async (): Promise<void> => {
+    const userSessionIssuerId = target.userSessionIssuerId;
+    if (!selfClient || !userSessionIssuerId) return;
+    await detachIssuer.mutateAsync({
+      request: {
+        attachUserSessionIssuerForm: { id: selfClient.id, userSessionIssuerId },
+      },
+    });
+    await invalidateAllRemoteSessionClients(queryClient);
+  };
+
+  // Switching to User commits a client; without one, removing the old
+  // identity first would leave the server with none.
+  const userSwitchBlocked =
+    selectedMode === "user" && actualMode !== "user" && !userDraft.canSave;
+  // An unfinished identity edit holds the whole commit, or Save would write
+  // the rest and silently drop it.
+  const userEditIncomplete =
+    selectedMode === "user" &&
+    actualMode === "user" &&
+    userDraft.pendingChange &&
+    !userDraft.canSave;
+  // Leaving the service account client for a static credential unbinds it
+  // only once a credential is written. With none typed and none on the
+  // server, Save would skip the identity half and commit the rest.
+  const staticSwitchBlocked =
+    !!selfClient &&
+    selectedMode === "agent" &&
+    !oauthSelected &&
+    !agentDraft.canSave &&
+    !authorizationHeader;
+  // Leaving User for a service account client keeps the user client until
+  // the new one binds. Without one to bind, Save would commit the rest and
+  // leave the server on User Identity behind the operator's back.
+  const oauthSwitchBlocked =
+    leavingUser && !!oauthFormat && !clientDraft.canSave(oauthFormat);
+
   const performSave = async () => {
-    if (!canWrite || rbacLoading) return;
+    if (
+      !canWrite ||
+      rbacLoading ||
+      userSwitchBlocked ||
+      userEditIncomplete ||
+      staticSwitchBlocked ||
+      oauthSwitchBlocked
+    )
+      return;
     setConfirmOpen(false);
+    // The draft is reset at most once per save: a reset deletes a created
+    // signing key client, and a second one would delete it again.
+    let draftReset = false;
     try {
-      if (leavingUser) await detachUserIdentity();
-      if (leavingAgent) await removeAgentCredential();
-      if (selectedMode === "agent") {
-        await agentDraft.save();
-      } else if (selectedMode === "user") {
-        userDraft.save();
-      } else if (destructive) {
-        toast.success("Identity removed");
+      // Binding a service account client replaces the user clients in the
+      // same commit, so they are only detached here when nothing is bound.
+      if (leavingUser && !oauthFormat) await detachUserIdentity();
+      // Leaving for a static credential unbinds the client only once that
+      // credential is written, below.
+      if (removingSelf) {
+        await detachSelfClient();
+        clientDraft.reset();
+        draftReset = true;
       }
-      // Headers last: identity may have just written or removed the
-      // Authorization row, and these rows are diffed against what the server
-      // holds once that has landed.
-      if (await headerDrafts.save()) {
-        toast.success("Upstream headers updated");
+      if (oauthFormat) {
+        // Bind first, so a failed commit never leaves the server with no
+        // identity; then drop the static credential the client replaces. An
+        // unchanged bound client has nothing to bind, and a header or pin
+        // edit still goes through.
+        const binding = clientDraft.canSave(oauthFormat);
+        if (binding && !(await clientDraft.save(oauthFormat))) return;
+        if (replacingCredential) await deleteStaticCredential();
+        if (binding) setFormatPick(null);
+      } else if (selectedMode === "user" && leavingAgent) {
+        // Bind the client before dropping the credential, so a failed commit
+        // never leaves the server with no identity; the client outranks the
+        // header while both exist.
+        if (!(await userDraft.save())) return;
+        await removeAgentCredential();
+      } else {
+        if (leavingAgent) await removeAgentCredential();
+        if (selectedMode === "agent") {
+          const written = await agentDraft.save();
+          if (leavingSelf) {
+            // A failed write has already said so; stop there. Otherwise
+            // unbind only with a credential to fall back on, new or already
+            // on the server, or the server is left with no identity.
+            if (agentDraft.canSave && !written) return;
+            if (written || authorizationHeader) {
+              await detachSelfClient();
+              clientDraft.reset();
+              draftReset = true;
+            }
+          }
+        } else if (
+          selectedMode === "user" &&
+          (actualMode !== "user" || userDraft.canSave)
+        ) {
+          // A pin or header edit alone must not recommit the connected client.
+          await userDraft.save();
+        }
+      }
+      // A signing key client made for the Service Account choice and left
+      // behind by a save that chose otherwise is never bound, so it goes.
+      if (!oauthFormat && clientDraft.created && !draftReset) {
+        clientDraft.reset();
       }
     } catch (error) {
+      toast.error(errorMessage(error, "Failed to save identity"));
+      return;
+    }
+    // Headers after identity: it may have just written or removed the
+    // Authorization row, and these rows are diffed against what the server
+    // holds once that has landed. The pin is independent of both.
+    const [pinResult, headersResult] = await Promise.allSettled([
+      scopePinDirty ? scopePin.save() : Promise.resolve(false),
+      headerDrafts.save(),
+    ]);
+    if (pinResult.status === "rejected") {
       toast.error(
-        error instanceof Error ? error.message : "Failed to save identity",
+        errorMessage(pinResult.reason, "Failed to save pinned scopes"),
       );
+    } else if (pinResult.value) {
+      toast.success("Pinned scopes updated");
+    }
+    if (headersResult.status === "rejected") {
+      toast.error(errorMessage(headersResult.reason, "Failed to save headers"));
+      return;
+    }
+    // Reported only once the headers have landed: when the draft already
+    // dropped the credential, the header save is what deletes it, and a
+    // failure there must not follow a claim that it is gone.
+    if (selectedMode === "none" && destructive) {
+      toast.success("Identity removed");
+    }
+    if (headersResult.value) {
+      toast.success("Upstream headers updated");
     }
   };
 
@@ -276,7 +582,7 @@ export function RemoteMcpIdentitySectionBody({
   // that card says so rather than a banner underneath the choice.
   const noneWarning =
     noneProbeStatus === "authentication-required"
-      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User or Agent Identity."
+      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User Identity or a Service Account."
       : null;
   const cards = identityModeCards(upstreamName);
 
@@ -286,25 +592,46 @@ export function RemoteMcpIdentitySectionBody({
   let identityCanSave: boolean;
   if (selectedMode === "user") {
     identityCanSave = userDraft.canSave;
+  } else if (oauthFormat) {
+    identityCanSave = clientDraft.canSave(oauthFormat);
   } else if (selectedMode === "agent") {
     // Moving to Agent needs a credential; without one there is nothing for
-    // the mode to actually be.
-    identityCanSave = agentDraft.canSave;
+    // the mode to actually be. One already on the server counts: in the
+    // legacy state where a bound client outranks a static header, detaching
+    // the client is the whole change, and demanding a fresh secret would ask
+    // the operator to retype one they cannot read.
+    identityCanSave =
+      agentDraft.canSave ||
+      ((leavingUser || leavingSelf) && !!authorizationHeader);
   } else {
     // No Identity commits only the removal it implies.
     identityCanSave = destructive;
   }
+  // A locked identity still lets a pin-only edit through.
+  const pinOnlyChange =
+    scopePinDirty && !identityCanSave && !headerDrafts.isDirty;
   // Rows that cannot be written stop the whole commit rather than letting the
   // identity half through and dropping the rest on the floor.
   const headersBlocked =
     headerDrafts.isDirty && headerDrafts.validationError !== null;
   const headersReason = headersBlocked && headerDrafts.reportErrors;
-  const canSave = !headersBlocked && (identityCanSave || headerDrafts.isDirty);
+  const canSave =
+    !headersBlocked &&
+    !userSwitchBlocked &&
+    !userEditIncomplete &&
+    !staticSwitchBlocked &&
+    !oauthSwitchBlocked &&
+    (identityCanSave || headerDrafts.isDirty || scopePinDirty);
   const savePending =
     detachIssuer.isPending ||
+    scopePin.saving ||
     saving ||
     headerDrafts.saving ||
-    (selectedMode === "user" ? userDraft.saving : agentDraft.saving);
+    (selectedMode === "user"
+      ? userDraft.saving
+      : oauthSelected
+        ? clientDraft.saving
+        : agentDraft.saving);
 
   return (
     <>
@@ -327,10 +654,37 @@ export function RemoteMcpIdentitySectionBody({
               </Alert>
             ) : null}
 
+            {orgSharedClient && !sharedSource ? (
+              <Alert variant="warning" dismissible={false}>
+                This server uses a client shared by every project on the
+                organization&apos;s session issuer, so it can&apos;t be changed
+                here. An organization admin can remove it from this server on
+                the{" "}
+                <Link
+                  className="font-medium underline underline-offset-2"
+                  to={routes.remoteIdentityProviders.clientDetail.mcpServers.href(
+                    orgSharedClient.remoteSessionIssuerId,
+                    orgSharedClient.id,
+                  )}
+                >
+                  client&apos;s MCP servers
+                </Link>
+                , or you can move this server to a project session issuer under
+                Sessions below.
+              </Alert>
+            ) : null}
+
             {siblingsQuery.isError ? (
               <Alert variant="error" dismissible={false}>
                 Could not verify whether this Remote MCP source is shared.
                 Identity editing is disabled.
+              </Alert>
+            ) : null}
+
+            {issuerError ? (
+              <Alert variant="error" dismissible={false}>
+                Could not load this server's user session issuer. Identity
+                editing is disabled.
               </Alert>
             ) : null}
 
@@ -344,8 +698,8 @@ export function RemoteMcpIdentitySectionBody({
             {passThroughAuthorization ? (
               <Alert variant="warning" dismissible={false}>
                 A legacy pass-through Authorization header is still configured.
-                Remove it in Custom Headers before selecting Agent Identity or
-                relying on No Identity.
+                Remove it in Custom Headers before selecting Service Account or
+                relying on Manual.
               </Alert>
             ) : null}
 
@@ -434,53 +788,91 @@ export function RemoteMcpIdentitySectionBody({
           </div>
 
           {identityResolved && selectedMode === "user" ? (
-            <AuthRow
-              label="Identity provider"
-              hint={
-                <>
-                  Where users sign in. Speakeasy registers this server with it
-                  for you.
-                  <Link
-                    to={routes.remoteIdentityProviders.href()}
-                    className="text-muted-foreground hover:text-foreground mt-2 flex w-fit items-center gap-1 underline underline-offset-2"
-                  >
-                    Manage identity providers
-                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                  </Link>
-                </>
-              }
-            >
+            // The provider row is the whole decision, so it takes the full
+            // width rather than sitting beside a label that restates it.
+            <div className="px-6 py-5">
               <UserIdentityRow
                 draft={userDraft}
-                disabled={identityReadOnly}
-                manageHref={routes.remoteIdentityProviders.href()}
+                disabled={identityReadOnly || userDraft.saving}
                 createHref={routes.remoteIdentityProviders.href()}
-                inspectHref={mcpServerTabHref(routes, target.slug, "inspect")}
-                providerHref={(issuerId) =>
-                  routes.remoteIdentityProviders.issuerDetail.href(issuerId)
-                }
                 clientHref={(issuerId, clientId) =>
                   routes.remoteIdentityProviders.clientDetail.href(
                     issuerId,
                     clientId,
                   )
                 }
-                onSwitchToAgent={() => setSelectedMode("agent")}
               />
-            </AuthRow>
+              {showScopePin && scopePin.data ? (
+                // Commits with the footer's Save, like the rest of the panel.
+                <div className="mt-4 pl-[52px]">
+                  <ResourceScopePinField
+                    pin={scopePin}
+                    scopes={scopePin.data}
+                    connectedClientId={userDraft.connectedClient?.id ?? null}
+                    issuerScopes={userDraft.scopeOptions}
+                    serverName={
+                      linkedServers
+                        .find(
+                          (server) => server.id === target.permissionResourceId,
+                        )
+                        ?.name?.trim() ?? ""
+                    }
+                    // Changing it needs write access to every server sharing the resource.
+                    disabled={!canWrite || !scopePin.data.canPin || savePending}
+                  />
+                </div>
+              ) : scopePinSlot && scopePin.isError ? (
+                <Text muted small className="mt-4 block pl-[52px]">
+                  Couldn't load pinned scopes.
+                </Text>
+              ) : scopePinSlot && !scopePin.data ? (
+                <Text muted small className="mt-4 block pl-[52px]">
+                  Loading pinned scopes…
+                </Text>
+              ) : null}
+              {showScopesSummary && scopesSummaryQuery.data ? (
+                <div className="mt-4 pl-[52px] empty:hidden">
+                  <RequestedScopesSummary
+                    scopes={scopesSummaryQuery.data}
+                    connectedClientId={userDraft.connectedClientId}
+                  />
+                </div>
+              ) : showScopesSummary && scopesSummaryQuery.isError ? (
+                <Text muted small className="mt-4 block pl-[52px]">
+                  Couldn't load requested scopes.
+                </Text>
+              ) : null}
+            </div>
+          ) : null}
+
+          {identityResolved && chainingIssuer && sourceQuery.data?.url ? (
+            <IdentityChainingField
+              userSessionIssuer={chainingIssuer}
+              linkedClients={clients}
+              resource={sourceQuery.data.url}
+              remoteMcpServerId={remoteMcpServerId}
+            />
           ) : null}
 
           {identityResolved && selectedMode === "agent" ? (
-            <AuthRow
-              label="Agent credential"
-              hint={`One credential every caller shares. Speakeasy sends it to ${upstreamName} as the Authorization header.`}
-            >
-              <AgentIdentityRow
-                draft={agentDraft}
-                disabled={identityReadOnly || !!passThroughAuthorization}
+            <div className="px-6 py-5">
+              <ServiceAccountPanel
+                format={saFormat}
+                onFormatChange={setFormatPick}
+                agentDraft={agentDraft}
+                clientDraft={clientDraft}
                 upstreamName={upstreamName}
+                disabled={identityReadOnly || !!passThroughAuthorization}
+                customerManagedKeys={customerManagedKeys}
+                providersHref={routes.remoteIdentityProviders.href()}
+                clientHref={(issuerId, clientId) =>
+                  routes.remoteIdentityProviders.clientDetail.href(
+                    issuerId,
+                    clientId,
+                  )
+                }
               />
-            </AuthRow>
+            </div>
           ) : null}
 
           <Collapsible>
@@ -525,7 +917,42 @@ export function RemoteMcpIdentitySectionBody({
                 {headerDrafts.validationError}
               </Text>
             ) : null}
+            {userEditIncomplete ? (
+              <Text small warning>
+                Finish the User Identity change, or cancel it, to save.
+              </Text>
+            ) : null}
+            {repointLookupPending ? (
+              <Text small muted>
+                Checking other servers on this user session issuer…
+              </Text>
+            ) : null}
+            {staticSwitchBlocked ? (
+              <Text small warning>
+                Enter the credential, or cancel, to save.
+              </Text>
+            ) : null}
+            {oauthSwitchBlocked ? (
+              <Text small warning>
+                Finish the service account client, or cancel, to save.
+              </Text>
+            ) : null}
             <SettingsSection.FooterActions>
+              {selectedMode === "agent" && clientDraft.replacing ? (
+                // Backs out of replacing the saved service account client.
+                <Button
+                  variant="secondary"
+                  disabled={savePending}
+                  onClick={() => {
+                    clientDraft.cancelReplace();
+                    // A format picked after Clear goes too, or Save would
+                    // still unbind the client being kept.
+                    setFormatPick(null);
+                  }}
+                >
+                  <Button.Text>Cancel</Button.Text>
+                </Button>
+              ) : null}
               <RequireScope
                 scope="mcp:write"
                 resourceId={target.permissionResourceId}
@@ -533,9 +960,14 @@ export function RemoteMcpIdentitySectionBody({
               >
                 <FooterSaveButton
                   pending={savePending}
-                  disabled={!canSave || savePending || identityReadOnly}
+                  disabled={
+                    !canSave ||
+                    savePending ||
+                    (identityReadOnly && !pinOnlyChange) ||
+                    repointLookupPending
+                  }
                   onClick={() => {
-                    if (destructive) setConfirmOpen(true);
+                    if (needsConfirm) setConfirmOpen(true);
                     else void performSave();
                   }}
                 />
@@ -549,16 +981,37 @@ export function RemoteMcpIdentitySectionBody({
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>
-              {leavingUser
-                ? `Stop signing users in through ${upstreamName}?`
-                : "Remove the shared credential?"}
+              {confirmTitle({
+                removingSelf,
+                replacingSelf,
+                leavingUser,
+                replacingClient,
+                replacingCredential,
+                destructive,
+                upstreamName,
+              })}
             </Dialog.Title>
-            <Dialog.Description>
-              {leavingUser
-                ? "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers."
-                : "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream."}
-            </Dialog.Description>
+            {destructive ? (
+              <Dialog.Description>
+                {removalConsequences({
+                  removingSelf,
+                  replacingSelf,
+                  leavingUser,
+                  leavingAgent,
+                  replacingClient,
+                  replacingCredential,
+                })}
+              </Dialog.Description>
+            ) : (
+              <Dialog.Description className="sr-only">
+                Saving changes the upstream of other servers.
+              </Dialog.Description>
+            )}
           </Dialog.Header>
+          <RepointedServersNotice
+            impact={sharedIssuerImpact}
+            projectId={target.projectId}
+          />
           <Dialog.Footer>
             <Button
               variant="secondary"
@@ -569,7 +1022,13 @@ export function RemoteMcpIdentitySectionBody({
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={savePending || !canWrite || rbacLoading}
+              disabled={
+                savePending ||
+                !canWrite ||
+                rbacLoading ||
+                repointLookupPending ||
+                sharedIssuerChangeBlocked(sharedIssuerImpact)
+              }
               onClick={() => void performSave()}
             >
               {savePending ? (
@@ -586,4 +1045,99 @@ export function RemoteMcpIdentitySectionBody({
       </Dialog>
     </>
   );
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+/** Identity chaining needs an organization issuer that trusts an identity provider sign-in client. */
+function identityChainingIssuer(
+  issuer: UserSessionIssuer | undefined,
+): UserSessionIssuer | undefined {
+  if (issuer?.projectId !== "") return undefined;
+  if (!issuer.trustedRemoteSessionIssuerId) return undefined;
+  if (!issuer.trustedRemoteSessionClientId) return undefined;
+  return issuer;
+}
+
+const UNLINK_PROVIDER_CONSEQUENCE =
+  "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers.";
+const REPLACE_CLIENT_CONSEQUENCE =
+  "Saving replaces the client this server uses. Everyone signed in through the current one will have to sign in again. The old client stays available to other servers.";
+const REMOVE_SELF_CLIENT_CONSEQUENCE =
+  "Saving stops this server using its service account client. Callers' requests will be rejected until you save a new identity. The client stays available to other servers.";
+const REPLACE_SELF_CLIENT_CONSEQUENCE =
+  "Saving stops this server using its current service account client. Callers get the new credential on their next request. The old client stays available to other servers.";
+const REMOVE_CREDENTIAL_CONSEQUENCE =
+  "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream.";
+const REPLACE_CREDENTIAL_CONSEQUENCE =
+  "Saving replaces the static Authorization credential with the service account client. Callers get the client's token on their next request.";
+
+/**
+ * What the confirmation discloses. A server can carry a bound client and a
+ * leftover static credential at once, and No Identity removes both, so the
+ * dialog has to name both.
+ */
+function removalConsequences({
+  removingSelf,
+  replacingSelf,
+  leavingUser,
+  leavingAgent,
+  replacingClient,
+  replacingCredential,
+}: {
+  removingSelf: boolean;
+  replacingSelf: boolean;
+  leavingUser: boolean;
+  leavingAgent: boolean;
+  replacingClient: boolean;
+  replacingCredential: boolean;
+}): string {
+  const credentialConsequence = replacingCredential
+    ? REPLACE_CREDENTIAL_CONSEQUENCE
+    : REMOVE_CREDENTIAL_CONSEQUENCE;
+  if (removingSelf || replacingSelf) {
+    // Only another service account client takes a static credential's
+    // place; No Identity and User Identity drop it.
+    const selfConsequence = removingSelf
+      ? REMOVE_SELF_CLIENT_CONSEQUENCE
+      : REPLACE_SELF_CLIENT_CONSEQUENCE;
+    return leavingAgent
+      ? `${selfConsequence} ${credentialConsequence}`
+      : selfConsequence;
+  }
+  if (replacingClient) return REPLACE_CLIENT_CONSEQUENCE;
+  if (leavingUser && leavingAgent) {
+    return `${UNLINK_PROVIDER_CONSEQUENCE} ${credentialConsequence}`;
+  }
+  if (leavingUser) return UNLINK_PROVIDER_CONSEQUENCE;
+  return credentialConsequence;
+}
+
+function confirmTitle({
+  removingSelf,
+  replacingSelf,
+  leavingUser,
+  replacingClient,
+  replacingCredential,
+  destructive,
+  upstreamName,
+}: {
+  removingSelf: boolean;
+  replacingSelf: boolean;
+  leavingUser: boolean;
+  replacingClient: boolean;
+  replacingCredential: boolean;
+  destructive: boolean;
+  upstreamName: string;
+}): string {
+  if (!destructive) return "Change the upstream of other servers?";
+  if (removingSelf) return "Remove the service account client?";
+  if (replacingSelf) return "Replace the service account client?";
+  if (replacingClient) return "Replace the connected client?";
+  if (leavingUser) return `Stop signing users in through ${upstreamName}?`;
+  return replacingCredential
+    ? "Replace the shared credential?"
+    : "Remove the shared credential?";
 }

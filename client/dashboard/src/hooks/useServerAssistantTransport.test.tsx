@@ -20,7 +20,7 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string) =>
-      scope === "project:read" ? state.canRead : state.canWrite,
+      scope === "assistant:read" ? state.canRead : state.canWrite,
     isLoading: false,
   }),
 }));

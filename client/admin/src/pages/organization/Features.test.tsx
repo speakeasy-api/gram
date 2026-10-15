@@ -11,10 +11,6 @@ import { Features } from "@/pages/organization/Features";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
 
-vi.mock("@/pages/organization/Onboarding", () => ({
-  Onboarding: () => <section aria-label="Onboarding" />,
-}));
-
 const mocks = vi.hoisted(() => ({
   featureFetch: vi.fn(),
   getOrganizationChatAnalysisSettings: vi.fn(),
@@ -46,12 +42,14 @@ const FEATURES: ProductFeatures = {
   hooksFailOpenEnabled: false,
   logsEnabled: true,
   networkIngressEnabled: false,
+  organizationGatewayDisabled: false,
   platformMcpEnabled: true,
   remoteSessionAutoRefreshEnabled: false,
   remoteSessionAutoRefreshEnforcedEnabled: false,
   scimEnabled: false,
   sessionCaptureEnabled: false,
   sessionPortabilityEnabled: false,
+  signalsIntelligenceEnabled: false,
   skillCaptureMetadataOnly: false,
   skillsEnabled: true,
   ssoEnabled: true,
@@ -69,12 +67,14 @@ const FEATURES_RESPONSE = {
   hooks_fail_open_enabled: false,
   logs_enabled: true,
   network_ingress_enabled: false,
+  organization_gateway_disabled: false,
   platform_mcp_enabled: true,
   remote_session_auto_refresh_enabled: false,
   remote_session_auto_refresh_enforced_enabled: false,
   scim_enabled: false,
   session_capture_enabled: false,
   session_portability_enabled: false,
+  signals_intelligence_enabled: false,
   skill_capture_metadata_only: false,
   skills_enabled: true,
   sso_enabled: true,
@@ -122,6 +122,11 @@ const TOGGLE_FEATURES = [
     enabledKey: "sessionPortabilityEnabled",
     label: "Session Portability",
   },
+  {
+    featureName: "signals_intelligence",
+    enabledKey: "signalsIntelligenceEnabled",
+    label: "Signals Intelligence",
+  },
   { featureName: "sso", enabledKey: "ssoEnabled", label: "SSO" },
   { featureName: "scim", enabledKey: "scimEnabled", label: "SCIM" },
 ] as const satisfies readonly {
@@ -142,6 +147,7 @@ const OMITTED_FEATURES = {
   skill_capture_metadata_only: "omitted",
   remote_session_auto_refresh_enforced: "omitted",
   consent_tool_filtering: "omitted",
+  organization_gateway_disabled: "omitted",
 } as const satisfies Record<Exclude<FeatureName, ToggleFeatureName>, "omitted">;
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -183,9 +189,10 @@ beforeEach(() => {
       enabled: boolean;
       feature_name: string;
     };
+    const responseKey = `${body.feature_name}_enabled`;
     return jsonResponse({
       ...FEATURES_RESPONSE,
-      [`${body.feature_name}_enabled`]: body.enabled,
+      [responseKey]: body.enabled,
     });
   });
   vi.stubGlobal("fetch", mocks.featureFetch);
@@ -270,6 +277,10 @@ describe("Features", () => {
         organization_id: ORG.id,
         feature_name: featureName,
         enabled: true,
+      });
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(0);
+        expect(control.getAttribute("data-state")).toBe("checked");
       });
     },
   );

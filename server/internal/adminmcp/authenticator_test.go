@@ -68,7 +68,7 @@ func staffAuthFixture(t *testing.T) (*StaffAuthenticator, *fakeStaffAccessStore,
 	})
 	require.NoError(t, err)
 	store := &fakeStaffAccessStore{session: staffAccessSession{
-		Subject: subject.String(), ClientID: staffClient, ConnectionID: "connection-1",
+		Subject: subject.String(), ClientID: staffClient, ClientRowID: "client-row-1", ConnectionID: "connection-1",
 		Generation: "generation-1", ActiveGeneration: "generation-1", ResourceURI: staffAudience,
 		Scopes: []string{"admin:read"}, AdminSessionEnc: linkedSession, ExpiresAt: time.Now().Add(time.Hour),
 	}}
@@ -85,7 +85,7 @@ func TestStaffAuthenticatorRequiresLiveMatchingStaff(t *testing.T) {
 	auth, store, verifier, token := staffAuthFixture(t)
 	principal, err := auth.Authenticate(t.Context(), token)
 	require.NoError(t, err)
-	require.Equal(t, Principal{Subject: "user:" + staffSubject, Email: "staff@example.test", ClientID: staffClient, ConnectionID: "connection-1", Scopes: []string{"admin:read"}, staff: verifier.result}, principal)
+	require.Equal(t, Principal{Subject: "user:" + staffSubject, Email: "staff@example.test", ClientID: staffClient, ClientRowID: "client-row-1", ConnectionID: "connection-1", Generation: "generation-1", Scopes: []string{"admin:read"}, staff: verifier.result}, principal)
 	require.Equal(t, "linked-browser-session", verifier.key)
 	require.Equal(t, 1, verifier.calls)
 	require.Equal(t, 1, store.calls)

@@ -339,14 +339,13 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			category = string(categories.Classify(message.GetSource(), message.GetRuleId()))
 		}
 
-		// Set only on messages republished by risk.markResultsFalsePositive /
-		// risk.unmarkResultsFalsePositive to append a state-change row for an
-		// already-persisted finding (see enqueueFalsePositiveMirror). Empty
-		// on every finding a scanner produces. A parse failure must skip the
-		// message rather than fall through with falsePositiveAt left nil: this
-		// row would still be appended with a fresh (and so dedup-winning)
-		// inserted_at, silently un-dismissing a finding whose true state this
-		// message never actually conveyed.
+		// Set only on messages that republish an already-persisted finding's
+		// state (the offline risk_results backfill, legacy producers); empty on
+		// every finding a scanner produces. A parse failure must skip the message
+		// rather than fall through with falsePositiveAt left nil: this row would
+		// still be appended with a fresh (and so dedup-winning) inserted_at,
+		// silently un-dismissing a finding whose true state this message never
+		// actually conveyed.
 		var falsePositiveAt *time.Time
 		if raw := message.GetFalsePositiveAt(); raw != "" {
 			t, err := time.Parse(time.RFC3339, raw)

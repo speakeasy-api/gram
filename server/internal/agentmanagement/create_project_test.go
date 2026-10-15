@@ -14,7 +14,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -33,7 +32,6 @@ func newProjectScopedService(t *testing.T, conn *pgxpool.Pool) *Service {
 	t.Helper()
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
-	service.features = &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
 	return service
 }
 
@@ -202,11 +200,7 @@ func TestCreateAgentSerializesWithConcurrentProjectDeletion(t *testing.T) {
 		created <- err
 	}()
 	// Observe the actual database wait rather than relying on a scheduling sleep.
-	require.Eventually(t, func() bool {
-		var blocked bool
-		err := conn.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))`, deletingPID).Scan(&blocked) //nolint:glint // notestingrawsql: observes concurrent transaction serialization
-		return err == nil && blocked
-	}, 5*time.Second, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, deletingPID, 1)
 	require.NoError(t, deletion.Commit(t.Context()))
 	select {
 	case err := <-created:

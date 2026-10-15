@@ -181,7 +181,7 @@ func TestHandleRemoteLoginCallback_RejectsStateWhoseIssuerWasDeleted(t *testing.
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "no remote_sessions row is resurrected for the dead issuer")
 
-	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Gram refused to store is handed back to the provider")
+	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Speakeasy refused to store is handed back to the provider")
 }
 
 // The callback and the issuer delete take the client row and the issuer row in
@@ -272,8 +272,7 @@ func TestHandleRemoteLoginCallback_WaitsForIssuerMigrationThenRejectsRetiredIssu
 	go func() {
 		done <- fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "migrate-code"))
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, fx.ti.conn)
-	require.Never(t, func() bool { return len(done) > 0 }, 250*time.Millisecond, 10*time.Millisecond, "the callback waits behind the migration's issuer lock instead of writing under it")
+	testenv.WaitForBackendsBlockedBy(t, ctx, fx.ti.conn, testenv.BackendPID(tx), 1)
 
 	// The migration retires the source and commits.
 	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
@@ -293,5 +292,5 @@ func TestHandleRemoteLoginCallback_WaitsForIssuerMigrationThenRejectsRetiredIssu
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "no remote_sessions row lands on the retired issuer")
 
-	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Gram refused to store is handed back to the provider")
+	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Speakeasy refused to store is handed back to the provider")
 }

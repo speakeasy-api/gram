@@ -360,6 +360,10 @@ export const SCOPE_INCLUDE_CEL_EXAMPLES: { label: string; expr: string }[] =
 export const SCOPE_EXEMPT_CEL_EXAMPLES: { label: string; expr: string }[] =
   celExamples.scope_exempt;
 
+export function mcpCompatibleAction(action: PolicyAction): PolicyAction {
+  return action === "warn" || action === "quarantine" ? "block" : action;
+}
+
 export const ACTION_OPTIONS: {
   value: PolicyAction;
   title: string;

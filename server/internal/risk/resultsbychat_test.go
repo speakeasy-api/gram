@@ -153,3 +153,35 @@ func TestListRiskResultsByChat_IncludesExternalUserID(t *testing.T) {
 	require.NotNil(t, result.Chats[0].UserID)
 	require.Equal(t, "alice@example.com", *result.Chats[0].UserID)
 }
+
+func TestListRiskResultsByChat_IncludesContentPartFindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("ByChat Content Part")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+
+	// One chat holds a message-anchored and an attachment-anchored finding;
+	// a second chat holds only an attachment-anchored one. Both anchors must
+	// resolve the chat, so the rollup sees two chats and three findings.
+	mixedChat, mixedMsg := seedChatWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alice@example.com")
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, mixedMsg, true)
+	seedContentPartFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, mixedChat, mixedMsg)
+	attachmentChat, attachmentMsg := seedChatWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "bob@example.com")
+	seedContentPartFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, attachmentChat, attachmentMsg)
+
+	result, err := ti.service.ListRiskResultsByChat(ctx, &gen.ListRiskResultsByChatPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 2)
+	counts := map[string]int64{}
+	for _, chat := range result.Chats {
+		counts[chat.ChatID] = chat.FindingsCount
+	}
+	require.Equal(t, map[string]int64{mixedChat.String(): 2, attachmentChat.String(): 1}, counts)
+}

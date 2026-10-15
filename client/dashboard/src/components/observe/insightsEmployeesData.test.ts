@@ -18,6 +18,7 @@ function makeMember(
     joinedAt: new Date("2025-01-01T00:00:00Z"),
     principalUrn: `user:${overrides.id}`,
     roleIds: [],
+    directoryRoleIds: [],
     ...overrides,
   };
 }
@@ -130,7 +131,7 @@ describe("buildEmployees attributed/unattributed split", () => {
   });
 
   it("merges a member's split identities so an email-less id summary can't shadow their email tokens", () => {
-    // The member's opaque user_id (Gram tool calls, no email) and their email
+    // The member's opaque user_id (Speakeasy tool calls, no email) and their email
     // (Claude/Cursor usage) are two summaries for the same person. Matching the
     // id first must not attribute the token-less id summary and orphan the
     // token-bearing email summary into the unattributed list (DNO-618).

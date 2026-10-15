@@ -38,6 +38,8 @@ func TestProductFeatureNameContract(t *testing.T) {
 		productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureRemoteSessionAutoRefreshEnforced,
 		productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureSessionPortability,
 		productfeatures.FeatureNetworkIngress,
+		productfeatures.FeatureSignalsIntelligence,
+		productfeatures.FeatureOrganizationGatewayDisabled,
 	}, document.Components.Schemas["SetOrganizationFeatureRequestBody"].Properties["feature_name"].Enum)
 }
 
@@ -76,6 +78,7 @@ func TestClientSnapshot_ReturnsCompleteProductFeatureState(t *testing.T) {
 		ConsentToolFilteringEnabled:             false,
 		SessionPortabilityEnabled:               false,
 		NetworkIngressEnabled:                   false,
+		SignalsIntelligenceEnabled:              false,
 		DeviceAgent:                             true,
 	}, ti.client.Snapshot(ctx, orgID))
 }

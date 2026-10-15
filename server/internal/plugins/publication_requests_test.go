@@ -51,17 +51,20 @@ func TestPublicationRequestsProjectRequiresExistingMarketplace(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, tx.Rollback(ctx)) }()
 
+	// Organization bootstrap may already have queued distribution events.
+	before, err := testrepo.New(tx).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
 	requester := plugins.PublicationRequests{Enabled: true}
 	outcome, err := requester.ProjectWithOutcome(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID)
 	require.NoError(t, err)
 	require.Equal(t, plugins.ProjectPublicationNotConfigured, outcome)
 	count, err := testrepo.New(tx).CountPublishOutboxRows(ctx)
 	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Equal(t, before, count)
 	require.NoError(t, requester.Project(ctx, tx, "another-organization", *ac.ProjectID, ac.UserID))
 	count, err = testrepo.New(tx).CountPublishOutboxRows(ctx)
 	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Equal(t, before, count)
 	require.Error(t, requester.Project(ctx, tx, ac.ActiveOrganizationID, uuid.Nil, ac.UserID))
 	outcome, err = (plugins.PublicationRequests{Enabled: false}).ProjectWithOutcome(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID)
 	require.NoError(t, err)

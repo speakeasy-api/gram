@@ -1,9 +1,15 @@
 -- name: GetEnabledServerCount :one
+-- Hosted servers count via their canonical wrapper; unwrapped enabled toolsets by flag.
 SELECT COUNT(*)
-FROM toolsets
-WHERE organization_id = @organization_id
-  AND mcp_enabled IS TRUE
-  AND deleted IS FALSE;
+FROM toolsets t
+LEFT JOIN mcp_servers w
+  ON w.id = t.id
+ AND w.toolset_id = t.id
+ AND w.project_id = t.project_id
+ AND w.deleted IS FALSE
+WHERE t.organization_id = @organization_id
+  AND t.deleted IS FALSE
+  AND CASE WHEN w.id IS NULL THEN t.mcp_enabled ELSE w.visibility <> 'disabled' END;
 
 -- name: GetBillingMetadata :one
 SELECT *
@@ -176,6 +182,7 @@ WITH locked AS (
     , (
         stripe_checkout_idempotency_key IS NOT NULL
         AND stripe_checkout_billing_cycle_anchor IS NOT NULL
+        AND stripe_checkout_idempotency_key IS DISTINCT FROM sqlc.narg(replace_lifecycle_intent_key)::text
         AND stripe_checkout_expires_at > sqlc.arg(prepared_at)::timestamptz
         AND right(stripe_checkout_idempotency_key, length(sqlc.arg(trial_fingerprint)::text) + 1) = ':' || sqlc.arg(trial_fingerprint)::text
       ) AS reuse_existing_intent
@@ -214,8 +221,8 @@ WITH locked AS (
   WHERE metadata.id = locked.id
     AND metadata.stripe_subscription_id IS NULL
     -- A known expired session rotates only after the caller verifies it. A
-    -- lifecycle-stale intent rotates only after the caller expires its remote
-    -- session and authorizes this exact old intent key.
+    -- obsolete intent rotates only after the caller expires its remote session
+    -- or Stripe rejects its trial end, and authorizes this exact old intent key.
     AND (
       locked.reuse_existing_intent
       OR locked.stripe_checkout_session_id = sqlc.narg(replace_expired_session_id)::text

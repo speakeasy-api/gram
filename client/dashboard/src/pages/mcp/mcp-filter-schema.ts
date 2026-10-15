@@ -150,7 +150,16 @@ export function toolsetFacets(
   return {
     status,
     source,
-    pluginIds: membership.byToolsetId.get(toolset.id) ?? [],
+    // A hosted entry may be keyed by its canonical mcp_server, which shares the toolset id.
+    pluginIds: [
+      ...new Set([
+        ...(membership.byToolsetId.get(toolset.id) ?? []),
+        ...(membership.byMcpServerId.get(
+          serverIds?.get(toolset.id) ?? toolset.id,
+        ) ?? []),
+        ...(membership.byMcpServerId.get(toolset.id) ?? []),
+      ]),
+    ],
     serverId: serverIds?.get(toolset.id),
   };
 }

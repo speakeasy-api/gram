@@ -1,0 +1,48 @@
+/* The dashboard grid's chrome, over react-grid-layout's own styles. */
+
+/* A card is dragged by its header. */
+.dashboard-grid--editable .react-grid-item header {
+  cursor: grab;
+}
+.dashboard-grid--editable .react-grid-item.react-draggable-dragging header {
+  cursor: grabbing;
+}
+
+/* For someone who may move cards, a card's border says what the grid is
+   doing with it: at rest the theme's border, darker under the pointer,
+   dashed and lifted while it is dragged, the primary colour while it is
+   resized. Readers see none of this. */
+.dashboard-grid--editable .react-grid-item > section {
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.dashboard-grid--editable .react-grid-item:hover > section {
+  border-color: var(--color-foreground, currentColor);
+}
+.dashboard-grid--editable .react-grid-item.react-draggable-dragging > section {
+  border-style: dashed;
+  border-color: var(--color-primary, currentColor);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
+}
+.dashboard-grid--editable .react-grid-item.resizing > section {
+  border-color: var(--color-primary, currentColor);
+}
+
+/* Where a card will land, in the theme's colour rather than red. */
+.dashboard-grid .react-grid-item.react-grid-placeholder {
+  background: var(--color-primary, currentColor);
+  opacity: 0.15;
+}
+
+/* The resize handle's corner mark follows the text colour, and the primary
+   colour while it is being used. */
+.dashboard-grid .react-grid-item > .react-resizable-handle::after {
+  border-color: var(--color-muted-foreground, currentColor);
+}
+.dashboard-grid .react-grid-item.resizing > .react-resizable-handle {
+  opacity: 1;
+}
+.dashboard-grid .react-grid-item.resizing > .react-resizable-handle::after {
+  border-color: var(--color-primary, currentColor);
+}

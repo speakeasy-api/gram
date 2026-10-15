@@ -10,9 +10,16 @@ import (
 )
 
 type McpRegistryEntry struct {
-	ID        uuid.UUID
-	Data      []byte
+	// @access: confidential
+	ID uuid.UUID
+	// @access: opaque-restricted
+	Data []byte
+	// @access: confidential
 	Published bool
+	// @access: confidential
+	PublishedAt pgtype.Timestamptz
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
+	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
 }

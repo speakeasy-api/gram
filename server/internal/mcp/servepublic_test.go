@@ -38,7 +38,7 @@ func makeInitializeBody() []byte {
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "initialize",
+		"method":  mcpversions.MethodInitialize,
 		"params": map[string]any{
 			"protocolVersion": "2025-03-26",
 			"capabilities":    map[string]any{},
@@ -66,6 +66,12 @@ func servePublicHTTP(
 
 	return servePublicHTTPWithBody(t, ctx, ti, mcpSlug, io.NopCloser(bytes.NewReader(body)), int64(len(body)), authToken, extraHeaders)
 }
+
+// unservedProtocolVersion is a well-formed revision identifier that no Speakeasy
+// surface supports, for exercising UnsupportedProtocolVersionError. It is
+// unrecognized rather than a published revision so that raising a surface's
+// ceiling cannot quietly make it supported.
+const unservedProtocolVersion = "2031-01-01"
 
 func requireUnsupportedProtocolVersionResponse(t *testing.T, w *httptest.ResponseRecorder, requested string, supported []string) {
 	t.Helper()
@@ -525,7 +531,7 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 		{
 			"jsonrpc": "2.0",
 			"id":      1,
-			"method":  "initialize",
+			"method":  mcpversions.MethodInitialize,
 		},
 	}
 	bodyBytes, err := json.Marshal(batchBody)
@@ -630,7 +636,7 @@ func makeToolsCallBody(toolName string) []byte {
 	bs, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      3,
-		"method":  "tools/call",
+		"method":  mcpversions.MethodToolsCall,
 		"params": map[string]any{
 			"name":      toolName,
 			"arguments": map[string]any{},
@@ -913,7 +919,7 @@ func makeInitializeBodyWithVersion(version string) []byte {
 	bs, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "initialize",
+		"method":  mcpversions.MethodInitialize,
 		"params":  params,
 	})
 	return bs
@@ -945,6 +951,9 @@ func TestServePublic_InitializeEchoesEverySupportedVersion(t *testing.T) {
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-echo-mcp")
 
 	for _, v := range mcpversions.SupportedHostedToolset() {
+		if !mcpversions.DefinesMethod(mcpversions.MethodInitialize, v) {
+			continue
+		}
 		w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(v), "", nil)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code, "requested %s, body: %s", v, w.Body.String())
@@ -963,17 +972,17 @@ func TestServePublic_InitializeAnswersUnsupportedVersionWithNewestSupported(t *t
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-down-mcp")
 
 	// The expected value is pinned rather than derived from the supported
-	// set, so raising the ceiling breaks this test and forces choosing new
-	// out-of-set requested versions that keep the fallback arm exercised.
+	// set: it is the newest revision defining initialize, which answers any
+	// proposal outside the handshake revisions.
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(mcpversions.Version20260728), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unsupported requested version is answered with the newest supported one")
+	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "a supported revision without initialize is answered with the newest handshake revision")
 
-	w, err = servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion("1999-12-31"), "", nil)
+	w, err = servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(unservedProtocolVersion), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unrecognized requested version is answered with the newest supported one")
+	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unrecognized requested version is answered with the newest handshake revision")
 }
 
 // TestServePublic_InitializeAnswersAbsentVersionWithDefault pins that the
@@ -1005,10 +1014,10 @@ func TestServePublic_UnsupportedRequestVersionReturnsSpecificationError(t *testi
 
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "unsupported-request-version")
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, toolsListBody(), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20260728,
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
 }
 
 func TestServePublic_UnsupportedBodyMetaVersionReturnsSpecificationError(t *testing.T) {
@@ -1023,10 +1032,10 @@ func TestServePublic_UnsupportedBodyMetaVersionReturnsSpecificationError(t *test
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "tools/list",
+		"method":  mcpversions.MethodToolsList,
 		"params": map[string]any{
 			"_meta": map[string]any{
-				"io.modelcontextprotocol/protocolVersion": mcpversions.Version20260728,
+				"io.modelcontextprotocol/protocolVersion": unservedProtocolVersion,
 			},
 		},
 	})
@@ -1034,7 +1043,7 @@ func TestServePublic_UnsupportedBodyMetaVersionReturnsSpecificationError(t *test
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", nil)
 	require.NoError(t, err)
-	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
 }
 
 func TestServePublic_UnsupportedVersionPrecedesPrivateAuthentication(t *testing.T) {
@@ -1048,15 +1057,19 @@ func TestServePublic_UnsupportedVersionPrecedesPrivateAuthentication(t *testing.
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(toolsListBody()))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(mcpversions.HTTPHeader, mcpversions.Version20260728)
+	req.Header.Set(mcpversions.HTTPHeader, unservedProtocolVersion)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 }
 
-func TestServePublic_UnsupportedVersionNotificationIsDropped(t *testing.T) {
+// A notification declaring an unsupported revision is refused with an HTTP
+// error status, as every revision requires for a notification the server
+// cannot accept, and its JSON-RPC error carries a null id because it answers no
+// request.
+func TestServePublic_UnsupportedVersionNotificationIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -1067,11 +1080,34 @@ func TestServePublic_UnsupportedVersionNotificationIsDropped(t *testing.T) {
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "unsupported-version-notification")
 	body := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20260728,
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	require.Equal(t, http.StatusAccepted, w.Code)
-	require.Empty(t, w.Body.String())
+	requireRefusedNotification(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
+}
+
+// requireRefusedNotification asserts the refusal of a notification declaring
+// the unsupported revision requested: UnsupportedProtocolVersionError under a
+// null id, carried by HTTP 400.
+func requireRefusedNotification(t *testing.T, w *httptest.ResponseRecorder, requested string, supported []string) {
+	t.Helper()
+
+	require.Equal(t, http.StatusBadRequest, w.Code, "body=%s", w.Body.String())
+	var response struct {
+		ID    json.RawMessage `json:"id"`
+		Error struct {
+			Code oops.MCPCode `json:"code"`
+			Data struct {
+				Supported []string `json:"supported"`
+				Requested string   `json:"requested"`
+			} `json:"data"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response), "body=%s", w.Body.String())
+	require.JSONEq(t, `null`, string(response.ID))
+	require.Equal(t, oops.MCPCodeUnsupportedProtocolVersion, response.Error.Code)
+	require.Equal(t, supported, response.Error.Data.Supported)
+	require.Equal(t, requested, response.Error.Data.Requested)
 }
 
 // TestServePublic_InitializeBodyWinsOverNonconformingHeader pins which source
@@ -1090,7 +1126,7 @@ func TestServePublic_InitializeBodyWinsOverNonconformingHeader(t *testing.T) {
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-header-mcp")
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(mcpversions.Version20251125), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20260728,
+		mcpversions.HTTPHeader: mcpversions.Version20250326,
 	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -1107,7 +1143,7 @@ func carriedProtocolVersion(t *testing.T, ctx context.Context, ti *testInstance,
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "tools/list",
+		"method":  mcpversions.MethodToolsList,
 		"params":  map[string]any{},
 	})
 	require.NoError(t, err)
@@ -1145,7 +1181,7 @@ func TestServePublic_CarriesSupportedDeclarationToTheErrorWrapper(t *testing.T) 
 // the provisional half of unsupported-version handling. The request is
 // rejected before dispatch, but the shared error wrapper still needs a
 // supported revision for compatibility-safe encoding; publishing the raw
-// declaration would claim Gram agreed to speak a revision it rejected.
+// declaration would claim Speakeasy agreed to speak a revision it rejected.
 func TestServePublic_UnsupportedDeclarationCarriesFallbackForErrorEncoding(t *testing.T) {
 	t.Parallel()
 
@@ -1157,7 +1193,5 @@ func TestServePublic_UnsupportedDeclarationCarriesFallbackForErrorEncoding(t *te
 
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "carried-resolved-version")
 
-	require.NotContains(t, mcpversions.SupportedHostedToolset(), mcpversions.Version20260728,
-		"this test's premise is that the declared revision is unsupported")
-	require.Equal(t, mcpversions.DefaultInEffect, carriedProtocolVersion(t, ctx, ti, toolset.McpSlug.String, mcpversions.Version20260728))
+	require.Equal(t, mcpversions.DefaultInEffect, carriedProtocolVersion(t, ctx, ti, toolset.McpSlug.String, unservedProtocolVersion))
 }

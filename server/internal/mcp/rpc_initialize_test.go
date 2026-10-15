@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestParseInitializeParams(t *testing.T) {
@@ -141,12 +141,13 @@ func (failingRow) Scan(...any) error { return errNoDatabaseInTest }
 // write-back: after negotiation the payload's resolution must carry the
 // negotiated revision rather than the provisional entry-time default, because
 // consumers downstream of dispatch read the in-effect revision from there.
-// The failing repositories exercise the documented tolerance of the
+// The failing metadata repository exercises the documented tolerance of the
 // instructions lookup, which must not affect the handshake.
 func TestHandleInitialize_WritesNegotiatedVersionBackIntoPayload(t *testing.T) {
 	t.Parallel()
 
 	store, payload := newClientIdentityFixture(t)
+	payload.toolsetID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	require.Equal(t, mcpversions.DefaultInEffect, payload.protocolVersion.InEffect)
 
 	rawParams, err := json.Marshal(map[string]any{
@@ -159,11 +160,11 @@ func TestHandleInitialize_WritesNegotiatedVersionBackIntoPayload(t *testing.T) {
 	req := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      mcpjsonrpc.NumberID(1),
-		Method:  "initialize",
+		Method:  mcpversions.MethodInitialize,
 		Params:  rawParams,
 	}
 
-	body, err := handleInitialize(t.Context(), testenv.NewLogger(t), nil, req, payload, nil, toolsets_repo.New(failingDBTX{}), metadata_repo.New(failingDBTX{}), store)
+	body, err := handleInitialize(t.Context(), testenv.NewLogger(t), nil, req, payload, nil, metadata_repo.New(failingDBTX{}), store)
 	require.NoError(t, err)
 
 	require.Equal(t, mcpversions.Version20251125, payload.protocolVersion.InEffect)

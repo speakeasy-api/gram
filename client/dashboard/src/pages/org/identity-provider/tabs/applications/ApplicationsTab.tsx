@@ -23,6 +23,7 @@ import { useIdentityProviderConnectionApplications } from "@gram/client/react-qu
 import { useSyncIdentityProviderConnectionApplicationsMutation } from "@gram/client/react-query/syncIdentityProviderConnectionApplications.js";
 
 import { ConnectionGate } from "../../ConnectionGate";
+import { OktaServerSuggestions } from "./OktaServerSuggestions";
 import {
   applicationStatusVariant,
   humanizeOktaToken,
@@ -420,7 +421,10 @@ export function ApplicationsTab({
       icon="layout-grid"
       purpose="to view your Okta applications"
     >
-      <ApplicationsSnapshot connection={connection} />
+      <div className="flex min-w-0 flex-col gap-10">
+        <OktaServerSuggestions />
+        <ApplicationsSnapshot connection={connection} />
+      </div>
     </ConnectionGate>
   );
 }

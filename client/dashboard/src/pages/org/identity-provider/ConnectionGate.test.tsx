@@ -33,7 +33,7 @@ describe("ConnectionGate", () => {
         screen
           .getByRole("link", { name: "Go to Okta setup" })
           .getAttribute("href"),
-      ).toBe("/?tab=enterprise-managed-auth&provider=okta&view=setup");
+      ).toBe("/?tab=identity-providers&provider=okta&view=setup");
       expect(screen.queryByText("Tab content")).toBeNull();
     },
   );
@@ -53,7 +53,7 @@ describe("ConnectionGate", () => {
       screen
         .getByRole("link", { name: "Re-verify the connection" })
         .getAttribute("href"),
-    ).toBe("/?tab=enterprise-managed-auth&provider=okta&view=setup#connection");
+    ).toBe("/?tab=identity-providers&provider=okta&view=setup#connection");
   });
 
   it.each(["dpop_not_bound", "read_failed:okta.apps.read"] as const)(

@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ChatParticipant,
+  ChatParticipant$inboundSchema,
+} from "./chatparticipant.js";
 
 export type ChatOverview = {
   /**
@@ -17,6 +21,10 @@ export type ChatOverview = {
    * Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
    */
   accountType?: string | undefined;
+  /**
+   * The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity
+   */
+  assistantAgentId?: string | undefined;
   /**
    * The ID of the assistant that produced this chat, if any
    */
@@ -54,6 +62,10 @@ export type ChatOverview = {
    */
   originatingClient?: string | undefined;
   /**
+   * Distinct observed conversation participants across the session.
+   */
+  participants?: Array<ChatParticipant> | undefined;
+  /**
    * True when the chat is pinned
    */
   pinned?: boolean | undefined;
@@ -61,6 +73,18 @@ export type ChatOverview = {
    * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
+  /**
+   * Observed Slack channel associated with this session.
+   */
+  slackChannelId?: string | undefined;
+  /**
+   * Observed Slack channel name as reported by the captured envelope.
+   */
+  slackChannelName?: string | undefined;
+  /**
+   * Observed Slack workspace associated with this session.
+   */
+  slackTeamId?: string | undefined;
   /**
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
@@ -113,6 +137,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
     z.object({
       account_email: z.optional(z.string()),
       account_type: z.optional(z.string()),
+      assistant_agent_id: z.optional(z.string()),
       assistant_id: z.optional(z.string()),
       assistant_name: z.optional(z.string()),
       created_at: z.pipe(
@@ -128,8 +153,12 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
       litellm_proxied: z.optional(z.boolean()),
       num_messages: z.int(),
       originating_client: z.optional(z.string()),
+      participants: z.optional(z.array(ChatParticipant$inboundSchema)),
       pinned: z.optional(z.boolean()),
       risk_findings_count: z.optional(z.int()),
+      slack_channel_id: z.optional(z.string()),
+      slack_channel_name: z.optional(z.string()),
+      slack_team_id: z.optional(z.string()),
       source: z.optional(z.string()),
       summary: z.optional(z.string()),
       summary_generated_at: z.optional(
@@ -151,6 +180,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
       return remap$(v, {
         "account_email": "accountEmail",
         "account_type": "accountType",
+        "assistant_agent_id": "assistantAgentId",
         "assistant_id": "assistantId",
         "assistant_name": "assistantName",
         "created_at": "createdAt",
@@ -160,6 +190,9 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         "num_messages": "numMessages",
         "originating_client": "originatingClient",
         "risk_findings_count": "riskFindingsCount",
+        "slack_channel_id": "slackChannelId",
+        "slack_channel_name": "slackChannelName",
+        "slack_team_id": "slackTeamId",
         "summary_generated_at": "summaryGeneratedAt",
         "total_cost": "totalCost",
         "total_input_tokens": "totalInputTokens",

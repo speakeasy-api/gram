@@ -3,19 +3,16 @@ import { Badge } from "@/components/ui/Badge";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
-import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpUrl, useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { MCPToolsetIcon } from "./MCPToolsetIcon";
 import { AlertTriangleIcon, Link2, Network } from "lucide-react";
-import { useMemo } from "react";
-import {
-  useCatalogIconMap,
-  useExternalMcpOAuthConfigStatus,
-} from "../sources/sources-hooks";
+import { useExternalMcpOAuthConfigStatus } from "../sources/sources-hooks";
 
 /**
  * The table rows of the /mcp listing: one per backend kind, mirroring the
@@ -62,23 +59,7 @@ export function MCPTableRow({
 }): JSX.Element {
   const routes = useRoutes();
   const { url: mcpUrl } = useMcpUrl(toolset);
-  const catalogIconMap = useCatalogIconMap();
-  const { data: deploymentResult } = useLatestDeployment();
   const oauthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
-
-  const externalMcpLogoUrl = useMemo(() => {
-    const externalMcpUrn = toolset.toolUrns?.find((urn) =>
-      urn.includes(":externalmcp:"),
-    );
-    const slug = externalMcpUrn?.split(":")[2];
-    if (!slug) return undefined;
-    const matchingMcp = deploymentResult?.deployment?.externalMcps?.find(
-      (mcp) => mcp.slug === slug,
-    );
-    return matchingMcp?.registryServerSpecifier
-      ? catalogIconMap.get(matchingMcp.registryServerSpecifier)
-      : undefined;
-  }, [toolset.toolUrns, catalogIconMap, deploymentResult]);
 
   // A server still waiting on OAuth setup opens on that step, as the card does.
   const href =
@@ -102,15 +83,11 @@ export function MCPTableRow({
       href={href}
       ariaLabel={`Open MCP server ${toolset.name}`}
       icon={
-        externalMcpLogoUrl ? (
-          <img
-            src={externalMcpLogoUrl}
-            alt={toolset.name}
-            className="h-6 w-6 object-contain"
-          />
-        ) : (
-          <Network className="text-muted-foreground h-5 w-5" />
-        )
+        <MCPToolsetIcon
+          toolset={toolset}
+          className="h-6 w-6"
+          fallbackClassName="h-5 w-5"
+        />
       }
     >
       <NameCell name={toolset.name}>
@@ -163,11 +140,16 @@ export function MCPTableRow({
 /** A Gateway Endpoint: a meta MCP server fronting member servers. */
 export function GatewayTableRow({
   gateway,
+  endpoints,
+  isLoadingEndpoints,
 }: {
   gateway: MetaMcpServer;
+  endpoints: McpEndpoint[];
+  isLoadingEndpoints: boolean;
 }): JSX.Element {
   const routes = useRoutes();
   const memberCount = gateway.memberCount ?? 0;
+  const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
   return (
     <DotRow
       href={routes.mcp.gateway.overview.href(gateway.id)}
@@ -178,12 +160,27 @@ export function GatewayTableRow({
       <td className={CELL}>
         <Badge variant="neutral">Gateway</Badge>
       </td>
-      {/* A gateway's address is minted per endpoint, not per gateway, so
-          there is nothing to show at the listing level. */}
-      <td className={CELL}>
-        <Text small muted>
-          —
-        </Text>
+      <td className={`max-w-xs ${CELL}`}>
+        {mcpUrl ? (
+          <div
+            className="relative z-20 flex items-center gap-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text small muted className="truncate font-mono text-xs">
+              {mcpUrl.replace(/^https?:\/\//, "")}
+            </Text>
+            <CopyButton
+              text={mcpUrl}
+              size="sm"
+              icon={Link2}
+              tooltip="Copy MCP URL"
+            />
+          </div>
+        ) : (
+          <Text small muted>
+            —
+          </Text>
+        )}
       </td>
       <td className={CELL}>
         <Text small muted>

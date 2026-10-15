@@ -45,6 +45,7 @@ type Server struct {
 	ListResourceAudience                 http.Handler
 	SetResourceAudience                  http.Handler
 	ListAudienceOptions                  http.Handler
+	ExplainResourceAccess                http.Handler
 	RequestAccess                        http.Handler
 	ListChallenges                       http.Handler
 	ListChallengeBuckets                 http.Handler
@@ -105,6 +106,7 @@ func New(
 			{"ListResourceAudience", "GET", "/rpc/access.listResourceAudience"},
 			{"SetResourceAudience", "POST", "/rpc/access.setResourceAudience"},
 			{"ListAudienceOptions", "GET", "/rpc/access.listAudienceOptions"},
+			{"ExplainResourceAccess", "GET", "/rpc/access.explainResourceAccess"},
 			{"RequestAccess", "POST", "/rpc/access.requestAccess"},
 			{"ListChallenges", "GET", "/rpc/access.listChallenges"},
 			{"ListChallengeBuckets", "GET", "/rpc/access.listChallengeBuckets"},
@@ -137,6 +139,7 @@ func New(
 		ListResourceAudience:                 NewListResourceAudienceHandler(e.ListResourceAudience, mux, decoder, encoder, errhandler, formatter),
 		SetResourceAudience:                  NewSetResourceAudienceHandler(e.SetResourceAudience, mux, decoder, encoder, errhandler, formatter),
 		ListAudienceOptions:                  NewListAudienceOptionsHandler(e.ListAudienceOptions, mux, decoder, encoder, errhandler, formatter),
+		ExplainResourceAccess:                NewExplainResourceAccessHandler(e.ExplainResourceAccess, mux, decoder, encoder, errhandler, formatter),
 		RequestAccess:                        NewRequestAccessHandler(e.RequestAccess, mux, decoder, encoder, errhandler, formatter),
 		ListChallenges:                       NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
 		ListChallengeBuckets:                 NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
@@ -176,6 +179,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListResourceAudience = m(s.ListResourceAudience)
 	s.SetResourceAudience = m(s.SetResourceAudience)
 	s.ListAudienceOptions = m(s.ListAudienceOptions)
+	s.ExplainResourceAccess = m(s.ExplainResourceAccess)
 	s.RequestAccess = m(s.RequestAccess)
 	s.ListChallenges = m(s.ListChallenges)
 	s.ListChallengeBuckets = m(s.ListChallengeBuckets)
@@ -214,6 +218,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListResourceAudienceHandler(mux, h.ListResourceAudience)
 	MountSetResourceAudienceHandler(mux, h.SetResourceAudience)
 	MountListAudienceOptionsHandler(mux, h.ListAudienceOptions)
+	MountExplainResourceAccessHandler(mux, h.ExplainResourceAccess)
 	MountRequestAccessHandler(mux, h.RequestAccess)
 	MountListChallengesHandler(mux, h.ListChallenges)
 	MountListChallengeBucketsHandler(mux, h.ListChallengeBuckets)
@@ -1590,6 +1595,59 @@ func NewListAudienceOptionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listAudienceOptions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountExplainResourceAccessHandler configures the mux to serve the "access"
+// service "explainResourceAccess" endpoint.
+func MountExplainResourceAccessHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.explainResourceAccess", f)
+}
+
+// NewExplainResourceAccessHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "explainResourceAccess" endpoint.
+func NewExplainResourceAccessHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeExplainResourceAccessRequest(mux, decoder)
+		encodeResponse = EncodeExplainResourceAccessResponse(encoder)
+		encodeError    = EncodeExplainResourceAccessError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "explainResourceAccess")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

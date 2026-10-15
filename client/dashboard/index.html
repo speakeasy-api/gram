@@ -2,10 +2,22 @@
 <html lang="en" class="dark:scheme-dark">
   <head>
     <meta charset="UTF-8" />
-    <!-- The SVG adapts to the browser color scheme on its own; the .ico is the
-         fallback for browsers that don't render SVG favicons. -->
+    <!-- Slack's link-preview proxy rejects SVG (HTTP 415) and then draws a
+         broken image beside the site name. The PNG listed first is an opaque
+         tile, so the mark stays visible on Slack's light and dark themes.
+         favicon.png is a black glyph on transparency and disappears in dark
+         mode. Browsers that support SVG favicons still select favicon.svg,
+         which adapts to the tab-strip color scheme; the .ico covers browsers
+         that support neither. -->
+    <link
+      rel="icon"
+      href="/external/sticker-logo.png"
+      type="image/png"
+      sizes="300x300"
+    />
+    <link rel="apple-touch-icon" href="/external/sticker-logo.png" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
 
     <!-- Apply the theme class before first paint to avoid a flash of the
          wrong theme on load. Mirrors App.tsx (key: "preferred-theme",

@@ -11,6 +11,8 @@ export type DiscoveredEndpoints = {
   jwksUri: string;
   scopesSupported: string[];
   grantTypesSupported: string[];
+  // RFC 7523bis profiles; the ID-JAG profile gates identity chaining.
+  authorizationGrantProfilesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
   // PKCE methods (RFC 8414 code_challenge_methods_supported). Unlike the
@@ -60,7 +62,7 @@ export function parseScopes(raw: string): string[] {
 }
 
 // DCR callers leave private_key_jwt disabled because a newly registered client
-// cannot already have Gram's JWKS attached. Existing-client settings opt in
+// cannot already have Speakeasy's JWKS attached. Existing-client settings opt in
 // after the key set has been attached through its dedicated endpoint.
 export function narrowTokenEndpointAuthMethod(
   value: string | null | undefined,
@@ -99,23 +101,6 @@ export function clientSecretUpdateValue(
 ): string | undefined {
   if (isPrivateKeyJwtAuthMethod(method)) return undefined;
   return secret.trim() || undefined;
-}
-
-// Picks the preferred auth method from the issuer's advertised list.
-// Preference order: client_secret_basic > client_secret_post > none.
-// Falls back to client_secret_basic when the issuer advertises no recognized
-// method, so DCR always sends one — upstreams that require an explicit method
-// reject a registration that omits it ("No supported Token Endpoint Auth
-// Method provided."). This fallback was the pre-#2910 server-side default.
-export function pickPreferredAuthMethod(
-  supported: string[],
-): CreateRemoteSessionClientFormTokenEndpointAuthMethod {
-  const { ClientSecretBasic, ClientSecretPost, None } =
-    CreateRemoteSessionClientFormTokenEndpointAuthMethod;
-  for (const preferred of [ClientSecretBasic, ClientSecretPost, None]) {
-    if (supported.includes(preferred)) return preferred;
-  }
-  return ClientSecretBasic;
 }
 
 // Derive a unique slug from the Issuer URL's hostname. Mirrors the hyphen-style
@@ -157,7 +142,7 @@ export function deriveNameFromUrl(url: string): string | null {
 // UI-only choice that routes to the matching create endpoint: DCR proxies a
 // registration to obtain credentials, Manual takes caller-supplied
 // credentials, and CIMD (Client ID Metadata Document) creates a
-// credential-less client whose client_id is a Gram-hosted document URL.
+// credential-less client whose client_id is a Speakeasy-hosted document URL.
 export type ClientType = "dcr" | "manual" | "cimd";
 
 export const TUNNELED_DCR_PERMISSION_MESSAGE =
@@ -226,4 +211,18 @@ export function clientTypeHelp(
       return help;
     }
   }
+}
+
+// legacyCallbackURL is the callback clients registered before
+// /mcp/remote_login_callback existed, on the same origin as the client's
+// current callbackURL (the server reports it per client, since a client keeps
+// the origin it was registered with). The server still mounts it and forwards
+// into the current callback, for clients in legacy callback compatibility mode.
+export function legacyCallbackURL(callbackURL: string): string {
+  // Swap only the path: URL.origin would drop an explicit default port the
+  // server keeps.
+  return callbackURL.replace(
+    /\/mcp\/remote_login_callback$/,
+    "/oauth/callback",
+  );
 }

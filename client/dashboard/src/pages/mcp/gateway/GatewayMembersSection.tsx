@@ -80,6 +80,7 @@ import {
   useReconcileWrappers,
 } from "./useGatewayMemberRows";
 import { useToolsets } from "../../toolsets/useToolsets";
+import { memberWrappers } from "./ensureToolsetWrapper";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
   hosted: "Hosted",
@@ -342,9 +343,11 @@ export function GatewayMembersSection({
             const findWrapper = async () => {
               // Read from the server, not the picker cache: a previous create
               // may have committed even when its response never reached us.
-              const { mcpServers } = await client.mcpServers.list({
-                toolsetId: toolset.id,
-              });
+              const mcpServers = memberWrappers(
+                (await client.mcpServers.list({ toolsetId: toolset.id }))
+                  .mcpServers,
+                toolset.id,
+              );
               if (mcpServers.length > 1) {
                 throw new Error(
                   "Multiple servers use this source. Select the intended existing server.",
@@ -768,6 +771,27 @@ export function AddServersSheet({
   const selectedValues = selectedCandidates.map((candidate) =>
     candidateKey(candidate, wrappers),
   );
+  const selectableValues = visibleOptions
+    .filter((option) => !option.disabled)
+    .map((option) => option.value);
+  const allSelected =
+    selectableValues.length > 0 &&
+    selectableValues.every((value) => selectedValues.includes(value));
+  const canSelectAll =
+    !isLoading &&
+    !loadFailed &&
+    !toolsetsLoading &&
+    selectableValues.length > 0;
+  const toggleSelectAll = () =>
+    setSelected((previous) => {
+      const rest = previous.filter(
+        (value) => !selectableValues.includes(value),
+      );
+      const everySelected = selectableValues.every((value) =>
+        previous.includes(value),
+      );
+      return everySelected ? rest : [...rest, ...selectableValues];
+    });
   const submit = async () => {
     if (
       submittingRef.current ||
@@ -832,7 +856,7 @@ export function AddServersSheet({
     {
       label: "Hosted remotely",
       description:
-        "Add a server that already runs elsewhere by its URL, proxied through Gram.",
+        "Add a server that already runs elsewhere by its URL, proxied through Speakeasy.",
       Icon: Cloud,
       group: "Recommended",
       href:
@@ -1009,9 +1033,23 @@ export function AddServersSheet({
             aria-labelledby="add-existing-server"
             className="space-y-4 border-t pt-4"
           >
-            <Text as="h3" id="add-existing-server" variant="subheading">
-              Add existing servers
-            </Text>
+            <div className="flex items-center justify-between gap-3">
+              <Text as="h3" id="add-existing-server" variant="subheading">
+                Add existing servers
+              </Text>
+              {canSelectAll && (
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  disabled={busy}
+                  onClick={toggleSelectAll}
+                >
+                  <Button.Text>
+                    {allSelected ? "Clear selection" : "Select all"}
+                  </Button.Text>
+                </Button>
+              )}
+            </div>
             <label ref={searchContainerRef} className="block">
               <span className="sr-only">Search existing servers</span>
               <SearchBar

@@ -2,16 +2,14 @@ package jsonwebkeysets
 
 import (
 	"context"
-	"crypto"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
 
-	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/internal/jwk"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
@@ -105,6 +103,9 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading external key").LogError(ctx, logger)
 	}
 
+	if row.EmaIssuerManaged {
+		return nil, oops.E(oops.CodeForbidden, nil, "enterprise authorization issuer keys are managed by Speakeasy")
+	}
 	if row.ExternalKey.Provider != externalKeyProviderGcpKms {
 		return nil, oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
 	}
@@ -115,7 +116,7 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 		return nil, oops.E(oops.CodeUnexpected, nil, "gcp kms key is missing its resource name").LogError(ctx, logger)
 	}
 
-	// The recorded algorithm is what Gram advertises and signs with, so it is
+	// The recorded algorithm is what Speakeasy advertises and signs with, so it is
 	// the expectation the key is measured against. It comes back out of a text
 	// column, where a bare conversion would accept anything the column holds.
 	want, err := gcpkms.ParseSignatureAlgorithm(row.ExternalKey.Algorithm)
@@ -137,7 +138,7 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 	}
 
 	// TokenSource alone proves nothing: it is lazy by design, so resolving the
-	// principal first is what separates "Gram cannot assume this identity" (a
+	// principal first is what separates "Speakeasy cannot assume this identity" (a
 	// grant the customer must add) from a key-level permission problem.
 	if _, err := s.gcpIdentity.ResolvePrincipal(ctx, credential); err != nil {
 		logger.InfoContext(ctx, "jwks mint could not assume the credential's identity", attr.SlogError(err))
@@ -186,35 +187,22 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 
 // BuildPublishedJWK returns the RFC 7638 thumbprint kid and the JWK document.
 func BuildPublishedJWK(public *gcpkms.PublicKey) (string, []byte, error) {
-	jwk := jose.JSONWebKey{
-		Key:                         public.Key,
-		KeyID:                       "",
-		Algorithm:                   string(public.Algorithm),
-		Use:                         "sig",
-		Certificates:                nil,
-		CertificatesURL:             nil,
-		CertificateThumbprintSHA1:   nil,
-		CertificateThumbprintSHA256: nil,
-	}
-
-	thumbprint, err := jwk.Thumbprint(crypto.SHA256)
+	key, err := jwk.NewPublicKey(public.Key, public.Algorithm)
 	if err != nil {
-		return "", nil, fmt.Errorf("derive key thumbprint: %w", err)
+		return "", nil, fmt.Errorf("build public jwk: %w", err)
 	}
 
-	jwk.KeyID = base64.RawURLEncoding.EncodeToString(thumbprint)
-
-	doc, err := jwk.MarshalJSON()
+	doc, err := key.MarshalJSON()
 	if err != nil {
 		return "", nil, fmt.Errorf("encode public jwk: %w", err)
 	}
 
-	return jwk.KeyID, doc, nil
+	return key.KeyID, doc, nil
 }
 
 // mintPublicKeyError maps a GetPublicKey failure onto an error code by the same
 // classification the verify probe uses: transient provider trouble is a
-// gateway error worth retrying, unrecognised failures are Gram's to
+// gateway error worth retrying, unrecognised failures are Speakeasy's to
 // investigate, and everything else names something the key's owner can fix.
 func (s *Service) mintPublicKeyError(ctx context.Context, logger *slog.Logger, err error) error {
 	detail := conv.TruncateDetail(err.Error(), mintDetailMaxLen)

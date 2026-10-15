@@ -24,10 +24,27 @@ type MCPScope struct {
 }
 
 // MCPServerScope selects one MCP server or gateway. A nil Tools slice follows
-// the policy tool rule; a non-nil slice is a custom tool selection.
+// the policy tool rule; AllToolsWildcard matches every tool unconditionally,
+// ignoring the tool rule; any other non-nil slice is a custom tool selection.
 type MCPServerScope struct {
 	MCPServerID uuid.UUID `json:"mcp_server_id"`
 	Tools       []string  `json:"tools,omitempty"`
+}
+
+// AllToolsWildcard is the sole element of a Tools slice that selects every
+// tool on a server, unconditionally. NormalizeMCPScope maps an empty input
+// tool list onto this sentinel rather than storing an empty slice: Go's
+// omitempty JSON tag collapses nil and empty-slice to the same absent key,
+// so an empty slice could never survive a stored round-trip as "all tools"
+// distinct from "omitted, follow the tool rule" — and unmarshalMCPScope
+// treats a literal empty-but-non-nil Tools as corruption and fails the whole
+// scope closed. The wildcard is a real, non-empty value, so it survives
+// storage and does not trip that guard.
+const AllToolsWildcard = "*"
+
+// isAllToolsWildcard reports whether tools is exactly the wildcard sentinel.
+func isAllToolsWildcard(tools []string) bool {
+	return len(tools) == 1 && tools[0] == AllToolsWildcard
 }
 
 // Applies reports whether a policy scope applies to a concrete MCP server and
@@ -60,6 +77,9 @@ func (s *MCPScope) toolMatches(server MCPServerScope, toolName string, annotatio
 		return true
 	}
 	if server.Tools != nil {
+		if isAllToolsWildcard(server.Tools) {
+			return true
+		}
 		return slices.Contains(server.Tools, toolName)
 	}
 	return s.toolRuleMatches(toolName, annotations)
@@ -101,8 +121,6 @@ type Policy struct {
 	Version                int64
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
-	PendingMessages        *int64
-	TotalMessages          *int64
 }
 
 // DetectionScope is one category's message-level detection scope.
@@ -118,12 +136,6 @@ type ModelConfig struct {
 	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
 
-// Progress describes the message-analysis progress attached to single-policy reads.
-type Progress struct {
-	Total    int64
-	Analyzed int64
-}
-
 // AuditSnapshot strips policy content that must not enter audit or outbox
 // telemetry while preserving the administrative fields needed for change logs.
 func AuditSnapshot(policy Policy) Policy {
@@ -132,15 +144,7 @@ func AuditSnapshot(policy Policy) Policy {
 }
 
 // Project maps a database policy row into its canonical transport-neutral form.
-func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Progress) Policy {
-	var pendingMessages, totalMessages *int64
-	if progress != nil {
-		total := progress.Total
-		pending := max(progress.Total-progress.Analyzed, 0)
-		totalMessages = &total
-		pendingMessages = &pending
-	}
-
+func Project(row repo.RiskPolicy, audiencePrincipalURNs []string) Policy {
 	audience := slices.Clone(audiencePrincipalURNs)
 	if audience == nil {
 		audience = []string{}
@@ -174,8 +178,6 @@ func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Prog
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time,
 		UpdatedAt:              row.UpdatedAt.Time,
-		PendingMessages:        pendingMessages,
-		TotalMessages:          totalMessages,
 	}
 }
 

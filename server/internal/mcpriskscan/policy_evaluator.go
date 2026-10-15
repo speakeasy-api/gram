@@ -15,6 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -31,6 +33,16 @@ const (
 
 	// FailClosed denies requests when block policy evaluation is indeterminate.
 	FailClosed FailMode = "closed"
+)
+
+const (
+	// mcpFindingEvidenceStoreTimeout bounds secondary evidence persistence
+	// without extending the policy evaluation deadline.
+	mcpFindingEvidenceStoreTimeout = time.Second
+
+	// mcpPayloadStorageLookupTimeout bounds the payload storage setting lookup
+	// on its own so a slow lookup cannot consume the evidence store budget.
+	mcpPayloadStorageLookupTimeout = 250 * time.Millisecond
 )
 
 // PolicyConfig controls bounded MCP policy evaluation.
@@ -54,7 +66,7 @@ var DefaultPolicyConfig = PolicyConfig{
 
 // PolicyLookup resolves enabled policies for one concrete MCP subject.
 type PolicyLookup interface {
-	ListEnabledForMCPServer(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, toolName string) ([]policycore.Policy, error)
+	ListEnabledForMCP(ctx context.Context, organizationID string, projectID uuid.UUID, target policycore.MCPTarget) ([]policycore.Policy, error)
 }
 
 // PolicyDetector runs one policy through the shared synchronous detector set.
@@ -62,15 +74,39 @@ type PolicyDetector interface {
 	ScanMCPPolicy(ctx context.Context, policy policycore.Policy, request risk.MCPScanRequest) ([]scanners.Finding, error)
 }
 
+// MCPFindingEvidenceWriter stores raw matches for published findings.
+type MCPFindingEvidenceWriter interface {
+	Store(context.Context, risk.MCPFindingEvidenceBatch) error
+}
+
+// PolicyEvaluatorOption configures optional evaluator dependencies.
+type PolicyEvaluatorOption func(*policyEvaluator)
+
+// PayloadStorageCheck reports whether an organization allows storing scanned
+// tool payloads.
+type PayloadStorageCheck = func(ctx context.Context, organizationID string) (bool, error)
+
+// WithMCPFindingEvidenceWriter enables encrypted evidence persistence. Scanned
+// payloads are stored only for organizations payloadStorage admits.
+func WithMCPFindingEvidenceWriter(writer MCPFindingEvidenceWriter, payloadStorage PayloadStorageCheck) PolicyEvaluatorOption {
+	return func(evaluator *policyEvaluator) {
+		evaluator.evidenceWriter = writer
+		evaluator.payloadStorage = payloadStorage
+	}
+}
+
 type policyEvaluator struct {
-	logger     *slog.Logger
-	lookup     PolicyLookup
-	detector   PolicyDetector
-	publisher  gcp.Publisher[*riskv1.Finding]
-	config     PolicyConfig
-	flagSlots  chan struct{}
-	flagScans  sync.WaitGroup
-	onFlagDrop func(context.Context, Event)
+	logger          *slog.Logger
+	lookup          PolicyLookup
+	detector        PolicyDetector
+	publisher       gcp.Publisher[*riskv1.Finding]
+	evidenceWriter  MCPFindingEvidenceWriter
+	payloadStorage  PayloadStorageCheck
+	config          PolicyConfig
+	flagSlots       chan struct{}
+	flagScans       sync.WaitGroup
+	onFlagDrop      func(context.Context, Event)
+	onFlagOversized func(context.Context, Event)
 }
 
 // NewPolicyEvaluator creates an evaluator that enforces block policies inline
@@ -83,6 +119,7 @@ func NewPolicyEvaluator(
 	detector PolicyDetector,
 	publisher gcp.Publisher[*riskv1.Finding],
 	config PolicyConfig,
+	options ...PolicyEvaluatorOption,
 ) *Evaluator {
 	if config.Deadline <= 0 {
 		config.Deadline = DefaultPolicyConfig.Deadline
@@ -95,16 +132,23 @@ func NewPolicyEvaluator(
 	}
 	evaluator := newInstrumentedEvaluator(nil, tracerProvider, meterProvider, logger)
 	policy := &policyEvaluator{
-		logger:     logger,
-		lookup:     lookup,
-		detector:   detector,
-		publisher:  publisher,
-		config:     config,
-		flagSlots:  make(chan struct{}, config.FlagConcurrency),
-		flagScans:  sync.WaitGroup{},
-		onFlagDrop: nil,
+		logger:          logger,
+		lookup:          lookup,
+		detector:        detector,
+		publisher:       publisher,
+		evidenceWriter:  nil,
+		payloadStorage:  nil,
+		config:          config,
+		flagSlots:       make(chan struct{}, config.FlagConcurrency),
+		flagScans:       sync.WaitGroup{},
+		onFlagDrop:      nil,
+		onFlagOversized: nil,
+	}
+	for _, option := range options {
+		option(policy)
 	}
 	policy.onFlagDrop = evaluator.metrics.recordFlagDrop
+	policy.onFlagOversized = evaluator.metrics.recordFlagOversized
 	evaluator.policy = policy
 	return evaluator
 }
@@ -113,44 +157,71 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 	event := subject.Event
 	projectID, err := uuid.Parse(event.ProjectID)
 	if err != nil {
-		return p.resolveIndeterminate(ctx, fmt.Errorf("parse project id: %w", err))
+		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("parse project id: %w", err))
 	}
 	serverID := uuid.Nil
 	if event.ServerID != "" {
 		serverID, err = uuid.Parse(event.ServerID)
 		if err != nil {
-			return p.resolveIndeterminate(ctx, fmt.Errorf("parse MCP server id: %w", err))
+			return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("parse MCP server id: %w", err))
 		}
 	}
 
 	scanCtx, cancel := context.WithTimeout(ctx, p.config.Deadline)
 	defer cancel()
-	policies, err := p.lookup.ListEnabledForMCPServer(scanCtx, event.OrganizationID, projectID, serverID, event.ToolName)
+	policies, err := p.lookup.ListEnabledForMCP(scanCtx, event.OrganizationID, projectID, policycore.MCPTarget{
+		ServerID:        serverID,
+		ToolName:        event.ToolName,
+		ToolAnnotations: event.ToolAnnotations,
+		PlatformToolset: event.Surface == SurfacePlatformMCP,
+		Principal:       audiencePrincipal(event.Principal()),
+	})
 	if err != nil {
-		return p.resolveIndeterminate(ctx, fmt.Errorf("list MCP policies: %w", err))
+		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("list MCP policies: %w", err))
 	}
 	if len(policies) == 0 {
 		return Allow()
 	}
 
 	blockPolicies, flagPolicies := partitionPolicies(policies)
-	defer p.scheduleFlagLane(ctx, subject, flagPolicies)
+	payloadSettled := false
+	defer func() { p.scheduleFlagLane(ctx, subject, flagPolicies, payloadSettled) }()
 	if len(blockPolicies) == 0 {
 		return Allow()
 	}
 	if subject.Payload.Availability() != PayloadAvailable {
-		return p.resolveIndeterminate(ctx, fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
+		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
 	}
 
-	match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, policyScanRequest(subject, subject.Payload.Bytes()))
+	request := policyScanRequest(subject, subject.Payload.Bytes())
+	match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, request)
 	if match != nil {
-		p.publish(scanCtx, subject.Event, match.policy, match.findings, riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED)
-		return deniedDecision(match.policy, match.findings[0])
+		outcome := riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED
+		if event.Phase() == PhaseResponse {
+			outcome = riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD
+		}
+		payloadSettled = p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome, request.Text)
+		return deniedDecision(subject.Event.Phase(), match.policy, match.findings[0])
 	}
 	if scanErr != nil || scanCtx.Err() != nil {
-		return p.resolveIndeterminate(ctx, errors.Join(scanErr, scanCtx.Err()))
+		return p.resolveIndeterminate(ctx, event.Phase(), errors.Join(scanErr, scanCtx.Err()))
 	}
 	return Allow()
+}
+
+// audiencePrincipal maps validated provenance to the principal whose grants
+// select policies. Only user sessions and agents are authoritative; every
+// other caller is unattributed.
+func audiencePrincipal(identity mcpidentity.Identity) *policycore.MCPPrincipal {
+	principal := policycore.MCPPrincipal{UserID: "", AgentID: ""}
+	switch identity.Kind() {
+	case mcpidentity.KindUserSession:
+		principal.UserID = identity.UserID()
+	case mcpidentity.KindAgent:
+		principal.AgentID = identity.AgentID()
+	default:
+	}
+	return &principal
 }
 
 type blockMatch struct {
@@ -188,8 +259,20 @@ func (p *policyEvaluator) scanBlockPolicies(ctx context.Context, policies []poli
 	return match, scanErr
 }
 
-func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subject, policies []policycore.Policy) {
-	if len(policies) == 0 || subject.Payload.Availability() != PayloadAvailable {
+// scheduleFlagLane scans flag policies off the request path. payloadSettled
+// reports that the block lane already stored this phase's payload or found
+// its storage disallowed.
+func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subject, policies []policycore.Policy, payloadSettled bool) {
+	if len(policies) == 0 {
+		return
+	}
+	if subject.Payload.Availability() == PayloadOversized {
+		if p.onFlagOversized != nil {
+			p.onFlagOversized(parent, subject.Event)
+		}
+		return
+	}
+	if subject.Payload.Availability() != PayloadAvailable || len(subject.Payload.Bytes()) == 0 {
 		return
 	}
 	select {
@@ -206,10 +289,16 @@ func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subje
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), p.config.Deadline)
 		defer cancel()
 		request := policyScanRequest(subject, payload)
+		// Every policy scans the same text, so it is settled with the first
+		// persisted findings only.
+		unstoredPayload := request.Text
+		if payloadSettled {
+			unstoredPayload = ""
+		}
 		for _, policy := range policies {
 			findings, err := p.detector.ScanMCPPolicy(ctx, policy, request)
-			if len(findings) > 0 {
-				p.publish(ctx, subject.Event, policy, findings, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED)
+			if len(findings) > 0 && p.publish(ctx, subject.Event, policy, findings, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, unstoredPayload) {
+				unstoredPayload = ""
 			}
 			if err != nil {
 				p.logger.WarnContext(ctx, "MCP flag policy scan failed", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
@@ -232,10 +321,13 @@ func (p *policyEvaluator) drain(ctx context.Context) error {
 	}
 }
 
-func (p *policyEvaluator) publish(ctx context.Context, event Event, policy policycore.Policy, findings []scanners.Finding, outcome riskv1.Finding_EnforcementOutcome) {
+// publish emits findings and stores their evidence. A non-empty payload is
+// the scanned text, stored once per execution phase; publish reports whether
+// it is settled: persisted, or disallowed for the organization.
+func (p *policyEvaluator) publish(ctx context.Context, event Event, policy policycore.Policy, findings []scanners.Finding, outcome riskv1.Finding_EnforcementOutcome, payload string) bool {
 	if p.publisher == nil {
 		p.logger.WarnContext(ctx, "MCP policy findings publisher is unavailable", attr.SlogRiskPolicyID(policy.ID.String()))
-		return
+		return false
 	}
 	principal := event.Principal()
 	attribution := riskv1.Finding_Attribution_builder{
@@ -262,7 +354,7 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 		PrincipalKind:    &principalKind,
 		IdentityStamped:  &identityStamped,
 	}.Build()
-	_, _, err := scanners.PublishFindings(ctx, p.logger, p.publisher, scanners.FindingMetadata{
+	meta := scanners.FindingMetadata{
 		RequestID:         event.executionID,
 		ChatMessageID:     "",
 		ContentPartID:     "",
@@ -271,22 +363,74 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 		RiskPolicyID:      policy.ID.String(),
 		RiskPolicyVersion: policy.Version,
 		Shadow:            false,
-	}, findings, "MCP policy", scanners.WithFindingMCPContext(attribution, execution, outcome))
+	}
+	_, _, err := scanners.PublishFindings(ctx, p.logger, p.publisher, meta, findings, "MCP policy", scanners.WithFindingMCPContext(attribution, execution, outcome))
 	if err != nil {
 		p.logger.WarnContext(ctx, "failed to publish MCP policy findings", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
 	}
+	if p.evidenceWriter == nil {
+		return false
+	}
+	projectID, err := uuid.Parse(event.ProjectID)
+	if err != nil {
+		p.logger.WarnContext(ctx, "failed to parse MCP finding evidence project id", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
+		return false
+	}
+	ids := scanners.FindingIDs(meta, findings)
+	evidence := make([]risk.MCPFindingEvidence, 0, len(findings))
+	for i, finding := range findings {
+		evidence = append(evidence, risk.MCPFindingEvidence{ID: ids[i], Match: finding.Match})
+	}
+	disallowed := payload != "" && !p.payloadStorageAllowed(ctx, event.OrganizationID)
+	var scanned *risk.MCPExecutionPayload
+	if payload != "" && !disallowed {
+		scanned = &risk.MCPExecutionPayload{ExecutionID: event.ExecutionID(), Phase: event.Phase(), Payload: payload}
+	}
+	storeCtx, cancel := context.WithTimeout(ctx, mcpFindingEvidenceStoreTimeout)
+	defer cancel()
+	if err := p.evidenceWriter.Store(storeCtx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      projectID,
+		CreatedAt:      time.Now().UTC(),
+		Findings:       evidence,
+		Execution:      scanned,
+	}); err != nil {
+		p.logger.WarnContext(ctx, "failed to store MCP policy finding evidence", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
+		return disallowed
+	}
+	return disallowed || scanned != nil
 }
 
-func (p *policyEvaluator) resolveIndeterminate(ctx context.Context, err error) Decision {
+// payloadStorageAllowed fails closed: a lookup error keeps the payload out of
+// storage.
+func (p *policyEvaluator) payloadStorageAllowed(ctx context.Context, organizationID string) bool {
+	if p.payloadStorage == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, mcpPayloadStorageLookupTimeout)
+	defer cancel()
+	allowed, err := p.payloadStorage(ctx, organizationID)
+	if err != nil {
+		p.logger.WarnContext(ctx, "failed to check MCP payload storage setting", attr.SlogError(err))
+		return false
+	}
+	return allowed
+}
+
+func (p *policyEvaluator) resolveIndeterminate(ctx context.Context, phase string, err error) Decision {
 	p.logger.WarnContext(ctx, "MCP block policy evaluation was indeterminate", attr.SlogError(err), attr.SlogRiskEnforcementFailMode(string(p.config.FailMode)))
 	if p.config.FailMode == FailClosed {
+		userMessage := "This MCP request was blocked because its risk policy evaluation did not complete."
+		if phase == PhaseResponse {
+			userMessage = "This MCP result was withheld because its risk policy evaluation did not complete."
+		}
 		return Decision{
 			Disposition:   DispositionDeny,
 			PolicyID:      "",
 			PolicyName:    "",
 			RuleID:        "",
 			Description:   "MCP risk policy evaluation did not complete",
-			UserMessage:   "This MCP request was blocked because its risk policy evaluation did not complete.",
+			UserMessage:   userMessage,
 			Indeterminate: true,
 		}
 	}
@@ -308,8 +452,11 @@ func partitionPolicies(policies []policycore.Policy) (block, flag []policycore.P
 	return block, flag
 }
 
-func deniedDecision(policy policycore.Policy, finding scanners.Finding) Decision {
+func deniedDecision(phase string, policy policycore.Policy, finding scanners.Finding) Decision {
 	userMessage := fmt.Sprintf("This MCP request was blocked by risk policy %q.", policy.Name)
+	if phase == PhaseResponse {
+		userMessage = fmt.Sprintf("This MCP result was withheld by risk policy %q.", policy.Name)
+	}
 	if policy.UserMessage != nil && *policy.UserMessage != "" {
 		userMessage = *policy.UserMessage
 	}
@@ -326,11 +473,16 @@ func deniedDecision(policy policycore.Policy, finding scanners.Finding) Decision
 
 func policyScanRequest(subject Subject, payload []byte) risk.MCPScanRequest {
 	principal := subject.Event.Principal()
+	messageType := message.ToolRequest
+	if subject.Event.Phase() == PhaseResponse {
+		messageType = message.ToolResponse
+	}
 	return risk.MCPScanRequest{
-		Text:      string(payload),
-		ToolName:  subject.Event.ToolName,
-		ToolsetID: subject.Event.ToolsetID,
-		ServerID:  subject.Event.ServerID,
-		UserID:    principal.UserID(),
+		Text:        string(payload),
+		ToolName:    subject.Event.ToolName,
+		ToolsetID:   subject.Event.ToolsetID,
+		ServerID:    subject.Event.ServerID,
+		UserID:      principal.UserID(),
+		MessageType: messageType,
 	}
 }

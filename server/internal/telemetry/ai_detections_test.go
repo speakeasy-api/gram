@@ -1,9 +1,12 @@
 package telemetry
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
@@ -82,7 +85,9 @@ func TestUpsertAIDetectionsAcceptsEveryKnownCategory(t *testing.T) {
 	require.ElementsMatch(t, known, aiDetectionCategories,
 		"this write path and the scan-report ingest must accept the same categories")
 
+	queryErr := errors.New("detection lookup failed")
 	logger := NewStub(testenv.NewLogger(t))
+	logger.chConn = &aiDetectionQueryFailure{err: queryErr}
 	for _, category := range known {
 		detection := AIDetection{
 			OrganizationID: "org_test",
@@ -95,6 +100,18 @@ func TestUpsertAIDetectionsAcceptsEveryKnownCategory(t *testing.T) {
 			SeenAt:         time.Now().UTC(),
 		}
 		_, err := logger.UpsertAIDetections(t.Context(), []AIDetection{detection})
-		require.NoErrorf(t, err, "category %q must survive validation", category)
+		// Reaching the lookup proves the category passed both validators.
+		require.ErrorIsf(t, err, queryErr, "category %q must survive validation", category)
 	}
+}
+
+// aiDetectionQueryFailure stops valid writes at their first database lookup.
+// Other connection methods are deliberately unsupported.
+type aiDetectionQueryFailure struct {
+	driver.Conn
+	err error
+}
+
+func (c *aiDetectionQueryFailure) Query(context.Context, string, ...any) (driver.Rows, error) {
+	return nil, c.err
 }

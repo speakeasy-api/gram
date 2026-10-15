@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -29,8 +32,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // Rebuild the service with the same database and no process-local preparation
@@ -45,7 +46,7 @@ func restartPreparationService(t *testing.T, ti *testInstance) *remotesessions.S
 	origin, err := url.Parse(testServerURL)
 	require.NoError(t, err)
 	enc := testenv.NewEncryptionClient(t)
-	return remotesessions.NewService(logger, tracer, meter, ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, ti.envEntries, policy, nil, audit.NewLogger(), origin, remotesessions.NewIdentityCommitter(logger, ti.conn, enc, audit.NewLogger(), origin, policy, nil, nil), remotesessions.NewRefreshService(logger, meter, ti.conn, enc, policy, nil, ti.redisCache), ti.features)
+	return remotesessions.NewService(logger, tracer, meter, ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, ti.envEntries, policy, nil, audit.NewLogger(), origin, remotesessions.NewIdentityCommitter(logger, ti.conn, enc, audit.NewLogger(), origin, policy, nil, nil), remotesessions.NewRefreshService(logger, meter, ti.conn, enc, policy, nil, ti.redisCache), ti.features, nil)
 }
 func preparationDCRFixture(t *testing.T, endpoint string) (context.Context, *testInstance, remotesessions.PreparationInput, uuid.UUID) {
 	t.Helper()
@@ -142,6 +143,44 @@ func TestPreparationDCRIntegration_TimeoutRestartDoesNotReplay(t *testing.T) {
 	require.Equal(t, "indeterminate", afterCrash.State)
 	require.Equal(t, int32(1), posts.Load())
 }
+func TestPreparationDCRIntegration_GrantsOmittedRecordsCallbackOrigin(t *testing.T) {
+	t.Parallel()
+	const registrationOrigin = "https://registration.example.test"
+	var redirectURIs atomic.Value
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			RedirectURIs []string `json:"redirect_uris"`
+		}
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		redirectURIs.Store(request.RedirectURIs)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = fmt.Fprintf(w, `{"client_id":"omitted-grants-client","client_secret":"omitted-grants-secret","client_secret_expires_at":0,"redirect_uris":["%s/mcp/remote_login_callback"]}`, registrationOrigin)
+	}))
+	t.Cleanup(server.Close)
+	ctx, ti, in, _ := preparationDCRFixture(t, server.URL)
+	outbound, err := url.Parse(testServerURL)
+	require.NoError(t, err)
+	registration, err := url.Parse(registrationOrigin)
+	require.NoError(t, err)
+	service := restartPreparationService(t, ti)
+	service.SetCallbackOrigins(remotesessions.CallbackOrigins{Outbound: outbound, Registration: registration})
+
+	result, err := service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.PreparationStateUnknownGrants, result.State)
+	require.Nil(t, result.GrantTypes)
+	require.Contains(t, result.Remediation, "JWT-bearer")
+	require.Contains(t, result.Remediation, "confirm its grants")
+	require.Equal(t, []string{registrationOrigin + "/mcp/remote_login_callback"}, redirectURIs.Load())
+
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	client, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{ID: result.ClientID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToPGText(registrationOrigin), client.RemoteSessionClient.CallbackBaseUrl)
+	require.Nil(t, client.RemoteSessionClient.GrantTypes)
+}
+
 func TestPreparationDCRIntegration_EffectiveGrantsAndNarrowedScopePersist(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, grants, state string }{
@@ -155,7 +194,8 @@ func TestPreparationDCRIntegration_EffectiveGrantsAndNarrowedScopePersist(t *tes
 				posts.Add(1)
 				var request map[string]json.RawMessage
 				assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
-				assert.JSONEq(t, `["urn:ietf:params:oauth:grant-type:jwt-bearer"]`, string(request["grant_types"]))
+				assert.JSONEq(t, `["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:jwt-bearer"]`, string(request["grant_types"]))
+				assert.JSONEq(t, `["`+testServerURL+`/mcp/remote_login_callback"]`, string(request["redirect_uris"]))
 				assert.JSONEq(t, `"client_secret_basic"`, string(request["token_endpoint_auth_method"]))
 				assert.NotContains(t, request, "client_secret")
 				w.Header().Set("Content-Type", "application/json")
@@ -204,6 +244,7 @@ func TestPreparationDCRIntegration_EffectiveGrantsAndNarrowedScopePersist(t *tes
 			afterAudit, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 			require.NoError(t, err)
 			require.Equal(t, beforeAudit+1, afterAudit, "one durable DCR registration emits one create audit, including after idempotent retries")
+			requireLatestClientCreateSnapshot(t, ctx, ti, result.ClientID.String())
 			assertPreparationInteractiveUntouched(t, ctx, ti, interactive, in.UserSessionIssuerID)
 		})
 	}
@@ -426,6 +467,7 @@ func TestPreparationDCRIntegration_CIMDProvenanceRequiresGeneration(t *testing.T
 	require.NoError(t, err)
 	err = testrepo.New(ti.conn).SetPreparationFixtureCIMDURI(ctx, testrepo.SetPreparationFixtureCIMDURIParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
+	preparationConfidentialClient(t, ctx, ti, in.RemoteSessionIssuerID, in.ClientID)
 	// A legacy CIMD publication already serves both interactive grants.
 	in.ConfirmGrants = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}
 	manual, err := ti.service.PrepareIdentityChaining(ctx, in)
@@ -475,12 +517,11 @@ func TestPreparationDCRIntegration_UnlinkWaitsForDurableSubmission(t *testing.T)
 	claim, err := repo.New(ti.conn).GetEMABinding(ctx, repo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource})
 	require.NoError(t, err)
 	require.Equal(t, "in_progress", claim.State.String)
-	// Another service cannot cancel the incarnation while its provider write is
-	// in flight. Its lock wait must time out, not unlink and orphan the response.
-	waitCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
-	defer cancel()
-	_, err = restartPreparationService(t, ti).UnlinkIdentityChaining(waitCtx, in)
-	require.Error(t, err)
+	// The competing service must reach the registration lock while the provider write is in flight.
+	contender := *ti
+	contender.conn = testenv.NewLockTimeoutPool(t, ti.conn, 50*time.Millisecond)
+	_, err = restartPreparationService(t, &contender).UnlinkIdentityChaining(ctx, in)
+	testenv.RequireLockNotAvailable(t, err)
 	releaseOnce.Do(func() { close(release) })
 	completed := <-finished
 	require.NoError(t, completed.err)

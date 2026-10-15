@@ -10,7 +10,9 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { useCommandPalette } from "@/contexts/CommandPalette";
+import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -24,17 +26,17 @@ import { useLocation } from "react-router";
 import { requestAskAi } from "./askAiBridge";
 import { useLauncherCandidates } from "./candidates";
 import {
-  MUTATING_VERBS,
+  CONFIRM_VERBS,
   type LauncherCandidate,
   type Verb,
 } from "./candidates/types";
-import { isReady, prefilter, rank } from "./ranker";
+import { isReady, prefilter, rank, type RankedRow } from "./ranker";
 import { useRecentsUserId } from "./recentlyVisited";
 import { useLauncherJudge } from "./useLauncherJudge";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
 // Assistant uses. Rendered as a thin hairline at the top of the palette so the
-// surface reads as Gram without leaning on display type or heavy chrome.
+// surface reads as Speakeasy without leaning on display type or heavy chrome.
 const BRAND_GRADIENT =
   "linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%)";
 
@@ -61,8 +63,9 @@ interface DisplayRow {
 
 /**
  * The confirm flow (see the design spec, "Mutation confirm flow"):
- * list ─Enter on verb≠open─▶ confirm ─Enter─▶ running ─▶ closed, with Esc
- * returning from confirm to list and a rejected run returning from running.
+ * list ─Enter on an irreversible verb─▶ confirm ─Enter─▶ running ─▶ closed,
+ * with Esc returning from confirm to list and a rejected run returning from
+ * running. Reversible verbs skip it and run from the list, offering an Undo.
  */
 type PaletteMode =
   | { mode: "list" }
@@ -332,7 +335,7 @@ function ConfirmBar({
       tabIndex={0}
       role="group"
       aria-label="Confirm action"
-      className="flex h-14 items-center gap-3 border-b px-3 text-sm outline-hidden"
+      className="flex h-14 items-center gap-3 border-b py-3 pr-12 pl-3 text-sm outline-hidden"
       onKeyDown={(e) => {
         if (e.key !== "Enter") return;
         e.preventDefault();
@@ -358,6 +361,8 @@ export function CommandPalette(): JSX.Element {
   const { isOpen, close, contextBadge } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
   const { pathname } = useLocation();
+  const project = useProject();
+  const { hasScope } = useRBAC();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<PaletteMode>(LIST);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -365,6 +370,8 @@ export function CommandPalette(): JSX.Element {
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
   const inProject = Boolean(projectSlug);
+  const canAskAssistant =
+    inProject && hasScope("assistant:read", undefined, project.id);
 
   // Recents are scoped per user so a shared browser profile doesn't leak
   // history. Gate the session lookup on `isOpen` so we don't poll auth.info on
@@ -438,9 +445,18 @@ export function CommandPalette(): JSX.Element {
     () => (inProject ? [] : idle.projects),
     [inProject, idle.projects],
   );
+  // Jev's verbs are the answer to a question the user asked in words, so they
+  // are set apart under their own heading rather than mixed into the matches.
+  // The DOM order still drives ↑/↓, so `domOrder` follows this partition.
+  const ranked = useMemo(() => {
+    const actions: RankedRow[] = [];
+    const results: RankedRow[] = [];
+    for (const row of rows) (row.verb === "open" ? results : actions).push(row);
+    return { actions, results, ordered: [...actions, ...results] };
+  }, [rows]);
   const domOrder = useMemo((): string[] => {
     if (mode.mode !== "list") return [mode.row.candidate.id];
-    const ask = inProject ? [ASK_AI_VALUE] : [];
+    const ask = canAskAssistant ? [ASK_AI_VALUE] : [];
     if (!hasQuery) {
       return [
         ...idle.recents.map((r) => r.candidate.id),
@@ -449,8 +465,8 @@ export function CommandPalette(): JSX.Element {
         ...idle.actions.map((r) => r.candidate.id),
       ];
     }
-    return [...rows.map((r) => r.candidate.id), ...ask];
-  }, [mode, inProject, hasQuery, idle, idleProjects, rows]);
+    return [...ranked.ordered.map((r) => r.candidate.id), ...ask];
+  }, [mode, canAskAssistant, hasQuery, idle, idleProjects, ranked]);
   const rowsKey = domOrder.join("\n");
   const selectedValue = resolveSelection(
     selectedFor,
@@ -460,7 +476,7 @@ export function CommandPalette(): JSX.Element {
   );
 
   // The green ↵ is purely visual: Enter always runs the highlighted row.
-  const topRow = rows[0];
+  const topRow = ranked.ordered[0];
   const readyValue =
     mode.mode === "list" &&
     hasQuery &&
@@ -469,7 +485,7 @@ export function CommandPalette(): JSX.Element {
     // Only a fresh judgment may light the ↵: a dimmed one belongs to the
     // previous keystroke and says nothing about the current query.
     state.fresh &&
-    isReady(rows, state.judgment)
+    isReady(ranked.ordered, state.judgment)
       ? topRow.candidate.id
       : null;
 
@@ -488,11 +504,13 @@ export function CommandPalette(): JSX.Element {
 
   const selectRow = (row: DisplayRow) => {
     if (mode.mode !== "list") return;
-    if (MUTATING_VERBS.has(row.verb)) {
+    if (CONFIRM_VERBS.has(row.verb)) {
       setMode({ mode: "confirm", row });
       return;
     }
-    void row.candidate.run(row.verb);
+    // `run` toasts its own failure, so the rejection is consumed rather than
+    // surfacing as an unhandled one after the palette has closed.
+    void Promise.resolve(row.candidate.run(row.verb)).catch(() => {});
     closeAndReset();
   };
 
@@ -543,7 +561,7 @@ export function CommandPalette(): JSX.Element {
   // while searching: cmdk auto-selects the first item in DOM order, so keeping
   // this row above the matches would steal the highlight from the closest
   // result and force an extra ↓ keypress to reach it (AGE-2807).
-  const askAiGroup = inProject ? (
+  const askAiGroup = canAskAssistant ? (
     <CommandGroup forceMount heading="Assistant">
       <CommandItem
         forceMount
@@ -668,7 +686,12 @@ export function CommandPalette(): JSX.Element {
             {rows.length === 0 && !inProject && (
               <div className="py-6 text-center text-sm">No results found.</div>
             )}
-            <RankedRows rows={rows} {...rowGroupProps} />
+            {ranked.actions.length > 0 && (
+              <CommandGroup heading="Actions">
+                <RankedRows rows={ranked.actions} {...rowGroupProps} />
+              </CommandGroup>
+            )}
+            <RankedRows rows={ranked.results} {...rowGroupProps} />
             {askAiGroup}
           </>
         )}

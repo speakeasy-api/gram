@@ -2,13 +2,14 @@
 // inline scripts. Loaded by consent_template.html via a content-hashed
 // <script src>.
 //
-// Two jobs:
+// Main jobs:
 //
 //   1. Neutralise double-clicks on the consent controls. A second activation
 //      while the first request is still pending sends the user to an authn
 //      challenge that has already been consumed, producing "authn challenge
 //      state not found or expired" (AIS-103).
 //   2. Fan the page-level auto-refresh choice out to every card.
+//   3. Check identity-chained cards' exchanges in the background.
 //
 // Connect deliberately stays a full-page form POST. Running it in a popup kept
 // the page's state through the provider round trip, but handed the provider a
@@ -41,6 +42,35 @@
     }, 2000);
   }
 
+  // A gateway's server list keeps the open state the person left it in, so
+  // a Connect from the list, which leaves for the provider and comes back,
+  // returns to the list rather than to its collapsed summary.
+  var gatewayList = document.querySelector("details[data-gateway-list]");
+  if (gatewayList) {
+    var listKey =
+      "consent-gateway-list:" + gatewayList.getAttribute("data-state");
+    try {
+      var remembered = window.sessionStorage.getItem(listKey);
+      if (remembered === "open") {
+        gatewayList.open = true;
+      } else if (remembered === "closed") {
+        gatewayList.open = false;
+      }
+    } catch (_) {
+      // Storage can be unavailable; the server's default stands.
+    }
+    gatewayList.addEventListener("toggle", function () {
+      try {
+        window.sessionStorage.setItem(
+          listKey,
+          gatewayList.open ? "open" : "closed",
+        );
+      } catch (_) {
+        // Storage can be unavailable; nothing to remember then.
+      }
+    });
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
@@ -59,6 +89,18 @@
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
     var agentInputs = document.querySelectorAll("input[data-agent-select]");
+    var agentModes = document.querySelectorAll("input[data-agent-mode]");
+    var agentMode = document.querySelector(
+      'input[data-agent-mode][value="agent"]',
+    );
+    var selfMode = document.querySelector(
+      'input[data-agent-mode][value="self"]',
+    );
+    var selfAgentInput = document.querySelector("[data-agent-self]");
+    var agentPicker = document.querySelector("[data-agent-picker]");
+    var agentSetup = document.querySelector("[data-agent-setup]");
+    var agentSearch = document.querySelector("[data-agent-search]");
+    var agentEmpty = document.querySelector("[data-agent-empty]");
     var agentPolicy = document.querySelector("[data-agent-policy]");
     var agentPolicyName = document.querySelector("[data-agent-policy-name]");
     var subjectDisplay = document.querySelector(
@@ -75,8 +117,10 @@
     try {
       var savedAgent = sessionStorage.getItem(savedAgentKey);
       Array.prototype.forEach.call(agentInputs, function (input) {
-        if (savedAgent !== null && input.value === savedAgent)
+        if (savedAgent !== null && input.value === savedAgent) {
           input.checked = true;
+          if (agentMode) agentMode.checked = true;
+        }
       });
     } catch (_) {
       /* Storage may be disabled; normal selection still works. */
@@ -147,12 +191,12 @@
             " Connection state is unknown. Retry to reload the current state.";
           access.appendChild(message);
           if (error.status === 401 || error.status === 403) {
-            var login = document.createElement("p");
-            login.setAttribute("data-agent-access-login", "");
-            login.className = "text-muted-foreground text-xs";
-            login.textContent =
-              "Sign in to Gram as the authorizing user in this organization, then retry.";
-            access.appendChild(login);
+            var unavailable = document.createElement("p");
+            unavailable.setAttribute("data-agent-access-unavailable", "");
+            unavailable.className = "text-muted-foreground text-xs";
+            unavailable.textContent =
+              "This agent is not available for authorization by the signed-in user. Select another identity or restart authorization.";
+            access.appendChild(unavailable);
           }
           var retry = document.createElement("button");
           retry.type = "button";
@@ -327,18 +371,22 @@
     }
     if (agentInputs.length > 0) {
       var syncAgentSelection = function () {
-        var selected = null;
+        var authorizingAgent = Boolean(agentMode && agentMode.checked);
+        var selected = authorizingAgent ? null : selfMode;
         Array.prototype.forEach.call(agentInputs, function (input) {
-          if (input.checked) {
-            selected = input;
-          }
+          input.disabled = !authorizingAgent;
+          input.required = authorizingAgent;
+          if (!authorizingAgent) input.checked = false;
+          if (input.checked) selected = input;
         });
-        var authorizingAgent = Boolean(selected && selected.value !== "");
+        if (selfAgentInput) selfAgentInput.disabled = authorizingAgent;
+        if (agentPicker) agentPicker.hidden = !authorizingAgent;
+        if (agentSetup) agentSetup.hidden = !authorizingAgent;
         var selectedDisplay = selected
           ? selected.getAttribute("data-subject-display") || ""
           : "";
         if (agentPolicy) {
-          agentPolicy.hidden = !authorizingAgent;
+          agentPolicy.hidden = !authorizingAgent || !selected;
         }
         if (agentPolicyName) {
           agentPolicyName.textContent = authorizingAgent ? selectedDisplay : "";
@@ -346,8 +394,8 @@
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
-        if (subjectDisplay && selected) {
-          subjectDisplay.textContent = selectedDisplay;
+        if (subjectDisplay) {
+          subjectDisplay.textContent = selectedDisplay || "Choose an agent";
         }
         if (subjectMode) {
           subjectMode.textContent = authorizingAgent
@@ -367,7 +415,7 @@
             ? true
             : button.getAttribute("data-consent-self-ready") !== "true";
         }
-        var selectedID = authorizingAgent ? selected.value : "";
+        var selectedID = authorizingAgent && selected ? selected.value : "";
         try {
           sessionStorage.setItem(savedAgentKey, selectedID);
         } catch (_) {}
@@ -376,11 +424,41 @@
       Array.prototype.forEach.call(agentInputs, function (input) {
         input.addEventListener("change", syncAgentSelection);
       });
+      Array.prototype.forEach.call(agentModes, function (input) {
+        input.addEventListener("change", syncAgentSelection);
+      });
+      if (agentSearch) {
+        agentSearch.addEventListener("input", function () {
+          var query = agentSearch.value.trim().toLowerCase();
+          var matches = 0;
+          Array.prototype.forEach.call(agentInputs, function (input) {
+            var matchesName = (input.getAttribute("data-subject-display") || "")
+              .toLowerCase()
+              .includes(query);
+            input.closest("[data-agent-option]").hidden = !matchesName;
+            if (matchesName) matches++;
+          });
+          if (agentEmpty) agentEmpty.hidden = matches !== 0;
+        });
+      }
       syncAgentSelection();
+      // Agent mode requires these handlers; leave it unavailable if the script
+      // cannot load or initialize rather than silently approving as Myself.
+      if (agentMode) agentMode.disabled = false;
     }
 
     form.addEventListener("submit", function (event) {
-      if (submitted) {
+      // Guard implicit/programmatic submissions too: an empty Agent choice
+      // must never fall through to self authorization.
+      if (
+        submitted ||
+        (button && button.disabled) ||
+        (agentMode &&
+          agentMode.checked &&
+          !Array.prototype.some.call(agentInputs, function (input) {
+            return input.checked && !input.disabled;
+          }))
+      ) {
         event.preventDefault();
         return;
       }
@@ -420,6 +498,107 @@
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
   guardActionButtons("button[data-validate-link]", "Checking…");
+
+  // Identity-chained cards render neutral, so they read right without script.
+  // Check each exchange in the background and settle the card in place; any
+  // failure keeps the neutral copy and the separate sign-in fallback.
+  var connectedSummary = document.querySelector("[data-connected-summary]");
+  var chainActionURL = (function () {
+    var services = document.querySelector("[data-service-connections]");
+    return services ? services.getAttribute("data-action-url") : "";
+  })();
+
+  function settleChainCheck(status, card, result) {
+    var state = result ? result.status : "";
+    if (state !== "connected" && state !== "rejected" && state !== "ready") {
+      state = "unknown";
+    }
+    status.setAttribute("data-chain-check", state);
+    if (state === "connected") {
+      status.className = "text-xs text-default-success";
+      status.textContent = "Connected through your identity provider";
+      if (connectedSummary) {
+        var count =
+          Number(connectedSummary.getAttribute("data-connected-count")) + 1;
+        connectedSummary.setAttribute("data-connected-count", String(count));
+        connectedSummary.textContent =
+          count +
+          " of " +
+          connectedSummary.getAttribute("data-connected-total") +
+          " connected";
+      }
+      return;
+    }
+    if (state === "ready") {
+      status.className = "text-xs text-muted-foreground";
+      status.textContent = "Automatically connects when you give access";
+      return;
+    }
+    if (state === "rejected") {
+      status.className = "text-xs text-default-warning";
+      status.textContent =
+        result.message ||
+        "Your identity provider sign-in wasn't accepted. Use a separate sign-in.";
+      var fallback = card.querySelector("button[data-connect-fallback]");
+      if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
+        fallback.className =
+          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm";
+        fallback.removeAttribute("data-connect-fallback");
+        fallback.textContent = "Connect";
+      }
+      signalChainRejected();
+      return;
+    }
+    status.className = "text-xs text-muted-foreground";
+    status.textContent = "Managed by your identity provider";
+  }
+
+  // Tells the tool access island that a chained service was refused. The
+  // island defers its inventory only when every service is chain-only, and
+  // on such a page each chained card serves the upstream the inventory
+  // needs, so one refusal means the tools can't load after approval either.
+  // Signing in separately reloads the page with that service connected,
+  // which the server no longer renders as deferred.
+  function signalChainRejected() {
+    document.documentElement.setAttribute(
+      "data-consent-chain-rejected",
+      "true",
+    );
+    document.dispatchEvent(new CustomEvent("gram:consent-chain-rejected"));
+  }
+
+  var chainChecks = document.querySelectorAll('[data-chain-check="pending"]');
+  Array.prototype.forEach.call(chainChecks, function (status) {
+    var card = status.closest("[data-remote-client]");
+    var state = card && card.querySelector('input[name="state"]');
+    var csrf = card && card.querySelector('input[name="csrf_token"]');
+    if (!chainActionURL || !state || !csrf) {
+      return;
+    }
+    showPending(status, "Connecting through your identity provider…");
+    fetch(chainActionURL, {
+      method: "POST",
+      credentials: "same-origin",
+      body: new URLSearchParams({
+        state: state.value,
+        csrf_token: csrf.value,
+        action: "identity_chaining_check",
+        client_id: card.getAttribute("data-remote-client"),
+      }),
+      headers: { Accept: "application/json" },
+    })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(
+        function (result) {
+          settleChainCheck(status, card, result);
+        },
+        function () {
+          settleChainCheck(status, card, null);
+        },
+      );
+  });
 
   // Session length is stated on the summary line so it is visible without
   // opening the configuration disclosure; keep the two in step when the

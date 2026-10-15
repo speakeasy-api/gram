@@ -708,36 +708,24 @@ func (s *Service) validateRouteDestination(
 	if err != nil {
 		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "invalid otel_destination_id")
 	}
-	if !ref.Valid {
-		if enabled {
-			return uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "otel_destination_id is required when the route is enabled")
-		}
-		return ref, nil
-	}
-
-	logger := s.logger.With(
-		attr.SlogOrganizationID(organizationID),
-		attr.SlogProjectID(projectID.String()),
-	)
-	destination, err := queries.GetOtelDestinationForRoute(ctx, repo.GetOtelDestinationForRouteParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		ID:             ref.UUID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
+	switch err := checkRouteDestination(ctx, queries, s.encryption, organizationID, projectID, ref, enabled); {
+	case err == nil:
+	case errors.Is(err, ErrRouteDestinationRequired):
+		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "otel_destination_id is required when the route is enabled")
+	case errors.Is(err, ErrRouteDestinationInactive):
 		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "otel_destination_id must reference an active destination in this project")
-	}
-	if err != nil {
-		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "load route destination").LogError(ctx, logger)
-	}
-	if _, err := validateDestinationURL(destination.EndpointUrl); err != nil {
-		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "stored OTEL destination has invalid endpoint URL").LogError(ctx, logger)
-	}
-	if _, err := sensitiveDataFromRow(destination.SensitiveData); err != nil {
-		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "stored OTEL destination has invalid sensitive-data policy").LogError(ctx, logger)
-	}
-	if _, err := s.decryptHeaders(destination.HeadersEncrypted); err != nil {
-		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "decode stored OTEL destination headers").LogError(ctx, logger)
+	default:
+		logger := s.logger.With(
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID.String()),
+		)
+		// A stored destination that no longer validates is a server-side
+		// fault, reported with the reason naming the field that failed.
+		message := "load route destination"
+		if invalid, ok := errors.AsType[*routeDestinationInvalidError](err); ok {
+			message = invalid.reason
+		}
+		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, logger)
 	}
 	return ref, nil
 }

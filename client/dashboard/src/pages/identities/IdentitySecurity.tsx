@@ -1,10 +1,7 @@
 import { HumanizeDateTime } from "@/lib/dates";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import {
-  RULE_CATEGORY_META,
-  type RuleCategory,
-} from "@/pages/security/policy-data";
+import { ruleCategoryLabel } from "@/pages/security/policy-data";
 import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import {
   IdentityPanel,
@@ -12,6 +9,11 @@ import {
   IdentityPanelRow,
 } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
+import {
+  type FindingsFilter,
+  identityFindingsHref,
+  RISK_UNAVAILABLE,
+} from "./identityFindingsLink";
 import { EmployeeShadowAISection } from "@/components/observe/EmployeeShadowAISection";
 import { useIdentityOutlet } from "./identityRoute";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -22,6 +24,7 @@ import { sectionMeta } from "./sectionMeta";
 import { shadowMCPAccessSummaryOf } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import {
   retryFailed,
+  riskMatchedOnLabel,
   useCanReadRisk,
   useIdentityChallenges,
   useIdentityPrincipalUrn,
@@ -33,14 +36,6 @@ import {
 
 const TOP_RULES = 5;
 const DENIED_ROWS = 8;
-
-/**
- * Risk and the shadow inventory are org:admin surfaces and their queries are
- * held back without it. Said outright, because the alternative rendering — the
- * panel's own empty state — reads as "we looked and there is nothing".
- */
-const RISK_UNAVAILABLE =
-  "Risk and shadow MCP findings need the org:admin permission.";
 
 export default function IdentitySecurity(): JSX.Element {
   const canReadRisk = useCanReadRisk();
@@ -55,7 +50,7 @@ export default function IdentitySecurity(): JSX.Element {
     ["project:read", "project:write"],
     project.id,
   );
-  const { identity } = useIdentityOutlet();
+  const { identity, urn } = useIdentityOutlet();
   // Only an enrolled person has device scans behind them; an API key or an
   // external identity has nothing to show.
   const isEmployee = identity.kind === "user" && identity.userIds.length > 0;
@@ -76,6 +71,11 @@ export default function IdentitySecurity(): JSX.Element {
   );
 
   const riskQuery = useIdentityRisk(identity, from, to);
+  const navigate = useNavigate();
+  const findingsHref = (filter: FindingsFilter) =>
+    identityFindingsHref(routes, urn, location.search, filter);
+  const showFindings = (filter: FindingsFilter) =>
+    void navigate(findingsHref(filter));
   // Asked for as a denied-only slice so the count below is the API's total for
   // exactly what the panel claims, rather than however many denials happened
   // to fall inside one capped page of mixed outcomes.
@@ -97,11 +97,6 @@ export default function IdentitySecurity(): JSX.Element {
   const unresolvedTotal = unresolvedQuery.data?.total;
   const shadowServers = shadowQuery.data?.servers ?? [];
 
-  // Risk keys on the ids agents report and the endpoint takes one of them, so
-  // this names the identifier the panel actually asked about.
-  const riskIdentifier = identity.externalUserIds[0];
-  const unqueriedIdentifiers = Math.max(identity.externalUserIds.length - 1, 0);
-
   return (
     <IdentitySection
       title="Security"
@@ -118,23 +113,18 @@ export default function IdentitySecurity(): JSX.Element {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <IdentityPanel
           title="Risk findings"
-          handoffLabel="Risk Events"
-          handoffHref={handoffs.riskEvents}
+          // Findings is admin-only.
+          handoffLabel={canReadRisk ? "Findings" : "Risk Events"}
+          handoffHref={canReadRisk ? findingsHref({}) : handoffs.riskEvents}
           loading={riskQuery.isLoading}
           loadingVariant="block"
           error={riskQuery.isError && categories.length === 0}
           refreshFailed={riskQuery.isError && categories.length > 0}
           onRetry={retryFailed(riskQuery)}
           footer={
-            !canReadRisk
-              ? undefined
-              : !riskIdentifier
-                ? "This identity reports no agent identifier, so risk cannot key on it."
-                : unqueriedIdentifiers > 0
-                  ? `Matched on ${riskIdentifier}. This identity reports ${unqueriedIdentifiers} further identifier${
-                      unqueriedIdentifiers === 1 ? "" : "s"
-                    }, which are not counted here.`
-                  : `Matched on ${riskIdentifier}`
+            canReadRisk
+              ? riskMatchedOnLabel(identity.externalUserIds)
+              : undefined
           }
         >
           {!canReadRisk ? (
@@ -146,13 +136,12 @@ export default function IdentitySecurity(): JSX.Element {
               <ShareBar
                 segments={categories.map((category) => ({
                   key: category.category,
-                  label:
-                    RULE_CATEGORY_META[category.category as RuleCategory]
-                      ?.label ?? category.category,
+                  label: ruleCategoryLabel(category.category),
                   value: Number(category.findings),
                   valueLabel: Number(category.findings).toLocaleString(),
                 }))}
                 ariaLabel="Findings by category"
+                onSelect={(category) => showFindings({ category })}
               />
             </div>
           )}
@@ -188,6 +177,9 @@ export default function IdentitySecurity(): JSX.Element {
                     ? getRuleTitleFallback(rule.ruleId)
                     : "(no rule_id)",
                   value: Number(rule.findings),
+                  onSelect: rule.ruleId
+                    ? () => showFindings({ ruleId: rule.ruleId })
+                    : undefined,
                 }))}
               />
             </div>

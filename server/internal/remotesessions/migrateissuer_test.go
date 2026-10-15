@@ -138,7 +138,7 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	// Before: the token resolves under the source issuer's id.
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	auditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerMigrate)
 	require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	// Nothing re-authenticated; only the client's foreign key moved.
 	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	// The session row itself was neither deleted nor rewritten.
 	q := repo.New(ti.conn)
@@ -244,6 +244,33 @@ func TestMigrateIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
 		IncludeGlobal:  false,
 	})
 	require.NoError(t, err, "blocked migration must leave the source issuer active")
+}
+
+// A client trusted for federated sign-in keeps its issuer, even when the trust row names another issuer.
+func TestMigrateIssuer_BlockedByTrustedSignInClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	source, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-client-source", nil))
+	require.NoError(t, err)
+	target, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-client-target", nil))
+	require.NoError(t, err)
+	other, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-client-other", nil))
+	require.NoError(t, err)
+	client, err := ti.service.CreateClient(ctx, newCreateClientPayload(source.ID, nil, nil))
+	require.NoError(t, err)
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "migrate-trusted-client-usi", uuid.MustParse(other.ID), uuid.MustParse(client.ID))
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, migratePreflightPayload(source.ID, target.ID))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+
+	_, err = ti.service.MigrateIssuer(ctx, migratePayload(source.ID, target.ID))
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	row, err := repo.New(ti.conn).GetRemoteSessionClientForRotation(ctx, uuid.MustParse(client.ID))
+	require.NoError(t, err)
+	require.Equal(t, uuid.MustParse(source.ID), row.RemoteSessionClient.RemoteSessionIssuerID, "the trusted client must stay on its issuer")
 }
 
 func TestMigrateIssuer_BlockedByOutOfScopeTrustedUserSessionIssuer(t *testing.T) {

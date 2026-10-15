@@ -1,3 +1,5 @@
+import { CostsSetupEmptyState } from "@/components/setup-empty-state";
+import { RoleLink } from "@/components/role-link";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { formatPlatform } from "@/lib/formatPlatform";
@@ -538,6 +540,18 @@ export function InsightsAgentsContent(): JSX.Element {
                 models over {rangeLabel}.
               </p>
             </div>
+            {!usersQuery.isPending &&
+              !usersQuery.isError &&
+              users.length === 0 && (
+                <CostsSetupEmptyState
+                  filtered={
+                    clientFilter !== "all" ||
+                    !!accountType ||
+                    (dateRange !== "30d" && dateRange !== "90d") ||
+                    !!customRange
+                  }
+                />
+              )}
             <Page.Toolbar>
               <Page.Toolbar.Filters
                 schema={COST_FILTERS}
@@ -1046,7 +1060,17 @@ function EmployeeCostTable({
         width: "1.4fr",
         render: (role) => (
           <div className="flex items-center gap-2">
-            <span className="font-medium">{role.roleName}</span>
+            <span className="font-medium">
+              <RoleLink
+                roleId={
+                  role.roleId && role.roleId !== "unassigned"
+                    ? role.roleId
+                    : undefined
+                }
+              >
+                {role.roleName}
+              </RoleLink>
+            </span>
             {role.roleId === "unassigned" && (
               <span className="bg-muted text-muted-foreground px-1.5 py-0.5 text-[10px]">
                 no role

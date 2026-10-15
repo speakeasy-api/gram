@@ -17,13 +17,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -57,7 +57,7 @@ type fakeWorkOSCreator struct {
 
 	// updateErr, when set, fails the external_id back-fill. That is the
 	// half-created state: a WorkOS organization exists and carries no
-	// external_id pointing back at Gram.
+	// external_id pointing back at Speakeasy.
 	updateErr error
 
 	// createdNames records every hostname CreateOrganizationWithVerifiedDomain
@@ -160,7 +160,7 @@ func runOrganizationWebhook(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 
 // organizationEvent builds a WorkOS organization event. externalID is passed
 // separately because the two orderings differ precisely there: an event that
-// arrives after the back-fill carries the Gram ID, and one that overtakes it
+// arrives after the back-fill carries the Speakeasy ID, and one that overtakes it
 // carries nothing and makes the sync derive the ID instead.
 func organizationEvent(eventID, kind, workosOrgID, name, externalID string) events.Event {
 	payload := `{"id":"` + workosOrgID + `","object":"organization","name":"` + name +
@@ -197,13 +197,13 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	// The whole idempotency story rests on this equality. A generated ID would
 	// pass every other assertion in this file except the two ordering tests.
 	require.Equal(t, orgid.FromWorkOSID(workosOrgID), res.ID,
-		"the Gram id must be derived from the WorkOS id, not minted")
+		"the Speakeasy id must be derived from the WorkOS id, not minted")
 	require.NotNil(t, res.WorkosID)
 	require.Equal(t, workosOrgID, *res.WorkosID, "the row must be linked to the WorkOS organization")
 
 	require.Equal(t, []string{"example.com"}, fake.names(), "WorkOS must be asked for exactly one verified domain")
 	require.Equal(t, res.ID, fake.externalID(workosOrgID),
-		"external_id must be back-filled with the Gram id, or the sync path resolves this organization by a different route")
+		"external_id must be back-filled with the Speakeasy id, or the sync path resolves this organization by a different route")
 
 	require.Equal(t, "example", res.Name)
 	require.Equal(t, "example", res.Slug)
@@ -387,14 +387,7 @@ func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testin
 		done <- outcome{res: res, err: err}
 	}()
 
-	// The handler calls WorkOS before it opens its transaction, so a recorded
-	// name means it is at or past its first read of the organization and about
-	// to ask for the slug lock this test is holding. Committing earlier than
-	// that cannot fail the test, because the handler would then see the row in
-	// its first read and reach the same slug; it would only prove less.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, fake.names(), 1)
-	}, 10*time.Second, 10*time.Millisecond)
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(blocker), 1)
 
 	_, err := blockerQueries.UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
 		ID:          orgid.FromWorkOSID(workosOrgID),
@@ -486,7 +479,8 @@ func TestCreateOrganization_FailureAfterTheUpsertLeavesNothing(t *testing.T) {
 	// is on a feature name the handler supplies as a constant. Each test holds
 	// its own database clone, dropped when the test ends, so this reaches
 	// nothing else.
-	testenv.RejectWritesTo(t, ctx, conn, "organization_features")
+	err := repo.New(conn).RejectOrganizationEntitlementsFixture(ctx)
+	require.NoError(t, err)
 
 	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rollback.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.Error(t, err, "a failure seeding default entitlements must fail the request")
@@ -690,7 +684,7 @@ func TestCreateOrganization_TwoOrganizationsCanShareAName(t *testing.T) {
 	second, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "duplicate.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err)
 
-	require.NotEqual(t, first.ID, second.ID, "two WorkOS organizations must not derive one Gram id")
+	require.NotEqual(t, first.ID, second.ID, "two WorkOS organizations must not derive one Speakeasy id")
 	require.NotEqual(t, first.Slug, second.Slug, "the second organization must get its own slug")
 	require.Equal(t, "example", first.Slug)
 
@@ -738,4 +732,35 @@ func TestCreateOrganization_HTTPRequiresPlatformAdmin(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, rec.Code)
 	}
 	require.Empty(t, fake.names())
+}
+
+func TestCreateOrganization_RecordsNewOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZADMINDEFAULTHOST"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+	svc.SetNewOrganizationDefaultHost(conv.ToPGText("https://ai.example.test"))
+
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "https://example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	require.NoError(t, err)
+
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, res.ID)
+	require.NoError(t, err)
+	require.Equal(t, conv.ToPGText("https://ai.example.test"), row.DefaultHost)
+}
+
+func TestCreateOrganization_WithoutNewOrganizationDefaultHostRecordsNone(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZADMINNODEFAULTHOST"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "https://example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	require.NoError(t, err)
+
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, res.ID)
+	require.NoError(t, err)
+	require.False(t, row.DefaultHost.Valid)
 }

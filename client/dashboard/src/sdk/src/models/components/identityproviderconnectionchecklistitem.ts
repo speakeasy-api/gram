@@ -35,6 +35,7 @@ export const IdentityProviderConnectionChecklistItemKey = {
   LinkAgentApp: "link_agent_app",
   ActivateAgentApp: "activate_agent_app",
   RecordAiAgent: "record_ai_agent",
+  AddAgentPublicKey: "add_agent_public_key",
   FirstResourceConnection: "first_resource_connection",
 } as const;
 /**
@@ -57,7 +58,7 @@ export type IdentityProviderConnectionChecklistItem = {
    */
   description: string;
   /**
-   * Sub-steps, in order. Empty when the description says it all.
+   * Supporting lines under the description: ordered sub-steps for the public-key step, otherwise notes or the values to enter. Empty when the description says it all.
    */
   details: Array<string>;
   /**

@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AGENT_PLATFORMS } from "../setup-data";
+import { getAgentPlatforms } from "../setup-data";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 
 const mocks = vi.hoisted(() => ({
@@ -30,9 +30,9 @@ vi.mock("@/routes", () => ({
   }),
 }));
 
-const step = AGENT_PLATFORMS.find(
-  ({ id }) => id === "claude-cowork",
-)!.setupSteps.find(({ title }) => title === "Enable OTEL export")!;
+const step = getAgentPlatforms("https://app.getgram.ai")
+  .find(({ id }) => id === "claude-cowork")!
+  .setupSteps.find(({ title }) => title === "Enable OTEL export")!;
 const writeText = vi.fn<(value: string) => Promise<void>>();
 const retry = vi.fn<() => void>();
 function body(
@@ -76,13 +76,22 @@ describe("copyable setup values", () => {
     const { container } = render(body({ apiKey: "EXAMPLE_GENERATED_KEY" }));
     expect(container.innerHTML).not.toContain("EXAMPLE_GENERATED_KEY");
     expect(
-      screen.getByText("Gram-Project=default,Gram-Key=••••••••"),
+      screen.getByText(
+        "Speakeasy-AI-Project=default,Speakeasy-AI-Key=••••••••",
+      ),
     ).toBeTruthy();
-    expect(screen.getByText("Save the settings in Claude.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Save the settings and start a new Cowork session to verify receipt. The native exporter automatically allowlists the collector hostname.",
+      ),
+    ).toBeTruthy();
     for (const [label, value] of [
       ["endpoint", "https://app.getgram.ai/rpc/hooks.otel"],
       ["protocol", "http/json"],
-      ["headers", "Gram-Project=default,Gram-Key=EXAMPLE_GENERATED_KEY"],
+      [
+        "headers",
+        "Speakeasy-AI-Project=default,Speakeasy-AI-Key=EXAMPLE_GENERATED_KEY",
+      ],
     ] as const) {
       fireEvent.click(copy(label));
       await waitFor(() => expect(copy(label).textContent).toContain("Copied"));
@@ -144,7 +153,7 @@ describe("copyable setup values", () => {
       fireEvent.click(copy("headers"));
       await waitFor(() =>
         expect(writeText).toHaveBeenLastCalledWith(
-          "Gram-Project=default,Gram-Key=EXAMPLE_RETRY_KEY",
+          "Speakeasy-AI-Project=default,Speakeasy-AI-Key=EXAMPLE_RETRY_KEY",
         ),
       );
     },
@@ -185,11 +194,11 @@ describe("inline setup identifiers", () => {
     "renders the resolved plugin %s inline without a copyable code block",
     (pluginName) => {
       mocks.pluginName = pluginName;
-      const requiredStep = AGENT_PLATFORMS.find(
-        ({ id }) => id === "claude-cowork",
-      )!.setupSteps.find(
-        ({ title }) => title === "Mark the observability plugin as Required",
-      )!;
+      const requiredStep = getAgentPlatforms("https://app.getgram.ai")
+        .find(({ id }) => id === "claude-cowork")!
+        .setupSteps.find(
+          ({ title }) => title === "Mark the observability plugin as Required",
+        )!;
       const { container } = render(
         <PlatformSetupStepBody
           step={requiredStep}
@@ -201,9 +210,7 @@ describe("inline setup identifiers", () => {
       expect(container.textContent).toContain(
         `Find ${pluginName ?? "the observability plugin"} in the plugin list and set Default access → Required.`,
       );
-      expect(container.textContent).toContain(
-        "prevents them from disabling it",
-      );
+      expect(container.textContent).toContain("prevents disabling or removal");
       expect(container.textContent).not.toContain("{{GRAM_");
       expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
       expect(container.querySelector("pre")).toBeNull();

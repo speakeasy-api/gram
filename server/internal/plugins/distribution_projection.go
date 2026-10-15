@@ -62,7 +62,7 @@ func (s *Service) ListDistributionPlugins(ctx context.Context, payload *gen.List
 	}
 	result := &gen.ListDistributionPluginsResult{Plugins: make([]*gen.DistributionPlugin, 0, len(rows))}
 	for _, p := range rows {
-		result.Plugins = append(result.Plugins, &gen.DistributionPlugin{ID: p.ID.String(), Name: p.Name, Description: conv.FromPGText[string](p.Description), IsDefault: p.IsDefault.Valid && p.IsDefault.Bool})
+		result.Plugins = append(result.Plugins, &gen.DistributionPlugin{ID: p.ID.String(), Name: p.Name, Description: conv.FromPGText[string](p.Description), IsDefault: p.IsDefault.Valid && p.IsDefault.Bool, AutoCreated: p.AutoCreated})
 	}
 	return result, nil
 }
@@ -83,5 +83,5 @@ func (s *Service) GetDistributionPlugin(ctx context.Context, payload *gen.GetDis
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get distribution plugin")
 	}
-	return &gen.DistributionPlugin{ID: p.ID.String(), Name: p.Name, Description: conv.FromPGText[string](p.Description), IsDefault: p.IsDefault.Valid && p.IsDefault.Bool}, nil
+	return &gen.DistributionPlugin{ID: p.ID.String(), Name: p.Name, Description: conv.FromPGText[string](p.Description), IsDefault: p.IsDefault.Valid && p.IsDefault.Bool, AutoCreated: p.AutoCreated}, nil
 }

@@ -1,11 +1,11 @@
 #!/usr/bin/env -S node --import tsx
-//MISE description="Run provider hook E2E checks against a local Gram server"
+//MISE description="Run provider hook E2E checks against a local Speakeasy server"
 //MISE dir="{{ config_root }}"
 //USAGE flag "--project <slug>" default="default" help="Project slug to test against."
 //USAGE flag "--providers <list>" default="claude,cursor,codex,opencode,copilot" help="Comma-separated providers to drive: claude,cursor,codex,opencode,copilot."
 //USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet."
 //USAGE flag "--timeout-seconds <seconds>" default="180" help="Timeout per provider scenario."
-//USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
+//USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Speakeasy telemetry and database evidence."
 //USAGE flag "--keep-artifacts" help="Keep the temp workspace and built plugin artifacts."
 //USAGE flag "--skip-build" help="Skip building plugins; use dirs supplied through GRAM_HOOKS_E2E_<PROVIDER>_PLUGIN_DIR."
 
@@ -107,7 +107,7 @@ async function authenticateViaDevIDP(serverURL) {
     {
       redirect: "manual",
     },
-    `connect to Gram server at ${serverURL}`,
+    `connect to Speakeasy server at ${serverURL}`,
   );
   const authorizeURL = loginRes.headers.get("location");
   if (!authorizeURL) {
@@ -667,7 +667,7 @@ async function prepareShadowMCPFixture(rootDir, runId) {
 const tools = [
   {
     name: "shadow_lookup",
-    description: "Return the Gram hooks E2E marker for a Shadow MCP check.",
+    description: "Return the Speakeasy hooks E2E marker for a Shadow MCP check.",
     inputSchema: {
       type: "object",
       properties: {
@@ -823,7 +823,7 @@ async function startHostedMCPHTTPFixture(runId) {
               {
                 name: "shadow_lookup",
                 description:
-                  "Return the Gram hooks E2E marker for a hosted Shadow MCP check.",
+                  "Return the Speakeasy hooks E2E marker for a hosted Shadow MCP check.",
                 inputSchema: {
                   type: "object",
                   properties: { marker: { type: "string" } },
@@ -1037,7 +1037,7 @@ async function createHostedMCPFixture(args) {
     projectSlug: args.projectSlug,
     path: "/rpc/remoteMcp.createServer",
     body: {
-      name: `Gram hooks E2E hosted ${args.runId}`,
+      name: `Speakeasy hooks E2E hosted ${args.runId}`,
       url: args.remoteURL,
       transport_type: "streamable-http",
       headers: [],
@@ -1050,7 +1050,7 @@ async function createHostedMCPFixture(args) {
     projectSlug: args.projectSlug,
     path: "/rpc/mcpServers.create",
     body: {
-      name: `Gram hooks E2E hosted ${args.runId}`,
+      name: `Speakeasy hooks E2E hosted ${args.runId}`,
       remote_mcp_server_id: remote.id,
       visibility: "public",
     },
@@ -1242,13 +1242,13 @@ async function prepareShadowMCPProviderConfig(args) {
 function providerPrompt(runId, provider, scenario, workdir) {
   if (scenario === "success") {
     return [
-      `Gram hooks E2E run ${runId} for ${provider}.`,
+      `Speakeasy hooks E2E run ${runId} for ${provider}.`,
       `Use your filesystem/tooling to read ${path.join(workdir, `input-${runId}.txt`)}.`,
       `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} success`,
     ].join(" ");
   }
   return [
-    `Gram hooks E2E run ${runId} for ${provider}.`,
+    `Speakeasy hooks E2E run ${runId} for ${provider}.`,
     `Use your filesystem/tooling to read the missing file ${path.join(workdir, `missing-${runId}.txt`)} so the tool call fails.`,
     `After the failed tool call, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} failure`,
   ].join(" ");
@@ -1260,10 +1260,10 @@ function shadowMCPPrompt(args) {
       ? args.fixture.gramServerName
       : args.fixture.shadowServerName;
   return [
-    `Gram hooks E2E Shadow MCP run ${args.runId} for ${args.provider}.`,
+    `Speakeasy hooks E2E Shadow MCP run ${args.runId} for ${args.provider}.`,
     `Use the MCP server named ${serverName} and call its shadow_lookup tool with marker "${marker}".`,
     `If the tool call succeeds, reply exactly: GRAM_HOOKS_E2E_OK ${marker}`,
-    `If Gram blocks the tool call, reply exactly: GRAM_HOOKS_E2E_BLOCKED ${marker}`,
+    `If Speakeasy blocks the tool call, reply exactly: GRAM_HOOKS_E2E_BLOCKED ${marker}`,
   ].join(" ");
 }
 async function runProviderScenario(args) {
@@ -1847,7 +1847,7 @@ async function verifyOnboarding(args) {
 }
 async function createShadowMCPPolicy(args) {
   await cleanupShadowMCPE2EPolicies(args.session.projectId);
-  const name = `Gram hooks E2E shadow_mcp ${args.runId}`;
+  const name = `Speakeasy hooks E2E shadow_mcp ${args.runId}`;
   const res = await fetchOrFail(
     `${args.serverURL}/rpc/risk.createPolicy`,
     {
@@ -1863,7 +1863,7 @@ async function createShadowMCPPolicy(args) {
         action: "block",
         audience_type: "everyone",
         enabled: true,
-        user_message: "Gram hooks E2E Shadow MCP block",
+        user_message: "Speakeasy hooks E2E Shadow MCP block",
       }),
     },
     "create Shadow MCP risk policy",
@@ -1880,7 +1880,7 @@ async function cleanupShadowMCPE2EPolicies(projectId) {
         enabled = false,
         updated_at = clock_timestamp()
     WHERE project_id = '${sqlString(projectId)}'
-      AND name LIKE 'Gram hooks E2E shadow_mcp %'
+      AND name LIKE 'Speakeasy hooks E2E shadow_mcp %'
       AND deleted IS FALSE;
   `;
   const res = await runProcess("psql", psqlArgs(sql));
@@ -2422,7 +2422,7 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
     status: outputHasFinalMarker(res, extra.marker, "OK") ? "PASS" : "FAIL",
     detail:
       phase === "gram-hosted"
-        ? "Gram-hosted MCP URL passed policy"
+        ? "Speakeasy-hosted MCP URL passed policy"
         : "approved bypass let the MCP tool run",
   });
   checks.push({
@@ -2447,10 +2447,10 @@ async function prepareSkillFixture(skillsRoot, runId, provider) {
   const content = [
     "---",
     `name: ${skillName}`,
-    `description: Gram hooks E2E skill-activation probe for run ${runId}. Activate this skill whenever the user asks to run the Gram hooks E2E skill probe.`,
+    `description: Speakeasy hooks E2E skill-activation probe for run ${runId}. Activate this skill whenever the user asks to run the Speakeasy hooks E2E skill probe.`,
     "---",
     "",
-    "# Gram hooks E2E skill probe",
+    "# Speakeasy hooks E2E skill probe",
     "",
     `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} skill`,
     "",
@@ -2584,21 +2584,21 @@ async function runSyntheticClaudeSkillActivation(args) {
 function skillPrompt(runId, skillName, provider, skillDir) {
   if (provider === "codex") {
     return [
-      `Gram hooks E2E skill run ${runId} for codex.`,
+      `Speakeasy hooks E2E skill run ${runId} for codex.`,
       `Use the $${skillName} skill: read ${path.join(skillDir, "SKILL.md")} and follow its instructions.`,
       `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} codex skill`,
     ].join(" ");
   }
   if (provider === "cursor") {
     return [
-      `Gram hooks E2E skill run ${runId} for cursor.`,
+      `Speakeasy hooks E2E skill run ${runId} for cursor.`,
       `Use the ${skillName} skill and follow its instructions.`,
       `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} cursor skill`,
     ].join(" ");
   }
   return [
-    `Gram hooks E2E skill run ${runId} for claude.`,
-    `Run the Gram hooks E2E skill probe by invoking the Skill tool with skill "${skillName}".`,
+    `Speakeasy hooks E2E skill run ${runId} for claude.`,
+    `Run the Speakeasy hooks E2E skill probe by invoking the Skill tool with skill "${skillName}".`,
     `After the ${skillName} skill is activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} claude skill`,
   ].join(" ");
 }
@@ -2681,7 +2681,7 @@ async function runSkillScenario(args) {
 // runRatchetSuite verifies the never-authenticated fail-open ratchet: with no
 // cached credentials, no key env vars, and local browser auth disabled, the
 // session must complete normally (hooks pass through instead of blocking) and
-// no hook events for the run may reach Gram.
+// no hook events for the run may reach Speakeasy.
 //
 // Copilot is driven alongside Claude because it is the provider where getting
 // this wrong is a total outage rather than lost telemetry: Copilot denies a
@@ -2743,7 +2743,7 @@ async function runRatchetSuite(args) {
       detail:
         leaked.length === 0
           ? "no hook telemetry for the unauthenticated run"
-          : `${leaked.length} events reached Gram without credentials`,
+          : `${leaked.length} events reached Speakeasy without credentials`,
     });
   }
   return { checks, commandResults };
@@ -3018,7 +3018,7 @@ async function runCaptureSuite(args) {
       }
     }
   }
-  log.info("Polling Gram capture evidence");
+  log.info("Polling Speakeasy capture evidence");
   await verifyOnboarding({
     serverURL: args.serverURL,
     sessionId: args.session.sessionId,
@@ -3284,7 +3284,7 @@ async function runShadowMCPSuite(args) {
         }),
       );
       const hostedSince = BigInt(Date.now()) * 1000000n;
-      log.info(`${provider}: running shadow-mcp Gram-hosted scenario`);
+      log.info(`${provider}: running shadow-mcp Speakeasy-hosted scenario`);
       const hosted = await runProviderShadowMCPScenario({
         provider,
         pluginDir: args.pluginDirs.get(provider),
@@ -3304,7 +3304,7 @@ async function runShadowMCPSuite(args) {
         hosted,
       );
       if (hosted.timedOut) {
-        fail(`${provider} shadow-mcp Gram-hosted scenario timed out`);
+        fail(`${provider} shadow-mcp Speakeasy-hosted scenario timed out`);
       }
       const hostedEvidence = await poll(
         Date.now() + args.pollSeconds * 1000,
@@ -3424,7 +3424,7 @@ async function main() {
     path.join(workdir, `input-${runId}.txt`),
     `file-content-${runId}\n`,
   );
-  intro(`Gram hooks E2E ${runId}`);
+  intro(`Speakeasy hooks E2E ${runId}`);
   let success = false;
   let organizationId = null;
   let sessionId = null;

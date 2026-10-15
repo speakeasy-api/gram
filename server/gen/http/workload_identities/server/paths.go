@@ -12,9 +12,29 @@ func ListWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.list"
 }
 
+// ListPlatformsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service listPlatforms HTTP endpoint.
+func ListPlatformsWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.listPlatforms"
+}
+
+// GetCustomFlowsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service getCustomFlows HTTP endpoint.
+func GetCustomFlowsWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.getCustomFlows"
+}
+
+// ListTokenEndpointsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service listTokenEndpoints HTTP endpoint.
+func ListTokenEndpointsWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.listTokenEndpoints"
+}
+
 // RegisterIssuerWorkloadIdentitiesPath returns the URL path to the workloadIdentities service registerIssuer HTTP endpoint.
 func RegisterIssuerWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.registerIssuer"
+}
+
+// UpdateIssuerWorkloadIdentitiesPath returns the URL path to the workloadIdentities service updateIssuer HTTP endpoint.
+func UpdateIssuerWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.updateIssuer"
 }
 
 // WithdrawIssuerWorkloadIdentitiesPath returns the URL path to the workloadIdentities service withdrawIssuer HTTP endpoint.
@@ -25,6 +45,11 @@ func WithdrawIssuerWorkloadIdentitiesPath() string {
 // AdmitSubjectWorkloadIdentitiesPath returns the URL path to the workloadIdentities service admitSubject HTTP endpoint.
 func AdmitSubjectWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.admitSubject"
+}
+
+// UpdateSubjectWorkloadIdentitiesPath returns the URL path to the workloadIdentities service updateSubject HTTP endpoint.
+func UpdateSubjectWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.updateSubject"
 }
 
 // WithdrawSubjectWorkloadIdentitiesPath returns the URL path to the workloadIdentities service withdrawSubject HTTP endpoint.

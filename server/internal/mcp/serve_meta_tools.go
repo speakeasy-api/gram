@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -257,7 +258,7 @@ func (s *Service) handleMetaExecuteToolCall(
 	syntheticReq := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      req.ID,
-		Method:  "tools/call",
+		Method:  mcpversions.MethodToolsCall,
 		Params:  params,
 	}
 
@@ -266,7 +267,7 @@ func (s *Service) handleMetaExecuteToolCall(
 	// so do not report the synthetic member dispatch as hosted coverage.
 	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.guardianPolicy, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
-		s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
+		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	if err != nil {
 		// A member's execution failure must degrade that member, not the
@@ -407,7 +408,15 @@ func (s *Service) buildMemberDispatch(
 	// consented for a specific member must never reach another member's
 	// tools. No entry degrades to no token rather than an error, so partially
 	// connected meta sessions keep hosted members callable.
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens, member))
+	tokens, err := gate.memberTokens(ctx, member)
+	if err != nil {
+		return nil, nil, err
+	}
+	hostedTokens, err := hostedMemberTokens(tokens, member)
+	if err != nil {
+		return nil, nil, err
+	}
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
@@ -457,6 +466,8 @@ func (s *Service) buildMemberDispatch(
 		apiKeyID:              gate.apiKeyID,
 		toolVariationsGroupID: variationsGroupID,
 		mcpServerID:           &serverID,
+		mcpEndpointID:         nil,
+		attributionServerID:   nil,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
 		wrapperRBACResourceID:    "",
@@ -464,6 +475,8 @@ func (s *Service) buildMemberDispatch(
 		metaMcpServerID:          gate.metaServerID.String(),
 		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
 		skipProxyTools:           true,
+		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		toolsetIsPublic:          new(toolset.McpIsPublic),
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,
 		identityCoverageRecorded: false,
@@ -478,16 +491,21 @@ func (s *Service) buildMemberDispatch(
 // routeMetaMemberToken applies the same rule. A lone-token fallback would
 // forward a sibling's bearer once partial resolution leaves gaps in the map,
 // and a resource-qualified token is audience-bound to the remote upstream it
-// was consented for; both cases yield no token.
-func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) map[uuid.UUID]remotesessions.UpstreamToken {
+// was consented for; both cases yield no token. A self client whose
+// credential could not be obtained yields the member-scoped remedy instead,
+// so the member's tools never run without the credential it holds.
+func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	if !member.remoteSessionIssuerID.Valid {
-		return nil
+		return nil, nil
 	}
 	entry, ok := tokens[member.remoteSessionIssuerID.UUID]
 	if !ok || entry.Resource != "" {
-		return nil
+		return nil, nil
 	}
-	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}
+	if err := entry.ClientCredentialErr; err != nil {
+		return nil, metaMemberClientCredentialError(member, err)
+	}
+	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}, nil
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member

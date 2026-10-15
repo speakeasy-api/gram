@@ -6,15 +6,15 @@ Surveyed: Claude Code, OpenAI Codex CLI, Cursor, Gemini CLI, GitHub Copilot CLI.
 
 ## Summary
 
-No harness has a first-class "quarantine this session" primitive that an external control plane can invoke. Every harness that supports enforcement does so through per-event interception, so session quarantine is built the same way everywhere: a session-keyed deny circuit on the control plane, consulted by the per-event intercept point, that denies every prompt and tool call for the quarantined session. Gram already has exactly this shape in production for spend rules (the spend gate circuit), and hook adapters for Claude, Codex, and Cursor that translate a backend deny into each provider's native response. Quarantine slots in next to the spend gate with a session-scoped key.
+No harness has a first-class "quarantine this session" primitive that an external control plane can invoke. Every harness that supports enforcement does so through per-event interception, so session quarantine is built the same way everywhere: a session-keyed deny circuit on the control plane, consulted by the per-event intercept point, that denies every prompt and tool call for the quarantined session. Speakeasy already has exactly this shape in production for spend rules (the spend gate circuit), and hook adapters for Claude, Codex, and Cursor that translate a backend deny into each provider's native response. Quarantine slots in next to the spend gate with a session-scoped key.
 
 Harness enforcement coverage:
 
-- Claude Code: enforceable. PreToolUse + UserPromptSubmit hook denies, first-class HTTP hooks, managed settings can make hooks non-removable. Gram adapter shipped.
-- Codex CLI: enforceable. PreToolUse/PermissionRequest hooks, execpolicy rules, requirements.toml managed layer; app-server mode adds real mid-flight interrupt. Gram adapter shipped.
-- Cursor: enforceable. beforeShellExecution / beforeMCPExecution / beforeReadFile / preToolUse / beforeSubmitPrompt hooks; the only harness with opt-in fail-closed hooks; enterprise/team hook distribution. Gram adapter shipped.
-- Gemini CLI: enforceable in principle. BeforeTool hooks with the same deny contract plus an admin policy tier; no Gram adapter today.
-- Copilot CLI: enforceable in principle. preToolUse hooks including native HTTP hooks and a tamper-resistant policy.d layer; no Gram adapter today; GitHub-side admin controls are enable/disable only.
+- Claude Code: enforceable. PreToolUse + UserPromptSubmit hook denies, first-class HTTP hooks, managed settings can make hooks non-removable. Speakeasy adapter shipped.
+- Codex CLI: enforceable. PreToolUse/PermissionRequest hooks, execpolicy rules, requirements.toml managed layer; app-server mode adds real mid-flight interrupt. Speakeasy adapter shipped.
+- Cursor: enforceable. beforeShellExecution / beforeMCPExecution / beforeReadFile / preToolUse / beforeSubmitPrompt hooks; the only harness with opt-in fail-closed hooks; enterprise/team hook distribution. Speakeasy adapter shipped.
+- Gemini CLI: enforceable in principle. BeforeTool hooks with the same deny contract plus an admin policy tier; no Speakeasy adapter today.
+- Copilot CLI: enforceable in principle. preToolUse hooks including native HTTP hooks and a tamper-resistant policy.d layer; no Speakeasy adapter today; GitHub-side admin controls are enable/disable only.
 
 ## Per-harness findings
 
@@ -56,13 +56,13 @@ No session-kill hook primitive, but the most complete per-call enforcement surfa
 
 Per-call intercept: Agent Hooks (https://cursor.com/docs/hooks) cover `preToolUse`, `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `beforeSubmitPrompt`, `afterFileEdit`, `sessionStart`/`sessionEnd`, `stop`, subagent events, and more. Hooks are executables (JSON stdin/stdout) configured in `hooks.json` at four levels. Deny contract: `{"permission": "allow" | "deny" | "ask", "user_message": "...", "agent_message": "..."}` (snake_case); exit code 2 also blocks; matchers filter tools/commands.
 
-Remote decision: hooks are arbitrary processes, so calling an HTTP control plane per call is unrestricted. Security-critical hook scripts should use an HTTPS Gram endpoint and must validate its certificate; disabling TLS verification turns fail-closed configuration into an interceptable bypass. Default is fail-open ("By default, hook failures (crash, timeout, invalid JSON) allow the action through"), but `"failClosed": true` per hook blocks on failure, and docs recommend it for security-critical `beforeMCPExecution` hooks; `timeout` is configurable in seconds with no documented default, and a timeout counts as failure so failClosed applies to it (https://cursor.com/docs/hooks). Cursor is the only surveyed harness with documented opt-in fail-closed timeout semantics. Known community-reported bug: malformed JSON hook output silently allowing commands (https://forum.cursor.com/t/beforeshellexecution-hook-malformed-json-response-silently-allows-command-instead-of-blocking/152669; forum report, not docs).
+Remote decision: hooks are arbitrary processes, so calling an HTTP control plane per call is unrestricted. Security-critical hook scripts should use an HTTPS Speakeasy endpoint and must validate its certificate; disabling TLS verification turns fail-closed configuration into an interceptable bypass. Default is fail-open ("By default, hook failures (crash, timeout, invalid JSON) allow the action through"), but `"failClosed": true` per hook blocks on failure, and docs recommend it for security-critical `beforeMCPExecution` hooks; `timeout` is configurable in seconds with no documented default, and a timeout counts as failure so failClosed applies to it (https://cursor.com/docs/hooks). Cursor is the only surveyed harness with documented opt-in fail-closed timeout semantics. Known community-reported bug: malformed JSON hook output silently allowing commands (https://forum.cursor.com/t/beforeshellexecution-hook-malformed-json-response-silently-allows-command-instead-of-blocking/152669; forum report, not docs).
 
 Session level: no kill-session hook. Quarantine is compositional: deny in all tool hooks plus `beforeSubmitPrompt` returning `{"continue": false, "user_message": "..."}` to block further turns; `stop` is not a kill switch (it fires at completion and can only auto-submit a followup) (https://cursor.com/docs/hooks). Cloud Agents do have mid-flight termination: `POST /v1/agents/{id}/runs/{runId}/cancel`, terminal and non-resumable (https://cursor.com/docs/cloud-agent/api/endpoints). The Teams Admin API has no agent-termination endpoint (https://cursor.com/docs/account/teams/admin-api).
 
 Bypass and management: precedence Enterprise > Team > Project > User. Enterprise hooks are system files in admin-writable paths (`/etc/cursor/hooks.json`, macOS `/Library/Application Support/Cursor/hooks.json`, Windows `C:\ProgramData\Cursor\hooks.json`) distributable via MDM; Team hooks are pushed from the dashboard and auto-synced every 30 minutes (https://cursor.com/docs/hooks). Docs do not state an explicit tamper-proofing guarantee; enforcement rests on OS file permissions/MDM. The CLI supports the same hooks including team-managed distribution (https://cursor.com/docs/cli/changelog) plus static allow/deny permission arrays (https://cursor.com/docs/cli/reference/permissions). Gap: cloud agents do not run `beforeMCPExecution` or prompt-based hooks (https://cursor.com/docs/hooks).
 
-Session identity: every hook receives `conversation_id` and `generation_id` plus `user_email`, `transcript_path` (https://cursor.com/docs/hooks). `conversation_id` is the natural quarantine key, and it is what Gram's Cursor adapter already maps into `hookevents.Event.ConversationID`.
+Session identity: every hook receives `conversation_id` and `generation_id` plus `user_email`, `transcript_path` (https://cursor.com/docs/hooks). `conversation_id` is the natural quarantine key, and it is what Speakeasy's Cursor adapter already maps into `hookevents.Event.ConversationID`.
 
 ### Gemini CLI
 
@@ -92,13 +92,13 @@ Bypass and management: user and repo hooks are trivially bypassable (`"disableAl
 
 Session identity: every hook payload includes `sessionId`, `timestamp`, and `cwd` on all events; sessions are resumable via `--continue` / `/resume` (https://docs.github.com/en/copilot/reference/hooks-reference). Known caveats: open bugs report `preToolUse` not enforced in subagents (https://github.com/github/copilot-cli/issues/2392) and plugin-defined hooks not firing (github/copilot-cli#2540). Config dir override is `COPILOT_HOME`, not `COPILOT_CONFIG_DIR` (https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/configure-copilot-cli). BYOK bypasses enterprise policies (https://docs.github.com/en/copilot/how-tos/copilot-cli/administer-copilot-cli-for-your-enterprise).
 
-## How Gram intercepts hook traffic today
+## How Speakeasy intercepts hook traffic today
 
 All file paths below are in the gram repo.
 
 ### Transport and deny contract
 
-Installed hooks call Gram synchronously over HTTPS on two generations of endpoints (`server/internal/hooks/README.md`):
+Installed hooks call Speakeasy synchronously over HTTPS on two generations of endpoints (`server/internal/hooks/README.md`):
 
 - Legacy per-provider endpoints: `/rpc/hooks.claude`, `/rpc/hooks.cursor`, `/rpc/hooks.codex`, plus Claude OTEL ingestion.
 - Unified ingest: `/rpc/hooks.ingest`, authenticated with `Gram-Key` + `Gram-Project` (`hooks` key scope). Payload is feature-first (`prompt.submitted`, `tool.requested`, ...), response is provider-neutral: `{"decision": "allow"}` or `{"decision": "deny", "reason": "...", "message": "..."}`. Generated hook glue translates that into the provider-native shape.
@@ -120,7 +120,7 @@ Provider adapters render denies natively: Claude `permissionDecision` (`server/i
 
 ### Risk policy enforcement path
 
-`server/internal/hooks/risk_scan.go` wires hook events into `risk.Scanner.ScanForEnforcement` (`server/internal/risk/scanner.go:254`), which loads enabled enforcing policies per project and fans out detectors synchronously inside the hook request. Deny/warn results are rendered per transport (block reason, warn challenge with out-of-band ack link). Expensive scanners (Presidio, prompt-injection judge) run in `pystreams` behind the AIS-402 request-reply pub/sub enforcement topics with an org-level deadline and failure-mode setting; cheap detectors run in-process. A quarantine check is not a scan at all: on the healthy-cache path it is a single Redis circuit read next to `checkSpendGate`, before `ScanForEnforcement`. If Redis fails, Gram also reads the durable organization `hooks_fail_open` setting from Postgres before deciding whether the request may proceed, so the error path is deliberately not Redis-only.
+`server/internal/hooks/risk_scan.go` wires hook events into `risk.Scanner.ScanForEnforcement` (`server/internal/risk/scanner.go:254`), which loads enabled enforcing policies per project and fans out detectors synchronously inside the hook request. Deny/warn results are rendered per transport (block reason, warn challenge with out-of-band ack link). Expensive scanners (Presidio, prompt-injection judge) run in `pystreams` behind the AIS-402 request-reply pub/sub enforcement topics with an org-level deadline and failure-mode setting; cheap detectors run in-process. A quarantine check is not a scan at all: on the healthy-cache path it is a single Redis circuit read next to `checkSpendGate`, before `ScanForEnforcement`. If Redis fails, Speakeasy also reads the durable organization `hooks_fail_open` setting from Postgres before deciding whether the request may proceed, so the error path is deliberately not Redis-only.
 
 ### Where quarantine slots in
 
@@ -133,7 +133,7 @@ Fail-mode: reuse the audited organization `hooks_fail_open` feature rather than 
 
 ## Recommendation
 
-Build quarantine as a control-plane circuit, not a harness feature. No harness offers a "quarantine session" API, but every enforceable harness already routes per-event decisions through Gram's hooks, and a session-keyed deny circuit turns per-event denial into session quarantine uniformly.
+Build quarantine as a control-plane circuit, not a harness feature. No harness offers a "quarantine session" API, but every enforceable harness already routes per-event decisions through Speakeasy's hooks, and a session-keyed deny circuit turns per-event denial into session quarantine uniformly.
 
 Enforcement design:
 
@@ -143,16 +143,16 @@ Enforcement design:
 
 Per-harness enforcement:
 
-- Claude Code: PreToolUse + UserPromptSubmit denies via the installed Gram hook. Recommend orgs set managed settings with `allowManagedHooksOnly` for tamper resistance. Harness timeouts fail open, so Gram must answer fast; the added circuit read is one Redis GET on the existing synchronous path (target: no measurable change to hook p99, which is already dominated by risk scans).
-- Codex CLI: same hook path (PreToolUse/PermissionRequest). Tamper resistance via `requirements.toml` with managed `[hooks]` and `allow_managed_hooks_only`. If Gram ever embeds Codex via app-server, `turn/interrupt` plus per-thread read-only sandbox is a true mid-flight kill; not needed for hook-based quarantine.
-- Cursor: hook denies across shell/MCP/read/preToolUse plus `beforeSubmitPrompt` `continue: false`. Call Gram over HTTPS with certificate validation enabled, and set `failClosed: true` on the gated hooks so a Gram outage or invalid response cannot be exploited to escape quarantine (unique among harnesses). Gap: cloud agents skip `beforeMCPExecution` and prompt hooks; the Cloud Agents cancel API is the fallback there if we ever manage those.
-- Gemini CLI: buildable, needs a Gram hook adapter (new work; ingest is adapter-agnostic so this is glue plus enforcement enablement in `spendGatedAdapter`-style gating). `BeforeTool` deny JSON matches Gram's contract shape almost exactly; `BeforeToolSelection` `toolConfig.mode: "NONE"` can strip tools from the model call as an extra layer. Admin policy tier gives tamper resistance. Until an adapter ships: alert-only.
-- Copilot CLI: buildable, needs an adapter; native HTTP hooks could even point directly at a Gram endpoint without local glue, with `policy.d` as the non-removable slot. HTTP hooks are fail-open and subagent enforcement has a known bug, so treat Copilot as best-effort enforcement plus alerting until those close. Until then: alert-only.
+- Claude Code: PreToolUse + UserPromptSubmit denies via the installed Speakeasy hook. Recommend orgs set managed settings with `allowManagedHooksOnly` for tamper resistance. Harness timeouts fail open, so Speakeasy must answer fast; the added circuit read is one Redis GET on the existing synchronous path (target: no measurable change to hook p99, which is already dominated by risk scans).
+- Codex CLI: same hook path (PreToolUse/PermissionRequest). Tamper resistance via `requirements.toml` with managed `[hooks]` and `allow_managed_hooks_only`. If Speakeasy ever embeds Codex via app-server, `turn/interrupt` plus per-thread read-only sandbox is a true mid-flight kill; not needed for hook-based quarantine.
+- Cursor: hook denies across shell/MCP/read/preToolUse plus `beforeSubmitPrompt` `continue: false`. Call Speakeasy over HTTPS with certificate validation enabled, and set `failClosed: true` on the gated hooks so a Speakeasy outage or invalid response cannot be exploited to escape quarantine (unique among harnesses). Gap: cloud agents skip `beforeMCPExecution` and prompt hooks; the Cloud Agents cancel API is the fallback there if we ever manage those.
+- Gemini CLI: buildable, needs a Speakeasy hook adapter (new work; ingest is adapter-agnostic so this is glue plus enforcement enablement in `spendGatedAdapter`-style gating). `BeforeTool` deny JSON matches Speakeasy's contract shape almost exactly; `BeforeToolSelection` `toolConfig.mode: "NONE"` can strip tools from the model call as an extra layer. Admin policy tier gives tamper resistance. Until an adapter ships: alert-only.
+- Copilot CLI: buildable, needs an adapter; native HTTP hooks could even point directly at a Speakeasy endpoint without local glue, with `policy.d` as the non-removable slot. HTTP hooks are fail-open and subagent enforcement has a known bug, so treat Copilot as best-effort enforcement plus alerting until those close. Until then: alert-only.
 
-Fail-mode: use the existing audited `hooks_fail_open` organization feature. The healthy-cache path remains one Redis read. On a cache error, Gram consults Postgres: organizations with `hooks_fail_open` enabled proceed, while all others fail closed for quarantine containment; if the settings lookup also fails, Gram fails open to avoid a global outage. Pair containment mode with Cursor `failClosed` and deny-by-default permission postures where managed configuration allows.
+Fail-mode: use the existing audited `hooks_fail_open` organization feature. The healthy-cache path remains one Redis read. On a cache error, Speakeasy consults Postgres: organizations with `hooks_fail_open` enabled proceed, while all others fail closed for quarantine containment; if the settings lookup also fails, Speakeasy fails open to avoid a global outage. Pair containment mode with Cursor `failClosed` and deny-by-default permission postures where managed configuration allows.
 
 Structural limits to state in the ticket:
 
 - Quarantine takes effect at the next hook event; no surface can abort a tool call already executing.
-- Enforcement is cooperative below the managed layers: a user who can edit user-level settings can strip hooks unless the org deploys managed settings (Claude), requirements.toml (Codex), enterprise/team hooks (Cursor), the admin policy tier (Gemini), or policy.d (Copilot). Hook removal is visible to Gram as the session going silent, which is itself an alertable signal.
-- Harnesses with no installed Gram hook (any harness, not just Gemini/Copilot) are observe-and-alert only.
+- Enforcement is cooperative below the managed layers: a user who can edit user-level settings can strip hooks unless the org deploys managed settings (Claude), requirements.toml (Codex), enterprise/team hooks (Cursor), the admin policy tier (Gemini), or policy.d (Copilot). Hook removal is visible to Speakeasy as the session going silent, which is itself an alertable signal.
+- Harnesses with no installed Speakeasy hook (any harness, not just Gemini/Copilot) are observe-and-alert only.

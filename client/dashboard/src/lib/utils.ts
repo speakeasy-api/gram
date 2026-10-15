@@ -50,13 +50,45 @@ export function getApiBaseURL(): string {
   return import.meta.env.DEV ? window.location.origin : getServerURL();
 }
 
-// tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
-// keeps the wildcard cert valid), tunnel.<host> otherwise.
-export function tunnelGatewayURL(): string {
-  const server = new URL(getServerURL());
-  const host =
-    server.host === "app.getgram.ai"
-      ? "tunnel.speakeasy.com"
+// Hosts serving the production dashboard. Compared exactly: a substring check
+// would also match dev.ai.speakeasy.com and preview hosts.
+const PROD_HOSTS = new Set(["app.getgram.ai", "ai.speakeasy.com"]);
+
+export function isProdHost(serverURL: string): boolean {
+  return PROD_HOSTS.has(new URL(serverURL).hostname);
+}
+
+// Hosts serving the dev dashboard, compared exactly like PROD_HOSTS.
+const DEV_HOSTS = new Set(["dev.getgram.ai", "dev.ai.speakeasy.com"]);
+
+// Every first-party host that serves the same product as serverURL's host:
+// all of that environment's hosts on a prod or dev host, otherwise just it.
+export function firstPartyHosts(serverURL = getServerURL()): string[] {
+  const host = new URL(serverURL, window.location.origin).hostname;
+  if (PROD_HOSTS.has(host)) return [...PROD_HOSTS];
+  if (DEV_HOSTS.has(host)) return [...DEV_HOSTS];
+  return [host];
+}
+
+// Hosts an agent sandbox must allow to reach Speakeasy: the current host first,
+// then every other host of its environment. Published plugins and the device
+// daemon send to the server URL at publish time, which moves between these
+// hosts when the server URL changes, so an allowlist needs all of them to keep
+// working across a republish.
+export function agentEgressHosts(serverURL = getServerURL()): string[] {
+  const host = new URL(serverURL, window.location.origin).hostname;
+  return [host, ...firstPartyHosts(serverURL).filter((h) => h !== host)];
+}
+
+// tunnel.speakeasy.com on every prod host, tunnel.dev.getgram.ai on every dev
+// host, tunnel-pr-N.<env> in previews (single label keeps the wildcard cert
+// valid), tunnel.<host> otherwise.
+export function tunnelGatewayURL(serverURL = getServerURL()): string {
+  const server = new URL(serverURL);
+  const host = PROD_HOSTS.has(server.hostname)
+    ? "tunnel.speakeasy.com"
+    : DEV_HOSTS.has(server.hostname)
+      ? "tunnel.dev.getgram.ai"
       : /^pr-\d+\./.test(server.host)
         ? `tunnel-${server.host}`
         : `tunnel.${server.host}`;
@@ -96,7 +128,7 @@ export function mcpConnectionUrl(
   }
 }
 
-// Whether GET /<runtimePath>/<slug>/connect/first-party would resolve.
+// Whether GET /mcp/<slug>/connect/first-party would resolve.
 // The handler 404s unless the server is issuer-gated, is not a public tunnel
 // (those serve anonymously and expose no OAuth surface), and the slug is a
 // platform-namespace endpoint. A custom-domain slug is a different address
@@ -114,32 +146,25 @@ export function supportsFirstPartyConnect(server: {
 }
 
 // firstPartyConnectUrl derives the runtime first-party connect entry point
-// (`/<runtimePath>/<slug>/connect/first-party`) for a display MCP URL. It's
-// always built on the Gram server origin (getServerURL), never the display
+// (`/mcp/<slug>/connect/first-party`) for a display MCP URL. It's
+// always built on the Speakeasy server origin (getServerURL), never the display
 // URL's origin: a custom-domain endpoint's display URL is
-// `https://<customer-domain>/mcp/<slug>`, but the connect page is a Gram auth
-// surface — the IDP callback, routes, and any session live on the Gram origin,
+// `https://<customer-domain>/mcp/<slug>`, but the connect page is a Speakeasy auth
+// surface — the IDP callback, routes, and any session live on the Speakeasy origin,
 // not the customer's MCP domain. Pass a platform-namespace URL
 // (`${getServerURL()}/mcp/<platform slug>`); a custom-domain display URL's
 // slug is not looked up on that host. Opened as a top-level new tab; the IDP
 // flow is state-based so no dev proxy is needed.
-//
-// `runtimePath` selects the surface the connect route is mounted on: the
-// experimental remote-MCP surface (`x/mcp`, the default) or the toolset surface
-// (`mcp`, used by the playground). Both display URLs are `/mcp/<slug>`, so the
-// surface can't be inferred from the URL and must be passed explicitly.
 // Returns undefined when the slug can't be derived.
 export function firstPartyConnectUrl(
   displayUrl: string | undefined,
-  options?: { runtimePath?: "mcp" | "x/mcp" },
 ): string | undefined {
   if (!displayUrl) return undefined;
-  const runtimePath = options?.runtimePath ?? "x/mcp";
   try {
     const slug = new URL(displayUrl).pathname.split("/").filter(Boolean).pop();
     if (!slug) return undefined;
     const url = new URL(getServerURL());
-    url.pathname = `/${runtimePath}/${slug}/connect/first-party`;
+    url.pathname = `/mcp/${slug}/connect/first-party`;
     return url.toString();
   } catch {
     return undefined;
@@ -166,7 +191,7 @@ export function buildLoginRedirectURL(
   // which is not a secret, and it goes no further than this request.
   if (orgName) url.searchParams.set("org_name", orgName);
   // Also sign-up only. The server turns this into WorkOS's `login_hint`, which
-  // pre-fills the email field on the hosted AuthKit screen. Gram never writes
+  // pre-fills the email field on the hosted AuthKit screen. Speakeasy never writes
   // it to Redis or the database.
   //
   // It does land in request logs, though: the logger records full URLs, so
@@ -251,9 +276,11 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export function getCustomDomainCNAME(): string {
+export function getCustomDomainCNAME(serverURL = getServerURL()): string {
   try {
-    const url = new URL(getServerURL());
+    if (isProdHost(serverURL)) return "cname.getgram.ai.";
+    const url = new URL(serverURL);
+    if (DEV_HOSTS.has(url.hostname)) return "cname.dev.getgram.ai.";
     const parts = url.hostname.split(".");
     if (parts.length > 2) {
       parts[0] = parts[0] === "app" ? "cname" : `cname.${parts[0]}`;

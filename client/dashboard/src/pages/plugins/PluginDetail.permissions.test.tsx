@@ -79,12 +79,15 @@ vi.mock("@/routes", () => ({
 vi.mock("@/components/command-palette/recentlyVisited", () => ({
   useRecentLabelOverride: () => {},
 }));
-vi.mock("@/components/page-layout", () => {
+vi.mock("@/components/page-layout", async (importOriginal) => {
+  const { Page: ActualPage } =
+    await importOriginal<typeof import("@/components/page-layout")>();
   const Container = ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   );
   return {
     Page: Object.assign(Container, {
+      Toolbar: ActualPage.Toolbar,
       Header: Object.assign(Container, { Breadcrumbs: () => null }),
       Body: Container,
     }),
@@ -138,7 +141,7 @@ vi.mock("@gram/client/react-query/addPluginServer", () => ({
 vi.mock("@gram/client/react-query/removePluginServer", () => ({
   useRemovePluginServerMutation: () => ({ mutate: vi.fn() }),
 }));
-function renderAdmin(section = "servers") {
+function renderAdmin(section = "overview") {
   adminQuery.mockReturnValue({
     data: {
       name: "Example plugin",
@@ -249,6 +252,10 @@ describe("plugin detail permission boundary", () => {
     (section) => {
       state.pluginWrite = true;
       renderAdmin(section);
+      if (section === "overview" || section === "servers") {
+        expect(screen.getByText("Overview")).toBeTruthy();
+        expect(screen.getByText("Example server")).toBeTruthy();
+      }
       expect(adminQuery).toHaveBeenCalled();
       expect(features).toHaveBeenLastCalledWith(
         { organizationId: "org-a" },
@@ -295,3 +302,10 @@ describe("plugin detail permission boundary", () => {
     expect(screen.queryByText("Server metadata unavailable")).toBeNull();
   });
 });
+
+vi.mock("@/components/sources/SourceCard", () => ({
+  SourceMcpIcon: () => null,
+}));
+vi.mock("@/components/mcp/MCPToolsetIcon", () => ({
+  MCPToolsetIcon: () => null,
+}));

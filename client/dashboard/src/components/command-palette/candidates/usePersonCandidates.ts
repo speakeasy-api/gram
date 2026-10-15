@@ -5,6 +5,7 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
+import { allMemberRoleIds } from "@/lib/member-roles";
 
 /**
  * Org members, jumping straight to their identity page. Org-scoped, so the
@@ -39,7 +40,7 @@ export function usePersonCandidates({
   return useMemo(
     () =>
       (data?.members ?? []).map((member): LauncherCandidate => {
-        const roles = member.roleIds.join(", ");
+        const roles = allMemberRoleIds(member).join(", ");
         return {
           id: `person:${member.id}`,
           kind: "person",

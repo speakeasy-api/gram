@@ -84,10 +84,6 @@ func (l *Logger) UpsertAIDetections(ctx context.Context, detections []AIDetectio
 		})
 	}
 
-	if l.chConn == nil {
-		return nil, nil
-	}
-
 	firstInOrganization, err := repo.New(l.chConn).UpsertAIDetections(l.detachedWriteContext(ctx), params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert ai detections")
@@ -98,9 +94,6 @@ func (l *Logger) UpsertAIDetections(ctx context.Context, detections []AIDetectio
 
 // InsertAIScanReceipt appends one scan receipt to ai_scan_receipts.
 func (l *Logger) InsertAIScanReceipt(ctx context.Context, receipt AIScanReceipt) error {
-	if l.chConn == nil {
-		return nil
-	}
 	if receipt.OrganizationID == "" {
 		return nil
 	}

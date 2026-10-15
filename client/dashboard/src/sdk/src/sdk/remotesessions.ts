@@ -4,14 +4,18 @@
 
 import { remoteSessionsAttachBinding } from "../funcs/remoteSessionsAttachBinding.js";
 import { remoteSessionsCommitServerIdentityConfiguration } from "../funcs/remoteSessionsCommitServerIdentityConfiguration.js";
+import { remoteSessionsCount } from "../funcs/remoteSessionsCount.js";
 import { remoteSessionsDetachBinding } from "../funcs/remoteSessionsDetachBinding.js";
+import { remoteSessionsGetServerIdentityImpact } from "../funcs/remoteSessionsGetServerIdentityImpact.js";
 import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CommitServerIdentityConfigurationResult } from "../models/components/commitserveridentityconfigurationresult.js";
+import { CountRemoteSessionsResult } from "../models/components/countremotesessionsresult.js";
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
 import { PrincipalRemoteSessionBinding } from "../models/components/principalremotesessionbinding.js";
+import { ServerIdentityImpactResult } from "../models/components/serveridentityimpactresult.js";
 import {
   AttachBindingRequest,
   AttachBindingSecurity,
@@ -21,9 +25,17 @@ import {
   CommitServerIdentityConfigurationSecurity,
 } from "../models/operations/commitserveridentityconfiguration.js";
 import {
+  CountRemoteSessionsRequest,
+  CountRemoteSessionsSecurity,
+} from "../models/operations/countremotesessions.js";
+import {
   DetachBindingRequest,
   DetachBindingSecurity,
 } from "../models/operations/detachbinding.js";
+import {
+  GetServerIdentityImpactRequest,
+  GetServerIdentityImpactSecurity,
+} from "../models/operations/getserveridentityimpact.js";
 import {
   ListBindingsRequest,
   ListBindingsSecurity,
@@ -80,6 +92,25 @@ export class RemoteSessions extends ClientSDK {
   }
 
   /**
+   * countRemoteSessions remoteSessions
+   *
+   * @remarks
+   * Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.
+   */
+  async count(
+    request: CountRemoteSessionsRequest,
+    security?: CountRemoteSessionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CountRemoteSessionsResult> {
+    return unwrapAsync(remoteSessionsCount(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * detachBinding remoteSessions
    *
    * @remarks
@@ -91,6 +122,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteSessionsDetachBinding(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getServerIdentityImpact remoteSessions
+   *
+   * @remarks
+   * Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
+   */
+  async getServerIdentityImpact(
+    request: GetServerIdentityImpactRequest,
+    security?: GetServerIdentityImpactSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ServerIdentityImpactResult> {
+    return unwrapAsync(remoteSessionsGetServerIdentityImpact(
       this,
       request,
       security,

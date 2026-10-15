@@ -52,13 +52,16 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("getMcpServer", func() {
-		Description("Get an MCP server by ID or slug. Exactly one of id or slug must be provided.")
+		Description("Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the MCP server. Mutually exclusive with slug.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("slug", String, "The slug of the MCP server. Mutually exclusive with id.")
+			Attribute("toolset_id", String, "Resolve the preferred MCP server for this toolset. Mutually exclusive with id and slug.", func() {
+				Format(FormatUUID)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -70,6 +73,7 @@ var _ = Service("mcpServers", func() {
 			GET("/rpc/mcpServers.get")
 			Param("id")
 			Param("slug")
+			Param("toolset_id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -351,7 +355,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("deleteMcpServer", func() {
-		Description("Delete an MCP server")
+		Description("Delete an MCP server. A toolset's own hosted server (its id equals the toolset id) is disabled instead, as turning MCP off on the toolset does, and stays listed with visibility disabled. Other servers, including other toolset-backed ones, are deleted.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the MCP server to delete", func() {
@@ -462,6 +466,7 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("slug", String, "A URL-safe, project-unique slug derived server-side from the name and ID")
+	Attribute("platform_endpoint_slug", String, "An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.")
 	Attribute("environment_id", String, "The ID of the environment associated with the server", func() {
 		Format(FormatUUID)
 	})
@@ -477,7 +482,7 @@ var McpServer = Type("McpServer", func() {
 	Attribute("toolset_id", String, "The ID of the toolset used as the backend", func() {
 		Format(FormatUUID)
 	})
-	Attribute("unproxied_mcp_server_id", String, "The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Gram.", func() {
+	Attribute("unproxied_mcp_server_id", String, "The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Speakeasy.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server, if any.", func() {

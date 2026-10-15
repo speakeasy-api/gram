@@ -25,7 +25,7 @@ const (
 	meterTypedCallDuration     = "risk.prompt_injection.typed_call_duration"
 	meterTypedDecisionDuration = "risk.prompt_injection.typed_decision_duration"
 	meterTypedFailOpen         = "risk.prompt_injection.typed_fail_open_samples"
-	meterRateLimited           = "risk.prompt_injection.rate_limited"
+	meterTypedCompletionTokens = "risk.prompt_injection.typed_completion_tokens" //nolint:gosec // G101: a metric name, not a credential
 )
 
 type metrics struct {
@@ -41,7 +41,7 @@ type metrics struct {
 	callDuration     metric.Float64Histogram
 	decisionDuration metric.Float64Histogram
 	failOpen         metric.Int64Counter
-	rateLimited      metric.Int64Counter
+	completionTokens metric.Int64Histogram
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -165,13 +165,16 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedFailOpen), attr.SlogError(err))
 	}
 
-	rateLimited, err := meter.Int64Counter(
-		meterRateLimited,
-		metric.WithDescription("Number of prompt-injection judge calls rejected by the per-org rate limiter"),
-		metric.WithUnit("{classification}"),
+	completionTokens, err := meter.Int64Histogram(
+		meterTypedCompletionTokens,
+		metric.WithDescription("Tokens the typed prompt-injection judge generated, reasoning included, against its MaxVerdictTokens cap"),
+		metric.WithUnit("{token}"),
+		// Powers of two up to the cap: the top buckets show it about to
+		// truncate verdicts, the bottom ones that it can be tightened.
+		metric.WithExplicitBucketBoundaries(64, 128, 256, 512, 1024, 2048, 4096, MaxVerdictTokens),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRateLimited), attr.SlogError(err))
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedCompletionTokens), attr.SlogError(err))
 	}
 
 	return &metrics{
@@ -187,7 +190,7 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		callDuration:     callDuration,
 		decisionDuration: decisionDuration,
 		failOpen:         failOpen,
-		rateLimited:      rateLimited,
+		completionTokens: completionTokens,
 	}
 }
 
@@ -292,6 +295,20 @@ func (m *metrics) RecordFailOpen(ctx context.Context, orgID, model, reasoning, r
 	))
 }
 
+// RecordCompletionTokens records one judge call's generated tokens, including
+// a call truncated at the cap.
+func (m *metrics) RecordCompletionTokens(ctx context.Context, orgID, model, reasoning string, tokens int, truncated bool) {
+	if m.completionTokens == nil {
+		return
+	}
+	m.completionTokens.Record(ctx, int64(tokens), metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
+		attribute.Bool("truncated", truncated),
+	))
+}
+
 func (m *metrics) RecordDetection(ctx context.Context, orgID, kind, target string, operational bool, model, reasoning string) {
 	attrs := metric.WithAttributes(
 		attr.OrganizationID(orgID),
@@ -333,17 +350,5 @@ func (m *metrics) RecordConfidence(ctx context.Context, orgID string, confidence
 	m.confidence.Record(ctx, confidence, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("stage", stageJudge),
-	))
-}
-
-// RecordRateLimited records a judge call rejected by the rate limiter.
-func (m *metrics) RecordRateLimited(ctx context.Context, orgID, model, reasoning string) {
-	if m.rateLimited == nil {
-		return
-	}
-	m.rateLimited.Add(ctx, 1, metric.WithAttributes(
-		attr.OrganizationID(orgID),
-		attribute.String("model", model),
-		attribute.String("reasoning", reasoning),
 	))
 }

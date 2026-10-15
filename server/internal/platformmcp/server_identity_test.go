@@ -116,16 +116,18 @@ func TestConfiguredServers_FoldsMembershipRowsPerServer(t *testing.T) {
 func TestOverviewObserved_NeverReportsNoObservationsBesideANonzeroMetric(t *testing.T) {
 	t.Parallel()
 
-	require.False(t, overviewObserved(nil, nil, nil, 0))
-	require.False(t, overviewObserved(&telemetryrepo.OverviewSummary{}, &telemetryrepo.ActiveCounts{}, []ProjectOverviewServer{}, 0))
+	require.False(t, overviewObserved(nil, 0, nil, 0))
+	require.False(t, overviewObserved(&telemetryrepo.OverviewSummary{}, 0, []ProjectOverviewServer{}, 0))
 
-	require.True(t, overviewObserved(&telemetryrepo.OverviewSummary{TotalToolCalls: 1}, nil, nil, 0))
-	require.True(t, overviewObserved(nil, &telemetryrepo.ActiveCounts{ActiveServersCount: 2}, nil, 0))
-	require.True(t, overviewObserved(nil, &telemetryrepo.ActiveCounts{ActiveUsersCount: 1}, nil, 0))
-	require.True(t, overviewObserved(nil, nil, []ProjectOverviewServer{{Name: "linear", MCPID: "", ToolCalls: 3}}, 0))
+	require.True(t, overviewObserved(&telemetryrepo.OverviewSummary{TotalToolCalls: 1}, 0, nil, 0))
+	// The exact unified count can observe attributed servers even when the
+	// bounded top-server presentation list is empty.
+	require.True(t, overviewObserved(nil, 2, nil, 0))
+	require.True(t, overviewObserved(nil, 0, nil, 1))
+	require.True(t, overviewObserved(nil, 0, []ProjectOverviewServer{{Name: "linear", MCPID: "", ToolCalls: 3}}, 0))
 	// Session mode: chat participants with no tool calls anywhere are still an
 	// observation, because active_users reports them.
-	require.True(t, overviewObserved(&telemetryrepo.OverviewSummary{}, &telemetryrepo.ActiveCounts{}, nil, 4))
+	require.True(t, overviewObserved(&telemetryrepo.OverviewSummary{}, 0, nil, 4))
 }
 
 // TestReconcileMetrics_NeverReportsNoObservationsBesideANonzeroMetric pins the

@@ -64,12 +64,12 @@ func TestService_redirectSignupError_PreservesDestination(t *testing.T) {
 		},
 	}
 
-	state := encodeStateParam("/~/toolsets?tab=all", "nonce")
+	state := encodeStateParam("/@self/projects/default/toolsets?tab=all", "nonce")
 	payload := &gen.CallbackPayload{Code: "code", State: &state}
 
 	result, err := svc.redirectSignupError(t.Context(), payload, errors.New("provisioning failed"))
 	require.NoError(t, err)
-	require.Equal(t, "http://localhost:3000/sign-up?signin_error=init_error&redirect=%2F~%2Ftoolsets%3Ftab%3Dall", result.Location)
+	require.Equal(t, "http://localhost:3000/sign-up?signin_error=init_error&redirect=%2F%40self%2Fprojects%2Fdefault%2Ftoolsets%3Ftab%3Dall", result.Location)
 }
 
 // TestService_redirectSignupError_DropsForeignDestination confirms an

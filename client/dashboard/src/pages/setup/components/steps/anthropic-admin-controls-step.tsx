@@ -32,14 +32,16 @@ export function AnthropicAdminControlsStep({
   // published. A missing flag means the collaborator lookup failed, not that
   // there are none, so only a definite "no" holds these instructions back.
   const noCollaborators = publishStatus?.hasCollaborators === false;
-  let heldBack: string | undefined;
-  if (!published) {
-    heldBack =
-      "Publish the marketplace above first — these instructions reference it.";
-  } else if (noCollaborators) {
-    heldBack =
-      "Add a collaborator to the marketplace repo above first — Claude.ai cannot sync a repo it has no access to.";
-  }
+  // Every path references the published marketplace. Only the org rollouts
+  // that read the repo through GitHub (Cowork's GitHub App, Cursor's import)
+  // need a collaborator; Claude Code clones through Speakeasy's proxy, and the
+  // personal-plan paths use the proxy or a downloaded ZIP.
+  const heldBack = published
+    ? undefined
+    : "Publish the marketplace above first — these instructions reference it.";
+  const orgHeldBack = noCollaborators
+    ? "Add a collaborator to the marketplace repo above first — the organization rollout cannot sync a repo nobody has access to."
+    : undefined;
 
   const statusOf = (id: string): PlatformSetupStatus =>
     platformStatus[id] ?? "not_started";
@@ -49,7 +51,7 @@ export function AnthropicAdminControlsStep({
   return (
     <StepContainer
       title="Set up Anthropic admin controls"
-      description="Claude Cowork and Claude Code are both configured from Claude.ai: organization plugins make the observability plugin required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach, and managed settings push it to Claude Code. Turn logging on, publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
+      description="On Team or Enterprise, an Owner or Primary Owner can configure Cowork organization plugins and Claude Code server-managed settings from Claude.ai. Personal installations and endpoint-managed policies are separate paths. Turn logging on, publish your plugin marketplace, follow the appropriate setup below, optionally connect Cursor, and verify actual event delivery."
       onContinue={onComplete}
     >
       <div className="space-y-8">
@@ -71,7 +73,7 @@ export function AnthropicAdminControlsStep({
           index={3}
           slug="connect-cowork"
           title="Connect Claude Cowork"
-          description="Cowork syncs the marketplace repo through Claude's own GitHub App, so the plugin is marked required from Organization settings rather than pushed from a machine."
+          description="On Team or Enterprise, an Owner or Primary Owner syncs the marketplace through Claude's GitHub App and marks the plugin Required. On Pro or Max, each person can add a personal marketplace (including private GitHub) or upload a ZIP. Required installation and successful upload do not prove hook execution."
           complete={statusOf("claude-cowork") === "complete"}
           aside={platformStatusBadge(statusOf("claude-cowork"))}
         >
@@ -81,6 +83,7 @@ export function AnthropicAdminControlsStep({
             status={statusOf("claude-cowork")}
             onStatusChange={(next) => setStatus("claude-cowork", next)}
             heldBack={heldBack}
+            orgHeldBack={orgHeldBack}
           />
         </StepSection>
 
@@ -88,7 +91,7 @@ export function AnthropicAdminControlsStep({
           index={4}
           slug="connect-claude-code"
           title="Connect Claude Code"
-          description="Managed settings on Claude.ai apply the marketplace and the observability plugin to every developer in your org. The device agent, if you deploy it, also enforces the plugin on managed machines."
+          description="On Team or Enterprise, an Owner or Primary Owner configures Claude.ai server-managed settings for eligible signed-in Claude Code sessions. Endpoint-managed policy files and MDM are separate mechanisms. Personal setup uses each developer's user settings, which higher-precedence policy can override. Start a new session and verify logs, metrics, and beta traces."
           complete={statusOf("claude") === "complete"}
           aside={platformStatusBadge(statusOf("claude"))}
         >
@@ -106,7 +109,7 @@ export function AnthropicAdminControlsStep({
           slug="connect-cursor"
           title="Connect Cursor"
           badge="Optional"
-          description="Cursor's team marketplace imports the observability plugin from the same repo. Skip this if your team doesn't use Cursor."
+          description="On Cursor Teams or Enterprise, import the same repo through the team marketplace and choose an installation mode; import alone does not install the plugin for everyone. On an individual plan, each person installs a local copy. Verify hook events after setup. Skip this if your team does not use Cursor."
           complete={statusOf("cursor") === "complete"}
           aside={platformStatusBadge(statusOf("cursor"))}
         >
@@ -115,15 +118,16 @@ export function AnthropicAdminControlsStep({
             status={statusOf("cursor")}
             onStatusChange={(next) => setStatus("cursor", next)}
             heldBack={heldBack}
+            orgHeldBack={orgHeldBack}
           />
         </StepSection>
 
         <ConfirmTrafficSection
           index={6}
-          description="Run any tool in Claude Code or Cursor, or start a Cowork session. Their events show up here once the plugin is active."
+          description="Run any tool in Claude Code or Cursor, or start a Cowork session. Confirm their events actually arrive here; installation alone does not prove delivery."
           callout={{
             title: "Turn Cowork on before you chat",
-            body: "The observability plugin's hooks run inside a Cowork session, not in an ordinary Claude conversation. On claude.ai, start a new conversation, switch the Claude Cowork toggle on, then send a message — its events land here.",
+            body: "Start a new Cowork session and run a tool, rather than an ordinary Claude conversation where hooks are ignored. Verify received events on the surface and version you use; upload success does not prove hook execution or network access.",
           }}
           matchesSource={isAnthropicOrCursorSource}
         />

@@ -1,6 +1,7 @@
 import { mkdtemp, open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { Readable } from "node:stream";
 import { test, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
@@ -34,14 +35,15 @@ afterAll(() => server.close());
 
 test("valid tool call with args", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "get-weather",
     input: { city: "San Francisco" },
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -50,14 +52,15 @@ test("valid tool call with args", async () => {
 
 test("valid tool call from default export", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "greet",
     input: { user: "Jane" },
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good-default-export.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -71,14 +74,15 @@ test("valid tool call from default export", async () => {
 
 test("valid tool call without args", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "ping",
     input: {},
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -87,14 +91,15 @@ test("valid tool call without args", async () => {
 
 test("valid tool call adds custom headers", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "list-products",
     input: { cursor: "1" },
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -105,14 +110,15 @@ test("valid tool call adds custom headers", async () => {
 
 test("valid tool call explicit 4XX", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "create-charge",
     input: { charge: -100 },
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -121,14 +127,15 @@ test("valid tool call explicit 4XX", async () => {
 
 test("valid tool call explicit 4XX", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "create-charge",
     input: { charge: -100 },
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -137,14 +144,15 @@ test("valid tool call explicit 4XX", async () => {
 
 test("proxy good downstream fetch calls", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "proxy",
     input: { url: "http://localhost:7357/pet" },
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -156,14 +164,15 @@ test("proxy good downstream fetch calls", async () => {
 
 test("proxy good downstream that returns binary data", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "proxy",
     input: { url: "http://localhost:7357/logo" },
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good.js"),
+    Readable.from([request]),
   );
 
   const text = await readFile(pipePath, "utf-8");
@@ -185,11 +194,12 @@ test("proxy good downstream that returns binary data", async () => {
 
 test("catches tool calls that throw", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({ name: "fail-tool" });
+  const request = JSON.stringify({ name: "fail-tool" });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -209,13 +219,14 @@ test("catches tool calls that throw", async () => {
 
 test("fails when tool call does not return Response", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "null-tool",
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "good.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -225,13 +236,14 @@ test("fails when tool call does not return Response", async () => {
 
 test("fails when functions file does not exist", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "null-tool",
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "nonexistent.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -249,13 +261,14 @@ test("fails when functions file does not exist", async () => {
 
 test("fails when functions file does not export handleToolCall", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "null-tool",
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "empty.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -263,32 +276,33 @@ test("fails when functions file does not export handleToolCall", async () => {
   expect(content).toMatchSnapshot();
 });
 
-test("backward compatibility - tool call without type parameter", async () => {
+test("rejects a call without a type argument", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "ping",
     input: {},
   });
 
-  await main(
-    ["node", "./gram-start.mjs", pipePath, args],
-    join(import.meta.dirname, "good.js"),
-  );
-
-  const content = await readFile(pipePath, "utf-8");
-  expect(content).toMatchSnapshot();
+  await expect(
+    main(
+      ["node", "./gram-start.mjs", pipePath],
+      join(import.meta.dirname, "good.js"),
+      Readable.from([request]),
+    ),
+  ).rejects.toThrow("Expected two command-line arguments but got 1");
 });
 
 test("valid resource request with uri", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     uri: "file:///config.json",
     input: {},
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    ["node", "./gram-start.mjs", pipePath, "resource"],
     join(import.meta.dirname, "goodResources.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -303,14 +317,15 @@ test("valid resource request with uri", async () => {
 
 test("valid resource request with input", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     uri: "file:///data/users.csv",
     input: { limit: 3 },
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    ["node", "./gram-start.mjs", pipePath, "resource"],
     join(import.meta.dirname, "goodResources.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -321,14 +336,15 @@ test("valid resource request with input", async () => {
 
 test("resource request with template rendering", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     uri: "file:///templates/email.html",
     input: { name: "Alice" },
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    ["node", "./gram-start.mjs", pipePath, "resource"],
     join(import.meta.dirname, "goodResources.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -338,14 +354,15 @@ test("resource request with template rendering", async () => {
 
 test("catches resource requests that throw", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     uri: "error://fail",
     input: {},
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    ["node", "./gram-start.mjs", pipePath, "resource"],
     join(import.meta.dirname, "goodResources.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -365,14 +382,15 @@ test("catches resource requests that throw", async () => {
 
 test("fails when resource request does not return Response", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     uri: "null://resource",
     input: {},
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    ["node", "./gram-start.mjs", pipePath, "resource"],
     join(import.meta.dirname, "goodResources.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -382,14 +400,15 @@ test("fails when resource request does not return Response", async () => {
 
 test("diagnoses sync-request/sync-rpc bundling error on tool call", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "any-tool",
     input: {},
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "bad-sync-request.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -402,14 +421,15 @@ test("diagnoses sync-request/sync-rpc bundling error on tool call", async () => 
 
 test("diagnoses native addon bundling error on tool call", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "any-tool",
     input: {},
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "bad-native-addon.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -422,14 +442,15 @@ test("diagnoses native addon bundling error on tool call", async () => {
 
 test("diagnoses sync-request/sync-rpc bundling error on resource request", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     uri: "file:///anything",
     input: {},
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    ["node", "./gram-start.mjs", pipePath, "resource"],
     join(import.meta.dirname, "bad-sync-request.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -441,14 +462,15 @@ test("diagnoses sync-request/sync-rpc bundling error on resource request", async
 
 test("fails when functions file does not export handleResources", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     uri: "file:///config.json",
     input: {},
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    ["node", "./gram-start.mjs", pipePath, "resource"],
     join(import.meta.dirname, "empty.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -462,15 +484,16 @@ test("fails when functions file does not export handleResources", async () => {
  */
 async function callerIdentityOptions(meta: unknown) {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
+  const request = JSON.stringify({
     name: "whoami",
     input: {},
     ...(meta === undefined ? {} : { _meta: meta }),
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args, "tool"],
+    ["node", "./gram-start.mjs", pipePath, "tool"],
     join(import.meta.dirname, "caller-identity.js"),
+    Readable.from([request]),
   );
 
   const content = await readFile(pipePath, "utf-8");
@@ -531,4 +554,39 @@ test("drops malformed and unknown _meta entries", async () => {
 
 test("omits caller identity when the call carries no _meta", async () => {
   expect(await callerIdentityOptions(undefined)).toEqual({});
+});
+
+test("tool call with a request larger than the 128 KiB argument limit", async () => {
+  const pipePath = await fakepipe();
+  const city = "x".repeat(2 * 1024 * 1024);
+  const request = JSON.stringify({ name: "get-weather", input: { city } });
+
+  // Split the request across chunks the way a pipe delivers it.
+  const chunkSize = 64 * 1024;
+  const chunks = [];
+  for (let i = 0; i < request.length; i += chunkSize) {
+    chunks.push(Buffer.from(request.slice(i, i + chunkSize)));
+  }
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, "tool"],
+    join(import.meta.dirname, "good.js"),
+    Readable.from(chunks),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  const res = JSON.parse(content.trim().split("\n").at(-1) ?? "");
+  expect(res.location).toHaveLength(city.length);
+});
+
+test("rejects an empty request", async () => {
+  const pipePath = await fakepipe();
+
+  await expect(
+    main(
+      ["node", "./gram-start.mjs", pipePath, "tool"],
+      join(import.meta.dirname, "good.js"),
+      Readable.from([]),
+    ),
+  ).rejects.toThrow("Expected a JSON request on stdin but got nothing");
 });

@@ -1,8 +1,6 @@
 package loops_test
 
 import (
-	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -21,9 +19,7 @@ const (
 func TestManifestMatchesApplicationTemplateContract(t *testing.T) {
 	t.Parallel()
 
-	_, filename, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	manifest, err := loops.LoadManifest(filepath.Join(filepath.Dir(filename), "manifest.json"))
+	manifest, err := loops.LoadManifest("manifest.json")
 	require.NoError(t, err)
 	require.Len(t, manifest.Templates, len(email.RegisteredTemplates))
 

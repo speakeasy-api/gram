@@ -26,6 +26,8 @@ import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -74,15 +76,20 @@ export function OrgSidebar({
   const isPlatformAdmin = useIsPlatformAdmin();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
+  const isUserSessionIssuersEnabled =
+    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
+    "enabled";
 
   const settingsActive = [
     orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,
+    orgRoutes.gateway,
     orgRoutes.logs,
     orgRoutes.skills,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
+    orgRoutes.userSessionIssuers,
     orgRoutes.externalServices,
     orgRoutes.encryptionKeys,
   ].some((r) => r.active);
@@ -101,9 +108,11 @@ export function OrgSidebar({
     (route) => route.active,
   );
 
-  const secureActive = [orgRoutes.auditLogs, orgRoutes.deviceAgent].some(
-    (r) => r.active,
-  );
+  const secureActive = [
+    orgRoutes.workloadIssuers,
+    orgRoutes.auditLogs,
+    orgRoutes.deviceAgent,
+  ].some((r) => r.active);
 
   const platformAdminActive = [
     orgRoutes.platformAdminOverview,
@@ -127,14 +136,17 @@ export function OrgSidebar({
     orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,
+    orgRoutes.gateway,
     orgRoutes.logs,
     orgRoutes.skills,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
+    orgRoutes.userSessionIssuers,
     orgRoutes.externalServices,
     orgRoutes.encryptionKeys,
     orgRoutes.data,
     orgRoutes.dataExports,
+    orgRoutes.workloadIssuers,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
@@ -187,10 +199,20 @@ export function OrgSidebar({
                     scope: orgReadOrAdmin,
                     label: "Network Access",
                   },
+                  { item: orgRoutes.gateway, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
+                  ...(isUserSessionIssuersEnabled
+                    ? [
+                        {
+                          item: orgRoutes.userSessionIssuers,
+                          scope: orgReadOrAdmin,
+                          label: "Authorization Servers",
+                        },
+                      ]
+                    : []),
                 ]}
               />
 
@@ -226,6 +248,10 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
+                  {
+                    item: orgRoutes.workloadIssuers,
+                    scope: ["workload:read", "workload:write"],
+                  },
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),

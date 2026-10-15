@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A remote_session record — Gram's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
+ * A remote_session record — Speakeasy's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
  */
 export type RemoteSession = {
   /**
@@ -42,11 +42,11 @@ export type RemoteSession = {
    */
   scopes: Array<string>;
   /**
-   * Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   * Resolved display name when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.
    */
   subjectDisplayName?: string | undefined;
   /**
-   * Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   * Resolved email when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.
    */
   subjectEmail?: string | undefined;
   /**
@@ -59,7 +59,7 @@ export type RemoteSession = {
    */
   upstreamDisplayName?: string | undefined;
   /**
-   * Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Gram subject.
+   * Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Speakeasy subject.
    */
   upstreamEmail?: string | undefined;
   /**

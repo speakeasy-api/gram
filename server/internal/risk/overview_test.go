@@ -214,3 +214,38 @@ func TestGetRiskOverview_RejectsLargeWindow(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
+
+func TestGetRiskRuleBreakdown_ExcludesDeletedPolicies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	live, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Breakdown Live")})
+	require.NoError(t, err)
+	livePolicyID, _ := uuid.Parse(live.ID)
+	deleted, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Breakdown Deleted")})
+	require.NoError(t, err)
+	deletedPolicyID, _ := uuid.Parse(deleted.ID)
+
+	now := time.Now().UTC()
+	_, liveMsg := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedRiskOverviewResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, livePolicyID, liveMsg, now.Add(-time.Hour), "gitleaks", "secret.stripe", true)
+	_, deletedMsg := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedRiskOverviewResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, deletedPolicyID, deletedMsg, now.Add(-time.Hour), "gitleaks", "secret.stripe", true)
+	seedRiskOverviewResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, deletedPolicyID, deletedMsg, now.Add(-time.Hour), "gitleaks", "secret.aws", true)
+
+	// Soft-delete through the repository so the findings stay behind, the way
+	// they do until the asynchronous cleanup catches up in production.
+	require.NoError(t, riskrepo.New(ti.conn).DeleteRiskPolicy(ctx, riskrepo.DeleteRiskPolicyParams{ID: deletedPolicyID, ProjectID: *authCtx.ProjectID}))
+
+	result, err := ti.service.GetRiskRuleBreakdown(ctx, &gen.GetRiskRuleBreakdownPayload{Category: "secrets"})
+	require.NoError(t, err)
+	require.Len(t, result.Rules, 1)
+	require.Equal(t, "secret.stripe", result.Rules[0].RuleID)
+	require.EqualValues(t, 1, result.Rules[0].Findings)
+	require.EqualValues(t, 1, result.Total)
+}

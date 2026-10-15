@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
@@ -31,6 +32,7 @@ func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
 	created, err := service.Create(validatedHumanContext(t, "org-a", "owner"), &gen.CreatePayload{Name: "Transfer agent"})
 	require.NoError(t, err)
 
+	seedGrant(t, t.Context(), conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeProjectRead, "project-one")
 	grant, err := service.CreatePolicyGrant(validatedHumanContext(t, "org-a", "owner"), &gen.CreatePolicyGrantPayload{
 		AgentID: created.ID, Scope: string(authz.ScopeProjectRead), Effect: "allow",
 		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "project-one"},
@@ -82,7 +84,9 @@ func TestExplicitReassignmentIsTheOnlyOwnershipOperationThatClearsLatch(t *testi
 	seedOrganizationUser(t, conn, "org-a", "admin")
 	seedOrganizationUser(t, conn, "org-a", "replacement")
 	agent := createAgent(t, conn, "org-a", "former-owner", "Reassignment agent")
-	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), conn, "org-a", "former-owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil))
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		return agentownership.LatchOwnerLossByMembership(t.Context(), tx, "org-a", "former-owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil)
+	}))
 
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
 	allow(engine, authz.ScopeAgentTransfer, agent.ID)
@@ -194,7 +198,9 @@ func TestReassignmentCanRestoreFormerOwnerOnlyThroughExplicitOperation(t *testin
 	seedOrganizationUser(t, conn, "org-a", "owner")
 	seedOrganizationUser(t, conn, "org-a", "admin")
 	agent := createAgent(t, conn, "org-a", "owner", "Restored owner agent")
-	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), conn, "org-a", "owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil))
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		return agentownership.LatchOwnerLossByMembership(t.Context(), tx, "org-a", "owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil)
+	}))
 
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
 	allow(engine, authz.ScopeAgentTransfer, agent.ID)
@@ -219,13 +225,18 @@ func TestLatchedRestoredOwnerCannotManagePolicyButExactWriteAdministratorCan(t *
 		AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow",
 		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "project-one"},
 	}
+	for _, userID := range []string{"owner", "admin"} {
+		seedGrant(t, ownerCtx, conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeProjectWrite, "project-one")
+	}
 	grant, err := service.CreatePolicyGrant(ownerCtx, createPayload)
 	require.NoError(t, err)
 
 	require.NoError(t, orgrepo.New(conn).DeleteOrganizationUserRelationship(t.Context(), orgrepo.DeleteOrganizationUserRelationshipParams{
 		OrganizationID: "org-a", UserID: conv.ToPGText("owner"),
 	}))
-	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), conn, "org-a", "owner", agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil))
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		return agentownership.LatchOwnerLossByMembership(t.Context(), tx, "org-a", "owner", agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil)
+	}))
 	seedOrganizationUser(t, conn, "org-a", "owner")
 	latched, err := repo.New(conn).GetAgentByID(t.Context(), repo.GetAgentByIDParams{OrganizationID: "org-a", ID: agent.ID})
 	require.NoError(t, err)

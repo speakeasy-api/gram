@@ -89,10 +89,7 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 	if db == nil {
 		return nil, ErrUnavailable
 	}
-	cursor, err := newRiskCursorCodec(keyMaterial)
-	if err != nil {
-		return nil, err
-	}
+	cursor := newRiskCursorCodec(keyMaterial)
 	catalog, err := policycatalog.Build()
 	if err != nil {
 		return nil, fmt.Errorf("build risk policy catalog: %w", err)
@@ -200,7 +197,40 @@ type RiskDetectionScope struct {
 	MessageTypes []string `json:"message_types"`
 }
 
+// RiskPolicyMCPScope is present when a policy is limited to MCP tool calls
+// through chosen servers and checked at the gateway before the tool runs.
+// Absent means the policy applies to agent sessions instead.
+type RiskPolicyMCPScope struct {
+	AllServers      bool                       `json:"all_servers"`
+	ToolAnnotations []string                   `json:"tool_annotations"`
+	Servers         []RiskPolicyMCPServerScope `json:"servers"`
+}
+
+// RiskPolicyMCPServerScope selects one server. Tools is absent when the
+// server follows the policy's tool_annotations rule, and ["*"] when every
+// tool on it is in scope.
+type RiskPolicyMCPServerScope struct {
+	MCPServerID string   `json:"mcp_server_id"`
+	Tools       []string `json:"tools,omitempty"`
+}
+
+func riskPolicyMCPScopeView(scope *policycore.MCPScope) *RiskPolicyMCPScope {
+	if scope == nil {
+		return nil
+	}
+	view := &RiskPolicyMCPScope{
+		AllServers:      scope.AllServers,
+		ToolAnnotations: append([]string{}, scope.ToolAnnotations...),
+		Servers:         make([]RiskPolicyMCPServerScope, 0, len(scope.Servers)),
+	}
+	for _, server := range scope.Servers {
+		view.Servers = append(view.Servers, RiskPolicyMCPServerScope{MCPServerID: server.MCPServerID.String(), Tools: slices.Clone(server.Tools)})
+	}
+	return view
+}
+
 type RiskPolicyDetail struct {
+	Audience *RiskPolicyAudience `json:"audience,omitempty"`
 	RiskPolicySummary
 	Version                string               `json:"version"`
 	PresidioEntities       []string             `json:"presidio_entities"`
@@ -208,10 +238,9 @@ type RiskPolicyDetail struct {
 	ApprovedEmailDomains   []string             `json:"approved_email_domains"`
 	DisabledRules          []string             `json:"disabled_rules"`
 	DetectionScopes        []RiskDetectionScope `json:"detection_scopes"`
+	MCPScope               *RiskPolicyMCPScope  `json:"mcp_scope,omitempty"`
 	UserMessage            *string              `json:"user_message,omitempty"`
 	Prompt                 *string              `json:"prompt,omitempty"`
-	PendingMessages        *int64               `json:"pending_messages,omitempty"`
-	TotalMessages          *int64               `json:"total_messages,omitempty"`
 }
 
 type ListRiskPoliciesInput struct {
@@ -333,6 +362,14 @@ func (s *RiskReadService) GetPolicy(ctx context.Context, principal Principal, in
 	}
 	detail := s.policyDetail(policy.policy, policy.shadowDecisions)
 	detail.Version = version
+	if externalRiskAudiencePrincipal(principal) {
+		principals := []string{}
+		if policy.policy.AudienceType != "everyone" {
+			principals = append(principals, policy.policy.AudiencePrincipalURNs...)
+		}
+		// Everyone's internal user:all grant is not a targeted audience identity.
+		detail.Audience = &RiskPolicyAudience{Type: policy.policy.AudienceType, PrincipalURNs: principals}
+	}
 	return GetRiskPolicyOutput{Project: riskProject(project), CatalogVersion: s.catalog.Schema, CatalogFingerprint: s.catalogFingerprint, Policy: detail}, nil
 }
 
@@ -421,6 +458,7 @@ func (s *RiskReadService) policySummary(policy policycore.Policy, shadowDecision
 func (s *RiskReadService) policyDetail(policy policycore.Policy, shadowDecisions *ShadowPolicyDecisions) RiskPolicyDetail {
 	detectionScopes, _ := s.projectDetectionScopes(policy)
 	detail := RiskPolicyDetail{
+		Audience:               nil,
 		RiskPolicySummary:      s.policySummary(policy, shadowDecisions),
 		Version:                "",
 		PresidioEntities:       allowlisted(policy.PresidioEntities, s.catalog.PresidioEntities),
@@ -428,10 +466,9 @@ func (s *RiskReadService) policyDetail(policy policycore.Policy, shadowDecisions
 		ApprovedEmailDomains:   append([]string{}, policy.ApprovedEmailDomains...),
 		DisabledRules:          allowlisted(policy.DisabledRules, s.catalog.DisabledRules),
 		DetectionScopes:        detectionScopes,
+		MCPScope:               riskPolicyMCPScopeView(policy.MCPScope),
 		UserMessage:            policy.UserMessage,
 		Prompt:                 nil,
-		PendingMessages:        policy.PendingMessages,
-		TotalMessages:          policy.TotalMessages,
 	}
 	if policy.PolicyType == "prompt_based" && policy.Prompt != nil && utf8.RuneCountInString(*policy.Prompt) <= 4000 {
 		detail.Prompt = policy.Prompt
@@ -444,8 +481,8 @@ func (s *RiskReadService) policyUnsupported(policy policycore.Policy) []string {
 	if !s.policyActionSupported(policy) {
 		unsupported = append(unsupported, "unsupported_action")
 	}
-	if policy.AudienceType != "everyone" {
-		unsupported = append(unsupported, "targeted_audience")
+	if policy.AudienceType != "everyone" && policy.AudienceType != "targeted" {
+		unsupported = append(unsupported, "unsupported_audience")
 	}
 	if len(policy.CustomRuleIDs) > 0 {
 		unsupported = append(unsupported, "custom_rules")

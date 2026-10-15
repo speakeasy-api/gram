@@ -15,6 +15,7 @@ import {
   ListOrganizationRemoteSessionIssuersRequest,
   ListOrganizationRemoteSessionIssuersResponse,
   ListOrganizationRemoteSessionIssuersSecurity,
+  Tier,
 } from "../models/operations/listorganizationremotesessionissuers.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -85,6 +86,7 @@ export function buildOrganizationRemoteSessionIssuersQuery(
     queryKey: queryKeyOrganizationRemoteSessionIssuers({
       cursor: request?.cursor,
       limit: request?.limit,
+      tier: request?.tier,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
     }),
@@ -130,6 +132,7 @@ export function buildOrganizationRemoteSessionIssuersInfiniteQuery(
     queryKey: queryKeyOrganizationRemoteSessionIssuersInfinite({
       cursor: request?.cursor,
       limit: request?.limit,
+      tier: request?.tier,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
     }),
@@ -173,6 +176,7 @@ export function queryKeyOrganizationRemoteSessionIssuers(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    tier?: Tier | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
   },
@@ -189,6 +193,7 @@ export function queryKeyOrganizationRemoteSessionIssuersInfinite(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    tier?: Tier | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
   },

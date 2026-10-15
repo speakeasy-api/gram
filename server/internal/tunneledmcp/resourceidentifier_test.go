@@ -48,8 +48,8 @@ func TestCreateServerResourceIdentifier(t *testing.T) {
 		ResourceIdentifier: new(" https://tunneled.internal/mcp/ "),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "https://tunneled.internal/mcp", conv.PtrValOr(result.Server.ResourceIdentifier, ""),
-		"the identifier is stored trimmed, without a trailing slash")
+	require.Equal(t, "https://tunneled.internal/mcp/", conv.PtrValOr(result.Server.ResourceIdentifier, ""),
+		"surrounding whitespace is trimmed and the trailing slash is preserved")
 }
 
 func TestCreateServerRejectsInvalidResourceIdentifier(t *testing.T) {
@@ -87,8 +87,8 @@ func TestUpdateServerResourceIdentifierTriState(t *testing.T) {
 		ResourceIdentifier: new(" https://tunneled.internal/mcp/ "),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "https://tunneled.internal/mcp", conv.PtrValOr(updated.ResourceIdentifier, ""),
-		"the identifier is stored trimmed, without a trailing slash")
+	require.Equal(t, "https://tunneled.internal/mcp/", conv.PtrValOr(updated.ResourceIdentifier, ""),
+		"surrounding whitespace is trimmed and the trailing slash is preserved")
 
 	// Omitting a field leaves the stored value untouched — name included, so a
 	// section editing only the identifier cannot revert a concurrent rename.
@@ -102,7 +102,7 @@ func TestUpdateServerResourceIdentifierTriState(t *testing.T) {
 		ResourceIdentifier: nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "https://tunneled.internal/mcp", conv.PtrValOr(updated.ResourceIdentifier, ""))
+	require.Equal(t, "https://tunneled.internal/mcp/", conv.PtrValOr(updated.ResourceIdentifier, ""))
 	require.Equal(t, server.Name, updated.Name)
 
 	// An empty string clears it back to NULL.
@@ -119,9 +119,7 @@ func TestUpdateServerResourceIdentifierTriState(t *testing.T) {
 	require.Nil(t, updated.ResourceIdentifier)
 }
 
-// A trailing slash is syntax in a path and data in a query, so only the path
-// is trimmed — otherwise one server would read as two routing identities.
-func TestUpdateServerResourceIdentifierTrimsPathOnly(t *testing.T) {
+func TestUpdateServerResourceIdentifierPreservesExactURI(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -139,10 +137,9 @@ func TestUpdateServerResourceIdentifierTrimsPathOnly(t *testing.T) {
 		ResourceIdentifier: new("https://tunneled.internal/mcp/?tenant=a/"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "https://tunneled.internal/mcp?tenant=a/", conv.PtrValOr(updated.ResourceIdentifier, ""))
+	require.Equal(t, "https://tunneled.internal/mcp/?tenant=a/", conv.PtrValOr(updated.ResourceIdentifier, ""))
 
-	// An encoded separator must survive the trim: decoding it would collapse
-	// this identifier onto the genuinely different .../a/b.
+	// Encoded separators identify a different resource from decoded slashes.
 	updated, err = ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
 		SessionToken:       nil,
 		ApikeyToken:        nil,
@@ -153,7 +150,7 @@ func TestUpdateServerResourceIdentifierTrimsPathOnly(t *testing.T) {
 		ResourceIdentifier: new("https://tunneled.internal/a%2Fb/"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "https://tunneled.internal/a%2Fb", conv.PtrValOr(updated.ResourceIdentifier, ""))
+	require.Equal(t, "https://tunneled.internal/a%2Fb/", conv.PtrValOr(updated.ResourceIdentifier, ""))
 }
 
 func TestUpdateServerRejectsInvalidResourceIdentifier(t *testing.T) {
@@ -165,13 +162,15 @@ func TestUpdateServerRejectsInvalidResourceIdentifier(t *testing.T) {
 	writeCtx := authztest.WithExactGrants(t, ctx, projectScopedMCPGrant(authz.ScopeMCPWrite, *authCtx.ProjectID))
 
 	for _, invalid := range []string{
-		"tunneled.internal/mcp",              // not absolute
-		"ftp://tunneled.internal/mcp",        // wrong scheme
-		"https:///mcp",                       // no host
-		"https://tunneled.internal/mcp#frag", // fragment (RFC 8707)
-		"https://tunneled.internal/mcp#",     // bare fragment delimiter
-		"/",                                  // normalizes to nothing: an error, not a silent clear
-		"   x   ",                            // whitespace-padded garbage is not a clear either
+		"tunneled.internal/mcp",               // not absolute
+		"ftp://tunneled.internal/mcp",         // wrong scheme
+		"https:///mcp",                        // no host
+		"https://tunneled.internal/mcp#frag",  // fragment (RFC 8707)
+		"https://tunneled.internal/mcp#",      // bare fragment delimiter
+		"https://tunneled.internal/a b",       // unescaped path
+		"https://tunneled.internal/mcp?q=a b", // unescaped query
+		"/",                                   // normalizes to nothing: an error, not a silent clear
+		"   x   ",                             // whitespace-padded garbage is not a clear either
 	} {
 		_, err := ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
 			SessionToken:       nil,

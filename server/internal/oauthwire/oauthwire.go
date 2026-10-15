@@ -62,9 +62,34 @@ const (
 	// (RFC 6749 §6).
 	GrantTypeRefreshToken = "refresh_token"
 
+	// GrantTypeTokenExchange is RFC 8693 §2.1's token exchange grant.
+	GrantTypeTokenExchange = "urn:ietf:params:oauth:grant-type:token-exchange" //nolint:gosec // standardized public grant identifier, not a credential
+
+	// TokenTypeIDToken identifies an OpenID Connect ID token as an RFC 8693
+	// subject or issued token (RFC 8693 §3).
+	TokenTypeIDToken = "urn:ietf:params:oauth:token-type:id_token" //nolint:gosec // standardized public token type identifier, not a credential
+
+	// TokenTypeIDJAG identifies an identity assertion JWT authorization grant
+	// (draft-ietf-oauth-identity-assertion-authz-grant §3).
+	TokenTypeIDJAG = "urn:ietf:params:oauth:token-type:id-jag" //nolint:gosec // standardized public token type identifier, not a credential
+
 	// ResponseTypeCode requests an authorization code from the authorization
 	// endpoint (RFC 6749 §4.1.1).
 	ResponseTypeCode = "code"
+
+	// TokenTypeBearer is the bearer token_type value and Authorization scheme
+	// (RFC 6750 §4, §2.1).
+	TokenTypeBearer = "Bearer"
+)
+
+// Authorization response parameters shared with the requesting client.
+const (
+	// ParamState binds the authorization response to the client's request
+	// (RFC 6749 §4.1.1, §4.1.2).
+	ParamState = "state"
+
+	// ParamError identifies an OAuth error response (RFC 6749 §4.1.2.1).
+	ParamError = "error"
 )
 
 // Client authentication parameters as they appear in a token or revocation
@@ -85,6 +110,86 @@ const (
 	// 7521 §4.2).
 	ParamClientAssertionType = "client_assertion_type"
 )
+
+// Token request parameters: the grant type, and the parameters of the
+// authorization code, refresh token, assertion, and token exchange grants.
+const (
+	// ParamGrantType selects the token endpoint grant (RFC 6749 §4.1.3).
+	ParamGrantType = "grant_type"
+
+	// ParamAssertion carries an RFC 7521 §4.1 authorization grant assertion.
+	ParamAssertion = "assertion"
+
+	// ParamSubjectToken carries the token that represents the subject (RFC
+	// 8693 §2.1).
+	ParamSubjectToken = "subject_token"
+
+	// ParamSubjectTokenType names the format of ParamSubjectToken (RFC 8693
+	// §2.1).
+	ParamSubjectTokenType = "subject_token_type"
+
+	// ParamRequestedTokenType names the token type the client wants issued
+	// (RFC 8693 §2.1).
+	ParamRequestedTokenType = "requested_token_type"
+
+	// ParamAudience names the logical target of the requested token (RFC 8693
+	// §2.1).
+	ParamAudience = "audience"
+
+	// ParamResource names the target resource of the requested token (RFC
+	// 8707 §2).
+	ParamResource = "resource"
+
+	// ParamScope requests a space-delimited scope set (RFC 6749 §3.3).
+	ParamScope = "scope"
+
+	// ParamCode carries the authorization code of an authorization_code grant
+	// (RFC 6749 §4.1.3).
+	ParamCode = "code"
+
+	// ParamRefreshToken carries the refresh token of a refresh_token grant
+	// (RFC 6749 §6).
+	ParamRefreshToken = "refresh_token"
+
+	// ParamToken carries the token a revocation request revokes (RFC 7009
+	// §2.1).
+	ParamToken = "token"
+
+	// ParamTokenTypeHint carries a revocation request's hint about the type
+	// of the token it revokes (RFC 7009 §2.1).
+	ParamTokenTypeHint = "token_type_hint"
+)
+
+// Scope values OpenID Connect reserves (OIDC Core §5.4, §11).
+const (
+	// ScopeOpenID marks an OpenID Connect request.
+	ScopeOpenID = "openid"
+
+	// ScopeProfile requests the default profile claims.
+	ScopeProfile = "profile"
+
+	// ScopeEmail requests the email and email_verified claims.
+	ScopeEmail = "email"
+
+	// ScopeAddress requests the address claim.
+	ScopeAddress = "address"
+
+	// ScopePhone requests the phone_number and phone_number_verified claims.
+	ScopePhone = "phone"
+
+	// ScopeOfflineAccess requests a refresh token.
+	ScopeOfflineAccess = "offline_access"
+)
+
+// IsOIDCReservedScope reports whether scope is one OpenID Connect reserves.
+func IsOIDCReservedScope(scope string) bool {
+	switch scope {
+	case ScopeOpenID, ScopeProfile, ScopeEmail, ScopeAddress, ScopePhone, ScopeOfflineAccess:
+		return true
+	default:
+		return false
+	}
+}
 
 // Error carries an OAuth wire error: the shared shape used across the
 // issuer-gated endpoints (RFC 6749 / RFC 7591 / RFC 7009). The structure is

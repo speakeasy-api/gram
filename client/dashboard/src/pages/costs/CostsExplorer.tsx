@@ -1,3 +1,4 @@
+import { CostsSetupEmptyState } from "@/components/setup-empty-state";
 import { formatCost } from "@/lib/money";
 import { Page } from "@/components/page-layout";
 import { telemetryListAttributeKeys } from "@gram/client/funcs/telemetryListAttributeKeys";
@@ -1358,6 +1359,24 @@ export function CostsExplorer(): JSX.Element {
         contextInfo={assistantContext}
         suggestions={assistantSuggestions}
       />
+      {!loadingSlice &&
+        !isError &&
+        data &&
+        rows.every(
+          (row) =>
+            (row.measures.totalCost ?? 0) === 0 &&
+            (row.measures.totalChats ?? 0) === 0 &&
+            (row.measures.totalToolCalls ?? 0) === 0 &&
+            llmTokens(row.measures) === 0,
+        ) && (
+          <CostsSetupEmptyState
+            filtered={
+              path.length > 0 ||
+              (dateRange !== "30d" && dateRange !== "90d") ||
+              !!customRange
+            }
+          />
+        )}
       <EntityProfile
         entity={currentEntity}
         path={path}

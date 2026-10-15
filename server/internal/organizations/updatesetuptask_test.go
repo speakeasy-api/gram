@@ -192,13 +192,13 @@ func TestService_UpdateSetupTaskAuditFailureRollsBackTaskAndAudit(t *testing.T) 
 func TestService_UpdateSetupTaskFirstStatusWritePreservesHidden(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsService(t)
-	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "configure-policies", Status: conv.PtrEmpty("done")})
+	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "litellm", Status: conv.PtrEmpty("done")})
 	require.NoError(t, err)
 	require.True(t, result.Hidden)
 	require.Equal(t, "done", result.Status)
 	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	require.Nil(t, setupTask(listed.Tasks, "configure-policies"))
+	require.Nil(t, setupTask(listed.Tasks, "litellm"))
 }
 
 func TestService_UpdateSetupTaskFirstAssignmentPreservesHidden(t *testing.T) {
@@ -207,7 +207,7 @@ func TestService_UpdateSetupTaskFirstAssignmentPreservesHidden(t *testing.T) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{
-		TaskKey: "platform-mcp", Assignee: &gen.SetupTaskAssigneeInput{UserID: &ac.UserID, Email: nil},
+		TaskKey: "litellm", Assignee: &gen.SetupTaskAssigneeInput{UserID: &ac.UserID, Email: nil},
 	})
 	require.NoError(t, err)
 	require.True(t, result.Hidden)
@@ -215,7 +215,7 @@ func TestService_UpdateSetupTaskFirstAssignmentPreservesHidden(t *testing.T) {
 	staff := *ac
 	staff.IsAdmin = true
 	visible := false
-	result, err = ti.service.UpdateSetupTask(contextvalues.SetAuthContext(ctx, &staff), &gen.UpdateSetupTaskPayload{TaskKey: "platform-mcp", Hidden: &visible})
+	result, err = ti.service.UpdateSetupTask(contextvalues.SetAuthContext(ctx, &staff), &gen.UpdateSetupTaskPayload{TaskKey: "litellm", Hidden: &visible})
 	require.NoError(t, err)
 	require.False(t, result.Hidden)
 	require.Equal(t, "in_progress", result.Status)

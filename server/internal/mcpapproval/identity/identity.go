@@ -783,7 +783,7 @@ func isMCPRemoteSpec(spec string) bool {
 // mcpRemoteIdentity resolves a command that proxies stdio to a remote server
 // through mcp-remote. The identity is the URL being proxied to, not the proxy
 // package: every server installed this way would otherwise collapse into one
-// identity. This is the shape of Gram's own install snippet for OAuth-backed
+// identity. This is the shape of Speakeasy's own install snippet for OAuth-backed
 // servers, so it is common rather than exotic.
 //
 // The target is the first absolute http(s) argument after the package spec.

@@ -3,8 +3,10 @@ package projects_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
@@ -12,8 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 func TestProjectsService_DeleteProject_CreatesAuditLog(t *testing.T) {
@@ -48,6 +52,58 @@ func TestProjectsService_DeleteProject_CreatesAuditLog(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+// Evidence outlives a deleted project and ages out with the 90-day sweep.
+func TestProjectsService_DeleteProject_RetainsMCPFindingEvidence(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProjectsService(t)
+	project := createProjectForDeletion(t, ctx, ti, "evidence-delete-project-"+uuid.NewString()[:8])
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	now := time.Now().UTC()
+	findingID := uuid.New()
+	evidenceRepo := riskrepo.New(ti.conn)
+	require.NoError(t, evidenceRepo.UpsertMCPFindingEvidence(ctx, riskrepo.UpsertMCPFindingEvidenceParams{
+		FindingID:      findingID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      project.ID,
+		MatchEncrypted: "encrypted evidence",
+		CreatedAt:      conv.ToPGTimestamptz(now),
+		ExpiresAt:      conv.ToPGTimestamptz(now.Add(90 * 24 * time.Hour)),
+	}))
+	executionID := uuid.NewString()
+	require.NoError(t, evidenceRepo.InsertMCPExecutionEvidence(ctx, riskrepo.InsertMCPExecutionEvidenceParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        project.ID,
+		ExecutionID:      executionID,
+		Phase:            "request",
+		PayloadEncrypted: "encrypted payload",
+		CreatedAt:        conv.ToPGTimestamptz(now),
+		ExpiresAt:        conv.ToPGTimestamptz(now.Add(90 * 24 * time.Hour)),
+	}))
+
+	require.NoError(t, ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{ID: project.ID.String()}))
+	_, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, project.ID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = evidenceRepo.GetMCPFindingEvidence(ctx, riskrepo.GetMCPFindingEvidenceParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      project.ID,
+		FindingID:      findingID,
+		Now:            conv.ToPGTimestamptz(now),
+	})
+	require.NoError(t, err)
+	_, err = evidenceRepo.GetMCPExecutionEvidence(ctx, riskrepo.GetMCPExecutionEvidenceParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      project.ID,
+		ExecutionID:    executionID,
+		Phase:          "request",
+		Now:            conv.ToPGTimestamptz(now),
+	})
+	require.NoError(t, err)
 }
 
 func TestProjectsService_DeleteProject_InvalidIDDoesNotCreateAuditLog(t *testing.T) {

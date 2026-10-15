@@ -3,6 +3,9 @@ package feature
 type Flag string
 
 const (
+	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
+	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
+
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"
@@ -26,14 +29,6 @@ const (
 	// payload is {"max_content_bytes": <int>}; a missing or invalid payload
 	// keeps the default limit.
 	FlagRiskEnforcementMaxContentBytes Flag = "risk-enforcement-max-content-bytes"
-
-	// FlagAgentManagement gates the first-class agent management API. It is
-	// evaluated per organization and fails closed unless explicitly on.
-	FlagAgentManagement Flag = "agent-management"
-	// FlagAgentIdentityCredentials gates agent credential issuance, management,
-	// and agent identity selection in MCP OAuth authorization.
-	// It is evaluated per organization and fails closed unless explicitly on.
-	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
@@ -66,15 +61,6 @@ const (
 	// approval decisions exposed through Platform MCP. It is evaluated at
 	// invocation time and fails closed independently of the dashboard workflow.
 	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
-	// FlagPlatformMCPShadowAudienceEnforcement selects legacy, report, or enforce
-	// behavior for direct-remote distribution. An enabled flag must carry a closed
-	// mode payload; missing or invalid configuration fails closed for expanding
-	// writes.
-	FlagPlatformMCPShadowAudienceEnforcement Flag = "platform-mcp-shadow-audience-enforcement"
-	// FlagPlatformMCPDirectRemoteDistributionDisabled is the emergency stop for
-	// expanding direct-remote distribution. Cleanup, audience narrowing, and
-	// disable paths remain available while it is enabled.
-	FlagPlatformMCPDirectRemoteDistributionDisabled Flag = "platform-mcp-direct-remote-distribution-disabled"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
@@ -83,20 +69,25 @@ const (
 	// like FlagBudgets. Evaluated server-side only; removed once the toolset
 	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
+	// FlagHostedMCPServerKeyWrites switches hosted MCP writers (plugin entries,
+	// install page metadata, assistant attachments) to the canonical MCP server
+	// key (AIM-16 phase B). Evaluated server-side; targeted by PostHog
+	// organization group (org slug), rolled out to everyone once no phase A pods
+	// remain. Fails closed to the toolset key. Removed once the AIM-507 move ships.
+	FlagHostedMCPServerKeyWrites Flag = "hosted-mcp-server-key-writes"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.
 	FlagRiskOverviewFromClickHouse Flag = "risk-overview-from-clickhouse"
-	// FlagRiskListFromClickHouse serves the project-wide risk events listing
-	// (ListRiskResults without a chat_id) from ClickHouse risk_findings
-	// instead of Postgres risk_results. The chat-scoped listing stays on
-	// Postgres, which is the only store holding raw match content. Per-org
-	// rollout gate; removed once the ClickHouse read path is GA.
-	FlagRiskListFromClickHouse Flag = "risk-list-from-clickhouse"
 	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
+	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
+	// matches the dashboard's page-level flag so one PostHog flag controls
+	// both surfaces; targeted by organization group (org slug), like
+	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
+	FlagExplore Flag = "gram-explore"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:
@@ -142,7 +133,7 @@ const (
 	// client_id_metadata_document_supported, assistants publish a stable
 	// metadata document and send its URL as client_id instead of dynamic
 	// client registration. Off (the default) keeps the DCR reuse path.
-	// Gram-hosted issuers admit assistant documents ahead of their CIMD
+	// Speakeasy-hosted issuers admit assistant documents ahead of their CIMD
 	// admission policy, so enabling this never depends on a catalog preset
 	// or a per-issuer custom URL. Targeted by PostHog organization group
 	// (org slug). Removed once CIMD is GA.
@@ -185,8 +176,33 @@ const (
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 
-	// FlagOktaConnections gates creating Okta connections while the integration is dogfooded.
+	// FlagOktaConnections gates the Okta integration while it is dogfooded:
+	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
+
+	// FlagSignInEnforcement turns on, per organization (keyed by its id),
+	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
+	// everywhere, member sign-in revocation and revocation on deprovisioning.
+	// Enable it only once every pod runs the code that honours it. It is
+	// evaluated with the organization id as the distinct id and no groups, so
+	// the PostHog flag must be person-aggregated and match distinct_id in a
+	// list of organization ids; a group-aggregated flag never matches.
+	FlagSignInEnforcement Flag = "sign-in-enforcement"
+
+	// FlagEMAProviders gates changing a vendor's EMA provider order while the
+	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.
+	FlagEMAProviders Flag = "ema-providers"
+
+	// FlagInternalSessionIssuer gates an organization's internal session issuer
+	// while it rolls out: enabling it, signing with it and its Platform MCP tool.
+	// Server-evaluated, targeted by the organization group.
+	FlagInternalSessionIssuer Flag = "internal-session-issuer"
+
+	// FlagInternalSessionIssuerSigningPaused pauses every internal session
+	// issuer signature without a redeploy, for incident response. Discovery
+	// keeps serving. Server-evaluated; target everyone to pause the platform,
+	// or an organization group to pause one organization.
+	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

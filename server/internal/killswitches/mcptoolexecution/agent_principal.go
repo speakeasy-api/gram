@@ -58,7 +58,7 @@ func (a *AgentPrincipalAdapter) DeriveCandidates(ctx context.Context, organizati
 	}
 	switch identity.Kind() {
 	case mcpidentity.KindAgent:
-	case mcpidentity.KindUserSession, mcpidentity.KindAPIKey, mcpidentity.KindAnonymous, mcpidentity.KindAssistant, mcpidentity.KindChatSession:
+	case mcpidentity.KindConsentDiscovery, mcpidentity.KindUserSession, mcpidentity.KindAPIKey, mcpidentity.KindAnonymous, mcpidentity.KindAssistant, mcpidentity.KindChatSession:
 		return killswitches.UnsupportedPrincipalCandidateResult(), nil
 	default:
 		return killswitches.PrincipalCandidateResult{}, errors.New("unknown identity provenance kind")

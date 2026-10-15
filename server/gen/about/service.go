@@ -14,9 +14,9 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// Information about the Gram platform and its components.
+// Information about the Speakeasy platform and its components.
 type Service interface {
-	// The OpenAPI description of the Gram API.
+	// The OpenAPI description of the Speakeasy API.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing

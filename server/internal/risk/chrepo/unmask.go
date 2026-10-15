@@ -21,29 +21,32 @@ type GetRiskFindingForUnmaskParams struct {
 // they index, and the match length the reconstructed candidate is checked
 // against. See internal/risk/unmask_ch.go for how it is consumed.
 type RiskFindingUnmaskRow struct {
-	ID             uuid.UUID
-	CreatedAt      time.Time
-	ChatMessageID  string
-	ContentPartID  string
-	ChatID         string
-	Source         string
-	RuleID         string
-	StartPos       int32
-	EndPos         int32
-	MatchLen       uint32
-	MatchRedacted  string
-	Surface        string
-	Field          string
-	Path           string
-	ToolCallID     string
-	OrganizationID string
+	ID               uuid.UUID
+	CreatedAt        time.Time
+	ChatMessageID    string
+	ContentPartID    string
+	ChatID           string
+	Source           string
+	RuleID           string
+	StartPos         int32
+	EndPos           int32
+	MatchLen         uint32
+	MatchRedacted    string
+	Surface          string
+	MediationSurface string
+	Field            string
+	Path             string
+	ToolCallID       string
+	OrganizationID   string
+	RiskPolicyID     string
+	ExecutionID      string
+	Phase            string
 }
 
 // GetRiskFindingForUnmask returns the reveal-relevant state for one finding id,
-// or nil when no live row exists. The gates mirror the Postgres unmask ones
-// (GetRiskResultByID): no dead-letter sentinels, no excluded rows, no false
-// positives, tenant-scoped. Shadow engine-comparison rows are hidden from
-// every user-facing surface, so a shadow id reads as absent here too.
+// or nil when no live row exists: no dead-letter sentinels, no excluded rows,
+// no false positives, tenant-scoped. Shadow engine-comparison rows are hidden
+// from every user-facing surface, so a shadow id reads as absent here too.
 //
 // The table is append-only with at-least-once delivery, so one id can have
 // several rows (redeliveries and exclusion / false-positive state mirrors).
@@ -65,10 +68,14 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		"match_len",
 		"match_redacted",
 		"surface",
+		"mediation_surface",
 		"field",
 		"path",
 		"tool_call_id",
 		"organization_id",
+		"risk_policy_id",
+		"execution_id",
+		"phase",
 		"dead_letter_reason",
 		"excluded_at",
 		"false_positive_at",
@@ -94,10 +101,14 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		"match_len",
 		"match_redacted",
 		"surface",
+		"mediation_surface",
 		"field",
 		"path",
 		"tool_call_id",
 		"organization_id",
+		"risk_policy_id",
+		"execution_id",
+		"phase",
 	).
 		FromSelect(latest, "latest").
 		Where("dead_letter_reason = ''").
@@ -139,10 +150,14 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		&row.MatchLen,
 		&row.MatchRedacted,
 		&row.Surface,
+		&row.MediationSurface,
 		&row.Field,
 		&row.Path,
 		&row.ToolCallID,
 		&row.OrganizationID,
+		&row.RiskPolicyID,
+		&row.ExecutionID,
+		&row.Phase,
 	); err != nil {
 		return nil, fmt.Errorf("scan risk finding unmask row: %w", err)
 	}

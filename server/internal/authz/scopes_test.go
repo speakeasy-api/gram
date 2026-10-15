@@ -104,6 +104,8 @@ func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 		{scope: ScopeEnvironmentWrite, expected: ScopeEnvironmentBlockedWrite},
 		{scope: ScopeSkillRead, expected: ScopeSkillBlockedRead},
 		{scope: ScopeSkillWrite, expected: ScopeSkillBlockedWrite},
+		{scope: ScopeAssistantRead, expected: ScopeAssistantBlockedRead},
+		{scope: ScopeAssistantWrite, expected: ScopeAssistantBlockedWrite},
 		{scope: ScopeRiskPolicyEvaluate, expected: ScopeRiskPolicyBypass},
 	}
 
@@ -130,6 +132,7 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 	require.Nil(t, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
 	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
+	require.Equal(t, []Scope{ScopeAssistantBlockedRead}, scopeExpansions[ScopeAssistantBlockedWrite])
 }
 
 func TestCalculateSubScopesExcludesInternalBlocklistScopes(t *testing.T) {
@@ -165,6 +168,29 @@ func TestSystemRoleAdminExcludesChatRead(t *testing.T) {
 	for _, grant := range SystemRoleGrants[SystemRoleMember] {
 		require.NotEqual(t, string(ScopeChatRead), grant.Scope)
 	}
+}
+
+// log:read is not a default for any system role. Raw tool-call logs carry every
+// member's tool arguments, results, and prompts, so a project's logs must be
+// granted explicitly; neither project access nor org:admin implies it.
+func TestSystemRolesExcludeLogRead(t *testing.T) {
+	t.Parallel()
+
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		require.NotEqual(t, string(ScopeLogRead), grant.Scope)
+	}
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		require.NotEqual(t, string(ScopeLogRead), grant.Scope)
+	}
+}
+
+func TestLogReadNotImpliedByProjectOrOrgScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead, ScopeOrgAdmin} {
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeLogRead, scope)
+	}
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeLogRead))
 }
 
 // environment:read is not a member default: environment values include secrets,
@@ -203,6 +229,38 @@ func TestSystemRolesIncludeSkillScopes(t *testing.T) {
 	}
 	require.Contains(t, member, string(ScopeSkillRead))
 	require.NotContains(t, member, string(ScopeSkillWrite))
+}
+
+func TestSystemRolesIncludeAssistantScopes(t *testing.T) {
+	t.Parallel()
+
+	admin := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		admin = append(admin, grant.Scope)
+	}
+	require.Contains(t, admin, string(ScopeAssistantRead))
+	require.Contains(t, admin, string(ScopeAssistantWrite))
+
+	member := make([]string, 0, len(SystemRoleGrants[SystemRoleMember]))
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		member = append(member, grant.Scope)
+	}
+	require.Contains(t, member, string(ScopeAssistantRead))
+	require.NotContains(t, member, string(ScopeAssistantWrite))
+}
+
+func TestGrantsSatisfy_assistantWriteSatisfiesAssistantRead(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrant(ScopeAssistantWrite, "assistant_1")}
+	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+}
+
+func TestGrantsSatisfy_assistantReadDoesNotSatisfyAssistantWrite(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrant(ScopeAssistantRead, "assistant_1")}
+	require.False(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {
@@ -486,6 +544,8 @@ func TestCalculateSubScopes(t *testing.T) {
 		{scope: string(ScopeEnvironmentWrite), want: []string{string(ScopeEnvironmentRead)}},
 		{scope: string(ScopeSkillRead), want: []string{}},
 		{scope: string(ScopeSkillWrite), want: []string{string(ScopeSkillRead)}},
+		{scope: string(ScopeAssistantRead), want: []string{}},
+		{scope: string(ScopeAssistantWrite), want: []string{string(ScopeAssistantRead)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {

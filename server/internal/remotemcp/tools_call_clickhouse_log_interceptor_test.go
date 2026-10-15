@@ -32,11 +32,12 @@ func TestToolsCallClickHouseLogInterceptor_Name(t *testing.T) {
 
 func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 	t.Parallel()
-	t.Run("legacy", func(t *testing.T) { t.Parallel(); testToolsCallClickHouseEmission(t, false) })
-	t.Run("managed agent", func(t *testing.T) { t.Parallel(); testToolsCallClickHouseEmission(t, true) })
+	for _, caller := range []string{"legacy", "managed agent", "anonymous", "other organization"} {
+		t.Run(caller, func(t *testing.T) { t.Parallel(); testToolsCallClickHouseEmission(t, caller) })
+	}
 }
 
-func testToolsCallClickHouseEmission(t *testing.T, managedAgent bool) {
+func testToolsCallClickHouseEmission(t *testing.T, caller string) {
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
@@ -50,15 +51,23 @@ func testToolsCallClickHouseEmission(t *testing.T, managedAgent bool) {
 	projectID := uuid.New()
 	serverID := uuid.New().String()
 	mcpServerID := uuid.New().String()
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org-test",
-		UserID:               "user-123",
-		APIKeyID:             "key-456",
-		ProjectID:            &projectID,
-	})
+	ctx := t.Context()
+	if caller != "anonymous" {
+		ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			ActiveOrganizationID: "org-test",
+			UserID:               "user-123",
+			APIKeyID:             "key-456",
+			ProjectID:            &projectID,
+		})
+	}
+	if caller == "anonymous" || caller == "other organization" {
+		ctx = remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
+			OrganizationID: "org-owner", ProjectID: projectID,
+		})
+	}
 
 	agentID := uuid.NewString()
-	if managedAgent {
+	if caller == "managed agent" {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		ctx = contextvalues.WithPrincipalAPIKeyAuthorization(ctx, authCtx,
@@ -144,7 +153,20 @@ func testToolsCallClickHouseEmission(t *testing.T, managedAgent bool) {
 	}, 5*time.Second, 50*time.Millisecond, "telemetry_logs row did not appear")
 	require.JSONEq(t, `{"q":"hi"}`, gotArgs)
 	require.JSONEq(t, `{"ok":true}`, gotResult)
-	if managedAgent {
+	if caller == "anonymous" || caller == "other organization" {
+		var organizationID, userID, apiKeyID, actorID string
+		err := chConn.QueryRow(t.Context(), `SELECT
+    toString(attributes.gram.org.id), user_id,
+    toString(attributes.gram.api_key.id), toString(attributes.gram.authorization.actor.id)
+   FROM telemetry_logs WHERE gram_project_id = ? AND gram_urn = ? LIMIT 1`,
+			projectID.String(), expectedURN).Scan(&organizationID, &userID, &apiKeyID, &actorID)
+		require.NoError(t, err)
+		require.Equal(t, "org-owner", organizationID)
+		require.Empty(t, userID)
+		require.Empty(t, apiKeyID)
+		require.Empty(t, actorID)
+	}
+	if caller == "managed agent" {
 		var actorType, actorID, authorizerID string
 		err := chConn.QueryRow(t.Context(), `SELECT
     toString(attributes.gram.authorization.actor.type),

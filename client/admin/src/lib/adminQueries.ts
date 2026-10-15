@@ -13,7 +13,6 @@ import {
   getOrganization,
   getOrganizationChatAnalysisSettings,
   getOrganizationStats,
-  getInferenceKeys,
   getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
@@ -22,9 +21,10 @@ import {
   listOrganizationMembers,
   listOrganizationProjects,
   listOrganizations,
+  listUsers,
+  listUserOrganizations,
   listProjectMcpServers,
   omitUnset,
-  type AdminInferenceKey,
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
@@ -158,19 +158,6 @@ export function organizationMembersQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-members", organizationID] as const,
     queryFn: () => listOrganizationMembers(organizationID),
-  });
-}
-
-export function inferenceKeysQuery(
-  organizationID: string,
-): AdminQuery<
-  AdminInferenceKey[],
-  readonly ["gram-admin-inference-keys", string]
-> {
-  return queryOptions({
-    queryKey: ["gram-admin-inference-keys", organizationID] as const,
-    queryFn: () => getInferenceKeys(organizationID),
-    retry: false,
   });
 }
 
@@ -378,5 +365,32 @@ export function projectQuery(
       organizationIdOrSlug ?? null,
     ] as const,
     queryFn: () => getProject(idOrSlug, organizationIdOrSlug),
+  });
+}
+
+export function usersListQuery(
+  params: Parameters<typeof listUsers>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUsers>>,
+  readonly ["admin", "users", Parameters<typeof listUsers>[0]]
+> {
+  return queryOptions({
+    queryKey: ["admin", "users", params] as const,
+    queryFn: ({ signal }) => listUsers(params, signal),
+  });
+}
+export function userOrganizationsListQuery(
+  params: Parameters<typeof listUserOrganizations>[0],
+): AdminQuery<
+  Awaited<ReturnType<typeof listUserOrganizations>>,
+  readonly [
+    "admin",
+    "user-organizations",
+    Parameters<typeof listUserOrganizations>[0],
+  ]
+> {
+  return queryOptions({
+    queryKey: ["admin", "user-organizations", params] as const,
+    queryFn: ({ signal }) => listUserOrganizations(params, signal),
   });
 }

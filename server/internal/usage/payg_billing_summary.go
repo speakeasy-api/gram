@@ -121,10 +121,6 @@ func isUTCMidnight(value time.Time) bool {
 }
 
 func (s *Service) getTokensUnderManagementForPeriod(ctx context.Context, organizationID string, periodStart, periodEnd time.Time) (int64, error) {
-	if s.telemetryRepo == nil {
-		return 0, oops.E(oops.CodeUnavailable, nil, "billing usage telemetry is temporarily unavailable").LogWarn(ctx, s.logger)
-	}
-
 	projectIDs, err := s.repo.ListBillingProjectIDsByOrganization(ctx, organizationID)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "list organization projects for billing summary").LogError(ctx, s.logger)

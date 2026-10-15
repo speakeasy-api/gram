@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   invalidate: vi.fn(),
+  // Real react-query mutations expose reset; save() calls it so a settled
+  // write stops holding the plaintext secret it submitted.
+  resetCreate: vi.fn(),
+  resetUpdate: vi.fn(),
+  resetRemove: vi.fn(),
 }));
 
 let queryClient: QueryClient;
@@ -22,6 +27,7 @@ vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
 vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
   useCreateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.create,
+    reset: mocks.resetCreate,
     isPending: false,
     error: null,
   }),
@@ -29,6 +35,7 @@ vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
 vi.mock("@gram/client/react-query/updateRemoteMcpServerHeader.js", () => ({
   useUpdateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.update,
+    reset: mocks.resetUpdate,
     isPending: false,
     error: null,
   }),
@@ -36,6 +43,7 @@ vi.mock("@gram/client/react-query/updateRemoteMcpServerHeader.js", () => ({
 vi.mock("@gram/client/react-query/deleteRemoteMcpServerHeader.js", () => ({
   useDeleteRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.remove,
+    reset: mocks.resetRemove,
     isPending: false,
     error: null,
   }),
@@ -133,6 +141,10 @@ describe("useHeaderDrafts", () => {
         },
       },
     });
+    // The submitted secret must not stay readable in mutation state once the
+    // write has settled.
+    expect(mocks.resetCreate).toHaveBeenCalled();
+    expect(mocks.resetUpdate).toHaveBeenCalled();
   });
 
   it("never deletes the Authorization row identity owns", async () => {
@@ -207,6 +219,157 @@ describe("useHeaderDrafts", () => {
 
     expect(result.current.drafts).toHaveLength(1);
     expect(result.current.drafts[0]?.staticValue).toBe("mine");
+  });
+
+  it("stays locked until the post-save refresh lands", async () => {
+    let finishRefresh: (value: unknown) => void = () => {};
+    const result0 = headersResult([]);
+    result0.refetch = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = resolve;
+        }),
+    );
+    mocks.headers.mockReturnValue(result0);
+    const { result } = renderDrafts();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        name: "X-Api-Key",
+        staticValue: "sk-test",
+      }),
+    );
+
+    let pending: Promise<boolean> = Promise.resolve(false);
+    await act(async () => {
+      pending = result.current.save();
+      await Promise.resolve();
+    });
+
+    // The writes have settled, but the refresh has not replaced the rows yet.
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    expect(result.current.readOnly).toBe(true);
+    expect(result.current.saving).toBe(true);
+    await act(async () => {
+      await expect(result.current.save()).resolves.toBe(false);
+    });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      finishRefresh({ isError: false, data: { headers: [] } });
+      await pending;
+    });
+    expect(result.current.readOnly).toBe(false);
+    // The refresh is what the lock protects: it replaces the rows wholesale.
+    expect(result.current.drafts).toHaveLength(0);
+  });
+
+  it("drops the submitted values even when a write fails", async () => {
+    mocks.create.mockRejectedValue(new Error("upstream rejected"));
+    const { result } = renderDrafts();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        name: "X-Api-Key",
+        staticValue: "sk-test",
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current.save()).rejects.toThrow("upstream rejected");
+    });
+
+    // The failed request still carried the plaintext secret.
+    expect(mocks.resetCreate).toHaveBeenCalled();
+    expect(mocks.resetUpdate).toHaveBeenCalled();
+    expect(mocks.resetRemove).toHaveBeenCalled();
+    // Resetting the mutation must not also swallow the failure.
+    expect(result.current.error?.message).toBe("upstream rejected");
+  });
+
+  it("keeps a saved secret untouched while Secret stays ticked", async () => {
+    mocks.headers.mockReturnValue(
+      headersResult([
+        serverHeader({
+          id: "header-key",
+          name: "X-Api-Key",
+          value: "***",
+          isSecret: true,
+        }),
+      ]),
+    );
+    const { result } = renderDrafts();
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        isRequired: true,
+      }),
+    );
+    await act(async () => {
+      await result.current.save();
+    });
+
+    const form =
+      mocks.update.mock.calls[0]?.[0]?.request?.updateServerHeaderForm;
+    expect(form).toMatchObject({ id: "header-key", isSecret: true });
+    expect(form).not.toHaveProperty("value");
+  });
+
+  it("asks for a new value before storing a saved secret as non-secret", async () => {
+    // The server never reveals a stored secret as plain text, and the
+    // redaction placeholder must never become the credential.
+    mocks.headers.mockReturnValue(
+      headersResult([
+        serverHeader({
+          id: "header-key",
+          name: "X-Api-Key",
+          value: "***",
+          isSecret: true,
+        }),
+      ]),
+    );
+    const { result } = renderDrafts();
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        isSecret: false,
+      }),
+    );
+
+    expect(result.current.fieldErrors.get("header-key")).toEqual({
+      field: "value",
+      message: 'Enter a new value for "X-Api-Key" to store it as non-secret.',
+    });
+    await act(async () => {
+      await expect(result.current.save()).resolves.toBe(false);
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        staticValue: "public-key",
+      }),
+    );
+    expect(result.current.validationError).toBeNull();
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(mocks.update.mock.calls[0]?.[0]).toMatchObject({
+      request: {
+        updateServerHeaderForm: {
+          id: "header-key",
+          isSecret: false,
+          value: "public-key",
+        },
+      },
+    });
   });
 
   it("refuses to write rows that would not validate", async () => {

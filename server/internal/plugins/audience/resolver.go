@@ -27,6 +27,19 @@ func Resolve(ctx context.Context, db database.DBTX, organizationID string) ([]Au
 	if err != nil {
 		return nil, fmt.Errorf("list roles for plugin assignments: %w", err)
 	}
+	// Members who hold a role only through a directory role mapping, per role.
+	// Adding them to the direct count gives everyone who holds the role.
+	mappedCounts, err := accessrepo.New(db).ListDirectoryMappedRoleMemberCounts(ctx, accessrepo.ListDirectoryMappedRoleMemberCountsParams{
+		OrganizationID: organizationID,
+		RoleUrns:       nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count directory mapped role members for plugin assignments: %w", err)
+	}
+	mappedByRole := make(map[string]int64, len(mappedCounts))
+	for _, row := range mappedCounts {
+		mappedByRole[row.RoleUrn] = row.MemberCount
+	}
 	directoryService := directory.NewService(db)
 	groups, err := directoryService.ListActiveGroups(ctx, organizationID)
 	if err != nil {
@@ -48,7 +61,7 @@ func Resolve(ctx context.Context, db database.DBTX, organizationID string) ([]Au
 		audiences = append(audiences, Audience{
 			Kind:         "role",
 			DisplayName:  role.WorkosName,
-			MemberCount:  &role.MemberCount,
+			MemberCount:  new(role.MemberCount + mappedByRole[role.RoleUrn]),
 			PrincipalURN: role.RoleUrn,
 		})
 	}

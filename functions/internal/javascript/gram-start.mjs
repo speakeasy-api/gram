@@ -3,6 +3,7 @@ import { open } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { Writable } from "node:stream";
+import { text } from "node:stream/consumers";
 import url from "node:url";
 
 export const ERROR_CODES = /** @type {const} */ ({
@@ -184,7 +185,12 @@ function toolCallOptionsFromMeta(meta) {
 }
 
 /**
+ * Parses the command-line arguments and the JSON request read from stdin. The
+ * request never travels as an argument: Linux caps a single argument at
+ * 128 KiB, which tool input such as base64-encoded media easily exceeds.
+ *
  * @param {string[]} args
+ * @param {string} requestText
  * @returns {{
  *   type: "tool",
  *   pipePath: string,
@@ -193,14 +199,14 @@ function toolCallOptionsFromMeta(meta) {
  *   type: "resource",
  *   pipePath: string,
  *   request: { uri: string, input: unknown}
- * }}}
+ * }}
  */
-function parseArgs(args) {
+function parseRequest(args, requestText) {
   args = args.slice(2);
 
-  if (args.length < 2 || args.length > 3) {
+  if (args.length !== 2) {
     throw new Error(
-      "Expected two or three command-line arguments but got " + args.length,
+      "Expected two command-line arguments but got " + args.length,
     );
   }
 
@@ -209,25 +215,21 @@ function parseArgs(args) {
     throw new Error(`Named pipe does not exist: ${pipePath}`);
   }
 
-  const requestArg = args[1];
-  if (typeof requestArg !== "string") {
-    throw new Error(
-      `Invalid request argument type: expected string, got ${typeof requestArg}`,
-    );
-  }
-
-  // Default to "tool" for backward compatibility
-  const typeArg = args[2] || "tool";
+  const typeArg = args[1];
   if (typeArg !== "tool" && typeArg !== "resource") {
     throw new Error(
       `Invalid type argument: expected "tool" or "resource", got "${typeArg}"`,
     );
   }
 
-  const request = JSON.parse(requestArg);
+  if (requestText === "") {
+    throw new Error("Expected a JSON request on stdin but got nothing");
+  }
+
+  const request = JSON.parse(requestText);
 
   if (typeof request !== "object" || request === null) {
-    throw new Error("Request argument must be a valid JSON object");
+    throw new Error("Request must be a valid JSON object");
   }
 
   // Validate the request has the correct property based on type
@@ -529,8 +531,17 @@ async function handleResources(pipeFile, resourceRequest, codePath) {
   }
 }
 
-export async function main(args = process.argv, codePath = USER_CODE_PATH) {
-  const { pipePath, request, type } = parseArgs(args);
+/**
+ * @param {string[]} [args]
+ * @param {string} [codePath]
+ * @param {NodeJS.ReadableStream} [input] the stream the JSON request arrives on
+ */
+export async function main(
+  args = process.argv,
+  codePath = USER_CODE_PATH,
+  input = process.stdin,
+) {
+  const { pipePath, request, type } = parseRequest(args, await text(input));
 
   const pipeFile = await open(pipePath, "w");
   try {

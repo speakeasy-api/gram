@@ -26,6 +26,7 @@ import type { ActivePanel, AnnotationHint, ResourceType } from "./types";
 import {
   ANNOTATION_TO_DISPOSITION,
   DISPOSITION_TO_ANNOTATION,
+  isProjectFilteredResourceType,
   isProjectSelectableResourceType,
   isUnrestrictedResourceType,
   unrestrictedResourceLabel,
@@ -33,6 +34,7 @@ import {
 import { computePanelState } from "./computePanelState";
 import { type ServerGroup, type ServerTool } from "./serverMerge";
 import { useOrgMcpServers } from "./useOrgMcpServers";
+import { useOrgAssistants } from "./useOrgAssistants";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
 
 /**
@@ -90,6 +92,9 @@ export function GrantRuleDrawerContent({
   const organization = useOrganization();
   const inventory = useOrgMcpServers(resourceType === "mcp");
   const mcpServers = inventory.groups;
+  const assistantInventory = useOrgAssistants(
+    isProjectFilteredResourceType(resourceType),
+  );
   // Project slug per id, so the tool picker can name each remote server's
   // project when fetching its (project-scoped) stored tool metadata.
   const projectSlugById = useMemo(
@@ -109,6 +114,7 @@ export function GrantRuleDrawerContent({
 
   const isMcpConnect = scope === "mcp:connect";
   const projectSelectable = isProjectSelectableResourceType(resourceType);
+  const projectFiltered = isProjectFilteredResourceType(resourceType);
 
   const panelState = computePanelState(selectors, resourceType);
   // Use override only when selectors are empty (user just switched mode)
@@ -279,6 +285,43 @@ export function GrantRuleDrawerContent({
     );
   }, [mcpServers, selectedResourceIds]);
 
+  const filteredAssistantGroups = useMemo(() => {
+    const scoped = allowFilter
+      ? assistantInventory.groups
+          .map((group) => {
+            if (allowFilter.projectIds?.has(group.projectId)) return group;
+            return {
+              ...group,
+              assistants: group.assistants.filter(
+                (a) => allowFilter.serverIds?.has(a.id) ?? false,
+              ),
+            };
+          })
+          .filter((g) => g.assistants.length > 0)
+      : assistantInventory.groups;
+    if (!resourceSearch) return scoped;
+    const q = resourceSearch.toLowerCase();
+    return scoped
+      .map((group) => ({
+        ...group,
+        assistants: group.assistants.filter(
+          (a) =>
+            a.name.toLowerCase().includes(q) ||
+            group.projectName.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.assistants.length > 0);
+  }, [assistantInventory.groups, allowFilter, resourceSearch]);
+
+  const selectedAssistantRows = useMemo(() => {
+    if (selectedResourceIds.size === 0) return [];
+    return assistantInventory.groups.flatMap((group) =>
+      group.assistants
+        .filter((a) => selectedResourceIds.has(a.id))
+        .map((assistant) => ({ assistant, projectName: group.projectName })),
+    );
+  }, [assistantInventory.groups, selectedResourceIds]);
+
   // The "Specific tools" picker shows servers with enumerable deploy-time tools
   // plus remote/tunneled (dynamic-tools) servers. Remote-backed ones resolve
   // their tools from the stored metadata table on expand; tunneled ones stay a
@@ -309,7 +352,8 @@ export function GrantRuleDrawerContent({
     );
   }
 
-  const resourceKind = projectSelectable ? resourceType : "mcp";
+  const resourceKind =
+    projectSelectable || projectFiltered ? resourceType : "mcp";
 
   // For MCP scopes, `id` is `Server.id`, which serverMerge.ts guarantees is
   // the id enforcement checks (toolset id for toolset-backed servers, the
@@ -351,7 +395,11 @@ export function GrantRuleDrawerContent({
     } else {
       onChangeSelectors([
         ...selectors,
-        { resourceKind: "mcp", resourceId: "*", projectId },
+        {
+          resourceKind: projectFiltered ? resourceType : "mcp",
+          resourceId: "*",
+          projectId,
+        },
       ]);
     }
   };
@@ -376,31 +424,40 @@ export function GrantRuleDrawerContent({
     <div className="border-border divide-border shrink-0 divide-y border">
       {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
-          label={projectSelectable ? "All projects" : "All servers"}
-          description={
-            projectSelectable
-              ? "Give access to every project in your org"
-              : "Give access to all servers in every project in your org"
-          }
+          label={allScopeLabel(projectSelectable, projectFiltered)}
+          description={allScopeDescription(projectSelectable, projectFiltered)}
           selected={activePanel === "all"}
           onClick={() => switchPanel("all")}
         />
       )}
-      {resourceType === "mcp" && isPanelAllowed("projects") && (
-        <ScopeOption
-          label="Specific projects"
-          description="Give access to servers within specific projects in your org"
-          selected={activePanel === "projects"}
-          onClick={() => switchPanel("projects")}
-        />
-      )}
+      {(resourceType === "mcp" || projectFiltered) &&
+        isPanelAllowed("projects") && (
+          <ScopeOption
+            label="Specific projects"
+            description={
+              projectFiltered
+                ? "Give access to assistants within specific projects in your org"
+                : "Give access to servers within specific projects in your org"
+            }
+            selected={activePanel === "projects"}
+            onClick={() => switchPanel("projects")}
+          />
+        )}
       {isPanelAllowed("servers") && (
         <ScopeOption
-          label={projectSelectable ? "Specific projects" : "Specific servers"}
+          label={
+            projectFiltered
+              ? "Specific assistants"
+              : projectSelectable
+                ? "Specific projects"
+                : "Specific servers"
+          }
           description={
-            projectSelectable
-              ? "Give access to specific projects in your org"
-              : "Give access to specific servers across your org"
+            projectFiltered
+              ? "Give access to specific assistants across your org"
+              : projectSelectable
+                ? "Give access to specific projects in your org"
+                : "Give access to specific servers across your org"
           }
           selected={activePanel === "servers"}
           onClick={() => switchPanel("servers")}
@@ -417,7 +474,7 @@ export function GrantRuleDrawerContent({
     </div>
   );
 
-  const resourceList = activePanel === "servers" && (
+  const resourceList = activePanel === "servers" && !projectFiltered && (
     <>
       <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
         <input
@@ -432,6 +489,7 @@ export function GrantRuleDrawerContent({
         {resourceSearch && (
           <button
             type="button"
+            aria-label="Clear search"
             onClick={() => setResourceSearch("")}
             className="text-muted-foreground hover:text-foreground shrink-0"
           >
@@ -533,6 +591,86 @@ export function GrantRuleDrawerContent({
     </>
   );
 
+  const assistantPickerList = activePanel === "servers" && projectFiltered && (
+    <>
+      <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
+        <input
+          type="text"
+          placeholder="Search assistants…"
+          value={resourceSearch}
+          onChange={(e) => setResourceSearch(e.target.value)}
+          className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
+        />
+        {resourceSearch && (
+          <button
+            type="button"
+            aria-label="Clear assistant search"
+            onClick={() => setResourceSearch("")}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <div
+        ref={resourceListRef}
+        onWheel={handleResourceWheel}
+        className="border-border divide-border min-h-0 flex-1 divide-y overflow-y-auto border"
+      >
+        <SelectedGroup count={selectedAssistantRows.length}>
+          {selectedAssistantRows.map(({ assistant, projectName }) => (
+            <ResourceCheckbox
+              key={`selected-${assistant.id}`}
+              id={assistant.id}
+              name={
+                <>
+                  <span title={assistant.name}>{assistant.name}</span>
+                  <span
+                    title={projectName}
+                    className="text-muted-foreground ml-2 text-xs font-normal"
+                  >
+                    {projectName}
+                  </span>
+                </>
+              }
+              checked
+              onToggle={toggleResource}
+            />
+          ))}
+        </SelectedGroup>
+        {filteredAssistantGroups.length === 0 ? (
+          <div className="text-muted-foreground px-3 py-3 text-sm">
+            {assistantInventory.isError
+              ? "Assistants unavailable"
+              : !assistantInventory.settled
+                ? "Loading assistants…"
+                : assistantInventory.groups.length === 0
+                  ? "No assistants found"
+                  : "No matching assistants"}
+          </div>
+        ) : (
+          filteredAssistantGroups.map((group) => (
+            <div key={group.projectId}>
+              <div className="bg-muted/40 text-muted-foreground text-eyebrow border-border border-b px-4 py-1.5">
+                {group.projectName}
+              </div>
+              {group.assistants.map((assistant) => (
+                <ResourceCheckbox
+                  key={assistant.id}
+                  id={assistant.id}
+                  name={assistant.name}
+                  qualifier={group.projectName}
+                  checked={isResourceSelected(assistant.id)}
+                  onToggle={toggleResource}
+                />
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  );
+
   const projectPickerList = activePanel === "projects" && (
     <>
       <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
@@ -546,6 +684,7 @@ export function GrantRuleDrawerContent({
         {resourceSearch && (
           <button
             type="button"
+            aria-label="Clear project search"
             onClick={() => setResourceSearch("")}
             className="text-muted-foreground hover:text-foreground shrink-0"
           >
@@ -654,9 +793,31 @@ export function GrantRuleDrawerContent({
   return (
     <div className="flex flex-1 flex-col px-1.5 pb-1.5">
       {renderScopeOptions()}
+      {isMcpConnect && !isDenyProp && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Plugins shared with this role receive the servers chosen here. Read
+          and write access also let members connect, but never add servers to
+          plugins.
+        </p>
+      )}
       {/* The server inventory is withheld unless both org listings succeeded,
           so say why the lists are empty rather than implying the org has no
           servers. */}
+      {assistantInventory.isError && (
+        <div
+          role="alert"
+          className="border-border text-muted-foreground mt-3 flex items-center justify-between gap-2 border px-3 py-2 text-sm"
+        >
+          <span>Could not load this organization&rsquo;s assistants.</span>
+          <button
+            type="button"
+            onClick={assistantInventory.refetch}
+            className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {inventory.isError && (
         <div
           role="alert"
@@ -681,13 +842,16 @@ export function GrantRuleDrawerContent({
           <div className="border-border text-muted-foreground flex flex-1 items-center justify-center border px-6 text-center text-sm">
             {isDenyProp
               ? "This exception covers everything the allow rule permits."
-              : projectSelectable
-                ? "This role reaches every project in the organization."
-                : "This role reaches every server in every project."}
+              : projectFiltered
+                ? "This role reaches every assistant in every project."
+                : projectSelectable
+                  ? "This role reaches every project in the organization."
+                  : "This role reaches every server in every project."}
           </div>
         ) : (
           <>
             {resourceList}
+            {assistantPickerList}
             {projectPickerList}
             {activePanel === "tools" && (
               <div className="flex min-h-0 flex-1 flex-col">{customTabs()}</div>
@@ -1138,4 +1302,19 @@ function ScopeOption({
       </span>
     </button>
   );
+}
+
+function allScopeLabel(projectSelectable: boolean, projectFiltered: boolean) {
+  if (projectFiltered) return "All assistants";
+  return projectSelectable ? "All projects" : "All servers";
+}
+
+function allScopeDescription(
+  projectSelectable: boolean,
+  projectFiltered: boolean,
+) {
+  if (projectFiltered) return "Give access to every assistant in your org";
+  return projectSelectable
+    ? "Give access to every project in your org"
+    : "Give access to all servers in every project in your org";
 }

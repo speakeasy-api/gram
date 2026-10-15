@@ -1,8 +1,8 @@
 // Anonymous public serving for tunneled MCP servers.
 //
 // Public tunneled endpoints have NO OAuth surface and NO user_sessions rows:
-// Gram terminates MCP sessions itself. On a successful anonymous initialize
-// it mints a Gram-owned session id, rewrites the backend's Mcp-Session-Id
+// Speakeasy terminates MCP sessions itself. On a successful anonymous initialize
+// it mints a Speakeasy-owned session id, rewrites the backend's Mcp-Session-Id
 // response header to it, and records a Redis-only mapping to the backend's
 // session id plus the exact tunnel target (gateway address + agent session)
 // that owns it. Session-bearing requests resolve that mapping and are pinned
@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -45,6 +46,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/publiclimits"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -362,7 +364,7 @@ func (s *Service) serveTunneledPublicBackend(
 // (this endpoint deliberately has no authorization server — relaying the
 // challenge would misdirect clients at an unreachable one), and
 // state-mutating headers (Set-Cookie, Clear-Site-Data) that would let a
-// backend plant or wipe browser state on the Gram or custom-domain origin.
+// backend plant or wipe browser state on the Speakeasy or custom-domain origin.
 func stripPublicResponseHeaders(resp *http.Response) {
 	resp.Header.Del("WWW-Authenticate")
 	resp.Header.Del("Set-Cookie")
@@ -373,7 +375,7 @@ func stripPublicResponseHeaders(resp *http.Response) {
 // uncommitted reservation so a Redis stall cannot pin the request goroutine.
 const reservationCleanupTimeout = 5 * time.Second
 
-// serveTunneledPublicInit serves anonymous requests that carry no Gram
+// serveTunneledPublicInit serves anonymous requests that carry no Speakeasy
 // session id: initialize plus all traffic to stateless/draft-protocol
 // backends. Admission (initialize rate limit + capacity reservation) runs as
 // plain pre-proxy code so availability failures surface as real HTTP status
@@ -430,7 +432,16 @@ func (s *Service) serveTunneledPublicInit(
 		reserved = true
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, organizationID, mcpServer, "", "", nil)
+	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
+		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
+		ProjectID:          endpoint.ProjectID,
+		OrganizationID:     organizationID,
+		MCPServer:          mcpServer,
+		ResourceIdentifier: "",
+		UpstreamAuth:       "",
+		WWWAuthenticate:    "",
+		Selection:          nil,
+	})
 	if err != nil {
 		if reserved {
 			s.rollbackReservation(ctx, logger, tunnelID, mcpServerID, sid)
@@ -470,7 +481,7 @@ func (s *Service) serveTunneledPublicInit(
 
 // commitAnonymousSession records the Redis mapping for a successful,
 // session-bearing anonymous initialize and rewrites the response's
-// Mcp-Session-Id to the Gram-owned id. Returns (committed, err): committed is
+// Mcp-Session-Id to the Speakeasy-owned id. Returns (committed, err): committed is
 // false with a nil error for the paths that legitimately mint no session
 // (non-2xx initialize, stateless backend that returned no session header) so
 // the caller releases the reservation. A non-nil error aborts the relay
@@ -493,7 +504,7 @@ func (s *Service) commitAnonymousSession(
 
 	backendSids := resp.Header.Values(proxy.McpSessionIDHeader)
 	if len(backendSids) == 0 {
-		// Stateless / draft-protocol backend: no session to track. Gram never
+		// Stateless / draft-protocol backend: no session to track. Speakeasy never
 		// synthesizes a session header the backend did not produce.
 		return false, nil
 	}
@@ -575,7 +586,7 @@ func peekIsInitialize(r *http.Request) bool {
 	if err := json.Unmarshal(body, &probe); err != nil {
 		return false
 	}
-	return probe.Method == "initialize"
+	return probe.Method == mcpversions.MethodInitialize
 }
 
 // isValidBackendSessionID enforces the MCP spec's constraint that a session
@@ -594,7 +605,7 @@ func isValidBackendSessionID(sid string) bool {
 }
 
 // serveTunneledPublicSession serves an anonymous request that carries a
-// Gram-owned session id: resolve the Redis mapping, pin the forward to the
+// Speakeasy-owned session id: resolve the Redis mapping, pin the forward to the
 // exact recorded gateway + agent session, and translate the session header in
 // both directions. A lost mapping or dead target surfaces as HTTP 404 so MCP
 // clients re-initialize; the cross-gateway retryer is never used because the
@@ -614,7 +625,7 @@ func (s *Service) serveTunneledPublicSession(
 	mcpServerID := mcpServer.ID.String()
 
 	if !tunnelsessions.IsSessionID(sid) {
-		// Not a Gram-minted id — never valid on this endpoint, and not safe
+		// Not a Speakeasy-minted id — never valid on this endpoint, and not safe
 		// to use as Redis key material.
 		return oops.E(oops.CodeNotFound, nil, "session not found").LogWarn(ctx, logger)
 	}
@@ -687,6 +698,7 @@ func (s *Service) serveTunneledPublicSession(
 		"",
 		"",
 		nil,
+		remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled),
 	)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
@@ -721,7 +733,7 @@ func (s *Service) serveTunneledPublicSession(
 		}
 
 		// Never leak the backend's session id: rewrite any echoed session
-		// header back to the Gram-owned id.
+		// header back to the Speakeasy-owned id.
 		if resp.Header.Get(proxy.McpSessionIDHeader) != "" {
 			resp.Header.Set(proxy.McpSessionIDHeader, sid)
 		}

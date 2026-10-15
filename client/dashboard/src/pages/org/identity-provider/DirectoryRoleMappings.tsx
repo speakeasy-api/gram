@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -22,6 +23,10 @@ import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 import { InlineEmptyState } from "@/components/inline-empty-state";
+import {
+  type FacepileMember,
+  MemberFacepile,
+} from "@/components/member-facepile";
 import { Button } from "@/components/ui/Button";
 import {
   Collapsible,
@@ -41,8 +46,11 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { attributeMemberCount } from "@/pages/access/directorySourcesForRole";
 import { useOrgRoutes } from "@/routes";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -55,6 +63,7 @@ import {
   invalidateAllDirectoryRoleMappings,
   useDirectoryRoleMappings,
 } from "@gram/client/react-query/directoryRoleMappings.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import {
   invalidateAllRoles,
   useRoles,
@@ -76,6 +85,8 @@ type SourceRow = {
   key: string;
   label: string;
   detail: string;
+  /** Speakeasy members in the source, shown as faces in place of the detail. */
+  members?: FacepileMember[];
   form: Omit<SetDirectoryRoleMappingForm, "roleUrn">;
   mapping: DirectoryRoleMapping | undefined;
 };
@@ -84,20 +95,39 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function memberLabel(count: number): string {
-  return `${count} ${count === 1 ? "user" : "users"}`;
+/** Undefined means the count is not known. */
+function memberLabel(count: number | undefined): string {
+  return count === undefined ? "—" : pluralize(count, "user");
 }
 
-function groupRows(data: ListDirectoryRoleMappingsResult): SourceRow[] {
+function groupRows(
+  data: ListDirectoryRoleMappingsResult,
+  members: AccessMember[],
+): SourceRow[] {
   const byGroup = new Map(
     data.mappings
       .filter((m) => m.sourceKind === "group")
       .map((m) => [m.directoryGroupId, m]),
   );
+  // Members name their directory groups, not group ids, so match on the name.
+  const membersByGroup = new Map<string, FacepileMember[]>();
+  for (const member of members) {
+    for (const group of member.groups ?? []) {
+      const list = membersByGroup.get(group) ?? [];
+      list.push({
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        photoUrl: member.photoUrl,
+      });
+      membersByGroup.set(group, list);
+    }
+  }
   return data.groups.map((group) => ({
     key: group.id,
     label: group.name,
     detail: memberLabel(group.memberCount),
+    members: membersByGroup.get(group.name),
     form: { sourceKind: "group", directoryGroupId: group.id },
     mapping: byGroup.get(group.id),
   }));
@@ -112,13 +142,10 @@ function attributeMappingRows(
     .map((mapping): SourceRow => {
       const key = mapping.attributeKey ?? "";
       const value = mapping.attributeValue ?? "";
-      const option = data.attributes.find(
-        (a) => a.key === key && a.value === value,
-      );
       return {
         key: mapping.id,
         label: `${key} = ${value}`,
-        detail: memberLabel(option?.memberCount ?? 0),
+        detail: memberLabel(attributeMemberCount(data, key, value)),
         form: {
           sourceKind: "attribute",
           attributeKey: key,
@@ -131,7 +158,7 @@ function attributeMappingRows(
 }
 
 /**
- * Maps directory groups to Gram roles, with attribute values as a secondary
+ * Maps directory groups to Speakeasy roles, with attribute values as a secondary
  * option for directories whose groups don't fit. Every group is a row with its
  * own role picker; picking a role saves it. Members who match get that role on
  * top of the roles assigned to them directly. Render it only for org admins:
@@ -157,7 +184,11 @@ export function DirectoryRoleMappings({
       ),
     [rolesData?.roles],
   );
-  const rows = useMemo(() => (data ? groupRows(data) : []), [data]);
+  const { data: membersData } = useMembers();
+  const rows = useMemo(
+    () => (data ? groupRows(data, membersData?.members ?? []) : []),
+    [data, membersData?.members],
+  );
 
   // Back from creating a role for a group or attribute: map it. The round
   // trip ends only once the save succeeds; a failed save keeps it so a reload
@@ -184,6 +215,7 @@ export function DirectoryRoleMappings({
           void Promise.all([
             invalidateAllDirectoryRoleMappings(queryClient),
             invalidateAllRoles(queryClient),
+            invalidateAllResourceAudience(queryClient),
           ]).then(() => toast.success("Role created and mapped"));
         },
       },
@@ -325,9 +357,15 @@ function MappingTable({
       render: (row) => (
         <div className="min-w-0">
           <Text className="truncate font-medium">{row.label}</Text>
-          <Text muted small className="truncate">
-            {row.detail}
-          </Text>
+          {row.members?.length ? (
+            <div className="mt-1">
+              <MemberFacepile members={row.members} />
+            </div>
+          ) : (
+            <Text muted small className="truncate">
+              {row.detail}
+            </Text>
+          )}
         </div>
       ),
     },
@@ -515,6 +553,7 @@ function RolePicker({
     Promise.all([
       invalidateAllDirectoryRoleMappings(queryClient),
       invalidateAllRoles(queryClient),
+      invalidateAllResourceAudience(queryClient),
     ]);
   // Returning the refresh keeps the mutation pending until the row reloads.
   const save = useSetDirectoryRoleMappingMutation({
@@ -663,6 +702,7 @@ function RemoveMappingButton({
       Promise.all([
         invalidateAllDirectoryRoleMappings(queryClient),
         invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
       ]),
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to remove role mapping"));

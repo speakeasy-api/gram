@@ -1,3 +1,4 @@
+import { MCPSessionsEmptyState } from "@/components/setup-empty-state";
 import { useSessionAgents } from "@/hooks/useSessionAgents";
 import { useDeferredValue, useMemo, useState } from "react";
 import { Navigate } from "react-router";
@@ -19,7 +20,6 @@ import {
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { subjectLabel } from "@/lib/user-session-status";
@@ -169,17 +169,17 @@ function UserSessionsInner(): JSX.Element {
         </Button>
       </div>
     );
-  } else if (sessions.length === 0) {
+  } else if (
+    sessions.length === 0 &&
+    Object.values(filters.values).some(Boolean)
+  ) {
     listBody = (
-      <div className="flex flex-col items-center justify-center border border-dashed px-8 py-16">
-        <Text variant="subheading" className="mb-1">
-          No connections yet
-        </Text>
-        <Text small muted className="max-w-md text-center">
-          Connections agents establish with your MCP servers will appear here.
-        </Text>
-      </div>
+      <p className="text-muted-foreground text-sm">
+        No connections match these filters
+      </p>
     );
+  } else if (sessions.length === 0) {
+    listBody = <MCPSessionsEmptyState />;
   } else if (filteredSessions.length === 0) {
     listBody = (
       <p className="text-muted-foreground text-sm">
@@ -204,7 +204,7 @@ function UserSessionsInner(): JSX.Element {
       scope="project:read"
       resourceId={project.id}
       title="MCP Sessions"
-      description="Connections Gram brokers for this project. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one."
+      description="Connections Speakeasy brokers for this project. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one."
     >
       <div className="space-y-8">
         {/* `Page.Section` stacks two `mb-6`s under the description, which reads

@@ -26,6 +26,8 @@ export const FeatureName = {
   ConsentToolFiltering: "consent_tool_filtering",
   SessionPortability: "session_portability",
   NetworkIngress: "network_ingress",
+  SignalsIntelligence: "signals_intelligence",
+  OrganizationGatewayDisabled: "organization_gateway_disabled",
 } as const;
 export type FeatureName = ClosedEnum<typeof FeatureName>;
 

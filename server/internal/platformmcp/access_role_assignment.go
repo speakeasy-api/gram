@@ -37,7 +37,7 @@ type AssignMCPAccessRoleOutput struct {
 	SnapshotScope  string                     `json:"snapshot_scope" jsonschema:"assignment_commit: this response describes the committed operation, not current access"`
 	AssignedRole   string                     `json:"assigned_role"`
 	ResultCategory string                     `json:"result_category"`
-	Reconciliation string                     `json:"reconciliation"`
+	Reconciliation string                     `json:"reconciliation" jsonschema:"pending: provider sync was requested after the commit; not_applicable: the member has nothing left to sync; rate_limited or unavailable: this replay did not request provider sync again because the retry allowance is spent or could not be checked"`
 	Receipt        RiskMutationToolReceipt    `json:"receipt"`
 }
 
@@ -99,7 +99,7 @@ func (s *AccessRoleAssignmentService) Assign(ctx context.Context, principal Prin
 	// but the fresh callback below refuses that shape for a new assignment.
 	normalized := normalizedAccessRoleAssignment{ProjectID: project.ID.String(), MemberID: memberID, RoleID: roleID, ExpectedVersion: input.ExpectedVersion, MCPID: input.MCPID, ExpectedRoleVersion: input.ExpectedRoleVersion}
 	var reconciliation access.MemberRoleReconciliation
-	receipt, err := s.receipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
+	receipt, err := s.receipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, s.roles.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
 		if _, err := s.roles.reads.references.Decode(input.MemberReference, principal, subjectKindAccessMember, s.roles.reads.now()); err != nil {
 			return AccessRoleAssignmentReceiptResult{}, accessRoleMutationNotFound()
 		}
@@ -150,7 +150,15 @@ func (s *AccessRoleAssignmentService) Assign(ctx context.Context, principal Prin
 			stored.Reconciliation = "not_applicable"
 		}
 	}
-	s.roles.backend.ReconcileMemberRoles(ctx, reconciliation)
+	// A member who has since left has nothing to reconcile, so nothing to
+	// charge for.
+	if stored.Reconciliation != "not_applicable" {
+		if err := chargeRerun(ctx, receipt, s.roles.charge(principal)); err != nil {
+			stored.Reconciliation = skippedRerun(ctx, s.roles.reads.logger, err)
+		} else {
+			s.roles.backend.ReconcileMemberRoles(ctx, reconciliation)
+		}
+	}
 	return AssignMCPAccessRoleOutput{
 		Member:        AccessRoleAssignmentMember{MaskedIdentity: stored.MaskedIdentity, Roles: slices.Clone(stored.Roles), Version: stored.Version},
 		SnapshotScope: "assignment_commit",

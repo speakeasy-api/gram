@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -735,7 +736,6 @@ func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
 	createSpendCapActivityKey(t, db, organizationID, 100)
 
 	firstStarted := make(chan struct{})
-	secondStarted := make(chan struct{})
 	releaseFirst := make(chan struct{})
 	var releaseOnce sync.Once
 	t.Cleanup(func() { releaseOnce.Do(func() { close(releaseFirst) }) })
@@ -767,7 +767,6 @@ func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
 		openrouter.KeyTypeChat,
 		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 700 }),
 	).Run(func(args mock.Arguments) {
-		close(secondStarted)
 		updateLimit(args, 700)
 	}).Return(700, nil).Once()
 
@@ -795,11 +794,9 @@ func TestSetOpenRouterSpendCapSerializesConcurrentOperations(t *testing.T) {
 
 	secondDone := make(chan error, 1)
 	go func() { secondDone <- run(spendCapActivityArgs("operation_second_placeholder", organizationID, 700)) }()
-	select {
-	case <-secondStarted:
-		require.FailNow(t, "second spend-cap operation bypassed the billing lock")
-	case <-time.After(150 * time.Millisecond):
-	}
+	holderPID, err := testrepo.New(db).GetAdvisoryLockHolderFixture(t.Context(), "openrouter-chat-billing:"+organizationID)
+	require.NoError(t, err)
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), db, uint32(holderPID), 1)
 
 	releaseOnce.Do(func() { close(releaseFirst) })
 	require.NoError(t, <-firstDone)

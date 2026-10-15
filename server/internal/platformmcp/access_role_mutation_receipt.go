@@ -41,15 +41,15 @@ func NewAccessRoleMutationReceiptStore(db *pgxpool.Pool) *AccessRoleMutationRece
 	return &AccessRoleMutationReceiptStore{db: db, now: time.Now}
 }
 
-func (s *AccessRoleMutationReceiptStore) ExecuteCreate(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedCreateMCPAccessRole, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
-	return s.execute(ctx, principal, project, operationCreateMCPAccessRole, idempotencyKey, normalized, mutate)
+func (s *AccessRoleMutationReceiptStore) ExecuteCreate(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedCreateMCPAccessRole, charge func(context.Context) error, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
+	return s.execute(ctx, principal, project, operationCreateMCPAccessRole, idempotencyKey, normalized, charge, mutate)
 }
 
-func (s *AccessRoleMutationReceiptStore) ExecuteUpdate(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedUpdateMCPAccessRole, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
-	return s.execute(ctx, principal, project, operationUpdateMCPAccessRole, idempotencyKey, normalized, mutate)
+func (s *AccessRoleMutationReceiptStore) ExecuteUpdate(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedUpdateMCPAccessRole, charge func(context.Context) error, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
+	return s.execute(ctx, principal, project, operationUpdateMCPAccessRole, idempotencyKey, normalized, charge, mutate)
 }
 
-func (s *AccessRoleMutationReceiptStore) execute(ctx context.Context, principal Principal, project ResolvedProject, operation, idempotencyKey string, normalized any, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
+func (s *AccessRoleMutationReceiptStore) execute(ctx context.Context, principal Principal, project ResolvedProject, operation, idempotencyKey string, normalized any, charge func(context.Context) error, mutate AccessRoleMutationTransaction) (OperationReceipt, error) {
 	if s == nil || s.db == nil || s.now == nil || mutate == nil || !accessRoleMutationOperation(operation) || idempotencyKey == "" || len(idempotencyKey) > 128 {
 		return OperationReceipt{}, accessRoleMutationInvalid("The access role receipt request is invalid.")
 	}
@@ -57,7 +57,7 @@ func (s *AccessRoleMutationReceiptStore) execute(ctx context.Context, principal 
 	if err != nil {
 		return OperationReceipt{}, accessRoleMutationInvalid("The access role mutation could not be normalized.")
 	}
-	return executeMutationReceipt(ctx, mutationReceiptExecution[AccessRoleMutationReceiptResult]{
+	return executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[AccessRoleMutationReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: idempotencyKey, InputHash: inputHash, Label: "access role",
 		Invalid: func(cause error) error {

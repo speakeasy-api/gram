@@ -67,7 +67,7 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 		"name":          name,
 		"private":       private,
 		"auto_init":     true,
-		"description":   "Plugin packages managed by Gram",
+		"description":   "Plugin packages managed by Speakeasy",
 		"has_issues":    false,
 		"has_wiki":      false,
 		"has_downloads": false,
@@ -449,7 +449,7 @@ func (c *Client) createCommit(ctx context.Context, installationID int64, owner, 
 func (c *Client) updateRef(ctx context.Context, installationID int64, owner, repo, branch, commitSHA string) error {
 	// force: true is required because we build clean trees (no base_tree)
 	// which Git may see as non-fast-forward. Safe because each project gets
-	// its own repo that Gram fully manages.
+	// its own repo that Speakeasy fully manages.
 	payload := map[string]any{
 		"sha":   commitSHA,
 		"force": true,

@@ -27,13 +27,14 @@ func TestRegistrySurvivesLocalReseed(t *testing.T) {
 	page, err := s.List(ctx, mcpregistry.ListOptions{})
 	require.NoError(t, err)
 	require.Empty(t, page.Entries)
-	const raw = `{"server":{"name":"example.test/seed-one","description":"Original","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]}}`
+	const raw = `{"server":{"name":"example.test/seed-one","description":"Original","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]},"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":"https://example.test/docs"}}}`
 	first, err := s.Create(ctx, json.RawMessage(raw))
 	require.NoError(t, err)
-	const other = `{"server":{"name":"example.test/seed-two","description":"Original","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]}}`
+	require.False(t, first.PublishedAt.IsZero())
+	const other = `{"server":{"name":"example.test/seed-two","description":"Original","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]},"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":"https://example.test/docs"}}}`
 	second, err := s.Create(ctx, json.RawMessage(other))
 	require.NoError(t, err)
-	second, err = s.Save(ctx, second.ID, mcpregistry.Token(second), json.RawMessage(`{"server":{"name":"example.test/seed-two","description":"Staff edit","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]}}`))
+	second, err = s.Save(ctx, second.ID, mcpregistry.Token(second), json.RawMessage(`{"server":{"name":"example.test/seed-two","description":"Staff edit","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]},"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":"https://example.test/docs"}}}`))
 	require.NoError(t, err)
 	second, err = s.SetPublished(ctx, second.ID, mcpregistry.Token(second), false)
 	require.NoError(t, err)

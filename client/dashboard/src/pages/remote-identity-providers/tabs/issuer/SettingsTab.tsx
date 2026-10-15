@@ -2,7 +2,10 @@ import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { RequireScope } from "@/components/require-scope";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { Label } from "@/components/ui/Label";
+import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { ScopeMultiSelect } from "@/lib/remote-identity";
 import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
@@ -49,6 +52,20 @@ export function SettingsTab({
   const [tunneledMcpServerId, setTunneledMcpServerId] = useState(
     issuer.tunneledMcpServerId ?? "",
   );
+  // Seeded from the saved override: buildUpdateIssuerForm always sends it and
+  // reads a blank field as "clear", so any other seed would drop the override
+  // on the next unrelated save.
+  const [scopeOverride, setScopeOverride] = useState<string[]>(
+    issuer.scopeOverride ?? [],
+  );
+  // Undefined until the operator flips the switch, so it tracks the saved
+  // value and a save only sends the flag when it was deliberately changed:
+  // an unrelated save must not write false over a NULL the issuer never set.
+  const [omitScopeFallback, setOmitScopeFallback] = useState<
+    boolean | undefined
+  >(undefined);
+  const omitScopeFallbackChecked =
+    omitScopeFallback ?? issuer.omitScopeFallback ?? false;
   const [showDelete, setShowDelete] = useState(false);
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasAnyScope } = useRBAC();
@@ -86,6 +103,8 @@ export function SettingsTab({
       jwksUri: issuer.jwksUri ?? "",
       scopesSupported: issuer.scopesSupported ?? [],
       grantTypesSupported: issuer.grantTypesSupported ?? [],
+      authorizationGrantProfilesSupported:
+        issuer.authorizationGrantProfilesSupported ?? [],
       responseTypesSupported: issuer.responseTypesSupported ?? [],
       tokenEndpointAuthMethodsSupported:
         issuer.tokenEndpointAuthMethodsSupported ?? [],
@@ -122,6 +141,7 @@ export function SettingsTab({
       await invalidateAllOrganizationRemoteSessionIssuer(queryClient, {
         refetchType: "all",
       });
+      setOmitScopeFallback(undefined);
       toast.success("Provider updated");
     },
     onError: (error) => {
@@ -219,6 +239,13 @@ export function SettingsTab({
           registrationEndpoint,
           jwksUri,
           discoveredSnapshot,
+          savedIssuerUrl: issuer.issuer,
+          scopeOverride,
+          omitScopeFallback:
+            omitScopeFallback !== undefined &&
+            omitScopeFallback !== (issuer.omitScopeFallback ?? false)
+              ? omitScopeFallback
+              : undefined,
           tunneledMcpServerId:
             isPlatformAdmin && issuer.projectId
               ? tunneledMcpServerId
@@ -343,6 +370,50 @@ export function SettingsTab({
       </SettingsSection>
 
       <SettingsSection
+        title="Scopes"
+        description="Requested exactly as chosen when neither the client nor the MCP server names scopes, in place of this provider's supported scopes."
+      >
+        <div className="flex flex-col gap-1.5">
+          <Label id="scope-override-label" htmlFor="scope-override">
+            Scope override
+          </Label>
+          <ScopeMultiSelect
+            id="scope-override"
+            labelId="scope-override-label"
+            options={issuer.scopesSupported ?? []}
+            value={scopeOverride}
+            onValueChange={setScopeOverride}
+            placeholder="No override"
+            disabled={!hasOrgAdminScope}
+          />
+          <Text small muted>
+            Choose from the scopes this identity provider advertises, or type
+            one to add it.
+          </Text>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-3">
+            <Switch
+              aria-labelledby="omit-scope-fallback-label"
+              checked={omitScopeFallbackChecked}
+              onCheckedChange={setOmitScopeFallback}
+            />
+            <Label id="omit-scope-fallback-label">
+              Request default scopes when the MCP server advertises none
+            </Label>
+          </div>
+          <Text small muted>
+            When the MCP server names no scopes (none advertised, pinned, or
+            demanded in its challenge) and no client scope or override is set,
+            every scope the authorization server lists is requested. Turn this
+            on to send no scope parameter instead so the authorization server
+            applies its defaults. Some authorization servers reject a request
+            without a scope.
+          </Text>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
         title="Client setup"
         description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this provider themselves."
       >
@@ -375,7 +446,7 @@ export function SettingsTab({
       </div>
 
       <div className="border-destructive/30 flex flex-col gap-2 border p-4">
-        <Text className="font-medium">Danger Zone</Text>
+        <Text className="font-medium">Danger zone</Text>
         <Text small muted>
           Deleting this provider is permanent. All clients must be deleted
           first.

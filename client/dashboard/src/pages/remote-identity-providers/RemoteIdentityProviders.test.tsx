@@ -60,48 +60,77 @@ vi.mock("@/components/ui/Dropdown", () => {
     }) => <button onClick={onClick}>{children}</button>,
   };
 });
-vi.mock("@gram/client/react-query/organizationRemoteSessionIssuers.js", () => ({
-  useOrganizationRemoteSessionIssuers: () => ({
-    data: {
-      result: {
-        items: [
+const tierMocks = vi.hoisted(() => ({
+  platformHasMore: vi.fn(() => false),
+  fetchNextPage: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/organizationRemoteSessionIssuers.js", () => {
+  const listed = [
+    {
+      issuer: {
+        id: "platform-provider",
+        name: "Platform Example",
+        issuer: "https://platform.example.com",
+        organizationId: null,
+        projectId: null,
+      },
+      clientCount: 0,
+    },
+    {
+      issuer: {
+        id: "org-provider",
+        name: "Organization Example",
+        issuer: "https://org.example.com",
+        organizationId: "example-org",
+        projectId: null,
+      },
+      clientCount: 1,
+    },
+    {
+      issuer: {
+        id: "project-provider",
+        name: "Project Example",
+        issuer: "https://project.example.com",
+        organizationId: "example-org",
+        projectId: "example-project",
+      },
+      projectName: "Example Project",
+      clientCount: 0,
+    },
+  ];
+
+  const tierOf = (issuer: {
+    projectId: string | null;
+    organizationId: string | null;
+  }) => {
+    if (issuer.projectId) return "project";
+    return issuer.organizationId ? "organization" : "platform";
+  };
+  return {
+    invalidateAllOrganizationRemoteSessionIssuers: vi.fn(),
+    // Stands in for the server's tier filter: each table lists its own tier.
+    useOrganizationRemoteSessionIssuersInfinite: (request: {
+      tier: string;
+    }) => ({
+      data: {
+        pages: [
           {
-            issuer: {
-              id: "platform-provider",
-              name: "Platform Example",
-              issuer: "https://platform.example.com",
-              organizationId: null,
-              projectId: null,
+            result: {
+              items: listed.filter(
+                (item) => tierOf(item.issuer) === request.tier,
+              ),
             },
-            clientCount: 0,
-          },
-          {
-            issuer: {
-              id: "org-provider",
-              name: "Organization Example",
-              issuer: "https://org.example.com",
-              organizationId: "example-org",
-              projectId: null,
-            },
-            clientCount: 1,
-          },
-          {
-            issuer: {
-              id: "project-provider",
-              name: "Project Example",
-              issuer: "https://project.example.com",
-              organizationId: "example-org",
-              projectId: "example-project",
-            },
-            projectName: "Example Project",
-            clientCount: 0,
           },
         ],
       },
-    },
-    isLoading: false,
-  }),
-}));
+      isLoading: false,
+      isError: false,
+      hasNextPage: request.tier === "platform" && tierMocks.platformHasMore(),
+      isFetchingNextPage: false,
+      fetchNextPage: () => tierMocks.fetchNextPage(request.tier),
+    }),
+  };
+});
 vi.mock(
   "@gram/client/react-query/moveOrganizationRemoteSessionIssuer.js",
   () => ({
@@ -169,4 +198,24 @@ it("preserves tenant actions and read-only platform browsing without platform ma
     screen.getByRole("button", { name: "New Remote Identity Provider" }),
   );
   expect(screen.getByText("Create tenant provider")).toBeTruthy();
+});
+
+it("pages the platform catalog on its own without crowding the org's tables", () => {
+  tierMocks.platformHasMore.mockReturnValue(true);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <RemoteIdentityProvidersPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  // The org's own providers render from their own tier queries, whatever the
+  // size of the catalog; only the platform table offers more.
+  expect(screen.getByText("Organization Example")).toBeTruthy();
+  expect(screen.getByText("Project Example")).toBeTruthy();
+  const loadMore = screen.getAllByRole("button", { name: "Load more" });
+  expect(loadMore).toHaveLength(1);
+  fireEvent.click(loadMore[0] as HTMLElement);
+  expect(tierMocks.fetchNextPage).toHaveBeenCalledWith("platform");
 });

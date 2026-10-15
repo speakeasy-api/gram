@@ -9,6 +9,7 @@ package server
 
 import (
 	organizations "github.com/speakeasy-api/gram/server/gen/organizations"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -28,6 +29,13 @@ type UpdateInviteRoleRequestBody struct {
 	InvitationID *string `form:"invitation_id,omitempty" json:"invitation_id,omitempty" xml:"invitation_id,omitempty"`
 	// Role ID to assign to the invitee.
 	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+}
+
+// RevokeMemberSignInsRequestBody is the type of the "organizations" service
+// "revokeMemberSignIns" endpoint HTTP request body.
+type RevokeMemberSignInsRequestBody struct {
+	// Speakeasy user ID of the member.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 }
 
 // SendEnterpriseAdminOnboardingEmailRequestBody is the type of the
@@ -98,6 +106,17 @@ type GetResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// GetGatewayResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body.
+type GetGatewayResponseBody struct {
+	// Whether the organization is served a gateway.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// The gateway's MCP URL. Set only when available.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Why the gateway is not served. Set only when not available.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+}
+
 // SendInviteResponseBody is the type of the "organizations" service
 // "sendInvite" endpoint HTTP response body.
 type SendInviteResponseBody struct {
@@ -111,7 +130,7 @@ type SendInviteResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram user ID of the inviter, when known.
+	// Speakeasy user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// WorkOS role slug assigned when the invite is accepted.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
@@ -134,7 +153,7 @@ type UpdateInviteRoleResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram user ID of the inviter, when known.
+	// Speakeasy user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// WorkOS role slug assigned when the invite is accepted.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
@@ -155,8 +174,17 @@ type ListInvitesResponseBody struct {
 // ListUsersResponseBody is the type of the "organizations" service "listUsers"
 // endpoint HTTP response body.
 type ListUsersResponseBody struct {
-	// Users linked to the organization in Gram.
+	// Users linked to the organization in Speakeasy.
 	Users []*OrganizationUserResponseBody `form:"users" json:"users" xml:"users"`
+}
+
+// RevokeMemberSignInsResponseBody is the type of the "organizations" service
+// "revokeMemberSignIns" endpoint HTTP response body.
+type RevokeMemberSignInsResponseBody struct {
+	// Number of sign-ins revoked.
+	RevokedSignIns int `form:"revoked_sign_ins" json:"revoked_sign_ins" xml:"revoked_sign_ins"`
+	// Number of MCP grants revoked.
+	RevokedSessions int `form:"revoked_sessions" json:"revoked_sessions" xml:"revoked_sessions"`
 }
 
 // CreatePortalSessionResponseBody is the type of the "organizations" service
@@ -216,7 +244,7 @@ type GenerateWorkOSAdminPortalLinkResponseBody struct {
 // ListSetupTasksResponseBody is the type of the "organizations" service
 // "listSetupTasks" endpoint HTTP response body.
 type ListSetupTasksResponseBody struct {
-	// Setup tasks in catalog order.
+	// Setup tasks in catalog order. A group precedes the cards under it.
 	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
 }
 
@@ -240,12 +268,19 @@ type UpdateSetupTaskResponseBody struct {
 	BlockedBy []string `form:"blocked_by" json:"blocked_by" xml:"blocked_by"`
 	// Whether a platform administrator hid the task.
 	Hidden bool `form:"hidden" json:"hidden" xml:"hidden"`
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string `form:"parent_key,omitempty" json:"parent_key,omitempty" xml:"parent_key,omitempty"`
+	// True for a group that nests cards. A group has no card of its own: it is
+	// hidden when every card under it is, done when every visible card is, and
+	// cannot be assigned or marked by hand.
+	Group bool `form:"group" json:"group" xml:"group"`
 }
 
 // SubmitOnboardingSurveyResponseBody is the type of the "organizations"
 // service "submitOnboardingSurvey" endpoint HTTP response body.
 type SubmitOnboardingSurveyResponseBody struct {
-	// Setup tasks in catalog order.
+	// Setup tasks in catalog order. A group precedes the cards under it.
 	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
 }
 
@@ -414,6 +449,190 @@ type GetUnexpectedResponseBody struct {
 // GetGatewayErrorResponseBody is the type of the "organizations" service "get"
 // endpoint HTTP response body for the "gateway_error" error.
 type GetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayUnauthorizedResponseBody is the type of the "organizations"
+// service "getGateway" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetGatewayUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayForbiddenResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "forbidden" error.
+type GetGatewayForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayBadRequestResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "bad_request" error.
+type GetGatewayBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayNotFoundResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "not_found" error.
+type GetGatewayNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConflictResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "conflict" error.
+type GetGatewayConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayUnsupportedMediaResponseBody is the type of the "organizations"
+// service "getGateway" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetGatewayUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayInvalidResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "invalid" error.
+type GetGatewayInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayInvariantViolationResponseBody is the type of the "organizations"
+// service "getGateway" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetGatewayInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayUnexpectedResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "unexpected" error.
+type GetGatewayUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayGatewayErrorResponseBody is the type of the "organizations"
+// service "getGateway" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetGatewayGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1524,6 +1743,196 @@ type RemoveUserUnexpectedResponseBody struct {
 // service "removeUser" endpoint HTTP response body for the "gateway_error"
 // error.
 type RemoveUserGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsUnauthorizedResponseBody is the type of the
+// "organizations" service "revokeMemberSignIns" endpoint HTTP response body
+// for the "unauthorized" error.
+type RevokeMemberSignInsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsForbiddenResponseBody is the type of the "organizations"
+// service "revokeMemberSignIns" endpoint HTTP response body for the
+// "forbidden" error.
+type RevokeMemberSignInsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsBadRequestResponseBody is the type of the "organizations"
+// service "revokeMemberSignIns" endpoint HTTP response body for the
+// "bad_request" error.
+type RevokeMemberSignInsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsNotFoundResponseBody is the type of the "organizations"
+// service "revokeMemberSignIns" endpoint HTTP response body for the
+// "not_found" error.
+type RevokeMemberSignInsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsConflictResponseBody is the type of the "organizations"
+// service "revokeMemberSignIns" endpoint HTTP response body for the "conflict"
+// error.
+type RevokeMemberSignInsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsUnsupportedMediaResponseBody is the type of the
+// "organizations" service "revokeMemberSignIns" endpoint HTTP response body
+// for the "unsupported_media" error.
+type RevokeMemberSignInsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsInvalidResponseBody is the type of the "organizations"
+// service "revokeMemberSignIns" endpoint HTTP response body for the "invalid"
+// error.
+type RevokeMemberSignInsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsInvariantViolationResponseBody is the type of the
+// "organizations" service "revokeMemberSignIns" endpoint HTTP response body
+// for the "invariant_violation" error.
+type RevokeMemberSignInsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsUnexpectedResponseBody is the type of the "organizations"
+// service "revokeMemberSignIns" endpoint HTTP response body for the
+// "unexpected" error.
+type RevokeMemberSignInsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeMemberSignInsGatewayErrorResponseBody is the type of the
+// "organizations" service "revokeMemberSignIns" endpoint HTTP response body
+// for the "gateway_error" error.
+type RevokeMemberSignInsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3450,7 +3859,7 @@ type OrganizationInvitationResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram user ID of the inviter, when known.
+	// Speakeasy user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// WorkOS role slug assigned when the invite is accepted.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
@@ -3462,11 +3871,11 @@ type OrganizationInvitationResponseBody struct {
 
 // OrganizationUserResponseBody is used to define fields on response body types.
 type OrganizationUserResponseBody struct {
-	// Gram relationship row ID.
+	// Speakeasy relationship row ID.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram organization ID.
+	// Speakeasy organization ID.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Gram user ID.
+	// Speakeasy user ID.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// User display name.
 	Name string `form:"name" json:"name" xml:"name"`
@@ -3494,14 +3903,14 @@ type OnboardingHookEventResponseBody struct {
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
 	// Hook event name (e.g. PreToolUse, SessionStart).
 	EventName *string `form:"event_name,omitempty" json:"event_name,omitempty" xml:"event_name,omitempty"`
-	// Slug of the Gram project that received the event.
+	// Slug of the Speakeasy project that received the event.
 	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
 	// Outcome status: allowed, blocked, failure, or pending.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Email of the user whose session produced the event, when present in hook
 	// attributes.
 	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	// Gram chat/session ID that owns this event, when present.
+	// Speakeasy chat/session ID that owns this event, when present.
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 }
 
@@ -3524,6 +3933,13 @@ type SetupTaskResponseBody struct {
 	BlockedBy []string `form:"blocked_by" json:"blocked_by" xml:"blocked_by"`
 	// Whether a platform administrator hid the task.
 	Hidden bool `form:"hidden" json:"hidden" xml:"hidden"`
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string `form:"parent_key,omitempty" json:"parent_key,omitempty" xml:"parent_key,omitempty"`
+	// True for a group that nests cards. A group has no card of its own: it is
+	// hidden when every card under it is, done when every visible card is, and
+	// cannot be assigned or marked by hand.
+	Group bool `form:"group" json:"group" xml:"group"`
 }
 
 // SetupTaskAssigneeResponseBody is used to define fields on response body
@@ -3587,6 +4003,17 @@ func NewGetResponseBody(res *organizations.Organization) *GetResponseBody {
 		WebhooksEnabled:   res.WebhooksEnabled,
 		CreatedAt:         res.CreatedAt,
 		UpdatedAt:         res.UpdatedAt,
+	}
+	return body
+}
+
+// NewGetGatewayResponseBody builds the HTTP response body from the result of
+// the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayResponseBody(res *organizations.OrganizationGateway) *GetGatewayResponseBody {
+	body := &GetGatewayResponseBody{
+		Available:         res.Available,
+		URL:               res.URL,
+		UnavailableReason: res.UnavailableReason,
 	}
 	return body
 }
@@ -3661,6 +4088,16 @@ func NewListUsersResponseBody(res *organizations.ListUsersResult) *ListUsersResp
 		}
 	} else {
 		body.Users = []*OrganizationUserResponseBody{}
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsResponseBody builds the HTTP response body from the
+// result of the "revokeMemberSignIns" endpoint of the "organizations" service.
+func NewRevokeMemberSignInsResponseBody(res *types.RevokeSignInsResult) *RevokeMemberSignInsResponseBody {
+	body := &RevokeMemberSignInsResponseBody{
+		RevokedSignIns:  res.RevokedSignIns,
+		RevokedSessions: res.RevokedSessions,
 	}
 	return body
 }
@@ -3767,6 +4204,8 @@ func NewUpdateSetupTaskResponseBody(res *organizations.SetupTask) *UpdateSetupTa
 		Status:          res.Status,
 		CompletedByFact: res.CompletedByFact,
 		Hidden:          res.Hidden,
+		ParentKey:       res.ParentKey,
+		Group:           res.Group,
 	}
 	if res.Assignee != nil {
 		body.Assignee = marshalOrganizationsSetupTaskAssigneeToSetupTaskAssigneeResponseBody(res.Assignee)
@@ -3932,6 +4371,146 @@ func NewGetUnexpectedResponseBody(res *goa.ServiceError) *GetUnexpectedResponseB
 // of the "get" endpoint of the "organizations" service.
 func NewGetGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayErrorResponseBody {
 	body := &GetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayUnauthorizedResponseBody(res *goa.ServiceError) *GetGatewayUnauthorizedResponseBody {
+	body := &GetGatewayUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayForbiddenResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayForbiddenResponseBody(res *goa.ServiceError) *GetGatewayForbiddenResponseBody {
+	body := &GetGatewayForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayBadRequestResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayBadRequestResponseBody(res *goa.ServiceError) *GetGatewayBadRequestResponseBody {
+	body := &GetGatewayBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayNotFoundResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayNotFoundResponseBody(res *goa.ServiceError) *GetGatewayNotFoundResponseBody {
+	body := &GetGatewayNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConflictResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayConflictResponseBody(res *goa.ServiceError) *GetGatewayConflictResponseBody {
+	body := &GetGatewayConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayUnsupportedMediaResponseBody(res *goa.ServiceError) *GetGatewayUnsupportedMediaResponseBody {
+	body := &GetGatewayUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayInvalidResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayInvalidResponseBody(res *goa.ServiceError) *GetGatewayInvalidResponseBody {
+	body := &GetGatewayInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayInvariantViolationResponseBody(res *goa.ServiceError) *GetGatewayInvariantViolationResponseBody {
+	body := &GetGatewayInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayUnexpectedResponseBody(res *goa.ServiceError) *GetGatewayUnexpectedResponseBody {
+	body := &GetGatewayUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayGatewayErrorResponseBody {
+	body := &GetGatewayGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4778,6 +5357,156 @@ func NewRemoveUserUnexpectedResponseBody(res *goa.ServiceError) *RemoveUserUnexp
 // result of the "removeUser" endpoint of the "organizations" service.
 func NewRemoveUserGatewayErrorResponseBody(res *goa.ServiceError) *RemoveUserGatewayErrorResponseBody {
 	body := &RemoveUserGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "revokeMemberSignIns" endpoint of the "organizations"
+// service.
+func NewRevokeMemberSignInsUnauthorizedResponseBody(res *goa.ServiceError) *RevokeMemberSignInsUnauthorizedResponseBody {
+	body := &RevokeMemberSignInsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsForbiddenResponseBody builds the HTTP response body
+// from the result of the "revokeMemberSignIns" endpoint of the "organizations"
+// service.
+func NewRevokeMemberSignInsForbiddenResponseBody(res *goa.ServiceError) *RevokeMemberSignInsForbiddenResponseBody {
+	body := &RevokeMemberSignInsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsBadRequestResponseBody builds the HTTP response body
+// from the result of the "revokeMemberSignIns" endpoint of the "organizations"
+// service.
+func NewRevokeMemberSignInsBadRequestResponseBody(res *goa.ServiceError) *RevokeMemberSignInsBadRequestResponseBody {
+	body := &RevokeMemberSignInsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsNotFoundResponseBody builds the HTTP response body
+// from the result of the "revokeMemberSignIns" endpoint of the "organizations"
+// service.
+func NewRevokeMemberSignInsNotFoundResponseBody(res *goa.ServiceError) *RevokeMemberSignInsNotFoundResponseBody {
+	body := &RevokeMemberSignInsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsConflictResponseBody builds the HTTP response body
+// from the result of the "revokeMemberSignIns" endpoint of the "organizations"
+// service.
+func NewRevokeMemberSignInsConflictResponseBody(res *goa.ServiceError) *RevokeMemberSignInsConflictResponseBody {
+	body := &RevokeMemberSignInsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "revokeMemberSignIns" endpoint of the
+// "organizations" service.
+func NewRevokeMemberSignInsUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeMemberSignInsUnsupportedMediaResponseBody {
+	body := &RevokeMemberSignInsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsInvalidResponseBody builds the HTTP response body from
+// the result of the "revokeMemberSignIns" endpoint of the "organizations"
+// service.
+func NewRevokeMemberSignInsInvalidResponseBody(res *goa.ServiceError) *RevokeMemberSignInsInvalidResponseBody {
+	body := &RevokeMemberSignInsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "revokeMemberSignIns" endpoint of the
+// "organizations" service.
+func NewRevokeMemberSignInsInvariantViolationResponseBody(res *goa.ServiceError) *RevokeMemberSignInsInvariantViolationResponseBody {
+	body := &RevokeMemberSignInsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "revokeMemberSignIns" endpoint of the "organizations"
+// service.
+func NewRevokeMemberSignInsUnexpectedResponseBody(res *goa.ServiceError) *RevokeMemberSignInsUnexpectedResponseBody {
+	body := &RevokeMemberSignInsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeMemberSignInsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "revokeMemberSignIns" endpoint of the "organizations"
+// service.
+func NewRevokeMemberSignInsGatewayErrorResponseBody(res *goa.ServiceError) *RevokeMemberSignInsGatewayErrorResponseBody {
+	body := &RevokeMemberSignInsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6268,6 +6997,15 @@ func NewGetPayload(sessionToken *string) *organizations.GetPayload {
 	return v
 }
 
+// NewGetGatewayPayload builds a organizations service getGateway endpoint
+// payload.
+func NewGetGatewayPayload(sessionToken *string) *organizations.GetGatewayPayload {
+	v := &organizations.GetGatewayPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewSendInvitePayload builds a organizations service sendInvite endpoint
 // payload.
 func NewSendInvitePayload(body *SendInviteRequestBody, sessionToken *string) *organizations.SendInvitePayload {
@@ -6325,6 +7063,17 @@ func NewListUsersPayload(sessionToken *string) *organizations.ListUsersPayload {
 func NewRemoveUserPayload(userID string, sessionToken *string) *organizations.RemoveUserPayload {
 	v := &organizations.RemoveUserPayload{}
 	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRevokeMemberSignInsPayload builds a organizations service
+// revokeMemberSignIns endpoint payload.
+func NewRevokeMemberSignInsPayload(body *RevokeMemberSignInsRequestBody, sessionToken *string) *organizations.RevokeMemberSignInsPayload {
+	v := &organizations.RevokeMemberSignInsPayload{
+		UserID: *body.UserID,
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -6466,6 +7215,15 @@ func ValidateUpdateInviteRoleRequestBody(body *UpdateInviteRoleRequestBody) (err
 	}
 	if body.RoleID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	}
+	return
+}
+
+// ValidateRevokeMemberSignInsRequestBody runs the validations defined on
+// RevokeMemberSignInsRequestBody
+func ValidateRevokeMemberSignInsRequestBody(body *RevokeMemberSignInsRequestBody) (err error) {
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
 	return
 }

@@ -41,6 +41,7 @@ type Client struct {
 	ListResourceAudienceEndpoint                 goa.Endpoint
 	SetResourceAudienceEndpoint                  goa.Endpoint
 	ListAudienceOptionsEndpoint                  goa.Endpoint
+	ExplainResourceAccessEndpoint                goa.Endpoint
 	RequestAccessEndpoint                        goa.Endpoint
 	ListChallengesEndpoint                       goa.Endpoint
 	ListChallengeBucketsEndpoint                 goa.Endpoint
@@ -49,7 +50,7 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, syncDirectoryGroups, setDirectoryRoleMapping, deleteDirectoryRoleMapping, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, syncDirectoryGroups, setDirectoryRoleMapping, deleteDirectoryRoleMapping, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
@@ -77,6 +78,7 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirec
 		ListResourceAudienceEndpoint:                 listResourceAudience,
 		SetResourceAudienceEndpoint:                  setResourceAudience,
 		ListAudienceOptionsEndpoint:                  listAudienceOptions,
+		ExplainResourceAccessEndpoint:                explainResourceAccess,
 		RequestAccessEndpoint:                        requestAccess,
 		ListChallengesEndpoint:                       listChallenges,
 		ListChallengeBucketsEndpoint:                 listChallengeBuckets,
@@ -661,6 +663,29 @@ func (c *Client) ListAudienceOptions(ctx context.Context, p *ListAudienceOptions
 		return
 	}
 	return ires.(*ListAudienceOptionsResult), nil
+}
+
+// ExplainResourceAccess calls the "explainResourceAccess" endpoint of the
+// "access" service.
+// ExplainResourceAccess may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ExplainResourceAccess(ctx context.Context, p *ExplainResourceAccessPayload) (res *ExplainResourceAccessResult, err error) {
+	var ires any
+	ires, err = c.ExplainResourceAccessEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ExplainResourceAccessResult), nil
 }
 
 // RequestAccess calls the "requestAccess" endpoint of the "access" service.

@@ -34,6 +34,42 @@ func LoadSettings(ctx context.Context, db *pgxpool.Pool, organizationID string) 
 	return loadSettings(ctx, repo.New(db), organizationID)
 }
 
+// JudgeSettings is the locked state of one judge, including absent-row defaults.
+type JudgeSettings struct {
+	// Judge identifies the analysis whose settings were read.
+	Judge string `json:"judge"`
+
+	// Enabled permits background evaluations for this judge.
+	Enabled bool `json:"enabled"`
+
+	// DailyCap bounds daily evaluations, not their currency cost.
+	DailyCap int `json:"daily_cap"`
+
+	// IsDefault distinguishes an absent row from an explicitly stored setting.
+	IsDefault bool `json:"is_default"`
+}
+
+// LockAndLoadSettingsTx serializes one judge's snapshot with all budget callers.
+// Callers that pin organisation identity must do so first using NO KEY UPDATE,
+// which remains compatible with foreign-key KEY SHARE locks on settings inserts.
+func LockAndLoadSettingsTx(ctx context.Context, tx pgx.Tx, organizationID, judge string) (JudgeSettings, error) {
+	if judge != analysis.WorkUnitsJudgeName && judge != businessmemory.JudgeName {
+		return JudgeSettings{}, errors.New("unsupported chat analysis judge")
+	}
+	queries := repo.New(tx)
+	if err := queries.LockOrganizationChatAnalysisBudget(ctx, organizationID); err != nil {
+		return JudgeSettings{}, fmt.Errorf("lock chat analysis snapshot: %w", err)
+	}
+	row, err := queries.GetChatAnalysisSettingForOrganizationJudge(ctx, repo.GetChatAnalysisSettingForOrganizationJudgeParams{OrganizationID: organizationID, Judge: judge})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return JudgeSettings{Judge: judge, Enabled: false, DailyCap: 0, IsDefault: true}, nil
+	}
+	if err != nil {
+		return JudgeSettings{}, fmt.Errorf("load chat analysis snapshot: %w", err)
+	}
+	return JudgeSettings{Judge: row.Judge, Enabled: row.Enabled, DailyCap: int(row.DailyCap), IsDefault: false}, nil
+}
+
 // UpsertSettings preserves the budget-lock, audit/outbox, and reload ordering
 // shared by every administrative chat analysis settings surface.
 func UpsertSettings(
@@ -56,6 +92,39 @@ func UpsertSettings(
 		return Settings{}, fmt.Errorf("begin chat analysis settings upsert: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if _, err := UpsertSettingsTx(ctx, tx, auditLogger, organizationID, judge, enabled, dailyCap, actor, actorDisplayName); err != nil {
+		return Settings{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Settings{}, fmt.Errorf("commit chat analysis settings upsert: %w", err)
+	}
+
+	settings, err := LoadSettings(ctx, db, organizationID)
+	if err != nil {
+		return Settings{}, fmt.Errorf("reload chat analysis settings: %w", err)
+	}
+	return settings, nil
+}
+
+// UpsertSettingsTx makes the settings change, budget lock and audit/outbox
+// record inside the caller's transaction and returns the in-transaction view.
+// The caller owns commit.
+func UpsertSettingsTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	auditLogger *audit.Logger,
+	organizationID string,
+	judge string,
+	enabled bool,
+	dailyCap int,
+	actor urn.Principal,
+	actorDisplayName *string,
+) (Settings, error) {
+	if dailyCap < 0 || dailyCap > MaxDailyCap {
+		return Settings{}, fmt.Errorf("daily cap must be between 0 and %d", MaxDailyCap)
+	}
 
 	queries := repo.New(tx)
 	if err := queries.LockOrganizationChatAnalysisBudget(ctx, organizationID); err != nil {
@@ -90,11 +159,7 @@ func UpsertSettings(
 		return Settings{}, fmt.Errorf("log chat analysis settings upsert: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return Settings{}, fmt.Errorf("commit chat analysis settings upsert: %w", err)
-	}
-
-	settings, err := LoadSettings(ctx, db, organizationID)
+	settings, err := loadSettings(ctx, queries, organizationID)
 	if err != nil {
 		return Settings{}, fmt.Errorf("reload chat analysis settings: %w", err)
 	}

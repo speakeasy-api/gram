@@ -1,0 +1,35 @@
+# Local development only. Shared collector: accept OTLP and drop it.
+#
+# gram-server, gram-worker, pystreams, mock-oidc, and anything else that
+# honours OTEL_EXPORTER_OTLP_ENDPOINT keep exporting to localhost:4317/4318.
+# Without a listener they retry forever and spam `otel error` / connection-
+# refused logs. This collector is that listener — a nop exporter, no store.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  nop:
+
+service:
+  telemetry:
+    # The collector's own telemetry would otherwise bind :8888 and chatter
+    # about every dropped batch. This process exists to be quiet.
+    logs:
+      level: error
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [nop]
+    metrics:
+      receivers: [otlp]
+      exporters: [nop]
+    logs:
+      receivers: [otlp]
+      exporters: [nop]

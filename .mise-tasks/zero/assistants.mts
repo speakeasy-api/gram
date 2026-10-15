@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Configure the local assistant runtime (provider, image, and initial build)"
 //MISE hide=true

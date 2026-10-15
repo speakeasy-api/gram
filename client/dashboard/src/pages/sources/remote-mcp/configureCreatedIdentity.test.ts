@@ -48,6 +48,10 @@ beforeEach(() => {
     tokenEndpoint: "https://id.example.com/token",
     registrationEndpoint: "https://id.example.com/register",
     tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+    authorizationGrantProfilesSupported: [
+      "urn:ietf:params:oauth:grant-profile:id-jag",
+    ],
+    codeChallengeMethodsSupported: ["S256"],
   });
   mocks.getIssuer.mockRejectedValue(
     Object.assign(new Error("not found"), { statusCode: 404 }),
@@ -82,7 +86,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
-  it("stores Agent Identity before enabling the server", async () => {
+  it("stores Service Account before enabling the server", async () => {
     const result = await configureCreatedRemoteMcpIdentity({
       client,
       remoteMcpServer: remoteServer(),
@@ -110,7 +114,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     );
   });
 
-  it("reports an Agent Identity enable failure without exposing the SDK error", async () => {
+  it("reports a Service Account enable failure without exposing the SDK error", async () => {
     mocks.updateServer.mockRejectedValue(new Error("sensitive backend detail"));
 
     const result = await configureCreatedRemoteMcpIdentity({
@@ -124,7 +128,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(result).toMatchObject({
       status: "setup-required",
       message:
-        "Agent Identity was configured, but the server could not be enabled. Enable it from Settings.",
+        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
     });
     expect(mocks.createHeader).toHaveBeenCalledOnce();
   });
@@ -145,18 +149,60 @@ describe("configureCreatedRemoteMcpIdentity", () => {
           clientMode: "auto",
           createProvider: expect.objectContaining({
             issuer: "https://id.example.com",
-          }),
-          clientConfiguration: expect.objectContaining({
-            scope: ["resource.read"],
+            authorizationGrantProfilesSupported: [
+              "urn:ietf:params:oauth:grant-profile:id-jag",
+            ],
+            codeChallengeMethodsSupported: ["S256"],
           }),
         }),
       },
       undefined,
       undefined,
     );
+    // Discovered scopes are not copied onto the client; each sign-in
+    // resolves them live.
+    expect(
+      mocks.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm
+        .clientConfiguration.scope,
+    ).toBeUndefined();
     expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.updateServer.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it("sends an empty grant profile list when discovery advertised none", async () => {
+    mocks.fetchIssuer.mockResolvedValue({
+      issuer: "https://id.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+    });
+
+    await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    const form = mocks.commit.mock.calls[0]![0]
+      .commitServerIdentityConfigurationForm as {
+      createProvider: Record<string, unknown>;
+    };
+    expect(form.createProvider.authorizationGrantProfilesSupported).toEqual([]);
+  });
+
+  it("creates no provider when discovery fails", async () => {
+    mocks.fetchIssuer.mockRejectedValue(new Error("unreachable"));
+
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    expect(result.status).toBe("setup-required");
+    expect(mocks.commit).not.toHaveBeenCalled();
   });
 
   it("retains the server disabled when registration is refused", async () => {
@@ -201,6 +247,34 @@ describe("configureCreatedRemoteMcpIdentity", () => {
       mcpServer: { visibility: "disabled" },
       message: expect.stringContaining("Settings > Identity"),
     });
+    expect(mocks.updateServer).not.toHaveBeenCalled();
+  });
+
+  it("refuses metadata that names a different issuer", async () => {
+    // RFC 8414 requires the document to name the issuer it was fetched for.
+    // The provider is created from the document's own `issuer`, so accepting a
+    // mismatch would bind this server to whichever issuer the document claimed
+    // rather than the one the resource pointed at.
+    mocks.fetchIssuer.mockResolvedValue({
+      issuer: "https://attacker.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+      registrationEndpoint: "https://id.example.com/register",
+      tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+    });
+
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    expect(result).toMatchObject({
+      status: "setup-required",
+      message: expect.stringContaining("different issuer"),
+    });
+    expect(mocks.commit).not.toHaveBeenCalled();
     expect(mocks.updateServer).not.toHaveBeenCalled();
   });
 

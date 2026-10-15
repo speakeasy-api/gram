@@ -8,6 +8,7 @@ import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { toError } from "@/lib/errors";
 import type { IdentityMode } from "../model/identity";
 import {
   findPassThroughAuthorizationHeader,
@@ -99,7 +100,7 @@ export function useHeaderDrafts({
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
     undefined,
-    { enabled: remoteMcpServerId !== "" },
+    { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
 
   const identityError =
@@ -122,12 +123,14 @@ export function useHeaderDrafts({
   const syncedRef = useRef(initialDrafts);
 
   useEffect(() => {
-    const previousSynced = syncedRef.current;
+    // Advance the baseline only when there is nothing to lose. Save measures
+    // its deletions against this snapshot, so moving it under a dirty form
+    // would make a row that appeared since — someone else's concurrent add —
+    // look like a row the operator deleted, and the diff would remove it.
+    if (!draftsEqual(drafts, syncedRef.current)) return;
     syncedRef.current = initialDrafts;
-    setDrafts((current) =>
-      draftsEqual(current, previousSynced) ? initialDrafts : current,
-    );
-  }, [initialDrafts]);
+    setDrafts(initialDrafts);
+  }, [drafts, initialDrafts]);
 
   // Seed suggested rows only into a form that has nothing in it, and only
   // once: re-seeding would resurrect rows the operator deleted on purpose.
@@ -152,19 +155,42 @@ export function useHeaderDrafts({
   const createHeader = useCreateRemoteMcpServerHeaderMutation();
   const updateHeader = useUpdateRemoteMcpServerHeaderMutation();
   const deleteHeader = useDeleteRemoteMcpServerHeaderMutation();
+  // Held here rather than read off the mutations: those are reset after every
+  // write so they stop holding the submitted secret, and reset clears their
+  // error too.
+  const [writeError, setWriteError] = useState<Error | null>(null);
 
   const validationError = validateDrafts(drafts, identityMode, managedHeaderId);
   const fieldErrors = headerDraftErrors(drafts, identityMode, managedHeaderId);
   const isDirty = !draftsEqual(drafts, initialDrafts);
-  const saving =
+  const writing =
     createHeader.isPending || updateHeader.isPending || deleteHeader.isPending;
 
   const pristineSuggestions =
     suggestionsSeeded && draftsEqual(drafts, [...suggestedDrafts]);
 
+  // The commit ends with a refetch that replaces every row, and the writes
+  // settle (and are reset) before it lands. Held across the whole commit so the
+  // rows and Save stay shut until then: an edit typed meanwhile would be
+  // overwritten, and a second Save would recreate rows that still lack ids.
+  const [committing, setCommitting] = useState(false);
+  const committingRef = useRef(false);
+  const saving = writing || committing;
+
   const save = async (): Promise<boolean> => {
     if (readOnly || identityError || validationError || !isDirty) return false;
+    if (committingRef.current) return false;
+    committingRef.current = true;
+    setCommitting(true);
+    try {
+      return await commit();
+    } finally {
+      committingRef.current = false;
+      setCommitting(false);
+    }
+  };
 
+  const commit = async (): Promise<boolean> => {
     // Diff against what the server actually holds now, not the snapshot this
     // render was built from: identity commits first and refetches headers, so
     // the query may have moved underneath us.
@@ -178,35 +204,49 @@ export function useHeaderDrafts({
       drafts.flatMap((draft) => (draft.id ? [draft.id] : [])),
     );
 
-    for (const draft of baseline) {
-      // The Authorization row belongs to the identity section. It is absent
-      // from these drafts precisely when identity has just written it, and
-      // deleting it here would undo the save that ran moments ago.
-      if (!draft.id || draft.id === managedHeaderId) continue;
-      if (keptIds.has(draft.id)) continue;
-      await deleteHeader.mutateAsync({ request: { id: draft.id } });
-    }
-
-    for (const draft of drafts) {
-      // Guard on the id first: an unsaved row and an absent managed header are
-      // both undefined, and skipping those would never create anything.
-      if (draft.id && draft.id === managedHeaderId) continue;
-      const fields = headerDraftToWriteFields(draft);
-      if (!draft.id) {
-        await createHeader.mutateAsync({
-          request: {
-            createServerHeaderForm: { remoteMcpServerId, ...fields },
-          },
-        });
-        continue;
+    setWriteError(null);
+    try {
+      for (const draft of baseline) {
+        // The Authorization row belongs to the identity section. It is absent
+        // from these drafts precisely when identity has just written it, and
+        // deleting it here would undo the save that ran moments ago.
+        if (!draft.id || draft.id === managedHeaderId) continue;
+        if (keptIds.has(draft.id)) continue;
+        await deleteHeader.mutateAsync({ request: { id: draft.id } });
       }
 
-      const previous = baselineById.get(draft.id);
-      if (previous && draftsEqual([draft], [previous])) continue;
+      for (const draft of drafts) {
+        // Guard on the id first: an unsaved row and an absent managed header are
+        // both undefined, and skipping those would never create anything.
+        if (draft.id && draft.id === managedHeaderId) continue;
+        const fields = headerDraftToWriteFields(draft);
+        if (!draft.id) {
+          await createHeader.mutateAsync({
+            request: {
+              createServerHeaderForm: { remoteMcpServerId, ...fields },
+            },
+          });
+          continue;
+        }
 
-      await updateHeader.mutateAsync({
-        request: { updateServerHeaderForm: { id: draft.id, ...fields } },
-      });
+        const previous = baselineById.get(draft.id);
+        if (previous && draftsEqual([draft], [previous])) continue;
+
+        await updateHeader.mutateAsync({
+          request: { updateServerHeaderForm: { id: draft.id, ...fields } },
+        });
+      }
+    } catch (error) {
+      setWriteError(toError(error));
+      throw error;
+    } finally {
+      // react-query keeps a settled mutation's request variables, and for
+      // these that means the plaintext secret stays readable in client state
+      // long after the write — failed writes included. Nothing reads them
+      // again, so drop them.
+      createHeader.reset();
+      updateHeader.reset();
+      deleteHeader.reset();
     }
 
     await invalidateAllRemoteMcpServerHeaders(queryClient, {
@@ -231,20 +271,23 @@ export function useHeaderDrafts({
 
   return {
     drafts,
+    // The commit ends with a refetch that replaces every row, so editing has
+    // to stay shut until that lands or the new snapshot overwrites whatever
+    // was typed in the meantime.
     authorization: {
       mode: identityMode,
       managedHeaderId,
       passThroughHeaderId,
       unknown: identityError,
     },
-    readOnly,
+    readOnly: readOnly || saving,
     isLoading: headersQuery.isLoading,
     isDirty,
     validationError,
     fieldErrors,
     reportErrors: isDirty && !pristineSuggestions,
     saving,
-    error: createHeader.error ?? updateHeader.error ?? deleteHeader.error,
+    error: writeError,
     addHeader: () => setDrafts((current) => [...current, newHeaderDraft()]),
     replaceHeader: (index, draft) =>
       setDrafts((current) =>

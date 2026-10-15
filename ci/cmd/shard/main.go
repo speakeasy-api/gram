@@ -15,6 +15,13 @@
 // lightest so far. The assignment is a pure function of the package list, so
 // every shard reaches the same answer without sharing state or recorded
 // timings.
+//
+// A package that is slow out of all proportion to its test sources can be given
+// a shard of its own with -isolate. Isolated packages take the last shards, one
+// each, in the order given; everything else is balanced over the shards before
+// them:
+//
+//	go run ./ci/cmd/shard -i 5/5 -isolate example.com/mod/slow ./server
 package main
 
 import (
@@ -68,6 +75,7 @@ func run(argv []string, stdout, stderr io.Writer) error {
 
 	spec := fs.String("i", "", "shard to print, as <index>/<total> (1-indexed), e.g. 1/4")
 	tags := fs.String("tags", "", "comma-separated build tags to pass to 'go list'")
+	isolateList := fs.String("isolate", "", "comma-separated import paths that each get a shard of their own, taking the last shards")
 
 	if err := fs.Parse(argv); err != nil {
 		fs.SetOutput(stderr)
@@ -99,7 +107,15 @@ func run(argv []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	selected := assign(pkgs, index, total)
+	var isolated []string
+	if *isolateList != "" {
+		isolated = strings.Split(*isolateList, ",")
+	}
+
+	selected, err := pick(pkgs, isolated, index, total)
+	if err != nil {
+		return err
+	}
 
 	var selectedWeight, totalWeight int64
 	for _, p := range pkgs {
@@ -274,4 +290,36 @@ func assign(pkgs []pkg, index int, total int) []pkg {
 	})
 
 	return selected
+}
+
+// pick returns the packages in shard index (1-indexed) of total. Each isolated
+// import path takes one of the last shards on its own, in the order given; the
+// remaining packages are balanced over the shards before them with assign.
+func pick(pkgs []pkg, isolated []string, index int, total int) ([]pkg, error) {
+	if len(isolated) == 0 {
+		return assign(pkgs, index, total), nil
+	}
+
+	if len(isolated) >= total {
+		return nil, fmt.Errorf("%d isolated packages need more than %d shards: at least one shard must hold the rest", len(isolated), total)
+	}
+
+	rest := slices.Clone(pkgs)
+	var own []pkg
+	for _, name := range isolated {
+		i := slices.IndexFunc(rest, func(p pkg) bool { return p.ImportPath == name })
+		if i < 0 {
+			return nil, fmt.Errorf("isolated package %q is not a test package in this run", name)
+		}
+
+		own = append(own, rest[i])
+		rest = slices.Delete(rest, i, i+1)
+	}
+
+	shared := total - len(isolated)
+	if index > shared {
+		return own[index-shared-1 : index-shared], nil
+	}
+
+	return assign(rest, index, shared), nil
 }

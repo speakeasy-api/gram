@@ -7,12 +7,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcpserverscope.js";
 import {
+  ALL_TOOLS_WILDCARD,
   type PolicyMCPScopeValue,
   type ToolAnnotation,
 } from "./policy-mcp-scope";
@@ -21,9 +23,11 @@ import { buildListMcpServerToolMetadataQuery } from "@gram/client/react-query/li
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskListMcpPlatformToolsets.js";
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, Info, Loader2, Network, Server, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 
 type AnnotationFields = Partial<Record<ToolAnnotation, boolean>>;
 
@@ -36,15 +40,32 @@ type PickerServer = {
   id: string;
   name: string;
   slug?: string;
-  kind: "server" | "gateway";
+  kind: "server" | "gateway" | "platform";
   memberCount?: number;
   tools: PickerTool[];
   toolsLoading: boolean;
+  /** The tool list failed to load, so an empty list says nothing about the
+   *  server. Stale tools from an earlier load are still shown. */
+  toolsError: boolean;
+  /** Where the tool list comes from. "discovered" tools are recorded when the
+   *  server's Inspect tab lists them, so an empty list means "not discovered
+   *  yet". "unlisted" servers (tunneled, unproxied) never record their tools. */
+  toolSource: "toolset" | "discovered" | "unlisted";
 };
+
+function toolSourceFor(server: {
+  toolsetId?: string;
+  remoteMcpServerId?: string;
+}): PickerServer["toolSource"] {
+  if (server.toolsetId) return "toolset";
+  if (server.remoteMcpServerId) return "discovered";
+  return "unlisted";
+}
 
 type ServerSelection =
   | { kind: "off" }
   | { kind: "rule"; derived: boolean }
+  | { kind: "wildcard" }
   | { kind: "custom"; tools: string[] };
 
 const TOOL_ANNOTATIONS: Array<{
@@ -86,6 +107,11 @@ export function PolicyMCPScopePicker({
   const toolsetsQuery = useListToolsets({ gramProject }, undefined, {
     throwOnError: false,
   });
+  const platformToolsetsQuery = useRiskListMcpPlatformToolsets(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
   const concreteServers = serversQuery.data?.mcpServers ?? [];
   const remoteServers = concreteServers.filter(
     (server) => !server.toolsetId && !!server.remoteMcpServerId,
@@ -138,8 +164,29 @@ export function PolicyMCPScopePicker({
         kind: "server",
         tools,
         toolsLoading: metadataQuery?.isLoading ?? false,
+        toolsError: metadataQuery?.isError ?? false,
+        toolSource: toolSourceFor(server),
       };
     }),
+    ...(platformToolsetsQuery.data?.toolsets ?? []).map(
+      (toolset): PickerServer => ({
+        id: toolset.id,
+        name: toolset.name,
+        slug: toolset.slug,
+        kind: "platform",
+        tools: toolset.tools
+          .map((tool) => ({
+            name: tool.name,
+            annotations: annotationNames(
+              tool.annotations as AnnotationFields | undefined,
+            ),
+          }))
+          .sort((left, right) => left.name.localeCompare(right.name)),
+        toolsLoading: false,
+        toolsError: false,
+        toolSource: "toolset",
+      }),
+    ),
     ...(gatewaysQuery.data?.metaMcpServers ?? []).map(
       (gateway): PickerServer => ({
         id: gateway.id,
@@ -148,6 +195,8 @@ export function PolicyMCPScopePicker({
         memberCount: gateway.memberCount,
         tools: [],
         toolsLoading: false,
+        toolsError: false,
+        toolSource: "unlisted",
       }),
     ),
   ];
@@ -159,7 +208,7 @@ export function PolicyMCPScopePicker({
   );
   const firstSelected = pickerServers.find((server) => {
     if (storedByID.has(server.id)) return true;
-    return value.allServers && server.kind === "server";
+    return value.allServers && server.kind !== "gateway";
   });
   const focusedServer =
     pickerServers.find((server) => server.id === focusedServerID) ??
@@ -181,17 +230,33 @@ export function PolicyMCPScopePicker({
   const loading =
     serversQuery.isLoading ||
     gatewaysQuery.isLoading ||
-    toolsetsQuery.isLoading;
+    toolsetsQuery.isLoading ||
+    platformToolsetsQuery.isLoading;
   const failed =
-    serversQuery.isError || gatewaysQuery.isError || toolsetsQuery.isError;
+    serversQuery.isError ||
+    gatewaysQuery.isError ||
+    toolsetsQuery.isError ||
+    platformToolsetsQuery.isError;
 
   const selectionFor = (server: PickerServer): ServerSelection => {
     const stored = storedByID.get(server.id);
     if (stored?.tools !== undefined) {
+      // An empty tools list means "every tool on this server", the same as
+      // never picking one — not "no tools". The server normalizes it the
+      // same way on save, but persists it as the single-element sentinel
+      // list `["*"]` (length 1, not 0) — see AllToolsWildcard in
+      // server/internal/risk/policycore/types.go — so both representations
+      // must be recognized here.
+      if (
+        stored.tools.length === 0 ||
+        (stored.tools.length === 1 && stored.tools[0] === ALL_TOOLS_WILDCARD)
+      ) {
+        return { kind: "wildcard" };
+      }
       return { kind: "custom", tools: stored.tools };
     }
     if (stored) return { kind: "rule", derived: false };
-    if (value.allServers && server.kind === "server") {
+    if (value.allServers && server.kind !== "gateway") {
       return { kind: "rule", derived: true };
     }
     return { kind: "off" };
@@ -211,7 +276,12 @@ export function PolicyMCPScopePicker({
     onChange({ ...value, servers });
   };
   const removeServer = (server: PickerServer) => {
-    if (value.allServers && server.kind === "server") {
+    // Deselecting must not lose the pane: without this, focus falls back to
+    // whichever server happens to be first in the list once this one drops
+    // out of storedByID, stranding the user on an unrelated server's (often
+    // empty) tool list instead of the one they just deselected.
+    setFocusedServerID(server.id);
+    if (value.allServers && server.kind !== "gateway") {
       const customByID = new Map(
         value.servers
           .filter((entry) => entry.tools !== undefined)
@@ -223,8 +293,11 @@ export function PolicyMCPScopePicker({
             candidate.id === entry.mcpServerId && candidate.kind === "gateway",
         ),
       );
-      const materialized = concreteServers
-        .filter((candidate) => candidate.id !== server.id)
+      const materialized = pickerServers
+        .filter(
+          (candidate) =>
+            candidate.kind !== "gateway" && candidate.id !== server.id,
+        )
         .map(
           (candidate) =>
             customByID.get(candidate.id) ?? { mcpServerId: candidate.id },
@@ -239,13 +312,15 @@ export function PolicyMCPScopePicker({
     replaceServer(server.id, null);
   };
   const selectRule = (server: PickerServer) => {
-    if (value.allServers && server.kind === "server") {
+    setFocusedServerID(server.id);
+    if (value.allServers && server.kind !== "gateway") {
       replaceServer(server.id, null);
       return;
     }
     replaceServer(server.id, { mcpServerId: server.id });
   };
   const toggleServer = (server: PickerServer) => {
+    setFocusedServerID(server.id);
     const selection = selectionFor(server);
     if (selection.kind === "off") selectRule(server);
     else removeServer(server);
@@ -264,20 +339,39 @@ export function PolicyMCPScopePicker({
     onChange({ ...value, allServers: false, servers: [] });
   };
   const toggleTool = (server: PickerServer, toolName: string) => {
+    setFocusedServerID(server.id);
     const selection = selectionFor(server);
     const ruleSelection = ruleTools(server);
     const current =
       selection.kind === "custom"
         ? selection.tools
-        : selection.kind === "rule"
-          ? ruleSelection
-          : [];
+        : selection.kind === "wildcard"
+          ? server.tools.map((tool) => tool.name)
+          : selection.kind === "rule"
+            ? ruleSelection
+            : [];
     const next = current.includes(toolName)
       ? current.filter((name) => name !== toolName)
       : [...current, toolName];
     next.sort();
     if (next.length === 0) {
-      removeServer(server);
+      if (
+        (selection.kind === "custom" || selection.kind === "wildcard") &&
+        value.toolAnnotations.length === 0
+      ) {
+        // Unchecking the last tool of an explicit selection means "every tool
+        // on this server", not "no tools" — keep the server in scope as a
+        // wildcard. A rule-derived selection (kind: "rule") must NOT take this
+        // path: it can be narrowed by the policy's top-level ToolAnnotations,
+        // and wildcarding here would silently widen past that rule. When a
+        // top-level rule IS set, the server can't wildcard past it either —
+        // NormalizeMCPScope rejects an empty tool list in that case — so
+        // fall through to dropping the server rather than saving a payload
+        // the backend will reject.
+        replaceServer(server.id, { mcpServerId: server.id, tools: [] });
+      } else {
+        removeServer(server);
+      }
     } else if (
       next.length === ruleSelection.length &&
       next.every((name, index) => name === ruleSelection[index])
@@ -294,9 +388,22 @@ export function PolicyMCPScopePicker({
   const toolsInScope = pickerServers.reduce((total, server) => {
     const selection = selectionFor(server);
     if (selection.kind === "custom") return total + selection.tools.length;
+    if (selection.kind === "wildcard") return total + server.tools.length;
     if (selection.kind === "rule") return total + ruleTools(server).length;
     return total;
   }, 0);
+  // These servers cover every tool, but none have been discovered, so they add
+  // nothing to toolsInScope. An annotation rule matches nothing until discovery
+  // (a wildcard can't bypass it), and a failed load says nothing about the server.
+  const undiscoveredServersInScope = pickerServers.filter((server) => {
+    if (value.toolAnnotations.length > 0) return false;
+    if (server.toolSource !== "discovered") return false;
+    if (server.toolsLoading || server.toolsError || server.tools.length > 0) {
+      return false;
+    }
+    const selection = selectionFor(server);
+    return selection.kind === "wildcard" || selection.kind === "rule";
+  }).length;
   const ruleLabel =
     value.toolAnnotations.length === 0
       ? "All tools"
@@ -304,39 +411,12 @@ export function PolicyMCPScopePicker({
         ? `${TOOL_ANNOTATIONS.find(({ value: annotation }) => annotation === value.toolAnnotations[0])?.label ?? value.toolAnnotations[0]} tools`
         : `${value.toolAnnotations.length} annotations`;
 
+  // The mode choice lives in PolicyScopeModeCards; this picker is mounted only
+  // once "Specific MCP servers" is chosen.
   return (
     <div className="space-y-6">
-      <div className="flex flex-nowrap items-center justify-between gap-4">
-        <Text small muted className="min-w-0 flex-1 text-pretty">
-          {value.mode === "everywhere"
-            ? "Every chat session and MCP tool call in this project."
-            : "Only tool calls through the servers below, checked at the gateway before the tool runs."}
-        </Text>
-        <SegmentedControl
-          value={value.mode}
-          onChange={(mode) => onChange({ ...value, mode })}
-          options={[
-            { value: "everywhere", label: "Everywhere" },
-            { value: "mcp", label: "Selected MCP servers" },
-          ]}
-          className="h-9"
-        />
-      </div>
-
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows,opacity,margin] duration-[260ms] ease-[cubic-bezier(0.215,0.61,0.355,1)]",
-          value.mode === "mcp"
-            ? "grid-rows-[1fr] opacity-100"
-            : "-mt-3 grid-rows-[0fr] opacity-0",
-        )}
-      >
-        <div
-          className={cn(
-            "min-h-0",
-            ruleOpen ? "overflow-visible" : "overflow-hidden",
-          )}
-        >
+      <div>
+        <div>
           <div className="border-border border">
             <div className="bg-muted/30 border-border grid grid-cols-[minmax(220px,300px)_minmax(0,1fr)] border-b">
               <div className="border-border flex items-center justify-between border-r px-3 py-2">
@@ -495,7 +575,7 @@ export function PolicyMCPScopePicker({
                       All MCP servers
                     </span>
                     <span className="text-muted-foreground block text-xs">
-                      Including servers added later
+                      Including Platform MCP and servers added later
                     </span>
                   </span>
                 </label>
@@ -523,11 +603,13 @@ export function PolicyMCPScopePicker({
                           : "ALL"
                       : selection.kind === "off"
                         ? `0/${server.tools.length}`
-                        : selection.kind === "custom"
-                          ? `${selection.tools.length}/${server.tools.length}`
-                          : value.toolAnnotations.length === 0
-                            ? "ALL"
-                            : `${ruleTools(server).length}/${server.tools.length}`;
+                        : selection.kind === "wildcard"
+                          ? "ALL"
+                          : selection.kind === "custom"
+                            ? `${selection.tools.length}/${server.tools.length}`
+                            : value.toolAnnotations.length === 0
+                              ? "ALL"
+                              : `${ruleTools(server).length}/${server.tools.length}`;
                   return (
                     <div
                       key={server.id}
@@ -619,6 +701,9 @@ export function PolicyMCPScopePicker({
             <div className="bg-muted/30 border-border flex min-h-10 items-center gap-4 border-t px-4 py-2.5">
               <span className="font-mono text-xs">
                 {explicitCount} servers · {toolsInScope} tools in scope
+                {undiscoveredServersInScope > 0
+                  ? ` · all tools on ${undiscoveredServersInScope} ${undiscoveredServersInScope === 1 ? "server" : "servers"} with no discovered tools`
+                  : null}
               </span>
               {action === "block" ? (
                 <span className="text-muted-foreground ml-auto flex items-center gap-1.5 text-xs">
@@ -660,16 +745,23 @@ function FocusedServerPane({
 }): JSX.Element {
   const selected = selection.kind !== "off";
   const custom = selection.kind === "custom";
-  const selectedTools = custom ? selection.tools : ruleTools;
+  const wildcard = selection.kind === "wildcard";
+  const selectedTools = custom
+    ? selection.tools
+    : wildcard
+      ? server.tools.map((tool) => tool.name)
+      : ruleTools;
   const followingAnnotationRule =
     selection.kind === "rule" && toolAnnotations.length > 0;
   const note = !selected
     ? "Not in scope"
     : custom
       ? `Custom · ${selectedTools.length} of ${server.tools.length}`
-      : toolAnnotations.length === 0
-        ? "All tools, including ones added later"
-        : `Following the tool rule · ${selectedTools.length} of ${server.tools.length}`;
+      : wildcard
+        ? "All tools, unconditionally — including ones added later"
+        : toolAnnotations.length === 0
+          ? "All tools, including ones added later"
+          : `Following the tool rule · ${selectedTools.length} of ${server.tools.length}`;
 
   return (
     <div className="space-y-4">
@@ -756,7 +848,7 @@ function FocusedServerPane({
             <span className="text-muted-foreground ml-auto text-xs">
               {note}
             </span>
-            {custom ? (
+            {custom || wildcard ? (
               <button
                 type="button"
                 onClick={onUseRule}
@@ -766,14 +858,11 @@ function FocusedServerPane({
               </button>
             ) : null}
           </div>
-          {server.toolsLoading ? (
-            <Text small muted className="flex items-center gap-2 p-3">
-              <Loader2 className="size-4 animate-spin" /> Loading tools...
-            </Text>
-          ) : server.tools.length === 0 ? (
-            <Text small muted className="p-3">
-              No tools are available for this server.
-            </Text>
+          {server.tools.length === 0 ? (
+            <EmptyToolListNotice
+              server={server}
+              toolAnnotations={toolAnnotations}
+            />
           ) : (
             server.tools.map((tool) => {
               const checked = selected && selectedTools.includes(tool.name);
@@ -792,6 +881,7 @@ function FocusedServerPane({
                     checked={checked}
                     className={cn(
                       !custom &&
+                        !wildcard &&
                         checked &&
                         "data-[state=checked]:border-muted-foreground data-[state=checked]:bg-muted-foreground",
                     )}
@@ -811,6 +901,82 @@ function FocusedServerPane({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function noToolsMessage(source: PickerServer["toolSource"]): string {
+  switch (source) {
+    case "discovered":
+      return "No tools discovered yet. MCP tools need to be discovered before you can pick them individually. They are discovered when someone who can edit this server opens its Inspect tab and the server's tools load.";
+    case "unlisted":
+      return "Tools on this server can't be listed, so they can't be picked individually.";
+    case "toolset":
+      return "This server has no tools yet.";
+  }
+}
+
+function noToolsScopeNote(
+  source: PickerServer["toolSource"],
+  toolAnnotations: ToolAnnotation[],
+): string {
+  if (toolAnnotations.length === 0) {
+    return source === "discovered"
+      ? "Selecting no tools puts every tool on this server in policy scope, including tools discovered later."
+      : "Selecting no tools puts every tool on this server in policy scope, including tools added later.";
+  }
+  switch (source) {
+    case "discovered":
+      return "The tool rule matches tools by their discovered annotations, so it matches nothing on this server until its tools are discovered.";
+    case "unlisted":
+      return "The tool rule matches tools by their annotations, so it matches nothing on this server.";
+    case "toolset":
+      return "The tool rule matches nothing on this server until it has tools with matching annotations.";
+  }
+}
+
+function EmptyToolListNotice({
+  server,
+  toolAnnotations,
+}: {
+  server: PickerServer;
+  toolAnnotations: ToolAnnotation[];
+}): JSX.Element {
+  const routes = useRoutes();
+  const discovered = server.toolSource === "discovered";
+
+  if (server.toolsLoading) {
+    return (
+      <Text small muted className="flex items-center gap-2 p-3">
+        <Loader2 className="size-4 animate-spin" /> Loading tools...
+      </Text>
+    );
+  }
+  if (server.toolsError) {
+    return (
+      <Text small className="text-destructive p-3">
+        Couldn't load tools for this server.
+      </Text>
+    );
+  }
+  return (
+    <div className="space-y-2 p-3">
+      <Text small muted>
+        {noToolsMessage(server.toolSource)}
+      </Text>
+      <Text small muted>
+        {noToolsScopeNote(server.toolSource, toolAnnotations)}
+      </Text>
+      {discovered ? (
+        <Link
+          to={routes.mcp.x.inspect.href(mcpServerRouteParam(server))}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground hover:text-foreground inline-block text-xs underline"
+        >
+          Discover tools on {server.name}
+        </Link>
+      ) : null}
     </div>
   );
 }

@@ -291,7 +291,7 @@ func (s *Service) approveSuggestion(
 			return approval, oops.E(oops.CodeUnexpected, err, "mark skill suggestion approved").LogError(ctx, logger)
 		}
 	}
-	recorded, err := s.recordVersion(
+	recorded, _, err := s.recordVersion(
 		ctx,
 		dbtx,
 		queries,
@@ -437,6 +437,9 @@ func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSug
 	if err != nil {
 		return nil, err
 	}
+	if approval.version != nil {
+		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{approval.suggestion.SkillID}, true)
+	}
 	return &gen.ApproveSkillSuggestionResult{
 		Suggestion: mv.BuildSkillEditSuggestionView(approval.suggestion, approval.evidence),
 		Outcome:    approval.outcome,
@@ -572,6 +575,9 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.Approv
 	}
 
 	items := make([]*gen.SkillSuggestionApprovalItem, 0, len(snapshot))
+	// Each approval commits on its own; the republish waits for the batch so the
+	// project is checked and signalled once rather than once per suggestion.
+	versionedSkillIDs := make([]uuid.UUID, 0, len(snapshot))
 	for _, suggestion := range snapshot {
 		approval, approveErr := s.approveSuggestion(ctx, authCtx, logger, suggestion.ID, nil, nil)
 		item := &gen.SkillSuggestionApprovalItem{
@@ -599,9 +605,11 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.Approv
 			}
 		} else if approval.version != nil {
 			item.ResultingVersionID = conv.PtrEmpty(approval.version.ID)
+			versionedSkillIDs = append(versionedSkillIDs, approval.suggestion.SkillID)
 		}
 		items = append(items, item)
 	}
+	s.signalPluginPublishForSkills(ctx, authCtx, versionedSkillIDs, true)
 
 	return &gen.ApproveAllSkillSuggestionsResult{Items: items}, nil
 }

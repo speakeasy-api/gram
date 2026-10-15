@@ -39,7 +39,7 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -48,11 +48,11 @@ var _ = Service("risk", func() {
 				Default("everyone")
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server. When a non-empty scope is set, the action must be flag or block.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
-			Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.", func() {
+			Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.", func() {
 				shared.RiskPolicyShadowMCPDispositionEnum()
 			})
 			Attribute("shadow_mcp_blocked_urls", ArrayOf(String), "For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.", func() {
@@ -109,6 +109,31 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
+	})
+
+	Method("listMCPPlatformToolsets", func() {
+		Description("List code-owned Platform MCP toolsets available as risk policy scope targets.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListMCPPlatformToolsetsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listMCPPlatformToolsets")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMCPPlatformToolsets")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMcpPlatformToolsets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListMcpPlatformToolsets"}`)
 	})
 
 	Method("listRiskPoliciesForMcpServer", func() {
@@ -221,14 +246,14 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
 				shared.RiskPolicyAudienceTypeEnum()
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. Omit to preserve the current target principals.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server. When the resulting policy keeps an MCP scope, the action must be flag or block.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
@@ -366,6 +391,10 @@ var _ = Service("risk", func() {
 			Attribute("mcp_server_id", String, "Optional concrete MCP server ID to match exactly.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("result_id", String, "Optional risk result ID; returns that one finding even when it is not on a loaded page, such as from a shared link. A dismissed finding, such as a false positive, is not returned.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("execution_id", String, "Optional ID of one mediated MCP execution (tool call, resource read or prompt get), the execution_id a result carries; returns the live findings on that execution across its request and response phases. Findings that were dismissed, auto-excluded by exclusion rules, or raised under deleted policies are omitted.")
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
@@ -398,6 +427,8 @@ var _ = Service("risk", func() {
 			Param("policy_id")
 			Param("chat_id")
 			Param("mcp_server_id")
+			Param("result_id")
+			Param("execution_id")
 			Param("category")
 			Param("rule_id")
 			Param("user_id")
@@ -485,7 +516,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("unmaskRiskResult", func() {
-		Description("Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.")
+		Description("Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -515,6 +546,37 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.results")
 		Meta("openapi:extension:x-speakeasy-name-override", "unmask")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUnmaskResult", "type": "mutation"}`)
+	})
+
+	Method("revealRiskResultPayload", func() {
+		Description("Return the full scanned payload of the MCP tool call phase a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id and phase index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The risk result ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskRevealPayloadResult)
+
+		HTTP(func() {
+			// POST for the same reason as unmaskResult: every reveal writes an audit entry.
+			POST("/rpc/risk.revealResultPayload")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(RiskIDRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revealRiskResultPayload")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "revealPayload")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskRevealResultPayload", "type": "mutation"}`)
 	})
 
 	Method("listRiskResultsByChat", func() {
@@ -700,6 +762,61 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCategories"}`)
 	})
 
+	Method("listRiskPresets", func() {
+		Description("Return the use-case presets a risk policy can start from. Each preset resolves to a complete create payload (policy type, detectors, action, severity and, for prompt-based presets, the judge instruction) so the dashboard and the Platform MCP offer the same starting points.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RiskPresetsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listPresets")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskPresets")
+		Meta("openapi:extension:x-speakeasy-group", "risk.presets")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskPresets"}`)
+	})
+
+	Method("suggestRiskPolicy", func() {
+		Description("Map a plain-language description of a risk to a policy draft: the closest preset with its detectors, action and severity, or a bespoke prompt-based guardrail when no preset fits. Uses the configured LLM when available and a deterministic keyword match otherwise. Nothing is created.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("prompt", String, "Plain-language description of what the policy should catch or prevent.", func() {
+				MinLength(3)
+				MaxLength(500)
+			})
+			Required("prompt")
+		})
+
+		Result(SuggestRiskPolicyResult)
+
+		HTTP(func() {
+			POST("/rpc/risk.suggestPolicy")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "suggestRiskPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.presets")
+		Meta("openapi:extension:x-speakeasy-name-override", "suggest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSuggestPolicy", "type": "mutation"}`)
+	})
+
 	Method("compileExpr", func() {
 		Description("Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).")
 
@@ -814,6 +931,9 @@ var _ = Service("risk", func() {
 			Attribute("to", String, "Exclusive end of the signals window. Defaults to now.", func() {
 				Format(FormatDateTime)
 			})
+			Attribute("mcp_server_id", String, "Optional concrete MCP server ID. When set, every signal, KPI and exposure figure is computed from findings on that server only.", func() {
+				Format(FormatUUID)
+			})
 		})
 
 		Result(RiskSignalsResult)
@@ -825,6 +945,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("from")
 			Param("to")
+			Param("mcp_server_id")
 			Response(StatusOK)
 		})
 
@@ -832,6 +953,39 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSignals"}`)
+	})
+
+	Method("getRiskMcpServerCounts", func() {
+		Description("Get live finding counts per concrete MCP server over a window, largest first. Powers the MCP server filter pickers on Risk Events and Watchdog. Served from the ClickHouse findings store.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("from", String, "Inclusive start of the window. Defaults to 7 days before to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window. Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+		})
+
+		Result(RiskMcpServerCountsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.getMcpServerCounts")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskMcpServerCounts")
+		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
+		Meta("openapi:extension:x-speakeasy-name-override", "mcpServerCounts")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskMcpServerCounts"}`)
 	})
 
 	Method("getRiskAnalysisStatus", func() {
@@ -857,35 +1011,6 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
 		Meta("openapi:extension:x-speakeasy-name-override", "analysisStatus")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskAnalysisStatus"}`)
-	})
-
-	Method("getRiskPolicyStatus", func() {
-		Description("Get the analysis status of a risk policy including progress and workflow state.")
-
-		Payload(func() {
-			security.ByKeyPayload()
-			security.SessionPayload()
-			security.ProjectPayload()
-			Attribute("id", String, "The policy ID.", func() {
-				Format(FormatUUID)
-			})
-			Required("id")
-		})
-
-		Result(shared.RiskPolicyStatus)
-
-		HTTP(func() {
-			GET("/rpc/risk.getPolicyStatus")
-			security.ByKeyHeader()
-			security.SessionHeader()
-			security.ProjectHeader()
-			Param("id")
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getRiskPolicyStatus")
-		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
-		Meta("openapi:extension:x-speakeasy-name-override", "status")
 	})
 
 	Method("createRiskPolicyBypassRequest", func() {
@@ -1852,6 +1977,27 @@ var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 	Required("policies")
 })
 
+var RiskMCPPlatformTool = Type("RiskMCPPlatformTool", func() {
+	Attribute("name", String, "The Platform MCP tool name.")
+	Attribute("annotations", shared.ToolAnnotations, "MCP behavior annotations from the code-owned descriptor.")
+	Required("name")
+})
+
+var RiskMCPPlatformToolset = Type("RiskMCPPlatformToolset", func() {
+	Attribute("id", String, "The stable policy-scope identity for this Platform MCP toolset.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The reserved Platform MCP toolset slug.")
+	Attribute("name", String, "The display name for this Platform MCP toolset.")
+	Attribute("tools", ArrayOf(RiskMCPPlatformTool), "The code-owned tools in this Platform MCP toolset.")
+	Required("id", "slug", "name", "tools")
+})
+
+var ListMCPPlatformToolsetsResult = Type("ListMCPPlatformToolsetsResult", func() {
+	Attribute("toolsets", ArrayOf(RiskMCPPlatformToolset), "The available Platform MCP policy scope targets.")
+	Required("toolsets")
+})
+
 var BuiltinExclusionEntry = Type("BuiltinExclusionEntry", func() {
 	Description("One rule in the built-in exclusion library. Deliberately omits internal detection-engine identifiers (sources, rule ids) so they are not exposed to end users.")
 	Attribute("id", String, "Stable rule id.")
@@ -1886,7 +2032,7 @@ var ListCustomDetectionRulesResult = Type("ListCustomDetectionRulesResult", func
 
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResult), "The list of risk results.")
-	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
+	Attribute("total_count", Int64, "Total number of findings matching the filters across all non-deleted policies.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("results", "total_count")
 })
@@ -1896,12 +2042,31 @@ var RiskUnmaskResultResult = Type("RiskUnmaskResultResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("match", String, "The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).")
-	Required("id", "match")
+	Attribute("reveal_state", String, "Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.", func() {
+		Enum("available", "evidence_not_stored")
+	})
+	Required("id", "match", "reveal_state")
+})
+
+var RiskRevealPayloadResult = Type("RiskRevealPayloadResult", func() {
+	Attribute("id", String, "The risk result ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("reveal_state", String, "Whether the payload was revealed or its evidence is unavailable or expired.", func() {
+		Enum("available", "evidence_not_stored")
+	})
+	Attribute("execution_id", String, "The mediated execution the payload belongs to.")
+	Attribute("phase", String, "Execution phase the payload was scanned in (request or response).")
+	Attribute("payload", String, "The exact text the scanners inspected: the tools/call arguments JSON for a request, or the extracted result text for a response. Empty when reveal_state is evidence_not_stored.")
+	Attribute("expires_at", String, "When the stored payload is deleted. Absent when reveal_state is evidence_not_stored.", func() {
+		Format(FormatDateTime)
+	})
+	Required("id", "reveal_state", "payload")
 })
 
 var ListRiskResultsForAgentResult = Type("ListRiskResultsForAgentResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResultRedacted), "The list of risk results with match content redacted to opaque fingerprints.")
-	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
+	Attribute("total_count", Int64, "Total number of findings matching the filters across all non-deleted policies.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("results", "total_count")
 })
@@ -1963,6 +2128,63 @@ var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
 	Attribute("recommended_scopes_version", Int64, "Version of the recommended-scope registry; bumps when any recommendation changes.")
 
 	Required("categories", "recommended_scopes_version")
+})
+
+var RiskPreset = Type("RiskPreset", func() {
+	Description("One use-case preset a risk policy can start from.")
+
+	Attribute("id", String, "Stable preset identifier (e.g. 'secrets_and_credentials').")
+	Attribute("label", String, "Human-readable preset name.")
+	Attribute("description", String, "What the preset protects against, in plain language.")
+	Attribute("policy_type", String, "Policy type the preset creates.", func() {
+		Enum("standard", "prompt_based")
+	})
+	Attribute("sources", ArrayOf(String), "Detector sources enabled by a standard preset; empty for prompt-based presets.")
+	Attribute("presidio_entities", ArrayOf(String), "Presidio entities enabled when sources include presidio.")
+	Attribute("action", String, "Default enforcement action.", func() {
+		Enum("flag", "warn", "block", "quarantine")
+	})
+	Attribute("score", Float64, "Default CVSS-style severity (0.1-10).")
+	Attribute("prompt", String, "Judge instruction for a prompt-based preset; empty otherwise.")
+	Attribute("user_message", String, "Default message shown to the user when the policy warns or blocks; empty when none.")
+	Attribute("requires_approved_email_domains", Boolean, "True when the preset is inert until approved_email_domains is supplied.")
+
+	Required("id", "label", "description", "policy_type", "sources", "presidio_entities", "action", "score", "prompt", "user_message", "requires_approved_email_domains")
+})
+
+var RiskPresetsResult = Type("RiskPresetsResult", func() {
+	Attribute("presets", ArrayOf(RiskPreset), "Presets in display order.")
+	Required("presets")
+})
+
+var RiskPresetMatch = Type("RiskPresetMatch", func() {
+	Attribute("preset_id", String, "Preset identifier.")
+	Attribute("label", String, "Preset label.")
+	Attribute("confidence", Float64, "Fit between 0 and 1.")
+	Required("preset_id", "label", "confidence")
+})
+
+var SuggestRiskPolicyResult = Type("SuggestRiskPolicyResult", func() {
+	Description("A policy draft derived from a plain-language description. The fields mirror createRiskPolicy so the dashboard can prefill the create form.")
+
+	Attribute("preset_id", String, "Matched preset identifier; empty when the draft is a bespoke prompt-based guardrail.")
+	Attribute("policy_type", String, "Policy type of the draft.", func() {
+		Enum("standard", "prompt_based")
+	})
+	Attribute("name", String, "Suggested policy name.")
+	Attribute("action", String, "Suggested enforcement action.", func() {
+		Enum("flag", "warn", "block", "quarantine")
+	})
+	Attribute("score", Float64, "Suggested CVSS-style severity (0.1-10).")
+	Attribute("sources", ArrayOf(String), "Detector sources for a standard draft; empty for prompt-based drafts.")
+	Attribute("presidio_entities", ArrayOf(String), "Presidio entities for a standard draft that includes presidio.")
+	Attribute("prompt", String, "Judge instruction for a prompt-based draft; empty otherwise.")
+	Attribute("user_message", String, "Suggested user-facing message when the policy warns or blocks; empty when none.")
+	Attribute("rationale", String, "Why this draft was chosen.")
+	Attribute("confidence", Float64, "Fit between 0 and 1; 0 for a bespoke draft.")
+	Attribute("alternatives", ArrayOf(RiskPresetMatch), "Other presets that partially matched, best first.")
+
+	Required("preset_id", "policy_type", "name", "action", "score", "sources", "presidio_entities", "prompt", "user_message", "rationale", "confidence", "alternatives")
 })
 
 var ExprCompileResult = Type("ExprCompileResult", func() {
@@ -2178,10 +2400,12 @@ var RiskSignal = Type("RiskSignal", func() {
 	Attribute("last_seen", String, "Event time of the latest finding in the window.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("mcp_server_ids", ArrayOf(String), "Concrete MCP server IDs the findings in this signal were observed on. Empty when no finding carries server attribution.")
+	Attribute("tool_names", ArrayOf(String), "Concrete tool names the findings in this signal were observed on. Empty when no finding carries tool attribution.")
 	Attribute("top_users", ArrayOf(RiskSignalTopUser), "Top users by finding count within the signal.")
 	Attribute("sparkline", ArrayOf(Int64), "Deduplicated finding counts per equal-width time bucket across the window, oldest bucket first. Powers the per-signal trend sparkline.")
 
-	Required("key", "rule_id", "category", "description", "detection_sources", "apps", "severity", "risk_score", "findings", "previous_findings", "users", "teams", "first_seen", "last_seen", "top_users", "sparkline")
+	Required("key", "rule_id", "category", "description", "detection_sources", "apps", "mcp_server_ids", "tool_names", "severity", "risk_score", "findings", "previous_findings", "users", "teams", "first_seen", "last_seen", "top_users", "sparkline")
 })
 
 var RiskExposureSlice = Type("RiskExposureSlice", func() {
@@ -2208,6 +2432,19 @@ var RiskAnalysisStatusResult = Type("RiskAnalysisStatusResult", func() {
 	Attribute("last_run_outcome", String, "How the most recent closed run ended: completed, failed, canceled, terminated, continued_as_new, timed_out, or unknown. continued_as_new is the normal outcome for a long-lived coordinator that rolled its history over, so treat it like completed. Set only when state is idle.")
 
 	Required("state")
+})
+
+var RiskMcpServerCount = Type("RiskMcpServerCount", func() {
+	Attribute("mcp_server_id", String, "Concrete MCP server ID.")
+	Attribute("findings", Int64, "Deduplicated live findings on this server in the window.")
+
+	Required("mcp_server_id", "findings")
+})
+
+var RiskMcpServerCountsResult = Type("RiskMcpServerCountsResult", func() {
+	Attribute("servers", ArrayOf(RiskMcpServerCount), "Per-server finding counts, largest first. Servers with no findings are omitted.")
+
+	Required("servers")
 })
 
 var RiskSignalsResult = Type("RiskSignalsResult", func() {

@@ -15,9 +15,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage remote_session_client records — credentials Gram uses when acting as
-// an OAuth client of a remote_session_issuer. client_secret_encrypted is never
-// returned.
+// Manage remote_session_client records — credentials Speakeasy uses when
+// acting as an OAuth client of a remote_session_issuer.
+// client_secret_encrypted is never returned.
 type Service interface {
 	// Explicit, tenant-scoped identity-chaining configuration. Mutations require
 	// project-write authorization; reads require project-read authorization. Does
@@ -38,8 +38,8 @@ type Service interface {
 	// client_secret obtained out-of-band from the upstream issuer.
 	CreateRemoteSessionClient(context.Context, *CreateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
 	// Register a remote_session_client in Client ID Metadata Document (CIMD) mode.
-	// Gram generates the client_id (the URL of a hosted client metadata document)
-	// and serves the document publicly; the client carries no secret and
+	// Speakeasy generates the client_id (the URL of a hosted client metadata
+	// document) and serves the document publicly; the client carries no secret and
 	// authenticates with token_endpoint_auth_method=none. The owning issuer must
 	// advertise client_id_metadata_document_supported.
 	CreateCimd(context.Context, *CreateCimdPayload) (res *types.RemoteSessionClient, err error)
@@ -65,6 +65,9 @@ type Service interface {
 	DetachKeySet(context.Context, *DetachKeySetPayload) (res *types.RemoteSessionClient, err error)
 	// List remote_session_clients in the caller's project.
 	ListRemoteSessionClients(context.Context, *ListRemoteSessionClientsPayload) (res *ListRemoteSessionClientsResult, err error)
+	// Get the redirect URI a remote_session_client created now in the caller's
+	// project registers with its upstream provider.
+	GetNewClientCallbackURL(context.Context, *GetNewClientCallbackURLPayload) (res *NewClientCallbackURLResult, err error)
 	// Get a remote_session_client by id.
 	GetRemoteSessionClient(context.Context, *GetRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
 	// Soft-delete a remote_session_client. Cascades to remote_sessions rows
@@ -92,7 +95,7 @@ const ServiceName = "remoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"prepareEMA", "readEMA", "unlinkEMA", "createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+var MethodNames = [14]string{"prepareEMA", "readEMA", "unlinkEMA", "createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getNewClientCallbackUrl", "getRemoteSessionClient", "deleteRemoteSessionClient"}
 
 // AttachKeySetPayload is the payload type of the remoteSessionClients service
 // attachKeySet method.
@@ -152,7 +155,7 @@ type CreateRemoteSessionClientPayload struct {
 	UserSessionIssuerIds []string
 	// client_id supplied by the caller.
 	ClientID string
-	// client_secret supplied by the caller. Gram encrypts before persisting.
+	// client_secret supplied by the caller. Speakeasy encrypts before persisting.
 	ClientSecret *string
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
@@ -161,12 +164,25 @@ type CreateRemoteSessionClientPayload struct {
 	// the issuer identifier; token_endpoint is available for providers that
 	// require the token endpoint URL.
 	TokenEndpointAuthAudienceFormat *string
+	// Organization JSON Web Key Set to sign private_key_jwt assertions with.
+	// Required when token_endpoint_auth_method is private_key_jwt and optional
+	// otherwise, as with attachKeySet. Must belong to the caller's organization,
+	// which needs the customer-managed encryption keys entitlement.
+	JSONWebKeySetID *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// Who the upstream access credential belongs to, fixed at creation. subject
+	// (the default) means each caller connects their own upstream account through
+	// the client. self means the client obtains a credential for itself with the
+	// client_credentials grant and every caller shares it; it requires
+	// token_endpoint_auth_method client_secret_basic, client_secret_post (both
+	// with client_secret) or private_key_jwt (with json_web_key_set_id), and an
+	// issuer with a token_endpoint.
+	CredentialOwner string
 	// When the issuer reported issuing the client_id (RFC 7591
 	// client_id_issued_at). Omit to record the time of this call.
 	ClientIDIssuedAt *string
@@ -207,6 +223,14 @@ type DetachUserSessionIssuerPayload struct {
 	UserSessionIssuerID string
 }
 
+// GetNewClientCallbackURLPayload is the payload type of the
+// remoteSessionClients service getNewClientCallbackUrl method.
+type GetNewClientCallbackURLPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // GetRemoteSessionClientPayload is the payload type of the
 // remoteSessionClients service getRemoteSessionClient method.
 type GetRemoteSessionClientPayload struct {
@@ -239,6 +263,10 @@ type IdentityChainingPreparation struct {
 	Scopes     []string
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string
+	// The vendor's EMA provider order resolved for this endpoint. Identity
+	// chaining tries the providers that can serve, in order; entries with
+	// unavailable_reason are skipped. Returned by readEMA only.
+	EmaProviders *types.EMAProviderOrder
 }
 
 // ListRemoteSessionClientsPayload is the payload type of the
@@ -263,6 +291,13 @@ type ListRemoteSessionClientsResult struct {
 	Items []*types.RemoteSessionClient
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// NewClientCallbackURLResult is the result type of the remoteSessionClients
+// service getNewClientCallbackUrl method.
+type NewClientCallbackURLResult struct {
+	// The redirect URI to register on the upstream provider's OAuth app.
+	CallbackURL string
 }
 
 // PrepareEMAPayload is the payload type of the remoteSessionClients service
@@ -330,7 +365,7 @@ type UpdateRemoteSessionClientPayload struct {
 	ProjectSlugInput *string
 	// The remote_session_client id.
 	ID string
-	// Rotate the client secret. Gram re-encrypts before persisting.
+	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string
@@ -343,6 +378,11 @@ type UpdateRemoteSessionClientPayload struct {
 	// Replace the upstream OAuth audience sent for this client. Omit to leave
 	// unchanged.
 	Audience *string
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

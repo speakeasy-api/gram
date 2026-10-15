@@ -131,7 +131,7 @@ func TestMetricRelayHandlerPreservesMetricsWithoutMixingProvenance(t *testing.T)
 				require.Equal(t, uint32(3), scopeMetrics.GetScope().GetDroppedAttributesCount())
 				for _, item := range scopeMetrics.GetMetrics() {
 					require.Equal(t, "model", item.GetGauge().GetDataPoints()[0].GetAttributes()[0].GetKey())
-					require.Empty(t, item.ProtoReflect().GetUnknown(), "Gram provenance must not reach the customer destination")
+					require.Empty(t, item.ProtoReflect().GetUnknown(), "Speakeasy provenance must not reach the customer destination")
 				}
 			}
 		}

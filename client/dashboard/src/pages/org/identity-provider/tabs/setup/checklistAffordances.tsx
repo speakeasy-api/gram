@@ -1,13 +1,15 @@
-import { Link } from "react-router";
-
 import { Button } from "@/components/ui/Button";
 
 import type { StepAffordances } from "./ConnectionChecklist";
-import type { LiveConnection } from "../../connectionView";
+import { connectionStep, type LiveConnection } from "../../connectionView";
 import { CopyableValue } from "./OktaConnectionDetails";
-import { AgentSetupForm } from "./OktaConnectionForms";
-import { oktaAdminConsoleUrl } from "../../oktaConsoleLinks";
-import { oktaViewHref } from "../../tabs";
+import { AgentSetupForm, ClientIdForm } from "./OktaConnectionForms";
+import { OKTA_SIGN_IN_SECTION_ID } from "./OktaSignInSection";
+import {
+  oktaAdminConsoleUrl,
+  oktaApiServiceIntegrationsUrl,
+} from "../../oktaConsoleLinks";
+import { READINESS_SECTION_ID } from "../../tabs";
 
 function adminConsoleLink(connection: LiveConnection): JSX.Element {
   return (
@@ -22,29 +24,56 @@ function adminConsoleLink(connection: LiveConnection): JSX.Element {
   );
 }
 
+function apiServiceIntegrationsLink(
+  connection: LiveConnection,
+): JSX.Element | null {
+  const href = oktaApiServiceIntegrationsUrl(connection.orgUrl);
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-sm underline underline-offset-4"
+    >
+      Open API Service Integrations in Okta
+    </a>
+  );
+}
+
 export const STEP_AFFORDANCES: StepAffordances = {
   create_api_services_app: adminConsoleLink,
-  add_oin_app: adminConsoleLink,
-  public_key_auth: (connection) => (
-    <span className="font-mono text-xs">
-      <CopyableValue
-        value={connection.jwksUrl}
-        tooltip="Copy public key URL (JWKS)"
-      />
-    </span>
-  ),
+  add_oin_app: apiServiceIntegrationsLink,
+  public_key_auth: (connection) =>
+    connection.jwksUrl ? (
+      <span className="font-mono text-xs">
+        <CopyableValue
+          value={connection.jwksUrl}
+          tooltip="Copy public key URL (JWKS)"
+        />
+      </span>
+    ) : null,
+  submit_client_id: (connection) =>
+    connectionStep(connection) === "submit_client_id" ? (
+      <ClientIdForm key={connection.id} connection={connection} />
+    ) : null,
   record_ai_agent: (connection) => (
     <AgentSetupForm
       key={`${connection.agentId ?? ""}|${connection.agentAppId ?? ""}`}
       connection={connection}
     />
   ),
+  add_agent_public_key: () => (
+    <div>
+      <Button asChild variant="secondary">
+        <a href={`#${OKTA_SIGN_IN_SECTION_ID}`}>Go to Okta sign-in</a>
+      </Button>
+    </div>
+  ),
   first_resource_connection: () => (
     <div>
       <Button asChild variant="secondary">
-        <Link to={oktaViewHref("cross-app-access")}>
-          Configure Cross App Access
-        </Link>
+        <a href={`#${READINESS_SECTION_ID}`}>Go to Server connections</a>
       </Button>
     </div>
   ),

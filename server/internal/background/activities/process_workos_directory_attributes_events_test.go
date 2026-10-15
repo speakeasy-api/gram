@@ -11,12 +11,16 @@ import (
 	"github.com/workos/workos-go/v6/pkg/events"
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
@@ -383,7 +387,7 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 	require.NoError(t, err)
 
 	// The seeded user's email matches the directory user payload so the
-	// deactivation can resolve the Gram user by email.
+	// deactivation can resolve the Speakeasy user by email.
 	email := userID + "@example.com"
 
 	workosClient := workos.NewStubClient()
@@ -439,6 +443,87 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 	for _, key := range deletedKeys {
 		require.Contains(t, key, sessions.UserInfoCacheKey(userID))
 	}
+}
+
+func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationRevokesSignIns(t *testing.T) {
+	t.Parallel()
+
+	for _, flag := range []string{"on", "off", "undecided"} {
+		t.Run("flag "+flag, func(t *testing.T) {
+			t.Parallel()
+			deactivateDirectoryUserWithSignIn(t, flag)
+		})
+	}
+}
+
+// flag "undecided" leaves the flag unset, as during a flag-service outage:
+// deprovisioning must still revoke.
+func deactivateDirectoryUserWithSignIn(t *testing.T, flag string) {
+	t.Helper()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_directory_user_deactivate_sign_ins_"+flag)
+	logger := testenv.NewLogger(t)
+
+	const (
+		organizationID  = "gram_org_dsync_sign_ins"
+		workosOrgID     = "org_01HZDSYNCSIGNINS"
+		userID          = "user_dsync_sign_ins"
+		workosUserID    = "user_01HZDSYNCSIGNINS"
+		membershipID    = "mem_01HZDSYNCSIGNINS"
+		directoryUserID = "directory_user_sign_ins"
+		workosSessionID = "session_dsync_sign_ins"
+	)
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	signIn, err := signins.Record(ctx, conn, signins.RecordParams{
+		OrganizationID: organizationID, UserID: userID, WorkOSSessionID: workosSessionID,
+		AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+	require.True(t, signIn.ID.Valid)
+
+	email := userID + "@example.com"
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		newWorkOSMembershipEvent(t, "organization_membership.created", "event_0001", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC), "member"),
+		{ID: "event_0002", Event: "dsync.user.created", CreatedAt: time.Date(2026, 5, 12, 12, 30, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "active", "2026-05-12T12:30:00Z")},
+		{ID: "event_0003", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 13, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "inactive", "2026-05-12T13:00:00Z")},
+	}})
+	signals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, newCaptureCache(), signals)
+	flags := &feature.InMemory{}
+	switch flag {
+	case "on":
+		signins.EnableForTests(flags, organizationID)
+	case "off":
+		flags.SetFlag(feature.FlagSignInEnforcement, organizationID, false)
+	}
+	activity.SetSignInEnforcement(flags, testenv.NewMeterProvider(t), nil)
+
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	activity.WaitForDeliveries()
+
+	if flag == "off" {
+		live, err := signins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
+		require.NoError(t, err)
+		require.True(t, live.Valid, "deprovisioning leaves sign-ins alone while enforcement is off")
+		require.Empty(t, workosClient.RevokedSessions())
+		return
+	}
+	live, err := signins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
+	require.NoError(t, err)
+	require.False(t, live.Valid, "deprovisioning revokes the user's sign-ins")
+	require.Equal(t, []string{workosSessionID}, workosClient.RevokedSessions(), "the revoked sign-in's WorkOS session is ended")
+	audited, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessMemberSignInsRevoke)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), audited, "deprovisioning audits the revocation as the system")
 }
 
 func TestProcessWorkOSOrganizationEvents_DirectoryUserReactivationRestoresDirectoryUser(t *testing.T) {

@@ -41,7 +41,8 @@ type bindingOperation struct {
 
 func bindingHuman(ctx context.Context) (*contextvalues.AuthContext, error) {
 	auth, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || auth == nil || auth.ProjectID == nil || !contextvalues.HasValidatedGramSession(ctx) || auth.SessionID == nil || *auth.SessionID == "" || auth.UserID == "" || auth.ActiveOrganizationID == "" {
+	_, consent := contextvalues.GetConsentBindingAuthorization(ctx)
+	if !ok || auth == nil || auth.ProjectID == nil || (!consent && (!contextvalues.HasValidatedGramSession(ctx) || auth.SessionID == nil || *auth.SessionID == "")) || auth.UserID == "" || auth.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if auth.APIKeyID != "" || auth.APIKeyName != "" || len(auth.APIKeyScopes) > 0 || auth.OrgWidePluginHooksKey || contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {
@@ -80,6 +81,9 @@ func (s *Service) beginBindingOperation(ctx context.Context, principal, issuer s
 	issuerID, err := uuid.Parse(issuer)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id")
+	}
+	if consent, ok := contextvalues.GetConsentBindingAuthorization(ctx); ok && (consent.AgentID != principalID || consent.IssuerID != issuerID) {
+		return nil, oops.C(oops.CodeForbidden)
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

@@ -26,6 +26,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -52,19 +56,23 @@ type RoleProvider interface {
 
 // RoleManager owns role reads and writes against local records, then syncs successful writes to WorkOS.
 type RoleManager struct {
-	db     *pgxpool.Pool
-	logger *slog.Logger
-	roles  RoleProvider
-	audit  *audit.Logger
+	db                      *pgxpool.Pool
+	logger                  *slog.Logger
+	roles                   RoleProvider
+	audit                   *audit.Logger
+	roleDeliveryPublication plugins.PublicationRequests
+	roleDeliveryGuard       *admission.Guard
 }
 
 // NewRoleManager wires the role manager to the local DB, the WorkOS role client, and the audit logger.
-func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, auditLogger *audit.Logger) *RoleManager {
+func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, auditLogger *audit.Logger, publication plugins.PublicationRequests, guard *admission.Guard) *RoleManager {
 	return &RoleManager{
-		db:     db,
-		logger: logger.With(attr.SlogComponent("access.role_manager")),
-		roles:  roles,
-		audit:  auditLogger,
+		roleDeliveryPublication: publication,
+		roleDeliveryGuard:       guard,
+		db:                      db,
+		logger:                  logger.With(attr.SlogComponent("access.role_manager")),
+		roles:                   roles,
+		audit:                   auditLogger,
 	}
 }
 
@@ -141,7 +149,8 @@ func (r *RoleManager) GetRoleByIDTx(ctx context.Context, tx pgx.Tx, gramOrgID, i
 	return roleViewFromLocalRoleAndGrants(role, view), nil
 }
 
-// ListMembers returns locally known organization members and includes a role ID only when a local assignment exists.
+// ListMembers returns locally known organization members with their directly
+// assigned role IDs and the role IDs they hold through directory role mappings.
 func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.ListMembersResult, error) {
 	rows, err := repo.New(r.db).ListAccessMembers(ctx, gramOrgID)
 	if err != nil {
@@ -160,7 +169,9 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 				Email:        row.Email,
 				PhotoURL:     conv.FromPGText[string](row.PhotoUrl),
 				RoleIds:      nil,
-				JoinedAt:     conv.FromPGTimestamptz(row.JoinedAt),
+				// Every row for a member carries the same mapped roles.
+				DirectoryRoleIds: row.DirectoryRoleIds,
+				JoinedAt:         conv.FromPGTimestamptz(row.JoinedAt),
 				// Null when no directory row was matched, or when the row
 				// reports no non-empty department — the query collapses both
 				// to an empty string, so the two cannot be told apart here.
@@ -180,6 +191,14 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 	}
 
 	return &gen.ListMembersResult{Members: result}, nil
+}
+
+// memberRoleIDs returns every role a member holds, assigned directly or
+// through a directory role mapping, each once.
+func memberRoleIDs(member *gen.AccessMember) []string {
+	ids := slices.Concat(member.RoleIds, member.DirectoryRoleIds)
+	slices.Sort(ids)
+	return slices.Compact(ids)
 }
 
 // RoleCreateResult is the safe local result of creating a role.
@@ -387,7 +406,8 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 }
 
 // UpdateRoleTx performs the local role, grant, member-assignment, and audit
-// writes on tx. It neither commits tx nor contacts WorkOS.
+// writes on tx. It neither commits tx nor contacts WorkOS. Role-delivery
+// admission is decided inside tx from the project's Shadow MCP policies.
 func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.UpdateRolePayload) (RoleUpdateResult, RoleReconciliation, error) {
 	roleID, err := uuid.Parse(payload.ID)
 	if err != nil {
@@ -516,11 +536,28 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 
 	// Grants live in the per-org grant store and are patched the same way for
 	// custom and system roles. WorkOS only tracks role identity/membership, not
-	// Gram scopes, so no grant sync to WorkOS is needed.
+	// Speakeasy scopes, so no grant sync to WorkOS is needed.
 	if payload.AddGrants != nil || payload.RemoveGrants != nil {
+		before, err := roledelivery.Snapshot(ctx, tx, gramOrgID, currentRole.PrincipalURN)
+		if err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "snapshot role delivery grants").LogError(ctx, r.logger)
+		}
 		syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
 		if err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
+		}
+		changedProjectIDs, err := roledelivery.RoleChanged(ctx, tx, gramOrgID, currentRole.PrincipalURN, before, r.roleDeliveryGuard)
+		if err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "update role audience plugin servers").LogError(ctx, r.logger)
+		}
+		actorID := ""
+		if actor.Principal.Type == urn.PrincipalTypeUser {
+			actorID = actor.Principal.ID
+		}
+		for _, projectID := range changedProjectIDs {
+			if err := r.roleDeliveryPublication.Project(ctx, tx, gramOrgID, projectID, actorID); err != nil {
+				return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "request role delivery publication").LogError(ctx, r.logger)
+			}
 		}
 		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 		for _, grant := range syncedGrants {
@@ -674,6 +711,15 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	}
 	if deletedCount == 0 {
 		return localRole{}, oops.E(oops.CodeNotFound, nil, "role not found").LogError(ctx, r.logger)
+	}
+
+	if err := pluginassignments.RemoveDeletedRole(ctx, tx, r.audit, pluginassignments.RoleDeletion{
+		OrganizationID:   gramOrgID,
+		PrincipalURN:     currentRole.PrincipalURN,
+		Actor:            actor.Principal,
+		ActorDisplayName: actor.DisplayName,
+	}); err != nil {
+		return localRole{}, oops.E(oops.CodeUnexpected, err, "delete plugin assignments for deleted role").LogError(ctx, r.logger)
 	}
 
 	if err := authz.DeleteRoleGrants(ctx, repo.New(tx), gramOrgID, currentRole.PrincipalURN); err != nil {
@@ -883,26 +929,28 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		// roles and nothing the directory owns: a profile this update cannot
 		// alter would read as part of the diff.
 		Before: &gen.AccessMember{
-			ID:           connectedUser.ID,
-			PrincipalUrn: memberPrincipalURN,
-			Name:         memberName,
-			Email:        connectedUser.Email,
-			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:      existingRoleIDs,
-			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
-			Department:   nil,
-			Groups:       nil,
+			ID:               connectedUser.ID,
+			PrincipalUrn:     memberPrincipalURN,
+			Name:             memberName,
+			Email:            connectedUser.Email,
+			PhotoURL:         conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:          existingRoleIDs,
+			JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:       nil,
+			Groups:           nil,
+			DirectoryRoleIds: nil,
 		},
 		After: &gen.AccessMember{
-			ID:           connectedUser.ID,
-			PrincipalUrn: memberPrincipalURN,
-			Name:         memberName,
-			Email:        connectedUser.Email,
-			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:      afterRoleIDs,
-			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
-			Department:   nil,
-			Groups:       nil,
+			ID:               connectedUser.ID,
+			PrincipalUrn:     memberPrincipalURN,
+			Name:             memberName,
+			Email:            connectedUser.Email,
+			PhotoURL:         conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:          afterRoleIDs,
+			JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:       nil,
+			Groups:           nil,
+			DirectoryRoleIds: nil,
 		},
 	}
 
@@ -1050,15 +1098,16 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 
 	memberName := conv.Default(connected.DisplayName, connected.Email)
 	after := &gen.AccessMember{
-		ID:           connected.ID,
-		PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
-		Name:         memberName,
-		Email:        connected.Email,
-		PhotoURL:     conv.FromPGText[string](connected.PhotoUrl),
-		RoleIds:      afterRoleIDs,
-		JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
-		Department:   nil,
-		Groups:       nil,
+		ID:               connected.ID,
+		PrincipalUrn:     urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
+		Name:             memberName,
+		Email:            connected.Email,
+		PhotoURL:         conv.FromPGText[string](connected.PhotoUrl),
+		RoleIds:          afterRoleIDs,
+		JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
+		Department:       nil,
+		Groups:           nil,
+		DirectoryRoleIds: nil,
 	}
 	safeAfter := MemberRoleState{
 		MemberID:         connected.ID,
@@ -1224,7 +1273,7 @@ func (r *RoleManager) MemberRolePrincipals(ctx context.Context, gramOrgID, worko
 	return rows, nil
 }
 
-// getLocalRoleByID loads one local role record by Gram role ID.
+// getLocalRoleByID loads one local role record by Speakeasy role ID.
 func (r *RoleManager) getLocalRoleByID(ctx context.Context, gramOrgID, id string) (localRole, error) {
 	return r.getLocalRoleByIDTx(ctx, r.db, gramOrgID, id)
 }
@@ -1726,7 +1775,7 @@ func workosTimeOrNow(value string) time.Time {
 	return t.UTC()
 }
 
-// slugify validates a role name and turns it into Gram's WorkOS role slug format.
+// slugify validates a role name and turns it into Speakeasy's WorkOS role slug format.
 func slugify(name string) (string, error) {
 	slug := conv.ToSlug(strings.ReplaceAll(name, "_", " "))
 	if slug == "" {

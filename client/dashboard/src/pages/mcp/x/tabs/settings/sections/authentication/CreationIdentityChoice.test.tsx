@@ -103,7 +103,7 @@ describe("CreationIdentityChoice", () => {
     ).toBeDefined();
   });
 
-  it("shows the credential form with its preview under Agent Identity", () => {
+  it("shows the credential form with its preview under Service Account", () => {
     renderChoice({ value: "agent" });
 
     expect(screen.getByRole("button", { name: "Bearer" })).toBeDefined();

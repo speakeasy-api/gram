@@ -19,7 +19,7 @@ export function AddAudienceDialog({
   kinds,
   alreadyAdded,
   alreadyReaches,
-  blockedFrom,
+  blockedReason,
   pending,
   onAdd,
   onClose,
@@ -32,10 +32,10 @@ export function AddAudienceDialog({
   /** Principals an organization-wide rule already covers, and what it gives. */
   alreadyReaches?: { principalUrn: string; reason: string }[];
   /**
-   * Principals a block already reaches. Granting them access here writes a
-   * rule the server will not honour, so the picker withholds it.
+   * Why a principal is withheld because a block reaches it that a rule added
+   * here would not outrank, or undefined when a rule here would take effect.
    */
-  blockedFrom?: { principalUrn: string; reason: string }[];
+  blockedReason?: (principalUrn: string) => string | undefined;
   pending: boolean;
   onAdd: (principalUrns: string[]) => void;
   onClose: () => void;
@@ -45,37 +45,39 @@ export function AddAudienceDialog({
 
   const groups = useMemo(() => {
     const added = new Set(alreadyAdded);
-    const covered = new Map([
-      ...(alreadyReaches ?? []).map(
+    const covered = new Map(
+      (alreadyReaches ?? []).map(
         (entry) => [entry.principalUrn, entry.reason] as const,
       ),
-      ...(blockedFrom ?? []).map(
-        (entry) => [entry.principalUrn, entry.reason] as const,
-      ),
-    ]);
+    );
     return OPTION_GROUPS.filter((group) => kinds.includes(group.kind))
       .map((group) => ({
         heading: group.heading,
         icon: audienceIcon(group.kind),
         options: (data?.options ?? [])
           .filter((option) => option.kind === group.kind)
-          .map((option) => ({
-            label: option.displayName,
-            value: option.principalUrn,
-            // A block beats a grant, so "blocked" is the truer answer even
-            // when a rule here already names them.
-            description:
-              covered.get(option.principalUrn) ??
-              (added.has(option.principalUrn)
-                ? "Already has access"
-                : option.description),
-            disabled:
-              added.has(option.principalUrn) ||
-              covered.has(option.principalUrn),
-          })),
+          .map((option) => {
+            // A block the rule would not outrank is the truer answer, even
+            // when a rule here already names the principal.
+            const blocked = blockedReason?.(option.principalUrn);
+            return {
+              label: option.displayName,
+              value: option.principalUrn,
+              description:
+                blocked ??
+                covered.get(option.principalUrn) ??
+                (added.has(option.principalUrn)
+                  ? "Already has access"
+                  : option.description),
+              disabled:
+                blocked !== undefined ||
+                added.has(option.principalUrn) ||
+                covered.has(option.principalUrn),
+            };
+          }),
       }))
       .filter((group) => group.options.length > 0);
-  }, [data?.options, kinds, alreadyAdded, alreadyReaches, blockedFrom]);
+  }, [data?.options, kinds, alreadyAdded, alreadyReaches, blockedReason]);
 
   return (
     <Dialog

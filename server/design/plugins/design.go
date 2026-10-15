@@ -316,8 +316,35 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
 	})
 
+	Method("rotateObservabilityCredential", func() {
+		Description("Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, republishes the marketplace when possible so installs pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.")
+
+		Payload(func() {
+			Attribute("previous_key_fate", String, func() {
+				Description("What happens to existing observability plugin hooks keys after the replacement is minted.")
+				Enum("revoke_immediately", "grace")
+			})
+			Required("previous_key_fate")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RotateObservabilityCredentialResult)
+
+		HTTP(func() {
+			POST("/rpc/plugins.rotateObservabilityCredential")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "rotateObservabilityCredential")
+		Meta("openapi:extension:x-speakeasy-name-override", "rotateObservabilityCredential")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateObservabilityCredential"}`)
+	})
+
 	Method("downloadObservabilityPlugin", func() {
-		Description("Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
+		Description("Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
 
 		Payload(func() {
 			Attribute("platform", String, func() {
@@ -485,15 +512,15 @@ var PluginServerModel = Type("PluginServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID. Exactly one backend ID is set.")
+		Description("Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID. Exactly one backend ID is set.")
+		Description("Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("meta_mcp_server_id", String, func() {
-		Description("MCP gateway ID. Exactly one backend ID is set.")
+		Description("MCP gateway ID. When set, no other backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("display_name", String, "Display name shown in generated plugin config.")
@@ -509,13 +536,17 @@ var PluginServerModel = Type("PluginServer", func() {
 
 // PluginAssignmentModel represents a role or user assignment for a plugin.
 var PluginAssignmentModel = Type("PluginAssignment", func() {
-	Required("id", "principal_urn", "created_at")
+	Required("id", "principal_urn", "install_mode", "created_at")
 
 	Attribute("id", String, func() {
 		Description("Unique assignment identifier.")
 		Format(FormatUUID)
 	})
 	Attribute("principal_urn", String, "Principal URN (e.g. role:organization:<uuid>, user:id, or *).")
+	Attribute("install_mode", String, func() {
+		Description("How the device agent installs the plugin for this audience. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on.")
+		shared.InstallModeEnum()
+	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -535,7 +566,7 @@ var PluginAudienceModel = Type("PluginAudience", func() {
 
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "agent_plugins_v1_compatible", "created_at", "updated_at")
+	Required("id", "name", "slug", "auto_created", "agent_plugins_v1_compatible", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin identifier.")
@@ -545,6 +576,7 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("slug", String, "URL-safe identifier, unique per org.")
 	Attribute("description", String, "Optional description.")
 	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
+	Attribute("auto_created", Boolean, "Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
 	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
@@ -587,11 +619,11 @@ var AddPluginServerForm = Type("AddPluginServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.")
+		Description("Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID. Provide exactly one backend ID.")
+		Description("Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.")
 		Format(FormatUUID)
 	})
 	Attribute("meta_mcp_server_id", String, func() {
@@ -634,6 +666,11 @@ var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("principal_urns", ArrayOf(String), "List of principal URNs to assign.")
+	Attribute("install_modes", MapOf(String, String, func() {
+		Elem(func() {
+			shared.InstallModeEnum()
+		})
+	}), "Install mode per principal URN in principal_urns. A principal missing from this map keeps its current mode, or gets `default` when it is newly assigned.")
 })
 
 // --- Results ---
@@ -690,4 +727,38 @@ var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", fu
 	Attribute("settings", MarketplaceSettingsResult, "The updated marketplace settings.")
 	Attribute("republished", Boolean, "Whether the marketplace was automatically republished to GitHub as part of this update.")
 	Attribute("hooks_update_deferred", Boolean, "True when the new name reached the MCP plugins and marketplace manifests but the observability (hooks) plugin could not be updated yet because the organization is not approved for the latest hooks version; it will update automatically once the organization is rolled forward.")
+})
+
+var RotatedObservabilityKey = Type("RotatedObservabilityKey", func() {
+	Required("id", "name", "key_prefix")
+
+	Attribute("id", String, func() {
+		Description("The API key ID.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The API key name.")
+	Attribute("key_prefix", String, "The recognizable prefix of the previous key.")
+	Attribute("expires_at", String, func() {
+		Description("When this key stops authenticating. A key already inside a shorter grace window keeps its earlier deadline, so this can precede the rotation's own deadline. Absent when the key was revoked immediately.")
+		Format(FormatDateTime)
+	})
+})
+
+var RotateObservabilityCredentialResult = Type("RotateObservabilityCredentialResult", func() {
+	Required("key", "key_prefix", "previous_key_fate", "previous_keys", "previous_keys_retired", "marketplace_republished")
+
+	Attribute("key", String, "The newly minted hooks-scoped API key. Returned only on this response.")
+	Attribute("key_prefix", String, "The recognizable prefix of the new key.")
+	Attribute("previous_key_fate", String, func() {
+		Description("What happened to previous observability plugin hooks keys.")
+		Enum("revoke_immediately", "grace")
+	})
+	Attribute("previous_keys", ArrayOf(RotatedObservabilityKey), "Previous observability plugin hooks keys that were revoked or scheduled to expire.")
+	Attribute("previous_keys_expire_at", String, func() {
+		Description("The latest deadline among previous keys when previous_key_fate is grace. Individual keys can expire earlier, so this is an upper bound rather than a shared deadline; per-key deadlines are on previous_keys.")
+		Format(FormatDateTime)
+	})
+	Attribute("previous_keys_retired", Boolean, "Whether the chosen fate was applied to the previous keys. False means the replacement was created and published but retiring the previous keys failed, so they are still valid and the rotation should be retried.")
+	Attribute("marketplace_republished", Boolean, "Whether the published marketplace was updated with the new credential.")
+	Attribute("marketplace_update_deferred", Boolean, "True when a marketplace exists but could not be updated yet (for example the organization is not approved for the latest hooks version, or GitHub publishing is unavailable). Existing marketplace installs keep the previous credential until the marketplace is republished.")
 })

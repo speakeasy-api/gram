@@ -15,6 +15,7 @@ import (
 const (
 	ActionOktaResourceConnectionConfirm Action = "okta-resource-connection:confirm"
 	ActionOktaResourceConnectionReset   Action = "okta-resource-connection:reset"
+	ActionOktaResourceConnectionObserve Action = "okta-resource-connection:observe"
 )
 
 // OktaResourceConnectionSnapshot is the row state an audit entry records; it
@@ -25,6 +26,7 @@ type OktaResourceConnectionSnapshot struct {
 	Resource          string `json:"resource"`
 	Audience          string `json:"audience"`
 	OktaApplicationID string `json:"okta_application_id,omitempty"`
+	ObservedResult    string `json:"observed_result,omitempty"`
 	State             string `json:"state"`
 }
 
@@ -37,10 +39,12 @@ type LogOktaResourceConnectionEvent struct {
 	ActorSlug        *string
 
 	ResourceConnectionURN urn.OktaResourceConnection
-	ServerName            string
-	ServerSlug            string
-	SnapshotBefore        *OktaResourceConnectionSnapshot
-	SnapshotAfter         *OktaResourceConnectionSnapshot
+	// ServerName is the upstream's resource indicator on observe entries,
+	// which belong to the upstream rather than one server.
+	ServerName     string
+	ServerSlug     string
+	SnapshotBefore *OktaResourceConnectionSnapshot
+	SnapshotAfter  *OktaResourceConnectionSnapshot
 }
 
 func (l *Logger) LogOktaResourceConnectionConfirm(ctx context.Context, dbtx repo.DBTX, event LogOktaResourceConnectionEvent) error {
@@ -49,6 +53,12 @@ func (l *Logger) LogOktaResourceConnectionConfirm(ctx context.Context, dbtx repo
 
 func (l *Logger) LogOktaResourceConnectionReset(ctx context.Context, dbtx repo.DBTX, event LogOktaResourceConnectionEvent) error {
 	return l.logOktaResourceConnection(ctx, dbtx, ActionOktaResourceConnectionReset, event)
+}
+
+// LogOktaResourceConnectionObserve records a change in what the exchange
+// path observed for a confirmed resource connection.
+func (l *Logger) LogOktaResourceConnectionObserve(ctx context.Context, dbtx repo.DBTX, event LogOktaResourceConnectionEvent) error {
+	return l.logOktaResourceConnection(ctx, dbtx, ActionOktaResourceConnectionObserve, event)
 }
 
 func (l *Logger) logOktaResourceConnection(ctx context.Context, dbtx repo.DBTX, action Action, event LogOktaResourceConnectionEvent) error {

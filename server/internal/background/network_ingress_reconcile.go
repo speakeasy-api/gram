@@ -17,11 +17,15 @@ const (
 	NetworkIngressReconcileActivityName = "ReconcileNetworkIngress"
 
 	networkIngressReconcileWorkflowIDPrefix = "v1:network-ingress-reconcile:"
-	// The executor has its own five-minute deadline. Leave cancellation margin,
-	// then budget all five attempts plus 5s, 10s, 20s and 40s backoffs.
-	networkIngressReconcileActivityTimeout     = 5*time.Minute + 30*time.Second
-	networkIngressReconcileActivityRetryBudget = 29 * time.Minute
-	networkIngressReconcileWorkflowRunTimeout  = 35 * time.Minute
+	// The executor has its own five-minute deadline. Leave cancellation margin.
+	networkIngressReconcileActivityTimeout = 5*time.Minute + 30*time.Second
+	// Retryable failures, mostly teardown waiting on provider finalizers or a
+	// transient Kubernetes/database outage, keep retrying with capped backoff for
+	// just under an hour. The hourly sweep then re-drives anything still due, so
+	// an ingress is never left without a pending retry for long.
+	networkIngressReconcileActivityRetryBudget = 55 * time.Minute
+	networkIngressReconcileActivityMaxBackoff  = 2 * time.Minute
+	networkIngressReconcileWorkflowRunTimeout  = 60 * time.Minute
 	networkIngressReconcileExecutionTimeout    = 6 * time.Hour
 )
 
@@ -106,7 +110,10 @@ func networkIngressReconcilePass(ctx workflow.Context, params NetworkIngressReco
 		StartToCloseTimeout:    networkIngressReconcileActivityTimeout,
 		ScheduleToCloseTimeout: networkIngressReconcileActivityRetryBudget,
 		HeartbeatTimeout:       30 * time.Second,
-		RetryPolicy:            &temporal.RetryPolicy{InitialInterval: 5 * time.Second, BackoffCoefficient: 2, MaximumInterval: time.Minute, MaximumAttempts: 5},
+		// No attempt cap: ScheduleToCloseTimeout bounds the retries instead.
+		// Non-retryable codes (for example rejected provider credentials) stop
+		// immediately and wait for the sweep or a user retry.
+		RetryPolicy: &temporal.RetryPolicy{InitialInterval: 5 * time.Second, BackoffCoefficient: 2, MaximumInterval: networkIngressReconcileActivityMaxBackoff, MaximumAttempts: 0},
 	})
 	var result NetworkIngressReconcileResult
 	if err := workflow.ExecuteActivity(ctx, NetworkIngressReconcileActivityName, params).Get(ctx, &result); err != nil {

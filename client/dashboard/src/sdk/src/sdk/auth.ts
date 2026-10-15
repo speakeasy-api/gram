@@ -7,8 +7,11 @@ import { authEnterDemo } from "../funcs/authEnterDemo.js";
 import { authInfo } from "../funcs/authInfo.js";
 import { authLogin } from "../funcs/authLogin.js";
 import { authLogout } from "../funcs/authLogout.js";
+import { authLogoutEverywhere } from "../funcs/authLogoutEverywhere.js";
 import { authRegister } from "../funcs/authRegister.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
+import { authTransferIn } from "../funcs/authTransferIn.js";
+import { authTransferOut } from "../funcs/authTransferOut.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import {
   AuthCallbackRequest,
@@ -19,6 +22,14 @@ import {
   AuthLoginResponse,
 } from "../models/operations/authlogin.js";
 import {
+  AuthTransferInRequest,
+  AuthTransferInResponse,
+} from "../models/operations/authtransferin.js";
+import {
+  AuthTransferOutRequest,
+  AuthTransferOutResponse,
+} from "../models/operations/authtransferout.js";
+import {
   EnterDemoRequest,
   EnterDemoResponse,
   EnterDemoSecurity,
@@ -28,6 +39,11 @@ import {
   LogoutResponse,
   LogoutSecurity,
 } from "../models/operations/logout.js";
+import {
+  LogoutEverywhereRequest,
+  LogoutEverywhereResponse,
+  LogoutEverywhereSecurity,
+} from "../models/operations/logouteverywhere.js";
 import {
   RegisterRequest,
   RegisterSecurity,
@@ -137,6 +153,25 @@ export class Auth extends ClientSDK {
   }
 
   /**
+   * logoutEverywhere auth
+   *
+   * @remarks
+   * Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.
+   */
+  async logoutEverywhere(
+    request?: LogoutEverywhereRequest | undefined,
+    security?: LogoutEverywhereSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<LogoutEverywhereResponse> {
+    return unwrapAsync(authLogoutEverywhere(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * register auth
    *
    * @remarks
@@ -170,6 +205,40 @@ export class Auth extends ClientSDK {
       this,
       request,
       security,
+      options,
+    ));
+  }
+
+  /**
+   * transferIn auth
+   *
+   * @remarks
+   * Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.
+   */
+  async transferIn(
+    request?: AuthTransferInRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AuthTransferInResponse | undefined> {
+    return unwrapAsync(authTransferIn(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * transferOut auth
+   *
+   * @remarks
+   * Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.
+   */
+  async transferOut(
+    request?: AuthTransferOutRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AuthTransferOutResponse | undefined> {
+    return unwrapAsync(authTransferOut(
+      this,
+      request,
       options,
     ));
   }

@@ -102,6 +102,25 @@ func TestStaffOAuthCodeExchangeRequiresLiveStaff(t *testing.T) {
 	require.Equal(t, staffClient, claims.ClientID)
 }
 
+func TestStaffOAuthTokenReportsGrantedScopes(t *testing.T) {
+	t.Parallel()
+	for _, scopes := range [][]string{{ScopeRead}, {ScopeRead, ScopeWrite}} {
+		tokens, store, _ := staffTokensFixture(t)
+		store.connection.Scopes = scopes
+		for _, request := range []*http.Request{
+			staffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}}),
+			staffTokenRequest("refresh_token", url.Values{"refresh_token": {"old-refresh-token"}}),
+		} {
+			response := httptest.NewRecorder()
+			tokens.TokenHandler().ServeHTTP(response, request)
+			require.Equal(t, http.StatusOK, response.Code)
+			var body map[string]any
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+			require.Equal(t, strings.Join(scopes, " "), body["scope"])
+		}
+	}
+}
+
 func TestStaffOAuthRefreshAndInvalidGrant(t *testing.T) {
 	t.Parallel()
 	tokens, store, verifier := staffTokensFixture(t)

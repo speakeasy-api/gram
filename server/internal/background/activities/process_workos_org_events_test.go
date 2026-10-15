@@ -173,7 +173,7 @@ func TestProcessWorkOSOrganizationEvents_CreatesOrgAndUpdatesWorkOSExternalIDWhe
 	const workosOrgID = "org_01HZTESTBAD"
 	organizationID := orgid.FromWorkOSID(workosOrgID)
 
-	// The first event has no external_id, so Gram creates the org with a
+	// The first event has no external_id, so Speakeasy creates the org with a
 	// deterministic ID and updates WorkOS after commit. The second event still
 	// updates the existing workos_id-linked org even if its payload carries a
 	// different external_id.
@@ -1964,7 +1964,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionEventUnknownOrgNoError(t *tes
 
 	const workosOrgID = "org_01HZSSOUNKORG"
 
-	// connection.activated for a workos org that has no matching Gram org — UPDATE
+	// connection.activated for a workos org that has no matching Speakeasy org — UPDATE
 	// matches 0 rows, which is fine (no error).
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOUNK", workosOrgID)},
@@ -2223,4 +2223,55 @@ func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t 
 		}
 	}
 	require.Equal(t, 1, active)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateRecordsNewOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_org_events_default_host")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZDEFAULTHOST"
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{ID: "event_01HZHOSTA", Event: "organization.created", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Hosted","updated_at":"2026-05-06T11:00:00Z"}`)},
+			{ID: "event_01HZHOSTB", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Hosted Renamed","updated_at":"2026-05-06T12:00:00Z"}`)},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity.SetNewOrganizationDefaultHost(conv.ToPGText("https://ai.example.test"))
+	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, "Hosted Renamed", row.Name)
+	require.Equal(t, conv.ToPGText("https://ai.example.test"), row.DefaultHost)
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateWithoutNewOrganizationDefaultHostRecordsNone(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_org_events_no_default_host")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZNODEFAULTHOST"
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{ID: "event_01HZNOHOST", Event: "organization.created", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Unhosted","updated_at":"2026-05-06T11:00:00Z"}`)},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.False(t, row.DefaultHost.Valid)
 }

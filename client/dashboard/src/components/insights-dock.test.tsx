@@ -6,6 +6,7 @@ import { InsightsProvider } from "./insights-dock";
 import { GramElementsProvider } from "@/elements";
 
 const mocks = vi.hoisted(() => ({
+  elementsConfig: vi.fn(),
   skills: vi.fn(() => ({
     data: undefined as
       | {
@@ -66,6 +67,7 @@ vi.mock("@/elements", async () => {
       };
     }) => {
       const hasRuntime = useContext(RuntimeContext);
+      mocks.elementsConfig(config);
       if (config.composer) mocks.skillContext = config.composer.skillContext;
       if (config.history) {
         mocks.resolveCreator = config.history.resolveCreator;
@@ -178,6 +180,7 @@ vi.mock("@/routes", () => ({
 
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.elementsConfig.mockClear();
   mocks.skills.mockReturnValue({
     data: undefined,
     isPending: false,
@@ -200,6 +203,34 @@ function AssistantEditor(): JSX.Element {
 }
 
 describe("InsightsProvider", () => {
+  it("does not connect project MCP inventory in the shared server-assistant runtime", () => {
+    mocks.activeRoute = "home";
+    const mcps = Array.from({ length: 1767 }, (_, i) => ({
+      url: `https://gram.example/mcp/server-${i}`,
+      name: `server-${i}`,
+    }));
+    render(
+      <InsightsProvider
+        mcpConfig={{
+          projectSlug: "project",
+          mcp: "https://gram.example/mcp/legacy",
+          mcps,
+        }}
+        title="Assistant"
+        subtitle=""
+      >
+        <div />
+      </InsightsProvider>,
+    );
+    expect(mocks.elementsConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectSlug: "project",
+        mcp: undefined,
+        mcps: [],
+        history: expect.objectContaining({ enabled: true }),
+      }),
+    );
+  });
   it.each([
     ["target-id", true],
     ["project-id", false],

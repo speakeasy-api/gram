@@ -50,6 +50,14 @@ vi.mock("@/components/ui/Dropdown", () => ({
     <>{children}</>
   ),
 }));
+vi.mock("@/components/icon-dither", () => ({
+  useIconDither: () => ({
+    canvasRef: { current: null },
+    start: () => {},
+    stop: () => {},
+  }),
+}));
+
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => client }));
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
@@ -74,6 +82,7 @@ afterEach(() => {
 function plugin(agentPluginsV1Compatible: boolean): Plugin {
   return {
     agentPluginsV1Compatible,
+    autoCreated: false,
     createdAt: new Date("2026-08-07T00:00:00Z"),
     id: "plugin-id",
     name: "Portable plugin",

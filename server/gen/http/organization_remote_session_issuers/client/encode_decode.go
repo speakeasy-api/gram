@@ -298,6 +298,9 @@ func EncodeListIssuersRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		if p.Tier != nil {
+			values.Add("tier", *p.Tier)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -2403,6 +2406,241 @@ func DecodeMigrateIssuerResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildSetEMAProvidersRequest instantiates a HTTP request object with method
+// and path set to call the "organizationRemoteSessionIssuers" service
+// "setEMAProviders" endpoint
+func (c *Client) BuildSetEMAProvidersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetEMAProvidersOrganizationRemoteSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionIssuers", "setEMAProviders", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetEMAProvidersRequest returns an encoder for requests sent to the
+// organizationRemoteSessionIssuers setEMAProviders server.
+func EncodeSetEMAProvidersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionissuers.SetEMAProvidersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionIssuers", "setEMAProviders", "*organizationremotesessionissuers.SetEMAProvidersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetEMAProvidersRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetEMAProvidersResponse returns a decoder for responses returned by
+// the organizationRemoteSessionIssuers setEMAProviders endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetEMAProvidersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetEMAProvidersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetEMAProvidersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			err = ValidateSetEMAProvidersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			res := NewSetEMAProvidersEMAProviderOrderOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetEMAProvidersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			err = ValidateSetEMAProvidersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			return nil, NewSetEMAProvidersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetEMAProvidersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			err = ValidateSetEMAProvidersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			return nil, NewSetEMAProvidersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetEMAProvidersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			err = ValidateSetEMAProvidersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			return nil, NewSetEMAProvidersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetEMAProvidersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			err = ValidateSetEMAProvidersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			return nil, NewSetEMAProvidersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetEMAProvidersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			err = ValidateSetEMAProvidersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			return nil, NewSetEMAProvidersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetEMAProvidersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			err = ValidateSetEMAProvidersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			return nil, NewSetEMAProvidersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetEMAProvidersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			err = ValidateSetEMAProvidersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			return nil, NewSetEMAProvidersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetEMAProvidersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+				}
+				err = ValidateSetEMAProvidersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+				}
+				return nil, NewSetEMAProvidersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetEMAProvidersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+				}
+				err = ValidateSetEMAProvidersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+				}
+				return nil, NewSetEMAProvidersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "setEMAProviders", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetEMAProvidersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			err = ValidateSetEMAProvidersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			}
+			return nil, NewSetEMAProvidersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "setEMAProviders", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildFetchIssuerMetadataRequest instantiates a HTTP request object with
 // method and path set to call the "organizationRemoteSessionIssuers" service
 // "fetchIssuerMetadata" endpoint
@@ -2883,6 +3121,42 @@ func DecodeRefreshIssuerMetadataResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder builds a value
+// of type *types.EMAProviderOrder from a value of type
+// *EMAProviderOrderResponseBody.
+func unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v *EMAProviderOrderResponseBody) *types.EMAProviderOrder {
+	if v == nil {
+		return nil
+	}
+	res := &types.EMAProviderOrder{
+		VendorIssuer: *v.VendorIssuer,
+		IsDefault:    *v.IsDefault,
+	}
+	res.Providers = make([]*types.EMAProvider, len(v.Providers))
+	for i, val := range v.Providers {
+		if val == nil {
+			res.Providers[i] = nil
+			continue
+		}
+		res.Providers[i] = unmarshalEMAProviderResponseBodyToTypesEMAProvider(val)
+	}
+
+	return res
+}
+
+// unmarshalEMAProviderResponseBodyToTypesEMAProvider builds a value of type
+// *types.EMAProvider from a value of type *EMAProviderResponseBody.
+func unmarshalEMAProviderResponseBodyToTypesEMAProvider(v *EMAProviderResponseBody) *types.EMAProvider {
+	res := &types.EMAProvider{
+		Kind:                    *v.Kind,
+		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
+		InternalSessionIssuerID: v.InternalSessionIssuerID,
+		UnavailableReason:       v.UnavailableReason,
+	}
+
+	return res
+}
+
 // unmarshalOrganizationRemoteSessionIssuerResponseBodyToOrganizationremotesessionissuersOrganizationRemoteSessionIssuer
 // builds a value of type
 // *organizationremotesessionissuers.OrganizationRemoteSessionIssuer from a
@@ -2928,6 +3202,7 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          v.OmitScopeFallback,
 		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
 		CreatedAt:                                  *v.CreatedAt,
 		UpdatedAt:                                  *v.UpdatedAt,
@@ -2992,6 +3267,9 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 			res.ScopeOverride[i] = val
 		}
 	}
+	if v.EmaProviders != nil {
+		res.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v.EmaProviders)
+	}
 
 	return res
 }
@@ -3045,6 +3323,30 @@ func unmarshalIssuerFieldMismatchResponseBodyToTypesIssuerFieldMismatch(v *Issue
 		for i, val := range v.TargetValues {
 			res.TargetValues[i] = val
 		}
+	}
+
+	return res
+}
+
+// marshalTypesEMAProviderInputToEMAProviderInputRequestBody builds a value of
+// type *EMAProviderInputRequestBody from a value of type
+// *types.EMAProviderInput.
+func marshalTypesEMAProviderInputToEMAProviderInputRequestBody(v *types.EMAProviderInput) *EMAProviderInputRequestBody {
+	res := &EMAProviderInputRequestBody{
+		Kind:                  v.Kind,
+		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
+	}
+
+	return res
+}
+
+// marshalEMAProviderInputRequestBodyToTypesEMAProviderInput builds a value of
+// type *types.EMAProviderInput from a value of type
+// *EMAProviderInputRequestBody.
+func marshalEMAProviderInputRequestBodyToTypesEMAProviderInput(v *EMAProviderInputRequestBody) *types.EMAProviderInput {
+	res := &types.EMAProviderInput{
+		Kind:                  v.Kind,
+		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
 	}
 
 	return res

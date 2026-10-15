@@ -6,7 +6,6 @@ import {
   FolderIcon,
   HistoryIcon,
   LayoutGridIcon,
-  PlugZapIcon,
   ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
@@ -318,20 +317,6 @@ export function RecordNav({
               {/* No query and no pending state: the count came with the
                   record. */}
               <SidebarMenuBadge>{org.member_count}</SidebarMenuBadge>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Admin MCP">
-                <Link to="/mcp-setup" {...currentProps(false)}>
-                  <PlugZapIcon />
-                  <span>Admin MCP</span>
-                </Link>
-              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroupContent>

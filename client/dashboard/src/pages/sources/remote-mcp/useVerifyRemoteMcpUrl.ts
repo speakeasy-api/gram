@@ -5,6 +5,13 @@ type VerifyResult = {
   verified: boolean;
   message: string;
   outcome?: "mcp_available" | "authentication_required";
+  /**
+   * Set only when the challenge advertised a valid protected resource metadata
+   * URL. `authentication_required` on its own says nothing about OAuth — a
+   * bare 401 for Basic or an API key reports the same outcome — so this is
+   * what distinguishes an upstream that User Identity can actually set up.
+   */
+  protectedResourceMetadataUrl?: string;
 };
 
 function unreachableMessage(reason: string | undefined): string {
@@ -83,6 +90,7 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
             verified: true,
             message: "MCP server is available and requires authentication",
             outcome: response.outcome,
+            protectedResourceMetadataUrl: response.protectedResourceMetadataUrl,
           });
           break;
         case "invalid_mcp_response": {

@@ -35,7 +35,7 @@ export interface BulkAction {
  * extra work — that's the property that actually matters when reviewing
  * several selected rows. `sticky top-0` is additionally set for the rarer
  * case of the whole page scrolling past it, but verify it actually takes
- * effect before relying on it in a new context: at least one of Gram's
+ * effect before relying on it in a new context: at least one of Speakeasy's
  * shared page layouts wraps content in a Tailwind `@container` element,
  * and `container-type` implicitly applies CSS containment, which breaks
  * `position: sticky` for any descendant trying to stick relative to a

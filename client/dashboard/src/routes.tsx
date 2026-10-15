@@ -59,7 +59,14 @@ import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import {
+  BuiltInDashboardRoute,
+  DashboardRoute,
+  DashboardsIndex,
+  DashboardsRoot,
+} from "./pages/explore/Dashboards";
 import Explore from "./pages/explore/Explore";
+import SignalsIntelligenceRoute from "./components/signals-intelligence-route";
 import IdentitiesIndex, {
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
@@ -69,6 +76,7 @@ import IdentityOverview from "./pages/identities/IdentityOverview";
 import IdentityAccess from "./pages/identities/IdentityAccess";
 import IdentityUsage from "./pages/identities/IdentityUsage";
 import IdentitySecurity from "./pages/identities/IdentitySecurity";
+import IdentityFindingsPage from "./pages/identities/IdentityFindings";
 import IdentityCost from "./pages/identities/IdentityCost";
 import IdentityDevices from "./pages/identities/IdentityDevices";
 import IdentityConnections from "./pages/identities/IdentityConnections";
@@ -86,6 +94,7 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
+import OrgGateway from "./pages/org/OrgGateway";
 import HeadlessMode from "./pages/org/HeadlessMode";
 import PlatformMCPRedirect from "./pages/org/PlatformMCPRedirect";
 import OrgSkills from "./pages/org/OrgSkills";
@@ -104,14 +113,22 @@ import {
   EncryptionKeysRoot,
 } from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
+import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
+import {
+  UserSessionIssuersPage,
+  UserSessionIssuersRoot,
+} from "./pages/user-session-issuers/UserSessionIssuers";
 import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
 import {
-  WorkloadIdentitiesPage,
-  WorkloadIdentitiesRoot,
-} from "./pages/workload-identities/WorkloadIdentities";
+  WorkloadIssuersPage,
+  WorkloadIssuersRoot,
+} from "./pages/workload-identities/WorkloadIssuers";
+import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
+import { CatalogPlatformPage } from "./pages/workload-identities/setup/CatalogPlatformPage";
+import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -134,16 +151,12 @@ import SecurityOverview, {
 import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import {
-  ShadowAIIndexRedirect,
   ShadowAIRoot,
-  ShadowMCPLegacyRedirect,
+  ShadowAISectionRedirect,
+  ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
-import ShadowAIHarnesses from "./pages/shadow-ai/ShadowAIHarnesses";
-import ShadowAIAssistants from "./pages/shadow-ai/ShadowAIAssistants";
-import ShadowAIModels from "./pages/shadow-ai/ShadowAIModels";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
-import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
@@ -364,6 +377,13 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  signalsIntelligence: {
+    title: "Signals intelligence",
+    url: "signals-intelligence",
+    icon: "radio",
+    stage: "preview",
+    component: SignalsIntelligenceRoute,
+  },
   skills: {
     title: "Skills",
     url: "skills",
@@ -545,6 +565,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          guardrails: {
+            title: "MCP Server Guardrails",
+            url: "guardrails",
+          },
           sessions: {
             title: "MCP Server Clients and Sessions",
             url: "sessions",
@@ -696,26 +720,38 @@ const ROUTE_STRUCTURE = {
           overview: { title: "Overview", url: "overview" },
           mcpServers: { title: "MCP Servers", url: "mcp-servers" },
           sessions: { title: "Sessions", url: "sessions" },
-          settings: { title: "Settings", url: "settings" },
+          // Merged into Overview; RemoteSessionClientDetail redirects it there.
+          settings: {
+            title: "Settings",
+            url: "settings",
+            legacyRedirect: true,
+          },
         },
       },
     },
   },
 
   fleet: { title: "Fleet", url: "fleet", icon: "bot", component: Fleet },
-  workloadIdentities: {
+  // Legacy project-scoped URLs for the Access Hub and the Workload Identities
+  // page redirect to the organization-level Access Hub.
+  legacyWorkloadIdentities: {
     title: "Workload Identities",
     url: "workload-identities",
-    icon: "cpu",
-    stage: "preview",
-    component: WorkloadIdentitiesRoot,
-    indexComponent: WorkloadIdentitiesPage,
+    legacyRedirect: true,
+    component: AccessHubRedirect,
+  },
+  legacyAccessHub: {
+    title: "Access Hub",
+    url: "access-hub/*",
+    legacyRedirect: true,
+    component: AccessHubRedirect,
   },
 
   agents: {
     title: "Agent Identity",
     url: "agent-management",
     icon: "bot",
+    stage: "preview",
     component: AgentsPage,
   },
   // One page per person, reached from every surface that renders a human. The
@@ -760,6 +796,11 @@ const ROUTE_STRUCTURE = {
             title: "Identity Security",
             url: "security",
             component: IdentitySecurity,
+          },
+          findings: {
+            title: "Identity Findings",
+            url: "findings",
+            component: IdentityFindingsPage,
           },
           cost: {
             title: "Identity Cost",
@@ -807,6 +848,26 @@ const ROUTE_STRUCTURE = {
     icon: "telescope",
     component: Explore,
     stage: "preview",
+  },
+  dashboards: {
+    title: "Dashboards",
+    url: "dashboards",
+    icon: "layout-grid",
+    component: DashboardsRoot,
+    indexComponent: DashboardsIndex,
+    stage: "preview",
+    subPages: {
+      builtIn: {
+        title: "Dashboard",
+        url: "builtin/:slug",
+        component: BuiltInDashboardRoute,
+      },
+      detail: {
+        title: "Dashboard",
+        url: ":dashboardId",
+        component: DashboardRoute,
+      },
+    },
   },
   logs: {
     title: "Tool Logs",
@@ -902,30 +963,27 @@ const ROUTE_STRUCTURE = {
     icon: "flag",
     component: RiskEventsPage,
   },
-  // Shadow MCP is a subset of Shadow AI, not a sibling: a shadow MCP server
-  // is reached by some AI tool, and one admin answers "what are people
-  // running?" and "what is it talking to?" in the same sitting. The two tabs
-  // are routed rather than toggled so either half survives being linked.
+  // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
+  // and is not in the nav. Its section URLs stay because tickets, bookmarks
+  // and block messages link to them: every index page redirects to
+  // Guardrails, and the tool and server detail pages beneath keep rendering.
   //
   // Project-level placement with organization-scoped reads behind it, the
   // same shape as identities above and for the same reason.
   shadowAI: {
-    // "Shadow AI" in the nav, matching the URL segment, which is also what
-    // the redirects below and the links already in tickets point at.
     title: "Shadow AI",
     url: "shadow-ai",
     icon: "shield",
     component: ShadowAIRoot,
-    indexComponent: ShadowAIIndexRedirect,
+    indexComponent: ShadowAISectionRedirect,
     subPages: {
-      // Each tool tab opens a row onto the people running that tool. The
-      // detail is nested under its tab, as the server detail is under MCPs,
-      // so the breadcrumb says which tab a pasted link came from.
+      // A tool's detail is nested under its category, as the server detail
+      // is under MCPs, so the breadcrumb says which kind a pasted link is.
       harnesses: {
         title: "Harnesses",
         url: "harnesses",
         component: ShadowAIRoot,
-        indexComponent: ShadowAIHarnesses,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
@@ -938,7 +996,7 @@ const ROUTE_STRUCTURE = {
         title: "Assistants",
         url: "assistants",
         component: ShadowAIRoot,
-        indexComponent: ShadowAIAssistants,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
@@ -951,7 +1009,7 @@ const ROUTE_STRUCTURE = {
         title: "Models",
         url: "models",
         component: ShadowAIRoot,
-        indexComponent: ShadowAIModels,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
@@ -963,8 +1021,10 @@ const ROUTE_STRUCTURE = {
       mcps: {
         title: "MCPs",
         url: "mcps",
-        component: ShadowMCPRoot,
-        indexComponent: ShadowMCP,
+        component: ShadowAIRoot,
+        // The MCPs index was the approvals queue; it lands on the MCP
+        // approvals tab of Guardrails rather than the policies list.
+        indexComponent: ShadowMCPIndexRedirect,
         subPages: {
           detail: {
             title: "Shadow MCP Server",
@@ -984,7 +1044,7 @@ const ROUTE_STRUCTURE = {
     title: "Shadow MCP",
     url: "shadow-mcp",
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPLegacyRedirect,
+    indexComponent: ShadowMCPIndexRedirect,
     subPages: {
       detail: {
         title: "Shadow MCP Server",
@@ -1035,8 +1095,9 @@ const ROUTE_STRUCTURE = {
             title: "Plugin Overview",
             url: "overview",
           },
+          // Keep existing server links working after merging servers into overview.
           servers: {
-            title: "Plugin MCP Servers",
+            title: "Plugin Overview",
             url: "servers",
           },
           skills: {
@@ -1309,6 +1370,12 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
+  gateway: {
+    title: "Gateway",
+    url: "gateway",
+    icon: "network",
+    component: OrgGateway,
+  },
   legacyData: {
     title: "Event Feed",
     url: "data",
@@ -1355,6 +1422,22 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "webhook",
     stage: "beta",
     component: OrgWebhooks,
+  },
+  // Rolled out behind gram-user-session-issuer-dashboard, which the root
+  // checks; the sidebar hides the entry while it is off.
+  userSessionIssuers: {
+    title: "Speakeasy Authorization Servers",
+    url: "user-session-issuers",
+    icon: "key-round",
+    component: UserSessionIssuersRoot,
+    indexComponent: UserSessionIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Speakeasy Authorization Server",
+        url: ":issuerId",
+        component: UserSessionIssuerDetail,
+      },
+    },
   },
   externalServices: {
     title: "External Services",
@@ -1428,6 +1511,28 @@ const ORG_ROUTE_STRUCTURE = {
           keys: { title: "Keys", url: "keys" },
           settings: { title: "Settings", url: "settings" },
         },
+      },
+    },
+  },
+  // The trust policy is configured for the organization as a whole, so the
+  // Access Hub names no project.
+  workloadIssuers: {
+    title: "Access Hub",
+    url: "access-hub",
+    icon: "cpu",
+    stage: "preview",
+    component: WorkloadIssuersRoot,
+    indexComponent: WorkloadIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Trusted Platform",
+        url: ":issuerId",
+        component: WorkloadIssuerDetailPage,
+      },
+      catalogPlatform: {
+        title: "Catalog Platform",
+        url: "catalog/:platformKey",
+        component: CatalogPlatformPage,
       },
     },
   },
@@ -1607,10 +1712,24 @@ const ORG_ROUTE_STRUCTURE = {
 type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
-/** The URL segments used by org-level routes (for redirect logic). */
-export const orgRoutePaths = Object.values(ORG_ROUTE_STRUCTURE)
-  .map((r) => r.url)
-  .filter(Boolean);
+function routePaths(
+  routes: Record<string, RouteEntry>,
+  parent?: string,
+): string[] {
+  return Object.values(routes).flatMap((route) => {
+    if (!route.url) return [];
+    const path = parent ? `${parent}/${route.url}` : route.url;
+    return [path, ...routePaths(route.subPages ?? {}, path)];
+  });
+}
+
+/**
+ * The org-relative path of every org-level route, nested pages included (for
+ * redirect logic). A detail page such as "access-hub/:issuerId" has to be
+ * listed with its parent, or its URL reads as a path inside a project that
+ * happens to share the parent's slug.
+ */
+export const orgRoutePaths = routePaths(ORG_ROUTE_STRUCTURE);
 
 export const useOrgRoutes = (): OrgRoutesWithGoTo => {
   const location = useLocation();

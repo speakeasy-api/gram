@@ -160,6 +160,15 @@ func (s *DelegationService) Resolve(ctx context.Context, b DelegationBinding, au
 	}
 	return s.service.Resolve(ctx, b, authority) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
 }
+
+// Check reports whether a retained credential still belongs to the current
+// trusted registration, without renewing it or contacting the provider.
+func (s *DelegationService) Check(ctx context.Context, b DelegationBinding, authority DelegationAuthorizer) error {
+	if authority != nil {
+		authority = delegationAuthority{authority}
+	}
+	return s.service.Check(ctx, b, authority) //nolint:wrapcheck // Compatibility facade preserves the public sentinel error and message contract.
+}
 func (s *DelegationService) Revoke(ctx context.Context, b DelegationBinding, authority DelegationAuthorizer) error {
 	if authority != nil {
 		authority = delegationAuthority{authority}

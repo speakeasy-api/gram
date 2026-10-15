@@ -293,37 +293,43 @@ func TestResolveClientIdentity_StampsBothProtocolVersions(t *testing.T) {
 
 // TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion covers the
 // derivation's downgrade arm: a session whose handshake requested a revision
-// outside the supported set was answered the newest supported one, and the
+// outside the handshake revisions was answered the newest one, and the
 // replayed negotiated attribute must reproduce that answer rather than echo
-// the stored request.
+// the stored request. A supported revision without initialize and an
+// unrecognized revision both take that arm.
 func TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
-	logger := testenv.NewLogger(t)
-	store, payload := newClientIdentityFixture(t)
+	for _, requested := range []string{mcpversions.Version20260728, "2031-01-01"} {
+		t.Run(requested, func(t *testing.T) {
+			t.Parallel()
 
-	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", mcpversions.Version20260728)
+			ctx := t.Context()
+			logger := testenv.NewLogger(t)
+			store, payload := newClientIdentityFixture(t)
 
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+			storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", requested)
 
-	spanCtx, span := provider.Tracer("test").Start(ctx, "tools/call")
-	resolveClientIdentity(spanCtx, logger, store, payload, nil)
-	span.End()
+			recorder := tracetest.NewSpanRecorder()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+			t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
 
-	ended := recorder.Ended()
-	require.Len(t, ended, 1)
+			spanCtx, span := provider.Tracer("test").Start(ctx, "tools/call")
+			resolveClientIdentity(spanCtx, logger, store, payload, nil)
+			span.End()
 
-	got := map[string]string{}
-	for _, kv := range ended[0].Attributes() {
-		got[string(kv.Key)] = kv.Value.AsString()
+			ended := recorder.Ended()
+			require.Len(t, ended, 1)
+
+			got := map[string]string{}
+			for _, kv := range ended[0].Attributes() {
+				got[string(kv.Key)] = kv.Value.AsString()
+			}
+
+			// The expected value is pinned rather than derived from the
+			// supported set: it is the newest revision defining initialize.
+			require.Equal(t, requested, got[string(attr.McpRequestedProtocolVersionKey)])
+			require.Equal(t, mcpversions.Version20251125, got[string(attr.McpNegotiatedProtocolVersionKey)])
+		})
 	}
-
-	// The expected value is pinned rather than derived from the supported
-	// set, so raising the ceiling breaks this test and forces choosing a new
-	// out-of-set stored version that keeps the downgrade arm exercised.
-	require.Equal(t, mcpversions.Version20260728, got[string(attr.McpRequestedProtocolVersionKey)])
-	require.Equal(t, mcpversions.Version20251125, got[string(attr.McpNegotiatedProtocolVersionKey)])
 }

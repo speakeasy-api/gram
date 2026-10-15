@@ -29,6 +29,32 @@ describe("Admin MCP setup", () => {
       ),
     ).toBeTruthy();
 
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Claude Desktop" }), {
+      button: 0,
+    });
+    expect(
+      screen.getByText(
+        JSON.stringify(
+          {
+            mcpServers: {
+              "gram-admin": {
+                command: "npx",
+                args: ["-y", "mcp-remote@0.1.25", endpoint],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        { normalizer: (text) => text },
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "GRW-224" }).getAttribute("href"),
+    ).toBe(
+      "https://linear.app/speakeasy/issue/GRW-224/feat-set-up-admin-mcp-locally-in-claude-desktop",
+    );
+
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Codex" }), {
       button: 0,
     });
