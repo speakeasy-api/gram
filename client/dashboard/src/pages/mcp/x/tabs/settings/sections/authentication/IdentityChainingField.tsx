@@ -43,12 +43,14 @@ import {
   providerView,
   serviceName,
   addIssuerStep,
+  crossAppAccessStep,
   type ProviderView,
 } from "@/pages/org/identity-provider/services/emaServiceView";
 import { useOktaIssuerId } from "@/pages/org/identity-provider/services/useEmaServices";
 import {
   emaServiceHref,
   identityProvidersHref,
+  oktaViewHref,
 } from "@/pages/org/identity-provider/tabs";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import type { IdentityChainingPreparation } from "@gram/client/models/components/identitychainingpreparation.js";
@@ -855,7 +857,20 @@ export function IdentityChainingField({
                       {acceptanceLabel(row.lastAcceptedAt)}
                     </Text>
                   </div>
-                  {row.lastAcceptedAt ? (
+                  {row.kind !== "speakeasy" ? (
+                    orgAdmin ? (
+                      <SettingsLink
+                        to={identityHref(oktaViewHref("cross-app-access"))}
+                      >
+                        {crossAppAccessStep(vendor, row.name)}
+                      </SettingsLink>
+                    ) : (
+                      <Text muted small className="block">
+                        An organization admin sets up {vendor} in {row.name}’s
+                        Cross App Access.
+                      </Text>
+                    )
+                  ) : row.lastAcceptedAt ? (
                     <Collapsible>
                       <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-sm underline underline-offset-4">
                         <ChevronDown

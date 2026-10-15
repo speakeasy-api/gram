@@ -19,7 +19,7 @@ import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
 import { useOrganizationUserSessionIssuersInfinite } from "@gram/client/react-query/organizationUserSessionIssuers.js";
 
 import { SESSION_SECURITY } from "../identityProviderQueries";
-import { identityProvidersHref } from "../tabs";
+import { identityProvidersHref, oktaViewHref } from "../tabs";
 import { useEnterpriseIssuer } from "../useEnterpriseIssuer";
 import {
   EmaAllowedProvidersEditor,
@@ -31,6 +31,7 @@ import {
   PLACEHOLDER_SCOPE,
   providerFixLink,
   addIssuerStep,
+  crossAppAccessStep,
   trustCaveat,
   type ProviderView,
 } from "./emaServiceView";
@@ -210,7 +211,15 @@ function TrustRow({
           {PLACEHOLDER_SCOPE}
         </Text>
       )}
-      {!provider.placeholder &&
+      {!provider.placeholder && provider.kind !== "speakeasy" && (
+        <Link
+          className="text-muted-foreground block text-sm underline underline-offset-4"
+          to={oktaViewHref("cross-app-access")}
+        >
+          {crossAppAccessStep(service, provider.name)}
+        </Link>
+      )}
+      {provider.kind === "speakeasy" &&
         provider.usable &&
         provider.issuerUrl &&
         !provider.lastAcceptedAt && (
@@ -218,14 +227,16 @@ function TrustRow({
             {addIssuerStep(service)}
           </Text>
         )}
-      {!provider.placeholder && provider.usable && provider.issuerUrl && (
-        <div className="max-w-2xl">
-          <CopyableValue
-            label={`${provider.name}’s issuer URL`}
-            value={provider.issuerUrl}
-          />
-        </div>
-      )}
+      {provider.kind === "speakeasy" &&
+        provider.usable &&
+        provider.issuerUrl && (
+          <div className="max-w-2xl">
+            <CopyableValue
+              label={`${provider.name}’s issuer URL`}
+              value={provider.issuerUrl}
+            />
+          </div>
+        )}
       {fix && (
         <Link
           className="text-muted-foreground text-sm underline underline-offset-4"

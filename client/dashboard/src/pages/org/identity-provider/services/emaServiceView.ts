@@ -232,6 +232,11 @@ export function addIssuerStep(service: string): string {
   return `Add this issuer URL in ${service}’s admin settings, under Enterprise Managed Authorization.`;
 }
 
+/** The setup step for an external identity provider, done in its Cross App Access. */
+export function crossAppAccessStep(service: string, provider: string): string {
+  return `Set up ${service} in ${provider}’s Cross App Access`;
+}
+
 /** Why registering is the admin's job, said once on the service page. */
 export function trustCaveat(service: string): string {
   return `Each identity provider is added once in ${service}’s admin settings. Speakeasy can’t do that for you, and not every service offers it.`;

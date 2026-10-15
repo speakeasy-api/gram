@@ -577,14 +577,19 @@ describe("identity chaining vouched for by Speakeasy", () => {
       {
         name: "Okta",
         accepted: "Not accepted yet",
-        url: "https://okta.example.com",
+        url: undefined,
       },
     ]);
+    expect(screen.queryByText(/Add this issuer URL/)).toBeNull();
     expect(
-      screen.getAllByText(
-        /Add this issuer URL in example.com’s admin settings/,
-      ),
-    ).toHaveLength(1);
+      screen
+        .getByRole("link", {
+          name: "Set up example.com in Okta’s Cross App Access",
+        })
+        .getAttribute("href"),
+    ).toBe(
+      "/org/identity?tab=identity-providers&provider=okta&view=cross-app-access",
+    );
     expect(
       screen
         .getByRole("link", { name: "Every server that reaches example.com" })
