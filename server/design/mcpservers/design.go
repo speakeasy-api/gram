@@ -466,7 +466,7 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("slug", String, "A URL-safe, project-unique slug derived server-side from the name and ID")
-	Attribute("platform_endpoint_slug", String, "An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.")
+	Attribute("platform_endpoint_slug", String, "The slug of this server's primary platform endpoint, the oldest one. Absent when no platform endpoint exists; never a custom-domain slug.")
 	Attribute("environment_id", String, "The ID of the environment associated with the server", func() {
 		Format(FormatUUID)
 	})
@@ -490,6 +490,11 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
+	Attribute("toolset", McpServerToolsetSummary, "A summary of the backing toolset. Present only for toolset-backed (hosted) servers whose toolset is live.")
+	Attribute("primary_endpoint_id", String, "The ID of the endpoint that stands for this server when a single address must be chosen: domain-root custom-domain endpoints first, then other custom-domain endpoints, then platform endpoints. Absent when the server has no addressable endpoint.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("primary_endpoint_url", String, "The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.")
 	Attribute("created_at", String, func() {
 		Description("When the MCP server was created")
 		Format(FormatDateTime)
@@ -500,6 +505,28 @@ var McpServer = Type("McpServer", func() {
 	})
 
 	Required("id", "project_id", "visibility", "network_access_mode", "created_at", "updated_at")
+})
+
+var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A summary of the toolset backing a hosted MCP server.")
+
+	Attribute("id", String, "The ID of the toolset", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The slug of the toolset")
+	Attribute("name", String, "The name of the toolset")
+	Attribute("tool_count", Int, "The number of distinct configured tools in the latest toolset version, excluding external MCP proxy tools. Counts configured tool URNs, so it may differ from the number of tools that resolve against the active deployment.")
+	Attribute("tool_selection_mode", String, "The toolset's tool selection mode")
+	Attribute("external_mcp_slugs", ArrayOf(String), "The distinct slugs of the external MCP sources the toolset's configured tools come from, sorted")
+	Attribute("external_mcp_proxy_only", Boolean, "Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in")
+	Attribute("external_oauth_server_id", String, "The ID of the external OAuth server attached to the toolset, if any", func() {
+		Format(FormatUUID)
+	})
+	Attribute("registry_specifier", String, "The registry specifier the toolset originated from, if any")
+
+	Required("id", "slug", "name", "tool_count", "tool_selection_mode", "external_mcp_slugs", "external_mcp_proxy_only")
 })
 
 var ListMcpServersResult = Type("ListMcpServersResult", func() {

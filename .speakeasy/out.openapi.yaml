@@ -95259,7 +95259,14 @@ components:
             - private_only
         platform_endpoint_slug:
           type: string
-          description: An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.
+          description: The slug of this server's primary platform endpoint, the oldest one. Absent when no platform endpoint exists; never a custom-domain slug.
+        primary_endpoint_id:
+          type: string
+          description: 'The ID of the endpoint that stands for this server when a single address must be chosen: domain-root custom-domain endpoints first, then other custom-domain endpoints, then platform endpoints. Absent when the server has no addressable endpoint.'
+          format: uuid
+        primary_endpoint_url:
+          type: string
+          description: The public MCP URL of the primary endpoint. Absent when the server has no addressable endpoint.
         project_id:
           type: string
           description: The project ID this MCP server belongs to
@@ -95275,6 +95282,8 @@ components:
           type: string
           description: The ID of the tool variations group enabling MCP tool filtering for this server, if any.
           format: uuid
+        toolset:
+          $ref: '#/components/schemas/McpServerToolsetSummary'
         toolset_id:
           type: string
           description: The ID of the toolset used as the backend
@@ -95345,6 +95354,50 @@ components:
         - target_label
         - total_tool_calls
         - recent_tool_calls
+    McpServerToolsetSummary:
+      type: object
+      properties:
+        external_mcp_proxy_only:
+          type: boolean
+          description: Whether every configured tool is an external MCP proxy tool, so the real tool count is unknown until a user signs in
+        external_mcp_slugs:
+          type: array
+          items:
+            type: string
+          description: The distinct slugs of the external MCP sources the toolset's configured tools come from, sorted
+        external_oauth_server_id:
+          type: string
+          description: The ID of the external OAuth server attached to the toolset, if any
+          format: uuid
+        id:
+          type: string
+          description: The ID of the toolset
+          format: uuid
+        name:
+          type: string
+          description: The name of the toolset
+        registry_specifier:
+          type: string
+          description: The registry specifier the toolset originated from, if any
+        slug:
+          type: string
+          description: The slug of the toolset
+        tool_count:
+          type: integer
+          description: The number of distinct configured tools in the latest toolset version, excluding external MCP proxy tools. Counts configured tool URNs, so it may differ from the number of tools that resolve against the active deployment.
+          format: int64
+        tool_selection_mode:
+          type: string
+          description: The toolset's tool selection mode
+      description: A summary of the toolset backing a hosted MCP server.
+      required:
+        - id
+        - slug
+        - name
+        - tool_count
+        - tool_selection_mode
+        - external_mcp_slugs
+        - external_mcp_proxy_only
     MetaMcpDiscoveryFunnel:
       type: object
       properties:
