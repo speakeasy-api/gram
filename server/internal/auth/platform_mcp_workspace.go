@@ -9,8 +9,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/repo"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -21,6 +23,15 @@ import (
 // already belongs to an organization. Only a user with no organization may
 // create one from the OAuth flow.
 var ErrUserHasOrganization = errors.New("user already belongs to an organization")
+
+// ErrWorkspaceCreationInProgress refuses a Platform MCP workspace while
+// another submit for the same user is still creating one.
+var ErrWorkspaceCreationInProgress = errors.New("workspace creation already in progress")
+
+// platformMCPWorkspaceLeaseTTL bounds how long a per-user workspace lease is
+// held if its holder dies before releasing it. It is well above the time a
+// provisioning takes, WorkOS call included.
+const platformMCPWorkspaceLeaseTTL = 2 * time.Minute
 
 // freeMailDomains are personal mailbox providers. Their domain names a mail
 // service, not the user's company, so a workspace name suggested from one
@@ -126,16 +137,36 @@ func (s *Service) ProvisionPlatformMCPWorkspace(ctx context.Context, userID, nam
 
 // provisionFirstOrgForUser provisions an organization only while the user
 // has none. Two OAuth challenges for the same user can submit at once, so a
-// per-user lock makes the check and the provisioning one step: only one of
-// them creates a workspace and a trial. The lock covers no more than that.
+// per-user lease makes the check and the provisioning one step: only one of
+// them creates a workspace and a trial. The other is refused at once.
+//
+// The lease lives in Redis, not Postgres, so no database connection is held
+// while provisioning calls WorkOS and takes its own connections. A lease that
+// outlives its TTL lapses, so a provisioning slower than the TTL is no longer
+// serialized.
 func (s *Service) provisionFirstOrgForUser(ctx context.Context, userID, orgName, actorEmail string) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
 
-	release, err := s.lockPlatformMCPWorkspace(ctx, userID)
-	if err != nil {
-		return empty, err
+	leases, ok := s.nonceStore.(cache.LeaseCache)
+	if !ok {
+		return empty, errors.New("workspace lock store does not support leases")
 	}
-	defer release()
+	key := "platform-mcp-workspace:" + userID
+	owner := uuid.NewString()
+	held, err := leases.AcquireLease(ctx, key, owner, platformMCPWorkspaceLeaseTTL)
+	if err != nil {
+		return empty, fmt.Errorf("acquire workspace lock: %w", err)
+	}
+	if !held {
+		return empty, ErrWorkspaceCreationInProgress
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if _, err := leases.ReleaseLeaseIfOwner(releaseCtx, key, owner); err != nil {
+			s.logger.ErrorContext(releaseCtx, "failed to release Platform MCP workspace lock", attr.SlogError(err), attr.SlogUserID(userID))
+		}
+	}()
 
 	existing, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
 	if err != nil {
@@ -155,32 +186,4 @@ func (s *Service) provisionFirstOrgForUser(ctx context.Context, userID, orgName,
 		return empty, fmt.Errorf("provision workspace: %w", err)
 	}
 	return org, nil
-}
-
-// lockPlatformMCPWorkspace holds a per-user advisory lock on a dedicated
-// connection. The returned function releases the lock and the connection.
-func (s *Service) lockPlatformMCPWorkspace(ctx context.Context, userID string) (func(), error) {
-	conn, err := s.db.Acquire(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("acquire workspace lock connection: %w", err)
-	}
-	queries := repo.New(conn)
-	if err := queries.AcquirePlatformMCPWorkspaceLock(ctx, userID); err != nil {
-		// The lock may have been granted as the call failed, so close the
-		// session rather than return it to the pool still holding the lock.
-		_ = conn.Hijack().Close(context.WithoutCancel(ctx))
-		return nil, fmt.Errorf("acquire workspace lock: %w", err)
-	}
-	return func() {
-		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		unlocked, err := queries.ReleasePlatformMCPWorkspaceLock(unlockCtx, userID)
-		if err != nil || !unlocked {
-			s.logger.ErrorContext(unlockCtx, "failed to release Platform MCP workspace lock", attr.SlogError(err), attr.SlogUserID(userID))
-			// Closing the session drops any advisory lock it still holds.
-			_ = conn.Hijack().Close(unlockCtx)
-			return
-		}
-		conn.Release()
-	}, nil
 }

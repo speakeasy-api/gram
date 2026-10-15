@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -21,8 +22,7 @@ import (
 func TestProvisionPlatformMCPWorkspace(t *testing.T) {
 	t.Parallel()
 
-	userInfo := defaultMockUserInfo()
-	userInfo.Organizations = nil
+	userInfo := platformMCPWorkspaceUser()
 	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 	armedAt := time.Now().UTC()
@@ -85,8 +85,7 @@ func TestProvisionPlatformMCPWorkspaceRejectsInvalidName(t *testing.T) {
 func TestProvisionPlatformMCPWorkspaceConcurrentSubmitsCreateOneOrganization(t *testing.T) {
 	t.Parallel()
 
-	userInfo := defaultMockUserInfo()
-	userInfo.Organizations = nil
+	userInfo := platformMCPWorkspaceUser()
 	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 	const submits = 2
@@ -104,7 +103,7 @@ func TestProvisionPlatformMCPWorkspaceConcurrentSubmitsCreateOneOrganization(t *
 		switch {
 		case err == nil:
 			created++
-		case errors.Is(err, auth.ErrUserHasOrganization):
+		case errors.Is(err, auth.ErrUserHasOrganization), errors.Is(err, auth.ErrWorkspaceCreationInProgress):
 			refused++
 		default:
 			require.NoError(t, err)
@@ -117,4 +116,14 @@ func TestProvisionPlatformMCPWorkspaceConcurrentSubmitsCreateOneOrganization(t *
 	require.NoError(t, err)
 	require.Len(t, organizations, 1)
 	require.Len(t, instance.trialNotifier.trialStarted, 1)
+}
+
+// platformMCPWorkspaceUser returns a user with no organization and a user ID
+// of its own. The workspace lease is keyed by user ID in a Redis that parallel
+// tests share, so a shared ID would let one test's lease refuse another's.
+func platformMCPWorkspaceUser() *MockUserInfo {
+	userInfo := defaultMockUserInfo()
+	userInfo.UserID = "test-user-" + uuid.NewString()
+	userInfo.Organizations = nil
+	return userInfo
 }
