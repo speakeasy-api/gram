@@ -15,10 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -272,4 +274,31 @@ func TestGatewayDirectDescribesMembersConcurrently(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), slugs[0]+"--ping")
 	require.Contains(t, w.Body.String(), slugs[1]+"--ping")
+}
+
+func TestGatewayDirectGivesQueuedMembersTheirOwnDeadline(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithMetaRuntime(t, testenv.NewMeterProvider(t), mcp.MetaRuntimeConfig{MemberCallTimeout: 1500 * time.Millisecond, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0})
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	// Seven members against a concurrency limit of six: the seventh starts
+	// only after a slow member finishes, past half of one shared deadline.
+	slow := func() bool {
+		time.Sleep(time.Second)
+		return true
+	}
+	slugs := make([]string, 7)
+	for i := range slugs {
+		slugs[i] = fmt.Sprintf("member%d-%s", i, uuid.NewString()[:8])
+		upstream := newListingUpstream(t, []any{map[string]any{"name": "ping", "inputSchema": map[string]any{"type": "object"}}}, slow)
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Member "+slugs[i], slugs[i], int32(i+1), upstream)
+	}
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	for _, memberSlug := range slugs {
+		require.Contains(t, w.Body.String(), memberSlug+"--ping")
+	}
 }
