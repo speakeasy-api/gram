@@ -41,6 +41,7 @@ type Evaluator struct {
 	classifier classifier.Classifier
 	failures   metric.Int64Counter
 	skipped    metric.Int64Counter
+	truncated  metric.Int64Counter
 	slots      chan struct{}
 }
 
@@ -59,7 +60,12 @@ func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Sourc
 		return nil, fmt.Errorf("create sensor skip counter: %w", err)
 	}
 
-	return &Evaluator{logger: logger, source: source, features: features, publisher: publisher, classifier: c, failures: failures, skipped: skipped, slots: make(chan struct{}, 4)}, nil
+	truncated, err := meter.Int64Counter("gram.sigint.evaluation.window_truncations", metric.WithDescription("Sensor evaluation attempts using less available history because of the content budget"))
+	if err != nil {
+		return nil, fmt.Errorf("create sensor window truncation counter: %w", err)
+	}
+
+	return &Evaluator{logger: logger, source: source, features: features, publisher: publisher, classifier: c, failures: failures, skipped: skipped, truncated: truncated, slots: make(chan struct{}, 4)}, nil
 }
 
 func (h *Evaluator) terminal(ctx context.Context, event Event, reason string, details ...slog.Attr) {
@@ -155,11 +161,11 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	// failed target reads are neither repeated nor counted once per window size.
 	target, err := buffer.Resolve(ctx, 1)
 	if err != nil {
-		return h.evaluateGroup(ctx, event, compiled, target, err)
+		return h.evaluateGroup(ctx, event, compiled, target.State, err)
 	}
 
-	// Ascending sizes let small windows succeed even when older content is invalid
-	// or a larger window exceeds the aggregate content budget.
+	// Ascending sizes let small windows succeed even when older content is invalid.
+	// Larger windows reuse the newest contiguous context that fits the budget.
 	var retry error
 	for size := 1; size <= maxSize; size++ {
 		var sensors []compiledSensor
@@ -171,14 +177,21 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		if len(sensors) == 0 {
 			continue
 		}
-		var state classifier.Entry
+		var resolved ResolvedInput
 		var err error
 		if size == 1 {
-			state = target
+			resolved = target
 		} else {
-			state, err = buffer.Resolve(ctx, size)
+			resolved, err = buffer.Resolve(ctx, size)
 		}
-		retry = errors.Join(retry, h.evaluateGroup(ctx, event, sensors, state, err))
+		if err == nil && resolved.Truncated {
+			h.truncated.Add(ctx, int64(len(sensors)), metric.WithAttributes(
+				attribute.String("reason", "content_too_large"),
+				attribute.Int("requested_window_size", size),
+				attribute.Int("effective_window_size", resolved.MessageCount),
+			))
+		}
+		retry = errors.Join(retry, h.evaluateGroup(ctx, event, sensors, resolved.State, err))
 	}
 	return retry
 }

@@ -3,7 +3,9 @@ package evaluation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -24,6 +26,9 @@ type conversationBuffer struct {
 	historyErr    error
 	resolved      map[uuid.UUID]classifier.Entry
 	resolvedBytes int
+
+	// contentLimitSize caches the fitting suffix length after a budget overflow.
+	contentLimitSize int
 }
 
 type conversationState struct {
@@ -34,20 +39,20 @@ type conversationState struct {
 	TargetMessageIndex int `json:"target_message_index"`
 }
 
-func (b *conversationBuffer) Resolve(ctx context.Context, size int) (classifier.Entry, error) {
-	var empty classifier.Entry
+func (b *conversationBuffer) Resolve(ctx context.Context, size int) (ResolvedInput, error) {
+	var empty ResolvedInput
 	if size < 1 || size > b.maxSize || b.maxSize > MaxWindowSize {
 		return empty, fmt.Errorf("%w: window size %d exceeds buffer capacity %d", ErrInvalidInput, size, b.maxSize)
 	}
 	if !b.targetLoaded {
-		b.target, b.targetErr = b.resolveMessage(ctx, targetContent(b.input.stored))
+		b.target, b.targetErr = b.resolveMessage(ctx, targetContent(b.input.stored), maxContentBytes)
 		b.targetLoaded = true
 	}
 	if b.targetErr != nil {
 		return empty, b.targetErr
 	}
 	if size == 1 {
-		return b.target, nil
+		return ResolvedInput{State: b.target, MessageCount: 1, Truncated: false}, nil
 	}
 	if !b.historyLoaded {
 		if b.input.history == nil {
@@ -60,27 +65,52 @@ func (b *conversationBuffer) Resolve(ctx context.Context, size int) (classifier.
 		return empty, b.historyErr
 	}
 	count := min(size-1, len(b.historyRows))
-	state := conversationState{Messages: make([]classifier.Entry, count+1), TargetMessageIndex: count}
-	state.Messages[count] = b.target
+	truncated := b.contentLimitSize > 0 && count+1 > b.contentLimitSize
+	if truncated {
+		count = b.contentLimitSize - 1
+	}
+	state := conversationState{Messages: []classifier.Entry{b.target}, TargetMessageIndex: 0}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		return empty, fmt.Errorf("%w: encode target state: %w", ErrInvalidInput, err)
+	}
+	stateBytes := len(encoded)
+	if stateBytes > maxContentBytes {
+		return empty, permanent("content_too_large")
+	}
 	for i := range count {
-		entry, err := b.resolveMessage(ctx, b.historyRows[i])
+		// Reserve the comma between messages. Target indexes remain one digit
+		// because windows contain at most ten messages.
+		entry, err := b.resolveMessage(ctx, b.historyRows[i], maxContentBytes-stateBytes-1)
 		if err != nil {
+			if terminal, ok := errors.AsType[*permanentError](err); ok && terminal.reason == "content_too_large" {
+				truncated = true
+				b.contentLimitSize = len(state.Messages)
+				break
+			}
 			return empty, err
 		}
-		state.Messages[count-1-i] = entry
+		data, err := json.Marshal(entry)
+		if err != nil {
+			return empty, permanent("invalid_content")
+		}
+		stateBytes += len(data) + 1
+		state.Messages = append(state.Messages, entry)
 	}
+	slices.Reverse(state.Messages)
+	state.TargetMessageIndex = len(state.Messages) - 1
 	entry, err := classifier.NewEntry(state)
 	if err != nil {
 		return empty, fmt.Errorf("%w: encode conversation state: %w", ErrInvalidInput, err)
 	}
-	return entry, nil
+	return ResolvedInput{State: entry, MessageCount: len(state.Messages), Truncated: truncated}, nil
 }
 
-func (b *conversationBuffer) resolveMessage(ctx context.Context, row repo.LoadEvaluationHistoryRow) (classifier.Entry, error) {
+func (b *conversationBuffer) resolveMessage(ctx context.Context, row repo.LoadEvaluationHistoryRow, budget int) (classifier.Entry, error) {
 	if entry, ok := b.resolved[row.ID]; ok {
 		return entry, nil
 	}
-	entry, err := inputWithBudget(ctx, b.input.blobs, b.input.message.GetProjectId(), row, maxContentBytes-b.resolvedBytes)
+	entry, err := inputWithBudget(ctx, b.input.blobs, b.input.message.GetProjectId(), row, budget)
 	if err != nil {
 		return entry, err
 	}

@@ -70,8 +70,22 @@ type Input interface {
 type InputBuffer interface {
 	// Resolve returns the target alone for size 1, or a window of up to size
 	// messages including the target. Sizes cannot exceed the buffer's capacity.
+	// Oversized history is truncated to the newest contiguous suffix that fits.
 	// Sources without history support only size 1. A wrapped ErrInvalidInput
 	// acknowledges invalid content or unsupported sizes. The conversation adapter's
 	// asset-validation permanentError is also terminal; other errors trigger retry.
-	Resolve(ctx context.Context, size int) (classifier.Entry, error)
+	Resolve(ctx context.Context, size int) (ResolvedInput, error)
+}
+
+// ResolvedInput carries classifier state and its effective context size.
+type ResolvedInput struct {
+	// State is complete source-specific text or structured JSON.
+	State classifier.Entry
+
+	// MessageCount includes the target; independent events have a count of one.
+	MessageCount int
+
+	// Truncated indicates the content budget excluded available history.
+	// A naturally short conversation does not count as truncation.
+	Truncated bool
 }

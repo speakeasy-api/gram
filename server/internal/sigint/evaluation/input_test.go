@@ -37,12 +37,12 @@ type eventBuffer struct {
 	input *eventInput
 }
 
-func (b *eventBuffer) Resolve(_ context.Context, size int) (classifier.Entry, error) {
+func (b *eventBuffer) Resolve(_ context.Context, size int) (ResolvedInput, error) {
 	if size != 1 {
-		return classifier.Entry{}, fmt.Errorf("%w: event has no history", ErrInvalidInput)
+		return ResolvedInput{}, fmt.Errorf("%w: event has no history", ErrInvalidInput)
 	}
 	b.input.resolved++
-	return b.input.data, b.input.err
+	return ResolvedInput{State: b.input.data, MessageCount: 1, Truncated: false}, b.input.err
 }
 
 func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {

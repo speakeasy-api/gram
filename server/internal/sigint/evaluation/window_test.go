@@ -141,34 +141,120 @@ func TestWindowHistoryFailureRetriesAfterPublishingTargetOnly(t *testing.T) {
 	require.Len(t, pub.readings, 1)
 }
 
-func TestWindowOverflowMarkerDoesNotPreventSmallerReading(t *testing.T) {
+func TestWindowBudgetFallbackAndMetrics(t *testing.T) {
 	t.Parallel()
-	m := message()
-	definitions := partialSensors()
-	definitions[0].InputStrategy, definitions[0].WindowSize = InputStrategySlidingWindow, 5
-	definitions[1].InputStrategy, definitions[1].WindowSize = InputStrategySlidingWindow, 2
-	c := classifiertest.NewMock(t)
-	c.On("Classify", mock.Anything, mock.Anything).Return(partialResult(false)).Once()
-	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
-	target := storedMessage(m)
-	prior := targetContent(storedMessage(message()))
-	oversized := repo.LoadEvaluationHistoryRow{ID: uuid.New(), ContentTooLarge: true}
-	h.messages = &windowMessages{storedMessages: storedMessages{target.ID: target}, history: []repo.LoadEvaluationHistoryRow{prior, oversized}}
-	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
-	require.Len(t, pub.readings, 1)
-	require.Equal(t, "other", pub.readings[0].GetSensorId())
+	for _, name := range []string{"overflow marker", "oversized attachment", "short history"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			m := message()
+			var definitions []Sensor
+			for i, size := range []int{2, 5, 5, 10} {
+				sensor := sensors()[0]
+				sensor.ID = string(rune('a' + i))
+				sensor.Signals = sensor.Signals[:1]
+				sensor.InputStrategy, sensor.WindowSize = InputStrategySlidingWindow, size
+				definitions = append(definitions, sensor)
+			}
+			reader := sdkmetric.NewManualReader()
+			meters := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			t.Cleanup(func() { require.NoError(t, meters.Shutdown(context.Background())) })
+			c, requests := newRecordingClassifier(t)
+			h, pub := handler(t, m, definitions, c, meters)
+			target := storedMessage(m)
+			target.Content = "Yes, that one."
+			prior := targetContent(storedMessage(message()))
+			prior.Content, prior.Role = "Most recent context", "assistant"
+			history := []repo.LoadEvaluationHistoryRow{prior}
+			blobs := &countingBlobs{reader: memoryBlobs{}}
+			switch name {
+			case "overflow marker":
+				history = append(history, repo.LoadEvaluationHistoryRow{ID: uuid.New(), ContentTooLarge: true})
+			case "oversized attachment":
+				uri := "gs://test-bucket/" + m.GetProjectId() + "/oversized"
+				oversized := targetContent(storedMessage(message()))
+				oversized.AttachmentUris = []string{uri}
+				history = append(history, oversized)
+				blobs.reader = memoryBlobs{uri: []byte(strings.Repeat("x", maxContentBytes))}
+			}
+			if name != "short history" {
+				older := targetContent(storedMessage(message()))
+				older.Content = "Must not skip over the oversized turn to include this"
+				history = append(history, older)
+			}
+			h.messages = &windowMessages{storedMessages: storedMessages{target.ID: target}, history: history}
+			h.blobs = blobs
+			require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
+			require.Len(t, pub.readings, 4)
+			if name == "oversized attachment" {
+				require.Equal(t, 1, blobs.reads, "larger windows reuse the truncation boundary")
+			}
+			testenv.RequireYAMLGolden(t, "testdata/requests/budget-fallback.golden.yaml", requests.snapshot(t))
+			var metrics metricdata.ResourceMetrics
+			require.NoError(t, reader.Collect(t.Context(), &metrics))
+			got := make(map[[2]int64]int64)
+			for _, scope := range metrics.ScopeMetrics {
+				for _, metric := range scope.Metrics {
+					if metric.Name == "gram.sigint.evaluation.window_truncations" {
+						sum, ok := metric.Data.(metricdata.Sum[int64])
+						require.True(t, ok)
+						for _, point := range sum.DataPoints {
+							reason, ok := point.Attributes.Value("reason")
+							require.True(t, ok)
+							require.Equal(t, "content_too_large", reason.AsString())
+							requested, ok := point.Attributes.Value("requested_window_size")
+							require.True(t, ok)
+							effective, ok := point.Attributes.Value("effective_window_size")
+							require.True(t, ok)
+							got[[2]int64{requested.AsInt64(), effective.AsInt64()}] += point.Value
+						}
+					}
+					if metric.Name == "gram.sigint.evaluation.failures" {
+						sum, ok := metric.Data.(metricdata.Sum[int64])
+						require.True(t, ok)
+						for _, point := range sum.DataPoints {
+							require.Zero(t, point.Value, "truncation is not a failed evaluation")
+						}
+					}
+				}
+			}
+			if name == "short history" {
+				require.Empty(t, got)
+			} else {
+				require.Equal(t, map[[2]int64]int64{{5, 2}: 2, {10, 2}: 1}, got)
+			}
+		})
+	}
 }
 
 func TestWindowAggregateContentLimit(t *testing.T) {
 	t.Parallel()
-	m := message()
-	target := storedMessage(m)
-	target.Content = strings.Repeat("x", maxContentBytes/2)
-	prior := targetContent(storedMessage(message()))
-	prior.Content = target.Content
-	in := &conversationInput{message: m, stored: target, history: &windowMessages{history: []repo.LoadEvaluationHistoryRow{prior}}}
-	_, err := in.NewBuffer(2).Resolve(t.Context(), 2)
-	require.ErrorContains(t, err, "content_too_large")
+	for _, tc := range []struct {
+		name       string
+		targetSize int
+		priorSize  int
+	}{
+		{name: "combined content", targetSize: maxContentBytes / 2, priorSize: maxContentBytes / 2},
+		// Both message objects fit without the window envelope, but the complete
+		// two-message JSON exceeds the limit. The target-only envelope still fits.
+		{name: "window framing", targetSize: maxContentBytes - 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m := message()
+			target := storedMessage(m)
+			target.Content = strings.Repeat("x", tc.targetSize)
+			prior := targetContent(storedMessage(message()))
+			prior.Content = strings.Repeat("x", tc.priorSize)
+			in := &conversationInput{message: m, stored: target, history: &windowMessages{history: []repo.LoadEvaluationHistoryRow{prior}}}
+			resolved, err := in.NewBuffer(2).Resolve(t.Context(), 2)
+			require.NoError(t, err)
+			require.True(t, resolved.Truncated)
+			require.Equal(t, 1, resolved.MessageCount)
+			data, err := json.Marshal(resolved.State)
+			require.NoError(t, err)
+			require.LessOrEqual(t, len(data), maxContentBytes)
+		})
+	}
 }
 
 func TestWindowEmptyHistoryAndUnusedHistory(t *testing.T) {
@@ -182,7 +268,8 @@ func TestWindowEmptyHistoryAndUnusedHistory(t *testing.T) {
 	require.Zero(t, source.calls)
 	entry, err := buffer.Resolve(t.Context(), 10)
 	require.NoError(t, err)
-	data, err := json.Marshal(entry)
+	require.False(t, entry.Truncated, "naturally short histories are not budget truncations")
+	data, err := json.Marshal(entry.State)
 	require.NoError(t, err)
 	testenv.RequireYAMLGolden(t, "testdata/state/empty-history.golden.yaml", data)
 }
@@ -211,6 +298,7 @@ func TestTargetFailureIsResolvedOnceAcrossWindowGroups(t *testing.T) {
 	}{
 		{name: "invalid content", data: []byte("invalid JSON")},
 		{name: "invalid attachment", attachment: true, data: []byte{0xff}},
+		{name: "oversized attachment", attachment: true, data: []byte(strings.Repeat("x", maxContentBytes))},
 		{name: "unavailable content", retry: true},
 		{name: "unavailable attachment", attachment: true, retry: true},
 	} {

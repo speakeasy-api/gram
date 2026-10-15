@@ -190,7 +190,7 @@ func (in *conversationInput) NewBuffer(maxSize int) InputBuffer {
 		input: in, maxSize: maxSize,
 		targetLoaded: false, target: classifier.Entry{}, targetErr: nil,
 		historyLoaded: false, historyRows: nil, historyErr: nil,
-		resolved: nil, resolvedBytes: 0,
+		resolved: nil, resolvedBytes: 0, contentLimitSize: 0,
 	}
 }
 

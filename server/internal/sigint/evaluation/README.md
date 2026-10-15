@@ -50,7 +50,7 @@ role, content representations, tool calls, row-local-content flag, attachment
 locators and an overflow marker. PostgreSQL measures the cumulative inline payload
 of the selected predecessors against the remaining content budget before returning
 payloads. Over-budget rows retain their IDs and positions but omit content and
-locators, so larger windows fail rather than silently skipping oversized turns.
+locators, marking where the buffer must stop expanding into older history.
 The target lookup additionally selects identity, ordering and attribution fields
 needed to anchor the window and publish readings.
 
@@ -69,8 +69,9 @@ an event ID unique within organization/project/kind; a connection-local protocol
 call ID alone is not sufficient. `Reading.source` continues to namespace external
 actor identities and is distinct from the event kind.
 
-Adapters wrap `ErrInvalidInput` for permanent content failures. Conversation asset
-validation also returns terminal failures; other resolution errors retry.
+Adapters wrap `ErrInvalidInput` for permanent content failures. Oversized history
+truncates context; other conversation asset-validation errors remain terminal,
+and transient resolution errors retry.
 Resolved JSON must be non-null and at most 16 MiB, including the complete window.
 
 ### Future improvement: conditional content projection
@@ -120,8 +121,14 @@ classifier state. The target is resolved before any groups run, so target errors
 are handled once. History is fetched lazily once, with a limit of buffer capacity
 minus one. Resolved content is reused across ascending window sizes within the
 16 MiB payload budget. This is not an exact heap ceiling: persisted target rows,
-decoded objects, metadata and encoding copies also consume memory. Failures in
-older content affect only larger slices, and a history
+decoded objects, metadata and encoding copies also consume memory. When history
+exceeds the budget, the buffer uses the largest contiguous suffix that fits,
+including the target, and updates `target_message_index` to the effective count.
+It stops at the first oversized predecessor rather than skipping to older turns.
+A requested five-message window can therefore evaluate with two messages, or with
+only the target. The sliding-window question framing remains in effect. Window
+JSON framing counts toward the budget; an oversized target still fails evaluation.
+Other failures in older content affect only larger slices, and a history
 lookup failure does not prevent target-only readings. Redelivery creates a fresh
 buffer. The classifier contract remains questions plus state. Definition hashes
 include strategy, size and the versioned target-framing contract.
@@ -158,6 +165,9 @@ by the same groups after the history changes.
 The independent-event fixture captures all three evaluations, including redelivery
 and a changed event kind. The null-content fixture is shared by inline and spilled
 JSON null payloads; both intentionally omit `content`.
+The budget-fallback fixture pins target-focused requests for windows of 2, 5 and 10
+when only two messages fit. It also covers naturally short history with the same
+requests but no truncation metric.
 
 Fixtures use readable YAML, including multiline instructions, while captured
 requests remain JSON. Comparison parses YAML strictly and ignores object-key order
@@ -251,6 +261,11 @@ reason `reading_too_large`; other successful readings are still published.
 Permanent failures emit error logs and
 `gram.sigint.evaluation.failures` with a bounded `reason` attribute. Transient
 classification/storage failures and publication failures nack the source delivery.
+Budget-truncated windows increment `gram.sigint.evaluation.window_truncations`
+once per affected sensor evaluation attempt, with `reason=content_too_large`,
+`requested_window_size` and `effective_window_size`. Sensors sharing a request
+each count; redelivery counts another attempt. Naturally short histories do not
+increment this counter, and truncation alone does not increment failures.
 Redelivery may reevaluate all sensors and republish successes with the same
 logical reading ID and different answers/attempt IDs. No evaluation checkpoints,
 DLQ, reading persistence or duplicate-winner policy are introduced.
