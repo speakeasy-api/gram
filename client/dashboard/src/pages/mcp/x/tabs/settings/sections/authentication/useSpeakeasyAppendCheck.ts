@@ -13,6 +13,8 @@ export function useSpeakeasyAppendCheck(
     queryKey: ["identityChaining", "speakeasyAppendCheck", target],
     enabled,
     retry: false,
+    // A refusal is an expected answer, shown inline; never the page error boundary.
+    throwOnError: false,
     queryFn: ({ signal }) =>
       buildAddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderMutation(
         core,
