@@ -158,13 +158,20 @@ func TestPreparationScopes_ServerFoundByItsDocumentResource(t *testing.T) {
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	serverURL := "https://mcp.example.com/v1/mcp"
 	connectedPreparation(t, ti, ctx, in, serverURL, []string{"files:read"})
-	_, err := remotemcprepo.New(ti.conn).UpsertRemoteProtectedResource(ctx, remotemcprepo.UpsertRemoteProtectedResourceParams{
+	b := remotesessions.BindingConnection{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: in.UserSessionIssuerID, ClientID: in.ClientID, Resource: in.Resource, Discover: true}
+	without, err := remotesessions.ConnectionScopes(ctx, ti.conn, b)
+	require.NoError(t, err)
+	require.Nil(t, without, "the server URL alone does not name the binding resource")
+	_, err = remotemcprepo.New(ti.conn).UpsertRemoteProtectedResource(ctx, remotemcprepo.UpsertRemoteProtectedResourceParams{
 		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ResourceIdentifier: serverURL,
 		MetadataUrl: "", AuthorizationServers: []string{syntheticIssuerURL}, ScopesSupported: nil, BearerMethodsSupported: nil,
 		ResourceName: "", ResourceDocumentation: "", ResourcePolicyUri: "", ResourceTosUri: "",
 		Metadata: `{"resource":"` + in.Resource + `"}`,
 	})
 	require.NoError(t, err)
+	with, err := remotesessions.ConnectionScopes(ctx, ti.conn, b)
+	require.NoError(t, err)
+	require.NotNil(t, with, "the cached document resource names the binding resource")
 
 	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/google/uuid"
 
@@ -192,13 +191,18 @@ func ConnectionScopeInputFromClientRow(r repo.ListRemoteSessionClientsForUserSes
 	}
 }
 
-// bindingServerURL is the one server URL whose own value or document
-// resource is resource, ignoring a trailing slash.
+// ServesBindingResource reports whether a server URL, or the resource its
+// cached protected resource document names, is exactly resource; RFC 8707
+// resources compare exactly.
+func ServesBindingResource(serverURL, documentResource, resource string) bool {
+	return resource != "" && (serverURL == resource || documentResource == resource)
+}
+
+// bindingServerURL is the one server URL that serves resource.
 func bindingServerURL(servers []repo.ListRemoteServerURLsForUserSessionIssuerRow, resource string) (string, bool) {
-	want := strings.TrimRight(resource, "/")
 	var found string
 	for _, s := range servers {
-		if strings.TrimRight(s.Url, "/") != want && (s.DocumentResource == "" || strings.TrimRight(s.DocumentResource, "/") != want) {
+		if !ServesBindingResource(s.Url, s.DocumentResource, resource) {
 			continue
 		}
 		if found != "" && found != s.Url {

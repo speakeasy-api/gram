@@ -202,8 +202,8 @@ type XAAIdentityChainingBinding struct {
 	Retryable        bool     `json:"retryable"`
 	GrantSource      string   `json:"grant_source"`
 	RequestedScopes  []string `json:"requested_scopes" jsonschema:"scopes identity chaining requests, after dropping OpenID Connect scopes"`
-	ConfiguredScopes []string `json:"configured_scopes" jsonschema:"scopes recorded on the binding when identity chaining was turned on, before dropping OpenID Connect scopes"`
-	ConnectionScopes []string `json:"connection_scopes,omitempty" jsonschema:"scopes turning identity chaining on again would record now, comparable to configured_scopes: what an interactive sign-in through the bound client requests for this server, or the recorded scopes when the binding has no server connection to follow; omitted when no client is bound"`
+	ConfiguredScopes []string `json:"configured_scopes" jsonschema:"the whole scope set recorded on the binding when identity chaining was turned on, OpenID Connect scopes included; when requested_scopes is empty, an ID-JAG naming a scope outside this set is rejected"`
+	ConnectionScopes []string `json:"connection_scopes,omitzero" jsonschema:"scopes turning identity chaining on again would record now, comparable to configured_scopes: what an interactive sign-in through the bound client requests for this server, or the recorded scopes when the binding has no server connection to follow or the connection names only OpenID Connect scopes while the recorded ones name others; an empty array when a bound client records none, omitted when no client is bound"`
 	ScopesOutOfDate  bool     `json:"scopes_out_of_date" jsonschema:"true when connection_scopes differs from configured_scopes; turning identity chaining on again in the dashboard applies the connection's scopes"`
 }
 

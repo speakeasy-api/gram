@@ -227,11 +227,12 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			return preparationResult(b, issuer, client, preparationMissingGrantsState(client.GrantTypes)), nil
 		}
 	}
-	// Turn on snapshots the server connection's scopes onto the binding, and
-	// chaining requests only that snapshot, OIDC-reserved scopes dropped. The
-	// request's scopes are recorded only when there is no connection to follow
-	// or it names no grantable scope while they do; they are always what a
-	// DCR registration asks for.
+	// Turn on snapshots scopes onto the binding, and chaining requests only
+	// that snapshot, OIDC-reserved scopes dropped. With a connection to follow,
+	// its set wins when it names a grantable scope, or when it is non-empty and
+	// the request names no grantable scope; otherwise, including an empty
+	// connection set, the request's scopes are recorded. DCR registrations
+	// always ask for the request's scopes.
 	var connection *ScopeResolution
 	if selected != uuid.Nil {
 		connection, err = ConnectionScopes(ctx, tx, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, ClientID: selected, Resource: in.Resource, Discover: s.resources != nil})
