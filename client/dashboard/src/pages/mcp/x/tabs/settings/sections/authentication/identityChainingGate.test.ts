@@ -122,5 +122,11 @@ describe("trustsExternalIdp", () => {
         trustedRemoteSessionIssuerId: "okta",
       } as UserSessionIssuer),
     ).toBe(true);
+    expect(
+      trustsExternalIdp({
+        ...orgIssuer,
+        trustedRemoteSessionClientId: "okta-client",
+      } as UserSessionIssuer),
+    ).toBe(true);
   });
 });

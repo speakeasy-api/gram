@@ -166,6 +166,22 @@ func TestAddSpeakeasyEMAProvider_Refusals(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeForbidden)
 	})
 
+	t.Run("no Speakeasy issuer, even on a dry run", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		flags := &feature.InMemory{}
+		flags.SetFlag(feature.FlagEMAProviders, feature.AnyDistinctID, true)
+		ti.service.SetFeatureFlags(flags)
+		vendor := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGText(authCtx.ActiveOrganizationID), "vendor-"+uuid.NewString()[:8], "https://vendor.example.com")
+		plain := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "plain-"+uuid.NewString()[:8])
+		_, err := addSpeakeasy(ctx, ti, vendor, plain, true)
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		_, err = addSpeakeasy(ctx, ti, vendor, plain, false)
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	})
+
 	t.Run("unknown user session issuer", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)

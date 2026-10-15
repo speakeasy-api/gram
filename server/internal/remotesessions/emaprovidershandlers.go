@@ -212,12 +212,20 @@ func (s *Service) AddSpeakeasyEMAProvider(ctx context.Context, payload *orgissue
 	}
 	scope := EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: s.speakeasySigningAvailable}
 	present := slices.ContainsFunc(rows, func(row repo.ListEMAProvidersRow) bool { return row.InternalSessionIssuerID.Valid })
-	if present || payload.DryRun {
-		if !present {
-			if err := checkSpeakeasyAppend(ctx, logger, q, org, vendor, rows); err != nil {
-				return nil, err
-			}
+	var internal repo.GetEMAInternalSessionIssuerRow
+	if !present {
+		if err := checkSpeakeasyAppend(ctx, logger, q, org, vendor, rows); err != nil {
+			return nil, err
 		}
+		internal, err = q.GetEMAInternalSessionIssuer(ctx, org)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeBadRequest, nil, "the organization has no Speakeasy issuer; set one up before adding it")
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "read Speakeasy issuer").LogError(ctx, logger)
+		}
+	}
+	if present || payload.DryRun {
 		order, err := ResolveEMAProviders(ctx, q, org, vendor, scope)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
@@ -226,16 +234,6 @@ func (s *Service) AddSpeakeasyEMAProvider(ctx context.Context, payload *orgissue
 			return nil, oops.E(oops.CodeUnexpected, err, "release ema provider order").LogError(ctx, logger)
 		}
 		return s.liveEMAProvidersView(ctx, logger, org, order), nil
-	}
-	if err := checkSpeakeasyAppend(ctx, logger, q, org, vendor, rows); err != nil {
-		return nil, err
-	}
-	internal, err := q.GetEMAInternalSessionIssuer(ctx, org)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeBadRequest, nil, "the organization has no Speakeasy issuer; set one up before adding it")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "read Speakeasy issuer").LogError(ctx, logger)
 	}
 
 	before := &audit.RemoteSessionIssuerEMAProviders{VendorIssuer: vendor, Providers: make([]audit.RemoteSessionIssuerEMAProvider, 0, len(rows))}

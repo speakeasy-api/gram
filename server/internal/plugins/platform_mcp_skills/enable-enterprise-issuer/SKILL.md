@@ -81,7 +81,8 @@ external identity provider, send an organization administrator to the server's
 dashboard, where **Add Speakeasy** appends Speakeasy to the vendor's EMA
 provider order; that needs the ema-providers rollout. It never removes or
 reorders providers, and it is refused while the vendor has no saved order and
-another server reaches it through an external identity provider. Any other
+another server has a ready binding to it through an external identity
+provider. Any other
 order change goes through the organization's management API.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for
 enterprise authorization readiness. Do not substitute a Platform MCP registration
