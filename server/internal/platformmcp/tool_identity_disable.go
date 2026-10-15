@@ -4,6 +4,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -12,6 +13,10 @@ type TurnOffMCPSignInToolInput struct {
 	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the MCP server"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform registration ID returned by find_mcp or get_mcp"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"false returns what the change would do and makes none; true performs it after the user has agreed to that result out loud"`
+	// ExpectedVersion ties a confirmation to the preview it was agreed
+	// against, so a sign-in reconfigured in between is never turned off on the
+	// strength of an answer about the old one.
+	ExpectedVersion string `json:"expected_version,omitempty" jsonschema:"required with confirmed: true; the version returned by the preview call for this same server"`
 }
 
 type TurnOffMCPSignInToolOutput struct {
@@ -28,6 +33,9 @@ type TurnOffMCPSignInToolOutput struct {
 	// OtherServersKeepTheClient reports that another MCP server still signs in
 	// through this provider's OAuth client, so it stays available to them.
 	OtherServersKeepTheClient bool `json:"other_servers_keep_the_client"`
+	// Version is the server state this answer describes. Pass it back as
+	// expected_version when confirming.
+	Version string `json:"version,omitempty"`
 	// PeopleMustSignInAgain reports that the OAuth client was unbound, which
 	// ends every session held through it.
 	PeopleMustSignInAgain bool   `json:"people_must_sign_in_again"`
@@ -48,7 +56,8 @@ func registerTurnOffMCPSignInTool(reg *Registrar, registrations *RegistrationSer
 		Name:  "turn_off_mcp_sign_in",
 		Title: "Turn Off an MCP Server's Sign-In",
 		Description: "Stop one MCP server asking people to sign in to the service behind it, so it calls that service without anyone's account. " +
-			"Call it first with confirmed: false to get exactly what would happen, show that to the user, and call again with confirmed: true only after they agree out loud. " +
+			"Call it first with confirmed: false to get exactly what would happen, show that to the user, and call again with confirmed: true and expected_version set to the version that preview returned, only after they agree out loud. " +
+			"A confirmation is refused when the server's sign-in changed since that preview, or when it has already been carried out: preview again and ask the user about the new answer. " +
 			"It affects the named server only: the provider's OAuth client is kept when another MCP server still signs in through it, and unbound otherwise, which ends every session held through it. " +
 			"Each server's sign-in is configured on that server, so turning it off is not undone by anything else and switching it back on is a separate setup. " +
 			"Retrying is safe: a server that already signs in to nothing is reported as such and nothing changes. " +
@@ -75,7 +84,8 @@ func registerTurnOffMCPSignInTool(reg *Registrar, registrations *RegistrationSer
 		if !preview.Configured {
 			return nil, TurnOffMCPSignInToolOutput{
 				ProjectSlug: input.ProjectSlug, RegistrationID: input.RegistrationID,
-				SignInConfigured: false, Applied: input.Confirmed, SignsInToNothing: true,
+				SignInConfigured: false, Applied: false, SignsInToNothing: true,
+				Version:    preview.Version,
 				NextAction: "none",
 				Message:    "This MCP server already signs in to nothing. Nothing was changed.",
 			}, nil
@@ -87,12 +97,23 @@ func registerTurnOffMCPSignInTool(reg *Registrar, registrations *RegistrationSer
 				Applied: false, SignsInToNothing: false,
 				OtherServersKeepTheClient: preview.ClientStaysBound,
 				PeopleMustSignInAgain:     !preview.ClientStaysBound,
+				Version:                   preview.Version,
 				NextAction:                "confirm",
 				Message:                   signInRemovalPreviewMessage(preview),
 			}, nil
 		}
 
-		result, err := registrations.RemoveIdentityProvider(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		result, err := registrations.RemoveIdentityProvider(ctx, principal, input.ProjectSlug, input.RegistrationID, input.ExpectedVersion)
+		if errors.Is(err, ErrSignInRemovalStale) {
+			content, marshalErr := json.Marshal(identityProviderAttachmentErrorResult{
+				Code:    "sign_in_removal_stale",
+				Message: "This MCP server's sign-in is not in the state the user agreed to turn off, so nothing was changed. Call this tool again with confirmed: false, show the user what it reports now, and only confirm that.",
+			})
+			if marshalErr != nil {
+				return nil, TurnOffMCPSignInToolOutput{}, marshalErr
+			}
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, TurnOffMCPSignInToolOutput{}, nil
+		}
 		if err != nil {
 			content, marshalErr := json.Marshal(identityProviderAttachmentErrorResult{Code: "sign_in_removal_refused", Message: err.Error()})
 			if marshalErr != nil {
@@ -109,7 +130,7 @@ func registerTurnOffMCPSignInTool(reg *Registrar, registrations *RegistrationSer
 		return nil, TurnOffMCPSignInToolOutput{
 			ProjectSlug: input.ProjectSlug, RegistrationID: input.RegistrationID,
 			SignInConfigured: true, ProviderURL: result.ProviderURL,
-			Applied: true, SignsInToNothing: !after.Configured,
+			Applied: true, SignsInToNothing: !after.Configured, Version: after.Version,
 			OtherServersKeepTheClient: !result.ClientUnbound,
 			PeopleMustSignInAgain:     result.ClientUnbound,
 			NextAction:                "none",

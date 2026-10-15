@@ -40,10 +40,11 @@ const issuerWriteTimeout = 10 * time.Second
 
 // ClearUnboundMCPServerRemoteSessionIssuers clears the provider of every MCP
 // server in projectID carrying one of userIssuerIDs whose provider has no live
-// client bound there. Each clear is conditional on that provider still being
-// the one stored, so it never overwrites a configuration committed after the
-// candidates were read. Safe with issuers no server uses; ids outside the
-// project reach nothing.
+// client bound there. Each clear is conditional on the row still being the one
+// read — same provider, same version — so it never overwrites a configuration
+// committed after the candidates were read, including one that reconfigures
+// the provider it already named. Safe with issuers no server uses; ids outside
+// the project reach nothing.
 func ClearUnboundMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
 	// Ahead of the empty-set shortcut, so the guarantee does not depend on data.
 	if organizationID == "" || projectID == uuid.Nil {
@@ -68,6 +69,7 @@ func ClearUnboundMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserv
 			ProjectID:                     projectID,
 			OrganizationID:                organizationID,
 			ObservedRemoteSessionIssuerID: server.RemoteSessionIssuerID,
+			ObservedUpdatedAt:             server.ObservedUpdatedAt,
 		}); err != nil {
 			return fmt.Errorf("clear mcp server remote session issuer: %w", err)
 		}

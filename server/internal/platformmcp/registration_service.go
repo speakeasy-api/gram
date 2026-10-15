@@ -408,13 +408,14 @@ func (s *RegistrationService) PreviewIdentityProviderRemoval(ctx context.Context
 	return s.identityProviderAttachment.PreviewSignInRemoval(ctx, principal, project, parsedID)
 }
 
-// RemoveIdentityProvider turns one registered MCP server's sign-in off.
-func (s *RegistrationService) RemoveIdentityProvider(ctx context.Context, principal Principal, projectSlug, registrationID string) (SignInRemovalResult, error) {
+// RemoveIdentityProvider turns one registered MCP server's sign-in off, only
+// while the server is still in the state expectedVersion names.
+func (s *RegistrationService) RemoveIdentityProvider(ctx context.Context, principal Principal, projectSlug, registrationID, expectedVersion string) (SignInRemovalResult, error) {
 	project, parsedID, err := s.identityProviderTarget(ctx, principal, projectSlug, registrationID)
 	if err != nil {
 		return SignInRemovalResult{}, err
 	}
-	return s.identityProviderAttachment.RemoveSignIn(ctx, principal, project, parsedID)
+	return s.identityProviderAttachment.RemoveSignIn(ctx, principal, project, parsedID, expectedVersion)
 }
 
 // identityProviderTarget resolves the project and registration an

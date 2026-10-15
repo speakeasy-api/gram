@@ -631,9 +631,9 @@ WHERE s.id = @id
 
 -- name: ListMCPServerRemoteSessionIssuersToClear :many
 -- Live MCP servers on the named user session issuers whose configured upstream
--- authorization server has no live client bound there, with the provider each
--- one names. The caller clears them one row at a time against the provider
--- read here, so a configuration committed in between is not overwritten.
+-- authorization server has no live client bound there, with the provider and
+-- row version each one names. The caller clears them one row at a time against
+-- both, so a configuration committed in between is not overwritten.
 --
 -- Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
 -- removal signal; the column's ON DELETE SET NULL never fires. The filters
@@ -645,7 +645,7 @@ WHERE s.id = @id
 -- row — and only that project's servers are listed. Organization-level clients
 -- of the caller's organization count, matching what the attach surface
 -- permits.
-SELECT s.id, s.remote_session_issuer_id
+SELECT s.id, s.remote_session_issuer_id, s.updated_at AS observed_updated_at
 FROM mcp_servers AS s
 JOIN projects AS p
   ON p.id = s.project_id
@@ -674,15 +674,20 @@ WHERE s.user_session_issuer_id = ANY (@user_session_issuer_ids::uuid[])
 ORDER BY s.id;
 
 -- name: ClearMCPServerRemoteSessionIssuerIfUnchanged :execrows
--- Clears one server's upstream authorization server, and only while it still
--- names the provider the caller observed and that provider still has no live
--- client bound to the server's user session issuer.
+-- Clears one server's upstream authorization server, and only while the row is
+-- still the one the caller read: the same provider at the same version, with
+-- that provider still holding no live client bound to the server's user
+-- session issuer.
 --
--- Both halves are the write's own, not a snapshot's. A configuration commit
--- racing this clear changes the provider, or binds a client for it, between
--- the read and the write; comparing a value computed from the earlier read
--- would overwrite that commit, and a shared server's explicitly configured
--- provider is not something a later pass can reconstruct.
+-- The version is what makes this safe, not the provider. A configuration
+-- commit that reconfigures the same provider leaves the provider comparison
+-- satisfied, and the binding it writes is invisible to this statement: a row
+-- lock taken after that commit re-checks these quals against the updated row,
+-- but the subquery below still reads this statement's snapshot, so the client
+-- it bound is not there. Every write to the row moves updated_at, so comparing
+-- it refuses the clear whatever the commit changed. A shared server's
+-- explicitly configured provider is not something a later pass can
+-- reconstruct, so losing that write has to be impossible rather than unlikely.
 UPDATE mcp_servers AS s
 SET remote_session_issuer_id = NULL,
     updated_at = clock_timestamp()
@@ -690,6 +695,7 @@ WHERE s.id = @id
   AND s.project_id = @project_id::uuid
   AND s.deleted IS FALSE
   AND s.remote_session_issuer_id = @observed_remote_session_issuer_id
+  AND s.updated_at = @observed_updated_at
   AND NOT EXISTS (SELECT 1
                   FROM remote_session_client_user_session_issuers AS link
                   JOIN remote_session_clients AS c

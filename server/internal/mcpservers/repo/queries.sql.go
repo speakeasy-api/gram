@@ -93,13 +93,14 @@ WHERE s.id = $1
   AND s.project_id = $2::uuid
   AND s.deleted IS FALSE
   AND s.remote_session_issuer_id = $3
+  AND s.updated_at = $4
   AND NOT EXISTS (SELECT 1
                   FROM remote_session_client_user_session_issuers AS link
                   JOIN remote_session_clients AS c
                     ON c.id = link.remote_session_client_id
                    AND c.deleted IS FALSE
                    AND (c.project_id = $2::uuid
-                        OR (c.project_id IS NULL AND c.organization_id = $4::text))
+                        OR (c.project_id IS NULL AND c.organization_id = $5::text))
                   JOIN remote_session_issuers AS i
                     ON i.id = c.remote_session_issuer_id
                    AND i.deleted IS FALSE
@@ -111,23 +112,30 @@ type ClearMCPServerRemoteSessionIssuerIfUnchangedParams struct {
 	ID                            uuid.UUID
 	ProjectID                     uuid.UUID
 	ObservedRemoteSessionIssuerID uuid.NullUUID
+	ObservedUpdatedAt             pgtype.Timestamptz
 	OrganizationID                string
 }
 
-// Clears one server's upstream authorization server, and only while it still
-// names the provider the caller observed and that provider still has no live
-// client bound to the server's user session issuer.
+// Clears one server's upstream authorization server, and only while the row is
+// still the one the caller read: the same provider at the same version, with
+// that provider still holding no live client bound to the server's user
+// session issuer.
 //
-// Both halves are the write's own, not a snapshot's. A configuration commit
-// racing this clear changes the provider, or binds a client for it, between
-// the read and the write; comparing a value computed from the earlier read
-// would overwrite that commit, and a shared server's explicitly configured
-// provider is not something a later pass can reconstruct.
+// The version is what makes this safe, not the provider. A configuration
+// commit that reconfigures the same provider leaves the provider comparison
+// satisfied, and the binding it writes is invisible to this statement: a row
+// lock taken after that commit re-checks these quals against the updated row,
+// but the subquery below still reads this statement's snapshot, so the client
+// it bound is not there. Every write to the row moves updated_at, so comparing
+// it refuses the clear whatever the commit changed. A shared server's
+// explicitly configured provider is not something a later pass can
+// reconstruct, so losing that write has to be impossible rather than unlikely.
 func (q *Queries) ClearMCPServerRemoteSessionIssuerIfUnchanged(ctx context.Context, arg ClearMCPServerRemoteSessionIssuerIfUnchangedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, clearMCPServerRemoteSessionIssuerIfUnchanged,
 		arg.ID,
 		arg.ProjectID,
 		arg.ObservedRemoteSessionIssuerID,
+		arg.ObservedUpdatedAt,
 		arg.OrganizationID,
 	)
 	if err != nil {
@@ -982,7 +990,7 @@ func (q *Queries) ListMCPServerRemoteSessionIssuerBackfill(ctx context.Context, 
 }
 
 const listMCPServerRemoteSessionIssuersToClear = `-- name: ListMCPServerRemoteSessionIssuersToClear :many
-SELECT s.id, s.remote_session_issuer_id
+SELECT s.id, s.remote_session_issuer_id, s.updated_at AS observed_updated_at
 FROM mcp_servers AS s
 JOIN projects AS p
   ON p.id = s.project_id
@@ -1020,12 +1028,13 @@ type ListMCPServerRemoteSessionIssuersToClearParams struct {
 type ListMCPServerRemoteSessionIssuersToClearRow struct {
 	ID                    uuid.UUID
 	RemoteSessionIssuerID uuid.NullUUID
+	ObservedUpdatedAt     pgtype.Timestamptz
 }
 
 // Live MCP servers on the named user session issuers whose configured upstream
-// authorization server has no live client bound there, with the provider each
-// one names. The caller clears them one row at a time against the provider
-// read here, so a configuration committed in between is not overwritten.
+// authorization server has no live client bound there, with the provider and
+// row version each one names. The caller clears them one row at a time against
+// both, so a configuration committed in between is not overwritten.
 //
 // Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
 // removal signal; the column's ON DELETE SET NULL never fires. The filters
@@ -1046,7 +1055,7 @@ func (q *Queries) ListMCPServerRemoteSessionIssuersToClear(ctx context.Context, 
 	var items []ListMCPServerRemoteSessionIssuersToClearRow
 	for rows.Next() {
 		var i ListMCPServerRemoteSessionIssuersToClearRow
-		if err := rows.Scan(&i.ID, &i.RemoteSessionIssuerID); err != nil {
+		if err := rows.Scan(&i.ID, &i.RemoteSessionIssuerID, &i.ObservedUpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

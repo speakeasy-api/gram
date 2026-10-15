@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -582,4 +584,103 @@ func TestAttachmentRegistersDiscoveredScopesWithoutStoringThem(t *testing.T) {
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
 	require.Empty(t, clients[0].ClientScope)
+}
+
+// signInRemovalIssuer is attachmentTestUserSessionIssuer with the
+// organization recorded, which a registration's composite foreign key to its
+// issuer requires.
+func signInRemovalIssuer(t *testing.T, conn *pgxpool.Pool, principal Principal, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(principal.OrganizationID),
+		Slug:               "usi-removal-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// signInRemovalRegistration seeds a registration bound to its own MCP server
+// and user session issuer, which is what the sign-in removal acts on.
+func signInRemovalRegistration(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, userSessionIssuerID, serverID uuid.UUID) uuid.UUID {
+	t.Helper()
+	registration, err := platformrepo.New(conn).CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		SourceKind:       "remote",
+		CatalogProvider:  "direct-remote-url-v1",
+		CatalogReference: "https://a.example.test/mcp",
+		Status:           "registered",
+		// Lifecycle actions match on the user that created the registration.
+		UserID: conv.ToPGText(principal.UserID),
+	})
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		ID:                  registration.ID,
+		OrganizationID:      principal.OrganizationID,
+		ProjectID:           project.ID,
+		Status:              "registered",
+		UserSessionIssuerID: conv.ToNullUUID(userSessionIssuerID),
+		McpServerID:         conv.ToNullUUID(serverID),
+	})
+	require.NoError(t, err)
+	return registration.ID
+}
+
+// AIM-577: the agent confirms a sign-in removal after showing the user what
+// the preview said. A confirmation that does not name the state it was agreed
+// against must be refused, so a sign-in reconfigured in between is not turned
+// off on the strength of an answer about the old one, and a confirmation
+// cannot be replayed once it has been carried out.
+func TestSignInRemovalRefusesAStalePreviewConfirmation(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_sign_in_removal_stale")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	usi := signInRemovalIssuer(t, conn, principal, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
+	registrationID := signInRemovalRegistration(t, ctx, conn, principal, project, usi, serverID)
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
+
+	preview, err := service.PreviewSignInRemoval(ctx, principal, project, registrationID)
+	require.NoError(t, err)
+	require.True(t, preview.Configured)
+	require.NotEmpty(t, preview.Version, "the preview must name the state it describes")
+
+	// The sign-in is configured again between the preview and the
+	// confirmation, which is a different answer to the same question.
+	second := attachmentTestIssuerMetadata("https://auth-second.example.test")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), second, "client-b", resource.Resource, resource))
+
+	_, err = service.RemoveSignIn(ctx, principal, project, registrationID, preview.Version)
+	require.ErrorIs(t, err, ErrSignInRemovalStale)
+	after, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.True(t, after.RemoteSessionIssuerID.Valid, "the refused confirmation must leave the sign-in configured")
+
+	// A confirmation naming no state at all is refused for the same reason.
+	_, err = service.RemoveSignIn(ctx, principal, project, registrationID, "")
+	require.ErrorIs(t, err, ErrSignInRemovalStale)
+
+	// Previewing again and confirming that is carried out, and the same
+	// confirmation cannot then be replayed.
+	fresh, err := service.PreviewSignInRemoval(ctx, principal, project, registrationID)
+	require.NoError(t, err)
+	require.NotEqual(t, preview.Version, fresh.Version)
+	removal, err := service.RemoveSignIn(ctx, principal, project, registrationID, fresh.Version)
+	require.NoError(t, err)
+	require.True(t, removal.Removed)
+	cleared, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.False(t, cleared.RemoteSessionIssuerID.Valid)
+
+	_, err = service.RemoveSignIn(ctx, principal, project, registrationID, fresh.Version)
+	require.ErrorIs(t, err, ErrSignInRemovalStale, "a carried-out confirmation must not be replayable")
 }

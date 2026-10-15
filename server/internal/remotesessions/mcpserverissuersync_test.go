@@ -2,15 +2,16 @@
 // here is the reconcile that keeps it honest: it clears a server whose own
 // provider lost its client, leaves every other server on a shared user session
 // issuer alone whatever that issuer's other clients do, still derives the
-// provider for a server that is alone on its issuer and so has nothing to
-// borrow from, and writes nothing outside the caller's own scope — the ids it
-// takes come from join tables with no tenancy column.
+// leaves a server whose provider was never configured without one, and writes
+// nothing outside the caller's own scope — the ids it takes come from join
+// tables with no tenancy column.
 
 package remotesessions_test
 
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -416,6 +417,7 @@ func TestClearMCPServerRemoteSessionIssuerLosesToAConfigurationCommit(t *testing
 		ProjectID:                     projectID,
 		OrganizationID:                orgID,
 		ObservedRemoteSessionIssuerID: stale[0].RemoteSessionIssuerID,
+		ObservedUpdatedAt:             stale[0].ObservedUpdatedAt,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), cleared, "the clear must not overwrite the provider committed after its read")
@@ -539,4 +541,131 @@ func TestListUserSessionIssuersBoundToProjectClient_Scoping(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, foreign, "a sibling project must not read another project's client's bindings")
+}
+
+// seedUnlinkedClient creates a provider with a live client that is bound to no
+// user session issuer, so a server stamped with it reads as a clear candidate
+// until something binds that client.
+func seedUnlinkedClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug string) (clientID, remoteIssuerID uuid.UUID) {
+	t.Helper()
+
+	q := repo.New(conn)
+	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: projectID, Valid: true},
+		OrganizationID:                    conv.ToPGText(organizationID),
+		Slug:                              slug,
+		Issuer:                            "https://issuer.example.com/" + slug,
+		AuthorizationEndpoint:             conv.ToPGText("https://issuer.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://issuer.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_post"},
+	})
+	require.NoError(t, err)
+
+	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:               conv.ToNullUUID(projectID),
+		OrganizationID:          conv.ToPGTextEmpty(organizationID),
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "cid-" + slug,
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
+		TokenEndpointAuthMethod: conv.ToPGText("client_secret_post"),
+	})
+	require.NoError(t, err)
+	return client.ID, issuer.ID
+}
+
+// requireBlockedOnMCPServers waits until a statement is parked on an
+// mcp_servers row lock, which is how the test knows the clear has taken its
+// snapshot and is waiting for the configuration commit rather than racing it.
+func requireBlockedOnMCPServers(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		var blocked bool
+		//nolint:glint // notestingrawsql: pg_stat_activity is server state, not application data, and has no SQLc query.
+		if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+			WHERE wait_event_type = 'Lock' AND query ILIKE '%UPDATE mcp_servers%')`).Scan(&blocked); err != nil {
+			return false
+		}
+		return blocked
+	}, 10*time.Second, 20*time.Millisecond, "the clear never blocked on the configuration commit's row lock")
+}
+
+// The configuration commit that races the clear may choose the provider the
+// server already names. The provider comparison is satisfied by that, and the
+// client the commit binds is invisible to the clear's statement snapshot even
+// after the row lock is released, so only the row version refuses the write.
+func TestClearMCPServerRemoteSessionIssuerLosesToASameProviderConfigurationCommit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-clear-same")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "clear-same")
+	clientID, provider := seedUnlinkedClient(t, ctx, ti.conn, projectID, orgID, "rsi-clear-same")
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, provider)
+
+	q := mcpserversrepo.New(ti.conn)
+	stale, err := q.ListMCPServerRemoteSessionIssuersToClear(ctx, mcpserversrepo.ListMCPServerRemoteSessionIssuersToClearParams{
+		UserSessionIssuerIds: []uuid.UUID{userIssuerID},
+		OrganizationID:       orgID,
+		ProjectID:            projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, stale, 1, "the server names a provider whose client is bound nowhere")
+	require.Equal(t, conv.ToNullUUID(provider), stale[0].RemoteSessionIssuerID)
+
+	// The commit holds the server row while it binds the provider's client and
+	// configures the same provider again, exactly as reconfiguring User
+	// Identity on that server does.
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary only, so the clear can block on a row this commit still holds; every read and write below uses generated SQLc methods.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	require.NoError(t, repo.New(tx).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+	restamped, err := mcpserversrepo.New(tx).StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(provider),
+		ID:                    serverID,
+		ProjectID:             projectID,
+		UserSessionIssuerID:   conv.ToNullUUID(userIssuerID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), restamped)
+
+	type clearResult struct {
+		rows int64
+		err  error
+	}
+	done := make(chan clearResult, 1)
+	go func() {
+		rows, err := q.ClearMCPServerRemoteSessionIssuerIfUnchanged(ctx, mcpserversrepo.ClearMCPServerRemoteSessionIssuerIfUnchangedParams{
+			ID:                            stale[0].ID,
+			ProjectID:                     projectID,
+			OrganizationID:                orgID,
+			ObservedRemoteSessionIssuerID: stale[0].RemoteSessionIssuerID,
+			ObservedUpdatedAt:             stale[0].ObservedUpdatedAt,
+		})
+		done <- clearResult{rows: rows, err: err}
+	}()
+
+	requireBlockedOnMCPServers(t, ctx, ti.conn)
+	require.NoError(t, tx.Commit(ctx))
+
+	var result clearResult
+	select {
+	case result = <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the clear never finished after the configuration commit released the row")
+	}
+	require.NoError(t, result.err)
+	require.Equal(t, int64(0), result.rows, "the clear must lose to a commit that reconfigured the same provider")
+	require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, serverID))
 }

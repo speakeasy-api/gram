@@ -616,6 +616,9 @@ type recordingIdentityProviderAttachment struct {
 	previewErr error
 	previews   int
 	removals   int
+	// removeVersions records the expected version each removal was asked to
+	// act on, so a test can assert the confirmation carried the preview's.
+	removeVersions []string
 }
 
 func (a *recordingIdentityProviderAttachment) Attach(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID) (CatalogIdentityProviderAttachmentResult, error) {
@@ -628,8 +631,9 @@ func (a *recordingIdentityProviderAttachment) PreviewSignInRemoval(_ context.Con
 	return a.preview, a.previewErr
 }
 
-func (a *recordingIdentityProviderAttachment) RemoveSignIn(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID) (SignInRemovalResult, error) {
+func (a *recordingIdentityProviderAttachment) RemoveSignIn(_ context.Context, _ Principal, _ ResolvedProject, _ uuid.UUID, expectedVersion string) (SignInRemovalResult, error) {
 	a.removals++
+	a.removeVersions = append(a.removeVersions, expectedVersion)
 	return a.removal, a.removeErr
 }
 

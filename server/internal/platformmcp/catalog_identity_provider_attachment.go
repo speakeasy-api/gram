@@ -36,6 +36,12 @@ var (
 	ErrIdentityProviderAttachmentUnavailable = errors.New("platform mcp identity provider attachment unavailable")
 	ErrIdentityProviderAttachmentUnsupported = errors.New("platform mcp identity provider attachment unsupported")
 	ErrIdentityProviderAttachmentConflict    = errors.New("platform mcp identity provider attachment conflict")
+
+	// ErrSignInRemovalStale refuses a confirmation that does not name the
+	// server state it was agreed against: the sign-in was reconfigured since
+	// the preview, or the same confirmation is being replayed after it was
+	// already carried out.
+	ErrSignInRemovalStale = errors.New("platform mcp sign-in removal confirmation is stale")
 )
 
 const browserCatalogDCRAuthMethod = string(remotesessions.TokenEndpointAuthMethodBasic)
@@ -55,7 +61,7 @@ type CatalogIdentityProviderAttachmentResult struct {
 type CatalogIdentityProviderAttachment interface {
 	Attach(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogIdentityProviderAttachmentResult, error)
 	PreviewSignInRemoval(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (SignInRemovalPreview, error)
-	RemoveSignIn(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (SignInRemovalResult, error)
+	RemoveSignIn(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, expectedVersion string) (SignInRemovalResult, error)
 }
 
 // SignInRemovalPreview is what turning a server's sign-in off would do, read
@@ -74,6 +80,12 @@ type SignInRemovalPreview struct {
 	// it. False means removal unbinds it, which signs out everyone holding a
 	// session through it.
 	ClientStaysBound bool
+
+	// Version identifies the server state this preview describes. The removal
+	// only acts on the same version, so a confirmation that was agreed against
+	// one sign-in cannot carry out a different one after the server was
+	// reconfigured, and cannot be replayed once it has.
+	Version string
 }
 
 // SignInRemovalResult is what turning a server's sign-in off left in place.
@@ -515,8 +527,9 @@ func (s *CatalogIdentityProviderAttachmentService) PreviewSignInRemoval(ctx cont
 	if err != nil {
 		return SignInRemovalPreview{}, err
 	}
+	version := signInRemovalVersion(server)
 	if !server.RemoteSessionIssuerID.Valid {
-		return SignInRemovalPreview{Configured: false, ProviderURL: "", ClientStaysBound: false}, nil
+		return SignInRemovalPreview{Configured: false, ProviderURL: "", ClientStaysBound: false, Version: version}, nil
 	}
 	provider, err := remotesessionsrepo.New(s.db).GetRemoteSessionIssuerByID(ctx, remotesessionsrepo.GetRemoteSessionIssuerByIDParams{
 		ID:                    server.RemoteSessionIssuerID.UUID,
@@ -537,16 +550,47 @@ func (s *CatalogIdentityProviderAttachmentService) PreviewSignInRemoval(ctx cont
 	if err != nil {
 		return SignInRemovalPreview{}, fmt.Errorf("count MCP servers sharing the sign-in provider: %w", err)
 	}
-	return SignInRemovalPreview{Configured: true, ProviderURL: provider.Issuer, ClientStaysBound: others > 0}, nil
+	return SignInRemovalPreview{Configured: true, ProviderURL: provider.Issuer, ClientStaysBound: others > 0, Version: version}, nil
+}
+
+// signInRemovalVersion is the server row's version, which every write to the
+// row moves. Opaque to the caller: it is only ever compared.
+func signInRemovalVersion(server mcpserversrepo.McpServer) string {
+	return server.UpdatedAt.Time.UTC().Format(time.RFC3339Nano)
 }
 
 // RemoveSignIn turns the registration's server sign-in off through the same
 // operation the dashboard runs, so its refusals, audit and client-preservation
 // rules are the ones that apply.
-func (s *CatalogIdentityProviderAttachmentService) RemoveSignIn(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (SignInRemovalResult, error) {
+func (s *CatalogIdentityProviderAttachmentService) RemoveSignIn(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, expectedVersion string) (SignInRemovalResult, error) {
+	if expectedVersion == "" {
+		return SignInRemovalResult{}, ErrSignInRemovalStale
+	}
+
+	// The same serialization the attach takes, so two confirmations cannot
+	// decide against the same state, and the version is read and compared
+	// while this operation holds it rather than before.
+	lockTx, err := s.db.Begin(ctx)
+	if err != nil {
+		return SignInRemovalResult{}, fmt.Errorf("begin sign-in removal lock: %w", err)
+	}
+	defer func() { _ = lockTx.Rollback(ctx) }()
+	if err := platformrepo.New(lockTx).LockPlatformMCPOperationReceipt(ctx, platformrepo.LockPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		ProjectID:      project.ID.String(),
+		Operation:      "remove_identity_provider",
+		IdempotencyKey: registrationID.String(),
+	}); err != nil {
+		return SignInRemovalResult{}, fmt.Errorf("lock sign-in removal: %w", err)
+	}
+
 	preview, err := s.PreviewSignInRemoval(ctx, principal, project, registrationID)
 	if err != nil {
 		return SignInRemovalResult{}, err
+	}
+	if preview.Version != expectedVersion {
+		return SignInRemovalResult{}, ErrSignInRemovalStale
 	}
 	server, issuer, err := s.signInRemovalTarget(ctx, principal, project, registrationID)
 	if err != nil {
@@ -561,6 +605,9 @@ func (s *CatalogIdentityProviderAttachmentService) RemoveSignIn(ctx context.Cont
 	}, issuer, server.ID)
 	if err != nil {
 		return SignInRemovalResult{}, attachmentCommitError("turn off MCP server sign-in", err)
+	}
+	if err := lockTx.Commit(ctx); err != nil {
+		return SignInRemovalResult{}, fmt.Errorf("commit sign-in removal lock: %w", err)
 	}
 	return SignInRemovalResult{Removed: true, ProviderURL: preview.ProviderURL, ClientUnbound: result.ClientUnbound}, nil
 }
