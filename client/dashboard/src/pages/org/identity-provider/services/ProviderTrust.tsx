@@ -24,15 +24,14 @@ export function ProviderTrust({
   const detail = provider.usable
     ? acceptanceLabel(provider.lastAcceptedAt)
     : provider.unavailable;
-  const scope =
-    !isDefaultOrder || !provider.usable
-      ? undefined
-      : provider.kind === "speakeasy"
-        ? SPEAKEASY_DEFAULT_SCOPE.charAt(0).toLowerCase() +
-          SPEAKEASY_DEFAULT_SCOPE.slice(1)
-        : provider.placeholder
-          ? "for servers whose people sign in through one"
-          : undefined;
+  const scope = !isDefaultOrder
+    ? undefined
+    : provider.kind === "speakeasy"
+      ? SPEAKEASY_DEFAULT_SCOPE.charAt(0).toLowerCase() +
+        SPEAKEASY_DEFAULT_SCOPE.slice(1)
+      : provider.placeholder
+        ? "for servers whose people sign in through one"
+        : undefined;
   return (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
       <StatusDot tone={tone} className="translate-y-[-1px]" />

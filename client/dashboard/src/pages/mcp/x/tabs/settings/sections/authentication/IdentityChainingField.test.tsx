@@ -254,6 +254,32 @@ describe("identity chaining client for this service", () => {
     expect(screen.queryByText("wiki-client")).toBeNull();
   });
 
+  it("matches the authorization server as the server does: case, default port and trailing slash aside", () => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://TRACKER.example.com:443/"] },
+    };
+    issuerNames.items = [
+      { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
+    ];
+    render(
+      <IdentityChainingField
+        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+        providers={{ external: false }}
+        linkedClients={
+          [
+            {
+              id: "tracker-client",
+              clientId: "tracker-client",
+              remoteSessionIssuerId: "tracker",
+            },
+          ] as RemoteSessionClient[]
+        }
+        resource="https://example.com/mcp"
+      />,
+    );
+    expect(screen.getByText("tracker-client")).toBeTruthy();
+  });
+
   it("keeps Turn off for a binding on a client the metadata no longer names", () => {
     prmMock.value = {
       metadata: { authorizationServers: ["https://tracker.example.com/"] },

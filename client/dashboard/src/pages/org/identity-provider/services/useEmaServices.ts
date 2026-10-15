@@ -3,7 +3,7 @@ import type { EMAService } from "@gram/client/models/components/emaservice.js";
 import type { EMAServiceServer } from "@gram/client/models/components/emaserviceserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useIdentityProviderConnection } from "@gram/client/react-query/identityProviderConnection.js";
+import { buildIdentityProviderConnectionQuery } from "@gram/client/react-query/identityProviderConnection.core.js";
 import { buildOrganizationRemoteSessionIssuerEMAServicesQuery } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.core.js";
 import { useOrganization } from "@/contexts/Auth";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
@@ -40,9 +40,23 @@ function emaServicesQueryKey(
   ] as const;
 }
 
-/** The Okta connection's issuer record, so a broken Okta provider links to Okta and nothing else does. */
+/**
+ * The Okta connection's issuer record, so a broken Okta provider links to
+ * Okta and nothing else does. Keyed by organization under the SDK's prefix,
+ * so switching organizations never reuses the last one's connection and the
+ * SDK's invalidation still reaches it.
+ */
 export function useOktaIssuerId(enabled = true): string | undefined {
-  const query = useIdentityProviderConnection(undefined, SESSION_SECURITY, {
+  const organization = useOrganization();
+  const client = useGramContext();
+  const base = buildIdentityProviderConnectionQuery(
+    client,
+    undefined,
+    SESSION_SECURITY,
+  );
+  const query = useQuery({
+    ...base,
+    queryKey: [...base.queryKey, { organizationId: organization.id }],
     enabled,
     throwOnError: false,
     retry: false,

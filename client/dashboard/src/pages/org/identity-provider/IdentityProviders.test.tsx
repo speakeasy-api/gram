@@ -193,6 +193,22 @@ describe("Identity providers", () => {
         .getAttribute("href"),
     ).toBe("/example/identity?tab=identity-providers&provider=okta&view=setup");
   });
+  it("offers only the service when the named provider is hidden by its rollout", () => {
+    show("&provider=okta&service=https%3A%2F%2Flinear.example.com", {
+      showExternal: false,
+      showSpeakeasy: true,
+    });
+    expect(
+      screen.queryByRole("link", { name: "Open the identity provider" }),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Open the service" })
+        .getAttribute("href"),
+    ).toBe(
+      "/example/identity?tab=identity-providers&service=https%3A%2F%2Flinear.example.com",
+    );
+  });
   it("shows the provider list for unknown providers", () => {
     show("&provider=unsupported");
     expect(

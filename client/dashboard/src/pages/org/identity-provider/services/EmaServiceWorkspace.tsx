@@ -183,6 +183,7 @@ export function EmaServiceWorkspace({
             isDefault={row.isDefaultOrder}
             candidates={candidates.items}
             candidatesReady={candidates.ready}
+            candidatesError={candidates.error}
             canEdit={permissions.canEdit}
             canRestore={permissions.canRestore}
             readOnlyReason={permissions.readOnlyReason}
@@ -204,7 +205,11 @@ function TrustRow({
   const fix = provider.fix ? providerFixLink(provider.fix) : undefined;
   return (
     <li className="space-y-2">
-      <ProviderTrust provider={provider} isDefaultOrder={isDefaultOrder} />
+      {/* The placeholder's full scope follows below, so its short one would repeat it. */}
+      <ProviderTrust
+        provider={provider}
+        isDefaultOrder={isDefaultOrder && !provider.placeholder}
+      />
       {provider.placeholder && (
         <Text muted small className="block">
           {PLACEHOLDER_SCOPE}
@@ -237,6 +242,7 @@ function TrustRow({
 function useOrderCandidates(enabled: boolean): {
   items: OrderCandidate[];
   ready: boolean;
+  error?: { retry: () => void };
 } {
   const speakeasy = useEnterpriseIssuer();
   const signIns = useOrganizationUserSessionIssuersInfinite(
@@ -273,6 +279,11 @@ function useOrderCandidates(enabled: boolean): {
     enabled &&
     signIns.isSuccess &&
     !signIns.hasNextPage &&
-    !speakeasy.isPending;
-  return { items, ready };
+    !speakeasy.isPending &&
+    !issuers.isLoading;
+  const error =
+    enabled && signIns.isError
+      ? { retry: () => void signIns.refetch() }
+      : undefined;
+  return { items, ready, error };
 }

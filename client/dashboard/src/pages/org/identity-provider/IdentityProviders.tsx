@@ -50,6 +50,12 @@ function ProviderContent({
     showExternal && !ambiguous
       ? PROVIDERS.find((provider) => provider.id === providerId)
       : undefined;
+  // Only offer an identity provider the rollout shows; the overview is all a
+  // hidden one would open.
+  const providerShown =
+    providerId === "speakeasy"
+      ? showSpeakeasy
+      : showExternal && PROVIDERS.some((p) => p.id === providerId);
   if (provider) return <provider.Workspace />;
   if (!ambiguous && providerId === "speakeasy" && showSpeakeasy)
     return <SpeakeasyWorkspace />;
@@ -76,22 +82,26 @@ function ProviderContent({
         <Alert variant="warning">
           <Text small>
             This link points at both an identity provider and a service.{" "}
-            <Link
-              className="underline underline-offset-4"
-              to={
-                providerId === "okta"
-                  ? oktaViewHref("setup")
-                  : speakeasyProviderHref()
-              }
-            >
-              Open the identity provider
-            </Link>{" "}
-            or{" "}
+            {providerShown && (
+              <>
+                <Link
+                  className="underline underline-offset-4"
+                  to={
+                    providerId === "okta"
+                      ? oktaViewHref("setup")
+                      : speakeasyProviderHref()
+                  }
+                >
+                  Open the identity provider
+                </Link>{" "}
+                or{" "}
+              </>
+            )}
             <Link
               className="underline underline-offset-4"
               to={emaServiceHref(serviceIssuer)}
             >
-              open the service
+              {providerShown ? "open the service" : "Open the service"}
             </Link>
             .
           </Text>

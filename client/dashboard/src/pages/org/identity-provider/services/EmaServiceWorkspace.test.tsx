@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   saveResult: { isDefault: false } as { isDefault: boolean },
   speakeasyIssuer: "https://speakeasy.example.com/issuer" as string | undefined,
   signIns: [] as { projectId: string; trustedRemoteSessionIssuerId?: string }[],
+  signInsState: "success" as "success" | "pending" | "error",
+  signInsRefetch: vi.fn(),
   issuers: [] as { id: string; name: string; issuer: string }[],
 }));
 vi.mock("./EmaServiceServers", () => ({
@@ -59,11 +61,15 @@ vi.mock("../useEnterpriseIssuer", () => ({
 }));
 vi.mock("@gram/client/react-query/organizationUserSessionIssuers.js", () => ({
   useOrganizationUserSessionIssuersInfinite: () => ({
-    data: { pages: [{ result: { items: mocks.signIns } }] },
-    isSuccess: true,
+    data:
+      mocks.signInsState === "success"
+        ? { pages: [{ result: { items: mocks.signIns } }] }
+        : undefined,
+    isSuccess: mocks.signInsState === "success",
     hasNextPage: false,
     isFetchingNextPage: false,
-    isError: false,
+    isError: mocks.signInsState === "error",
+    refetch: mocks.signInsRefetch,
     fetchNextPage: () => Promise.resolve(),
   }),
 }));
@@ -193,6 +199,8 @@ beforeEach(() => {
   mocks.saveResult = { isDefault: false };
   mocks.speakeasyIssuer = "https://speakeasy.example.com/issuer";
   mocks.signIns = [{ projectId: "", trustedRemoteSessionIssuerId: "okta" }];
+  mocks.signInsState = "success";
+  mocks.signInsRefetch.mockReset();
   mocks.issuers = [
     { id: "okta", name: "Okta", issuer: "https://okta.example.com" },
   ];
@@ -510,5 +518,29 @@ describe("one service", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
     fireEvent.click(screen.getByRole("button", { name: "Move Okta up" }));
     expect(saveButton().disabled).toBe(false);
+  });
+  it("waits for every identity provider it could add before editing", () => {
+    mocks.signInsState = "pending";
+    show();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Customize order",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText("Checking which identity providers you can add…"),
+    ).toBeTruthy();
+  });
+
+  it("offers a retry when the identity providers it could add fail to load", () => {
+    mocks.signInsState = "error";
+    show();
+    expect(
+      screen.getByText(/Couldn’t load the identity providers you can put/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.signInsRefetch).toHaveBeenCalled();
   });
 });

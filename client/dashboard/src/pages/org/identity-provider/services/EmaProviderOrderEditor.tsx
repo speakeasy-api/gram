@@ -41,14 +41,7 @@ export type OrderCandidate = {
   remoteSessionIssuerId?: string;
 };
 
-type Entry = OrderCandidate & {
-  /**
-   * False when a saved entry can no longer be referenced: deleted, or no
-   * organization sign-in trusts it. One that is only paused or disabled
-   * stays valid and gets a readiness note instead.
-   */
-  available: boolean;
-};
+type Entry = OrderCandidate;
 
 /**
  * Which identity providers are tried for a service, in what order. By
@@ -63,6 +56,7 @@ export function EmaProviderOrderEditor({
   isDefault,
   candidates,
   candidatesReady,
+  candidatesError,
   canEdit,
   canRestore,
   readOnlyReason,
@@ -75,6 +69,8 @@ export function EmaProviderOrderEditor({
   candidates: OrderCandidate[];
   /** Whether every candidate has loaded, so a saved entry missing from them is really gone. */
   candidatesReady: boolean;
+  /** Why the candidates couldn't load, with a retry; editing waits for them. */
+  candidatesError?: { retry: () => void };
   /** Build and save a custom order. */
   canEdit: boolean;
   /** Go back to the default. */
@@ -98,11 +94,16 @@ export function EmaProviderOrderEditor({
           kind: provider.kind,
           name: candidate?.name ?? provider.name,
           remoteSessionIssuerId: provider.remoteSessionIssuerId,
-          available:
-            !candidatesReady ||
-            (!!candidate && provider.unavailableReason !== "deleted"),
         };
       });
+  // Judged on every render, so a draft started before the candidates loaded
+  // is checked against them once they have. An entry that is only paused or
+  // disabled stays valid and gets a readiness note instead.
+  const available = (entry: Entry): boolean =>
+    !candidatesReady ||
+    (candidates.some((c) => c.key === entry.key) &&
+      current.find((p) => p.key === entry.key)?.unavailableReason !==
+        "deleted");
   const readiness = (key: string): string | undefined => {
     const provider = current.find((p) => p.key === key);
     return provider && !provider.usable && !provider.placeholder
@@ -129,7 +130,7 @@ export function EmaProviderOrderEditor({
   const addable = candidates.filter(
     (candidate) => !order.some((entry) => entry.key === candidate.key),
   );
-  const unavailable = order.filter((entry) => !entry.available);
+  const unavailable = order.filter((entry) => !available(entry));
   const fallbackFrom = providersBeforeSpeakeasy(order);
 
   const save = useSetOrganizationRemoteSessionIssuerEMAProvidersMutation({
@@ -187,7 +188,7 @@ export function EmaProviderOrderEditor({
         ...candidates.filter((c) => c.kind === "speakeasy"),
       ]
         .slice(0, MAX_ORDER_LENGTH)
-        .map((c) => ({ ...c, available: true })),
+        .map((c) => ({ ...c })),
     );
   const showEditControls = canEdit && editing;
 
@@ -279,7 +280,7 @@ export function EmaProviderOrderEditor({
                         <Text as="span" small className="truncate font-medium">
                           {entry.name}
                         </Text>
-                        {!entry.available ? (
+                        {!available(entry) ? (
                           <Text
                             as="span"
                             small
@@ -386,10 +387,7 @@ export function EmaProviderOrderEditor({
                             (c) => c.key === adding,
                           );
                           if (!candidate) return;
-                          setDraft([
-                            ...order,
-                            { ...candidate, available: true },
-                          ]);
+                          setDraft([...order, { ...candidate }]);
                           setAdding("");
                         }}
                       >
@@ -409,6 +407,30 @@ export function EmaProviderOrderEditor({
             <Text muted small>
               {readOnlyReason}
             </Text>
+          )}
+          {canEdit && candidatesError ? (
+            <Alert variant="error" alignTop>
+              <div className="flex flex-col items-start gap-2">
+                <Text small className="block">
+                  Couldn’t load the identity providers you can put in the order,
+                  so the order can’t be changed right now.
+                </Text>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={candidatesError.retry}
+                >
+                  Retry
+                </Button>
+              </div>
+            </Alert>
+          ) : (
+            canEdit &&
+            !candidatesReady && (
+              <Text muted small role="status">
+                Checking which identity providers you can add…
+              </Text>
+            )
           )}
           <ApiErrorAlert error={conflictError ? null : save.error} />
         </SettingsSection.Body>
@@ -436,7 +458,7 @@ export function EmaProviderOrderEditor({
                 <Button
                   variant={custom ? "secondary" : "primary"}
                   size="sm"
-                  disabled={save.isPending}
+                  disabled={save.isPending || !candidatesReady}
                   onClick={() => (custom ? startEditing(saved) : customize())}
                 >
                   {custom ? "Edit order" : "Customize order"}

@@ -1027,8 +1027,18 @@ function StaleBinding({
   );
 }
 
+/** An issuer URL compared as the server does: scheme and host case, default port and trailing slash aside. */
+function canonicalIssuer(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname.replace(/\/+$/, "")}${url.search}`;
+  } catch {
+    return value.replace(/\/+$/, "");
+  }
+}
+
 function sameIssuer(a: string, b: string): boolean {
-  return a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
+  return canonicalIssuer(a) === canonicalIssuer(b);
 }
 
 /** Clients registered with the server's authorization server, when that is known. */

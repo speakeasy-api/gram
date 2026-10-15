@@ -102,11 +102,11 @@ export function IdentityChainingSection({
     { enabled: !!userSessionIssuerId, throwOnError: false },
   );
   const userSessionIssuer = issuerQuery.data;
-  const { items: clients, isLoading: clientsLoading } =
-    useAllRemoteSessionClients(
-      { userSessionIssuerId },
-      { enabled: !!userSessionIssuerId },
-    );
+  const clientsQuery = useAllRemoteSessionClients(
+    { userSessionIssuerId },
+    { enabled: !!userSessionIssuerId },
+  );
+  const clients = clientsQuery.items;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -141,12 +141,13 @@ export function IdentityChainingSection({
         !!userSessionIssuer.trustedRemoteSessionIssuerId));
 
   const applies = !!userSessionIssuerId && remoteMcpServerId !== "";
-  const failed = issuerQuery.isError || sourceQuery.isError;
+  const failed =
+    issuerQuery.isError || sourceQuery.isError || clientsQuery.isError;
   const loading =
     !failed &&
     (issuerQuery.isLoading ||
       sourceQuery.isLoading ||
-      clientsLoading ||
+      clientsQuery.isLoading ||
       externalFlag.status === "loading" ||
       emaProvidersFlag.status === "loading" ||
       speakeasyIssuer.isLoading);
@@ -181,6 +182,7 @@ export function IdentityChainingSection({
               onClick={() => {
                 void issuerQuery.refetch();
                 void sourceQuery.refetch();
+                clientsQuery.refetch();
               }}
             >
               Retry

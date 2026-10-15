@@ -124,7 +124,11 @@ describe("Services", () => {
       },
     ];
     show();
-    expect(screen.getByText("Can’t sign right now")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Can’t sign right now · for servers whose people sign in with Speakeasy",
+      ),
+    ).toBeTruthy();
     expect(screen.getByText("None yet")).toBeTruthy();
   });
 

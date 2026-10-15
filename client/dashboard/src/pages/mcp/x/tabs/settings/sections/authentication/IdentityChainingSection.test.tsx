@@ -12,6 +12,8 @@ const state = vi.hoisted(() => ({
     boolean
   >,
   clientsLoading: false,
+  clientsError: false,
+  clientsRefetch: vi.fn(),
   url: "https://mcp.vendor.example.com/mcp" as string | undefined,
   sourceError: false,
   hash: "",
@@ -44,6 +46,8 @@ vi.mock("@/lib/remote-identity", () => ({
   useAllRemoteSessionClients: () => ({
     items: [{ id: "client" }],
     isLoading: state.clientsLoading,
+    isError: state.clientsError,
+    refetch: state.clientsRefetch,
   }),
 }));
 vi.mock("@/routes", () => ({
@@ -102,6 +106,8 @@ beforeEach(() => {
   };
   state.flags = { oktaConnections: true, emaProviders: true };
   state.clientsLoading = false;
+  state.clientsError = false;
+  state.clientsRefetch.mockReset();
   state.url = "https://mcp.vendor.example.com/mcp";
   state.sourceError = false;
   state.hash = "";
@@ -230,6 +236,18 @@ describe("IdentityChainingSection", () => {
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(state.refetch).toHaveBeenCalled();
+  });
+
+  it("says when the clients couldn't load, instead of asking for a client", () => {
+    state.clientsError = true;
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.getByText(
+        "Couldn’t load Enterprise Managed Authorization for this server.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.clientsRefetch).toHaveBeenCalled();
   });
 
   it("scrolls to itself once it has loaded on a deep link", () => {
