@@ -48,6 +48,16 @@ An agent's grants — its own and the ones it inherits from its roles — are fi
 
 Widening an agent through a role does not raise its ceiling. A request authenticated as an agent still evaluates the intersection of its credential's delegated policy, its agent policy (now including role grants), and its owner's grants.
 
+Workload sessions use the same three independent boundaries: the session's immutable approved policy, the assigned agent's current policy, and the current owner's effective permissions. Admission reads the assignment, agent, owner membership, and policies in one database snapshot on every request. It does not cache owner permissions between requests. Owner permissions include role and `user:all` grants, exclusions, and direct-grant precedence; they do not become grants held by the workload itself.
+
+This restricts existing workload sessions without changing workload authentication. Removing an owner's permission prevents the next operation from using it. Restoring permission can restore access only within the original session ceiling and the current agent policy. Transfers immediately use the new owner's permissions, not the former owner's. A missing or inactive owner, an unresolved assignment, or an unusable agent fails admission with the ordinary unauthorized response. An eligible owner who lacks a required permission produces a forbidden operation instead.
+
+Configured Assistant triggers that use workload identity follow this boundary too, including autonomous turns without a human authorizer. Assistants without configured agent identity retain their existing owner-scoped authentication. No credential format, issuer setup, or stored policy migration is required. Administrators should review the current owner's access if an existing workload can authenticate but can no longer reach a resource.
+
+MCP session withdrawal rules still apply. A session limited to one MCP server is withdrawn when it loses access to that server; restoring permission then requires a new session. An issuer-wide session can remain usable at other servers its three policies still permit.
+
+Platform MCP needs no new tool for this enforcement change: the target is a runtime operation, and the actor is the authenticated workload or agent. The existing Assistant identity-upgrade tool still reports configuration state, not execution permission; its `ACTIVE` qualification remains accurate. Runtime authorization and configured-trigger regression tests verify the boundary. No new dashboard data requires demo seed changes.
+
 A request's effective grants are normally loaded from both:
 
 - the authenticated user principal, such as `user:user_01abc`
