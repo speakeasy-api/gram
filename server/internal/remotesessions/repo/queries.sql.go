@@ -11862,6 +11862,43 @@ func (q *Queries) RetireLegacyEMACredentialSlot(ctx context.Context, arg RetireL
 	return err
 }
 
+const retireSpeakeasyConsentEMACredentials = `-- name: RetireSpeakeasyConsentEMACredentials :exec
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND user_session_issuer_id = $3::uuid
+  AND remote_session_client_id = $4::uuid
+  AND resource = $5::text AND subject_urn = $6::text
+  AND sign_in_id = $7::uuid
+  AND ema_provider = 'speakeasy' AND user_session_id IS NULL
+  AND deleted IS FALSE
+`
+
+type RetireSpeakeasyConsentEMACredentialsParams struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	Resource              string
+	SubjectUrn            string
+	SignInID              uuid.UUID
+}
+
+// NULL grants never conflict in the per-grant key, so a sign-in's earlier
+// consent credentials are retired before it publishes a new one.
+func (q *Queries) RetireSpeakeasyConsentEMACredentials(ctx context.Context, arg RetireSpeakeasyConsentEMACredentialsParams) error {
+	_, err := q.db.Exec(ctx, retireSpeakeasyConsentEMACredentials,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+		arg.SignInID,
+	)
+	return err
+}
+
 const revokeOrganizationRemoteSession = `-- name: RevokeOrganizationRemoteSession :one
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp(),

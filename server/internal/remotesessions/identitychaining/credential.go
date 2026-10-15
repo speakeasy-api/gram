@@ -187,6 +187,14 @@ const legacySubjectKey = "remote_session_ema_credentials_subject_key"
 // is retired and the write retried, matching the old replace-on-publish.
 func upsertSpeakeasyCredential(ctx context.Context, tx pgx.Tx, params repo.UpsertSpeakeasyEMACredentialParams) (publishedSlot, error) {
 	var none publishedSlot
+	if !params.UserSessionID.Valid {
+		if err := repo.New(tx).RetireSpeakeasyConsentEMACredentials(ctx, repo.RetireSpeakeasyConsentEMACredentialsParams{
+			OrganizationID: params.OrganizationID, ProjectID: params.ProjectID, UserSessionIssuerID: params.UserSessionIssuerID,
+			RemoteSessionClientID: params.RemoteSessionClientID, Resource: params.Resource, SubjectUrn: params.SubjectUrn, SignInID: params.SignInID,
+		}); err != nil {
+			return none, fmt.Errorf("retire earlier consent EMA credentials: %w", err)
+		}
+	}
 	sp, err := tx.Begin(ctx)
 	if err != nil {
 		return none, fmt.Errorf("begin Speakeasy credential savepoint: %w", err)

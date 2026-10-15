@@ -5556,6 +5556,19 @@ WHERE organization_id = @organization_id::text AND project_id = @project_id::uui
   AND resource = @resource::text AND subject_urn = @subject_urn::text
   AND deleted IS FALSE;
 
+-- name: RetireSpeakeasyConsentEMACredentials :exec
+-- NULL grants never conflict in the per-grant key, so a sign-in's earlier
+-- consent credentials are retired before it publishes a new one.
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
+  AND user_session_issuer_id = @user_session_issuer_id::uuid
+  AND remote_session_client_id = @remote_session_client_id::uuid
+  AND resource = @resource::text AND subject_urn = @subject_urn::text
+  AND sign_in_id = @sign_in_id::uuid
+  AND ema_provider = 'speakeasy' AND user_session_id IS NULL
+  AND deleted IS FALSE;
+
 -- name: RetireLegacyConsentEMACredentialSlot :execrows
 -- A consent credential may only replace another consent credential in the
 -- legacy one-per-subject slot, never a grant's or another provider's.
