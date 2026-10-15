@@ -2183,6 +2183,9 @@ type ProductFeatures struct {
 	NetworkIngressEnabled bool
 	// Whether the organization can configure signals intelligence
 	SignalsIntelligenceEnabled bool
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -2736,6 +2739,9 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	if vres.SignalsIntelligenceEnabled != nil {
 		res.SignalsIntelligenceEnabled = *vres.SignalsIntelligenceEnabled
 	}
+	if vres.OrganizationGatewayDisabled != nil {
+		res.OrganizationGatewayDisabled = *vres.OrganizationGatewayDisabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -2766,6 +2772,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

@@ -5593,6 +5593,12 @@ type SigintSensor struct {
 	MatchExpression string
 	// @access: confidential
 	Enabled bool
+	// Absent means single_message; sliding_window supplies preceding conversation context.
+	// @access: confidential
+	InputStrategy pgtype.Text
+	// Total messages including the target; absent means five for sliding windows.
+	// @access: confidential
+	WindowSize pgtype.Int4
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

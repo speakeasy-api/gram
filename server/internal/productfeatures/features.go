@@ -56,13 +56,18 @@ const (
 	FeatureNetworkIngress Feature = "network_ingress"
 	// FeatureSignalsIntelligence gates signals intelligence configuration access.
 	FeatureSignalsIntelligence Feature = "signals_intelligence"
+	// FeatureOrganizationGatewayDisabled turns the organization gateway off:
+	// while set, every gateway route answers 404. Stored inverted so the
+	// gateway stays on for every organization that never touched it.
+	FeatureOrganizationGatewayDisabled Feature = "organization_gateway_disabled"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set
 // requires a platform admin in addition to org:admin on the target
 // organization. The org-settable cases are the toggles organization admins
 // manage themselves through the dashboard's organization settings (Logs,
-// Skills content upload, consent tool filtering, Platform MCP access); every
+// Skills content upload, consent tool filtering, Platform MCP access, the
+// organization gateway); every
 // other settable feature is a staff-managed entitlement, and features missing
 // a case fail closed so a new feature cannot silently become self-serve.
 func (f Feature) RequiresPlatformAdmin() bool {
@@ -74,7 +79,8 @@ func (f Feature) RequiresPlatformAdmin() bool {
 		FeatureHooksFailOpen,
 		FeatureSkillCaptureMetadataOnly,
 		FeatureConsentToolFiltering,
-		FeaturePlatformMCP:
+		FeaturePlatformMCP,
+		FeatureOrganizationGatewayDisabled:
 		return false
 	default:
 		return true

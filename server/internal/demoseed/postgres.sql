@@ -28,15 +28,13 @@
 --                in the ClickHouse seed's arrayElement calls)
 
 -- ensure_demo_org() does the whole delete-and-reinsert as ONE statement, and
--- the shared pool caps statements at 60s (newDBClient) — which the prod-sized
--- demo org now exceeds, failing the daily run with SQLSTATE 57014. 3x that
--- ceiling is enough headroom for the current seed to grow into while still
--- failing the daily run fast if it ever wedges. SET LOCAL, not
--- SET: the script is applied as a single multi-statement simple query, so it
--- runs in one implicit transaction and the setting reverts when that ends —
+-- the shared pool caps statements at 60s (newDBClient), which a prod run
+-- exceeds. Raise the cap for this run only, while still failing it if it
+-- ever wedges. SET LOCAL, not SET: the script is applied as a single
+-- multi-statement simple query, so it runs in one implicit transaction and the setting reverts when that ends —
 -- including on failure, so a raised timeout can never escape onto a pooled
 -- connection.
-SET LOCAL statement_timeout = '180s';
+SET LOCAL statement_timeout = '360s';
 
 CREATE SCHEMA IF NOT EXISTS demo;
 
@@ -582,20 +580,20 @@ BEGIN
      'A future customer renewal campaign.', NULL);
 
   INSERT INTO sigint_sensors
-    (id, project_id, name, slug, description, instructions, mode, enabled)
+    (id, project_id, name, slug, description, instructions, mode, enabled, input_strategy, window_size)
   VALUES
     (demo.det_uuid('gram-demo-sigint-sensor-service-areas'), proj_a,
      'Service areas', 'service-areas', 'Labels every service area discussed in a conversation.',
-     'Select every product service that materially appears.', 'multi_label', true),
+     'Select every product service that materially appears in the target message.', 'multi_label', true, 'single_message', 5),
     (demo.det_uuid('gram-demo-sigint-sensor-primary-service'), proj_a,
      'Primary service', 'primary-service', 'Chooses the service most central to a conversation.',
-     'Choose the single service that best describes the main request.', 'exclusive', true),
+     'Choose the single service that best describes the target request.', 'exclusive', true, 'sliding_window', 5),
     (demo.det_uuid('gram-demo-sigint-sensor-impact'), proj_a,
      'Customer impact', 'customer-impact', 'Orders conversations by customer impact.',
-     'Score impact from low to high using the supplied levels.', 'ordered_score', true),
+     'Score the target message impact from low to high using the supplied levels.', 'ordered_score', true, 'sliding_window', 10),
     (demo.det_uuid('gram-demo-sigint-sensor-draft-campaign'), proj_a,
      'Draft campaign', 'draft-campaign', 'An incomplete campaign classifier awaiting its labels.',
-     NULL, 'multi_label', false);
+     NULL, 'multi_label', false, 'single_message', 5);
 
   INSERT INTO sigint_sensor_signals
     (id, project_id, sensor_id, signal_id, sort_order)
@@ -745,6 +743,11 @@ BEGIN
        ARRAY['chat:read'],
        ARRAY['user_demo_hana', 'user_demo_jonas'],
        ARRAY[]::text[]),
+      ('tool-log-viewer', 'Tool Log Viewer',
+       'Reads one project''s tool-call logs, including arguments and results, without organization admin access.',
+       ARRAY['log:read'],
+       ARRAY['user_demo_mateo'],
+       ARRAY[]::text[]),
       ('collaborator', 'Collaborator',
        'Builds and ships MCP servers, skills and assistants, without organization settings.',
        ARRAY['org:read', 'project:read', 'project:write', 'mcp:read',
@@ -809,14 +812,15 @@ BEGIN
     custom_role_urn := 'role:organization:' || custom_role_id;
 
     -- Unrestricted selectors: the wildcard shape every scope stores when a
-    -- rule is not narrowed to one resource.
+    -- rule is not narrowed to one resource. log:read is granted per project,
+    -- so the Tool Log Viewer names the demo project instead.
     INSERT INTO principal_grants
       (organization_id, principal_urn, scope, selectors)
     SELECT demo_org, custom_role_urn, scope,
            jsonb_build_object(
-             'resource_kind', CASE WHEN scope = 'plugin:write' THEN 'project'
+             'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
                                    ELSE split_part(scope, ':', 1) END,
-             'resource_id', '*')
+             'resource_id', CASE WHEN scope = 'log:read' THEN proj_a::text ELSE '*' END)
     FROM unnest(custom_role.scopes) AS scope;
 
     FOR i IN 1 .. COALESCE(array_length(custom_role.members, 1), 0) LOOP

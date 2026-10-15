@@ -206,14 +206,19 @@ func identityChainingError(outcome identitychaining.Outcome) error {
 }
 
 // metaMemberChainer returns the tools/call gate's chaining hook for member,
-// or nil when chaining cannot apply: no gated issuer, or a member outside the
-// gateway's project, whose bindings belong to another project.
+// or nil when chaining cannot apply: no gated issuer, or, on a stored
+// gateway, a member outside the gateway's project, whose bindings belong to
+// another project. An organization gateway chains each member in its own
+// project.
 func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) func(ctx context.Context, upstreamResource string) (string, error) {
-	if s.identityChainer == nil || gate.userSessionIssuerID == uuid.Nil || member.projectID != gate.projectID {
+	if s.identityChainer == nil || gate.userSessionIssuerID == uuid.Nil {
+		return nil
+	}
+	if !gate.organizationGateway && member.projectID != gate.projectID {
 		return nil
 	}
 	return func(ctx context.Context, upstreamResource string) (string, error) {
-		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, gate.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID)
+		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, member.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID)
 		if !chainable {
 			return "", nil
 		}
@@ -256,7 +261,10 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	if s.identityChainer == nil || len(clients) == 0 || endpoint.UserSessionIssuerID == uuid.Nil || subject == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
 		return nil
 	}
-	if !s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID) {
+	// Configured is a per-project shortcut. An organization gateway has no
+	// project of its own, so its members' requests, each in its member's
+	// project, decide instead.
+	if !endpoint.IsOrganizationGateway() && !s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID) {
 		return nil
 	}
 	if endpoint.MetaMcpServerID.Valid {
@@ -326,7 +334,7 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 	served := map[identitychaining.Request]servedBy{}
 	chained := make(map[uuid.UUID][]identitychaining.Request, len(clients))
 	for _, c := range clients {
-		members, resolved := routing.members[c.RemoteSessionIssuerID]
+		members, resolved := routing.members[c.ID]
 		if !resolved {
 			if memberCtx == nil {
 				stamped, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
@@ -337,7 +345,7 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 				memberCtx = stamped
 			}
 			var err error
-			members, _, err = s.claimingMetaMembers(memberCtx, endpoint, c.RemoteSessionIssuerID)
+			members, _, err = s.claimingMetaMembers(memberCtx, endpoint, c)
 			if err != nil {
 				s.logger.WarnContext(ctx, "resolve identity chaining members for consent", attr.SlogError(err))
 				continue
@@ -345,7 +353,9 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 		}
 		var requests []identitychaining.Request
 		for _, m := range members {
-			req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, challengeState.Subject.ID, m.UpstreamUrl, m.Tunneled, uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true})
+			// The member's own project: an organization gateway's members span
+			// projects, and a stored gateway's share its one.
+			req, ok := identitychaining.NewRequest(endpoint.OrganizationID, m.ProjectID, endpoint.UserSessionIssuerID, challengeState.Subject.ID, m.UpstreamUrl, m.Tunneled, uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true})
 			if !ok {
 				requests = nil
 				break

@@ -322,6 +322,17 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	if input.Outcome != "" && !validOutcomeClass(input.Outcome) {
 		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, blocked, unauthorized, client_error, server_error, failed, unknown")
 	}
+	if input.ProjectID == "" || input.MCPID == "" {
+		return QueryMCPTracesOutput{}, fmt.Errorf("project_id and mcp_id are required")
+	}
+	if s.reader == nil {
+		return QueryMCPTracesOutput{}, ErrUnavailable
+	}
+	// Individual calls are the Tool Logs list, so log:read on the project is
+	// required before any budget is spent or row is read.
+	if _, err := s.reader.ResolveProjectLogRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID}); err != nil {
+		return QueryMCPTracesOutput{}, fmt.Errorf("authorize mcp traces: %w", err)
+	}
 	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget, drilldownWindowSpec)
 	if err != nil {
 		return QueryMCPTracesOutput{}, err

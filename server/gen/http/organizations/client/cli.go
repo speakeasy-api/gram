@@ -31,6 +31,21 @@ func BuildGetPayload(organizationsGetSessionToken string) (*organizations.GetPay
 	return v, nil
 }
 
+// BuildGetGatewayPayload builds the payload for the organizations getGateway
+// endpoint from CLI flags.
+func BuildGetGatewayPayload(organizationsGetGatewaySessionToken string) (*organizations.GetGatewayPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsGetGatewaySessionToken != "" {
+			sessionToken = &organizationsGetGatewaySessionToken
+		}
+	}
+	v := &organizations.GetGatewayPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildSendInvitePayload builds the payload for the organizations sendInvite
 // endpoint from CLI flags.
 func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSendInviteSessionToken string) (*organizations.SendInvitePayload, error) {

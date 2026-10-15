@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -30,9 +29,20 @@ type eventInput struct {
 
 func (in *eventInput) Event() Event                       { return in.event }
 func (in *eventInput) MatchingMessage() *matching.Message { return nil }
-func (in *eventInput) Resolve(context.Context) (classifier.Entry, error) {
-	in.resolved++
-	return in.data, in.err
+func (in *eventInput) NewBuffer(int) InputBuffer {
+	return &eventBuffer{input: in}
+}
+
+type eventBuffer struct {
+	input *eventInput
+}
+
+func (b *eventBuffer) Resolve(_ context.Context, size int) (ResolvedInput, error) {
+	if size != 1 {
+		return ResolvedInput{}, fmt.Errorf("%w: event has no history", ErrInvalidInput)
+	}
+	b.input.resolved++
+	return ResolvedInput{State: b.input.data, MessageCount: 1, Truncated: false}, b.input.err
 }
 
 func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
@@ -51,10 +61,7 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	deps.On("IsFeatureEnabled", mock.Anything, in.event.OrganizationID, productfeatures.FeatureSignalsIntelligence).Return(true, nil).Times(3)
 	deps.On("Load", mock.Anything, in.event.OrganizationID, project, "mcp.tool_call").Return(partialSensors()[1:], nil).Twice()
 	deps.On("Load", mock.Anything, in.event.OrganizationID, project, "custom.audit_event").Return(partialSensors()[1:], nil).Once()
-	c := classifiertest.NewMock(t)
-	c.On("Classify", mock.Anything, mock.MatchedBy(func(req *classifier.Request) bool {
-		return reflect.DeepEqual(req.Input, data) && len(req.Questions) == 1
-	})).Return(partialResult(false)).Times(3)
+	c, requests := newRecordingClassifier(t)
 	var pub capturePublisher
 
 	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, &pub, c)
@@ -87,6 +94,22 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	require.NotEqual(t, a.GetId(), pub.readings[2].GetId(), "event kinds namespace otherwise identical identities")
 	require.Equal(t, "mcp.tool_call", a.GetEvent().GetKind(), "published metadata is an independent snapshot")
 	require.Equal(t, 3, in.resolved)
+	testenv.RequireYAMLGolden(t, "testdata/requests/independent-event.golden.yaml", requests.snapshot(t))
+}
+
+func TestEvaluatorRejectsUnsupportedWindowAfterPublishingTargetOnly(t *testing.T) {
+	t.Parallel()
+	m := message()
+	in := &eventInput{event: (&conversationInput{message: m}).Event(), data: classifier.Text("independent event")}
+	definitions := partialSensors()
+	definitions[0].InputStrategy = InputStrategySlidingWindow
+	c := classifiertest.NewMock(t)
+	c.On("Classify", mock.Anything, mock.Anything).Return(partialResult(false)).Once()
+	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
+	require.NoError(t, h.evaluator.Evaluate(t.Context(), in))
+	require.Len(t, pub.readings, 1)
+	require.Equal(t, "other", pub.readings[0].GetSensorId())
+	require.Equal(t, 1, in.resolved)
 }
 
 func TestEvaluatorDefersContentUntilEligible(t *testing.T) {

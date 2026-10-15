@@ -211,7 +211,7 @@ func TestWriteMCPError_NotificationsGetTheMandatedStatusToo(t *testing.T) {
 
 	var response map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Nil(t, response["id"], "a notification is still answered with a null id")
+	require.NotContains(t, response, "id", "an error for a notification omits the ID under 2026-07-28")
 }
 
 // TestWriteMCPError_NotificationsKeep200OnLegacyRevisions is the other half:

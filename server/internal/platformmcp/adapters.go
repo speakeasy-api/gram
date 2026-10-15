@@ -366,6 +366,7 @@ type PostgresReader struct {
 	riskFindings              riskFindingsLister
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
+	organizationGateway       *OrganizationGatewayService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -401,6 +402,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindings:              nil,
 		riskFindingList:           nil,
 		chatMetadata:              nil,
+		organizationGateway:       nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -594,6 +596,14 @@ func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, bu
 func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.chatMetadata = service
+	}
+	return r
+}
+
+// WithOrganizationGateway serves get_my_organization_gateway.
+func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.organizationGateway = service
 	}
 	return r
 }
@@ -949,6 +959,17 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 // organization and enforces the existing project:read scope before callers read
 // project-operational data.
 func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeProjectRead)
+}
+
+// ResolveProjectLogRead resolves one exact project under the principal's
+// organization and enforces log:read before callers list that project's
+// individual tool calls. project:read alone does not satisfy it.
+func (r *PostgresReader) ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeLogRead)
+}
+
+func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, scope authz.Scope) (ResolvedProject, error) {
 	if r == nil || r.reader == nil || r.authz == nil {
 		return ResolvedProject{}, ErrUnavailable
 	}
@@ -956,7 +977,7 @@ func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Princ
 	if err != nil {
 		return ResolvedProject{}, err
 	}
-	if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+	if err := r.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
 		if isAuthorizationDenied(err) {
 			return ResolvedProject{}, ErrForbidden
 		}

@@ -18,6 +18,18 @@ const (
 	// SigintSensorModeKey identifies the sensor's classification mode.
 	SigintSensorModeKey = attribute.Key("gram.sigint.sensor.mode")
 
+	// SigintSensorDefinitionHashKey identifies the evaluated sensor configuration version.
+	SigintSensorDefinitionHashKey = attribute.Key("gram.sigint.sensor.definition_hash")
+
+	// SigintRequestedWindowSizeKey records the configured message count including the target.
+	SigintRequestedWindowSizeKey = attribute.Key("gram.sigint.window.requested_size")
+
+	// SigintEffectiveWindowSizeKey records the message count supplied to classification.
+	SigintEffectiveWindowSizeKey = attribute.Key("gram.sigint.window.effective_size")
+
+	// SigintContentBudgetBytesKey records the payload limit used to construct context.
+	SigintContentBudgetBytesKey = attribute.Key("gram.sigint.content_budget_bytes")
+
 	// ClassifierErrorKey preserves classifier failure details without input or provider bodies.
 	ClassifierErrorKey = attribute.Key("gram.classifier.error")
 
@@ -680,56 +692,58 @@ const (
 	// remote session's access token.
 	RemoteSessionAccessExpiresAtKey = attribute.Key("gram.remote_session.access_expires_at")
 
-	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
-	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
-	RiskPolicyNameKey              = attribute.Key("gram.risk.policy_name")
-	RiskPolicyTypeKey              = attribute.Key("gram.risk.policy_type")
-	RiskMessageTypeKey             = attribute.Key("gram.risk.message_type")
-	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
-	RiskExclusionIDKey             = attribute.Key("gram.risk.exclusion_id")
-	RiskExclusionMatchTypeKey      = attribute.Key("gram.risk.exclusion_match_type")
-	RiskReconcileRowCountKey       = attribute.Key("gram.risk.reconcile_row_count")
-	RiskReconcileRowsKeptKey       = attribute.Key("gram.risk.reconcile_rows_kept")
-	SpendRuleIDKey                 = attribute.Key("gram.spend.rule_id")
-	RiskSourceKey                  = attribute.Key("gram.risk.source")
-	RiskScanAttemptKey             = attribute.Key("gram.risk.scan.attempt")
-	RiskScanMaxAttemptsKey         = attribute.Key("gram.risk.scan.max_attempts")
-	RiskScanBatchIndexKey          = attribute.Key("gram.risk.scan.batch_index")
-	RiskScanTextSizeKey            = attribute.Key("gram.risk.scan.text_size_bytes")
-	RiskScanLimitBytesKey          = attribute.Key("gram.risk.scan.limit_bytes")
-	RiskScanRequestIDKey           = attribute.Key("gram.risk.scan.request_id")
-	RiskScanEngineKey              = attribute.Key("gram.risk.scan.engine")
-	RiskScanGateReasonKey          = attribute.Key("gram.risk.scan.gate_reason")
-	RiskFindingIDKey               = attribute.Key("gram.risk.finding.id")
-	RiskPolicyVersionKey           = attribute.Key("gram.risk.policy.version")
-	RiskConfidenceKey              = attribute.Key("gram.risk.confidence")
-	RiskTagsKey                    = attribute.Key("gram.risk.tags")
-	RiskSurfaceKey                 = attribute.Key("gram.risk.surface")
-	RiskFieldKey                   = attribute.Key("gram.risk.field")
-	RiskPathKey                    = attribute.Key("gram.risk.path")
-	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
-	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
-	RiskEnforcementTruncatedKey    = attribute.Key("gram.risk.enforcement_truncated")
-	RiskEnforcementFailModeKey     = attribute.Key("gram.risk.enforcement.fail_mode")
-	RiskScanModeKey                = attribute.Key("gram.risk.scan_mode")
-	RiskLLMTokenKindKey            = attribute.Key("gram.risk.llm.token_kind")
-	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
-	RiskLLMFindingCountKey         = attribute.Key("gram.risk.llm.finding_count")
-	RiskLLMPublishFailedCountKey   = attribute.Key("gram.risk.llm.publish_failed_count")
-	RiskLLMCompletionKey           = attribute.Key("gram.risk.llm.completion")
-	SecretNameKey                  = attribute.Key("gram.secret.name")
-	SecurityPlacementKey           = attribute.Key("gram.security.placement")
-	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
-	SecurityTypeKey                = attribute.Key("gram.security.type")
-	SessionIDKey                   = attribute.Key("gram.session.id")
-	SessionTransferSourceHostKey   = attribute.Key("gram.session_transfer.source_host")
-	SessionTransferTargetHostKey   = attribute.Key("gram.session_transfer.target_host")
-	TransferFailureReasonKey       = attribute.Key("gram.session_transfer.failure_reason")
-	TransferSigninErrorKey         = attribute.Key("gram.session_transfer.signin_error")
-	SlackEventFullKey              = attribute.Key("gram.slack.event.full")
-	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
-	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
-	ToolCallDurationKey            = attribute.Key("gram.tool_call.duration")
+	RiskPolicyCountKey           = attribute.Key("gram.risk.policy_count")
+	RiskPolicyIDKey              = attribute.Key("gram.risk.policy_id")
+	RiskPolicyNameKey            = attribute.Key("gram.risk.policy_name")
+	RiskPolicyTypeKey            = attribute.Key("gram.risk.policy_type")
+	RiskMessageTypeKey           = attribute.Key("gram.risk.message_type")
+	RiskRuleIDKey                = attribute.Key("gram.risk.rule_id")
+	RiskExclusionIDKey           = attribute.Key("gram.risk.exclusion_id")
+	RiskExclusionMatchTypeKey    = attribute.Key("gram.risk.exclusion_match_type")
+	RiskReconcileRowCountKey     = attribute.Key("gram.risk.reconcile_row_count")
+	RiskReconcileRowsKeptKey     = attribute.Key("gram.risk.reconcile_rows_kept")
+	SpendRuleIDKey               = attribute.Key("gram.spend.rule_id")
+	RiskSourceKey                = attribute.Key("gram.risk.source")
+	RiskScanAttemptKey           = attribute.Key("gram.risk.scan.attempt")
+	RiskScanMaxAttemptsKey       = attribute.Key("gram.risk.scan.max_attempts")
+	RiskScanBatchIndexKey        = attribute.Key("gram.risk.scan.batch_index")
+	RiskScanTextSizeKey          = attribute.Key("gram.risk.scan.text_size_bytes")
+	RiskScanLimitBytesKey        = attribute.Key("gram.risk.scan.limit_bytes")
+	RiskScanRequestIDKey         = attribute.Key("gram.risk.scan.request_id")
+	RiskScanEngineKey            = attribute.Key("gram.risk.scan.engine")
+	RiskScanGateReasonKey        = attribute.Key("gram.risk.scan.gate_reason")
+	RiskFindingIDKey             = attribute.Key("gram.risk.finding.id")
+	RiskPolicyVersionKey         = attribute.Key("gram.risk.policy.version")
+	RiskConfidenceKey            = attribute.Key("gram.risk.confidence")
+	RiskTagsKey                  = attribute.Key("gram.risk.tags")
+	RiskSurfaceKey               = attribute.Key("gram.risk.surface")
+	RiskFieldKey                 = attribute.Key("gram.risk.field")
+	RiskPathKey                  = attribute.Key("gram.risk.path")
+	RiskStartPosKey              = attribute.Key("gram.risk.start_pos")
+	RiskEndPosKey                = attribute.Key("gram.risk.end_pos")
+	RiskEnforcementTruncatedKey  = attribute.Key("gram.risk.enforcement_truncated")
+	RiskEnforcementFailModeKey   = attribute.Key("gram.risk.enforcement.fail_mode")
+	RiskScanModeKey              = attribute.Key("gram.risk.scan_mode")
+	RiskLLMTokenKindKey          = attribute.Key("gram.risk.llm.token_kind")
+	RiskLLMModelKey              = attribute.Key("gram.risk.llm.model")
+	RiskLLMFindingCountKey       = attribute.Key("gram.risk.llm.finding_count")
+	RiskLLMPublishFailedCountKey = attribute.Key("gram.risk.llm.publish_failed_count")
+	RiskLLMCompletionKey         = attribute.Key("gram.risk.llm.completion")
+	SecretNameKey                = attribute.Key("gram.secret.name")
+	SecurityPlacementKey         = attribute.Key("gram.security.placement")
+	SecuritySchemeKey            = attribute.Key("gram.security.scheme")
+	SecurityTypeKey              = attribute.Key("gram.security.type")
+	SessionIDKey                 = attribute.Key("gram.session.id")
+	SessionTransferSourceHostKey = attribute.Key("gram.session_transfer.source_host")
+	SessionTransferTargetHostKey = attribute.Key("gram.session_transfer.target_host")
+	TransferFailureReasonKey     = attribute.Key("gram.session_transfer.failure_reason")
+	TransferSigninErrorKey       = attribute.Key("gram.session_transfer.signin_error")
+	SlackEventFullKey            = attribute.Key("gram.slack.event.full")
+	SlackEventTypeKey            = attribute.Key("gram.slack.event.type")
+	SlackTeamIDKey               = attribute.Key("gram.slack.team.id")
+	ToolCallDurationKey          = attribute.Key("gram.tool_call.duration")
+	// ToolCallIDKey names one gateway tool call on its telemetry_logs row.
+	ToolCallIDKey                  = attribute.Key("gram.tool_call.id")
 	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
 	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
@@ -762,6 +776,14 @@ const (
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
+	// The hooks ingest endpoint stamps these on the copy of a hook row it
+	// republishes into the OTel pipeline, so the row says where it came
+	// from and what Speakeasy decided without a join back to the request.
+	HookAdapterKey            = attribute.Key("gram.hook.adapter")
+	HookRawEventNameKey       = attribute.Key("gram.hook.raw_event_name")
+	HookCanonicalEventTypeKey = attribute.Key("gram.hook.canonical_event_type")
+	HookPermissionTypeKey     = attribute.Key("gram.hook.permission_type")
+	HookTurnIDKey             = attribute.Key("gram.hook.turn_id")
 	// HookRiskScannedKey marks hook duration metrics where a risk enforcement
 	// scan actually executed (as opposed to short-circuiting on missing
 	// context or no policies), so gating latency can be separated from the
@@ -913,6 +935,10 @@ const (
 	GenAIToolTypeKey          = semconv.GenAIToolTypeKey
 	GenAIToolDescriptionKey   = semconv.GenAIToolDescriptionKey
 
+	// MCP semconv keys
+	McpMethodNameKey = semconv.McpMethodNameKey
+	McpSessionIDKey  = semconv.McpSessionIDKey
+
 	// GenAI semconv keys for messages (opt-in due to PII concerns)
 	GenAIInputMessagesKey      = semconv.GenAIInputMessagesKey
 	GenAIOutputMessagesKey     = semconv.GenAIOutputMessagesKey
@@ -1035,6 +1061,26 @@ func SlogSigintSensorID(v string) slog.Attr { return slog.String(string(SigintSe
 
 // SlogSigintSensorMode identifies the sensor's classification mode.
 func SlogSigintSensorMode(v string) slog.Attr { return slog.String(string(SigintSensorModeKey), v) }
+
+// SlogSigintSensorDefinitionHash identifies the evaluated sensor configuration version.
+func SlogSigintSensorDefinitionHash(v string) slog.Attr {
+	return slog.String(string(SigintSensorDefinitionHashKey), v)
+}
+
+// SlogSigintRequestedWindowSize records the configured message count including the target.
+func SlogSigintRequestedWindowSize(v int) slog.Attr {
+	return slog.Int(string(SigintRequestedWindowSizeKey), v)
+}
+
+// SlogSigintEffectiveWindowSize records the message count supplied to classification.
+func SlogSigintEffectiveWindowSize(v int) slog.Attr {
+	return slog.Int(string(SigintEffectiveWindowSizeKey), v)
+}
+
+// SlogSigintContentBudgetBytes records the payload limit used to construct context.
+func SlogSigintContentBudgetBytes(v int) slog.Attr {
+	return slog.Int(string(SigintContentBudgetBytesKey), v)
+}
 
 // SlogClassifierError records the classifier's safe operation and question failures.
 func SlogClassifierError(err error) slog.Attr {
@@ -3081,6 +3127,9 @@ func SlogToolCallDuration(v time.Duration) slog.Attr {
 	return slog.Float64(string(ToolCallDurationKey), v.Seconds())
 }
 
+func ToolCallID(v string) attribute.KeyValue { return ToolCallIDKey.String(v) }
+func SlogToolCallID(v string) slog.Attr      { return slog.String(string(ToolCallIDKey), v) }
+
 func VisibilityInternal() attribute.KeyValue {
 	return VisibilityKey.String(VisibilityInternalValue)
 }
@@ -3252,6 +3301,10 @@ func SlogGenAIToolCallID(v string) slog.Attr      { return slog.String(string(Ge
 
 func GenAIToolName(v string) attribute.KeyValue { return GenAIToolNameKey.String(v) }
 func SlogGenAIToolName(v string) slog.Attr      { return slog.String(string(GenAIToolNameKey), v) }
+
+func McpMethodName(v string) attribute.KeyValue { return McpMethodNameKey.String(v) }
+
+func McpSessionID(v string) attribute.KeyValue { return McpSessionIDKey.String(v) }
 
 func GenAIToolType(v string) attribute.KeyValue { return GenAIToolTypeKey.String(v) }
 func SlogGenAIToolType(v string) slog.Attr      { return slog.String(string(GenAIToolTypeKey), v) }
