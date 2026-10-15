@@ -62,7 +62,7 @@ type speakeasySource struct {
 
 	// consentSignInID is the consent page's sign-in. When set, the source
 	// vouches for that sign-in before its MCP grant exists, and the
-	// credential it mints waits for the grant to adopt it.
+	// credential it mints waits for a grant of that sign-in to adopt it.
 	consentSignInID uuid.UUID
 }
 
@@ -306,16 +306,23 @@ func (c *Chainer) checkSpeakeasyPublish(ctx context.Context, tx pgx.Tx, req Requ
 	return nil
 }
 
-// adoptConsentCredential binds the credential minted on the consent page to
-// the grant that consent created, so the first tool call reuses it instead of
-// signing again. It takes the publish locks and rechecks the grant's sign-in,
-// so a revocation or rotation since consent leaves the credential unadopted.
+// adoptConsentCredential binds a credential minted on the consent page to a
+// grant backed by the same sign-in, so the first tool call reuses it instead
+// of signing again. Any such grant could mint the identical token itself. It
+// takes the publish locks and rechecks the grant's sign-in, so a revocation or
+// rotation since consent leaves the credential unadopted.
 func (c *Chainer) adoptConsentCredential(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, bool) {
 	var none Token
 	if sel.provider.Kind != remotesessions.EMAProviderSpeakeasy || sel.userSessionID == uuid.Nil {
 		return none, false
 	}
-	adopted, err := c.adopt(ctx, req, sel)
+	// Most misses have no consent credential; skip the locks for them.
+	pending := sel
+	pending.userSessionID = uuid.Nil
+	if row, err := readCredential(ctx, repo.New(c.db), req, pending, c.now()); err != nil || !row.Usable {
+		return none, false
+	}
+	adopted, err := c.adopt(ctx, logger, req, sel)
 	if err != nil {
 		if !errors.Is(err, errStale) {
 			logger.WarnContext(ctx, "adopt consent identity chaining credential", attr.SlogError(err))
@@ -328,7 +335,7 @@ func (c *Chainer) adoptConsentCredential(ctx context.Context, logger *slog.Logge
 	return c.cachedToken(ctx, logger, req, sel)
 }
 
-func (c *Chainer) adopt(ctx context.Context, req Request, sel selection) (bool, error) {
+func (c *Chainer) adopt(ctx context.Context, logger *slog.Logger, req Request, sel selection) (bool, error) {
 	tx, err := c.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin consent credential adoption: %w", err)
@@ -338,7 +345,7 @@ func (c *Chainer) adopt(ctx context.Context, req Request, sel selection) (bool, 
 	if err := q.LockEMAProvidersShared(ctx, req.OrganizationID); err != nil {
 		return false, fmt.Errorf("lock ema provider order: %w", err)
 	}
-	if outcome := c.stillServesWith(ctx, q, c.logger, req, sel); !outcome.Succeeded() {
+	if outcome := c.stillServesWith(ctx, q, logger, req, sel); !outcome.Succeeded() {
 		return false, errStale
 	}
 	if _, err := q.LockEMABindingForPublish(ctx, repo.LockEMABindingForPublishParams{ID: sel.bindingID, OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, Generation: sel.generation}); err != nil {

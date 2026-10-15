@@ -55,6 +55,9 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 
 	slot, err := c.publishSlot(ctx, logger, req, sel, cred)
 	switch {
+	case errors.Is(err, errConsentNotStored):
+		// The consent page only needs the outcome; nothing was stored to recheck.
+		return Token{value: cred.accessToken, expiresAt: cred.expiresAt.Add(-accessExpirySkew)}, success, true
 	case errors.Is(err, errStale):
 		return none, newOutcome(StagePersistence, ReasonStaleConfiguration, ConfidenceVerified, true), true
 	case err != nil:

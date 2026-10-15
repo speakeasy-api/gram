@@ -5490,8 +5490,8 @@ DO UPDATE SET
 RETURNING id, updated_at;
 
 -- name: AdoptSpeakeasyConsentEMACredential :one
--- Binds the credential minted on the consent page to the grant that consent
--- created. The caller holds the publish locks and has checked the grant's
+-- Binds a credential minted on the consent page to a grant backed by the same
+-- sign-in. The caller holds the publish locks and has checked the grant's
 -- sign-in; only a usable credential with identical provenance is adopted.
 UPDATE remote_session_ema_credentials AS t
 SET user_session_id = @user_session_id::uuid, updated_at = clock_timestamp()
@@ -5554,6 +5554,18 @@ WHERE organization_id = @organization_id::text AND project_id = @project_id::uui
   AND user_session_issuer_id = @user_session_issuer_id::uuid
   AND remote_session_client_id = @remote_session_client_id::uuid
   AND resource = @resource::text AND subject_urn = @subject_urn::text
+  AND deleted IS FALSE;
+
+-- name: RetireLegacyConsentEMACredentialSlot :execrows
+-- A consent credential may only replace another consent credential in the
+-- legacy one-per-subject slot, never a grant's or another provider's.
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
+  AND user_session_issuer_id = @user_session_issuer_id::uuid
+  AND remote_session_client_id = @remote_session_client_id::uuid
+  AND resource = @resource::text AND subject_urn = @subject_urn::text
+  AND ema_provider = 'speakeasy' AND user_session_id IS NULL
   AND deleted IS FALSE;
 
 -- name: ListEMAChainingResourceCandidates :many

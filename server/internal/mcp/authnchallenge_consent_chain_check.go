@@ -18,7 +18,6 @@ import (
 // Chained card check states, shared by the template and the page script.
 const (
 	chainCheckPending   = "pending"
-	chainCheckReady     = "ready"
 	chainCheckConnected = "connected"
 	chainCheckRejected  = "rejected"
 	chainCheckUnknown   = "unknown"
@@ -133,10 +132,6 @@ func (s *Service) checkIdentityChaining(ctx context.Context, requests []identity
 		switch checked.Status {
 		case chainCheckRejected:
 			return checked
-		case chainCheckReady:
-			if result.Status != chainCheckUnknown {
-				result = checked
-			}
 		case chainCheckUnknown:
 			result = checked
 		}
@@ -154,8 +149,6 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		return consentChainCheckResult{Status: chainCheckRejected, Message: fmt.Sprintf(format, service)}
 	}
 	switch outcome.Reason {
-	case identitychaining.ReasonConsentRequired:
-		return consentChainCheckResult{Status: chainCheckReady, Message: "Automatically connects when you give access"}
 	case identitychaining.ReasonSuccess:
 		return chainCheckConnectedResult
 	case identitychaining.ReasonInvalidGrant, identitychaining.ReasonAccessDenied, identitychaining.ReasonScopePolicyDenied,

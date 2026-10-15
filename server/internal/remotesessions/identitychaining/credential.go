@@ -206,7 +206,19 @@ func upsertSpeakeasyCredential(ctx context.Context, tx pgx.Tx, params repo.Upser
 		return none, fmt.Errorf("roll back Speakeasy credential savepoint: %w", err)
 	}
 	q := repo.New(tx)
-	if err := q.RetireLegacyEMACredentialSlot(ctx, repo.RetireLegacyEMACredentialSlotParams{
+	if !params.UserSessionID.Valid {
+		// A consent check never evicts a grant's working credential.
+		retired, err := q.RetireLegacyConsentEMACredentialSlot(ctx, repo.RetireLegacyConsentEMACredentialSlotParams{
+			OrganizationID: params.OrganizationID, ProjectID: params.ProjectID, UserSessionIssuerID: params.UserSessionIssuerID,
+			RemoteSessionClientID: params.RemoteSessionClientID, Resource: params.Resource, SubjectUrn: params.SubjectUrn,
+		})
+		if err != nil {
+			return none, fmt.Errorf("retire legacy consent EMA credential slot: %w", err)
+		}
+		if retired == 0 {
+			return none, errConsentNotStored
+		}
+	} else if err := q.RetireLegacyEMACredentialSlot(ctx, repo.RetireLegacyEMACredentialSlotParams{
 		OrganizationID: params.OrganizationID, ProjectID: params.ProjectID, UserSessionIssuerID: params.UserSessionIssuerID,
 		RemoteSessionClientID: params.RemoteSessionClientID, Resource: params.Resource, SubjectUrn: params.SubjectUrn,
 	}); err != nil {

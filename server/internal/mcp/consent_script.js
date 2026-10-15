@@ -481,7 +481,7 @@
 
   function settleChainCheck(status, card, result) {
     var state = result ? result.status : "";
-    if (state !== "connected" && state !== "rejected" && state !== "ready") {
+    if (state !== "connected" && state !== "rejected") {
       state = "unknown";
     }
     status.setAttribute("data-chain-check", state);
@@ -498,11 +498,6 @@
           connectedSummary.getAttribute("data-connected-total") +
           " connected";
       }
-      return;
-    }
-    if (state === "ready") {
-      status.className = "text-xs text-muted-foreground";
-      status.textContent = "Automatically connects when you give access";
       return;
     }
     if (state === "rejected") {

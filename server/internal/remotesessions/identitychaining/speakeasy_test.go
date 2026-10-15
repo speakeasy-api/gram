@@ -262,27 +262,35 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.True(t, outcome.Succeeded(), "%+v", outcome)
 	require.EqualValues(t, 2, calls.Load())
 	require.False(t, chainer.HasUsableCredential(ctx, f.req), "the legacy index keeps one slot per subject")
+	// With the legacy slot held by a grant, a consent check still reports its
+	// outcome but never evicts that grant's working credential.
+	otherSignIn, err := signins.Record(ctx, f.db, signins.RecordParams{OrganizationID: f.req.OrganizationID, UserID: f.req.UserID, WorkOSSessionID: uuid.NewString(), AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now().Add(-time.Minute), Evidence: signins.Evidence{VerifiedEmail: f.req.UserID + "@example.test", IDPAuthenticatedAt: time.Now().Add(-time.Minute)}})
+	require.NoError(t, err)
+	require.True(t, chainer.CheckConsent(ctx, preGrant, otherSignIn.ID.UUID).Succeeded())
+	checkExchange()
+	require.EqualValues(t, 3, calls.Load())
+	require.True(t, chainer.HasUsableCredential(ctx, second), "consent leaves the grant's credential in place")
 	// Once the legacy index is dropped, each grant keeps its own slot.
 	_, err = f.db.Exec(ctx, "DROP INDEX remote_session_ema_credentials_subject_key") //nolint:glint // notestingrawsql: DDL simulating the contract migration in this cloned database; sqlc does not generate DDL.
 	require.NoError(t, err)
 	_, outcome = chainer.Acquire(ctx, f.req)
 	checkExchange()
 	require.True(t, outcome.Succeeded(), "%+v", outcome)
-	require.EqualValues(t, 3, calls.Load())
+	require.EqualValues(t, 4, calls.Load())
 	require.True(t, chainer.HasUsableCredential(ctx, f.req))
 	require.True(t, chainer.HasUsableCredential(ctx, second), "another grant's publish never evicts this one")
 	for _, r := range []Request{f.req, second} {
 		_, outcome = chainer.Acquire(ctx, r)
 		require.True(t, outcome.Succeeded(), "%+v", outcome)
 	}
-	require.EqualValues(t, 3, calls.Load(), "each grant reuses its own cached token")
+	require.EqualValues(t, 4, calls.Load(), "each grant reuses its own cached token")
 	// A consent credential belongs to its sign-in: a grant backed by another
 	// sign-in mints its own, and the matching grant adopts it.
 	laterSignIn, err := signins.Record(ctx, f.db, signins.RecordParams{OrganizationID: f.req.OrganizationID, UserID: f.req.UserID, WorkOSSessionID: uuid.NewString(), AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now().Add(-time.Minute), Evidence: signins.Evidence{VerifiedEmail: f.req.UserID + "@example.test", IDPAuthenticatedAt: time.Now().Add(-time.Minute)}})
 	require.NoError(t, err)
 	require.True(t, chainer.CheckConsent(ctx, preGrant, laterSignIn.ID.UUID).Succeeded())
 	checkExchange()
-	require.EqualValues(t, 4, calls.Load())
+	require.EqualValues(t, 5, calls.Load())
 	newGrant := func(signInID uuid.NullUUID) Request {
 		r := f.req
 		r.UserSessionJTI = uuid.NewString()
@@ -293,10 +301,10 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	_, outcome = chainer.Acquire(ctx, newGrant(signIn.ID))
 	checkExchange()
 	require.True(t, outcome.Succeeded(), "%+v", outcome)
-	require.EqualValues(t, 5, calls.Load(), "another sign-in's consent credential is never adopted")
+	require.EqualValues(t, 6, calls.Load(), "another sign-in's consent credential is never adopted")
 	_, outcome = chainer.Acquire(ctx, newGrant(laterSignIn.ID))
 	require.True(t, outcome.Succeeded(), "%+v", outcome)
-	require.EqualValues(t, 5, calls.Load(), "the matching grant adopts the consent credential")
+	require.EqualValues(t, 6, calls.Load(), "the matching grant adopts the consent credential")
 	// A vendor refusal surfaces on the consent page, before any grant.
 	rejectRedemption.Store(true)
 	refusedSignIn, err := signins.Record(ctx, f.db, signins.RecordParams{OrganizationID: f.req.OrganizationID, UserID: f.req.UserID, WorkOSSessionID: uuid.NewString(), AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now().Add(-time.Minute), Evidence: signins.Evidence{VerifiedEmail: f.req.UserID + "@example.test", IDPAuthenticatedAt: time.Now().Add(-time.Minute)}})
@@ -305,8 +313,31 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	checkExchange()
 	require.Equal(t, ReasonInvalidGrant, refused.Reason)
 	require.Equal(t, StageRedemption, refused.Stage)
-	require.EqualValues(t, 6, calls.Load())
+	require.True(t, refused.Retryable, "the vendor may not have fetched a just-published key yet")
+	require.EqualValues(t, 7, calls.Load())
+	chainer.now = func() time.Time { return time.Now().Add(recentKeyWindow + time.Minute) }
+	refused = chainer.CheckConsent(ctx, preGrant, refusedSignIn.ID.UUID)
+	checkExchange()
+	chainer.now = time.Now
+	require.Equal(t, ReasonInvalidGrant, refused.Reason)
+	require.False(t, refused.Retryable, "past the key window a refusal is definitive")
+	require.EqualValues(t, 8, calls.Load())
 	rejectRedemption.Store(false)
+	// A sign-in revoked between consent and approval leaves its consent
+	// credential unadopted, and its grant cannot mint either.
+	revokedSession := uuid.NewString()
+	revokedSignIn, err := signins.Record(ctx, f.db, signins.RecordParams{OrganizationID: f.req.OrganizationID, UserID: f.req.UserID, WorkOSSessionID: revokedSession, AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now().Add(-time.Minute), Evidence: signins.Evidence{VerifiedEmail: f.req.UserID + "@example.test", IDPAuthenticatedAt: time.Now().Add(-time.Minute)}})
+	require.NoError(t, err)
+	require.True(t, chainer.CheckConsent(ctx, preGrant, revokedSignIn.ID.UUID).Succeeded())
+	checkExchange()
+	require.EqualValues(t, 9, calls.Load())
+	revokedGrant := newGrant(revokedSignIn.ID)
+	_, err = signins.RevokeSession(ctx, f.db, []string{f.req.OrganizationID}, f.req.UserID, revokedSession)
+	require.NoError(t, err)
+	_, outcome = chainer.Acquire(ctx, revokedGrant)
+	require.Equal(t, ReasonReauthenticationRequired, outcome.Reason)
+	require.False(t, chainer.HasUsableCredential(ctx, revokedGrant))
+	require.EqualValues(t, 9, calls.Load(), "a revoked sign-in neither adopts nor mints")
 	wrongOrigin, err := url.Parse("https://other-deployment.example.test")
 	require.NoError(t, err)
 	for _, cfg := range []internalsessionissuers.SignerConfig{
@@ -331,7 +362,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 		order, resolved, _ := governor.ProviderOrder(ctx, f.req)
 		require.True(t, resolved)
 		require.Equal(t, remotesessions.EMAProviderSigningUnavailable, order.Providers[0].Unavailable)
-		require.EqualValues(t, 6, calls.Load())
+		require.EqualValues(t, 9, calls.Load())
 	}
 	chainer.SetSpeakeasyIssuer(gate, signer, flags)
 	governor.SetSpeakeasyIssuer(gate, signer, flags)
@@ -396,8 +427,8 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.Equal(t, ReasonStaleConfiguration, outcome.Reason, "revocation during redemption discards the token")
 	require.False(t, chainer.HasUsableCredential(ctx, f.req))
 	require.False(t, chainer.HasUsableCredential(ctx, preGrant), "status cannot revive a revoked retained grant")
-	require.EqualValues(t, 7, calls.Load())
+	require.EqualValues(t, 10, calls.Load())
 	require.Equal(t, ReasonReauthenticationRequired, chainer.CheckConsent(ctx, preGrant, signIn.ID.UUID).Reason, "revoked consent is not eligible")
-	require.EqualValues(t, 7, calls.Load(), "a revoked consent sign-in never redeems")
+	require.EqualValues(t, 10, calls.Load(), "a revoked consent sign-in never redeems")
 
 }

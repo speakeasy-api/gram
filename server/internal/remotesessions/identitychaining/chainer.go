@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -254,6 +255,11 @@ func (c *Chainer) acquireWith(ctx context.Context, logger *slog.Logger, req Requ
 	token, outcome, grantValidated := c.acquire(attemptCtx, logger, req, sel, src)
 	outcome.Provider = src.kind()
 	if !outcome.Succeeded() {
+		// A consent page has no later retry, so a vendor that may not have
+		// fetched a new key yet reads as unknown there, never as a refusal.
+		if consent, ok := src.(speakeasySource); ok && consent.consentSignInID != uuid.Nil && c.signedWithRecentKey(sel, outcome) {
+			outcome.Retryable = true
+		}
 		logAcquisitionFailure(ctx, logger, outcome)
 		outcome.providerDescription = ""
 		// Requests waiting on this attempt adopt its failure instead of timing out.

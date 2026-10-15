@@ -60,8 +60,8 @@ type AdoptSpeakeasyConsentEMACredentialParams struct {
 	UsableAfter                    pgtype.Timestamptz
 }
 
-// Binds the credential minted on the consent page to the grant that consent
-// created. The caller holds the publish locks and has checked the grant's
+// Binds a credential minted on the consent page to a grant backed by the same
+// sign-in. The caller holds the publish locks and has checked the grant's
 // sign-in; only a usable credential with identical provenance is adopted.
 func (q *Queries) AdoptSpeakeasyConsentEMACredential(ctx context.Context, arg AdoptSpeakeasyConsentEMACredentialParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, adoptSpeakeasyConsentEMACredential,
@@ -11790,6 +11790,43 @@ func (q *Queries) RetireEMACredential(ctx context.Context, arg RetireEMACredenti
 		arg.ExpectedUpdatedAt,
 	)
 	return err
+}
+
+const retireLegacyConsentEMACredentialSlot = `-- name: RetireLegacyConsentEMACredentialSlot :execrows
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND user_session_issuer_id = $3::uuid
+  AND remote_session_client_id = $4::uuid
+  AND resource = $5::text AND subject_urn = $6::text
+  AND ema_provider = 'speakeasy' AND user_session_id IS NULL
+  AND deleted IS FALSE
+`
+
+type RetireLegacyConsentEMACredentialSlotParams struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	Resource              string
+	SubjectUrn            string
+}
+
+// A consent credential may only replace another consent credential in the
+// legacy one-per-subject slot, never a grant's or another provider's.
+func (q *Queries) RetireLegacyConsentEMACredentialSlot(ctx context.Context, arg RetireLegacyConsentEMACredentialSlotParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retireLegacyConsentEMACredentialSlot,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const retireLegacyEMACredentialSlot = `-- name: RetireLegacyEMACredentialSlot :exec

@@ -12,8 +12,8 @@ import (
 
 // CheckConsent tries the vendor's providers in order, as Acquire does, and
 // each runs its live exchange. The Speakeasy provider vouches for the consent
-// page's sign-in; its credential has no MCP grant yet, and the grant that
-// consent creates adopts it on first use (adoptConsentCredential).
+// page's sign-in; its credential has no MCP grant yet, and a grant backed by
+// that sign-in adopts it on first use (adoptConsentCredential).
 func (c *Chainer) CheckConsent(ctx context.Context, req Request, signInID uuid.UUID) Outcome {
 	if !req.complete() || req.UserID == "" {
 		return notApplicable
