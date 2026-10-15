@@ -168,20 +168,21 @@ func supportedTransport(transport string) bool {
 	return transport == "streamable-http" || transport == "sse"
 }
 
-// loadCandidate re-reads one candidate inside the migration transaction.
-func loadCandidate(ctx context.Context, tx pgx.Tx, toolsetID uuid.UUID) (Candidate, bool, error) {
+// loadCandidate re-reads one candidate inside the migration transaction. It
+// returns nil when the toolset is no longer a candidate.
+func loadCandidate(ctx context.Context, tx pgx.Tx, toolsetID uuid.UUID) (*Candidate, error) {
 	rows, err := repo.New(tx).ListCandidates(ctx, []uuid.UUID{toolsetID})
 	if err != nil {
-		return Candidate{}, false, fmt.Errorf("reload external MCP candidate: %w", err)
+		return nil, fmt.Errorf("reload external MCP candidate: %w", err)
 	}
 	if len(rows) != 1 {
-		return Candidate{}, false, nil
+		return nil, nil
 	}
 	candidates, err := buildCandidates(ctx, tx, rows)
 	if err != nil {
-		return Candidate{}, false, err
+		return nil, err
 	}
-	return candidates[0], true, nil
+	return &candidates[0], nil
 }
 
 // SignInProvider names the candidate's user session issuer and the upstream

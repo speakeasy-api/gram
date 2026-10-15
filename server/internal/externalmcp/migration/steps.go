@@ -57,11 +57,11 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 
 	// The scope locks need the toolset's organization and project, which are
 	// read before the locks and confirmed after them.
-	unlocked, found, err := loadCandidate(ctx, tx, request.ToolsetID)
+	unlocked, err := loadCandidate(ctx, tx, request.ToolsetID)
 	if err != nil {
 		return outcome, err
 	}
-	if !found {
+	if unlocked == nil {
 		return outcome, errNotCandidate
 	}
 	organizationID, projectID := unlocked.Row.OrganizationID, unlocked.Row.ProjectID
@@ -74,13 +74,14 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		}
 		return outcome, fmt.Errorf("lock toolset: %w", err)
 	}
-	candidate, found, err := loadCandidate(ctx, tx, request.ToolsetID)
+	reloaded, err := loadCandidate(ctx, tx, request.ToolsetID)
 	if err != nil {
 		return outcome, err
 	}
-	if !found || candidate.Row.ProjectID != projectID {
+	if reloaded == nil || reloaded.Row.ProjectID != projectID {
 		return outcome, errNotCandidate
 	}
+	candidate := *reloaded
 	if len(candidate.Blockers) > 0 {
 		return outcome, fail("%s", strings.Join(candidate.Blockers, "; "))
 	}
@@ -232,8 +233,8 @@ func (m *Migrator) resolveReplacement(ctx context.Context, tx pgx.Tx, actor Acto
 		ActorUserID: actor.UserID, ActorEmail: actor.Email,
 		Name: toolset.Name, Visibility: hostedmcp.Visibility(toolset), NetworkAccessMode: networkaccess.ModePublicOnly,
 		EnvironmentID: environmentID, UserSessionIssuerID: issuerID,
-		RemoteMCPServerID: uuid.NullUUID{UUID: remote.ID, Valid: true},
-		TunneledMCPServerID: uuid.NullUUID{}, ToolsetID: uuid.NullUUID{}, UnproxiedMCPServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
+		RemoteMCPServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
+		TunneledMCPServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, UnproxiedMCPServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return replacement{}, fmt.Errorf("create replacement MCP server: %w", err)
@@ -243,14 +244,14 @@ func (m *Migrator) resolveReplacement(ctx context.Context, tx pgx.Tx, actor Acto
 
 func environmentForToolset(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset) (uuid.NullUUID, error) {
 	if !toolset.DefaultEnvironmentSlug.Valid {
-		return uuid.NullUUID{}, nil
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 	environment, err := environmentsrepo.New(tx).GetEnvironmentBySlug(ctx, environmentsrepo.GetEnvironmentBySlugParams{Slug: toolset.DefaultEnvironmentSlug.String, ProjectID: toolset.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.NullUUID{}, nil
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 	if err != nil {
-		return uuid.NullUUID{}, fmt.Errorf("read default environment: %w", err)
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("read default environment: %w", err)
 	}
 	return uuid.NullUUID{UUID: environment.ID, Valid: true}, nil
 }
@@ -264,7 +265,7 @@ func (m *Migrator) moveEndpoints(ctx context.Context, tx pgx.Tx, principal urn.P
 	for _, existing := range endpoints {
 		updated, err := endpointRepo.UpdateMCPEndpoint(ctx, mcpendpointsrepo.UpdateMCPEndpointParams{
 			CustomDomainID: existing.CustomDomainID, McpServerID: uuid.NullUUID{UUID: target.id, Valid: true},
-			MetaMcpServerID: uuid.NullUUID{}, Slug: existing.Slug, IsDomainRoot: existing.IsDomainRoot,
+			MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: existing.Slug, IsDomainRoot: existing.IsDomainRoot,
 			ID: existing.ID, ProjectID: toolset.ProjectID,
 		})
 		if err != nil {
@@ -295,7 +296,7 @@ func (m *Migrator) moveEndpoints(ctx context.Context, tx pgx.Tx, principal urn.P
 	}
 	available, err := endpointRepo.CheckUnifiedSlugAvailability(ctx, mcpendpointsrepo.CheckUnifiedSlugAvailabilityParams{
 		SkipDomainCheck: true, CustomDomainID: toolset.CustomDomainID, OrganizationID: toolset.OrganizationID, Slug: slug,
-		ExcludeToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ExcludeMcpServerID: uuid.NullUUID{},
+		ExcludeToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return fmt.Errorf("check slug availability: %w", err)
@@ -305,7 +306,7 @@ func (m *Migrator) moveEndpoints(ctx context.Context, tx pgx.Tx, principal urn.P
 	}
 	created, err := endpointRepo.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: toolset.ProjectID, CustomDomainID: toolset.CustomDomainID,
-		McpServerID: uuid.NullUUID{UUID: target.id, Valid: true}, MetaMcpServerID: uuid.NullUUID{}, Slug: slug,
+		McpServerID: uuid.NullUUID{UUID: target.id, Valid: true}, MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: slug,
 	})
 	if err != nil {
 		return fmt.Errorf("create endpoint for legacy address: %w", err)
