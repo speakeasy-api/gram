@@ -69,11 +69,11 @@ func (q *Queries) OrgDeleteAssistantAgentBindings(ctx context.Context, arg OrgDe
 }
 
 const orgDeleteAssistantMCPServers = `-- name: OrgDeleteAssistantMCPServers :exec
-DELETE FROM assistant_mcp_servers WHERE project_id = $1::uuid
+DELETE FROM assistant_mcp_servers WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-func (q *Queries) OrgDeleteAssistantMCPServers(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, orgDeleteAssistantMCPServers, projectID)
+func (q *Queries) OrgDeleteAssistantMCPServers(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteAssistantMCPServers, orgID)
 	return err
 }
 
@@ -197,11 +197,11 @@ func (q *Queries) OrgDeleteLitellmInstances(ctx context.Context, orgID string) e
 }
 
 const orgDeleteMCPServers = `-- name: OrgDeleteMCPServers :exec
-DELETE FROM mcp_servers WHERE project_id = $1::uuid
+DELETE FROM mcp_servers WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-func (q *Queries) OrgDeleteMCPServers(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, orgDeleteMCPServers, projectID)
+func (q *Queries) OrgDeleteMCPServers(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteMCPServers, orgID)
 	return err
 }
 
@@ -253,142 +253,97 @@ func (q *Queries) OrgDeleteOnboardingVendors(ctx context.Context, orgID string) 
 
 const orgDeletePlatformMCPCatalogRegistrations = `-- name: OrgDeletePlatformMCPCatalogRegistrations :exec
 DELETE FROM platform_mcp_catalog_registrations
-  WHERE organization_id = $1::text AND project_id = $2::uuid
+  WHERE organization_id = $1::text AND project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeletePlatformMCPCatalogRegistrationsParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) OrgDeletePlatformMCPCatalogRegistrations(ctx context.Context, arg OrgDeletePlatformMCPCatalogRegistrationsParams) error {
-	_, err := q.db.Exec(ctx, orgDeletePlatformMCPCatalogRegistrations, arg.OrgID, arg.ProjectID)
+func (q *Queries) OrgDeletePlatformMCPCatalogRegistrations(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeletePlatformMCPCatalogRegistrations, orgID)
 	return err
 }
 
 const orgDeletePlatformMCPDistributions = `-- name: OrgDeletePlatformMCPDistributions :exec
 DELETE FROM platform_mcp_distributions
-  WHERE organization_id = $1::text AND project_id = $2::uuid
+  WHERE organization_id = $1::text AND project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeletePlatformMCPDistributionsParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) OrgDeletePlatformMCPDistributions(ctx context.Context, arg OrgDeletePlatformMCPDistributionsParams) error {
-	_, err := q.db.Exec(ctx, orgDeletePlatformMCPDistributions, arg.OrgID, arg.ProjectID)
+func (q *Queries) OrgDeletePlatformMCPDistributions(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeletePlatformMCPDistributions, orgID)
 	return err
 }
 
 const orgDeletePlatformMCPFeedback = `-- name: OrgDeletePlatformMCPFeedback :exec
 DELETE FROM platform_mcp_feedback
   WHERE organization_id = $1::text
-    AND (project_id = $2::uuid OR workflow_id IN
+    AND (project_id IN (SELECT id FROM projects WHERE organization_id = $1::text) OR workflow_id IN
       (SELECT id FROM platform_mcp_onboarding_workflows
-       WHERE organization_id = $1::text AND selected_project_id = $2::uuid))
+       WHERE organization_id = $1::text AND selected_project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)))
 `
 
-type OrgDeletePlatformMCPFeedbackParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) OrgDeletePlatformMCPFeedback(ctx context.Context, arg OrgDeletePlatformMCPFeedbackParams) error {
-	_, err := q.db.Exec(ctx, orgDeletePlatformMCPFeedback, arg.OrgID, arg.ProjectID)
+func (q *Queries) OrgDeletePlatformMCPFeedback(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeletePlatformMCPFeedback, orgID)
 	return err
 }
 
 const orgDeletePlatformMCPOnboardingMilestones = `-- name: OrgDeletePlatformMCPOnboardingMilestones :exec
 DELETE FROM platform_mcp_onboarding_milestones
-  WHERE organization_id = $1::text AND project_id = $2::uuid
+  WHERE organization_id = $1::text AND project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeletePlatformMCPOnboardingMilestonesParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) OrgDeletePlatformMCPOnboardingMilestones(ctx context.Context, arg OrgDeletePlatformMCPOnboardingMilestonesParams) error {
-	_, err := q.db.Exec(ctx, orgDeletePlatformMCPOnboardingMilestones, arg.OrgID, arg.ProjectID)
+func (q *Queries) OrgDeletePlatformMCPOnboardingMilestones(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeletePlatformMCPOnboardingMilestones, orgID)
 	return err
 }
 
 const orgDeletePlatformMCPOnboardingWorkflows = `-- name: OrgDeletePlatformMCPOnboardingWorkflows :exec
 DELETE FROM platform_mcp_onboarding_workflows
-  WHERE organization_id = $1::text AND selected_project_id = $2::uuid
+  WHERE organization_id = $1::text AND selected_project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeletePlatformMCPOnboardingWorkflowsParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) OrgDeletePlatformMCPOnboardingWorkflows(ctx context.Context, arg OrgDeletePlatformMCPOnboardingWorkflowsParams) error {
-	_, err := q.db.Exec(ctx, orgDeletePlatformMCPOnboardingWorkflows, arg.OrgID, arg.ProjectID)
+func (q *Queries) OrgDeletePlatformMCPOnboardingWorkflows(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeletePlatformMCPOnboardingWorkflows, orgID)
 	return err
 }
 
 const orgDeletePlatformMCPOperationReceipts = `-- name: OrgDeletePlatformMCPOperationReceipts :exec
 DELETE FROM platform_mcp_operation_receipts
-  WHERE organization_id = $1::text AND project_id = $2::uuid
+  WHERE organization_id = $1::text AND project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeletePlatformMCPOperationReceiptsParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) OrgDeletePlatformMCPOperationReceipts(ctx context.Context, arg OrgDeletePlatformMCPOperationReceiptsParams) error {
-	_, err := q.db.Exec(ctx, orgDeletePlatformMCPOperationReceipts, arg.OrgID, arg.ProjectID)
+func (q *Queries) OrgDeletePlatformMCPOperationReceipts(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeletePlatformMCPOperationReceipts, orgID)
 	return err
 }
 
 const orgDeletePlatformMCPReadiness = `-- name: OrgDeletePlatformMCPReadiness :exec
 DELETE FROM platform_mcp_readiness
-  WHERE organization_id = $1::text AND project_id = $2::uuid
+  WHERE organization_id = $1::text AND project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeletePlatformMCPReadinessParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) OrgDeletePlatformMCPReadiness(ctx context.Context, arg OrgDeletePlatformMCPReadinessParams) error {
-	_, err := q.db.Exec(ctx, orgDeletePlatformMCPReadiness, arg.OrgID, arg.ProjectID)
+func (q *Queries) OrgDeletePlatformMCPReadiness(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeletePlatformMCPReadiness, orgID)
 	return err
 }
 
 const orgDeletePlatformMCPSelectedUseEvidence = `-- name: OrgDeletePlatformMCPSelectedUseEvidence :exec
 DELETE FROM platform_mcp_selected_use_evidence
   WHERE organization_id = $1::text
-    AND (project_id = $2::uuid OR workflow_id IN
-      (SELECT id FROM platform_mcp_onboarding_workflows
-       WHERE organization_id = $1::text AND selected_project_id = $2::uuid))
+    AND project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeletePlatformMCPSelectedUseEvidenceParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) OrgDeletePlatformMCPSelectedUseEvidence(ctx context.Context, arg OrgDeletePlatformMCPSelectedUseEvidenceParams) error {
-	_, err := q.db.Exec(ctx, orgDeletePlatformMCPSelectedUseEvidence, arg.OrgID, arg.ProjectID)
+// project_id is NOT NULL and pinned to an org project by the composite FK,
+// so this covers evidence for every workflow deleted below.
+func (q *Queries) OrgDeletePlatformMCPSelectedUseEvidence(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeletePlatformMCPSelectedUseEvidence, orgID)
 	return err
 }
 
 const orgDeletePlatformMCPSetupHandoffs = `-- name: OrgDeletePlatformMCPSetupHandoffs :exec
 DELETE FROM platform_mcp_setup_handoffs
-  WHERE organization_id = $1::text AND project_id = $2::uuid
+  WHERE organization_id = $1::text AND project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeletePlatformMCPSetupHandoffsParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) OrgDeletePlatformMCPSetupHandoffs(ctx context.Context, arg OrgDeletePlatformMCPSetupHandoffsParams) error {
-	_, err := q.db.Exec(ctx, orgDeletePlatformMCPSetupHandoffs, arg.OrgID, arg.ProjectID)
+func (q *Queries) OrgDeletePlatformMCPSetupHandoffs(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeletePlatformMCPSetupHandoffs, orgID)
 	return err
 }
 
@@ -532,55 +487,31 @@ func (q *Queries) OrgDeleteSetupTasks(ctx context.Context, orgID string) error {
 
 const orgDeleteSigintCustomSignals = `-- name: OrgDeleteSigintCustomSignals :exec
 DELETE FROM sigint_custom_signals
-WHERE project_id IN (
-  SELECT id FROM projects
-  WHERE id = $1::uuid AND organization_id = $2::text
-)
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeleteSigintCustomSignalsParams struct {
-	ProjectID uuid.UUID
-	OrgID     string
-}
-
-func (q *Queries) OrgDeleteSigintCustomSignals(ctx context.Context, arg OrgDeleteSigintCustomSignalsParams) error {
-	_, err := q.db.Exec(ctx, orgDeleteSigintCustomSignals, arg.ProjectID, arg.OrgID)
+func (q *Queries) OrgDeleteSigintCustomSignals(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteSigintCustomSignals, orgID)
 	return err
 }
 
 const orgDeleteSigintSensorSignals = `-- name: OrgDeleteSigintSensorSignals :exec
 DELETE FROM sigint_sensor_signals
-WHERE project_id IN (
-  SELECT id FROM projects
-  WHERE id = $1::uuid AND organization_id = $2::text
-)
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeleteSigintSensorSignalsParams struct {
-	ProjectID uuid.UUID
-	OrgID     string
-}
-
-func (q *Queries) OrgDeleteSigintSensorSignals(ctx context.Context, arg OrgDeleteSigintSensorSignalsParams) error {
-	_, err := q.db.Exec(ctx, orgDeleteSigintSensorSignals, arg.ProjectID, arg.OrgID)
+func (q *Queries) OrgDeleteSigintSensorSignals(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteSigintSensorSignals, orgID)
 	return err
 }
 
 const orgDeleteSigintSensors = `-- name: OrgDeleteSigintSensors :exec
 DELETE FROM sigint_sensors
-WHERE project_id IN (
-  SELECT id FROM projects
-  WHERE id = $1::uuid AND organization_id = $2::text
-)
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
 `
 
-type OrgDeleteSigintSensorsParams struct {
-	ProjectID uuid.UUID
-	OrgID     string
-}
-
-func (q *Queries) OrgDeleteSigintSensors(ctx context.Context, arg OrgDeleteSigintSensorsParams) error {
-	_, err := q.db.Exec(ctx, orgDeleteSigintSensors, arg.ProjectID, arg.OrgID)
+func (q *Queries) OrgDeleteSigintSensors(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteSigintSensors, orgID)
 	return err
 }
 

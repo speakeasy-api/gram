@@ -90,7 +90,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		retErr = errors.Join(retErr, fmt.Errorf("release demo seed advisory lock: %w", unlockErr))
 	}()
 
-	s, err := seedPostgres(ctx, logger, db, blob, spec)
+	s, err := seedPostgres(ctx, logger, conn, blob, spec)
 	if err != nil {
 		return err
 	}
@@ -103,10 +103,17 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	return nil
 }
 
-// seedPostgres runs the Postgres seed for spec in one transaction, so a failed
-// run leaves the previous data in place. It returns the seeder, whose clock
-// the ClickHouse seed reuses.
-func seedPostgres(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, spec Spec) (*seeder, error) {
+// txBeginner starts a transaction. Run passes the *pgxpool.Conn that holds the
+// advisory lock, so the seed runs inside the locked session; tests pass the
+// *pgxpool.Pool.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// seedPostgres runs the Postgres seed for spec in one transaction on db, so a
+// failed run leaves the previous data in place. It returns the seeder, whose
+// clock the ClickHouse seed reuses.
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, spec Spec) (*seeder, error) {
 	s := &seeder{spec: spec, q: nil, logger: logger, now: time.Time{}}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)

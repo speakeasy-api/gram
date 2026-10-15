@@ -2,7 +2,7 @@
 
 Acceptance contract for the demo seed. Every dashboard page a demo user can
 reach must render populated (no empty state, no error boundary) from the data
-the demo seed (`server/internal/demoseed/`). A page is DONE when its `verify.md`
+in the demo seed (`server/internal/demoseed/`). A page is DONE when its `verify.md`
 check passes.
 
 Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not seeded.

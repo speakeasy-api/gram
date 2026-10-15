@@ -129,11 +129,13 @@ func (s *seeder) seedRiskPolicies(ctx context.Context) error {
 			[]string{"shadow_mcp"}, nil, empty, []string{}, nil,
 			true, "block", riskText("block_all"), true, 9.0),
 		// OWASP ASI03 identity/privilege misuse: agent sessions on a personal or
-		// off-domain AI account. flag-only source. The domain is a literal: the
-		// old script's tenant rewrite only touched the "@demo.getgram.ai" form.
+		// off-domain AI account. flag-only source. The approved domain is the
+		// tenant's own email domain.
 		policy(s.policyAI(), "Acme non-corporate account policy",
 			[]string{"account_identity"}, nil,
-			[]byte(`{"account_identity": {"approved_email_domains": ["demo.getgram.ai"]}}`),
+			riskJSON(map[string]any{
+				"account_identity": map[string]any{"approved_email_domains": []string{strings.TrimPrefix(s.spec.EmailDomain, "@")}},
+			}),
 			[]string{}, nil,
 			true, "flag", none, false, 5.5),
 		// Custom CEL rules only (no built-in source): OWASP LLM02 credential-file

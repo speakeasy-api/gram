@@ -79,8 +79,8 @@ build-tagged (`demoseed_safety`): running the package without the tag reports
   The first phase asserts the demo constants collide with nothing that is
   not the demo org, then deletes demo data (the projects delete cascades most
   of it; org-scoped tables are deleted explicitly) before the reinserts. The
-  postflight phases (`seed_08`/`seed_09`) fail the run on missing or leaked
-  rows. Deliberately NOT a migration: the seed churns, and the daily rerun is
+  postflight phase (implemented in `seed_08_postflight.go` and
+  `seed_09_postflight_identity.go`) fails the run on missing or leaked rows. Deliberately NOT a migration: the seed churns, and the daily rerun is
   the upgrade path.
 - **ClickHouse** — `ch_NN_*.go` phases (`seeder.runClickHouse`).
   `ch_01_purge_telemetry.go` runs scoped lightweight deletes on the telemetry
@@ -99,7 +99,7 @@ with version nibble `5`, variant `8`), the chat schedule (`chatID`, `chatTS`,
 what keeps their rows joined — never re-derive them. `s.det` inputs only need
 to be unique: pick a fresh `<thing>-` prefix per row family and never reuse
 one across families. Timestamps are always relative to `s.now` (the Postgres
-transaction time), trailing ~12 days.
+transaction time); chat activity trails ~12 days.
 
 ## Rules the safety test enforces
 

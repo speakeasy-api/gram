@@ -99,7 +99,10 @@ func (s *seeder) orgMetadata(ctx context.Context) error {
 // RESTRICT from deployments, and toolsets only SET NULL their project_id — so
 // the deployment stack and toolsets are deleted explicitly before the
 // projects delete cascades everything else (chats -> chat_messages ->
-// risk_results, risk_policies, skills, ...).
+// risk_results, risk_policies, skills, ...). The toolsets and projects
+// deletes span every project the org owns, so each explicit delete of a row
+// that would block them (RESTRICT / NO ACTION, or SET NULL on a NOT NULL
+// column) spans the org's projects too, not just the seeded one.
 func (s *seeder) orgPurge(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
@@ -122,36 +125,36 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// Catalog registrations have both direct and transitive NO ACTION
 		// children. Evidence pins its distribution and selected workflow;
 		// feedback also pins selected workflows. Remove those rows first, then
-		// every project-scoped registration child, before replacing the
-		// canonical registrations. Keep the workflow subqueries
+		// every registration child, before replacing the canonical
+		// registrations. Keep the workflow subqueries
 		// organization-scoped so another tenant's rows cannot be reached even if
 		// identifiers are malformed.
 		{"delete platform mcp selected use evidence", func() error {
-			return s.q.OrgDeletePlatformMCPSelectedUseEvidence(ctx, repo.OrgDeletePlatformMCPSelectedUseEvidenceParams{OrgID: org, ProjectID: proj})
+			return s.q.OrgDeletePlatformMCPSelectedUseEvidence(ctx, org)
 		}},
 		{"delete platform mcp feedback", func() error {
-			return s.q.OrgDeletePlatformMCPFeedback(ctx, repo.OrgDeletePlatformMCPFeedbackParams{OrgID: org, ProjectID: proj})
+			return s.q.OrgDeletePlatformMCPFeedback(ctx, org)
 		}},
 		{"delete platform mcp onboarding milestones", func() error {
-			return s.q.OrgDeletePlatformMCPOnboardingMilestones(ctx, repo.OrgDeletePlatformMCPOnboardingMilestonesParams{OrgID: org, ProjectID: proj})
+			return s.q.OrgDeletePlatformMCPOnboardingMilestones(ctx, org)
 		}},
 		{"delete platform mcp onboarding workflows", func() error {
-			return s.q.OrgDeletePlatformMCPOnboardingWorkflows(ctx, repo.OrgDeletePlatformMCPOnboardingWorkflowsParams{OrgID: org, ProjectID: proj})
+			return s.q.OrgDeletePlatformMCPOnboardingWorkflows(ctx, org)
 		}},
 		{"delete platform mcp operation receipts", func() error {
-			return s.q.OrgDeletePlatformMCPOperationReceipts(ctx, repo.OrgDeletePlatformMCPOperationReceiptsParams{OrgID: org, ProjectID: proj})
+			return s.q.OrgDeletePlatformMCPOperationReceipts(ctx, org)
 		}},
 		{"delete platform mcp setup handoffs", func() error {
-			return s.q.OrgDeletePlatformMCPSetupHandoffs(ctx, repo.OrgDeletePlatformMCPSetupHandoffsParams{OrgID: org, ProjectID: proj})
+			return s.q.OrgDeletePlatformMCPSetupHandoffs(ctx, org)
 		}},
 		{"delete platform mcp readiness", func() error {
-			return s.q.OrgDeletePlatformMCPReadiness(ctx, repo.OrgDeletePlatformMCPReadinessParams{OrgID: org, ProjectID: proj})
+			return s.q.OrgDeletePlatformMCPReadiness(ctx, org)
 		}},
 		{"delete platform mcp distributions", func() error {
-			return s.q.OrgDeletePlatformMCPDistributions(ctx, repo.OrgDeletePlatformMCPDistributionsParams{OrgID: org, ProjectID: proj})
+			return s.q.OrgDeletePlatformMCPDistributions(ctx, org)
 		}},
 		{"delete platform mcp catalog registrations", func() error {
-			return s.q.OrgDeletePlatformMCPCatalogRegistrations(ctx, repo.OrgDeletePlatformMCPCatalogRegistrationsParams{OrgID: org, ProjectID: proj})
+			return s.q.OrgDeletePlatformMCPCatalogRegistrations(ctx, org)
 		}},
 
 		// Binding rows point at project resources; clear them by tenant and
@@ -172,7 +175,7 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// collection attachments, metadata, endpoints, and tool metadata)
 		// cascade. mcp_servers in turn pins its toolset with RESTRICT, so it
 		// must still go before the toolsets delete.
-		{"delete assistant mcp servers", func() error { return s.q.OrgDeleteAssistantMCPServers(ctx, proj) }},
+		{"delete assistant mcp servers", func() error { return s.q.OrgDeleteAssistantMCPServers(ctx, org) }},
 		// Toolsets are cleared across the organization, including other
 		// projects. Clear their plugin attachments across the same scope before
 		// deleting them.
@@ -198,7 +201,7 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete remote session issuers", func() error {
 			return s.q.OrgDeleteRemoteSessionIssuers(ctx, repo.OrgDeleteRemoteSessionIssuersParams{ProjectID: proj, OrgID: org})
 		}},
-		{"delete mcp servers", func() error { return s.q.OrgDeleteMCPServers(ctx, proj) }},
+		{"delete mcp servers", func() error { return s.q.OrgDeleteMCPServers(ctx, org) }},
 		{"delete remote protected resources", func() error { return s.q.OrgDeleteRemoteProtectedResources(ctx, proj) }},
 		{"delete meta mcp servers", func() error { return s.q.OrgDeleteMetaMCPServers(ctx, org) }},
 		// meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
@@ -250,16 +253,16 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// project deletion.
 		{"delete chat message participants", func() error { return s.q.OrgDeleteChatMessageParticipants(ctx, org) }},
 		// Sigint ownership/reference FKs use ON DELETE SET NULL with non-null
-		// columns, so every project-scoped row, including tombstones, must be
-		// physically removed child-first before the project can be recreated.
+		// columns, so every row in the org's projects, including tombstones,
+		// must be physically removed child-first before the projects delete.
 		{"delete sigint sensor signals", func() error {
-			return s.q.OrgDeleteSigintSensorSignals(ctx, repo.OrgDeleteSigintSensorSignalsParams{ProjectID: proj, OrgID: org})
+			return s.q.OrgDeleteSigintSensorSignals(ctx, org)
 		}},
 		{"delete sigint sensors", func() error {
-			return s.q.OrgDeleteSigintSensors(ctx, repo.OrgDeleteSigintSensorsParams{ProjectID: proj, OrgID: org})
+			return s.q.OrgDeleteSigintSensors(ctx, org)
 		}},
 		{"delete sigint custom signals", func() error {
-			return s.q.OrgDeleteSigintCustomSignals(ctx, repo.OrgDeleteSigintCustomSignalsParams{ProjectID: proj, OrgID: org})
+			return s.q.OrgDeleteSigintCustomSignals(ctx, org)
 		}},
 		{"delete projects", func() error { return s.q.OrgDeleteProjects(ctx, org) }},
 	})

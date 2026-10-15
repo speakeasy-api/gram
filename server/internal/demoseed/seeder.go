@@ -79,6 +79,7 @@ func (s *seeder) runPostgres(ctx context.Context) error {
 	for _, p := range phases {
 		start := time.Now()
 		if err := p.run(ctx); err != nil {
+			s.logger.ErrorContext(ctx, fmt.Sprintf("demo seed phase %q failed after %s", p.name, time.Since(start).Round(time.Millisecond)), attr.SlogName(p.name), attr.SlogError(err))
 			return fmt.Errorf("demo seed phase %q: %w", p.name, err)
 		}
 		s.logger.InfoContext(ctx, fmt.Sprintf("demo seed phase %q done in %s", p.name, time.Since(start).Round(time.Millisecond)), attr.SlogName(p.name))

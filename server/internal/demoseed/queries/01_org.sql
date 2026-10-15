@@ -70,46 +70,46 @@ DELETE FROM organization_features
 WHERE organization_id = @org_id::text AND feature_name = 'network_ingress';
 
 -- name: OrgDeletePlatformMCPSelectedUseEvidence :exec
+-- project_id is NOT NULL and pinned to an org project by the composite FK,
+-- so this covers evidence for every workflow deleted below.
 DELETE FROM platform_mcp_selected_use_evidence
   WHERE organization_id = @org_id::text
-    AND (project_id = @project_id::uuid OR workflow_id IN
-      (SELECT id FROM platform_mcp_onboarding_workflows
-       WHERE organization_id = @org_id::text AND selected_project_id = @project_id::uuid));
+    AND project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeletePlatformMCPFeedback :exec
 DELETE FROM platform_mcp_feedback
   WHERE organization_id = @org_id::text
-    AND (project_id = @project_id::uuid OR workflow_id IN
+    AND (project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text) OR workflow_id IN
       (SELECT id FROM platform_mcp_onboarding_workflows
-       WHERE organization_id = @org_id::text AND selected_project_id = @project_id::uuid));
+       WHERE organization_id = @org_id::text AND selected_project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text)));
 
 -- name: OrgDeletePlatformMCPOnboardingMilestones :exec
 DELETE FROM platform_mcp_onboarding_milestones
-  WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;
+  WHERE organization_id = @org_id::text AND project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeletePlatformMCPOnboardingWorkflows :exec
 DELETE FROM platform_mcp_onboarding_workflows
-  WHERE organization_id = @org_id::text AND selected_project_id = @project_id::uuid;
+  WHERE organization_id = @org_id::text AND selected_project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeletePlatformMCPOperationReceipts :exec
 DELETE FROM platform_mcp_operation_receipts
-  WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;
+  WHERE organization_id = @org_id::text AND project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeletePlatformMCPSetupHandoffs :exec
 DELETE FROM platform_mcp_setup_handoffs
-  WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;
+  WHERE organization_id = @org_id::text AND project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeletePlatformMCPReadiness :exec
 DELETE FROM platform_mcp_readiness
-  WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;
+  WHERE organization_id = @org_id::text AND project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeletePlatformMCPDistributions :exec
 DELETE FROM platform_mcp_distributions
-  WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;
+  WHERE organization_id = @org_id::text AND project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeletePlatformMCPCatalogRegistrations :exec
 DELETE FROM platform_mcp_catalog_registrations
-  WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;
+  WHERE organization_id = @org_id::text AND project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeleteTriggerWorkloadBindings :exec
 DELETE FROM trigger_workload_bindings
@@ -120,7 +120,7 @@ DELETE FROM assistant_agent_bindings
   WHERE organization_id = @org_id::text AND project_id = @project_id::uuid;
 
 -- name: OrgDeleteAssistantMCPServers :exec
-DELETE FROM assistant_mcp_servers WHERE project_id = @project_id::uuid;
+DELETE FROM assistant_mcp_servers WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeletePluginServers :exec
 DELETE FROM plugin_servers WHERE plugin_id IN
@@ -151,7 +151,7 @@ DELETE FROM remote_session_clients WHERE project_id = @project_id::uuid OR organ
 DELETE FROM remote_session_issuers WHERE project_id = @project_id::uuid OR organization_id = @org_id::text;
 
 -- name: OrgDeleteMCPServers :exec
-DELETE FROM mcp_servers WHERE project_id = @project_id::uuid;
+DELETE FROM mcp_servers WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeleteRemoteProtectedResources :exec
 DELETE FROM remote_protected_resources WHERE project_id = @project_id::uuid;
@@ -228,24 +228,15 @@ DELETE FROM chat_message_participants WHERE project_id IN (SELECT id FROM projec
 
 -- name: OrgDeleteSigintSensorSignals :exec
 DELETE FROM sigint_sensor_signals
-WHERE project_id IN (
-  SELECT id FROM projects
-  WHERE id = @project_id::uuid AND organization_id = @org_id::text
-);
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeleteSigintSensors :exec
 DELETE FROM sigint_sensors
-WHERE project_id IN (
-  SELECT id FROM projects
-  WHERE id = @project_id::uuid AND organization_id = @org_id::text
-);
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeleteSigintCustomSignals :exec
 DELETE FROM sigint_custom_signals
-WHERE project_id IN (
-  SELECT id FROM projects
-  WHERE id = @project_id::uuid AND organization_id = @org_id::text
-);
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
 
 -- name: OrgDeleteProjects :exec
 DELETE FROM projects WHERE organization_id = @org_id::text;
