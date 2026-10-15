@@ -747,6 +747,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		switch metaServer.DiscoveryMode.String {
 		case "code_mode":
 			gatewayDefaultMode = "Code Mode"
+			// admitMetaGate serves Code Mode gateways as Progressive while the runtime is off.
+			if !s.CodeModeAvailable(ctx, endpoint.OrganizationID, endpoint.ProjectID) {
+				gatewayDefaultMode = "Progressive"
+			}
 		case "direct":
 			gatewayDefaultMode = "Direct"
 		case "", "progressive":
