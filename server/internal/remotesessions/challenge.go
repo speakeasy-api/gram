@@ -103,6 +103,10 @@ type ParentChallenge struct {
 	// server. Unlike FinalRedirectURI it changes only where the browser goes:
 	// the login keeps its consent parent and that parent's browser binding.
 	ConsentURL string
+	// ConsentServer is the gateway server whose connect page started the
+	// login, so the callback returns to that page rather than to the
+	// gateway's own. Empty for every other login.
+	ConsentServer string
 	// Resource is the RFC 8707 resource indicator sent on the authorize
 	// redirect and code exchange. Empty omits the parameter.
 	Resource string
@@ -158,6 +162,8 @@ type RemoteLoginState struct {
 	// for a consent parent whose page is not at /<RouteBase>/{slug}/connect.
 	// Empty for every other login, including states minted before it existed.
 	ConsentURL string `json:"consent_url,omitempty"`
+	// ConsentServer is the gateway server page the callback returns to.
+	ConsentServer string `json:"consent_server,omitempty"`
 	// AutoRefresh is the subject's consent-screen auto-refresh choice. Nil
 	// (including in-flight states minted before this field) defers to the
 	// client capability's default at persist time.
@@ -198,6 +204,7 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		RouteBase:           s.RouteBase,
 		FinalRedirectURI:    s.FinalRedirectURI,
 		ConsentURL:          s.ConsentURL,
+		ConsentServer:       s.ConsentServer,
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
@@ -1383,6 +1390,7 @@ func (m *ChallengeManager) mintAuthorization(
 		MetaMcpServerID:       parent.MetaMcpServerID,
 		FinalRedirectURI:      parent.FinalRedirectURI,
 		ConsentURL:            parent.ConsentURL,
+		ConsentServer:         parent.ConsentServer,
 		AutoRefresh:           parent.AutoRefresh,
 		Authority:             parent.Authority,
 		Scopes:                scopes,
@@ -1807,6 +1815,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(redirectBaseURL, "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
 	if state.ConsentURL != "" {
 		redirect = state.ConsentURL
+	}
+	if state.ConsentServer != "" {
+		redirect += "&server=" + url.QueryEscape(state.ConsentServer)
 	}
 	if state.FinalRedirectURI != "" {
 		redirect = state.FinalRedirectURI

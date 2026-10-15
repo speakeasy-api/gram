@@ -194,6 +194,10 @@ type AuthnChallengeState struct {
 	// or failed upstream leg — and a deliberate disconnect — return the user to
 	// a page they can act on instead of bouncing them out again.
 	AutoConnectDone bool `json:"auto_connect_done,omitempty"`
+	// FocusServer is the gateway server a first-party connect was opened
+	// for, so the consent page lands on that server's connect page. Empty
+	// lands on the gateway's own page.
+	FocusServer string `json:"focus_server,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
