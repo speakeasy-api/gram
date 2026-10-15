@@ -560,7 +560,10 @@ describe("parsePrefillBootstrap", () => {
         },
         { name: "docs--search", _meta: { "gram.dev/source": "Docs" } },
       ],
-      _meta: { "gram.dev/unavailableSources": ["Linear", "Slack"] },
+      _meta: {
+        "gram.dev/unavailableSources": ["Linear", "Slack"],
+        "gram.dev/managedSources": ["Jira"],
+      },
       nextCursor: undefined,
     });
     const user = userEvent.setup();
@@ -569,6 +572,9 @@ describe("parsePrefillBootstrap", () => {
 
     expect(
       screen.getByText(/Linear and Slack aren't connected yet/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Jira is managed by your identity provider/),
     ).toBeTruthy();
     expect(screen.getByRole("group", { name: "GitHub" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Docs" })).toBeTruthy();

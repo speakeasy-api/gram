@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -285,6 +286,10 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt *memberRou
 		return &metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}
 	}
 	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok {
+		// The member proxy's own selection refusal, not the upstream's.
+		if rpcErr.Code == proxy.RejectCodeInvalidRequest && rpcErr.Message == remotemcp.ToolNotApprovedMessage {
+			return &metaMemberError{message: remotemcp.ToolNotApprovedMessage}
+		}
 		return &metaMemberError{message: fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message)}
 	}
 	if status := rt.status(); status != 0 && !upstreamStatusOK(status) {
