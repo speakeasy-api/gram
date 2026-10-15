@@ -75,6 +75,8 @@ DELETE FROM attribute_keys WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM shadow_mcp_inventory_urls WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
+DELETE FROM shadow_mcp_inventory_url_overrides WHERE gram_project_id IN
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM mcp_network_traffic_hourly_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM ai_detections WHERE organization_id = 'org_gram_demo_workspace';
@@ -975,38 +977,38 @@ FROM (
 -- Shadow MCP inventory + companion hook telemetry (Shadow MCP page list,
 -- call/user counts).
 INSERT INTO shadow_mcp_inventory_urls
-  (gram_project_id, canonical_server_url, url_host, server_name, first_seen, last_seen, updated_at)
+  (gram_project_id, canonical_server_url, url_host, server_name, first_seen, last_seen, updated_at, legacy_override)
 VALUES
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://api.githubcopilot.com/mcp',
-   'api.githubcopilot.com', 'GitHub', now64(9) - INTERVAL 30 DAY, now64(9) - INTERVAL 2 HOUR, now64(9)),
+   'api.githubcopilot.com', 'GitHub', now64(9) - INTERVAL 30 DAY, now64(9) - INTERVAL 2 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.notion.com/mcp',
-   'mcp.notion.com', 'Notion', now64(9) - INTERVAL 29 DAY, now64(9) - INTERVAL 4 HOUR, now64(9)),
+   'mcp.notion.com', 'Notion', now64(9) - INTERVAL 29 DAY, now64(9) - INTERVAL 4 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.linear.app/mcp',
-   'mcp.linear.app', 'Linear', now64(9) - INTERVAL 28 DAY, now64(9) - INTERVAL 6 HOUR, now64(9)),
+   'mcp.linear.app', 'Linear', now64(9) - INTERVAL 28 DAY, now64(9) - INTERVAL 6 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.slack.com/mcp',
-   'mcp.slack.com', 'Slack', now64(9) - INTERVAL 26 DAY, now64(9) - INTERVAL 8 HOUR, now64(9)),
+   'mcp.slack.com', 'Slack', now64(9) - INTERVAL 26 DAY, now64(9) - INTERVAL 8 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.sentry.dev/mcp',
-   'mcp.sentry.dev', 'Sentry', now64(9) - INTERVAL 25 DAY, now64(9) - INTERVAL 10 HOUR, now64(9)),
+   'mcp.sentry.dev', 'Sentry', now64(9) - INTERVAL 25 DAY, now64(9) - INTERVAL 10 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.datadoghq.com/api/mcp',
-   'mcp.datadoghq.com', 'Datadog', now64(9) - INTERVAL 23 DAY, now64(9) - INTERVAL 12 HOUR, now64(9)),
+   'mcp.datadoghq.com', 'Datadog', now64(9) - INTERVAL 23 DAY, now64(9) - INTERVAL 12 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.cloudflare.com/mcp',
-   'mcp.cloudflare.com', 'Cloudflare', now64(9) - INTERVAL 22 DAY, now64(9) - INTERVAL 14 HOUR, now64(9)),
+   'mcp.cloudflare.com', 'Cloudflare', now64(9) - INTERVAL 22 DAY, now64(9) - INTERVAL 14 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.stripe.com/mcp',
-   'mcp.stripe.com', 'Stripe', now64(9) - INTERVAL 20 DAY, now64(9) - INTERVAL 16 HOUR, now64(9)),
+   'mcp.stripe.com', 'Stripe', now64(9) - INTERVAL 20 DAY, now64(9) - INTERVAL 16 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.figma.com/mcp',
-   'mcp.figma.com', 'Figma', now64(9) - INTERVAL 19 DAY, now64(9) - INTERVAL 18 HOUR, now64(9)),
+   'mcp.figma.com', 'Figma', now64(9) - INTERVAL 19 DAY, now64(9) - INTERVAL 18 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://postgres.internal.example.com/mcp',
-   'postgres.internal.example.com', 'Postgres Explorer', now64(9) - INTERVAL 17 DAY, now64(9) - INTERVAL 20 HOUR, now64(9)),
+   'postgres.internal.example.com', 'Postgres Explorer', now64(9) - INTERVAL 17 DAY, now64(9) - INTERVAL 20 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://support-tools.example.com/mcp',
-   'support-tools.example.com', 'Customer Support', now64(9) - INTERVAL 16 DAY, now64(9) - INTERVAL 22 HOUR, now64(9)),
+   'support-tools.example.com', 'Customer Support', now64(9) - INTERVAL 16 DAY, now64(9) - INTERVAL 22 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://prod-admin.example.com/mcp',
-   'prod-admin.example.com', 'Production Admin', now64(9) - INTERVAL 14 DAY, now64(9) - INTERVAL 24 HOUR, now64(9)),
+   'prod-admin.example.com', 'Production Admin', now64(9) - INTERVAL 14 DAY, now64(9) - INTERVAL 24 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://warehouse.example.com/mcp',
-   'warehouse.example.com', 'Data Warehouse', now64(9) - INTERVAL 13 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+   'warehouse.example.com', 'Data Warehouse', now64(9) - INTERVAL 13 DAY, now64(9) - INTERVAL 26 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://incidents.example.com/mcp',
-   'incidents.example.com', 'Incident Commander', now64(9) - INTERVAL 11 DAY, now64(9) - INTERVAL 28 HOUR, now64(9)),
+   'incidents.example.com', 'Incident Commander', now64(9) - INTERVAL 11 DAY, now64(9) - INTERVAL 28 HOUR, now64(9), 0),
   (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://payroll.example.com/mcp',
-   'payroll.example.com', 'Payroll Assistant', now64(9) - INTERVAL 10 DAY, now64(9) - INTERVAL 30 HOUR, now64(9));
+   'payroll.example.com', 'Payroll Assistant', now64(9) - INTERVAL 10 DAY, now64(9) - INTERVAL 30 HOUR, now64(9), 0);
 
 INSERT INTO telemetry_logs
   (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,

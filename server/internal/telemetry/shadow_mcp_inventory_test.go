@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -145,6 +146,138 @@ func TestShadowMCPInventoryURLs_NameOverrideSurvivesLaterObservation(t *testing.
 	require.Len(t, rows, 1)
 	require.Equal(t, "GitHub Enterprise MCP", rows[0].ServerName)
 	require.Equal(t, "Engineering GitHub", rows[0].ServerNameOverride)
+}
+
+// Regression test for DNO-615: an observation writer that read the inventory
+// before an override was set used to write back an empty override with a
+// newer updated_at, silently erasing the admin's display name.
+func TestShadowMCPInventoryURLs_NameOverrideSurvivesStaleObservationWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	serverURL := "https://github.example.com/mcp"
+	seenAt := inventoryTestTime(15, 12, 0, 0, 0)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		URLHost:            "github.example.com",
+		ServerName:         "GitHub MCP",
+		SeenAt:             seenAt,
+		UpdatedAt:          seenAt,
+	}}))
+
+	updated, err := ti.chClient.UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryRepo.UpdateShadowMCPInventoryURLNameOverrideParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		ServerNameOverride: "Engineering GitHub",
+		UpdatedAt:          seenAt.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	require.True(t, updated)
+
+	// The row a concurrent observation writer holding a pre-override read
+	// would produce.
+	require.NoError(t, ti.chConn.Exec(ctx, `
+		INSERT INTO shadow_mcp_inventory_urls
+			(gram_project_id, canonical_server_url, url_host, server_name, server_name_override, first_seen, last_seen, updated_at, legacy_override)
+		SETTINGS async_insert = 0
+		VALUES (?, ?, 'github.example.com', 'GitHub MCP', '', fromUnixTimestamp64Nano(?), fromUnixTimestamp64Nano(?), fromUnixTimestamp64Nano(?), 0)`,
+		projectID, serverURL, seenAt.UnixNano(), seenAt.Add(2*time.Minute).UnixNano(), seenAt.Add(2*time.Minute).UnixNano(),
+	))
+
+	row, err := ti.chClient.GetShadowMCPInventoryURL(ctx, telemetryRepo.GetShadowMCPInventoryURLParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	require.Equal(t, "Engineering GitHub", row.ServerNameOverride)
+
+	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		Limit:         10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "Engineering GitHub", rows[0].ServerNameOverride)
+}
+
+// insertLegacyShadowMCPInventoryRow writes a row the way code from before
+// the override table did: server_name_override in the row, legacy_override
+// left to its default.
+func insertLegacyShadowMCPInventoryRow(t *testing.T, ctx context.Context, conn clickhouse.Conn, projectID, serverURL, override string, at time.Time) {
+	t.Helper()
+	require.NoError(t, conn.Exec(ctx, `
+		INSERT INTO shadow_mcp_inventory_urls
+			(gram_project_id, canonical_server_url, url_host, server_name, server_name_override, first_seen, last_seen, updated_at)
+		SETTINGS async_insert = 0
+		VALUES (?, ?, 'github.example.com', 'GitHub MCP', ?, fromUnixTimestamp64Nano(?), fromUnixTimestamp64Nano(?), fromUnixTimestamp64Nano(?))`,
+		projectID, serverURL, override, at.UnixNano(), at.UnixNano(), at.UnixNano(),
+	))
+}
+
+// Names set or cleared by older code after the migration ran, but before
+// this code shipped, are mirrored into the override table and must carry over.
+func TestShadowMCPInventoryURLs_LegacyOverrideCarriesOver(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	serverURL := "https://github.example.com/mcp"
+	seenAt := inventoryTestTime(15, 12, 0, 0, 0)
+
+	getOverride := func() string {
+		t.Helper()
+		row, err := ti.chClient.GetShadowMCPInventoryURL(ctx, telemetryRepo.GetShadowMCPInventoryURLParams{
+			GramProjectID:      projectID,
+			CanonicalServerURL: serverURL,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, row)
+
+		rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
+			GramProjectID: projectID,
+			Limit:         10,
+		})
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		require.Equal(t, row.ServerNameOverride, rows[0].ServerNameOverride)
+		return row.ServerNameOverride
+	}
+
+	insertLegacyShadowMCPInventoryRow(t, ctx, ti.chConn, projectID, serverURL, "Legacy GitHub", seenAt)
+	require.Equal(t, "Legacy GitHub", getOverride())
+
+	// A current observation write is not mirrored, so it cannot clear the name.
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		URLHost:            "github.example.com",
+		ServerName:         "GitHub MCP",
+		SeenAt:             seenAt.Add(time.Minute),
+		UpdatedAt:          seenAt.Add(time.Minute),
+	}}))
+	// Collapsing the inventory rows drops the legacy row; the mirrored name
+	// must not depend on it.
+	require.NoError(t, ti.chConn.Exec(ctx, "OPTIMIZE TABLE shadow_mcp_inventory_urls FINAL"))
+	require.Equal(t, "Legacy GitHub", getOverride())
+
+	// A new override outranks the mirrored name even with a regressed clock.
+	updated, err := ti.chClient.UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryRepo.UpdateShadowMCPInventoryURLNameOverrideParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		ServerNameOverride: "Engineering GitHub",
+		UpdatedAt:          seenAt.Add(-time.Hour),
+	})
+	require.NoError(t, err)
+	require.True(t, updated)
+	require.Equal(t, "Engineering GitHub", getOverride())
+
+	// A later clear from older code, as during a rolling deploy, is mirrored too.
+	insertLegacyShadowMCPInventoryRow(t, ctx, ti.chConn, projectID, serverURL, "", time.Now().Add(time.Hour))
+	require.Empty(t, getOverride())
 }
 
 func TestShadowMCPInventoryURLs_NameOverrideCanBeCleared(t *testing.T) {
