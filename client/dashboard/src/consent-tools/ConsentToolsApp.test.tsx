@@ -164,6 +164,44 @@ describe("ConsentToolsApp", () => {
     expect(button.disabled).toBe(true);
   });
 
+  it("falls back to all tools when the inventory cannot be captured", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(422, "too many tools"));
+    const { button } = renderApp();
+    await screen.findByText(/too many tools to choose from here/);
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+  });
+
+  it("asks before widening a stored selection the inventory cannot honor", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(422, "too many tools"));
+    const user = userEvent.setup();
+    const { button } = renderApp({
+      prefill: { annotations: [], tools: ["get_thing"] },
+    });
+    await screen.findByText(/too many tools to choose from here/);
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_filtering")).toEqual([]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Give access to all tools" }),
+    );
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+  });
+
+  it("lets the user give access with all tools after a failed load", async () => {
+    listTools.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    const { button } = renderApp();
+    await user.click(
+      await screen.findByRole("button", { name: "Give access to all tools" }),
+    );
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+  });
+
   it("gives access with all tools when a chained service defers the inventory", async () => {
     connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
     const { button } = renderApp({ inventoryDeferred: true });
