@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mapWithConcurrency } from "./bounded-concurrency";
 
 describe("mapWithConcurrency", () => {
@@ -20,6 +20,15 @@ describe("mapWithConcurrency", () => {
     );
     expect(peak).toBe(3);
     expect(results).toEqual([10, 20, 30, 40, 50, 60, 70]);
+  });
+
+  it("rejects a limit that would never run anything", async () => {
+    const fn = vi.fn(async (n: number) => n);
+    await expect(mapWithConcurrency([1, 2], 0, fn)).rejects.toThrow(RangeError);
+    await expect(mapWithConcurrency([1, 2], 1.5, fn)).rejects.toThrow(
+      RangeError,
+    );
+    expect(fn).not.toHaveBeenCalled();
   });
 
   it("maps nothing to nothing", async () => {

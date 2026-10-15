@@ -8,6 +8,9 @@ export async function mapWithConcurrency<T, R>(
   limit: number,
   fn: (item: T) => Promise<R>,
 ): Promise<R[]> {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new RangeError(`limit must be a positive integer, got ${limit}`);
+  }
   const results: R[] = [];
   let next = 0;
   const worker = async () => {
@@ -17,7 +20,7 @@ export async function mapWithConcurrency<T, R>(
     }
   };
   await Promise.all(
-    Array.from({ length: Math.min(Math.max(limit, 1), items.length) }, worker),
+    Array.from({ length: Math.min(limit, items.length) }, worker),
   );
   return results;
 }
