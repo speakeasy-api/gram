@@ -60,7 +60,27 @@ func quotedList(values []string) string {
 	return strings.Join(quoted, ", ")
 }
 
-// dedupedAgentEvents is the innermost scan every event dataset starts from:
+// Observations picks which observations a dataset folds: the de-duplicated
+// scan a query reads, or the plain scan a values listing reads. The extra
+// predicates are the dataset's own.
+type Observations func(qc QueryContext, extra ...squirrel.Sqlizer) squirrel.SelectBuilder
+
+// scopedAgentEvents is the tenancy and window filter every event dataset
+// starts from, with the dataset's predicates applied directly to it.
+func scopedAgentEvents(qc QueryContext, extra ...squirrel.Sqlizer) squirrel.SelectBuilder {
+	builder := sq.Select("*").
+		From("agent_events").
+		Where(squirrel.Eq{"organization_id": qc.Tenant.OrganizationID}).
+		Where(squirrel.Eq{"project_id": qc.Tenant.ProjectID}).
+		Where("occurred_at_unix_nano >= ?", qc.Window.FromUnixNano).
+		Where("occurred_at_unix_nano < ?", qc.Window.ToUnixNano)
+	for _, condition := range extra {
+		builder = builder.Where(condition)
+	}
+	return builder
+}
+
+// dedupedAgentEvents is the innermost scan every event query starts from:
 // the tenancy and window filter, then LIMIT 1 BY record_id so a redelivered
 // record counts once before anything is aggregated. No aggregate function can
 // express that, which is why it lives here and not in a measure.
@@ -75,13 +95,11 @@ func quotedList(values []string) string {
 // dataset's own predicates apply. Filtering first would let a correction
 // that moved a record out of the dataset (a session id withdrawn, an event
 // retyped) be dropped before the collapse, leaving its stale copy to win.
+//
+// The sort holds every row of the project's window in memory and cannot
+// spill, so it is the costliest step of any query.
 func dedupedAgentEvents(qc QueryContext, extra ...squirrel.Sqlizer) squirrel.SelectBuilder {
-	scoped := sq.Select("*").
-		From("agent_events").
-		Where(squirrel.Eq{"organization_id": qc.Tenant.OrganizationID}).
-		Where(squirrel.Eq{"project_id": qc.Tenant.ProjectID}).
-		Where("occurred_at_unix_nano >= ?", qc.Window.FromUnixNano).
-		Where("occurred_at_unix_nano < ?", qc.Window.ToUnixNano).
+	scoped := scopedAgentEvents(qc).
 		OrderBy("observed_at_unix_nano DESC").
 		Suffix("LIMIT 1 BY organization_id, project_id, record_id")
 	builder := sq.Select("*").FromSelect(scoped, "scoped")
@@ -98,6 +116,15 @@ func dedupedAgentEvents(qc QueryContext, extra ...squirrel.Sqlizer) squirrel.Sel
 // caller composing sum(turn_count) gets the de-duplicated figure without
 // needing to know why.
 func sessionsSource(qc QueryContext) squirrel.SelectBuilder {
+	return foldSessions(qc, dedupedAgentEvents)
+}
+
+// sessionsValues folds sessions the same way without the redelivery collapse.
+func sessionsValues(qc QueryContext) squirrel.SelectBuilder {
+	return foldSessions(qc, scopedAgentEvents)
+}
+
+func foldSessions(qc QueryContext, observations Observations) squirrel.SelectBuilder {
 	return sq.Select(
 		"organization_id",
 		"project_id",
@@ -113,26 +140,37 @@ func sessionsSource(qc QueryContext) squirrel.SelectBuilder {
 		"toInt64(uniqExactIf(turn_id, turn_id != '')) AS turn_count",
 		"toInt64(uniqExactIf(event_id, "+toolCallEventTypesSQL+")) AS tool_call_count",
 	).
-		FromSelect(dedupedAgentEvents(qc, squirrel.NotEq{"session_id": ""}), "deduped").
+		FromSelect(observations(qc, squirrel.NotEq{"session_id": ""}), "observed").
 		GroupBy("organization_id", "project_id", "session_id")
 }
 
 // toolCallsSource is one row per tool call, Skill invocations included.
 func toolCallsSource(qc QueryContext) squirrel.SelectBuilder {
-	return collapsedToolCalls(qc)
+	return foldToolCalls(qc, dedupedAgentEvents)
+}
+
+// toolCallsValues folds tool calls the same way without the redelivery
+// collapse.
+func toolCallsValues(qc QueryContext) squirrel.SelectBuilder {
+	return foldToolCalls(qc, scopedAgentEvents)
 }
 
 // skillsSource is one row per tool call that named a skill. The filter runs
 // after the collapse because not every observation of a call carries the
 // name: a blocked invocation's decision does not, its result does.
 func skillsSource(qc QueryContext) squirrel.SelectBuilder {
-	return collapsedToolCalls(qc).Having("skill_name != ''")
+	return toolCallsSource(qc).Having("skill_name != ''")
 }
 
-// collapsedToolCalls folds the observations of each tool call (decision,
-// call, result) into one row at its latest observation. A blocked call has
-// only its decision, so that row is the call and its status is rejected.
-func collapsedToolCalls(qc QueryContext) squirrel.SelectBuilder {
+// skillsValues is skillsSource without the redelivery collapse.
+func skillsValues(qc QueryContext) squirrel.SelectBuilder {
+	return toolCallsValues(qc).Having("skill_name != ''")
+}
+
+// foldToolCalls folds the observations of each tool call (decision, call,
+// result) into one row at its latest observation. A blocked call has only its
+// decision, so that row is the call and its status is rejected.
+func foldToolCalls(qc QueryContext, observations Observations) squirrel.SelectBuilder {
 	return sq.Select(
 		"organization_id",
 		"project_id",
@@ -149,9 +187,9 @@ func collapsedToolCalls(qc QueryContext) squirrel.SelectBuilder {
 		"min(occurred_at_unix_nano) AS started_at",
 		"max(occurred_at_unix_nano) AS ended_at",
 	).
-		FromSelect(dedupedAgentEvents(qc,
+		FromSelect(observations(qc,
 			squirrel.Eq{"event_type": toolCallEventTypes},
 			squirrel.NotEq{"event_id": ""},
-		), "deduped").
+		), "observed").
 		GroupBy("organization_id", "project_id", "event_id")
 }

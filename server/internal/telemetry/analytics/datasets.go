@@ -75,6 +75,7 @@ var Sessions = &Dataset{
 		},
 	},
 	Source: sessionsSource,
+	Values: sessionsValues,
 }
 
 // ToolCalls is one row per tool call, resolved to its terminal observation.
@@ -164,6 +165,7 @@ var ToolCalls = &Dataset{
 		},
 	},
 	Source: toolCallsSource,
+	Values: toolCallsValues,
 }
 
 // Skills is one row per skill invocation: a tool call that named a skill,
@@ -237,6 +239,7 @@ var Skills = &Dataset{
 		},
 	},
 	Source: skillsSource,
+	Values: skillsValues,
 }
 
 // Filters fold their values the way the column folds, so a raw name or its

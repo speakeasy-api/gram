@@ -20,7 +20,8 @@ func TestCompileValues(t *testing.T) {
 	plan, err := CompileValues(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, nil, ValuesRequest{Dataset: "tool_calls", Dimension: "tool_name", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: 0})
 	require.NoError(t, err)
 	require.Contains(t, plan.SQL, "SELECT tool_name AS value, count() AS n FROM (")
-	require.Contains(t, plan.SQL, "LIMIT 1 BY organization_id, project_id, record_id", "values come from the collapsed rows")
+	require.Contains(t, plan.SQL, "argMaxIf(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name", "values come from the folded rows")
+	require.NotContains(t, plan.SQL, "LIMIT 1 BY", "a values listing skips the redelivery collapse, which sorts the whole window in memory")
 	require.Contains(t, plan.SQL, "WHERE tool_name <> ?")
 	require.Contains(t, plan.SQL, "GROUP BY value ORDER BY n DESC, value ASC LIMIT 50")
 
@@ -139,6 +140,34 @@ func TestDimensionValues(t *testing.T) {
 		require.EqualValues(t, 2, result.Values[0].Count)
 		require.Equal(t, "linear", result.Values[1].Value, "a raw name with no override shows as reported")
 		require.EqualValues(t, 1, result.Values[1].Count)
+	})
+
+	t.Run("it counts a redelivered call once", func(t *testing.T) {
+		t.Parallel()
+		call := func(recordID, eventID, eventType string, at time.Time) chrepo.AgentEventRow {
+			r := agentEventFixture(ti.organizationID, recordID, "", "", eventID, eventType, at.UnixNano())
+			r.ProjectID = ti.projectID
+			r.ToolName = "redelivered_tool"
+			return r
+		}
+		redelivered := call("d1", "call-d", "tool_call_result", base.Add(20*time.Minute))
+		require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+			call("d0", "call-d", "tool_call", base.Add(19*time.Minute)),
+			redelivered,
+			redelivered,
+		}))
+
+		result, err := ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{
+			Dataset: "tool_calls", Dimension: "tool_name", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
+		})
+		require.NoError(t, err)
+		var count int64
+		for _, v := range result.Values {
+			if v.Value == "redelivered_tool" {
+				count = v.Count
+			}
+		}
+		require.EqualValues(t, 1, count, "one call, observed twice and redelivered once, is one call")
 	})
 
 	t.Run("it names an unknown dimension", func(t *testing.T) {

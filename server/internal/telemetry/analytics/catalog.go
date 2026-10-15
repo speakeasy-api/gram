@@ -160,6 +160,23 @@ type Dataset struct {
 	Fields   []Field
 	// Source builds the dataset's source query for one tenancy and window.
 	Source SourceQuery
+	// Values builds the rows a dimension's values are listed from: the same
+	// fold as Source, over observations that skip the redelivery collapse.
+	// The collapse sorts the whole window in memory, and a filter bar asks
+	// for every field's values on page load, so the listing must not pay
+	// for it. Folding over a redelivered record is harmless, since every
+	// fold keeps the latest value or a min or max. What the listing gives up
+	// is a retraction: a value a later copy of a record withdrew can still
+	// be offered. Empty reads Source.
+	Values SourceQuery
+}
+
+// valuesSource is the source a values listing reads.
+func (d *Dataset) valuesSource() SourceQuery {
+	if d.Values != nil {
+		return d.Values
+	}
+	return d.Source
 }
 
 // MaxTimeRangeDays is the longest window this dataset can answer honestly:

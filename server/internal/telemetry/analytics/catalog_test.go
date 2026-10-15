@@ -81,6 +81,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: ""},
 			},
 			Source: sessionsSource,
+			Values: nil,
 		}
 	}
 
@@ -240,7 +241,7 @@ func TestDatasetWindowIsBoundedByItsTableRetention(t *testing.T) {
 	require.Equal(t, MaxEventTimeRangeDays, ToolCalls.MaxTimeRangeDays())
 	require.Equal(t, int64(MaxEventTimeRangeDays)*nanosPerDay, Sessions.MaxTimeRangeNanos())
 
-	metric := &Dataset{Name: "spend", Kind: KindMetric, Grain: "measurement", Description: "", TimeExpr: "t", Fields: nil, Source: nil}
+	metric := &Dataset{Name: "spend", Kind: KindMetric, Grain: "measurement", Description: "", TimeExpr: "t", Fields: nil, Source: nil, Values: nil}
 	require.Equal(t, MaxMetricTimeRangeDays, metric.MaxTimeRangeDays())
 	require.Equal(t, MaxTimeRangeDays, metric.MaxTimeRangeDays(), "the metric limit is the ceiling")
 }
