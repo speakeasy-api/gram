@@ -378,13 +378,16 @@ export function ConsentToolsApp({
           connected first.
         </p>
         <input type="hidden" name="tool_filtering" value="off" form={formId} />
-        <button
-          type="button"
-          onClick={() => setAttemptID(crypto.randomUUID())}
-          className="text-primary hover:underline"
-        >
-          Retry
-        </button>
+        <p>
+          Signed in to the service separately?{" "}
+          <button
+            type="button"
+            onClick={() => setAttemptID(crypto.randomUUID())}
+            className="text-primary hover:underline"
+          >
+            Load tools
+          </button>
+        </p>
       </div>
     );
   }

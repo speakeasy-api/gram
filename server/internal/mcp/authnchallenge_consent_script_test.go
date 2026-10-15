@@ -146,7 +146,7 @@ setTimeout(() => {
 
   const ready = cards.ready;
   assert.equal(ready.status.getAttribute('data-chain-check'), 'ready');
-  assert.equal(ready.status.textContent, 'Ready to connect after authorization');
+  assert.equal(ready.status.textContent, 'Automatically connects when you give access');
   assert.equal(ready.fallback.className, fallbackClass, 'readiness keeps separate OAuth optional');
   assert.equal(summary.textContent, '2 of 5 connected', 'readiness does not claim a downstream token');
 
