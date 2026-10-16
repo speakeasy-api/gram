@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAgentCreationChecksRespectOwnerTargeting(t *testing.T) {
+func TestBoundOwnerSelectorContainment(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name    string
@@ -31,12 +31,8 @@ func TestAgentCreationChecksRespectOwnerTargeting(t *testing.T) {
 			t.Parallel()
 			grant := NewGrantWithSelector(tc.scope, AgentOwnerSelector(tc.scope, tc.target))
 			require.NoError(t, ValidateSelector(tc.scope, grant.Selector))
-			allowed := false
-			for _, check := range AgentCreationChecks(tc.caller, tc.owner) {
-				match, err := GrantsAuthorize([]Grant{grant}, check)
-				require.NoError(t, err)
-				allowed = allowed || match
-			}
+			grants := BindSelectorValue([]Grant{grant}, SelectorKeyOwner, AgentOwnerSelf, tc.caller)
+			allowed := GrantsContainSelector(grants, ScopeAgentWrite, AgentOwnerSelector(ScopeAgentWrite, tc.owner))
 			require.Equal(t, tc.allowed, allowed)
 		})
 	}
@@ -49,9 +45,7 @@ func TestOwnerScopedAgentGrantRejectsMissingOwnerDimension(t *testing.T) {
 		t.Run(owner, func(t *testing.T) {
 			t.Parallel()
 			grant := NewGrantWithSelector(ScopeAgentWrite, AgentOwnerSelector(ScopeAgentWrite, owner))
-			allowed, err := GrantsAuthorize([]Grant{grant}, Check{
-				Scope: ScopeAgentWrite, ResourceKind: ResourceKindAgent, ResourceID: "existing-agent", Dimensions: nil,
-			})
+			allowed, err := GrantsAuthorize([]Grant{grant}, AgentCheck(ScopeAgentWrite, "existing-agent", ""))
 			require.NoError(t, err)
 			require.False(t, allowed)
 		})

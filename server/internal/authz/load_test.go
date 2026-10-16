@@ -127,8 +127,7 @@ func TestRemovingSystemRoleCreationEligibilityIsDurable(t *testing.T) {
 		}
 		grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{principal})
 		require.NoError(t, err)
-		allowed, err := GrantsAuthorize(grants, AgentCreationChecks("caller", "employee")[0])
-		require.NoError(t, err)
+		allowed := GrantsContainSelector(grants, ScopeAgentWrite, AgentOwnerSelector(ScopeAgentWrite, "employee"))
 		require.False(t, allowed, "deleting persisted creation grants must revoke eligibility, including for Admin")
 		listed, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, principal.String())
 		require.NoError(t, err)

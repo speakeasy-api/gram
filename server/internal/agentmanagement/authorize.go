@@ -160,20 +160,9 @@ func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, ownerUse
 	if a.authz == nil {
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
 	}
-	checks := authz.AgentCreationChecks(human.Auth.UserID, ownerUserID)
-	check := checks[0]
-	for _, candidate := range checks {
-		allowed, err := authz.GrantsAuthorize(human.grants, candidate)
-		if err != nil {
-			return HumanContext{}, fmt.Errorf("evaluate agent creation eligibility: %w", err)
-		}
-		if allowed {
-			check = candidate
-			break
-		}
-	}
-	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, check); err != nil {
-		return HumanContext{}, fmt.Errorf("authorize agent creation for intended owner: %w", err)
+	grants := authz.BindSelectorValue(human.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, human.Auth.UserID)
+	if !authz.GrantsContainSelector(grants, authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, ownerUserID)) {
+		return HumanContext{}, oops.C(oops.CodeForbidden)
 	}
 	return human, nil
 }
@@ -271,8 +260,8 @@ func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, 
 	if a.authz == nil {
 		return HumanContext{}, repo.Agent{}, errors.New("agent authorization engine is unavailable")
 	}
-	check := permittedAgentCheck(human, agent, scope)
-	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, check); err != nil {
+	grants := authz.BindSelectorValue(human.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, human.Auth.UserID)
+	if err := a.authz.EvaluateLoadedGrants(ctx, grants, authz.AgentCheck(scope, agent.ID.String(), agent.OwnerUserID)); err != nil {
 		// Selected-agent denials deliberately do not distinguish absent,
 		// cross-tenant, or unauthorized resources.
 		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
@@ -288,11 +277,12 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 		return AgentPermissions{}, errors.New("agent authorization engine is unavailable")
 	}
 
+	grants := authz.BindSelectorValue(human.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, human.Auth.UserID)
 	return AgentPermissions{
-		Read:      authz.GrantsSatisfy(human.grants, permittedAgentCheck(human, agent, authz.ScopeAgentRead)),
-		Write:     authz.GrantsSatisfy(human.grants, permittedAgentCheck(human, agent, authz.ScopeAgentWrite)),
-		Authorize: authz.GrantsSatisfy(human.grants, permittedAgentCheck(human, agent, authz.ScopeAgentAuthorize)),
-		Transfer:  authz.GrantsSatisfy(human.grants, permittedAgentCheck(human, agent, authz.ScopeAgentTransfer)),
+		Read:      authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentRead, agent.ID.String(), agent.OwnerUserID)),
+		Write:     authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentWrite, agent.ID.String(), agent.OwnerUserID)),
+		Authorize: authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID)),
+		Transfer:  authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentTransfer, agent.ID.String(), agent.OwnerUserID)),
 	}, nil
 }
 
@@ -313,14 +303,4 @@ func scopeForOwnerPredicate(predicate OwnerPredicate) (authz.Scope, bool) {
 	default:
 		return "", false
 	}
-}
-
-func permittedAgentCheck(human HumanContext, agent repo.Agent, scope authz.Scope) authz.Check {
-	checks := authz.AgentChecks(scope, agent.ID.String(), human.Auth.UserID, agent.OwnerUserID)
-	for _, check := range checks {
-		if authz.GrantsSatisfy(human.grants, check) {
-			return check
-		}
-	}
-	return checks[0]
 }

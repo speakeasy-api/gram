@@ -234,9 +234,7 @@ func TestCreateForAnotherOwnerUsesIntendedOwnerSelector(t *testing.T) {
 	seedGrant(t, ctx, conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, "*", "owner")
 	_, err = authorizer.RequireCreate(ctx, conn, "owner")
 	require.NoError(t, err)
-	require.Equal(t, authz.ScopeAgentWrite, engine.checks[len(engine.checks)-1].Scope)
-	require.Equal(t, "*", engine.checks[len(engine.checks)-1].ResourceID)
-	require.Equal(t, "owner", engine.checks[len(engine.checks)-1].Dimensions[authz.SelectorKeyOwner])
+	require.Empty(t, engine.checks, "creation proves containment without a wildcard runtime check")
 
 	_, err = authorizer.RequireCreate(ctx, conn, "caller")
 	requireOopsCode(t, err, oops.CodeForbidden)

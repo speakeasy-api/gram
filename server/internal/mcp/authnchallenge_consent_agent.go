@@ -302,12 +302,8 @@ func consentAgentCandidateEligible(human consentHumanAuthorization, agent agents
 	if agent.OrganizationID != target.OrganizationID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
 		return false
 	}
-	return agent.OwnerUserID == human.userID || authz.GrantsSatisfy(human.grants, authz.Check{
-		Scope:        authz.ScopeAgentAuthorize,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agent.ID.String(),
-		Dimensions:   nil,
-	})
+	grants := authz.BindSelectorValue(human.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, human.userID)
+	return agent.OwnerUserID == human.userID || authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID))
 }
 
 // consentPolicyConnect checks effective access, including exclusion scopes, for

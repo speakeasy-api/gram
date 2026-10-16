@@ -1,6 +1,7 @@
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
 import {
+  bindSelectorValue,
   canCreateAgentForInGrants,
   exclusionScopesForScope,
   hasScopeInGrants,
@@ -9,6 +10,54 @@ import {
   selectorMatches,
   selectorMatchesStrict,
 } from "./useRBAC";
+
+describe("selector value binding", () => {
+  it.each(["owner", "tool", "projectId"])(
+    "binds %s without dimension-specific matching or mutation",
+    (key) => {
+      const selector = { resourceKind: "*", resourceId: "*", [key]: "current" };
+      const bound = bindSelectorValue(selector, key, "current", "caller");
+      expect(bound).toEqual({ ...selector, [key]: "caller" });
+      expect(selector[key]).toBe("current");
+      expect(
+        selectorMatchesStrict(bound!, {
+          resourceKind: "*",
+          resourceId: "*",
+          [key]: "caller",
+        }),
+      ).toBe(true);
+      expect(
+        selectorMatchesStrict(bound!, { resourceKind: "*", resourceId: "*" }),
+      ).toBe(false);
+    },
+  );
+
+  it.each(["", "*"])(
+    "rejects an unresolved or wildcard binding %s",
+    (value) => {
+      expect(
+        bindSelectorValue({ tool: "current" }, "tool", "current", value),
+      ).toBeUndefined();
+    },
+  );
+
+  it("leaves literal values, wildcards, and unrelated dimensions unchanged", () => {
+    const selector = {
+      owner: "*",
+      projectId: "current",
+      tool: "specific-tool",
+    };
+    expect(bindSelectorValue(selector, "owner", "current", "caller")).toEqual(
+      selector,
+    );
+    expect(bindSelectorValue(selector, "tool", "current", "caller")).toEqual(
+      selector,
+    );
+    expect(
+      bindSelectorValue(selector, "projectId", "current", "caller"),
+    ).toEqual({ ...selector, projectId: "caller" });
+  });
+});
 
 describe("owner-scoped agent creation", () => {
   it("does not confuse a concrete owner ID with the relative self selector", () => {

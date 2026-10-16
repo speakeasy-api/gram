@@ -21,9 +21,6 @@ type selectorMatchMode int
 const (
 	selectorMatchNormal selectorMatchMode = iota
 	selectorMatchStrict
-	// selectorMatchAgentOwnerID excludes the relative self target when matching
-	// a concrete owner ID, even when that user's literal ID is "self".
-	selectorMatchAgentOwnerID
 )
 
 // WithStrictSelectorMatch returns a copy that only accepts grants whose every
@@ -35,17 +32,31 @@ func (c Check) WithStrictSelectorMatch() Check {
 }
 
 func (c Check) matchesAllowSelector(selector Selector) bool {
-	// Owner-scoped authority must not satisfy a check that omitted its owner.
-	if selector[SelectorKeyOwner] != "" && c.Dimensions[SelectorKeyOwner] == "" {
-		return false
-	}
-	if c.selectorMatch == selectorMatchAgentOwnerID && selector[SelectorKeyOwner] == AgentOwnerSelf {
-		return false
-	}
-	if c.selectorMatch != selectorMatchNormal {
+	if c.selectorMatch == selectorMatchStrict {
 		return selector.StrictMatches(c.selector())
 	}
 	return selector.Matches(c.selector())
+}
+
+// BindSelectorValue resolves a symbolic value for one selector dimension into
+// its request-local value. It preserves principal provenance and never mutates
+// the supplied grants or their selectors. Other dimensions are left unchanged.
+// A matching symbol with an empty or wildcard binding rejects the whole set.
+func BindSelectorValue(grants []Grant, key, symbol, value string) []Grant {
+	bound := make([]Grant, 0, len(grants))
+	for _, grant := range grants {
+		if selected, ok := grant.Selector[key]; ok && selected == symbol {
+			// Reject the whole set on an unresolved binding: dropping only a
+			// matching exclusion could otherwise broaden an unrelated allow.
+			if value == "" || value == WildcardResource {
+				return nil
+			}
+			grant.Selector = maps.Clone(grant.Selector)
+			grant.Selector[key] = value
+		}
+		bound = append(bound, grant)
+	}
+	return bound
 }
 
 // selector converts the check into a Selector for matching against grant selectors.

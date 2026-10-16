@@ -33,3 +33,25 @@ func TestConsentAgentCandidateOwnershipOrAuthorize(t *testing.T) {
 	require.True(t, consentAgentCandidateEligible(consentHumanAuthorization{userID: "other", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentAuthorize, agent.ID.String())}}, agent, target))
 	require.False(t, consentAgentCandidateEligible(consentHumanAuthorization{userID: "owner"}, agent, AgentAuthorizationTarget{OrganizationID: "org-b"}))
 }
+
+func TestConsentAgentCandidateHonorsOwnerSelector(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		owner   string
+		allowed bool
+	}{
+		{owner: "owner", allowed: true},
+		{owner: "different-owner"},
+		{owner: "self"},
+		{owner: "*", allowed: true},
+	} {
+		t.Run(tc.owner, func(t *testing.T) {
+			t.Parallel()
+			agent := agentsrepo.Agent{ID: uuid.New(), OrganizationID: "org-a", OwnerUserID: "owner"}
+			human := consentHumanAuthorization{userID: "caller", grants: []authz.Grant{
+				authz.NewGrantWithSelector(authz.ScopeAgentAuthorize, authz.AgentOwnerSelector(authz.ScopeAgentAuthorize, tc.owner)),
+			}}
+			require.Equal(t, tc.allowed, consentAgentCandidateEligible(human, agent, AgentAuthorizationTarget{OrganizationID: "org-a"}))
+		})
+	}
+}

@@ -234,6 +234,18 @@ export function hasScopeInProject(
   return hasScopeInGrants(grants, scope, "*", projectId);
 }
 
+/** Resolve a symbolic selector value without changing the original selector. */
+export function bindSelectorValue(
+  selector: Record<string, string>,
+  key: string,
+  symbol: string,
+  value: string,
+): Record<string, string> | undefined {
+  if (selector[key] !== symbol) return selector;
+  if (!value || value === "*") return undefined;
+  return { ...selector, [key]: value };
+}
+
 /** Write access to all agents of an owner also permits creating for them. */
 export function canCreateAgentForInGrants(
   grants: EffectiveGrant[],
@@ -246,13 +258,15 @@ export function canCreateAgentForInGrants(
       return false;
     if (!grant.selectors) return true;
     return grant.selectors.some((selector) => {
-      const owner = selector.owner;
-      if (owner === "self" && callerUserId !== ownerUserId) return false;
-      return selectorMatchesStrict(selector, {
-        resourceKind: "agent",
-        resourceId: "*",
-        owner: owner === "self" ? "self" : ownerUserId,
-      });
+      const bound = bindSelectorValue(selector, "owner", "self", callerUserId);
+      return (
+        bound !== undefined &&
+        selectorMatchesStrict(bound, {
+          resourceKind: "agent",
+          resourceId: "*",
+          owner: ownerUserId,
+        })
+      );
     });
   });
 }

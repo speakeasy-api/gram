@@ -81,6 +81,10 @@ Initial policy containment and atomic auditing still apply.
 
 Management checks use the agent's current persisted owner, including after a
 transfer. A grant restricted to one owner cannot manage another owner's agent.
+The service resolves `owner: self` to the caller's user ID before evaluating
+ordinary strict selectors. Creation uses grant containment over all agents of
+the intended owner, not a wildcard runtime check. The generic authorization
+engine has no ownership-specific matching or resource-validation exceptions.
 Owners retain intrinsic management of their own agents without agent grants,
 unless owner reassignment is required. Removing write permission prevents new
 creation and delegated edits, but does not remove intrinsic owner management or
@@ -111,6 +115,10 @@ through the existing general role editor and management API in this change.
 Existing Platform MCP access-role mutation tools accept only bounded MCP-access
 rules, not general role capabilities. Extending those tools would broaden their
 delegation contract, so they must not accept or replace owner-scoped agent grants.
+The existing assistant identity upgrade tool keeps its schema and uses the same
+owner-aware strict authorization when selecting an existing agent; no new tool
+is needed for that enforcement change. Assistant-upgrade regression tests cover
+concrete, caller-relative, wildcard, and mismatched owner grants.
 The same omission applies to external callers and managed assistants. Server
 authorization and role round-trip tests, plus dashboard owner-selection tests,
 verify the shipped boundary.

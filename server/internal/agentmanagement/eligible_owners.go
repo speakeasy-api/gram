@@ -2,7 +2,6 @@ package agentmanagement
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -45,10 +44,7 @@ func (s *Service) ListEligibleOwners(ctx context.Context, payload *gen.ListEligi
 		return nil, oops.C(oops.CodeBadRequest)
 	}
 	search = strings.TrimSpace(search)
-	allOwners, ownerIDs, err := eligibleOwnerTargets(human.grants, human.Auth.UserID)
-	if err != nil {
-		return nil, s.serviceError(ctx, err, "list eligible agent owners")
-	}
+	allOwners, ownerIDs := eligibleOwnerTargets(human.grants, human.Auth.UserID)
 	rows, err := orgrepo.New(s.db).ListEligibleAgentOwners(ctx, orgrepo.ListEligibleAgentOwnersParams{
 		OrganizationID: human.Auth.ActiveOrganizationID,
 		AllOwners:      allOwners, OwnerUserIds: ownerIDs,
@@ -70,10 +66,11 @@ func (s *Service) ListEligibleOwners(ctx context.Context, payload *gen.ListEligi
 
 // eligibleOwnerTargets compiles owner-scoped write grants into SQL
 // constraints. Agent write has no exclusion scope; strict containment proves
-// wildcard authority, and concrete targets use the canonical creation checks.
-func eligibleOwnerTargets(grants []authz.Grant, callerID string) (bool, []string, error) {
+// authority for both wildcard and concrete owners.
+func eligibleOwnerTargets(grants []authz.Grant, callerID string) (bool, []string) {
+	grants = authz.BindSelectorValue(grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, callerID)
 	if authz.GrantsContainSelector(grants, authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, authz.WildcardResource)) {
-		return true, []string{}, nil
+		return true, []string{}
 	}
 	owners := make([]string, 0)
 	for _, grant := range grants {
@@ -81,22 +78,12 @@ func eligibleOwnerTargets(grants []authz.Grant, callerID string) (bool, []string
 			continue
 		}
 		ownerID := grant.Selector[authz.SelectorKeyOwner]
-		if ownerID == authz.AgentOwnerSelf {
-			ownerID = callerID
-		}
 		if ownerID == "" || ownerID == authz.WildcardResource || slices.Contains(owners, ownerID) {
 			continue
 		}
-		for _, check := range authz.AgentCreationChecks(callerID, ownerID) {
-			allowed, err := authz.GrantsAuthorize(grants, check)
-			if err != nil {
-				return false, nil, fmt.Errorf("evaluate eligible agent owner: %w", err)
-			}
-			if allowed {
-				owners = append(owners, ownerID)
-				break
-			}
+		if authz.GrantsContainSelector(grants, authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, ownerID)) {
+			owners = append(owners, ownerID)
 		}
 	}
-	return false, owners, nil
+	return false, owners
 }

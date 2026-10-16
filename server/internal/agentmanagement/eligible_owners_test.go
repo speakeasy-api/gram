@@ -44,7 +44,7 @@ func TestListEligibleOwnersValidatesDirectCalls(t *testing.T) {
 	}
 }
 
-func TestEligibleOwnerTargetsMatchesCreationChecks(t *testing.T) {
+func TestEligibleOwnerTargetsMatchesCreationContainment(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
@@ -61,17 +61,12 @@ func TestEligibleOwnerTargetsMatchesCreationChecks(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			all, owners, err := eligibleOwnerTargets(tc.grants, "caller")
-			require.NoError(t, err)
+			all, owners := eligibleOwnerTargets(tc.grants, "caller")
 			require.Equal(t, tc.all, all)
 			require.ElementsMatch(t, tc.owners, owners)
 			for _, ownerID := range []string{"caller", "employee", "unrelated", "self"} {
-				allowed := false
-				for _, check := range authz.AgentCreationChecks("caller", ownerID) {
-					matches, err := authz.GrantsAuthorize(tc.grants, check)
-					require.NoError(t, err)
-					allowed = allowed || matches
-				}
+				grants := authz.BindSelectorValue(tc.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, "caller")
+				allowed := authz.GrantsContainSelector(grants, authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, ownerID))
 				require.Equal(t, allowed, all || slices.Contains(owners, ownerID), ownerID)
 			}
 		})
