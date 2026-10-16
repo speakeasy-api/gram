@@ -906,10 +906,12 @@ func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg Se
 
 const serversInsertServerClientAssociation = `-- name: ServersInsertServerClientAssociation :exec
 INSERT INTO mcp_server_remote_session_clients
-  (id, project_id, organization_id, mcp_server_id, remote_session_client_id)
-VALUES
-  ($1::uuid, $2::uuid, $3::text, $4::uuid,
-   $5::uuid)
+  (id, project_id, organization_id, mcp_server_id, remote_session_client_id,
+   client_attachment_scope)
+SELECT $1::uuid, $2::uuid, $3::text, $4::uuid,
+       c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = $5::uuid
 `
 
 type ServersInsertServerClientAssociationParams struct {

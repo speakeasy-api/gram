@@ -13,14 +13,19 @@ import (
 )
 
 const backfillUpstreamClientAssociation = `-- name: BackfillUpstreamClientAssociation :execrows
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id)
-SELECT s.project_id, p.organization_id, s.id, c.id
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
 FROM mcp_servers AS s
 JOIN projects AS p
   ON p.id = s.project_id
  AND p.deleted IS FALSE
+JOIN user_session_issuers AS usi
+  ON usi.id = s.user_session_issuer_id
+ AND usi.deleted IS FALSE
+ AND (usi.project_id = p.id
+      OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
 JOIN remote_session_client_user_session_issuers AS link
-  ON link.user_session_issuer_id = s.user_session_issuer_id
+  ON link.user_session_issuer_id = usi.id
  AND link.remote_session_client_id = $1::uuid
 JOIN remote_session_clients AS c
   ON c.id = link.remote_session_client_id
@@ -31,7 +36,26 @@ JOIN remote_session_clients AS c
 WHERE s.id = $2::uuid
   AND s.user_session_issuer_id = $3::uuid
   AND s.deleted IS FALSE
-  AND (NOT $4::boolean OR NOT EXISTS (
+  AND (NOT $4::boolean OR (
+    NOT EXISTS (
+      SELECT 1
+      FROM mcp_servers AS other
+      JOIN projects AS other_project
+        ON other_project.id = other.project_id
+       AND other_project.organization_id = p.organization_id
+      WHERE other.user_session_issuer_id = s.user_session_issuer_id
+        AND other.id <> s.id
+        AND other.deleted IS FALSE
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.user_session_issuer_id = s.user_session_issuer_id
+        AND gateway.organization_id = p.organization_id
+        AND gateway.deleted IS FALSE
+    )
+  ))
+  AND (NOT $5::boolean OR NOT EXISTS (
     SELECT 1
     FROM mcp_server_remote_session_clients AS recorded
     WHERE recorded.mcp_server_id = s.id
@@ -44,19 +68,22 @@ type BackfillUpstreamClientAssociationParams struct {
 	RemoteSessionClientID uuid.UUID
 	McpServerID           uuid.UUID
 	UserSessionIssuerID   uuid.UUID
+	RequireSoleConsumer   bool
 	RespectRemoved        bool
 }
 
 // Writes one decided association, conditional on the evidence still holding:
-// the server is live on the same issuer, the client is still bound to it and
-// in the server's tenant, and, with respect_removed, no row was recorded for
-// the pair meanwhile. A concurrent configuration change therefore wins and
-// the write is skipped.
+// the server is live on the same tenant issuer, the client is still bound to
+// it and in the server's tenant, with require_sole_consumer the server is
+// still the issuer's only consumer and no gateway fronts it, and with
+// respect_removed no row was recorded for the pair meanwhile. A concurrent
+// configuration change therefore wins and the write is skipped.
 func (q *Queries) BackfillUpstreamClientAssociation(ctx context.Context, arg BackfillUpstreamClientAssociationParams) (int64, error) {
 	result, err := q.db.Exec(ctx, backfillUpstreamClientAssociation,
 		arg.RemoteSessionClientID,
 		arg.McpServerID,
 		arg.UserSessionIssuerID,
+		arg.RequireSoleConsumer,
 		arg.RespectRemoved,
 	)
 	if err != nil {
@@ -114,12 +141,19 @@ WITH page AS (
     JOIN projects AS p
       ON p.id = s.project_id
      AND p.deleted IS FALSE
+    -- A server's issuer reference is not tenant-checked by its foreign key,
+    -- so only a live issuer of the server's own project or organization
+    -- counts.
+    JOIN user_session_issuers AS usi
+      ON usi.id = s.user_session_issuer_id
+     AND usi.deleted IS FALSE
+     AND (usi.project_id = p.id
+          OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
     LEFT JOIN remote_mcp_servers AS rms
       ON rms.id = s.remote_mcp_server_id
      AND rms.project_id = s.project_id
      AND rms.deleted IS FALSE
     WHERE s.deleted IS FALSE
-      AND s.user_session_issuer_id IS NOT NULL
       AND s.id > $1::uuid
       AND ($2::text = '' OR p.organization_id = $2::text)
     ORDER BY s.id
@@ -134,6 +168,9 @@ SELECT page.id AS mcp_server_id,
        (
          SELECT count(*)
          FROM mcp_servers AS other
+         JOIN projects AS other_project
+           ON other_project.id = other.project_id
+          AND other_project.organization_id = page.organization_id
          WHERE other.user_session_issuer_id = page.user_session_issuer_id
            AND other.deleted IS FALSE
        )::bigint AS issuer_server_count,
@@ -141,6 +178,7 @@ SELECT page.id AS mcp_server_id,
          SELECT 1
          FROM meta_mcp_servers AS gateway
          WHERE gateway.user_session_issuer_id = page.user_session_issuer_id
+           AND gateway.organization_id = page.organization_id
            AND gateway.deleted IS FALSE
        )::boolean AS issuer_has_gateway,
        (
@@ -212,8 +250,9 @@ type ListUpstreamClientBackfillCandidatesRow struct {
 // bound to that issuer (client columns NULL when none is bound), for servers
 // after the cursor. Read-only: the runner decides from this evidence alone.
 //
-// issuer_server_count counts live servers on the issuer across every project;
-// issuer_has_gateway reports a gateway fronting it. Either makes the binding
+// issuer_server_count counts the organization's live servers on the issuer
+// across its projects; issuer_has_gateway reports one of its gateways
+// fronting it. Either makes the binding
 // shared, so it no longer proves which server it was meant for.
 //
 // metadata_match reports that the server's own upstream URL names a protected
@@ -259,16 +298,18 @@ func (q *Queries) ListUpstreamClientBackfillCandidates(ctx context.Context, arg 
 }
 
 const seedAssociationFixture = `-- name: SeedAssociationFixture :exec
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, deleted_at)
-VALUES ($1, $2, $3, $4, CASE WHEN $5::boolean THEN clock_timestamp() END)
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope, deleted_at)
+SELECT $1, $2, $3, c.id, c.attachment_scope, CASE WHEN $4::boolean THEN clock_timestamp() END
+FROM remote_session_clients AS c
+WHERE c.id = $5
 `
 
 type SeedAssociationFixtureParams struct {
 	ProjectID             uuid.UUID
 	OrganizationID        string
 	McpServerID           uuid.UUID
-	RemoteSessionClientID uuid.UUID
 	Removed               bool
+	RemoteSessionClientID uuid.UUID
 }
 
 func (q *Queries) SeedAssociationFixture(ctx context.Context, arg SeedAssociationFixtureParams) error {
@@ -276,8 +317,8 @@ func (q *Queries) SeedAssociationFixture(ctx context.Context, arg SeedAssociatio
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.McpServerID,
-		arg.RemoteSessionClientID,
 		arg.Removed,
+		arg.RemoteSessionClientID,
 	)
 	return err
 }

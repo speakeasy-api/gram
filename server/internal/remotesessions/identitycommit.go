@@ -914,15 +914,17 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 		return err
 	}
 	if c.plan.MCPServerID != uuid.Nil {
-		// No row means the association already exists: the caller holds the
-		// server lock and attach has validated the client's tenant.
-		if _, err := upstreamclientsrepo.New(tx.tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+		associated, err := upstreamclientsrepo.New(tx.tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 			OrganizationID:        c.plan.Scope.OrganizationID,
 			RemoteSessionClientID: client.ID,
 			McpServerID:           c.plan.MCPServerID,
 			ProjectID:             c.plan.Scope.ProjectID,
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("associate mcp server with remote session client: %w", err)
+		}
+		if associated == 0 {
+			return identityRefusal(ErrIdentityConflict, nil, "the MCP server or its client changed while saving; retry")
 		}
 	}
 	c.result = IdentityResult{

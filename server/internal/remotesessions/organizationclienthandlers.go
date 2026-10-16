@@ -931,7 +931,10 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
 	}
 
-	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, deleted.ID); err != nil {
+	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
+		RemoteSessionClientID: deleted.ID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
 	}
 
@@ -1051,7 +1054,10 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 
 	// The binding is removed for every server on the issuer, in any project,
 	// so their associations with this client go with it.
-	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, clientID); err != nil {
+	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove mcp server associations for detached client").LogError(ctx, logger)
 	}
 

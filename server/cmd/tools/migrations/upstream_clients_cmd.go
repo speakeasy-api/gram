@@ -138,7 +138,7 @@ func runUpstreamClients(args []string, stdout io.Writer, getenv func(string) str
 		code = 1
 	}
 	if runErr != nil {
-		log.Printf("%s stopped early: %v; rerun the same command, the run is idempotent", upstreamClientsConfirm, runErr)
+		log.Printf("%s stopped early: %v; rerun the same command with a new -report path, the run is idempotent", upstreamClientsConfirm, runErr)
 		return 1
 	}
 	return code
