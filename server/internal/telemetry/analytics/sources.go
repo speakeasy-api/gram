@@ -40,7 +40,8 @@ var toolCallEventTypes = []string{"tool_call", "tool_call_result", "tool_decisio
 
 // Source declares one row per Key of a dataset: the table it reads, the
 // predicates, and the Columns that fold or merge into that row. Observations
-// is the predicates alone over agent_events, for listing a dimension's values.
+// is the predicates alone over the stored rows, for listing a dimension's
+// values.
 type Source struct {
 	Table   engine
 	Where   []squirrel.Sqlizer
@@ -49,6 +50,15 @@ type Source struct {
 	// Having keeps a folded row. It must name columns the fold keeps any
 	// non-empty value of, so Observations can test it on the raw rows.
 	Having string
+
+	// Expand reshapes the selected rows of a replacingMergeTree source: an
+	// ARRAY JOIN that fans one stored row out into several, or a column that
+	// reads the query's lookups. Rows and Observations both apply it.
+	Expand func(qc QueryContext, rows squirrel.SelectBuilder) squirrel.SelectBuilder
+
+	// Lookups names the lookups Expand reads. Every query of the dataset
+	// loads them, whichever fields it names.
+	Lookups []string
 }
 
 func (s Source) Rows(qc QueryContext) squirrel.SelectBuilder {
@@ -59,9 +69,15 @@ func (s Source) Rows(qc QueryContext) squirrel.SelectBuilder {
 	return builder
 }
 
-// Observations reads the predicates over the plain agent_events scan, so a
-// value a later correction withdrew can still show up.
+// Observations reads the predicates over the stored rows without collapsing
+// them, so a value a later correction withdrew can still show up.
 func (s Source) Observations(qc QueryContext) squirrel.SelectBuilder {
+	return s.Table.observations(qc, s)
+}
+
+// agentEventObservations reads a source's predicates over the plain
+// agent_events scan. Both agent tables are built from those events.
+func agentEventObservations(qc QueryContext, s Source) squirrel.SelectBuilder {
 	builder := where(agentEvents.scan(qc), s.Where)
 	if s.Having != "" {
 		keys := where(agentEvents.scan(qc).RemoveColumns().Column(s.Key), s.Where).Where(s.Having)
@@ -73,6 +89,10 @@ func (s Source) Observations(qc QueryContext) squirrel.SelectBuilder {
 // engine reads a table the way its ClickHouse engine family merges it.
 type engine interface {
 	rows(qc QueryContext, s Source) squirrel.SelectBuilder
+	observations(qc QueryContext, s Source) squirrel.SelectBuilder
+	// plan is the stable suffix of a plan name: the data a plan reads, not
+	// necessarily the table.
+	plan() string
 }
 
 // mergeTree rows are facts as appended. Its fold must be idempotent, so a
@@ -84,10 +104,60 @@ type mergeTree struct{ table, time string }
 // up, so keys are picked by start and every row of those keys is merged.
 type aggregatingMergeTree struct{ table, start string }
 
+// replacingMergeTree rows are versions of one logical row per key. Merges
+// drop superseded versions only eventually, so a read keeps the newest
+// version of each key itself, after the tenant and the window have bounded
+// the scan. A retried evaluation is a new version of the same key and never
+// a second row. time is a DateTime64 column; version orders the versions.
+type replacingMergeTree struct{ table, time, version string }
+
 var (
-	agentEvents = mergeTree{table: "agent_events", time: "occurred_at_unix_nano"}
-	toolCalls   = aggregatingMergeTree{table: "tool_calls", start: "started_at_unix_nano"}
+	agentEvents    = mergeTree{table: "agent_events", time: "occurred_at_unix_nano"}
+	toolCalls      = aggregatingMergeTree{table: "tool_calls", start: "started_at_unix_nano"}
+	sigintReadings = replacingMergeTree{table: "sigint_readings", time: "event_occurred_at", version: "evaluated_at"}
 )
+
+func (mergeTree) plan() string            { return "agent_events" }
+func (aggregatingMergeTree) plan() string { return "agent_events" }
+func (t replacingMergeTree) plan() string { return t.table }
+
+func (mergeTree) observations(qc QueryContext, s Source) squirrel.SelectBuilder {
+	return agentEventObservations(qc, s)
+}
+
+func (aggregatingMergeTree) observations(qc QueryContext, s Source) squirrel.SelectBuilder {
+	return agentEventObservations(qc, s)
+}
+
+func (t replacingMergeTree) scan(qc QueryContext) squirrel.SelectBuilder {
+	return sq.Select("*").
+		From(t.table).
+		Where(tenant(qc)).
+		Where(t.time+" >= fromUnixTimestamp64Nano(toInt64(?), 'UTC')", qc.Window.FromUnixNano).
+		Where(t.time+" < fromUnixTimestamp64Nano(toInt64(?), 'UTC')", qc.Window.ToUnixNano)
+}
+
+// rows keeps the newest version of each key, then selects, expands and
+// filters it, so a predicate sees the settled version and never a
+// superseded one.
+func (t replacingMergeTree) rows(qc QueryContext, s Source) squirrel.SelectBuilder {
+	latest := t.scan(qc).OrderBy(t.version + " DESC").Suffix("LIMIT 1 BY " + s.Key)
+	return t.shape(qc, s, latest)
+}
+
+// observations reads every stored version, so listing a dimension's values
+// never sorts the window.
+func (t replacingMergeTree) observations(qc QueryContext, s Source) squirrel.SelectBuilder {
+	return t.shape(qc, s, t.scan(qc))
+}
+
+func (t replacingMergeTree) shape(qc QueryContext, s Source, stored squirrel.SelectBuilder) squirrel.SelectBuilder {
+	builder := where(sq.Select(s.Columns...).FromSelect(stored, "stored"), s.Where)
+	if s.Expand != nil {
+		builder = s.Expand(qc, builder)
+	}
+	return builder
+}
 
 func (t mergeTree) scan(qc QueryContext) squirrel.SelectBuilder {
 	return sq.Select("*").
@@ -154,7 +224,9 @@ var toolCallsSource = Source{
 		"min(started_at_unix_nano) AS started_at",
 		"max(ended_at_unix_nano) AS ended_at",
 	},
-	Having: "",
+	Having:  "",
+	Expand:  nil,
+	Lookups: nil,
 }
 
 // skillsSource is one row per tool call that named a skill. Having runs after
@@ -166,4 +238,6 @@ var skillsSource = Source{
 	Key:     toolCallsSource.Key,
 	Columns: toolCallsSource.Columns,
 	Having:  "skill_name != ''",
+	Expand:  nil,
+	Lookups: nil,
 }

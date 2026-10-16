@@ -57,30 +57,34 @@ func (c *Catalog) WithLoaders(loaders map[string]LookupLoader) (*Catalog, error)
 	return &Catalog{datasets: c.datasets, lookups: bound}, nil
 }
 
-// LoadLookups fetches each lookup the read fields declare, once. A lookup
-// without a loader is skipped; an unknown dataset is left for the compiler.
+// LoadLookups fetches each lookup the read fields declare, and every lookup
+// the dataset's source reads, once. A lookup without a loader is skipped; an
+// unknown dataset is left for the compiler.
 func (c *Catalog) LoadLookups(ctx context.Context, tenant Tenant, dataset string, reads []string) (LookupMaps, error) {
 	ds, ok := c.Dataset(dataset)
 	if !ok {
 		return nil, nil
 	}
-	maps := make(LookupMaps)
+	names := slices.Clone(ds.Source.Lookups)
 	for _, f := range ds.Fields {
-		if f.Lookup == "" || !slices.Contains(reads, f.Name) {
+		if f.Lookup != "" && slices.Contains(reads, f.Name) {
+			names = append(names, f.Lookup)
+		}
+	}
+	maps := make(LookupMaps)
+	for _, name := range names {
+		if _, loaded := maps[name]; loaded {
 			continue
 		}
-		if _, loaded := maps[f.Lookup]; loaded {
-			continue
-		}
-		lookup, ok := c.Lookup(f.Lookup)
+		lookup, ok := c.Lookup(name)
 		if !ok || lookup.Load == nil {
 			continue
 		}
 		m, err := lookup.Load(ctx, tenant)
 		if err != nil {
-			return nil, fmt.Errorf("load lookup %s: %w", f.Lookup, err)
+			return nil, fmt.Errorf("load lookup %s: %w", name, err)
 		}
-		maps[f.Lookup] = m
+		maps[name] = m
 	}
 	return maps, nil
 }

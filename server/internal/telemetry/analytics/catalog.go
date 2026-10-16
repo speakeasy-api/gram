@@ -8,6 +8,8 @@ package analytics
 import (
 	"fmt"
 	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // Kind is the shape of a dataset: occurrences or measurements.
@@ -108,6 +110,9 @@ const (
 	MaxEventTimeRangeDays  = 90
 	MaxMetricTimeRangeDays = 730
 
+	// MaxSensorReadingTimeRangeDays is sigint_readings' retention: two years.
+	MaxSensorReadingTimeRangeDays = 730
+
 	// MaxTimeRangeDays is the ceiling over every dataset: the longest any
 	// window can be. A dataset's own limit is MaxTimeRangeDays(), which is
 	// what the compiler enforces.
@@ -162,11 +167,22 @@ type Dataset struct {
 	TimeExpr string
 	Fields   []Field
 	Source   Source
+
+	// RetentionDays is the retention of a table outside its kind's, such as
+	// sigint_readings; zero reads the kind's table.
+	RetentionDays int
+
+	// Feature is the product feature an organization needs to see and query
+	// the dataset; empty needs none. Engine enforces it.
+	Feature productfeatures.Feature
 }
 
 // MaxTimeRangeDays is the longest window this dataset can answer honestly:
-// the retention of the table its kind reads.
+// the retention of the table it reads.
 func (d *Dataset) MaxTimeRangeDays() int {
+	if d.RetentionDays > 0 {
+		return d.RetentionDays
+	}
 	if d.Kind == KindMetric {
 		return MaxMetricTimeRangeDays
 	}
@@ -283,6 +299,14 @@ func (d *Dataset) validate(lookups map[string]struct{}) error {
 	}
 	if d.Source.Key == "" || d.Source.Table == nil {
 		return fmt.Errorf("catalog: dataset %q has no source query", d.Name)
+	}
+	if d.RetentionDays < 0 || d.RetentionDays > MaxTimeRangeDays {
+		return fmt.Errorf("catalog: dataset %q retention must be between 1 and %d days", d.Name, MaxTimeRangeDays)
+	}
+	for _, name := range d.Source.Lookups {
+		if _, declared := lookups[name]; !declared {
+			return fmt.Errorf("catalog: dataset %q source reads undeclared lookup %q", d.Name, name)
+		}
 	}
 	if len(d.Fields) == 0 {
 		return fmt.Errorf("catalog: dataset %q declares no fields", d.Name)

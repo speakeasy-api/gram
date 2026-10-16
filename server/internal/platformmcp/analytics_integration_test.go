@@ -3,15 +3,19 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	sigintchrepo "github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -81,7 +85,7 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 
-	engine, err := analytics.NewEngine(conn, chConn)
+	engine, err := analytics.NewEngine(conn, chConn, nil)
 	require.NoError(t, err)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
@@ -203,7 +207,7 @@ func TestAnalyticsToolsFollowTheExploreFlag(t *testing.T) {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 
-	engine, err := analytics.NewEngine(conn, chConn)
+	engine, err := analytics.NewEngine(conn, chConn, nil)
 	require.NoError(t, err)
 	flags := &feature.InMemory{}
 	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
@@ -232,4 +236,98 @@ func TestAnalyticsToolsFollowTheExploreFlag(t *testing.T) {
 	output, ok := raw.(DescribeAnalyticsCatalogOutput)
 	require.True(t, ok)
 	require.Equal(t, project.ID.String(), output.Project.ID)
+}
+
+// switchableFeatures is a product feature set a test turns on and off.
+type switchableFeatures struct{ enabled atomic.Bool }
+
+func (f *switchableFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+	return feature == productfeatures.FeatureSignalsIntelligence && f.enabled.Load(), nil
+}
+
+func TestAnalyticsToolsServeSensorDatasetsWithSignalsIntelligence(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_analytics_sensors")
+	require.NoError(t, err)
+	chConn, err := platformMCPInfra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	features := &switchableFeatures{}
+	engine, err := analytics.NewEngine(conn, chConn, features)
+	require.NoError(t, err)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
+	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authzEngine)
+	reg := newRegistrar(newTestMCPServer())
+	registerAnalyticsTools(reg, NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}))
+
+	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+	sensor := uuid.New()
+	reading := func(message, status string) sigintchrepo.ReadingRow {
+		return sigintchrepo.ReadingRow{
+			ID: uuid.New(), EvaluationAttemptID: uuid.New(), OrganizationID: principal.OrganizationID, ProjectID: project.ID,
+			SensorID: sensor, SensorSlug: "intent", EventKind: "conversation.message", EventID: message,
+			EventOccurredAt: base, EvaluatedAt: base, InsertedAt: base, Status: status, FailureReason: "",
+			DefinitionHash: "hash", ConfiguredModel: "model", Models: nil, CompilerVersion: "v1", Provider: "test",
+			InputStrategy: "single_message", InputRequestedMessageCount: 1, InputMessageCount: 1, InputTruncated: false,
+			EventContextType: "", ConversationID: nil, ConversationRole: "user", ToolName: "", ToolCallID: "", MCPServerID: nil,
+			ActorUserID: "", ActorExternalUserID: "", ActorUserEmail: "", BillingUserID: "", Source: "", UserAccountID: nil,
+			AccountType: "", BillingMode: "", AssistantID: nil, Replayed: nil, Attributes: map[string]string{},
+			ResultType: "", Probabilities: nil, SelectedSignalID: nil, SelectedSignalSlug: "", ExpectedIndex: nil, Confidence: nil,
+		}
+	}
+	require.NoError(t, sigintchrepo.New(chConn).InsertReadings(ctx, []sigintchrepo.ReadingRow{
+		reading("m1", sigintchrepo.StatusNotApplicable),
+		reading("m2", sigintchrepo.StatusNotApplicable),
+		reading("m3", sigintchrepo.StatusDraft),
+	}))
+
+	actor := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+	actor = contextvalues.SetActingSurface(actor, contextvalues.ActingSurfacePlatformMCP)
+	granted := ContextWithPrincipal(authz.GrantsToContext(actor, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())}), principal)
+	projectID := `"project_id":"` + project.ID.String() + `"`
+	query := json.RawMessage(`{` + projectID + `,"dataset":"sensor_evaluations","from":"` + base.Add(-time.Hour).Format(time.RFC3339) + `","to":"` + base.Add(time.Hour).Format(time.RFC3339) + `","dimensions":["status"],"measures":[{"op":"count"},{"op":"count_distinct","field":"message","alias":"messages"}]}`)
+
+	described := func(t *testing.T) map[string]AnalyticsDataset {
+		t.Helper()
+		raw, err := descriptorByName(t, reg, describeAnalyticsCatalogToolName).Invoke(granted, json.RawMessage(`{`+projectID+`}`))
+		require.NoError(t, err)
+		output, ok := raw.(DescribeAnalyticsCatalogOutput)
+		require.True(t, ok)
+		byName := make(map[string]AnalyticsDataset, len(output.Datasets))
+		for _, ds := range output.Datasets {
+			byName[ds.Name] = ds
+		}
+		return byName
+	}
+
+	hidden := described(t)
+	require.Contains(t, hidden, "tool_calls")
+	require.NotContains(t, hidden, "sensor_evaluations", "an organization without signals intelligence does not see the sensor datasets")
+	require.NotContains(t, hidden, "sensor_signals")
+	_, err = descriptorByName(t, reg, runAnalyticsQueryToolName).Invoke(granted, query)
+	refusal := requireAnalyticsRefusal(t, err)
+	require.Equal(t, "invalid_request", refusal.Code)
+	require.Equal(t, "unknown_dataset", refusal.Reason, "the refusal does not reveal the hidden dataset")
+
+	features.enabled.Store(true)
+	shown := described(t)
+	require.Contains(t, shown, "sensor_signals")
+	require.Equal(t, analytics.MaxSensorReadingTimeRangeDays, shown["sensor_evaluations"].MaxTimeRangeDays)
+	require.Contains(t, shown["sensor_signals"].Description, "count_distinct over message")
+
+	raw, err := descriptorByName(t, reg, runAnalyticsQueryToolName).Invoke(granted, query)
+	require.NoError(t, err)
+	output, ok := raw.(RunAnalyticsQueryOutput)
+	require.True(t, ok)
+	require.Equal(t, "sensor_evaluations.sigint_readings", output.Plan)
+	require.Len(t, output.Rows, 2)
+	require.Equal(t, "not_applicable", output.Rows[0]["status"])
+	require.EqualValues(t, 2, output.Rows[0]["count"])
+	require.EqualValues(t, 2, output.Rows[0]["messages"])
+	require.Equal(t, "draft", output.Rows[1]["status"])
 }

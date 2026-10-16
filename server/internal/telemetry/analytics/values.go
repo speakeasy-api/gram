@@ -79,7 +79,7 @@ func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Valu
 
 	plan := &Plan{
 		Dataset: ds.Name,
-		Name:    ds.Name + ".agent_events",
+		Name:    ds.Name + "." + ds.Source.Table.plan(),
 		SQL:     "",
 		Args:    nil,
 		Columns: []Column{{Name: "value", Kind: ColumnDimension}, {Name: "n", Kind: ColumnMeasure}},

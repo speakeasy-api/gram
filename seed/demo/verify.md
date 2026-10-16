@@ -502,8 +502,15 @@ that URL.
     `review-pr`, `write-tests` and `release-notes` with counts and no empty
     group, since a call that named no skill is not a row. Add a filter on
     `skill`: the values picker offers those three names with counts and
-    never an empty value. Then flip the Explore row in `PAGES.md` from
-    `[~]` to `[x]`.
+    never an empty value. Switch the dataset to `sensor_evaluations` with a
+    90-day window: grouped by `sensor` and `status`, each enabled sensor shows
+    `answered`, `not_applicable` and `failed` counts that sum to one row per
+    day, with no extra rows for the retried days. Switch to `sensor_signals`
+    grouped by `sensor` and `answer_status`: **Primary service** shows both
+    `confident` and `uncertain` answers against its 0.6 minimum, the other
+    sensors only `confident`, and none are `unrated`. With the organization's
+    `signals_intelligence` feature off, neither sensor dataset is offered.
+    Then flip the Explore row in `PAGES.md` from `[~]` to `[x]`.
 27. **Check access** — open MCP → **GitHub** → Team Access and pick Mateo
     Alvarez in Check access. Connect is **Blocked**: the Contractors block
     wins, Engineer's grants show as blocked, and his own grant covering

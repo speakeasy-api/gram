@@ -48,7 +48,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 	describe := &mcp.Tool{
 		Name:  describeAnalyticsCatalogToolName,
 		Title: "Describe the Analytics Catalog",
-		Description: "Read the catalog a project's agent session data is queried through: every dataset (what one row is, and how many days back it can be asked about), its dimensions with the filter operators and the one aggregation each admits, its measures with their units and aggregations, the time grains, and the limits every query is held to. " +
+		Description: "Read the catalog a project's agent session data and, when the organization has signals intelligence, its sensor readings are queried through: every dataset (what one row is, and how many days back it can be asked about), its dimensions with the filter operators and the one aggregation each admits, its measures with their units and aggregations, the time grains, and the limits every query is held to. " +
 			"Call this before run_analytics_query or list_analytics_dimension_values: the names it returns are the only vocabulary they accept, and nothing here is a table or SQL. A field's description says which producers fill it; a field's lookup names the per-project map it reads through, so grouping and filtering on it speak the mapped names. " +
 			"Requires Explore to be switched on for the organization.",
 		Annotations: readOnlyAnnotations(),

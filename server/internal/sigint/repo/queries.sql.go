@@ -536,6 +536,46 @@ func (q *Queries) ListLiveSignalIDs(ctx context.Context, arg ListLiveSignalIDsPa
 	return items, nil
 }
 
+const listSensorAnalyticsLabels = `-- name: ListSensorAnalyticsLabels :many
+SELECT sensor.id, sensor.name, sensor.min_confidence
+FROM sigint_sensors AS sensor
+JOIN projects AS project ON project.id = sensor.project_id
+WHERE sensor.project_id = $1
+  AND project.organization_id = $2
+`
+
+type ListSensorAnalyticsLabelsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListSensorAnalyticsLabelsRow struct {
+	ID            uuid.UUID
+	Name          string
+	MinConfidence pgtype.Float8
+}
+
+// Deleted sensors are included so their past readings keep a name and threshold.
+func (q *Queries) ListSensorAnalyticsLabels(ctx context.Context, arg ListSensorAnalyticsLabelsParams) ([]ListSensorAnalyticsLabelsRow, error) {
+	rows, err := q.db.Query(ctx, listSensorAnalyticsLabels, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSensorAnalyticsLabelsRow
+	for rows.Next() {
+		var i ListSensorAnalyticsLabelsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.MinConfidence); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSensors = `-- name: ListSensors :many
 SELECT
     sensor.id,
@@ -712,6 +752,45 @@ func (q *Queries) ListSensorsForSignal(ctx context.Context, arg ListSensorsForSi
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSignalAnalyticsLabels = `-- name: ListSignalAnalyticsLabels :many
+SELECT signal.id, signal.name
+FROM sigint_custom_signals AS signal
+JOIN projects AS project ON project.id = signal.project_id
+WHERE signal.project_id = $1
+  AND project.organization_id = $2
+`
+
+type ListSignalAnalyticsLabelsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListSignalAnalyticsLabelsRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Deleted signals are included so their past answers keep a name.
+func (q *Queries) ListSignalAnalyticsLabels(ctx context.Context, arg ListSignalAnalyticsLabelsParams) ([]ListSignalAnalyticsLabelsRow, error) {
+	rows, err := q.db.Query(ctx, listSignalAnalyticsLabels, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSignalAnalyticsLabelsRow
+	for rows.Next() {
+		var i ListSignalAnalyticsLabelsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

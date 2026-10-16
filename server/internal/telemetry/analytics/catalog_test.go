@@ -13,11 +13,11 @@ import (
 func TestDefaultCatalog(t *testing.T) {
 	t.Parallel()
 
-	names := make([]string, 0, 2)
+	names := make([]string, 0, 4)
 	for _, ds := range Default.Datasets() {
 		names = append(names, ds.Name)
 	}
-	require.Equal(t, []string{"tool_calls", "skills"}, names)
+	require.Equal(t, []string{"tool_calls", "skills", "sensor_evaluations", "sensor_signals"}, names)
 
 	toolCalls, ok := Default.Dataset("tool_calls")
 	require.True(t, ok)
@@ -229,6 +229,14 @@ func TestRetentionLimitsMatchTheSchema(t *testing.T) {
 	}
 
 	require.Equal(t, MaxEventTimeRangeDays, ttl("agent_events"), "agent_events TTL drifted from the catalog's event limit")
+
+	readings := regexp.MustCompile(`(?s)CREATE TABLE IF NOT EXISTS sigint_readings \(.*?TTL [^\n]*INTERVAL (\d+) YEAR`).FindSubmatch(schema)
+	require.NotNil(t, readings, "no TTL found for sigint_readings")
+	years, err := strconv.Atoi(string(readings[1]))
+	require.NoError(t, err)
+	require.Equal(t, MaxSensorReadingTimeRangeDays, years*365, "sigint_readings TTL drifted from the sensor datasets' limit")
+	require.Equal(t, MaxSensorReadingTimeRangeDays, SensorEvaluations.MaxTimeRangeDays())
+	require.Equal(t, MaxSensorReadingTimeRangeDays, SensorSignals.MaxTimeRangeDays())
 	require.Equal(t, MaxMetricTimeRangeDays, ttl("agent_metrics"), "agent_metrics TTL drifted from the catalog's metric limit")
 }
 
