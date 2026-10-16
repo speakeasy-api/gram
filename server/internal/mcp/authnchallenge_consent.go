@@ -659,7 +659,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	if r.URL.Query().Get("consent") != "required" && len(agentOptions) == 0 &&
 		consentReuseEligible(endpoint, challengeState) && consentBrowserMatches(r, challengeState, time.Now()) &&
-		consentRemoteFingerprint(endpoint, cards) != "" && s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
+		consentRemoteFingerprint(endpoint, cards) != "" {
 		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
 		lockedDown, lockdownErr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
 		if eligible && eligibilityErr == nil && lockdownErr == nil && !lockedDown {

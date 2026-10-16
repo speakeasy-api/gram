@@ -272,9 +272,6 @@ func renderConsentReuse(w http.ResponseWriter, endpoint *ResolvedMcpEndpoint, st
 }
 
 func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, rawAttempt string) (*consentToolInventory, error) {
-	if !s.consentToolFilteringEnabled(ctx, s.logger, endpoint.OrganizationID) {
-		return nil, nil
-	}
 	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
 	if err != nil || !eligible {
 		return nil, err
