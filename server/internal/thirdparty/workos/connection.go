@@ -112,8 +112,8 @@ func (wc *Client) ListDirectoryUsers(ctx context.Context, directoryID string) ([
 // ListDirectoryGroupUsers fetches every user in a directory group from WorkOS,
 // following pagination to the last page.
 // https://workos.com/docs/reference/directory-sync/directory-user/list
-func (wc *Client) ListDirectoryGroupUsers(ctx context.Context, groupID string) ([]DirectoryUser, error) {
-	return wc.listDirectoryUsers(ctx, "", groupID)
+func (wc *Client) ListDirectoryGroupUsers(ctx context.Context, directoryID, groupID string) ([]DirectoryUser, error) {
+	return wc.listDirectoryUsers(ctx, directoryID, groupID)
 }
 
 func (wc *Client) listDirectoryUsers(ctx context.Context, directoryID, groupID string) ([]DirectoryUser, error) {

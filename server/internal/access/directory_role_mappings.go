@@ -154,7 +154,7 @@ func (s *Service) SyncDirectoryGroups(ctx context.Context, _ *gen.SyncDirectoryG
 				return nil, oops.E(oops.CodeUnexpected, err, "save directory group").LogError(ctx, s.logger)
 			}
 
-			if err := s.reconcileDirectoryGroupMembers(ctx, ac.ActiveOrganizationID, group.ID); err != nil {
+			if err := s.reconcileDirectoryGroupMembers(ctx, ac.ActiveOrganizationID, directory.ID, group.ID); err != nil {
 				return nil, err
 			}
 		}
@@ -166,10 +166,10 @@ func (s *Service) SyncDirectoryGroups(ctx context.Context, _ *gen.SyncDirectoryG
 // reconcileDirectoryGroupMembers makes a group's memberships match its full
 // WorkOS member list, so members who joined before the organization's event
 // cursor still get the roles the group grants.
-func (s *Service) reconcileDirectoryGroupMembers(ctx context.Context, organizationID, workosGroupID string) error {
+func (s *Service) reconcileDirectoryGroupMembers(ctx context.Context, organizationID, workosDirectoryID, workosGroupID string) error {
 	// Taken before the listing, so an event processed while it runs wins.
 	listedAt := time.Now()
-	members, err := s.roleMgr.roles.ListDirectoryGroupUsers(ctx, workosGroupID)
+	members, err := s.roleMgr.roles.ListDirectoryGroupUsers(ctx, workosDirectoryID, workosGroupID)
 	if err != nil {
 		return oops.E(oops.CodeGatewayError, err, "list directory group members").LogError(ctx, s.logger)
 	}

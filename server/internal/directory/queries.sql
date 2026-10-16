@@ -486,8 +486,27 @@ VALUES (
 )
 ON CONFLICT (workos_directory_user_id) DO NOTHING;
 
--- name: ListOpenDirectoryGroupMemberships :many
-SELECT workos_directory_user_id, workos_created_at
-FROM directory_user_group_memberships
-WHERE directory_group_id = @directory_group_id
-  AND deleted IS FALSE;
+-- name: LockOrganizationDirectoryGroupByWorkOSID :one
+SELECT id
+FROM directory_groups
+WHERE organization_id = @organization_id
+  AND workos_directory_group_id = @workos_directory_group_id
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+FOR UPDATE;
+
+-- name: GetOrganizationDirectoryUserIDByWorkOSID :one
+SELECT id
+FROM directory_users
+WHERE organization_id = @organization_id
+  AND workos_directory_user_id = @workos_directory_user_id
+  AND deleted_at IS NULL;
+
+-- name: ListOpenOrganizationDirectoryGroupMemberships :many
+SELECT m.workos_directory_user_id, m.workos_created_at
+FROM directory_user_group_memberships AS m
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+WHERE dg.organization_id = @organization_id
+  AND m.directory_group_id = @directory_group_id
+  AND m.deleted IS FALSE;
