@@ -3,6 +3,7 @@ package environments
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -97,12 +99,127 @@ func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID 
 // on project:write instead would let a caller without environment:read
 // exfiltrate secrets by linking an environment to a resource they can run.
 func (s *Service) requireProjectEnvironmentRead(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentRead,
-		ResourceKind: "environment",
-		ResourceID:   projectID.String(),
-		Dimensions:   map[string]string{"project_id": projectID.String()},
-	})
+	return s.authz.Require(ctx, authz.EnvironmentLinkCheck(projectID.String()))
+}
+
+// requireEnvironmentRead gates on environment:read for one environment. The
+// link handlers pair it with requireProjectEnvironmentRead for each
+// environment a link change affects, so an exclusion naming that environment
+// refuses the change even when the project-wide grant allows it.
+func (s *Service) requireEnvironmentRead(ctx context.Context, projectID, environmentID uuid.UUID) error {
+	return s.authz.Require(ctx, authz.EnvironmentReadCheck(environmentID.String(), projectID.String()))
+}
+
+// environmentLabel returns an environment's name and slug for an audit entry,
+// or blanks when it has since been deleted: the binding still pointed at it.
+func environmentLabel(ctx context.Context, q *repo.Queries, projectID, environmentID uuid.UUID) (string, string, error) {
+	env, err := q.GetEnvironmentByID(ctx, repo.GetEnvironmentByIDParams{ID: environmentID, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", "", nil
+	case err != nil:
+		return "", "", fmt.Errorf("load environment for audit: %w", err)
+	}
+	return env.Name, env.Slug, nil
+}
+
+// auditBindingChange records a binding moving from previous to next as an
+// unlink of previous and a link of next, in the caller's transaction. An
+// unchanged binding records nothing.
+func auditBindingChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, previous, next uuid.NullUUID, unlink, link func(env urn.Environment, name, slug string) error) error {
+	if previous == next {
+		return nil
+	}
+	if previous.Valid {
+		name, slug, err := environmentLabel(ctx, q, projectID, previous.UUID)
+		if err != nil {
+			return err
+		}
+		if err := unlink(urn.NewEnvironment(previous.UUID), name, slug); err != nil {
+			return err
+		}
+	}
+	if next.Valid {
+		name, slug, err := environmentLabel(ctx, q, projectID, next.UUID)
+		if err != nil {
+			return err
+		}
+		if err := link(urn.NewEnvironment(next.UUID), name, slug); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) auditSourceBinding(ctx context.Context, q *repo.Queries, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, kind, slug string, previous, next uuid.NullUUID) error {
+	event := func(env urn.Environment, name, envSlug string) audit.LogEnvironmentSourceLinkEvent {
+		return audit.LogEnvironmentSourceLinkEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			EnvironmentURN:   env,
+			EnvironmentName:  name,
+			EnvironmentSlug:  envSlug,
+			SourceKind:       kind,
+			SourceSlug:       slug,
+		}
+	}
+	err := auditBindingChange(ctx, q, *authCtx.ProjectID, previous, next,
+		func(env urn.Environment, name, envSlug string) error {
+			return s.audit.LogEnvironmentSourceUnlink(ctx, dbtx, audit.LogEnvironmentSourceUnlinkEvent(event(env, name, envSlug)))
+		},
+		func(env urn.Environment, name, envSlug string) error {
+			return s.audit.LogEnvironmentSourceLink(ctx, dbtx, event(env, name, envSlug))
+		})
+	if err != nil {
+		return fmt.Errorf("audit source environment link: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) auditToolsetBinding(ctx context.Context, q *repo.Queries, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, previous, next uuid.NullUUID) error {
+	event := func(env urn.Environment, name, envSlug string) audit.LogEnvironmentToolsetLinkEvent {
+		return audit.LogEnvironmentToolsetLinkEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			EnvironmentURN:   env,
+			EnvironmentName:  name,
+			EnvironmentSlug:  envSlug,
+			ToolsetURN:       urn.NewToolset(toolsetID),
+		}
+	}
+	err := auditBindingChange(ctx, q, *authCtx.ProjectID, previous, next,
+		func(env urn.Environment, name, envSlug string) error {
+			return s.audit.LogEnvironmentToolsetUnlink(ctx, dbtx, audit.LogEnvironmentToolsetUnlinkEvent(event(env, name, envSlug)))
+		},
+		func(env urn.Environment, name, envSlug string) error {
+			return s.audit.LogEnvironmentToolsetLink(ctx, dbtx, event(env, name, envSlug))
+		})
+	if err != nil {
+		return fmt.Errorf("audit toolset environment link: %w", err)
+	}
+	return nil
+}
+
+// beginLinkChange opens the transaction a link change reads and writes its
+// binding in, holding the project lock that MCP-server environment links and
+// source destination changes also take, so a binding read cannot go stale
+// before it is written.
+func (s *Service) beginLinkChange(ctx context.Context, projectID uuid.UUID) (pgx.Tx, error) {
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to access environments").LogError(ctx, s.logger)
+	}
+	if err := admission.LockProject(ctx, dbtx, projectID); err != nil {
+		_ = dbtx.Rollback(ctx)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock project").LogError(ctx, s.logger)
+	}
+	return dbtx, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -652,9 +769,39 @@ func (s *Service) SetSourceEnvironmentLink(ctx context.Context, payload *gen.Set
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid environment_id").LogError(ctx, s.logger)
 	}
+	if err := s.requireEnvironmentRead(ctx, *authCtx.ProjectID, environmentID); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.beginLinkChange(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txRepo := s.repo.WithTx(dbtx)
+
+	// Replacing a binding unlinks the environment it had.
+	previous := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	current, err := txRepo.LockSourceEnvironmentBinding(ctx, repo.LockSourceEnvironmentBindingParams{
+		SourceKind: string(payload.SourceKind),
+		SourceSlug: payload.SourceSlug,
+		ProjectID:  *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read source environment link").LogError(ctx, s.logger)
+	default:
+		previous = uuid.NullUUID{UUID: current, Valid: true}
+		if current != environmentID {
+			if err := s.requireEnvironmentRead(ctx, *authCtx.ProjectID, current); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	// Verify the environment exists and belongs to the project
-	_, err = s.repo.GetEnvironmentByID(ctx, repo.GetEnvironmentByIDParams{
+	_, err = txRepo.GetEnvironmentByID(ctx, repo.GetEnvironmentByIDParams{
 		ID:        environmentID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -662,13 +809,22 @@ func (s *Service) SetSourceEnvironmentLink(ctx context.Context, payload *gen.Set
 		return nil, oops.E(oops.CodeNotFound, err, "environment not found").LogError(ctx, s.logger)
 	}
 
-	link, err := s.repo.SetSourceEnvironment(ctx, repo.SetSourceEnvironmentParams{
+	link, err := txRepo.SetSourceEnvironment(ctx, repo.SetSourceEnvironmentParams{
 		SourceKind:    string(payload.SourceKind),
 		SourceSlug:    payload.SourceSlug,
 		ProjectID:     *authCtx.ProjectID,
 		EnvironmentID: environmentID,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "environment not found").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to set source environment link").LogError(ctx, s.logger)
+	}
+	if err := s.auditSourceBinding(ctx, txRepo, dbtx, authCtx, string(payload.SourceKind), payload.SourceSlug, previous, uuid.NullUUID{UUID: environmentID, Valid: true}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to set source environment link").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to set source environment link").LogError(ctx, s.logger)
 	}
 
@@ -690,12 +846,40 @@ func (s *Service) DeleteSourceEnvironmentLink(ctx context.Context, payload *gen.
 		return err
 	}
 
-	err := s.repo.DeleteSourceEnvironment(ctx, repo.DeleteSourceEnvironmentParams{
+	dbtx, err := s.beginLinkChange(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return err
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txRepo := s.repo.WithTx(dbtx)
+
+	current, err := txRepo.LockSourceEnvironmentBinding(ctx, repo.LockSourceEnvironmentBindingParams{
 		SourceKind: string(payload.SourceKind),
 		SourceSlug: payload.SourceSlug,
 		ProjectID:  *authCtx.ProjectID,
 	})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Nothing linked: deleting is a no-op, as before.
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to read source environment link").LogError(ctx, s.logger)
+	}
+	if err := s.requireEnvironmentRead(ctx, *authCtx.ProjectID, current); err != nil {
+		return err
+	}
+
+	if err := txRepo.DeleteSourceEnvironment(ctx, repo.DeleteSourceEnvironmentParams{
+		SourceKind: string(payload.SourceKind),
+		SourceSlug: payload.SourceSlug,
+		ProjectID:  *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete source environment link").LogError(ctx, s.logger)
+	}
+	if err := s.auditSourceBinding(ctx, txRepo, dbtx, authCtx, string(payload.SourceKind), payload.SourceSlug, uuid.NullUUID{UUID: current, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete source environment link").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to delete source environment link").LogError(ctx, s.logger)
 	}
 
@@ -752,9 +936,38 @@ func (s *Service) SetToolsetEnvironmentLink(ctx context.Context, payload *gen.Se
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid environment_id").LogError(ctx, s.logger)
 	}
+	if err := s.requireEnvironmentRead(ctx, *authCtx.ProjectID, environmentID); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.beginLinkChange(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txRepo := s.repo.WithTx(dbtx)
+
+	// Replacing a binding unlinks the environment it had.
+	previous := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	current, err := txRepo.LockToolsetEnvironmentBinding(ctx, repo.LockToolsetEnvironmentBindingParams{
+		ToolsetID: toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read toolset environment link").LogError(ctx, s.logger)
+	default:
+		previous = uuid.NullUUID{UUID: current, Valid: true}
+		if current != environmentID {
+			if err := s.requireEnvironmentRead(ctx, *authCtx.ProjectID, current); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	// Verify the environment exists and belongs to the project
-	_, err = s.repo.GetEnvironmentByID(ctx, repo.GetEnvironmentByIDParams{
+	_, err = txRepo.GetEnvironmentByID(ctx, repo.GetEnvironmentByIDParams{
 		ID:        environmentID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -762,12 +975,22 @@ func (s *Service) SetToolsetEnvironmentLink(ctx context.Context, payload *gen.Se
 		return nil, oops.E(oops.CodeNotFound, err, "environment not found").LogError(ctx, s.logger)
 	}
 
-	link, err := s.repo.SetToolsetEnvironment(ctx, repo.SetToolsetEnvironmentParams{
+	// The upsert writes only for a live toolset in this project.
+	link, err := txRepo.SetToolsetEnvironment(ctx, repo.SetToolsetEnvironmentParams{
 		ToolsetID:     toolsetID,
 		ProjectID:     *authCtx.ProjectID,
 		EnvironmentID: environmentID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+	}
 	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to set toolset environment link").LogError(ctx, s.logger)
+	}
+	if err := s.auditToolsetBinding(ctx, txRepo, dbtx, authCtx, toolsetID, previous, uuid.NullUUID{UUID: environmentID, Valid: true}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to set toolset environment link").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to set toolset environment link").LogError(ctx, s.logger)
 	}
 
@@ -793,11 +1016,38 @@ func (s *Service) DeleteToolsetEnvironmentLink(ctx context.Context, payload *gen
 		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, s.logger)
 	}
 
-	err = s.repo.DeleteToolsetEnvironment(ctx, repo.DeleteToolsetEnvironmentParams{
+	dbtx, err := s.beginLinkChange(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return err
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txRepo := s.repo.WithTx(dbtx)
+
+	current, err := txRepo.LockToolsetEnvironmentBinding(ctx, repo.LockToolsetEnvironmentBindingParams{
 		ToolsetID: toolsetID,
 		ProjectID: *authCtx.ProjectID,
 	})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Nothing linked: deleting is a no-op, as before.
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to read toolset environment link").LogError(ctx, s.logger)
+	}
+	if err := s.requireEnvironmentRead(ctx, *authCtx.ProjectID, current); err != nil {
+		return err
+	}
+
+	if err := txRepo.DeleteToolsetEnvironment(ctx, repo.DeleteToolsetEnvironmentParams{
+		ToolsetID: toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset environment link").LogError(ctx, s.logger)
+	}
+	if err := s.auditToolsetBinding(ctx, txRepo, dbtx, authCtx, toolsetID, uuid.NullUUID{UUID: current, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset environment link").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset environment link").LogError(ctx, s.logger)
 	}
 

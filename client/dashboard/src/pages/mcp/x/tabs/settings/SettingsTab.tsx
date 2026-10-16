@@ -14,7 +14,8 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
-import { Fragment, useEffect } from "react";
+import { Fragment, useEffect, useMemo } from "react";
+import { withUnconfirmedEnvironmentLink } from "./sections/sourceDestinationLock";
 import { useLocation } from "react-router";
 import {
   AgentSetupSection,
@@ -111,6 +112,17 @@ export function SettingsTab({
   );
   const remoteMcpServer = remoteQuery.data;
   const tunneledMcpServer = tunneledQuery.data;
+  // General and Tunnel Key decide whether the source can be moved from its
+  // environment link; a failed refresh leaves that unknown, not cached.
+  const remoteForLock = useMemo(
+    () => withUnconfirmedEnvironmentLink(remoteMcpServer, remoteQuery.isError),
+    [remoteMcpServer, remoteQuery.isError],
+  );
+  const tunneledForLock = useMemo(
+    () =>
+      withUnconfirmedEnvironmentLink(tunneledMcpServer, tunneledQuery.isError),
+    [tunneledMcpServer, tunneledQuery.isError],
+  );
   const unproxiedMcpServer = unproxiedQuery.data;
   const sourceUnavailable =
     remoteQuery.isError || tunneledQuery.isError || unproxiedQuery.isError;
@@ -140,7 +152,7 @@ export function SettingsTab({
         {remoteMcpServer || remoteQuery.isError ? (
           <GeneralSection
             mcpServer={mcpServer}
-            remoteMcpServer={remoteMcpServer}
+            remoteMcpServer={remoteForLock}
           />
         ) : null}
         {/* Identity sits directly under General: it is the first decision a
@@ -186,7 +198,7 @@ export function SettingsTab({
         </>
       )}
       <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
-      {tunneledMcpServer ? (
+      {tunneledMcpServer && tunneledForLock ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
           <TunneledHeadersSection
@@ -199,7 +211,7 @@ export function SettingsTab({
             tunneledMcpServerId={tunneledMcpServer.id}
             projectId={mcpServer.projectId}
           />
-          <TunnelKeySection tunneledMcpServer={tunneledMcpServer} />
+          <TunnelKeySection tunneledMcpServer={tunneledForLock} />
           <AgentSetupSection tunneledMcpServer={tunneledMcpServer} />
         </Fragment>
       ) : null}
