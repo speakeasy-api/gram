@@ -1,4 +1,4 @@
-package upstreamselectionsbackfill
+package selectionbackfill
 
 import (
 	"context"
@@ -43,7 +43,7 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	pool, err := testInfra.CloneTestDatabase(t, "upstreamselectionsbackfill")
+	pool, err := testInfra.CloneTestDatabase(t, "selectionbackfill")
 	require.NoError(t, err)
 	f := &fixture{t: t, pool: pool, q: New(pool), orgID: "org_" + uuid.NewString(), projectID: uuid.New()}
 	require.NoError(t, f.q.SeedOrganizationFixture(t.Context(), f.orgID))
