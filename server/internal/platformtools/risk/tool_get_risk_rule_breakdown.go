@@ -40,7 +40,7 @@ func (s *GetRiskRuleBreakdown) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "risk",
 		HandlerName: "get_risk_rule_breakdown",
 		Name:        "platform_get_risk_rule_breakdown",
-		Description: "Get per-rule_id finding counts for one category over a time window. Prefer this over paginating platform_list_risk_results_for_agent when the question is about volume or which rules fire most — it answers in one small call instead of many large pages.",
+		Description: "Get per-rule_id finding counts for one category over a time window. Prefer this over paginating platform_list_risk_results_for_agent when the question is about volume or which rules fire most — it answers in one small call instead of many large pages. At most 1000 rules are returned; Truncated reports when more exist.",
 		InputSchema: core.BuildInputSchema[getRiskRuleBreakdownInput](
 			core.WithPropertyEnum("category", categoryKeys()...),
 			core.WithPropertyFormat("from", "date-time"),

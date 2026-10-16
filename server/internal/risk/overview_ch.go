@@ -92,12 +92,15 @@ func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID u
 const ruleBreakdownRowLimit = 1000
 
 // RuleBreakdown is one category's per-rule finding counts over a window.
+// Truncated reports that more rules exist than were returned; Total covers
+// only the returned rules.
 type RuleBreakdown struct {
-	From     string
-	To       string
-	Category string
-	Rules    []*gen.RiskRuleBreakdownEntry
-	Total    int64
+	From      string
+	To        string
+	Category  string
+	Rules     []*gen.RiskRuleBreakdownEntry
+	Total     int64
+	Truncated bool
 }
 
 // GetRuleBreakdown counts one category's live findings per rule for the
@@ -123,11 +126,12 @@ func (s *Service) GetRuleBreakdown(ctx context.Context, category string, rawFrom
 	}
 
 	out := &RuleBreakdown{
-		From:     from.UTC().Format(time.RFC3339),
-		To:       to.UTC().Format(time.RFC3339),
-		Category: category,
-		Rules:    []*gen.RiskRuleBreakdownEntry{},
-		Total:    0,
+		From:      from.UTC().Format(time.RFC3339),
+		To:        to.UTC().Format(time.RFC3339),
+		Category:  category,
+		Rules:     []*gen.RiskRuleBreakdownEntry{},
+		Total:     0,
+		Truncated: false,
 	}
 
 	policyIDs, err := s.visiblePolicyIDs(ctx, *authCtx.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -144,11 +148,16 @@ func (s *Service) GetRuleBreakdown(ctx context.Context, category string, rawFrom
 		From:           from,
 		To:             to,
 		MCPServerID:    "",
-	}, category, policyIDs, ruleBreakdownRowLimit)
+	}, category, policyIDs, ruleBreakdownRowLimit+1)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk rule breakdown from clickhouse").LogError(ctx, s.logger)
 	}
 
+	// One row past the bound detects truncation without an unbounded read.
+	if len(rows) > ruleBreakdownRowLimit {
+		out.Truncated = true
+		rows = rows[:ruleBreakdownRowLimit]
+	}
 	for _, row := range rows {
 		findings := safeCount(row.Findings)
 		out.Rules = append(out.Rules, &gen.RiskRuleBreakdownEntry{
