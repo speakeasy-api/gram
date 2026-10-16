@@ -401,6 +401,7 @@ WITH page AS (
            p.organization_id,
            s.user_session_issuer_id,
            s.remote_mcp_server_id,
+           s.tunneled_mcp_server_id,
            s.toolset_id,
            rms.url AS remote_url
     FROM mcp_servers AS s
@@ -431,6 +432,7 @@ SELECT page.id AS mcp_server_id,
        page.user_session_issuer_id::uuid AS user_session_issuer_id,
        (page.remote_mcp_server_id IS NOT NULL)::boolean AS remote_backed,
        (page.toolset_id IS NOT NULL)::boolean AS hosted,
+       (page.remote_mcp_server_id IS NOT NULL OR page.tunneled_mcp_server_id IS NOT NULL)::boolean AS proxied,
        (
          SELECT count(*)
          FROM mcp_servers AS other
@@ -507,6 +509,7 @@ type ListUpstreamClientBackfillCandidatesRow struct {
 	UserSessionIssuerID   uuid.UUID
 	RemoteBacked          bool
 	Hosted                bool
+	Proxied               bool
 	IssuerServerCount     int64
 	IssuerHasGateway      bool
 	LiveAssociations      int64
@@ -549,6 +552,7 @@ func (q *Queries) ListUpstreamClientBackfillCandidates(ctx context.Context, arg 
 			&i.UserSessionIssuerID,
 			&i.RemoteBacked,
 			&i.Hosted,
+			&i.Proxied,
 			&i.IssuerServerCount,
 			&i.IssuerHasGateway,
 			&i.LiveAssociations,
