@@ -204,7 +204,9 @@ Based on the [System One request schema](https://openrouter.ai/docs/api/api-refe
 - `exclusive`: one Choice question, 1–255 options; null descriptions are allowed.
 - `ordered_score`: one Score question, 2–10 ordered, non-null level descriptions.
 - Empty sensors and incomplete definitions are skipped, counted as `draft` in
-  `gram.sigint.evaluation.skipped`, and published as `STATUS_DRAFT` outcomes.
+  `gram.sigint.evaluation.skipped`. Incomplete sensors whose match expression
+  selects the event publish `STATUS_DRAFT` outcomes. Matching runs first, so a
+  nonmatching incomplete sensor publishes `STATUS_NOT_APPLICABLE`.
 
 Every eligible runnable sensor contributes to one logical classifier request per
 event and effective input configuration.

@@ -1,6 +1,7 @@
 package chrepo
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -138,4 +139,19 @@ func TestParseOutcomeRejectsPoison(t *testing.T) {
 	}
 	_, err := ParseOutcome(nil, at)
 	require.ErrorIs(t, err, ErrInvalidReading)
+}
+
+func TestParseOutcomeDropsLabelsOutsideTheStorageBudget(t *testing.T) {
+	t.Parallel()
+	at := time.Now().UTC()
+	o := testOutcome(t, testReading(t, at), at, sigintv1.Outcome_STATUS_FAILED, "classifier_rejected")
+	labels := make(map[string]string, MaxAttributes+1)
+	for i := range MaxAttributes + 1 {
+		labels["label-"+strconv.Itoa(i)] = "value"
+	}
+	o.SetAttributes(labels)
+	row, err := ParseOutcome(o, at)
+	require.NoError(t, err, "coverage keeps the decision even when its labels do not fit")
+	require.Empty(t, row.Attributes)
+	require.Equal(t, StatusFailed, row.Status)
 }

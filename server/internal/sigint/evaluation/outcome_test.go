@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
@@ -207,4 +208,22 @@ func TestOutcomeEventLevelFailurePublishesNothing(t *testing.T) {
 	in := &eventInput{event: Event{OrganizationID: "test-organization", ProjectID: project.String(), Subject: subject}}
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
 	require.Empty(t, outcomes.messages, "no sensors were loaded, so the census must account for the event")
+}
+
+func TestOutcomeDropsOversizedLabelsToFitTransport(t *testing.T) {
+	t.Parallel()
+	m := message()
+	labels := &conversationv1.MessageEvent_IngestionContext{}
+	labels.SetAttributes(map[string]string{"large": strings.Repeat("x", maxReadingBytes)})
+	m.SetIngestion(labels)
+	definitions := sensors()[:1]
+	definitions[0].MatchExpression = `message.role == "assistant"`
+	h, pub := handler(t, m, definitions, nil, testenv.NewMeterProvider(t))
+	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
+
+	require.Len(t, pub.outcomes.messages, 1)
+	o := pub.outcomes.messages[0]
+	require.Equal(t, sigintv1.Outcome_STATUS_NOT_APPLICABLE, o.GetStatus())
+	require.Empty(t, o.GetAttributes())
+	require.LessOrEqual(t, proto.Size(o), maxReadingBytes)
 }

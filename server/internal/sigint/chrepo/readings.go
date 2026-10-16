@@ -403,18 +403,27 @@ func parseAttempt(m *sigintv1.Reading, insertedAt time.Time, requireDefinition b
 			return invalid("invalid MCP server UUID")
 		}
 	}
-	if len(m.GetAttributes()) > MaxAttributes {
-		return invalid("too many attributes")
-	}
-	attributeBytes := 0
-	for key, value := range m.GetAttributes() {
-		attributeBytes += len(key) + len(value)
-		if key == "" || attributeBytes > MaxAttributeBytes {
-			return invalid("invalid attribute payload")
-		}
+	if !AttributesWithinLimits(m.GetAttributes()) {
+		return invalid("invalid attribute payload")
 	}
 	row.Attributes = maps.Clone(m.GetAttributes())
 	return row, nil
+}
+
+// AttributesWithinLimits reports whether labels fit the storage budget and
+// every key is non-empty.
+func AttributesWithinLimits(attributes map[string]string) bool {
+	if len(attributes) > MaxAttributes {
+		return false
+	}
+	attributeBytes := 0
+	for key, value := range attributes {
+		attributeBytes += len(key) + len(value)
+		if key == "" || attributeBytes > MaxAttributeBytes {
+			return false
+		}
+	}
+	return true
 }
 
 func finiteInRange(value, maximum float64) bool {

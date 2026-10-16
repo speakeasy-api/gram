@@ -9,9 +9,11 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 )
 
@@ -41,21 +43,22 @@ func readingID(event Event, sensorID string) string {
 // outcome records a terminal decision without an answer, with the same identity
 // and attribution a reading for the sensor and event would carry.
 func outcome(event Event, sensor sensorRef, attempt, at string, status sigintv1.Outcome_Status, reason string) *sigintv1.Outcome {
-	o := &sigintv1.Outcome{}
-	o.SetId(readingID(event, sensor.id))
-	o.SetEvaluationAttemptId(attempt)
-	o.SetOrganizationId(event.OrganizationID)
-	o.SetProjectId(event.ProjectID)
-	o.SetEvent(outcomeEvent(event.Subject))
-	o.SetSensorId(sensor.id)
-	o.SetSensorSlug(sensor.slug)
-	o.SetEvaluatedAt(at)
-	o.SetDefinitionHash(sensor.hash)
-	o.SetStatus(status)
+	o := sigintv1.Outcome_builder{
+		Id:                  new(readingID(event, sensor.id)),
+		EvaluationAttemptId: new(attempt),
+		OrganizationId:      new(event.OrganizationID),
+		ProjectId:           new(event.ProjectID),
+		Event:               outcomeEvent(event.Subject),
+		SensorId:            new(sensor.id),
+		SensorSlug:          new(sensor.slug),
+		EvaluatedAt:         new(at),
+		DefinitionHash:      new(sensor.hash),
+		Status:              new(status),
+		Attributes:          maps.Clone(event.Attributes),
+	}.Build()
 	if status == sigintv1.Outcome_STATUS_FAILED {
 		o.SetFailureReason(reason)
 	}
-	o.SetAttributes(maps.Clone(event.Attributes))
 	if event.Actor != nil {
 		actor := &sigintv1.Outcome_Actor{}
 		if event.Actor.HasUserId() {
@@ -148,6 +151,17 @@ func withClassification(o *sigintv1.Outcome, result classifier.Result) *sigintv1
 	o.SetModels(slices.Clone(result.Models))
 	o.SetCompilerVersion(compilerVersion(result))
 	return o
+}
+
+// publishOutcome publishes within the transport budget readings use. Customer
+// labels are the only unbounded content an outcome copies, so an oversized
+// outcome drops them instead of failing publication on every redelivery.
+func (h *Evaluator) publishOutcome(ctx context.Context, o *sigintv1.Outcome) gcp.PublishResult {
+	if proto.Size(o) > maxReadingBytes {
+		o.SetAttributes(nil)
+		h.logger.WarnContext(ctx, "dropping oversized labels from sensor outcome", attr.SlogSigintSensorID(o.GetSensorId()), attr.SlogSigintEventID(o.GetEvent().GetId()), attr.SlogProjectID(o.GetProjectId()))
+	}
+	return h.outcomes.Publish(ctx, o)
 }
 
 // awaitPublications waits for every publication so the source event is acked

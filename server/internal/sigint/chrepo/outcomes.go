@@ -12,7 +12,9 @@ import (
 
 // ParseOutcome validates a sensor decision without an answer. It shares the
 // reading's identity and replacement key, so the latest attempt wins whether
-// it is a reading or an outcome. Result columns stay empty.
+// it is a reading or an outcome. Result columns stay empty. Labels outside the
+// storage budget are dropped rather than the outcome, because coverage needs
+// the decision more than its labels.
 func ParseOutcome(m *sigintv1.Outcome, insertedAt time.Time) (ReadingRow, error) {
 	if m == nil {
 		return invalid("missing outcome")
@@ -79,7 +81,9 @@ func readingEnvelope(m *sigintv1.Outcome) (*sigintv1.Reading, error) {
 	r.SetBillingUserId(m.GetBillingUserId())
 	r.SetSource(m.GetSource())
 	r.SetAssistantId(m.GetAssistantId())
-	r.SetAttributes(m.GetAttributes())
+	if AttributesWithinLimits(m.GetAttributes()) {
+		r.SetAttributes(m.GetAttributes())
+	}
 	if m.HasReplayed() {
 		r.SetReplayed(m.GetReplayed())
 	}

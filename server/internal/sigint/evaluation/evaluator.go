@@ -133,7 +133,7 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 			ref.hash = item.hash
 		}
 		decide := func(status sigintv1.Outcome_Status, reason string) {
-			pending = append(pending, h.outcomes.Publish(ctx, outcome(event, ref, attempt, time.Now().UTC().Format(time.RFC3339Nano), status, reason)))
+			pending = append(pending, h.publishOutcome(ctx, outcome(event, ref, attempt, time.Now().UTC().Format(time.RFC3339Nano), status, reason)))
 		}
 
 		matched, err := matching.Match(ctx, sensor.MatchExpression, matchMessage)
@@ -247,7 +247,7 @@ func (h *Evaluator) failGroup(ctx context.Context, event Event, attempt string, 
 		if input != nil {
 			withInput(o, sensor, *input)
 		}
-		pending = append(pending, h.outcomes.Publish(ctx, o))
+		pending = append(pending, h.publishOutcome(ctx, o))
 	}
 	return awaitPublications(ctx, pending, "sensor outcome")
 }
@@ -296,7 +296,7 @@ func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, attempt stri
 	var pending, decided []gcp.PublishResult
 	fail := func(sensor compiledSensor, reason string) {
 		o := withClassification(withInput(outcome(event, sensor.ref(), attempt, at, sigintv1.Outcome_STATUS_FAILED, reason), sensor, input), result)
-		decided = append(decided, h.outcomes.Publish(ctx, o))
+		decided = append(decided, h.publishOutcome(ctx, o))
 	}
 	for _, sensor := range compiled {
 		failed, transient := false, false
