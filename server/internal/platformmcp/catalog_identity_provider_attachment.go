@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -170,7 +171,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	}
 	registrationResource.ScopesSupported = append([]string(nil), resourceMetadata.ScopesSupported...)
 	registrationResource.Live = true
-	commit := s.identity.Prepare(attachmentIdentityPlan(principal, project, registrationID, registration.UserSessionIssuerID.UUID, metadata, existing, reuse, remote.Url, resourceMetadata, registrationResource))
+	commit := s.identity.Prepare(attachmentIdentityPlan(principal, project, registrationID, registration.UserSessionIssuerID.UUID, registration.McpServerID.UUID, metadata, existing, reuse, remote.Url, resourceMetadata, registrationResource))
 	if err := commit.Preflight(ctx); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("check identity-provider attachment", err)
 	}
@@ -187,6 +188,17 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("begin identity-provider attachment: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// The server row is locked ahead of the issuer, the order MCP server
+	// updates take, because the commit associates the server with its client.
+	if _, err := mcpserversrepo.New(tx.DB()).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+		ID:        registration.McpServerID.UUID,
+		ProjectID: project.ID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
+		}
+		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock registered mcp server: %w", err)
+	}
 	if err := commit.Lock(ctx, tx); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("lock identity-provider attachment", err)
 	}
@@ -284,7 +296,7 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 // provider is set up through a Client ID Metadata Document when it supports
 // one, the same path the dashboard's automatic setup takes. A provider offering
 // neither leaves the registration needing manual setup.
-func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata, registrationResource remotesessions.ResourceScopes) remotesessions.IdentityPlan {
+func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID, mcpServerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata, registrationResource remotesessions.ResourceScopes) remotesessions.IdentityPlan {
 	var provider remotesessions.ProviderChoice
 	var allowCIMD bool
 	if reuse {
@@ -302,6 +314,7 @@ func attachmentIdentityPlan(principal Principal, project ResolvedProject, regist
 			ActorDisplayName: nil,
 		},
 		UserSessionIssuerID: userSessionIssuerID,
+		MCPServerID:         mcpServerID,
 		Provider:            provider,
 		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
 			// No copied scope: login discovers what to request live, and the

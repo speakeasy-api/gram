@@ -1,0 +1,178 @@
+-- name: ListUpstreamClientBackfillCandidates :many
+-- One row per live MCP server carrying a user session issuer and each client
+-- bound to that issuer (client columns NULL when none is bound), for servers
+-- after the cursor. Read-only: the runner decides from this evidence alone.
+--
+-- issuer_server_count counts live servers on the issuer across every project;
+-- issuer_has_gateway reports a gateway fronting it. Either makes the binding
+-- shared, so it no longer proves which server it was meant for.
+--
+-- metadata_match reports that the server's own upstream URL names a protected
+-- resource whose RFC 9728 authorization_servers list this client's issuer.
+-- Resource identifiers match exactly, as the serve-time lookup does.
+--
+-- pair_live is true when the pair already has a live association.
+-- pair_recorded is true when an association row exists for the pair, live or
+-- removed: a removed row on a shared issuer is an explicit detach the backfill
+-- must not undo.
+WITH page AS (
+    SELECT s.id,
+           s.project_id,
+           p.organization_id,
+           s.user_session_issuer_id,
+           s.remote_mcp_server_id,
+           s.toolset_id,
+           rms.url AS remote_url
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    LEFT JOIN remote_mcp_servers AS rms
+      ON rms.id = s.remote_mcp_server_id
+     AND rms.project_id = s.project_id
+     AND rms.deleted IS FALSE
+    WHERE s.deleted IS FALSE
+      AND s.user_session_issuer_id IS NOT NULL
+      AND s.id > @cursor::uuid
+      AND (@organization_id::text = '' OR p.organization_id = @organization_id::text)
+    ORDER BY s.id
+    LIMIT @page_size::int
+)
+SELECT page.id AS mcp_server_id,
+       page.project_id,
+       page.organization_id,
+       page.user_session_issuer_id::uuid AS user_session_issuer_id,
+       (page.remote_mcp_server_id IS NOT NULL)::boolean AS remote_backed,
+       (page.toolset_id IS NOT NULL)::boolean AS hosted,
+       (
+         SELECT count(*)
+         FROM mcp_servers AS other
+         WHERE other.user_session_issuer_id = page.user_session_issuer_id
+           AND other.deleted IS FALSE
+       )::bigint AS issuer_server_count,
+       EXISTS (
+         SELECT 1
+         FROM meta_mcp_servers AS gateway
+         WHERE gateway.user_session_issuer_id = page.user_session_issuer_id
+           AND gateway.deleted IS FALSE
+       )::boolean AS issuer_has_gateway,
+       (
+         SELECT count(*)
+         FROM mcp_server_remote_session_clients AS live
+         WHERE live.mcp_server_id = page.id
+           AND live.deleted IS FALSE
+       )::bigint AS live_associations,
+       c.id AS remote_session_client_id,
+       COALESCE((
+         SELECT i.issuer = ANY (rpr.authorization_servers)
+         FROM remote_session_issuers AS i
+         JOIN remote_protected_resources AS rpr
+           ON rpr.project_id = page.project_id
+          AND rpr.resource_identifier = page.remote_url
+          AND rpr.deleted IS FALSE
+         WHERE i.id = c.remote_session_issuer_id
+           AND i.deleted IS FALSE
+         LIMIT 1
+       ), false)::boolean AS metadata_match,
+       (c.id IS NOT NULL AND EXISTS (
+         SELECT 1
+         FROM mcp_server_remote_session_clients AS recorded
+         WHERE recorded.mcp_server_id = page.id
+           AND recorded.remote_session_client_id = c.id
+           AND recorded.deleted IS FALSE
+       ))::boolean AS pair_live,
+       (c.id IS NOT NULL AND EXISTS (
+         SELECT 1
+         FROM mcp_server_remote_session_clients AS recorded
+         WHERE recorded.mcp_server_id = page.id
+           AND recorded.remote_session_client_id = c.id
+       ))::boolean AS pair_recorded
+FROM page
+LEFT JOIN remote_session_client_user_session_issuers AS link
+  ON link.user_session_issuer_id = page.user_session_issuer_id
+LEFT JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+ AND (c.project_id = page.project_id
+      OR (c.project_id IS NULL AND c.organization_id = page.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+ORDER BY page.id, c.id;
+
+-- name: BackfillUpstreamClientAssociation :execrows
+-- Writes one decided association, conditional on the evidence still holding:
+-- the server is live on the same issuer, the client is still bound to it and
+-- in the server's tenant, and, with respect_removed, no row was recorded for
+-- the pair meanwhile. A concurrent configuration change therefore wins and
+-- the write is skipped.
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id)
+SELECT s.project_id, p.organization_id, s.id, c.id
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.user_session_issuer_id = s.user_session_issuer_id
+ AND link.remote_session_client_id = @remote_session_client_id::uuid
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+ AND (c.project_id = p.id
+      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+WHERE s.id = @mcp_server_id::uuid
+  AND s.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND s.deleted IS FALSE
+  AND (NOT @respect_removed::boolean OR NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS recorded
+    WHERE recorded.mcp_server_id = s.id
+      AND recorded.remote_session_client_id = c.id
+  ))
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- Test fixtures. Each seeds the one row its name says; nothing else uses them.
+
+-- name: SeedOrganizationFixture :exec
+INSERT INTO organization_metadata (id, name, slug) VALUES (@id, @id, @id);
+
+-- name: SeedProjectFixture :exec
+INSERT INTO projects (id, name, slug, organization_id) VALUES (@id, @slug, @slug, @organization_id);
+
+-- name: SeedUserSessionIssuerFixture :exec
+INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
+VALUES (@id, @project_id, @slug, 'interactive', interval '1 hour');
+
+-- name: SeedRemoteSessionIssuerFixture :exec
+INSERT INTO remote_session_issuers (id, project_id, slug, issuer) VALUES (@id, @project_id, @slug, @issuer);
+
+-- name: SeedRemoteSessionClientFixture :exec
+INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id)
+VALUES (@id, @project_id, @organization_id, @remote_session_issuer_id, @client_id);
+
+-- name: SeedClientBindingFixture :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+VALUES (@remote_session_client_id, @user_session_issuer_id);
+
+-- name: DeleteClientBindingsFixture :exec
+DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = @remote_session_client_id;
+
+-- name: SeedRemoteMCPServerFixture :exec
+INSERT INTO remote_mcp_servers (id, project_id, transport_type, url) VALUES (@id, @project_id, 'streamable-http', @url);
+
+-- name: SeedMCPServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, slug, remote_mcp_server_id, user_session_issuer_id, visibility)
+VALUES (@id, @project_id, @slug, @remote_mcp_server_id, @user_session_issuer_id, 'private');
+
+-- name: SeedProtectedResourceFixture :exec
+INSERT INTO remote_protected_resources (project_id, organization_id, resource_identifier, authorization_servers)
+VALUES (@project_id, @organization_id, @resource_identifier, @authorization_servers::text[]);
+
+-- name: SeedAssociationFixture :exec
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, deleted_at)
+VALUES (@project_id, @organization_id, @mcp_server_id, @remote_session_client_id, CASE WHEN @removed::boolean THEN clock_timestamp() END);
+
+-- name: ListLiveAssociationsFixture :many
+SELECT remote_session_client_id
+FROM mcp_server_remote_session_clients
+WHERE mcp_server_id = @mcp_server_id AND deleted IS FALSE
+ORDER BY remote_session_client_id;

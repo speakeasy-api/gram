@@ -6,14 +6,17 @@ import { remoteSessionsAttachBinding } from "../funcs/remoteSessionsAttachBindin
 import { remoteSessionsCommitServerIdentityConfiguration } from "../funcs/remoteSessionsCommitServerIdentityConfiguration.js";
 import { remoteSessionsCount } from "../funcs/remoteSessionsCount.js";
 import { remoteSessionsDetachBinding } from "../funcs/remoteSessionsDetachBinding.js";
+import { remoteSessionsDetachServerClientAssociation } from "../funcs/remoteSessionsDetachServerClientAssociation.js";
 import { remoteSessionsGetServerIdentityImpact } from "../funcs/remoteSessionsGetServerIdentityImpact.js";
 import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.js";
+import { remoteSessionsListServerClientAssociations } from "../funcs/remoteSessionsListServerClientAssociations.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CommitServerIdentityConfigurationResult } from "../models/components/commitserveridentityconfigurationresult.js";
 import { CountRemoteSessionsResult } from "../models/components/countremotesessionsresult.js";
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
+import { ListServerClientAssociationsResult } from "../models/components/listserverclientassociationsresult.js";
 import { PrincipalRemoteSessionBinding } from "../models/components/principalremotesessionbinding.js";
 import { ServerIdentityImpactResult } from "../models/components/serveridentityimpactresult.js";
 import {
@@ -33,6 +36,10 @@ import {
   DetachBindingSecurity,
 } from "../models/operations/detachbinding.js";
 import {
+  DetachServerClientAssociationRequest,
+  DetachServerClientAssociationSecurity,
+} from "../models/operations/detachserverclientassociation.js";
+import {
   GetServerIdentityImpactRequest,
   GetServerIdentityImpactSecurity,
 } from "../models/operations/getserveridentityimpact.js";
@@ -45,6 +52,10 @@ import {
   ListRemoteSessionsResponse,
   ListRemoteSessionsSecurity,
 } from "../models/operations/listremotesessions.js";
+import {
+  ListServerClientAssociationsRequest,
+  ListServerClientAssociationsSecurity,
+} from "../models/operations/listserverclientassociations.js";
 import {
   RevokeRemoteSessionRequest,
   RevokeRemoteSessionSecurity,
@@ -130,6 +141,25 @@ export class RemoteSessions extends ClientSDK {
   }
 
   /**
+   * detachServerClientAssociation remoteSessions
+   *
+   * @remarks
+   * Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.
+   */
+  async detachServerClientAssociation(
+    request: DetachServerClientAssociationRequest,
+    security?: DetachServerClientAssociationSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(remoteSessionsDetachServerClientAssociation(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getServerIdentityImpact remoteSessions
    *
    * @remarks
@@ -179,6 +209,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListBindingsResponseBody> {
     return unwrapAsync(remoteSessionsListBindings(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listServerClientAssociations remoteSessions
+   *
+   * @remarks
+   * List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer's bindings. Requires mcp:read on the server.
+   */
+  async listServerClientAssociations(
+    request: ListServerClientAssociationsRequest,
+    security?: ListServerClientAssociationsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListServerClientAssociationsResult> {
+    return unwrapAsync(remoteSessionsListServerClientAssociations(
       this,
       request,
       security,

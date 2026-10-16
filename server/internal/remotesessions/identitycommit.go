@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -175,6 +176,12 @@ type IdentityPlan struct {
 
 	// UserSessionIssuerID is the user session issuer the client is bound to.
 	UserSessionIssuerID uuid.UUID
+
+	// MCPServerID is the MCP server being configured, which Bind associates
+	// with the bound client; uuid.Nil configures the issuer alone. The caller
+	// locks the server row before Lock, keeping the server-then-issuer lock
+	// order of MCP server updates.
+	MCPServerID uuid.UUID
 
 	// Provider is UseProvider or CreateProvider.
 	Provider ProviderChoice
@@ -905,6 +912,18 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	bindings, err := c.attach(ctx, tx, client, attached)
 	if err != nil {
 		return err
+	}
+	if c.plan.MCPServerID != uuid.Nil {
+		// No row means the association already exists: the caller holds the
+		// server lock and attach has validated the client's tenant.
+		if _, err := upstreamclientsrepo.New(tx.tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+			OrganizationID:        c.plan.Scope.OrganizationID,
+			RemoteSessionClientID: client.ID,
+			McpServerID:           c.plan.MCPServerID,
+			ProjectID:             c.plan.Scope.ProjectID,
+		}); err != nil {
+			return fmt.Errorf("associate mcp server with remote session client: %w", err)
+		}
 	}
 	c.result = IdentityResult{
 		Provider:        c.provider,

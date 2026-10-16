@@ -126,7 +126,7 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	// An apply never reuses a path, so each batch keeps its own record; a dry run truncates only when writing.
 	var reportFile *os.File
 	if cfg.reportPath != "" {
-		reportFile, err = openHostedMCPWrappersOutput(cfg.reportPath, cfg.options.Apply)
+		reportFile, err = openReportOutput(cfg.reportPath, cfg.options.Apply)
 		if err != nil {
 			log.Printf("open hosted-mcp-wrappers report: %v", err)
 			return 2
@@ -134,7 +134,7 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 		defer o11y.NoLogDefer(reportFile.Close)
 	}
 	if cfg.journalPath != "" {
-		journalFile, err := openHostedMCPWrappersOutput(cfg.journalPath, true)
+		journalFile, err := openReportOutput(cfg.journalPath, true)
 		if err != nil {
 			log.Printf("open hosted-mcp-wrappers journal: %v", err)
 			if err := os.Remove(cfg.reportPath); err != nil {
@@ -162,7 +162,7 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	code := 0
 	// The report is the record of committed rows, so write it before anything that can fail.
 	if cfg.reportPath != "" {
-		if err := writeHostedMCPWrappersReport(reportFile, report); err != nil {
+		if err := writeJSONReport(reportFile, report); err != nil {
 			log.Printf("write hosted-mcp-wrappers report: %v", err)
 			code = 1
 		}
@@ -182,7 +182,7 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	return code
 }
 
-func openHostedMCPWrappersOutput(path string, exclusive bool) (*os.File, error) {
+func openReportOutput(path string, exclusive bool) (*os.File, error) {
 	flags := os.O_CREATE | os.O_WRONLY
 	if exclusive {
 		flags |= os.O_EXCL
@@ -194,7 +194,9 @@ func openHostedMCPWrappersOutput(path string, exclusive bool) (*os.File, error) 
 	return f, nil
 }
 
-func writeHostedMCPWrappersReport(f *os.File, report hostedmcpbackfill.Report) error {
+// writeJSONReport replaces the report file's contents with report as indented
+// JSON and flushes it.
+func writeJSONReport(f *os.File, report any) error {
 	if err := f.Truncate(0); err != nil {
 		return fmt.Errorf("truncate report: %w", err)
 	}

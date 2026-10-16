@@ -904,6 +904,36 @@ func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg Se
 	return result.RowsAffected(), nil
 }
 
+const serversInsertServerClientAssociation = `-- name: ServersInsertServerClientAssociation :exec
+INSERT INTO mcp_server_remote_session_clients
+  (id, project_id, organization_id, mcp_server_id, remote_session_client_id)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::uuid,
+   $5::uuid)
+`
+
+type ServersInsertServerClientAssociationParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrgID                 string
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// The Linear server's upstream OAuth client association. The app records it
+// when User Identity is configured on the server, or when the server is the
+// only consumer of its user session issuer; the seed writes it directly.
+func (q *Queries) ServersInsertServerClientAssociation(ctx context.Context, arg ServersInsertServerClientAssociationParams) error {
+	_, err := q.db.Exec(ctx, serversInsertServerClientAssociation,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.McpServerID,
+		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
 const serversInsertSlackIdentityHeader = `-- name: ServersInsertSlackIdentityHeader :exec
 INSERT INTO remote_mcp_server_headers
   (id, remote_mcp_server_id, name, description, is_required, is_secret, value)

@@ -2028,3 +2028,10 @@ SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until,
 FROM sign_in_revocation_deliveries
 WHERE organization_id = @organization_id
 ORDER BY created_at, id;
+
+-- name: InsertMCPServerRemoteSessionClientFixture :exec
+-- Test-only fixture: inserts an MCP server upstream client association with
+-- no application checks, so a test can prove the schema itself refuses a
+-- cross-tenant row.
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id)
+VALUES (@project_id, @organization_id, @mcp_server_id, @remote_session_client_id);

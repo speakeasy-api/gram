@@ -158,7 +158,7 @@ func TestWriteHostedMCPWrappersReportReplacesPreviousContent(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, bytes.Repeat([]byte("x"), 4096), 0o600))
 	f, err := os.OpenFile(path, os.O_WRONLY, 0o600)
 	require.NoError(t, err)
-	require.NoError(t, writeHostedMCPWrappersReport(f, hostedmcpbackfill.Report{Mode: "dry-run"}))
+	require.NoError(t, writeJSONReport(f, hostedmcpbackfill.Report{Mode: "dry-run"}))
 	require.NoError(t, f.Close())
 
 	got, err := os.ReadFile(path)
