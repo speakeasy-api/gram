@@ -256,7 +256,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	return newTestAuthServiceWithWorkOSClient(t, userInfo, nil)
 }
 
-func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, workosClient identity.WorkOSClient) (context.Context, *testInstance) {
+func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, workosClient identity.WorkOSClient, configure ...func(*auth.AuthConfigurations)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := authztest.WithAdminGrants(t.Context())
@@ -306,6 +306,9 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	trialNotifier := &fakeTrialNotifier{}
+	for _, apply := range configure {
+		apply(&authConfigs)
+	}
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
@@ -314,13 +317,13 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 	return ctx, result
 }
 
-func newTestAuthServiceForOrganizationProvisioning(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
+func newTestAuthServiceForOrganizationProvisioning(t *testing.T, userInfo *MockUserInfo, configure ...func(*auth.AuthConfigurations)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx, result := newTestAuthServiceWithWorkOSClient(t, userInfo, &mockWorkOSFetcher{
 		members: map[string][]workos.Member{},
 		orgs:    map[string]*workos.Organization{},
-	})
+	}, configure...)
 	require.NoError(t, result.createTestUser(ctx, userInfo))
 	require.NoError(t, userRepo.New(result.conn).OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
 		ID:       userInfo.UserID,
