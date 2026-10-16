@@ -5,6 +5,8 @@ name: Publish MCP Registry Listing
 # version it already has, so bump "version" in server.json before each run.
 # MCP_REGISTRY_PRIVATE_KEY is a secret of the `mcp-registry` environment, which
 # must restrict deployments to `main`; runs from other branches are skipped.
+# Its public key must be live at https://ai.speakeasy.com/.well-known/mcp-registry-auth
+# (GRAM_MCP_REGISTRY_AUTH on the server) before the login step can pass.
 
 on:
   workflow_dispatch:
@@ -20,8 +22,8 @@ env:
   MCP_PUBLISHER_VERSION: "1.8.1"
   # sha256 of mcp-publisher_linux_amd64.tar.gz from the release's checksums file.
   MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
-  # DNS proof: a TXT record at the apex of this domain grants com.speakeasy/*.
-  REGISTRY_DOMAIN: speakeasy.com
+  # HTTP proof: /.well-known/mcp-registry-auth on this host grants com.speakeasy.ai/*.
+  REGISTRY_DOMAIN: ai.speakeasy.com
 
 jobs:
   publish:
@@ -48,12 +50,12 @@ jobs:
         working-directory: mcp-registry/platform
         run: '"$RUNNER_TEMP/mcp-publisher" validate server.json'
 
-      - name: Log in with the DNS proof
+      - name: Log in with the HTTP proof
         env:
           MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/mcp-publisher" login dns \
+          "$RUNNER_TEMP/mcp-publisher" login http \
             --domain "$REGISTRY_DOMAIN" \
             --private-key "$MCP_REGISTRY_PRIVATE_KEY"
 
