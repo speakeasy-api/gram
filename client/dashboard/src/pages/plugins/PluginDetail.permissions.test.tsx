@@ -270,7 +270,21 @@ describe("plugin detail permission boundary", () => {
           slug: "already-added",
           tools: [],
         },
-        { id: "toolset-b", name: "Billing", slug: "billing", tools: [] },
+        {
+          id: "toolset-b",
+          name: "Billing",
+          slug: "billing",
+          mcpEnabled: true,
+          mcpSlug: "billing",
+          tools: [],
+        },
+        {
+          id: "toolset-c",
+          name: "Payroll",
+          slug: "payroll",
+          mcpEnabled: false,
+          tools: [],
+        },
       ],
     };
     serverData.mcpServers = {
@@ -308,6 +322,11 @@ describe("plugin detail permission boundary", () => {
     expect(
       screen.queryByRole("checkbox", { name: "Already added" }),
     ).toBeNull();
+    // The backend refuses hosted servers with MCP off, so they can't be picked.
+    expect(
+      (screen.getByRole("checkbox", { name: "Payroll" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     await act(async () => {
       fireEvent.click(
