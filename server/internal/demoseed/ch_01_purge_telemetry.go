@@ -212,10 +212,11 @@ func (s *seeder) chInsertTelemetry(ctx context.Context, ch driver.Conn, rows []c
 	return nil
 }
 
-func chPtr(v string) *string { return &v }
+//go:fix inline
+func chPtr(v string) *string { return new(v) }
 
 // chTrace is lower(hex(MD5(<seed><name>))), the trace id formula.
-func (s *seeder) chTrace(name string) *string { return chPtr(md5Hex(s.name(name))) }
+func (s *seeder) chTrace(name string) *string { return new(md5Hex(s.name(name))) }
 
 // chResource is the resource attributes every row carries: the marker the
 // ClickHouse postflight leak-checks.
@@ -307,7 +308,7 @@ func (s *seeder) chTranscriptRows(ctx context.Context, ch driver.Conn) error {
 			resource: s.chResource(),
 			urn:      "chat:transcript:observed",
 			service:  "gram-server",
-			chatID:   chPtr(chatID),
+			chatID:   new(chatID),
 		})
 	}
 	if err := s.chInsertTelemetry(ctx, ch, rows); err != nil {
@@ -469,7 +470,7 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 				resource:     s.chResource(),
 				urn:          toolURN(toolName),
 				service:      "gram-mcp-gateway",
-				chatID:       chPtr(chatID),
+				chatID:       new(chatID),
 			})
 		}
 	}
@@ -608,7 +609,7 @@ func (s *seeder) chUnattributedAPIRows() []chTelemetryRow {
 			resource: s.chResource(),
 			urn:      "claude-code:otel:logs",
 			service:  "claude-code",
-			chatID:   chPtr(chatID),
+			chatID:   new(chatID),
 		})
 	}
 	return rows
@@ -670,7 +671,7 @@ func (s *seeder) chClaudeAPIRows() []chTelemetryRow {
 				resource: s.chClaudeResource(),
 				urn:      "claude-code:otel:logs",
 				service:  "claude-code",
-				chatID:   chPtr(chatID),
+				chatID:   new(chatID),
 			})
 		}
 	}
@@ -714,7 +715,7 @@ func (s *seeder) chClaudeToolResultRows() []chTelemetryRow {
 				resource: s.chClaudeResource(),
 				urn:      "claude-code:otel:logs",
 				service:  "claude-code",
-				chatID:   chPtr(chatID),
+				chatID:   new(chatID),
 			})
 		}
 	}
@@ -765,7 +766,7 @@ func (s *seeder) chSkillRows() []chTelemetryRow {
 				resource: s.chResource(),
 				urn:      "",
 				service:  "",
-				chatID:   chPtr(chatID),
+				chatID:   new(chatID),
 			})
 		}
 	}
@@ -839,7 +840,7 @@ func (s *seeder) chBlockedRows() []chTelemetryRow {
 			resource: s.chResource(),
 			urn:      "hooks:" + toolName,
 			service:  "gram-hooks",
-			chatID:   chPtr(chatID),
+			chatID:   new(chatID),
 		})
 	}
 	return rows
@@ -883,7 +884,7 @@ func (s *seeder) chCursorUsageRows() []chTelemetryRow {
 			resource: s.chResource(),
 			urn:      "cursor:usage:metrics",
 			service:  "",
-			chatID:   chPtr(chatID),
+			chatID:   new(chatID),
 		})
 	}
 	return rows
@@ -925,7 +926,7 @@ func (s *seeder) chCursorHookRows() []chTelemetryRow {
 				resource: s.chResource(),
 				urn:      "",
 				service:  "",
-				chatID:   chPtr(chatID),
+				chatID:   new(chatID),
 			})
 		}
 	}
@@ -968,7 +969,7 @@ func (s *seeder) chWorkUnitRows() []chTelemetryRow {
 			resource: s.chResource(),
 			urn:      "chat_analysis:work_units:score",
 			service:  "",
-			chatID:   chPtr(chatID),
+			chatID:   new(chatID),
 		})
 	}
 	return rows
