@@ -40,7 +40,8 @@ type revision struct {
 	messageSeq     int64
 	messageChanged bool
 	// retentionFloor is the organization's retention floor. Raising it removes
-	// readable history, which is a change to the messages resource.
+	// readable history, which changes the messages resource and the last
+	// messages and counts the threads resource reports.
 	retentionFloor int64
 }
 
@@ -49,7 +50,7 @@ func (r revision) changed(next revision, uri string) bool {
 	case "channels://presence":
 		return next.presenceLive != r.presenceLive || next.presenceAnnounce != r.presenceAnnounce
 	case "channels://threads":
-		return next.threadCount != r.threadCount || next.threadAnnounce != r.threadAnnounce || next.threadActivity != r.threadActivity
+		return next.threadCount != r.threadCount || next.threadAnnounce != r.threadAnnounce || next.threadActivity != r.threadActivity || next.retentionFloor != r.retentionFloor
 	case "channels://messages":
 		return next.messageChanged || next.retentionFloor != r.retentionFloor
 	default:
