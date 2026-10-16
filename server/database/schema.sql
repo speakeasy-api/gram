@@ -4315,6 +4315,53 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
 ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
 WHERE deleted IS FALSE;
 
+-- Approval evidence is specific to a resource; the parent consent supplies
+-- the subject, OAuth client and issuer tenancy. Parent liveness is required
+-- when reading evidence, including after issuer moves or deletion.
+CREATE TABLE IF NOT EXISTS user_session_consent_resources (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  user_session_consent_id uuid,
+  resource text NOT NULL,
+  inventory_hash text NOT NULL,
+  remote_set_hash text NOT NULL,
+  tool_selection jsonb,
+  session_duration_hours integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+  CONSTRAINT user_session_consent_resources_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_consent_resources_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT user_session_consent_resources_user_session_consent_id_fkey FOREIGN KEY (user_session_consent_id) REFERENCES user_session_consents (id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN user_session_consent_resources.id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.project_id IS 'Target resource project, independent of issuer tenancy.
+@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.user_session_consent_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.resource IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.inventory_hash IS 'Versioned fingerprint of the complete approved tool inventory.
+@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.remote_set_hash IS 'Fingerprint of the approved upstream clients, resources and requested permissions.
+@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.tool_selection IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_session_consent_resources.session_duration_hours IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_consent_resources_consent_resource_key
+ON user_session_consent_resources (user_session_consent_id, resource)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS user_session_consent_resources_project_id_idx
+ON user_session_consent_resources (project_id);
+
+CREATE INDEX IF NOT EXISTS user_session_consent_resources_user_session_consent_id_idx
+ON user_session_consent_resources (user_session_consent_id);
+
 -- One row per WorkOS session established by a Speakeasy sign-in, from the
 -- dashboard login or an MCP authorization. MCP grants (user_sessions) record
 -- the sign-in that created them, so revoking a sign-in revokes its grants.
