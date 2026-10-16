@@ -55,10 +55,17 @@ func TestHandleMCPRegistryAuthReturnsNotFoundOnCustomDomain(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	require.NoError(t, ti.service.SetMCPRegistryAuth(testMCPRegistryAuthRecord))
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/mcp-registry-auth", nil)
-	req = req.WithContext(customdomains.WithContext(ctx, &customdomains.Context{
+	ctx = customdomains.WithContext(ctx, &customdomains.Context{
 		OrganizationID: "registry-auth-organization",
 		Domain:         "registry-auth.example.com",
 		DomainID:       uuid.New(),
+	})
+	req = req.WithContext(requestorigin.WithContext(ctx, requestorigin.Origin{
+		Surface:          requestorigin.SurfaceCustomDomain,
+		BaseURL:          "https://registry-auth.example.com",
+		OrganizationID:   "registry-auth-organization",
+		NetworkIngressID: uuid.Nil,
+		NetworkIdentity:  nil,
 	}))
 	err := ti.service.HandleMCPRegistryAuth(httptest.NewRecorder(), req)
 
