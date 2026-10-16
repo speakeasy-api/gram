@@ -1138,6 +1138,11 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 // behind it is not.
 func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, err error) error {
 	switch {
+	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
+		// The credential's chosen client is no longer bound to its issuer, the
+		// same unusable choice the selection read reports.
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
+		return writeRemoteSessionReconnectChallenge(w, authentication)
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
 		// The upstream token endpoint failed in a way that clears on its own.
 		// A 401 would send the user through reauthorization over an outage, so

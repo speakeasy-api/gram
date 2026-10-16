@@ -465,7 +465,7 @@ func TestConformanceMatrix_MissingTargets(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -590,7 +590,7 @@ func TestConformanceMatrix_HostedToolset(t *testing.T) {
 	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "conformance-"+uuid.NewString()[:8])
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	runConformanceMatrix(t, conformanceTarget{
 		router:          router,
@@ -613,7 +613,7 @@ func TestConformanceMatrix_HostedToolsetEndpoint(t *testing.T) {
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, uuid.Nil)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	runConformanceMatrix(t, conformanceTarget{
 		router:          router,
@@ -635,7 +635,7 @@ func TestConformanceMatrix_Meta(t *testing.T) {
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	runConformanceMatrix(t, conformanceTarget{
 		router:          router,
@@ -661,7 +661,7 @@ func TestConformanceMatrix_Platform(t *testing.T) {
 	require.NoError(t, err)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	runConformanceMatrix(t, conformanceTarget{
 		router:          router,
@@ -679,7 +679,7 @@ func TestConformanceMatrix_AgentGateway(t *testing.T) {
 	fixture := seedAgentGateway(t, ctx, ti)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	runConformanceMatrix(t, conformanceTarget{
 		router:          router,

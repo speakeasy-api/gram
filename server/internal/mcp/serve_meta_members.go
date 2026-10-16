@@ -137,7 +137,6 @@ type metaMemberCandidate struct {
 func (s *Service) resolveMetaMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
-	organizationID string,
 	metaServerID uuid.UUID,
 	projectID uuid.UUID,
 ) (context.Context, []metaMember, error) {
@@ -181,14 +180,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 		})
 	}
 
-	ctx, members, err := s.admitMetaMembers(ctx, logger, candidates)
-	if err != nil {
-		return ctx, nil, err
-	}
-	if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
-		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
-	}
-	return ctx, members, nil
+	return s.admitMetaMembers(ctx, logger, candidates)
 }
 
 // resolveEndpointMemberSnapshot resolves the members an OAuth flow for a
@@ -198,7 +190,18 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 	if endpoint.IsOrganizationGateway() {
 		return s.resolveOrganizationMemberSnapshot(ctx, logger, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	}
-	return s.resolveMetaMemberSnapshot(ctx, logger, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	if err != nil {
+		return ctx, nil, err
+	}
+	// Only consent and its validation read a stored gateway's associated
+	// clients, and only a gateway that signs people in has any to match.
+	if endpoint.UserSessionIssuerID != uuid.Nil {
+		if err := s.attachAssociatedClients(ctx, endpoint.OrganizationID, members); err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
+		}
+	}
+	return ctx, members, nil
 }
 
 // resolveOrganizationMemberSnapshot derives a gateway's members from the
@@ -269,11 +272,13 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	if err != nil {
 		return ctx, nil, err
 	}
-	if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
-		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
-	}
 	var clients []remotesessions.Client
 	if userSessionIssuerID != uuid.Nil {
+		// The agent gateway signs nobody in, so its callers never read
+		// associations and its members keep the derived match.
+		if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
+		}
 		clients, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)

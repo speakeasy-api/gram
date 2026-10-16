@@ -1811,6 +1811,8 @@ type GetUpstreamClientSelectionRow struct {
 // holds only while the server has no associated client.
 // An unusable choice is reported as such rather than replaced, so the caller
 // fails closed instead of switching clients.
+// ListUpstreamClientSelections repeats the usable expression; the two must
+// stay identical.
 func (q *Queries) GetUpstreamClientSelection(ctx context.Context, arg GetUpstreamClientSelectionParams) (GetUpstreamClientSelectionRow, error) {
 	row := q.db.QueryRow(ctx, getUpstreamClientSelection,
 		arg.UserSessionIssuerID,
@@ -3141,6 +3143,8 @@ type ListUpstreamClientSelectionsRow struct {
 
 // GetUpstreamClientSelection for several MCP servers at once, as a gateway
 // reads its members' choices. Servers without a choice have no row.
+// The usable expression repeats GetUpstreamClientSelection's; the two must
+// stay identical, since both callers fail closed on it.
 func (q *Queries) ListUpstreamClientSelections(ctx context.Context, arg ListUpstreamClientSelectionsParams) ([]ListUpstreamClientSelectionsRow, error) {
 	rows, err := q.db.Query(ctx, listUpstreamClientSelections,
 		arg.UserSessionIssuerID,

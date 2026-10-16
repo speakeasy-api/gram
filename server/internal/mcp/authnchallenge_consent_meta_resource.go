@@ -38,10 +38,9 @@ type chosenMetaMember struct {
 // authenticates against the client's authorization server, and the member
 // whose spelling of that URL was chosen.
 //
-// Tri-state: ("", true) means members claimed the issuer but no single member
-// wins, and the caller must not fall back to a weaker derivation; ("", false)
-// is a genuine no-match, the only case where the stored per-client derivation
-// may answer. A NULL remote_session_issuer_id matches nothing. The error is a
+// Tri-state: ("", true) means members claimed the client but no single member
+// wins; ("", false) means no member is associated with the client. Either way
+// the caller must not fall back to a weaker derivation. The error is a
 // database or grant-load fault only, and the connect fails closed on it.
 func (s *Service) resolveMetaMemberResource(
 	ctx context.Context,

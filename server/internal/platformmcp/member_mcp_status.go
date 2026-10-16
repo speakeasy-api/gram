@@ -367,7 +367,22 @@ func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principa
 	default:
 		return false, false, nil
 	}
-	req, ok := identitychaining.NewRequest(principal.OrganizationID, target.projectID, target.userSessionIssuerID, principal.UserID, upstream, tunneled, uuid.NullUUID{UUID: target.remoteSessionIssuerID, Valid: target.remoteSessionIssuerID != uuid.Nil})
+	tunnelIssuer := uuid.NullUUID{UUID: target.remoteSessionIssuerID, Valid: target.remoteSessionIssuerID != uuid.Nil}
+	if tunneled {
+		// A tunneled upstream routes, and chains, by the issuer of the one
+		// client the caller's sign-in would choose for it.
+		tunnelIssuer = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		if s.remoteSessions != nil && target.userSessionIssuerID != uuid.Nil {
+			clients, err := s.remoteSessions.ListClients(ctx, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+			if err != nil {
+				return false, false, fmt.Errorf("list MCP authorization clients: %w", err)
+			}
+			if chosen := memberMCPConnectionClients(clients, target); len(chosen) == 1 {
+				tunnelIssuer = uuid.NullUUID{UUID: chosen[0].RemoteSessionIssuerID, Valid: true}
+			}
+		}
+	}
+	req, ok := identitychaining.NewRequest(principal.OrganizationID, target.projectID, target.userSessionIssuerID, principal.UserID, upstream, tunneled, tunnelIssuer)
 	if !ok {
 		return false, false, nil
 	}

@@ -32,8 +32,7 @@ const (
 // render so every card is judged from plain values.
 type consentRouting struct {
 	backend  consentBackend
-	upstream string        // the single proxied server's upstream
-	issuer   uuid.NullUUID // a tunneled server's derived issuer, for identity chaining
+	upstream string // the single proxied server's upstream
 	// members claiming each client's grant, keyed by remote session client,
 	// meta only.
 	members map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
@@ -89,7 +88,7 @@ func (s *Service) resolveConsentRouting(
 	clients []remotesessions.Client,
 	statuses map[uuid.UUID]remotesessions.RemoteSessionState,
 ) (consentRouting, error) {
-	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil}
+	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
 		memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
@@ -122,7 +121,6 @@ func (s *Service) resolveConsentRouting(
 			r.backend = consentBackendRemote
 		case server.TunneledMcpServerID.Valid:
 			r.backend = consentBackendTunneled
-			r.issuer = tunneledBackendIssuer(&server)
 		}
 	}
 	return r, nil

@@ -562,7 +562,7 @@ func (s *Service) callMetaServerTool(
 		}
 		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
 	} else {
-		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.OrganizationID, metaServer.ID, mcpEndpoint.ProjectID)
+		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
 	}
 	if err == nil && gate.memberChoices != nil {
 		gate.memberChoices.apply(ctx, logger, members)

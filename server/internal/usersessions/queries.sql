@@ -2488,6 +2488,8 @@ ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FAL
 -- holds only while the server has no associated client.
 -- An unusable choice is reported as such rather than replaced, so the caller
 -- fails closed instead of switching clients.
+-- ListUpstreamClientSelections repeats the usable expression; the two must
+-- stay identical.
 SELECT sel.remote_session_client_id,
        chosen.remote_session_issuer_id AS remote_session_issuer_id,
        sel.no_auth,
@@ -2527,6 +2529,8 @@ WHERE sel.credential_kind = @credential_kind::text
 -- name: ListUpstreamClientSelections :many
 -- GetUpstreamClientSelection for several MCP servers at once, as a gateway
 -- reads its members' choices. Servers without a choice have no row.
+-- The usable expression repeats GetUpstreamClientSelection's; the two must
+-- stay identical, since both callers fail closed on it.
 SELECT sel.mcp_server_id,
        sel.remote_session_client_id,
        chosen.remote_session_issuer_id AS remote_session_issuer_id,
