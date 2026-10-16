@@ -212,9 +212,6 @@ func (s *seeder) chInsertTelemetry(ctx context.Context, ch driver.Conn, rows []c
 	return nil
 }
 
-//go:fix inline
-func chPtr(v string) *string { return new(v) }
-
 // chTrace is lower(hex(MD5(<seed><name>))), the trace id formula.
 func (s *seeder) chTrace(name string) *string { return new(md5Hex(s.name(name))) }
 
