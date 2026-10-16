@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"text/tabwriter"
 
 	"github.com/urfave/cli/v2"
@@ -79,7 +78,7 @@ func newChannelsConvertCommand() *cli.Command {
 			// The mapping goes to stdout because it is the command's product:
 			// an operator pastes it to whoever holds a stale identifier.
 			// Identifiers only — see writeChannelsConversionMapping.
-			if err := writeChannelsConversionMapping(os.Stdout, result); err != nil {
+			if err := writeChannelsConversionMapping(c.App.Writer, result); err != nil {
 				return err
 			}
 			if convertErr != nil {

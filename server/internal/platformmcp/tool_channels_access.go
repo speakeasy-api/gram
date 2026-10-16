@@ -23,16 +23,13 @@ const getMyChannelsAccessDescription = "Get the Channels endpoint for your organ
 // about the caller's own connection target, so only a person's external client
 // asks for it, and Channels is organization-wide so no project is named.
 //
-// Discovery is restricted to the three Channels permissions rather than left
-// open to every member. A member with no Channels permission has nothing to do
-// with the answer, and tool visibility is the right place to say so — the
-// handler still re-evaluates each permission itself and never relies on
-// visibility for enforcement.
+// Discovery is open to every member. A member who holds no Channels
+// permission is exactly who needs the no_channels_permission answer and its
+// instruction to ask for access; the handler evaluates each permission itself.
 var getMyChannelsAccessMeta = ToolMeta{
-	Authorization:   ExternalAuthorizationMember,
-	Audiences:       externalOnly,
-	ProjectScope:    ProjectScopeNone,
-	DiscoveryScopes: []authz.Scope{authz.ScopeChannelsConnect, authz.ScopeChannelsAdmin, authz.ScopeChannelsReadAll},
+	Authorization: ExternalAuthorizationMember,
+	Audiences:     externalOnly,
+	ProjectScope:  ProjectScopeNone,
 }
 
 // GetMyChannelsAccessOutput is the caller's own Channels access.
@@ -106,7 +103,7 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal) (G
 	case output.CanConnect:
 		output.NextAction = "Add endpoint_url to your MCP client as a remote server and sign in with your organization account when prompted. Then call channels_connect through it."
 	case output.CanAdminister:
-		output.NextAction = "You may administer Channels but not take part in it. Open Channels in the dashboard to change availability and participation, or ask an organization administrator for channels:connect to join conversations."
+		output.NextAction = "You may administer Channels but not take part in it. Change availability and participation in the dashboard, or with channels_admin after adding endpoint_url to your MCP client; ask an organization administrator for channels:connect to join conversations."
 	case output.CanReadAllConversations:
 		output.NextAction = "You may observe conversations but not take part in them. Ask an organization administrator for channels:connect to join."
 	default:
@@ -121,7 +118,7 @@ func registerChannelsAccessTool(reg *Registrar, service *ChannelsAccessService) 
 		addTool(reg, &mcp.Tool{
 			Name:        getMyChannelsAccessName,
 			Title:       "Get My Channels Access",
-			Description: "Get the Channels endpoint and your own Channels permissions. This is not switched on for your organization yet.",
+			Description: "Get the Channels endpoint and your own Channels permissions. Channels is not available on this deployment yet.",
 			Annotations: readOnlyAnnotations(),
 		}, getMyChannelsAccessMeta, unavailableTool("channels"))
 		return

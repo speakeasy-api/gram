@@ -361,12 +361,6 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_ENABLED"},
 			Value:   false,
 		},
-		&cli.BoolFlag{
-			Name:    "channels-enabled",
-			Usage:   "Serve the Channels endpoints, their OAuth resource metadata and the Channels audience",
-			EnvVars: []string{"GRAM_CHANNELS_ENABLED"},
-			Value:   false,
-		},
 
 		&cli.StringFlag{
 			Name:     "server-url",
@@ -649,6 +643,14 @@ func serverFlags() []cli.Flag {
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
 		&cli.StringFlag{Name: "github-evidence-token", Usage: "GitHub API token for MCP evidence repository lookups", EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"}},
+		// Channels rides the Platform MCP OAuth server, which only this
+		// command serves, so the MCP tier does not accept the flag.
+		&cli.BoolFlag{
+			Name:    "channels-enabled",
+			Usage:   "Serve the Channels endpoints, their OAuth resource metadata and the Channels audience",
+			EnvVars: []string{"GRAM_CHANNELS_ENABLED"},
+			Value:   false,
+		},
 		&cli.StringFlag{
 			Name:     "loops-api-key",
 			Usage:    "Loops API key for transactional emails (invite emails). Empty or 'unset' disables email sending.",
