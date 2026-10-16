@@ -14674,12 +14674,15 @@ ON sigint_sensor_signals (project_id, signal_id);
 -- channels.ConvertLegacyState reads it, to copy its contents forward.
 -- Channels are organization-wide, independent of project membership. The
 -- optional project reference only attaches demo data to its owning workspace.
-CREATE TABLE channels_state (
-  organization_id TEXT NOT NULL PRIMARY KEY REFERENCES organization_metadata (id) ON DELETE SET NULL,
-  project_id UUID REFERENCES projects (id) ON DELETE SET NULL,
+CREATE TABLE IF NOT EXISTS channels_state (
+  organization_id TEXT NOT NULL,
+  project_id UUID,
   state JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT channels_state_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT channels_state_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT channels_state_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN channels_state.organization_id IS '@access: confidential';
@@ -14689,7 +14692,7 @@ COMMENT ON COLUMN channels_state.state IS 'Channels instances, hashed resumption
 COMMENT ON COLUMN channels_state.created_at IS '@access: confidential';
 COMMENT ON COLUMN channels_state.updated_at IS '@access: confidential';
 
-CREATE INDEX channels_state_project_id_idx ON channels_state (project_id);
+CREATE INDEX IF NOT EXISTS channels_state_project_id_idx ON channels_state (project_id);
 
 -- Normalized Channels storage. channels_state above is the superseded proof of
 -- concept document and is retained for one expand-contract cycle so an older
@@ -14734,7 +14737,7 @@ CREATE TABLE IF NOT EXISTS channels_settings (
 
   CONSTRAINT channels_settings_pkey PRIMARY KEY (id),
   CONSTRAINT channels_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT channels_settings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT channels_settings_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN channels_settings.id IS '@access: confidential';
@@ -14776,7 +14779,7 @@ CREATE TABLE IF NOT EXISTS channels_access_exceptions (
 
   CONSTRAINT channels_access_exceptions_pkey PRIMARY KEY (id),
   CONSTRAINT channels_access_exceptions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT channels_access_exceptions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT channels_access_exceptions_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN channels_access_exceptions.id IS '@access: confidential';
@@ -14826,7 +14829,7 @@ CREATE TABLE IF NOT EXISTS channels_instances (
 
   CONSTRAINT channels_instances_pkey PRIMARY KEY (id),
   CONSTRAINT channels_instances_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT channels_instances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT channels_instances_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN channels_instances.id IS '@access: confidential';
@@ -14903,7 +14906,7 @@ CREATE TABLE IF NOT EXISTS channels_conversations (
   -- tenancy-pinned self reference below has to resolve during CREATE TABLE.
   CONSTRAINT channels_conversations_organization_id_id_key UNIQUE (organization_id, id),
   CONSTRAINT channels_conversations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT channels_conversations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT channels_conversations_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   -- Tenancy-pinned self reference: a branch can only descend from a thread in
   -- the same organization.
   CONSTRAINT channels_conversations_parent_fkey FOREIGN KEY (organization_id, parent_id) REFERENCES channels_conversations (organization_id, id) ON DELETE CASCADE
@@ -14958,7 +14961,7 @@ CREATE TABLE IF NOT EXISTS channels_conversation_participants (
 
   CONSTRAINT channels_conversation_participants_pkey PRIMARY KEY (id),
   CONSTRAINT channels_conversation_participants_conversation_fkey FOREIGN KEY (organization_id, conversation_id) REFERENCES channels_conversations (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT channels_conversation_participants_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT channels_conversation_participants_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN channels_conversation_participants.id IS '@access: confidential';
@@ -14993,7 +14996,7 @@ CREATE TABLE IF NOT EXISTS channels_conversation_endpoints (
   CONSTRAINT channels_conversation_endpoints_pkey PRIMARY KEY (id),
   CONSTRAINT channels_conversation_endpoints_conversation_fkey FOREIGN KEY (organization_id, conversation_id) REFERENCES channels_conversations (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT channels_conversation_endpoints_instance_fkey FOREIGN KEY (organization_id, instance_id) REFERENCES channels_instances (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT channels_conversation_endpoints_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT channels_conversation_endpoints_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN channels_conversation_endpoints.id IS '@access: confidential';
@@ -15034,7 +15037,7 @@ CREATE TABLE IF NOT EXISTS channels_messages (
   CONSTRAINT channels_messages_pkey PRIMARY KEY (id),
   CONSTRAINT channels_messages_conversation_fkey FOREIGN KEY (organization_id, conversation_id) REFERENCES channels_conversations (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT channels_messages_instance_fkey FOREIGN KEY (organization_id, instance_id) REFERENCES channels_instances (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT channels_messages_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT channels_messages_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN channels_messages.id IS '@access: confidential';
@@ -15098,7 +15101,7 @@ CREATE TABLE IF NOT EXISTS channels_thread_preferences (
 
   CONSTRAINT channels_thread_preferences_pkey PRIMARY KEY (id),
   CONSTRAINT channels_thread_preferences_conversation_fkey FOREIGN KEY (organization_id, conversation_id) REFERENCES channels_conversations (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT channels_thread_preferences_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT channels_thread_preferences_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN channels_thread_preferences.id IS '@access: confidential';

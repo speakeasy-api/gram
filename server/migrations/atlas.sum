@@ -1,4 +1,4 @@
-h1:0k/Nhl47axYt+oG99eAQO/yZ57F2q8n9US7FFP8tjfs=
+h1:R4ez0kc0dooJLku37b/Vr/0e0Dhi4JqzqdrcEh9m1gI=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -473,3 +473,4 @@ h1:0k/Nhl47axYt+oG99eAQO/yZ57F2q8n9US7FFP8tjfs=
 20261015093918_sigint_sliding_windows.sql h1:QNosxelv6yIY4WGy6yiWmCb5wJkOv/0h/MVFItmtXT8=
 20261015185547_promotion_ledger_signup_offers.sql h1:vYR6/rG62LpP+MvSq6oR5Nc69PRGJ4VH4ZvOnCJnzxs=
 20261016094642_channels.sql h1:jyCCNIYoaJ4OJyqpB4Rk0io55zUOI8B57kTKFvEKlSo=
+20261016104948_channels-tenant-pinned-fks.sql h1:KiVmUZh9jQ7TGIA924+szVMP7mso+bub/QwGbfVcGp0=
