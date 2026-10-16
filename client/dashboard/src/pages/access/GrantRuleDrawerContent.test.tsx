@@ -95,8 +95,8 @@ it("preserves a blanket owner deny when generic panels are restricted", () => {
   const onChangeSelectors = vi.fn<() => void>();
   render(
     <GrantRuleDrawerContent
-      resourceType="agent_owner"
-      scope="agent:create"
+      resourceType="agent"
+      scope="agent:write"
       selectors={null}
       onChangeSelectors={onChangeSelectors}
       isDeny

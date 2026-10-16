@@ -116,11 +116,11 @@ func TestRemovingSystemRoleCreationEligibilityIsDurable(t *testing.T) {
 		require.NoError(t, err)
 		seededCreate := false
 		for _, row := range rows {
-			seededCreate = seededCreate || row.Scope == string(ScopeAgentCreate)
+			seededCreate = seededCreate || row.Scope == string(ScopeAgentWrite)
 		}
 		require.Equal(t, slug == SystemRoleAdmin, seededCreate, "persisted seed grants must give creation only to Admin")
 		for _, row := range rows {
-			if row.Scope == string(ScopeAgentCreate) {
+			if row.Scope == string(ScopeAgentWrite) {
 				_, err := q.DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{OrganizationID: organizationID, ID: row.ID})
 				require.NoError(t, err)
 			}
@@ -134,7 +134,7 @@ func TestRemovingSystemRoleCreationEligibilityIsDurable(t *testing.T) {
 		require.NoError(t, err)
 		found := false
 		for _, grant := range listed {
-			found = found || grant.Scope == string(ScopeAgentCreate)
+			found = found || grant.Scope == string(ScopeAgentWrite)
 		}
 		require.Equal(t, allowed, found, "role editor and enforcement agree")
 	}

@@ -86,7 +86,7 @@ func createAgent(t *testing.T, conn *pgxpool.Pool, organizationID, ownerUserID, 
 func seedAgentCreator(t *testing.T, conn *pgxpool.Pool, organizationID, userID string) {
 	t.Helper()
 	seedOrganizationUser(t, conn, organizationID, userID)
-	seedGrant(t, t.Context(), conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeAgentCreate, authz.AgentOwnerSelf)
+	seedGrant(t, t.Context(), conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeAgentWrite, "*", authz.AgentOwnerSelf)
 }
 
 func agentWebhookOutboxActions(t *testing.T, conn *pgxpool.Pool, organizationID string) []string {

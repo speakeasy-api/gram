@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -101,9 +100,6 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 // Callers that only have a pool should use SeedSystemRoleGrants. Idempotent:
 // roles that already hold grants are skipped.
 func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
-	if _, err := orgrepo.New(dbtx).LockOrganizationForAdminConfiguration(ctx, organizationID); err != nil {
-		return fmt.Errorf("lock organization for system role seeding: %w", err)
-	}
 	q := repo.New(dbtx)
 	for roleSlug, grants := range SystemRoleGrants {
 		existingRole, err := q.GetGlobalRoleBySlug(ctx, roleSlug)
@@ -162,11 +158,6 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 		if err := insertRoleGrantsIfAbsent(ctx, q, organizationID, roleSlug, principal, rows); err != nil {
 			return fmt.Errorf("seed %s grants: %w", roleSlug, err)
 		}
-		if roleSlug == SystemRoleAdmin {
-			if _, err := InitializeAdminAgentCreationTx(ctx, dbtx, organizationID); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
@@ -176,11 +167,6 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug string, rolePrincipalURN string, addGrants []*RoleGrant, removeGrants []*RoleGrant) ([]*ScopedGrant, error) {
 	if orgID == "" {
 		return nil, fmt.Errorf("organization id is required")
-	}
-	if roleSlug == SystemRoleAdmin {
-		if _, err := orgrepo.New(dbtx).LockOrganizationForAdminConfiguration(ctx, orgID); err != nil {
-			return nil, fmt.Errorf("lock organization for Admin grant patch: %w", err)
-		}
 	}
 
 	principal, err := loadRolePrincipal(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)

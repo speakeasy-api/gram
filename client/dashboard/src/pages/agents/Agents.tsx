@@ -184,7 +184,7 @@ function AgentList({
       description="Agents visible to you."
       stage="preview"
       primaryAction={
-        <RequireScope scope="agent:create" level="section">
+        <RequireScope scope="agent:write" level="section">
           <Button onClick={onCreate}>New agent identity</Button>
         </RequireScope>
       }
@@ -313,7 +313,7 @@ function CreateAgent({
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor,
-    enabled: !disabled && !grantsLoading && hasScope("agent:create"),
+    enabled: !disabled && !grantsLoading && hasScope("agent:write"),
     throwOnError: false,
   });
   const owners = (

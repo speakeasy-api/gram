@@ -8,20 +8,24 @@ vi.mock("./ToolAccessSheet", () => ({ ToolAccessSheet: () => null }));
 
 afterEach(cleanup);
 
-it("names the owner-rule chip for creation rather than View", () => {
+it("edits owner targets through the Agents Manage permission", () => {
   const onEditRule = vi.fn<() => void>();
   render(
     <TooltipProvider>
       <RoleAccessMatrix
         grants={{
-          "agent:create": {
-            scope: "agent:create",
+          "agent:write": {
+            scope: "agent:write",
             rules: [
               {
                 id: "owner-rule",
                 effect: "allow",
                 selectors: [
-                  { resourceKind: "agent_owner", resourceId: "self" },
+                  {
+                    resourceKind: "agent",
+                    resourceId: "*",
+                    ownerUserId: "self",
+                  },
                 ],
               },
             ],
@@ -29,10 +33,17 @@ it("names the owner-rule chip for creation rather than View", () => {
         }}
         scopes={[
           {
-            slug: "agent:create",
-            resourceType: "agent_owner",
+            slug: "agent:read",
+            resourceType: "agent",
             visibility: "user_visible",
-            description: "Create agents",
+            description: "Read agents",
+            agentEligible: false,
+          } as ScopeDefinition,
+          {
+            slug: "agent:write",
+            resourceType: "agent",
+            visibility: "user_visible",
+            description: "Create and manage agents",
             agentEligible: false,
           } as ScopeDefinition,
         ]}
@@ -59,7 +70,7 @@ it("names the owner-rule chip for creation rather than View", () => {
     screen.queryByRole("button", { name: "Change where View applies" }),
   ).toBeNull();
   fireEvent.click(
-    screen.getByRole("button", { name: "Change where Create agents applies" }),
+    screen.getByRole("button", { name: "Change where Manage applies" }),
   );
-  expect(onEditRule).toHaveBeenCalledWith("agent:create", 0);
+  expect(onEditRule).toHaveBeenCalledWith("agent:write", 0);
 });

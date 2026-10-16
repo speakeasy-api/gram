@@ -8,7 +8,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
  */
 export function resourceKindForScope(scope: string): string {
-  if (scope === "agent:create") return "agent_owner";
   if (
     scope.startsWith("project:") ||
     scope.startsWith("plugin:") ||
@@ -235,28 +234,27 @@ export function hasScopeInProject(
   return hasScopeInGrants(grants, scope, "*", projectId);
 }
 
-/** Creation grants target owners, with a caller-relative self alternative. */
+/** Write access to all agents of an owner also permits creating for them. */
 export function canCreateAgentForInGrants(
   grants: EffectiveGrant[],
   callerUserId: string,
   ownerUserId: string,
 ): boolean {
   if (!callerUserId || !ownerUserId) return false;
-  // A concrete user ID spelled "self" is not the caller-relative target.
-  // Drop relative selectors for that check, but preserve wildcard grants.
-  if (ownerUserId === "self" && callerUserId !== ownerUserId) {
-    const concreteGrants = grants.map((grant) => ({
-      ...grant,
-      selectors: grant.selectors?.filter((s) => s.resourceId !== "self"),
-      directSelectors: grant.directSelectors?.filter(
-        (s) => s.resourceId !== "self",
-      ),
-    }));
-    return hasScopeInGrants(concreteGrants, "agent:create", ownerUserId);
-  }
-  const owners =
-    callerUserId === ownerUserId ? [ownerUserId, "self"] : [ownerUserId];
-  return hasScopeInGrants(grants, "agent:create", owners);
+  return grants.some((grant) => {
+    if ((grant.effect ?? "allow") !== "allow" || grant.scope !== "agent:write")
+      return false;
+    if (!grant.selectors) return true;
+    return grant.selectors.some((selector) => {
+      const owner = selector.ownerUserId;
+      if (owner === "self" && callerUserId !== ownerUserId) return false;
+      return selectorMatchesStrict(selector, {
+        resourceKind: "agent",
+        resourceId: "*",
+        ownerUserId: owner === "self" ? "self" : ownerUserId,
+      });
+    });
+  });
 }
 
 /**

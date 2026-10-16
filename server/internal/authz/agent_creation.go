@@ -1,20 +1,32 @@
 package authz
 
-// AgentOwnerSelf names the caller as the intended owner of a new agent.
+// AgentOwnerSelf names the caller in an agent's owner selector.
 const AgentOwnerSelf = "self"
 
-// AgentCreationChecks names the intended owner in the creation-only namespace.
-// The self alternative is available only when the caller is the intended owner.
-// Both checks use the normal scope-and-selector evaluator.
+// AgentOwnerSelector covers all agents belonging to the selected owner.
+func AgentOwnerSelector(scope Scope, ownerUserID string) Selector {
+	selector := NewSelector(scope, WildcardResource)
+	selector[SelectorKeyOwnerUserID] = ownerUserID
+	return selector
+}
+
+// AgentCreationChecks requires write access to all agents of the intended owner.
+// A grant naming one existing agent cannot authorize creating another.
 func AgentCreationChecks(callerUserID, ownerUserID string) []Check {
+	return AgentChecks(ScopeAgentWrite, WildcardResource, callerUserID, ownerUserID)
+}
+
+// AgentChecks applies the current persisted owner to every agent operation.
+// The relative self alternative is available only to that owner.
+func AgentChecks(scope Scope, agentID, callerUserID, ownerUserID string) []Check {
 	checks := []Check{{
-		Scope: ScopeAgentCreate, ResourceKind: ResourceKindAgentOwner,
-		ResourceID: ownerUserID, Dimensions: nil, selectorMatch: selectorMatchAgentOwnerID,
+		Scope: scope, ResourceKind: ResourceKindAgent,
+		ResourceID: agentID, Dimensions: map[string]string{SelectorKeyOwnerUserID: ownerUserID}, selectorMatch: selectorMatchAgentOwnerID,
 	}}
 	if callerUserID == ownerUserID {
 		checks = append(checks, Check{
-			Scope: ScopeAgentCreate, ResourceKind: ResourceKindAgentOwner,
-			ResourceID: AgentOwnerSelf, Dimensions: nil, selectorMatch: selectorMatchStrict,
+			Scope: scope, ResourceKind: ResourceKindAgent,
+			ResourceID: agentID, Dimensions: map[string]string{SelectorKeyOwnerUserID: AgentOwnerSelf}, selectorMatch: selectorMatchStrict,
 		})
 	}
 	return checks

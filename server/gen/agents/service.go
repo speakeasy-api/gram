@@ -21,7 +21,7 @@ type Service interface {
 	// RevokeSession implements revokeSession.
 	RevokeSession(context.Context, *RevokeSessionPayload) (err error)
 	// List only active same-organization owners for whom this ordinary human
-	// session may create an agent. Requires live agent:create eligibility, not
+	// session may create an agent. Requires live owner-scoped agent:write, not
 	// directory-read access. Creation revalidates eligibility and membership.
 	ListEligibleOwners(context.Context, *ListEligibleOwnersPayload) (res *ListEligibleOwnersResult, err error)
 	// List implements list.

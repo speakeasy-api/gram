@@ -318,8 +318,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
 		{scope: authz.ScopeLogRead, description: "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.", resourceType: "project"},
 		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
-		{scope: authz.ScopeAgentWrite, description: "Configure and manage existing agents.", resourceType: "agent"},
-		{scope: authz.ScopeAgentCreate, description: "Create agents for yourself, selected people, or anyone in the organization.", resourceType: "agent_owner"},
+		{scope: authz.ScopeAgentWrite, description: "Create and manage agents for permitted owners.", resourceType: "agent"},
 		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
 		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
 		{scope: authz.ScopeWorkloadRead, description: "View workload identity trust policy: issuers, admitted subjects, and assigned agents.", resourceType: "workload"},
@@ -661,6 +660,9 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ProjectID != nil {
 		sel["project_id"] = *s.ProjectID
 	}
+	if s.OwnerUserID != nil {
+		sel[authz.SelectorKeyOwnerUserID] = *s.OwnerUserID
+	}
 	if s.ServerURL != nil {
 		sel["server_url"] = *s.ServerURL
 	}
@@ -675,6 +677,7 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 		Tool:         nil,
 		ProjectID:    nil,
 		ServerURL:    nil,
+		OwnerUserID:  nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -684,6 +687,9 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	}
 	if v, ok := sel["project_id"]; ok {
 		s.ProjectID = &v
+	}
+	if v, ok := sel[authz.SelectorKeyOwnerUserID]; ok {
+		s.OwnerUserID = &v
 	}
 	if v, ok := sel["server_url"]; ok {
 		s.ServerURL = &v
@@ -725,7 +731,6 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeLogRead), Selectors: nil},
 		{Scope: string(authz.ScopeAgentRead), Selectors: nil},
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
-		{Scope: string(authz.ScopeAgentCreate), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
 		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
 		{Scope: string(authz.ScopeWorkloadRead), Selectors: nil},

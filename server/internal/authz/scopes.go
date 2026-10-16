@@ -51,7 +51,6 @@ const (
 	ScopeChatWrite               Scope = "chat:write"
 	ScopeLogRead                 Scope = "log:read"
 	ScopeAgentRead               Scope = "agent:read"
-	ScopeAgentCreate             Scope = "agent:create"
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
 	ScopeAgentTransfer           Scope = "agent:transfer"
@@ -103,7 +102,6 @@ var adminScopes = []Scope{
 	ScopeAssistantWrite,
 	ScopePluginWrite,
 	ScopeAgentRead,
-	ScopeAgentCreate,
 	ScopeAgentWrite,
 	ScopeAgentAuthorize,
 	ScopeAgentTransfer,
@@ -171,7 +169,6 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeChatWrite:               scopeVisibilityUserVisible,
 	ScopeLogRead:                 scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
-	ScopeAgentCreate:             scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
 	ScopeAgentTransfer:           scopeVisibilityUserVisible,
@@ -293,8 +290,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
 	ScopeLogRead:                 nil,
-	ScopeAgentRead:               nil,
-	ScopeAgentCreate:             nil,
+	ScopeAgentRead:               {ScopeAgentWrite},
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
 	ScopeAgentTransfer:           nil,
@@ -346,7 +342,6 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeChatWrite:               "",
 	ScopeLogRead:                 "",
 	ScopeAgentRead:               "",
-	ScopeAgentCreate:             "",
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",
 	ScopeAgentTransfer:           "",

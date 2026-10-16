@@ -8,8 +8,6 @@
 //     confirmation.
 //   - pro-entitlements: PostgreSQL application-data backfill; see
 //     PRO_ENTITLEMENTS_BACKFILL.md. It defaults to a non-writing dry run.
-//   - admin-agent-creation: one-time PostgreSQL initialization for one explicit
-//     organization. Dry runs roll back both the grant and its audit receipt.
 //   - hosted-mcp-wrappers: PostgreSQL application-data backfill; see
 //     HOSTED_MCP_WRAPPERS_MIGRATION.md. It defaults to a dry run.
 //
@@ -92,8 +90,6 @@ func run() int {
 		return runOpenRouterDisableCauses(args, os.Stdin, os.Stdout, os.Getenv)
 	case "pro-entitlements":
 		return runProEntitlements(args, os.Stdout, os.Getenv)
-	case "admin-agent-creation":
-		return runAdminAgentCreation(args, os.Stdout, os.Getenv)
 	case "hosted-mcp-wrappers":
 		return runHostedMCPWrappers(args, os.Stdout, os.Getenv)
 	default:

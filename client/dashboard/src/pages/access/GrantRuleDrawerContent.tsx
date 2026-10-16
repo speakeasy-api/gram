@@ -134,7 +134,7 @@ export function GrantRuleDrawerContent({
   useEffect(() => {
     // Owner rules have their own modes, not the generic project/server panels.
     // In particular, opening a blanket owner deny must not empty its selectors.
-    if (resourceType === "agent_owner") return;
+    if (resourceType === "agent") return;
     if (!allowedPanels || allowedPanels.length === 0) return;
     if (allowedPanels.includes(activePanel)) return;
     switchPanel(allowedPanels[0]!);
@@ -345,7 +345,7 @@ export function GrantRuleDrawerContent({
     [scopedMcpServers],
   );
 
-  if (resourceType === "agent_owner") {
+  if (resourceType === "agent") {
     return (
       <AgentOwnerRulePicker
         selectors={selectors}

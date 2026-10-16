@@ -49,7 +49,6 @@ export const ResourceType = {
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Agent: "agent",
-  AgentOwner: "agent_owner",
   Workload: "workload",
 } as const;
 /**
@@ -97,7 +96,6 @@ export const Slug = {
   LogRead: "log:read",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",
-  AgentCreate: "agent:create",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
   WorkloadRead: "workload:read",

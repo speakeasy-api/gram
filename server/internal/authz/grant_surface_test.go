@@ -22,7 +22,6 @@ func TestValidateGrantSurface(t *testing.T) {
 		{Scope: string(ScopeLogRead)},
 		{Scope: string(ScopeAgentRead)},
 		{Scope: string(ScopeAgentWrite)},
-		{Scope: string(ScopeAgentCreate)},
 		{Scope: string(ScopeAgentAuthorize)},
 		{Scope: string(ScopeAgentTransfer)},
 		{Scope: string(ScopeAssistantRead)},

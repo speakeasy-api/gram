@@ -15,6 +15,20 @@ import type { RoleGrant } from "./types";
 
 // --- Helpers ---
 
+it("detects an owner-only change to an agent write grant", () => {
+  const before = {
+    "agent:write": grant("agent:write", [
+      { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
+    ]),
+  };
+  const after = {
+    "agent:write": grant("agent:write", [
+      { resourceKind: "agent", resourceId: "*", ownerUserId: "other" },
+    ]),
+  };
+  expect(grantKeysString(before)).not.toBe(grantKeysString(after));
+});
+
 function grant(scope: Scope, selectors: Selector[] | null = null): RoleGrant {
   return {
     scope,
@@ -378,9 +392,13 @@ describe("computeRuleLabel", () => {
   ])("labels owner selections as $label", ({ owners, label }) => {
     const selectors =
       owners?.map((resourceId) =>
-        sel({ resourceKind: "agent_owner", resourceId }),
+        sel({
+          resourceKind: "agent",
+          resourceId: "*",
+          ownerUserId: resourceId,
+        }),
       ) ?? null;
-    expect(computeRuleLabel(selectors, "agent_owner", projects)).toBe(label);
+    expect(computeRuleLabel(selectors, "agent", projects)).toBe(label);
   });
 
   it("null selectors (mcp) → All servers", () => {

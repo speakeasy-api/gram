@@ -67,44 +67,50 @@ This lets us give most access through roles while still allowing direct user gra
 
 An agent-authenticated request loads the same way but from the agent's own set: the agent principal, such as `agent:<agent-uuid>`, plus the role principals recorded for it in `agent_role_assignments`. It never loads `user:all`, its owner's user principal, or its owner's roles into that set — those are evaluated as a separate policy the request is also bounded by.
 
-### Agent creation
+### Agent creation and management
 
-`agent:create` is independent of existing-agent management scopes. Its selector
-uses `resource_kind: agent_owner`, with `resource_id: self` for each grant holder's
-own agents, a user ID for one specified owner, or `*` for every eligible owner in
-the organization. Creation checks the intended owner, not a prospective agent ID.
-It requires a validated ordinary human session and locks both active organization
-memberships. The recipient needs no creation permission, and provisioning has no
-second `agent:write` gate. Initial policy containment and atomic auditing still apply.
+`agent:write` permits both creation and management. Agent selectors use
+`resource_kind: agent`, with `owner_user_id: self` for each grant holder's
+own agents, a user ID for a specified owner, or `*` for any owner in the
+organization. Omitting the owner dimension preserves unrestricted owner access.
+With `resource_id: *`, a write grant permits creating agents for those owners.
+A grant naming an existing agent permits managing only that agent, not creation.
+Creation requires a validated ordinary human session and locks both active
+organization memberships. The recipient needs no write permission.
+Initial policy containment and atomic auditing still apply.
+
+Management checks use the agent's current persisted owner, including after a
+transfer. A grant restricted to one owner cannot manage another owner's agent.
+Owners retain intrinsic management of their own agents without agent grants,
+unless owner reassignment is required. Removing write permission prevents new
+creation and delegated edits, but does not remove intrinsic owner management or
+independently authorized connections. Authorizing credentials and transferring
+other people's agents still require their separate scopes.
 
 The creation form uses a dedicated eligible-owner list authorized by
-`agent:create`, not the general member directory. It returns only active members
+`agent:write`, not the general member directory. It returns only active members
 the caller may create for; neither `org:read` nor `project:read` is required.
 Owner discovery applies these targets in the database before pagination. Pages
 default to 50 owners, with a maximum of 100; the next-page cursor names only an
 eligible owner already returned. Optional search matches display names.
 
-New Admin roles receive organization-wide creation. Existing Admin roles need
-the [one-time creation-grant backfill](../server/cmd/tools/migrations/ADMIN_AGENT_CREATION_BACKFILL.md)
-before rollout; creation grants are persisted,
-not synthesized when permissions load. Member and custom roles do not gain it
-automatically. Use the existing role editor's **Create agents** row to grant
-eligibility. Removing it prevents only new creation: intrinsic owner management
-and independently authorized connections retain their own authorization paths.
-Agents cannot hold this permission at runtime.
+Existing unrestricted Admin write grants already permit creation; no creation
+scope or backfill is needed. Use the role editor's **Agents → Manage** permission
+to select owners. Newly enabled write rules default to each role holder's agents.
+Agents cannot hold management permissions at runtime.
 
 Built-in role names and descriptions are immutable, but their grants can be
-edited. Removing `agent:create` from Admin therefore remains effective, just as
+edited. Removing `agent:write` from Admin therefore remains effective, just as
 removing it from a custom role does. Routine role seeding does not restore it.
 
-Platform MCP assessment: no new tool for agent creation or creation-role configuration.
+Platform MCP assessment: no new tool for agent creation or owner-scoped role configuration.
 Creating an agent requires a validated human session for an exact owner; general
-agent management rejects MCP and machine authentication. Configuring creation
-eligibility is a separate administrator outcome, intentionally available only
+agent management rejects MCP and machine authentication. Configuring owner-scoped
+write access is an administrator outcome, intentionally available only
 through the existing general role editor and management API in this change.
 Existing Platform MCP access-role mutation tools accept only bounded MCP-access
 rules, not general role capabilities. Extending those tools would broaden their
-delegation contract, so they must not accept or replace owner-creation grants.
+delegation contract, so they must not accept or replace owner-scoped agent grants.
 The same omission applies to external callers and managed assistants. Server
 authorization and role round-trip tests, plus dashboard owner-selection tests,
 verify the shipped boundary.
@@ -675,13 +681,14 @@ Admin defaults include `assistant:read` and `assistant:write`; Member defaults i
 
 System roles are seeded when an organization is provisioned, and the first user is assigned the Admin role. WorkOS organization reconciliation also seeds the defaults as an idempotent backstop. System roles are not meant to be edited like custom roles. Changing their default grants is a product behavior change and should be treated carefully, especially for existing organizations.
 
-### Agent creation grant reference
+### Agent grant reference
 
-| Agent creation action                                      | Required permission         | Target and behavior                                                                                                                                                         |
-| ---------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create a new agent                                         | `agent:create`              | `agent_owner` selector: `self`, a specified user ID, or `*`. Owner choices are filtered to permitted members; the server validates both memberships. No `agent:write` gate. |
-| Configure creation eligibility in the existing role editor | `org:admin`                 | The same role assignment and save flow as other permissions. Adding creation defaults to self-owned agents.                                                                 |
-| Manage an already-owned agent                              | Current unblocked ownership | Independent of creation eligibility. The inventory and management controls remain available when creation is removed.                                                       |
+| Agent creation action                                      | Required permission         | Target and behavior                                                                                                                                                                               |
+| ---------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create a new agent                                         | `agent:write`               | `agent` selector with `resource_id: *` and optional `owner_user_id`: `self`, a specified user ID, or `*`. Owner choices are filtered to permitted members; the server validates both memberships. |
+| Configure creation eligibility in the existing role editor | `org:admin`                 | The same role assignment and save flow as other permissions. Adding creation defaults to self-owned agents.                                                                                       |
+| Manage an already-owned agent                              | Current unblocked ownership | Independent of creation eligibility. The inventory and management controls remain available when creation is removed.                                                                             |
+| Manage another owner's agent                               | `agent:write`               | The agent ID and current persisted owner must match the grant. Write also implies read; credential authorization and ownership transfer remain separate permissions.                              |
 
 ## Dashboard Grant Reference
 

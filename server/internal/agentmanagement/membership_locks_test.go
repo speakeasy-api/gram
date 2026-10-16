@@ -47,7 +47,7 @@ func TestMembershipLocksUseCanonicalOrderBeforeAgent(t *testing.T) {
 	seedOrganization(t, db, "org-lock-order")
 	for _, userID := range []string{"a-user", "z-user"} {
 		seedOrganizationUser(t, db, "org-lock-order", userID)
-		seedGrant(t, t.Context(), db, "org-lock-order", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeAgentCreate, "*")
+		seedGrant(t, t.Context(), db, "org-lock-order", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeAgentWrite, "*")
 	}
 	for _, operation := range []string{"create", "transfer", "credential", "policy"} {
 		for _, pair := range [][2]string{{"z-user", "a-user"}, {"a-user", "z-user"}, {"z-user", "z-user"}} {

@@ -14,8 +14,10 @@ describe("owner-scoped agent creation", () => {
   it("does not confuse a concrete owner ID with the relative self selector", () => {
     const selfOnly = [
       {
-        scope: "agent:create",
-        selectors: [{ resourceKind: "agent_owner", resourceId: "self" }],
+        scope: "agent:write",
+        selectors: [
+          { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
+        ],
       },
     ];
     expect(canCreateAgentForInGrants(selfOnly, "user-a", "self")).toBe(false);
@@ -23,8 +25,10 @@ describe("owner-scoped agent creation", () => {
       canCreateAgentForInGrants(
         [
           {
-            scope: "agent:create",
-            selectors: [{ resourceKind: "agent_owner", resourceId: "*" }],
+            scope: "agent:write",
+            selectors: [
+              { resourceKind: "agent", resourceId: "*", ownerUserId: "*" },
+            ],
           },
         ],
         "user-a",
@@ -33,7 +37,7 @@ describe("owner-scoped agent creation", () => {
     ).toBe(true);
     expect(
       canCreateAgentForInGrants(
-        [{ scope: "agent:create" }, { ...selfOnly[0], effect: "deny" }],
+        [{ scope: "agent:write" }, { ...selfOnly[0], effect: "deny" }],
         "user-a",
         "self",
       ),
@@ -42,9 +46,13 @@ describe("owner-scoped agent creation", () => {
   it("limits self grants to the caller", () => {
     const grants = [
       {
-        scope: "agent:create" as const,
+        scope: "agent:write" as const,
         selectors: [
-          { resourceKind: "agent_owner" as const, resourceId: "self" },
+          {
+            resourceKind: "agent" as const,
+            resourceId: "*",
+            ownerUserId: "self",
+          },
         ],
       },
     ];
@@ -55,19 +63,34 @@ describe("owner-scoped agent creation", () => {
   it("distinguishes specified owners, everyone, and management rights", () => {
     const selected = [
       {
-        scope: "agent:create" as const,
+        scope: "agent:write" as const,
         selectors: [
-          { resourceKind: "agent_owner" as const, resourceId: "bob" },
+          {
+            resourceKind: "agent" as const,
+            resourceId: "*",
+            ownerUserId: "bob",
+          },
         ],
       },
     ];
     expect(canCreateAgentForInGrants(selected, "alice", "bob")).toBe(true);
     expect(canCreateAgentForInGrants(selected, "alice", "alice")).toBe(false);
     expect(
-      canCreateAgentForInGrants([{ scope: "agent:create" }], "alice", "bob"),
+      canCreateAgentForInGrants([{ scope: "agent:write" }], "alice", "bob"),
     ).toBe(true);
     expect(
-      canCreateAgentForInGrants([{ scope: "agent:write" }], "alice", "alice"),
+      canCreateAgentForInGrants(
+        [
+          {
+            scope: "agent:write",
+            selectors: [
+              { resourceKind: "agent", resourceId: "existing-agent" },
+            ],
+          },
+        ],
+        "alice",
+        "alice",
+      ),
     ).toBe(false);
     expect(canCreateAgentForInGrants([], "alice", "alice")).toBe(false);
   });

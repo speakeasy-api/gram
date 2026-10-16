@@ -125,7 +125,7 @@ func TestCreateAgentInitialPolicyForOtherOwnerRequiresTenantMembership(t *testin
 	seedOrganizationUser(t, conn, "org-create-policy", "owner")
 	seedOrganizationUser(t, conn, "org-other-policy", "outside")
 	ctx := validatedHumanContext(t, "org-create-policy", "caller")
-	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentCreate, "*")
+	seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, "*")
 	for _, userID := range []string{"caller", "owner"} {
 		seedGrant(t, ctx, conn, "org-create-policy", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeMCPRead, "*")
 	}

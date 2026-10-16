@@ -170,7 +170,7 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string) =>
-      scope === "agent:create"
+      scope === "agent:write"
         ? mocks.creationOwners.length > 0
         : mocks.directoryRead,
     hasAnyScope: () => mocks.creationOwners.length > 0,

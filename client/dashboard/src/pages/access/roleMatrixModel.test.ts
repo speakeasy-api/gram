@@ -53,7 +53,8 @@ const scopes: ScopeDefinition[] = [
   def("plugin:write", "project", "plugin:blocked_write"),
   def("chat:read", "chat"),
   def("chat:write", "chat"),
-  def("agent:create", "agent_owner"),
+  def("agent:read", "agent"),
+  def("agent:write", "agent"),
 ];
 
 const mcp = (resourceId: string, extra: Partial<Selector> = {}): Selector => ({
@@ -79,17 +80,23 @@ function save(grants: Record<string, RoleGrant>) {
 const all: McpRow = { kind: "all" };
 
 it("defaults agent creation to self and preserves owner targets on save", () => {
-  const grants = setPlatformAllow({}, "agent:create", true);
+  const grants = setPlatformAllow({}, "agent:write", true);
   expect(save(grants)).toContainEqual({
-    scope: "agent:create",
-    selectors: [{ resourceKind: "agent_owner", resourceId: "self" }],
+    scope: "agent:write",
+    selectors: [
+      { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
+    ],
   });
   for (const owner of ["self", "user-example"]) {
     const stored = [
       {
-        scope: "agent:create",
+        scope: "agent:write",
         selectors: [
-          { resourceKind: "agent_owner" as const, resourceId: owner },
+          {
+            resourceKind: "agent" as const,
+            resourceId: "*",
+            ownerUserId: owner,
+          },
         ],
       },
     ];
@@ -99,17 +106,15 @@ it("defaults agent creation to self and preserves owner targets on save", () => 
     save(
       load([
         {
-          scope: "agent:create",
-          selectors: [{ resourceKind: "agent_owner", resourceId: "*" }],
+          scope: "agent:write",
+          selectors: [{ resourceKind: "agent", resourceId: "*" }],
         },
       ]),
     ),
-  ).toEqual([{ scope: "agent:create", selectors: undefined }]);
-  expect(
-    platformAreas(scopes)
-      .flatMap((area) => area.extras)
-      .map((scope) => scope.slug),
-  ).toContain("agent:create");
+  ).toEqual([{ scope: "agent:write", selectors: undefined }]);
+  expect(platformAreas(scopes).map((area) => area.manage?.slug)).toContain(
+    "agent:write",
+  );
 });
 const project: McpRow = { kind: "project", projectId: "p1" };
 const github: McpRow = { kind: "server", serverId: "gh", projectId: "p1" };
@@ -288,7 +293,7 @@ describe("platform areas", () => {
     ).toEqual([
       ["Organization", "org:read", "org:admin", ["org:hooks_ingest"]],
       ["Projects", "project:read", "project:write", ["plugin:write"]],
-      ["Agent creation", undefined, undefined, ["agent:create"]],
+      ["Agents", "agent:read", "agent:write", []],
       ["Agent sessions", "chat:read", "chat:write", []],
     ]);
   });

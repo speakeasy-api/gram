@@ -48,33 +48,6 @@ func (q *Queries) GetLatestOpenRouterSpendCapAuditOperation(ctx context.Context,
 	return i, err
 }
 
-const hasAdminAgentCreationInitialization = `-- name: HasAdminAgentCreationInitialization :one
-SELECT EXISTS (
-  SELECT 1 FROM audit_logs
-  WHERE organization_id = $1
-    AND project_id IS NULL
-    AND actor_type = 'system'
-    AND actor_id = $2
-    AND action = 'access_role:update'
-    AND subject_type = 'access_role'
-    AND subject_slug = 'admin'
-) AS recorded
-`
-
-type HasAdminAgentCreationInitializationParams struct {
-	OrganizationID string
-	ActorID        string
-}
-
-// This audit operation is a durable, organization-wide completion receipt.
-// Deleting a grant must never make the initialization eligible to run again.
-func (q *Queries) HasAdminAgentCreationInitialization(ctx context.Context, arg HasAdminAgentCreationInitializationParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasAdminAgentCreationInitialization, arg.OrganizationID, arg.ActorID)
-	var recorded bool
-	err := row.Scan(&recorded)
-	return recorded, err
-}
-
 const hasOpenRouterSpendCapAuditOperation = `-- name: HasOpenRouterSpendCapAuditOperation :one
 SELECT EXISTS (
   SELECT 1

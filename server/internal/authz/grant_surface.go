@@ -51,7 +51,6 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeLogRead:                 GrantSurfaceAccess,
 	ScopeAgentRead:               GrantSurfaceAccess,
 	ScopeAgentWrite:              GrantSurfaceAccess,
-	ScopeAgentCreate:             GrantSurfaceAccess,
 	ScopeAgentAuthorize:          GrantSurfaceAccess,
 	ScopeAgentTransfer:           GrantSurfaceAccess,
 	ScopeWorkloadRead:            GrantSurfaceAccess,

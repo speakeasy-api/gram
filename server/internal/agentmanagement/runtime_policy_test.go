@@ -88,10 +88,14 @@ func TestLoadAgentPolicyUsesOnlyExactSafeAgentGrants(t *testing.T) {
 	require.Greater(t, len(rows), len(grants), "generic grant behavior remains broader than the agent runtime resolver")
 }
 
-func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope authz.Scope, resource string) {
+func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope authz.Scope, resource string, owners ...string) {
 	t.Helper()
 
-	selectors, err := authz.NewSelector(scope, resource).MarshalJSON()
+	selector := authz.NewSelector(scope, resource)
+	if len(owners) > 0 {
+		selector[authz.SelectorKeyOwnerUserID] = owners[0]
+	}
+	selectors, err := selector.MarshalJSON()
 	require.NoError(t, err)
 
 	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{

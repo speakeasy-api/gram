@@ -208,8 +208,8 @@ func (q *Queries) RolesInsertAIScanTargets(ctx context.Context, organizationID s
 
 const rolesInsertAgentCreationGrants = `-- name: RolesInsertAgentCreationGrants :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
-SELECT $1::text, 'role:organization:' || r.id, 'agent:create',
-       jsonb_build_object('resource_kind', 'agent_owner', 'resource_id', v.owner_id)
+SELECT $1::text, 'role:organization:' || r.id, 'agent:write',
+       jsonb_build_object('resource_kind', 'agent', 'resource_id', '*', 'owner_user_id', v.owner_id)
 FROM organization_roles r
 JOIN (VALUES
   ('engineer', 'self'),
@@ -224,7 +224,7 @@ type RolesInsertAgentCreationGrantsParams struct {
 	SpecifiedOwnerID string
 }
 
-// Creation targets are independent of existing-agent management permissions.
+// Write targets authorize both creation and management for the selected owners.
 func (q *Queries) RolesInsertAgentCreationGrants(ctx context.Context, arg RolesInsertAgentCreationGrantsParams) error {
 	_, err := q.db.Exec(ctx, rolesInsertAgentCreationGrants, arg.OrganizationID, arg.SpecifiedOwnerID)
 	return err

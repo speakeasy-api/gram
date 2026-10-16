@@ -1039,10 +1039,12 @@ type ScopeDefinition struct {
 type Selector struct {
 	// The kind of resource this selector targets.
 	ResourceKind string
-	// The resource identifier, or '*' for all resources of this kind. For
-	// agent_owner, use 'self' for the caller, a user ID for a specified owner, or
-	// '*' for any eligible owner in the organization.
+	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string
+	// Agent owner filter (agent scopes only): 'self' for the caller, a user ID for
+	// a specified owner, or '*' for any owner. With resource_id='*', agent:write
+	// permits creation and management for these owners.
+	OwnerUserID *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).

@@ -20,6 +20,7 @@ const (
 	SelectorKeyTool           = "tool"
 	SelectorKeyDisposition    = "disposition"
 	SelectorKeyProjectID      = "project_id"
+	SelectorKeyOwnerUserID    = "owner_user_id"
 	SelectorKeyServerURL      = "server_url"
 	SelectorKeyServerIdentity = "server_identity"
 )
@@ -63,9 +64,6 @@ func (s Selector) StrictMatches(check Selector) bool {
 
 // ResourceKindForScope derives the selector resource kind from a scope.
 func ResourceKindForScope(scope Scope) string {
-	if scope == ScopeAgentCreate {
-		return ResourceKindAgentOwner
-	}
 	switch scope.Parts().Resource {
 	case "project", "plugin", "log":
 		return ResourceKindProject
@@ -114,6 +112,9 @@ var validDispositions = map[string]bool{
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
+	ResourceKindAgent: {
+		SelectorKeyOwnerUserID: true,
+	},
 	ResourceKindMCP: {
 		SelectorKeyTool:        true,
 		SelectorKeyDisposition: true,
@@ -169,6 +170,9 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		}
 		if !allowed[k] {
 			return fmt.Errorf("selector key %q is not allowed for scope %q", k, scope)
+		}
+		if k == SelectorKeyOwnerUserID && v == "" {
+			return fmt.Errorf("owner_user_id must not be empty")
 		}
 		if k == SelectorKeyDisposition && !validDispositions[v] {
 			return fmt.Errorf("invalid disposition value %q", v)

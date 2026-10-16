@@ -70,8 +70,8 @@ connection.
 
 ### Owner-scoped agent creation
 
-See [the verification check](verify.md#owner-scoped-agent-creation). Engineer permits each role holder to create
-self-owned agents; Collaborator permits one specified owner; Temporary Escalation
+See [the verification check](verify.md#owner-scoped-agent-creation). Agent write permits creation and management:
+Engineer targets each role holder's agents; Collaborator targets one specified owner; Temporary Escalation
 permits any eligible owner. Opening and saving must preserve all three targets.
 Agent creation remains unavailable to shared-demo visitors without membership.
 

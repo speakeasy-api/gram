@@ -10,7 +10,7 @@ var accessScopeSlugs = []any{
 	"skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write",
 	"assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write",
 	"plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block",
-	"chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:create", "agent:authorize", "agent:transfer",
+	"chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer",
 	"workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write",
 	"org:device_agent_sync", "org:hooks_ingest",
 }

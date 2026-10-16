@@ -23,19 +23,23 @@ export function AgentOwnerRulePicker({
   const members = useMembers();
   const [search, setSearch] = useState("");
   let mode = "selected";
-  if (selectors === null || selectors.some((s) => s.resourceId === "*"))
+  if (
+    selectors === null ||
+    selectors.some((s) => !s.ownerUserId || s.ownerUserId === "*")
+  )
     mode = "all";
-  else if (selectors.length === 1 && selectors[0]?.resourceId === "self")
+  else if (selectors.length === 1 && selectors[0]?.ownerUserId === "self")
     mode = "self";
-  const selected = new Set(selectors?.map((s) => s.resourceId) ?? []);
+  const selected = new Set(selectors?.map((s) => s.ownerUserId) ?? []);
   const toggle = (id: string) => {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
     else next.add(id);
     onChange(
-      [...next].map((resourceId) => ({
-        resourceKind: "agent_owner",
-        resourceId,
+      [...next].map((ownerUserId) => ({
+        resourceKind: "agent",
+        resourceId: "*",
+        ownerUserId,
       })),
     );
   };
@@ -51,11 +55,13 @@ export function AgentOwnerRulePicker({
         onValueChange={(value) => {
           if (value === "all") onChange(null);
           else if (value === "self")
-            onChange([{ resourceKind: "agent_owner", resourceId: "self" }]);
+            onChange([
+              { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
+            ]);
           else onChange([]);
         }}
       >
-        <SelectTrigger aria-label="Who new agents may belong to">
+        <SelectTrigger aria-label="Whose agents this permission covers">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -65,8 +71,9 @@ export function AgentOwnerRulePicker({
         </SelectContent>
       </Select>
       <Text muted small>
-        Only controls new agent creation. People keep management access to
-        agents they already own.
+        This permission applies to these owners’ agents. Write access permits
+        creation and management. People keep management access to agents they
+        already own.
       </Text>
       {mode === "selected" && (
         <>
@@ -75,7 +82,7 @@ export function AgentOwnerRulePicker({
               checked={selected.has("self")}
               onCheckedChange={() => toggle("self")}
             />
-            Also allow each role holder to create their own agents
+            Also include each role holder’s agents
           </label>
           <Input
             aria-label="Find owners"

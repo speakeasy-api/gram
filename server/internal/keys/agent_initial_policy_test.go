@@ -35,7 +35,7 @@ func TestKeysService_InitialAgentPolicyCannotElevateCredentialAuthority(t *testi
 			require.NoError(t, err)
 			caller := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 			owner := urn.NewPrincipal(urn.PrincipalTypeUser, ownerID)
-			upsertGrant(t, ctx, ti, caller, authz.ScopeAgentCreate, "*")
+			upsertGrant(t, ctx, ti, caller, authz.ScopeAgentWrite, "*")
 			upsertGrant(t, ctx, ti, caller, authz.ScopeMCPConnect, "*")
 			upsertGrant(t, ctx, ti, owner, authz.ScopeMCPConnect, "*")
 			logger := testenv.NewLogger(t)

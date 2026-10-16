@@ -982,10 +982,13 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "agent_owner", "workload", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "*")
 	})
 	Attribute("resource_id", String, func() {
-		Description("The resource identifier, or '*' for all resources of this kind. For agent_owner, use 'self' for the caller, a user ID for a specified owner, or '*' for any eligible owner in the organization.")
+		Description("The resource identifier, or '*' for all resources of this kind.")
+	})
+	Attribute("owner_user_id", String, func() {
+		Description("Agent owner filter (agent scopes only): 'self' for the caller, a user ID for a specified owner, or '*' for any owner. With resource_id='*', agent:write permits creation and management for these owners.")
 	})
 	Attribute("disposition", String, func() {
 		Description("Tool disposition filter (MCP scopes only).")
@@ -1076,7 +1079,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "agent_owner", "workload")
+		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload")
 	})
 	Attribute("visibility", String, func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")

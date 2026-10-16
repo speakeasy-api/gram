@@ -3,4 +3,4 @@
 "dashboard": patch
 ---
 
-Require explicit owner-scoped permission to create agents. Configure self-owned, selected-owner, or organization-wide creation through the existing role editor, without removing management of already-owned agents. Admins retain creation access; members need an explicit grant.
+Use agent write permission for both creation and management, with owner selectors for each role holder, selected people, or everyone. Preserve automatic management of already-owned agents and check delegated access against the agent's current owner. Existing unrestricted write grants continue to work without a backfill.

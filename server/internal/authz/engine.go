@@ -706,6 +706,11 @@ func validateInput(c Check) error {
 	case "":
 		return InvalidCheck(c.Scope, c.ResourceID)
 	case WildcardResource:
+		// Creation proves write authority over every agent of an intended owner.
+		// Strict matching prevents a grant for one existing agent from passing.
+		if c.Scope == ScopeAgentWrite && c.selectorMatch != selectorMatchNormal && c.Dimensions[SelectorKeyOwnerUserID] != "" {
+			return nil
+		}
 		return InvalidCheck(c.Scope, c.ResourceID)
 	default:
 		return nil

@@ -485,10 +485,10 @@ WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
 SELECT count(*) FROM principal_grants g
 JOIN organization_roles r ON g.principal_urn = 'role:organization:' || r.id
 WHERE g.organization_id = @org_id::text AND r.organization_id = @org_id::text
-  AND g.scope = 'agent:create'
+  AND g.scope = 'agent:write'
   AND g.selectors = jsonb_build_object(
-    'resource_kind', 'agent_owner',
-    'resource_id', CASE r.workos_slug
+    'resource_kind', 'agent', 'resource_id', '*',
+    'owner_user_id', CASE r.workos_slug
       WHEN 'engineer' THEN 'self'
       WHEN 'collaborator' THEN @specified_owner_id::text
       WHEN 'temporary-escalation' THEN '*'

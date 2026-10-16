@@ -77,7 +77,7 @@ export type AgentEligibleOwnersQueryError =
  * listEligibleOwners agents
  *
  * @remarks
- * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.
+ * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live owner-scoped agent:write, not directory-read access. Creation revalidates eligibility and membership.
  */
 export function useAgentEligibleOwners(
   request?: ListAgentEligibleOwnersRequest | undefined,
@@ -103,7 +103,7 @@ export function useAgentEligibleOwners(
  * listEligibleOwners agents
  *
  * @remarks
- * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.
+ * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live owner-scoped agent:write, not directory-read access. Creation revalidates eligibility and membership.
  */
 export function useAgentEligibleOwnersSuspense(
   request?: ListAgentEligibleOwnersRequest | undefined,
@@ -132,7 +132,7 @@ export function useAgentEligibleOwnersSuspense(
  * listEligibleOwners agents
  *
  * @remarks
- * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.
+ * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live owner-scoped agent:write, not directory-read access. Creation revalidates eligibility and membership.
  */
 export function useAgentEligibleOwnersInfinite(
   request?: ListAgentEligibleOwnersRequest | undefined,
@@ -175,7 +175,7 @@ export function useAgentEligibleOwnersInfinite(
  * listEligibleOwners agents
  *
  * @remarks
- * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.
+ * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live owner-scoped agent:write, not directory-read access. Creation revalidates eligibility and membership.
  */
 export function useAgentEligibleOwnersInfiniteSuspense(
   request?: ListAgentEligibleOwnersRequest | undefined,

@@ -53,10 +53,11 @@ func TestEligibleOwnerTargetsMatchesCreationChecks(t *testing.T) {
 		owners []string
 	}{
 		{name: "root wildcard", grants: []authz.Grant{authz.NewGrant(authz.ScopeRoot, "*")}, all: true, owners: []string{}},
-		{name: "root concrete", grants: []authz.Grant{authz.NewGrant(authz.ScopeRoot, "employee")}, owners: []string{"employee"}},
-		{name: "concrete and self union", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentCreate, "employee"), authz.NewGrant(authz.ScopeAgentCreate, authz.AgentOwnerSelf)}, owners: []string{"employee", "caller"}},
-		{name: "self is not literal user ID", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentCreate, authz.AgentOwnerSelf)}, owners: []string{"caller"}},
-		{name: "write does not imply create", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentWrite, "*")}, owners: []string{}},
+		{name: "root concrete cannot create", grants: []authz.Grant{authz.NewGrant(authz.ScopeRoot, "employee")}, owners: []string{}},
+		{name: "concrete and self union", grants: []authz.Grant{authz.NewGrantWithSelector(authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, "employee")), authz.NewGrantWithSelector(authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, authz.AgentOwnerSelf))}, owners: []string{"employee", "caller"}},
+		{name: "self is not literal user ID", grants: []authz.Grant{authz.NewGrantWithSelector(authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, authz.AgentOwnerSelf))}, owners: []string{"caller"}},
+		{name: "unrestricted write implies create", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentWrite, "*")}, all: true, owners: []string{}},
+		{name: "single agent cannot create", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentWrite, "existing-agent")}, owners: []string{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -91,7 +92,7 @@ func TestListEligibleOwnersPaginatesAfterEligibility(t *testing.T) {
 				seedOrganizationUser(t, db, "org-pages", fmt.Sprintf("unrelated-%03d", i))
 			}
 			ctx := validatedHumanContext(t, "org-pages", "z-caller")
-			seedGrant(t, ctx, db, "org-pages", urn.NewPrincipal(urn.PrincipalTypeUser, "z-caller"), authz.ScopeAgentCreate, target)
+			seedGrant(t, ctx, db, "org-pages", urn.NewPrincipal(urn.PrincipalTypeUser, "z-caller"), authz.ScopeAgentWrite, "*", target)
 			service := newTestService(db, &fakeAuthorizationEngine{loadedGrantsOnly: true})
 			var cursor *string
 			ids := make([]string, 0)
@@ -139,7 +140,7 @@ func TestListEligibleOwnersSearchAndPageBoundary(t *testing.T) {
 		seedOrganizationUser(t, db, "org-search", id)
 	}
 	ctx := validatedHumanContext(t, "org-search", "caller")
-	seedGrant(t, ctx, db, "org-search", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentCreate, "*")
+	seedGrant(t, ctx, db, "org-search", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, "*")
 	service := newTestService(db, &fakeAuthorizationEngine{loadedGrantsOnly: true})
 	page, err := service.ListEligibleOwners(ctx, &gen.ListEligibleOwnersPayload{Search: new("MATCH"), Limit: 2})
 	require.NoError(t, err)
@@ -188,10 +189,10 @@ func TestListEligibleOwnersUsesOnlyLiveCreationGrants(t *testing.T) {
 			require.NoError(t, testrepo.New(db).ForceSoftDeleteUser(t.Context(), "deleted"))
 			ctx := validatedHumanContext(t, "org-owners", "caller")
 			principal := urn.NewPrincipal(urn.PrincipalTypeUser, "caller")
-			seedGrant(t, ctx, db, "org-owners", principal, authz.ScopeAgentCreate, tc.target)
+			seedGrant(t, ctx, db, "org-owners", principal, authz.ScopeAgentWrite, "*", tc.target)
 			service := newTestService(db, &fakeAuthorizationEngine{loadedGrantsOnly: true})
 			// Prepared grants must not widen the live owner roster.
-			ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentCreate, "*")})
+			ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentWrite, "*")})
 			owners, err := service.ListEligibleOwners(ctx, &gen.ListEligibleOwnersPayload{})
 			require.NoError(t, err)
 			ids := make([]string, 0, len(owners.Owners))
@@ -211,8 +212,8 @@ func TestListEligibleOwnersRejectsCallersWithoutLiveCreation(t *testing.T) {
 	seedOrganization(t, db, "org-owners")
 	seedOrganizationUser(t, db, "org-owners", "caller")
 	ctx := validatedHumanContext(t, "org-owners", "caller")
-	seedGrant(t, ctx, db, "org-owners", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, "*")
-	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentCreate, "*")})
+	seedGrant(t, ctx, db, "org-owners", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentRead, "*")
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentWrite, "*")})
 	owners, err := newTestService(db, &fakeAuthorizationEngine{loadedGrantsOnly: true}).ListEligibleOwners(ctx, &gen.ListEligibleOwnersPayload{})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Nil(t, owners)

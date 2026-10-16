@@ -29,7 +29,7 @@ verify those as an ordinary human in the local organization, not through imperso
 ### Owner-scoped agent creation
 
 In the shared demo, open **Roles & Permissions** → **Roles**. Inspect each role's
-**Platform access** tab and **Create agents** target: Engineer shows **Each role
+**Platform access** tab and **Agents → Manage** target: Engineer shows **Each role
 holder**, Collaborator shows one selected demo member, and Temporary Escalation
 shows **Anyone in the organization**. Demo visitors cannot create agents or save
 role changes.

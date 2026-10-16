@@ -26,20 +26,20 @@ func TestAgentCreationEligibilityTargetsTheIntendedOwner(t *testing.T) {
 		allowed bool
 	}{
 		{name: "membership alone", owner: "caller"},
-		{name: "write does not grant self creation", scope: authz.ScopeAgentWrite, target: "*", owner: "caller"},
-		{name: "write does not grant provisioning", scope: authz.ScopeAgentWrite, target: "*", owner: "employee"},
-		{name: "self", scope: authz.ScopeAgentCreate, target: authz.AgentOwnerSelf, owner: "caller", allowed: true},
-		{name: "self cannot provision", scope: authz.ScopeAgentCreate, target: authz.AgentOwnerSelf, owner: "employee"},
-		{name: "self cannot provision literal self owner", scope: authz.ScopeAgentCreate, target: authz.AgentOwnerSelf, owner: "self"},
-		{name: "specified owner without recipient eligibility", scope: authz.ScopeAgentCreate, target: "employee", owner: "employee", allowed: true},
-		{name: "specified owner is not self", scope: authz.ScopeAgentCreate, target: "employee", owner: "caller"},
-		{name: "specified owner is not another employee", scope: authz.ScopeAgentCreate, target: "employee", owner: "other"},
-		{name: "organization wide self", scope: authz.ScopeAgentCreate, target: "*", owner: "caller", allowed: true},
-		{name: "organization wide employee", scope: authz.ScopeAgentCreate, target: "*", owner: "employee", allowed: true},
-		{name: "cross organization", scope: authz.ScopeAgentCreate, target: "*", owner: "foreign"},
-		{name: "targeted cross organization", scope: authz.ScopeAgentCreate, target: "foreign", owner: "foreign"},
-		{name: "absent owner", scope: authz.ScopeAgentCreate, target: "*", owner: "absent"},
-		{name: "inactive recipient membership", scope: authz.ScopeAgentCreate, target: "*", owner: "inactive"},
+		{name: "read does not create", scope: authz.ScopeAgentRead, target: "*", owner: "caller"},
+		{name: "authorize does not create", scope: authz.ScopeAgentAuthorize, target: "*", owner: "employee"},
+		{name: "self", scope: authz.ScopeAgentWrite, target: authz.AgentOwnerSelf, owner: "caller", allowed: true},
+		{name: "self cannot provision", scope: authz.ScopeAgentWrite, target: authz.AgentOwnerSelf, owner: "employee"},
+		{name: "self cannot provision literal self owner", scope: authz.ScopeAgentWrite, target: authz.AgentOwnerSelf, owner: "self"},
+		{name: "specified owner without recipient eligibility", scope: authz.ScopeAgentWrite, target: "employee", owner: "employee", allowed: true},
+		{name: "specified owner is not self", scope: authz.ScopeAgentWrite, target: "employee", owner: "caller"},
+		{name: "specified owner is not another employee", scope: authz.ScopeAgentWrite, target: "employee", owner: "other"},
+		{name: "organization wide self", scope: authz.ScopeAgentWrite, target: "*", owner: "caller", allowed: true},
+		{name: "organization wide employee", scope: authz.ScopeAgentWrite, target: "*", owner: "employee", allowed: true},
+		{name: "cross organization", scope: authz.ScopeAgentWrite, target: "*", owner: "foreign"},
+		{name: "targeted cross organization", scope: authz.ScopeAgentWrite, target: "foreign", owner: "foreign"},
+		{name: "absent owner", scope: authz.ScopeAgentWrite, target: "*", owner: "absent"},
+		{name: "inactive recipient membership", scope: authz.ScopeAgentWrite, target: "*", owner: "inactive"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -56,7 +56,7 @@ func TestAgentCreationEligibilityTargetsTheIntendedOwner(t *testing.T) {
 			}))
 			ctx := validatedHumanContext(t, "org-create", "caller")
 			if tc.scope != "" {
-				seedGrant(t, ctx, conn, "org-create", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), tc.scope, tc.target)
+				seedGrant(t, ctx, conn, "org-create", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), tc.scope, "*", tc.target)
 			}
 			engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 			service := newTestService(conn, engine)
@@ -86,13 +86,13 @@ func TestRemovingCreationEligibilityPreservesOwnedAgentManagement(t *testing.T) 
 	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Existing agent"})
 	require.NoError(t, err)
 	principal := urn.NewPrincipal(urn.PrincipalTypeUser, "owner")
-	selector, err := authz.NewSelector(authz.ScopeAgentCreate, authz.AgentOwnerSelf).MarshalJSON()
+	selector, err := authz.AgentOwnerSelector(authz.ScopeAgentWrite, authz.AgentOwnerSelf).MarshalJSON()
 	require.NoError(t, err)
 	_, err = accessrepo.New(conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
-		OrganizationID: "org-create", PrincipalUrn: principal, Scope: string(authz.ScopeAgentCreate), Selectors: selector,
+		OrganizationID: "org-create", PrincipalUrn: principal, Scope: string(authz.ScopeAgentWrite), Selectors: selector,
 	})
 	require.NoError(t, err)
-	stale := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentCreate, "*")})
+	stale := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentWrite, "*")})
 	_, err = service.Create(stale, &gen.CreatePayload{Name: "Denied agent"})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	got, err := service.Get(ctx, &gen.GetPayload{ID: created.ID})
