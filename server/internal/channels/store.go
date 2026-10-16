@@ -68,6 +68,50 @@ type access struct {
 
 func (a access) permitted() bool { return a.settings.Enabled && a.canConnect }
 
+func (a access) effective(p Principal) EffectiveAccess {
+	return EffectiveAccess{CanConnect: a.canConnect, CanReadAll: a.canReadAll, CanAdmin: p.CanAdmin}
+}
+
+// EffectiveAccess is a member's Channels permissions as enforced: canConnect
+// and canReadAll after any access exception overrides the role-granted
+// permissions, and canAdmin as granted by role, which no exception changes.
+type EffectiveAccess struct {
+	// CanConnect reports whether the member may connect instances and take
+	// part in conversations.
+	CanConnect bool `json:"canConnect"`
+
+	// CanReadAll reports whether the member may read private conversations
+	// they do not take part in.
+	CanReadAll bool `json:"canReadAll"`
+
+	// CanAdmin reports whether the member may administer Channels.
+	CanAdmin bool `json:"canAdmin"`
+}
+
+// ResolveEffectiveAccess applies the member's access exception, if any, to the
+// role-granted permissions carried on p. It reads without creating anything,
+// so it is safe to call for an organization that has never used Channels.
+func ResolveEffectiveAccess(ctx context.Context, db repo.DBTX, p Principal) (EffectiveAccess, error) {
+	return resolveEffectiveAccess(ctx, repo.New(db), p)
+}
+
+func resolveEffectiveAccess(ctx context.Context, q *repo.Queries, p Principal) (EffectiveAccess, error) {
+	effective := EffectiveAccess{CanConnect: p.CanConnect, CanReadAll: p.CanReadAll, CanAdmin: p.CanAdmin}
+	exception, err := q.GetChannelsAccessException(ctx, repo.GetChannelsAccessExceptionParams{
+		OrganizationID: p.OrganizationID,
+		SubjectID:      p.SubjectID,
+	})
+	switch {
+	case err == nil:
+		effective.CanConnect = exception.CanConnect
+		effective.CanReadAll = exception.CanReadAll
+	case errors.Is(err, pgx.ErrNoRows):
+	default:
+		return EffectiveAccess{}, fmt.Errorf("load channels access exception: %w", err)
+	}
+	return effective, nil
+}
+
 // writeOperations are the operations a write burst limit applies to. Reads are
 // bounded by page size instead.
 var writeOperations = map[string]bool{
@@ -181,19 +225,11 @@ func loadAccess(ctx context.Context, q *repo.Queries, p Principal) (access, erro
 	if err != nil {
 		return access{}, fmt.Errorf("load channels settings: %w", err)
 	}
-	acc := access{settings: settings, canConnect: p.CanConnect, canReadAll: p.CanReadAll}
-	exception, err := q.GetChannelsAccessException(ctx, repo.GetChannelsAccessExceptionParams{
-		OrganizationID: p.OrganizationID,
-		SubjectID:      p.SubjectID,
-	})
-	switch {
-	case err == nil:
-		acc.canConnect = exception.CanConnect
-		acc.canReadAll = exception.CanReadAll
-	case errors.Is(err, pgx.ErrNoRows):
-	default:
-		return access{}, fmt.Errorf("load channels access exception: %w", err)
+	effective, err := resolveEffectiveAccess(ctx, q, p)
+	if err != nil {
+		return access{}, err
 	}
+	acc := access{settings: settings, canConnect: effective.CanConnect, canReadAll: effective.CanReadAll}
 	return acc, nil
 }
 

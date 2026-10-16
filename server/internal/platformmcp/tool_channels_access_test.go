@@ -5,10 +5,14 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	channelsrepo "github.com/speakeasy-api/gram/server/internal/channels/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -21,7 +25,9 @@ func newChannelsAccessService(t *testing.T, serverURL string) *ChannelsAccessSer
 	t.Helper()
 	base, err := url.Parse(serverURL)
 	require.NoError(t, err)
-	return NewChannelsAccessService(authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, nil), base)
+	db, err := platformMCPInfra.CloneTestDatabase(t, "channels_access")
+	require.NoError(t, err)
+	return NewChannelsAccessService(authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, nil), db, base)
 }
 
 // channelsAccessContext is the context PrepareExternalContext hands a tool: an
@@ -102,6 +108,38 @@ func TestChannelsAccessReportsEachPermissionIndependently(t *testing.T) {
 	}
 }
 
+// An access exception overrides the role grants, exactly as the Channels
+// endpoint enforces it: a member whose exception withdraws participation is not
+// told they may connect, and one granted read-all by exception is told so.
+func TestChannelsAccessAppliesTheMembersAccessException(t *testing.T) {
+	t.Parallel()
+	service := newChannelsAccessService(t, "https://api.example.test")
+	ctx := t.Context()
+	_, err := orgrepo.New(service.db).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID: channelsAccessOrganizationID, Name: "Channels access", Slug: "channels-access",
+		WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{}, CreationSource: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	project, err := projectsrepo.New(service.db).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "default", Slug: "default", OrganizationID: channelsAccessOrganizationID,
+	})
+	require.NoError(t, err)
+	_, err = channelsrepo.New(service.db).UpsertChannelsAccessException(ctx, channelsrepo.UpsertChannelsAccessExceptionParams{
+		OrganizationID: channelsAccessOrganizationID, ProjectID: project.ID, SubjectID: channelsAccessUserID,
+		CanConnect: false, CanReadAll: true,
+	})
+	require.NoError(t, err)
+
+	output, err := service.Get(channelsAccessContext(t,
+		authz.NewGrant(authz.ScopeChannelsConnect, channelsAccessOrganizationID),
+		authz.NewGrant(authz.ScopeChannelsAdmin, channelsAccessOrganizationID),
+	), channelsAccessPrincipal())
+	require.NoError(t, err)
+	require.False(t, output.CanConnect, "the exception withdraws the role's connect grant")
+	require.True(t, output.CanReadAllConversations, "the exception grants read-all")
+	require.True(t, output.CanAdminister, "no exception changes administration")
+}
+
 // A wildcard grant covers the caller's organization like a grant naming it.
 func TestChannelsAccessHonoursWildcardGrants(t *testing.T) {
 	t.Parallel()
@@ -156,7 +194,9 @@ func TestChannelsAccessIncompleteServiceIsNotValid(t *testing.T) {
 	require.NoError(t, err)
 	var nilService *ChannelsAccessService
 	require.False(t, nilService.valid())
-	require.False(t, NewChannelsAccessService(nil, base).valid())
-	require.False(t, NewChannelsAccessService(authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, nil), nil).valid())
-	require.True(t, newChannelsAccessService(t, "https://api.example.test").valid())
+	service := newChannelsAccessService(t, "https://api.example.test")
+	require.False(t, NewChannelsAccessService(nil, service.db, base).valid())
+	require.False(t, NewChannelsAccessService(service.engine, nil, base).valid())
+	require.False(t, NewChannelsAccessService(service.engine, service.db, nil).valid())
+	require.True(t, service.valid())
 }

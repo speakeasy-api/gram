@@ -90,21 +90,7 @@ type snapshotView struct {
 	Grants map[string]grantView `json:"grants,omitzero"`
 
 	// Viewer is the requesting identity's own effective Channels access.
-	Viewer viewerView `json:"viewer"`
-}
-
-// viewerView is the caller's effective access: canConnect and canReadAll after
-// any access exception overrides the role-granted permissions, and canAdmin as
-// granted by role, which no exception changes. A client gates participation
-// controls on it; the server enforces the same values on every operation.
-type viewerView struct {
-	CanConnect bool `json:"canConnect"`
-	CanReadAll bool `json:"canReadAll"`
-	CanAdmin   bool `json:"canAdmin"`
-}
-
-func newViewerView(p Principal, acc access) viewerView {
-	return viewerView{CanConnect: acc.canConnect, CanReadAll: acc.canReadAll, CanAdmin: p.CanAdmin}
+	Viewer EffectiveAccess `json:"viewer"`
 }
 
 // conversationsView is one keyset page of conversation discovery.
