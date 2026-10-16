@@ -46,6 +46,9 @@ type Event struct {
 
 	// Replayed marks historical ingestion, not transport redelivery.
 	Replayed *bool
+
+	// Attributes preserves customer-defined string labels from the source event.
+	Attributes map[string]string
 }
 
 // Input adapts a source event into immutable metadata and classifier content.

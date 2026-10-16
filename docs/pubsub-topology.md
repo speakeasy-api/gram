@@ -77,6 +77,7 @@ flowchart LR
   b_lake[("lake<br/>GCS / Parquet")]:::topic
   s_gram_sigint_v1_lake_primary --> b_lake
   s_gram_sigint_v1_lake_primary["gram-sigint-v1-lake-primary<br/>(storage sub)"]:::sub
+  s_gram_sigint_v1_reading_ch_writer["gram-sigint-v1-reading-ch-writer<br/>(sub)"]:::sub
   s_gram_telemetry_v1_noop["gram-telemetry-v1-noop<br/>(sub)"]:::sub
   s_gram_telemetry_v1_session_observed_ch_writer["gram-telemetry-v1-session-observed-ch-writer<br/>(sub)"]:::sub
   s_gram_telemetry_v1_tool_call_log_relay["gram-telemetry-v1-tool-call-log-relay<br/>(sub)"]:::sub
@@ -170,6 +171,7 @@ flowchart LR
   t_gram_role_distribution_v1_role_distribution_setup_requested_v1 --> s_gram_role_distribution_v1_role_distribution_setup_handler
   t_gram_conversation_v1_message_event --> s_gram_sigint_v1_evaluator
   t_gram_sigint_v1_reading --> s_gram_sigint_v1_lake_primary
+  t_gram_sigint_v1_reading --> s_gram_sigint_v1_reading_ch_writer
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_noop
   t_gram_telemetry_v1_session_observed --> s_gram_telemetry_v1_session_observed_ch_writer
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_tool_call_log_relay
@@ -315,6 +317,7 @@ flowchart LR
 | [`gram-role-distribution-v1-role-distribution-setup-handler`](../infra/proto/gram/role_distribution/v1/setup_handler.proto) | `gram-role-distribution-v1-role-distribution-setup-requested-v1` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-sigint-v1-evaluator`](../infra/proto/gram/sigint/v1/evaluator.proto) | `gram-conversation-v1-message-event` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-sigint-v1-lake-primary`](../infra/proto/gram/sigint/v1/lake_primary.proto) | `gram-sigint-v1-reading` | 1m | — | Go storage runner → `lake/gram.sigint.v1.LakePrimary/` (HIVE_DAILY); explicit installation required |
+| [`gram-sigint-v1-reading-ch-writer`](../infra/proto/gram/sigint/v1/reading_ch_writer.proto) | `gram-sigint-v1-reading` | 1m | — | — |
 | [`gram-telemetry-v1-noop`](../infra/proto/gram/telemetry/v1/noop.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-session-observed-ch-writer`](../infra/proto/gram/telemetry/v1/session_observed_ch_writer.proto) | `gram-telemetry-v1-session-observed` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-tool-call-log-relay`](../infra/proto/gram/telemetry/v1/tool_call_log_relay.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
@@ -328,4 +331,5 @@ flowchart LR
 - Topic `gram-otel-v1-metric` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.
 - Storage subscription `gram-sigint-v1-lake-primary` requires an explicitly installed Go runner; generated binding call sites are not inferred by this diagram.
+- Subscription `gram-sigint-v1-reading-ch-writer` has no consumer in `server/` or `pystreams/`.
 

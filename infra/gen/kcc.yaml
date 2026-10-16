@@ -87,6 +87,7 @@ pubsub:
             string account_type = 8;
             string billing_mode = 9;
             bool replayed = 10;
+            map<string, string> attributes = 11;
           }
           string id = 1;
           Type type = 2;
@@ -1436,6 +1437,14 @@ pubsub:
             Score score = 21;
           }
           string provider = 22;
+          map<string, string> attributes = 23;
+          message Input {
+            string strategy = 1;
+            int32 requested_message_count = 2;
+            int32 message_count = 3;
+            bool truncated = 4;
+          }
+          Input input = 24;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1941,6 +1950,20 @@ pubsub:
       ackDeadlineSeconds: 60
       messageRetentionDuration: 345600s
       retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-sigint-v1-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading-ch-writer
+      topic_proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
         minimumBackoff: 10s
