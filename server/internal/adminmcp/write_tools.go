@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -219,8 +220,8 @@ func registerWriteTools(server *mcp.Server, tools *writeTools) {
 // AttachWrites registers the implemented write operations. Switching on an
 // operation that has no implementation is a startup error, so a misconfigured
 // server cannot expose an unreviewed write.
-func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures.Client, writes WriteConfig) error {
-	if runtime == nil || oauth == nil || oauth.Approval == nil || features == nil {
+func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures.Client, registry *mcpregistry.Service, writes WriteConfig) error {
+	if runtime == nil || oauth == nil || oauth.Approval == nil || features == nil || registry == nil {
 		return errors.New("staff write tools are not configured")
 	}
 	auditLogger := audit.NewLogger()
@@ -234,6 +235,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 		OperationEnableOrganization:                   &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationEnableOrganization},
 		OperationDisableOrganization:                  &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationDisableOrganization},
 		OperationUpdateSupportMatrix:                  &supportMatrixWriter{store: store, writes: writes, baseURL: oauth.Resource()},
+		OperationCreateRegistryEntry:                  &registryEntryWriter{store: store, registry: registry, writes: writes, baseURL: oauth.Resource()},
 	})
 	for _, op := range writes.EnabledOperations() {
 		if tools.writers[op] == nil {

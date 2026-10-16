@@ -30,6 +30,7 @@ const (
 	OperationCreateGlobalIssuer                   WriteOperation = "create_global_issuer"
 	OperationUpdateGlobalIssuer                   WriteOperation = "update_global_issuer"
 	OperationUpdateSupportMatrix                  WriteOperation = "update_support_matrix"
+	OperationCreateRegistryEntry                  WriteOperation = "create_registry_entry"
 )
 
 // AllWriteOperations is the complete allowlist, in a stable order.
@@ -44,6 +45,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationCreateGlobalIssuer,
 	OperationUpdateGlobalIssuer,
 	OperationUpdateSupportMatrix,
+	OperationCreateRegistryEntry,
 }
 
 // PlatformGlobal reports whether an operation has no tenant target. Global
@@ -51,7 +53,7 @@ var AllWriteOperations = []WriteOperation{
 // only durable record.
 func (op WriteOperation) PlatformGlobal() bool {
 	switch op {
-	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix:
+	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry:
 		return true
 	default:
 		return false
@@ -94,7 +96,7 @@ func (op WriteOperation) implemented() bool {
 	switch op {
 	case OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
 		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
-		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix:
+		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry:
 		return true
 	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
 		return false
