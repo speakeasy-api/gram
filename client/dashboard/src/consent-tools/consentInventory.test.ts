@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-import { fetchConsentInventory } from "./ConsentToolsApp";
+import { fetchConsentInventory } from "./consentInventory";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -16,7 +16,9 @@ it.each(["tools/list", "DELETE"])(
       "fetch",
       vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
         const request =
-          init?.method === "POST" ? JSON.parse(String(init.body)) : undefined;
+          init?.method === "POST" && typeof init.body === "string"
+            ? JSON.parse(init.body)
+            : undefined;
         const method = request?.method ?? init?.method;
         if (method === stalledMethod) {
           sawStall();

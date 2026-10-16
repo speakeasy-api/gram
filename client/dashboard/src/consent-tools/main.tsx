@@ -1,10 +1,7 @@
 import { createRoot } from "react-dom/client";
 
-import {
-  ConsentToolsApp,
-  fetchConsentInventory,
-  type ConsentToolsAppProps,
-} from "./ConsentToolsApp";
+import { ConsentToolsApp, type ConsentToolsAppProps } from "./ConsentToolsApp";
+import { fetchConsentInventory } from "./consentInventory";
 import { parsePrefillBootstrap } from "./prefill";
 import "./consent-tools.css";
 
