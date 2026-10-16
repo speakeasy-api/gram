@@ -33,9 +33,9 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, ch Querier, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, ch Querier, sessions *sessions.Manager, authzEngine *authz.Engine, features FeatureChecker) *Service {
 	logger = logger.With(attr.SlogComponent("analytics"))
-	engine, err := NewEngine(db, ch)
+	engine, err := NewEngine(db, ch, features)
 	if err != nil {
 		panic(err)
 	}
@@ -114,10 +114,16 @@ func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.An
 
 // Describe serves the catalog: every dataset and what each field admits.
 func (s *Service) Describe(ctx context.Context, _ *gen.DescribePayload) (*gen.AnalyticsDescribeResult, error) {
-	if _, err := s.authorize(ctx); err != nil {
+	authCtx, err := s.authorize(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return &gen.AnalyticsDescribeResult{Datasets: describeDatasets(s.engine.Catalog())}, nil
+	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
+	catalog, err := s.engine.Catalog(ctx, tenant)
+	if err != nil {
+		return nil, s.failure(ctx, err, "failed to read the analytics catalog")
+	}
+	return &gen.AnalyticsDescribeResult{Datasets: describeDatasets(catalog)}, nil
 }
 
 func requestFromPayload(payload *gen.QueryPayload) (Request, error) {

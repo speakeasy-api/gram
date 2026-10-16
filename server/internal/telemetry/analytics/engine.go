@@ -4,37 +4,97 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	sigintRepo "github.com/speakeasy-api/gram/server/internal/sigint/repo"
 )
 
+// FeatureChecker says whether an organization has a product feature.
+type FeatureChecker interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+}
+
 // Engine is the query path without its transport, shared by the analytics
-// RPC and the Platform MCP: the catalog bound to its loaders and the
-// connection plans run on.
+// RPC, the Explore page and the Platform MCP: the catalog bound to its
+// loaders, the product features that gate datasets, and the connection plans
+// run on.
 type Engine struct {
-	catalog *Catalog
-	ch      Querier
+	catalog  *Catalog
+	features FeatureChecker
+	ch       Querier
 }
 
 // NewEngine binds the default catalog's lookups to their loaders over db and
-// runs plans on ch; a lookup without a loader is a programming error.
-func NewEngine(db *pgxpool.Pool, ch Querier) (*Engine, error) {
+// runs plans on ch; a lookup without a loader is a programming error. A nil
+// features hides every dataset behind a product feature.
+func NewEngine(db *pgxpool.Pool, ch Querier, features FeatureChecker) (*Engine, error) {
+	sigint := sigintRepo.New(db)
 	catalog, err := Default.WithLoaders(map[string]LookupLoader{
 		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
+		SensorNamesLookup:           sensorNames(sigint),
+		SignalNamesLookup:           signalNames(sigint),
+		SensorMinConfidenceLookup:   sensorMinConfidences(sigint),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind catalog lookups: %w", err)
 	}
-	return &Engine{catalog: catalog, ch: ch}, nil
+	return &Engine{catalog: catalog, features: features, ch: ch}, nil
 }
 
-// Catalog is the contract the engine answers: what describe serves.
-func (e *Engine) Catalog() *Catalog {
-	return e.catalog
+// Catalog is the contract the engine answers for a tenant: what describe
+// serves. A dataset behind a product feature the organization lacks is left
+// out, as if it did not exist.
+func (e *Engine) Catalog(ctx context.Context, tenant Tenant) (*Catalog, error) {
+	datasets := make([]*Dataset, 0, len(e.catalog.datasets))
+	for _, ds := range e.catalog.datasets {
+		available, err := e.available(ctx, tenant, ds)
+		if err != nil {
+			return nil, err
+		}
+		if available {
+			datasets = append(datasets, ds)
+		}
+	}
+	return &Catalog{datasets: datasets, lookups: e.catalog.lookups}, nil
+}
+
+// available says whether the tenant's organization may read a dataset.
+func (e *Engine) available(ctx context.Context, tenant Tenant, ds *Dataset) (bool, error) {
+	if ds.Feature == "" {
+		return true, nil
+	}
+	if e.features == nil {
+		return false, nil
+	}
+	enabled, err := e.features.IsFeatureEnabled(ctx, tenant.OrganizationID, ds.Feature)
+	if err != nil {
+		return false, fmt.Errorf("check %s for dataset %s: %w", ds.Feature, ds.Name, err)
+	}
+	return enabled, nil
+}
+
+// admit refuses a dataset the tenant's organization may not read the way the
+// compiler refuses an unknown one, so a refusal does not reveal it. A name
+// the catalog does not know is left for the compiler.
+func (e *Engine) admit(ctx context.Context, tenant Tenant, dataset string) error {
+	ds, ok := e.catalog.Dataset(dataset)
+	if !ok {
+		return nil
+	}
+	available, err := e.available(ctx, tenant, ds)
+	if err != nil {
+		return err
+	}
+	if !available {
+		return newError(ErrUnknownDataset, dataset, "dataset", dataset, fmt.Sprintf("dataset %q does not exist", dataset))
+	}
+	return nil
 }
 
 // QueryResult is a run query: the plan that answered it and its rows.
@@ -49,6 +109,9 @@ type QueryResult struct {
 // Query loads the lookups the request reads, compiles it and runs it. A
 // request the compiler rejects comes back as an *Error.
 func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryResult, error) {
+	if err := e.admit(ctx, tenant, req.Dataset); err != nil {
+		return nil, fmt.Errorf("admit analytics query: %w", err)
+	}
 	lookups, err := e.catalog.LoadLookups(ctx, tenant, req.Dataset, req.Reads())
 	if err != nil {
 		return nil, fmt.Errorf("load the dataset's lookups: %w", err)
@@ -67,6 +130,9 @@ func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryR
 // Values lists a dimension's values inside a window, most frequent first,
 // read through its lookup like a query. Errors are as for Query.
 func (e *Engine) Values(ctx context.Context, tenant Tenant, req ValuesRequest) ([]DimensionValue, error) {
+	if err := e.admit(ctx, tenant, req.Dataset); err != nil {
+		return nil, fmt.Errorf("admit dimension values query: %w", err)
+	}
 	lookups, err := e.catalog.LoadLookups(ctx, tenant, req.Dataset, []string{req.Dimension})
 	if err != nil {
 		return nil, fmt.Errorf("load the dataset's lookups: %w", err)
@@ -98,6 +164,70 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 		names := make(map[string]string, len(overrides))
 		for _, override := range overrides {
 			names[override.RawServerName] = override.DisplayName
+		}
+		return names, nil
+	}
+}
+
+// sensorNames loads a project's sensor names by id, deleted sensors included.
+func sensorNames(sigint *sigintRepo.Queries) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		rows, err := listSensorLabels(ctx, sigint, tenant)
+		if err != nil {
+			return nil, err
+		}
+		names := make(map[string]string, len(rows))
+		for _, row := range rows {
+			names[row.ID.String()] = row.Name
+		}
+		return names, nil
+	}
+}
+
+// sensorMinConfidences loads each sensor's minimum classifier confidence by
+// id, as the shortest decimal that reads back as the stored value.
+func sensorMinConfidences(sigint *sigintRepo.Queries) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		rows, err := listSensorLabels(ctx, sigint, tenant)
+		if err != nil {
+			return nil, err
+		}
+		thresholds := make(map[string]string, len(rows))
+		for _, row := range rows {
+			if row.MinConfidence.Valid {
+				thresholds[row.ID.String()] = strconv.FormatFloat(row.MinConfidence.Float64, 'g', -1, 64)
+			}
+		}
+		return thresholds, nil
+	}
+}
+
+func listSensorLabels(ctx context.Context, sigint *sigintRepo.Queries, tenant Tenant) ([]sigintRepo.ListSensorAnalyticsLabelsRow, error) {
+	projectID, err := uuid.Parse(tenant.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("parse project id: %w", err)
+	}
+	rows, err := sigint.ListSensorAnalyticsLabels(ctx, sigintRepo.ListSensorAnalyticsLabelsParams{ProjectID: projectID, OrganizationID: tenant.OrganizationID})
+	if err != nil {
+		return nil, fmt.Errorf("list sensor analytics labels: %w", err)
+	}
+	return rows, nil
+}
+
+// signalNames loads a project's signal names by id, deleted signals included.
+func signalNames(sigint *sigintRepo.Queries) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		projectID, err := uuid.Parse(tenant.ProjectID)
+		if err != nil {
+			return nil, fmt.Errorf("parse project id: %w", err)
+		}
+		rows, err := sigint.ListSignalAnalyticsLabels(ctx, sigintRepo.ListSignalAnalyticsLabelsParams{ProjectID: projectID, OrganizationID: tenant.OrganizationID})
+		if err != nil {
+			return nil, fmt.Errorf("list signal analytics labels: %w", err)
+		}
+		names := make(map[string]string, len(rows))
+		for _, row := range rows {
+			names[row.ID.String()] = row.Name
 		}
 		return names, nil
 	}

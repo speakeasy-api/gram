@@ -13,9 +13,10 @@ import (
 )
 
 // AnalyticsEngine is the query path the analytics tools answer through: the
-// same catalog, compiler and runner as the analytics RPC.
+// same catalog, compiler and runner as the analytics RPC. Catalog leaves out
+// the datasets the tenant's organization is not entitled to.
 type AnalyticsEngine interface {
-	Catalog() *analytics.Catalog
+	Catalog(ctx context.Context, tenant analytics.Tenant) (*analytics.Catalog, error)
 	Query(ctx context.Context, tenant analytics.Tenant, req analytics.Request) (*analytics.QueryResult, error)
 	Values(ctx context.Context, tenant analytics.Tenant, req analytics.ValuesRequest) ([]analytics.DimensionValue, error)
 }
@@ -142,7 +143,11 @@ func (s *AnalyticsService) Describe(ctx context.Context, principal Principal, in
 	if err != nil {
 		return DescribeAnalyticsCatalogOutput{}, err
 	}
-	return describeAnalyticsCatalog(project, s.engine.Catalog()), nil
+	catalog, err := s.engine.Catalog(ctx, analyticsTenant(principal, project))
+	if err != nil {
+		return DescribeAnalyticsCatalogOutput{}, fmt.Errorf("read analytics catalog: %w", err)
+	}
+	return describeAnalyticsCatalog(project, catalog), nil
 }
 
 func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalog) DescribeAnalyticsCatalogOutput {

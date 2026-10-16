@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -48,6 +50,7 @@ func newTestClickhouse(t *testing.T) clickhouse.Conn {
 
 type testInstance struct {
 	service        *Service
+	features       *testFeatures
 	ch             clickhouse.Conn
 	db             *pgxpool.Pool
 	organizationID string
@@ -78,14 +81,36 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	chConn := newTestClickhouse(t)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	features := &testFeatures{enabled: map[productfeatures.Feature]bool{}}
 
 	return ctx, &testInstance{
-		service:        NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine),
+		features:       features,
+		service:        NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, features),
 		ch:             chConn,
 		db:             conn,
 		organizationID: authCtx.ActiveOrganizationID,
 		projectID:      authCtx.ProjectID.String(),
 	}
+}
+
+// testFeatures is a per-test product feature set. The real client caches in a
+// Redis every test shares, under one fixed organization, so a parallel test
+// toggling a feature would leak into the others.
+type testFeatures struct {
+	mu      sync.Mutex
+	enabled map[productfeatures.Feature]bool
+}
+
+func (f *testFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.enabled[feature], nil
+}
+
+func (f *testFeatures) set(feature productfeatures.Feature, enabled bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.enabled[feature] = enabled
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

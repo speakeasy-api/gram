@@ -187,14 +187,15 @@ const mcpServerDescription = "MCP server the call went to, under the display nam
 // project's hook server-name overrides, raw name to display name.
 const MCPServerDisplayNamesLookup = "mcp_server_display_names"
 
-// Lookups is every map a dimension of the v1 catalog reads through. The
+// Lookups is every map a dataset of the v1 catalog reads through. The
 // service attaches the loaders.
-var Lookups = []*Lookup{
+var Lookups = append([]*Lookup{
 	{
 		Name:        MCPServerDisplayNamesLookup,
 		Description: "The project's hook server-name overrides, set in Hooks settings: a reported MCP server name with an override shows as its display name, the rest as reported.",
 	},
-}
+}, sensorLookups...)
 
-// Default is the v1 catalog: every dataset reads agent_events.
-var Default = MustCatalog(Lookups, ToolCalls, Skills)
+// Default is the v1 catalog: the agent datasets read agent_events, and the
+// sensor datasets, behind signals intelligence, read sigint_readings.
+var Default = MustCatalog(Lookups, ToolCalls, Skills, SensorEvaluations, SensorSignals)

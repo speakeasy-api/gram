@@ -28,7 +28,9 @@ type stubAnalyticsEngine struct {
 	calls         int
 }
 
-func (s *stubAnalyticsEngine) Catalog() *analytics.Catalog { return analytics.Default }
+func (s *stubAnalyticsEngine) Catalog(context.Context, analytics.Tenant) (*analytics.Catalog, error) {
+	return analytics.Default, nil
+}
 
 func (s *stubAnalyticsEngine) Query(_ context.Context, tenant analytics.Tenant, req analytics.Request) (*analytics.QueryResult, error) {
 	s.calls++

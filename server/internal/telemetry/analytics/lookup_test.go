@@ -137,6 +137,9 @@ func TestDefaultCatalogLookups(t *testing.T) {
 
 	read := map[string]bool{}
 	for _, ds := range Default.Datasets() {
+		for _, name := range ds.Source.Lookups {
+			read[name] = true
+		}
 		for _, f := range ds.Fields {
 			if f.Lookup != "" {
 				read[f.Lookup] = true
@@ -146,7 +149,7 @@ func TestDefaultCatalogLookups(t *testing.T) {
 		}
 	}
 	for _, l := range Default.Lookups() {
-		require.True(t, read[l.Name], "lookup %q is read by no field", l.Name)
+		require.True(t, read[l.Name], "lookup %q is read by no field or source", l.Name)
 		require.Nil(t, l.Load, "the declaration carries no loader; the service attaches it")
 		require.NotEmpty(t, l.Description)
 	}

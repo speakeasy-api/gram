@@ -27,7 +27,30 @@ const (
 	// sigintReadingMembers is the member count the reading formulas below are
 	// written for: three signals or levels per enabled sensor.
 	sigintReadingMembers = 3
+
+	// Every ninth message is an assistant reply, which each sensor's default
+	// user-only match expression excludes, so its evaluations are
+	// not_applicable and coverage shows outside-scope messages.
+	sigintAssistantReplyEvery = 9
+
+	// Every 23rd message failed for every sensor, so coverage shows failures.
+	sigintFailedEvery = 23
+
+	// Every 17th answered message first failed and was answered on retry. The
+	// failed attempt stays stored as a superseded version of the same reading,
+	// so the analytics collapse is visible in the demo: it counts once.
+	sigintRetriedEvery = 17
+
+	// sigintMessagesPerConversation groups consecutive messages into one
+	// conversation.
+	sigintMessagesPerConversation = 4
+
+	// sigintFailureReason is the evaluator's code for a classifier refusal.
+	sigintFailureReason = "classifier_rejected"
 )
+
+// sigintMessageSources alternate the surface each message came from.
+var sigintMessageSources = [2]string{"claude-code", "cursor"}
 
 // sigintReadingResultTypes maps a sensor mode to its stored result variant.
 var sigintReadingResultTypes = map[string]string{
@@ -49,10 +72,18 @@ func (s *seeder) chSigintReadings(ctx context.Context, ch driver.Conn) error {
 	if err := chrepo.New(ch).InsertReadings(ctx, rows); err != nil {
 		return fmt.Errorf("insert demo sensor readings: %w", err)
 	}
+	ids := make(map[uuid.UUID]struct{}, len(rows))
+	for _, row := range rows {
+		ids[row.ID] = struct{}{}
+	}
 	return s.chRunChecks(ctx, ch, []chCheck{{
-		cond:     `(SELECT count() FROM sigint_readings FINAL WHERE organization_id = @org) != ` + strconv.Itoa(len(rows)),
+		cond:     `(SELECT count() FROM sigint_readings FINAL WHERE organization_id = @org) != ` + strconv.Itoa(len(ids)),
 		settings: chFinalSettings,
-		msg:      "demo seed postflight: expected 400 retrospective readings for each enabled sensor",
+		msg:      "demo seed postflight: expected 400 retrospective readings for each enabled sensor, retries collapsed",
+	}, {
+		cond:     `(SELECT countIf(status = 'not_applicable') = 0 OR countIf(status = 'failed') = 0 FROM sigint_readings FINAL WHERE organization_id = @org)`,
+		settings: chFinalSettings,
+		msg:      "demo seed postflight: expected not_applicable and failed sensor outcomes for coverage",
 	}})
 }
 
@@ -83,10 +114,39 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 			return nil, fmt.Errorf("demo sigint sensor %s: %w", sensor.key, err)
 		}
 		for n := range sigintReadingDays {
-			rows = append(rows, s.sigintReading(sensor, members, n))
+			reading := s.sigintReading(sensor, members, n)
+			switch {
+			case n%sigintAssistantReplyEvery == 4:
+				reading.ConversationRole = "assistant"
+				rows = append(rows, sigintOutcome(reading, chrepo.StatusNotApplicable, ""))
+			case n%sigintFailedEvery == 5:
+				rows = append(rows, sigintOutcome(reading, chrepo.StatusFailed, sigintFailureReason))
+			case n%sigintRetriedEvery == 3:
+				failed := sigintOutcome(reading, chrepo.StatusFailed, sigintFailureReason)
+				failed.EvaluationAttemptID = s.det("sigint-attempt-failed-" + strconv.Itoa(n))
+				failed.EvaluatedAt = reading.EvaluatedAt.Add(-time.Hour)
+				failed.InsertedAt = failed.EvaluatedAt
+				rows = append(rows, failed, reading)
+			default:
+				rows = append(rows, reading)
+			}
 		}
 	}
 	return rows, nil
+}
+
+// sigintOutcome turns a reading into the outcome of the same evaluation: a
+// decision without an answer, so its result columns are empty.
+func sigintOutcome(reading chrepo.ReadingRow, status, reason string) chrepo.ReadingRow {
+	reading.Status = status
+	reading.FailureReason = reason
+	reading.ResultType = ""
+	reading.Probabilities = nil
+	reading.SelectedSignalID = nil
+	reading.SelectedSignalSlug = ""
+	reading.ExpectedIndex = nil
+	reading.Confidence = nil
+	return reading
 }
 
 func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMembership, n int) chrepo.ReadingRow {
@@ -140,8 +200,8 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		}
 		expectedIndex = new((1-probability)*0.35 + 2*probability)
 	}
-	// Some exclusive and ordered readings carry no classifier confidence.
-	if sensor.mode != "multi_label" && n%11 != 0 {
+	// The classifier reports confidence for every choice and score.
+	if sensor.mode != "multi_label" {
 		confidence = new(0.6 + 0.3*math.Cos(day*2*math.Pi/17))
 	}
 
@@ -155,7 +215,7 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		ProjectID:                  s.projectID(),
 		SensorID:                   s.det("sigint-sensor-" + sensor.key),
 		SensorSlug:                 sensor.slug,
-		EventKind:                  "demo.event",
+		EventKind:                  evaluation.ConversationMessageKind,
 		EventID:                    s.name("sigint-source-" + strconv.Itoa(n)),
 		EventOccurredAt:            s.now.UTC().AddDate(0, 0, -n).Add(-time.Hour),
 		EvaluatedAt:                s.now.UTC(),
@@ -172,16 +232,16 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		InputMessageCount:          supplied,
 		InputTruncated:             false,
 		EventContextType:           "",
-		ConversationID:             nil,
-		ConversationRole:           "",
+		ConversationID:             new(s.det("sigint-conversation-" + strconv.Itoa(n/sigintMessagesPerConversation))),
+		ConversationRole:           "user",
 		ToolName:                   "",
 		ToolCallID:                 "",
 		MCPServerID:                nil,
 		ActorUserID:                "",
 		ActorExternalUserID:        "",
-		ActorUserEmail:             "",
+		ActorUserEmail:             s.email(demoUsers[n%len(demoUsers)].handle),
 		BillingUserID:              "",
-		Source:                     "",
+		Source:                     sigintMessageSources[n%len(sigintMessageSources)],
 		UserAccountID:              nil,
 		AccountType:                "",
 		BillingMode:                "",

@@ -234,7 +234,7 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 
 	plan := &Plan{
 		Dataset: name,
-		Name:    name + ".agent_events",
+		Name:    name + "." + ds.Source.Table.plan(),
 		SQL:     "",
 		Args:    nil,
 		Columns: nil,

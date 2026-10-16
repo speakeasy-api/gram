@@ -449,3 +449,19 @@ SELECT m.id,
         m.content_too_large
 FROM bounded m
 ORDER BY m.created_at DESC, m.seq DESC;
+
+-- name: ListSensorAnalyticsLabels :many
+-- Deleted sensors are included so their past readings keep a name and threshold.
+SELECT sensor.id, sensor.name, sensor.min_confidence
+FROM sigint_sensors AS sensor
+JOIN projects AS project ON project.id = sensor.project_id
+WHERE sensor.project_id = @project_id
+  AND project.organization_id = @organization_id;
+
+-- name: ListSignalAnalyticsLabels :many
+-- Deleted signals are included so their past answers keep a name.
+SELECT signal.id, signal.name
+FROM sigint_custom_signals AS signal
+JOIN projects AS project ON project.id = signal.project_id
+WHERE signal.project_id = @project_id
+  AND project.organization_id = @organization_id;
