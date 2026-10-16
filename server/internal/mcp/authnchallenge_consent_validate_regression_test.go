@@ -75,8 +75,10 @@ func TestConsentValidationStandaloneTunnelWillNotProbeWithAnotherCardsCredential
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunneled.ID.String(), gatewayServer.URL, time.Hour))
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, clientID: foreign, name: "validate-selected-tunnel"}
 
-	_, _ = postValidate(t, fx, foreign)
+	_, err = postValidate(t, fx, foreign)
+	require.NoError(t, err)
 	headers, _ := tunnelForwards(gateway)
+	require.NotEmpty(t, headers, "the card's own credential is probed")
 	for _, header := range headers {
 		require.NotContains(t, header.Get("Authorization"), "token-owner", "a card never probes with another card's credential")
 	}
