@@ -21,6 +21,7 @@ import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
 import { Route as SignupOffersRouteImport } from './routes/signup-offers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
+import { Route as UpstreamOauthMigrationRouteImport } from './routes/upstream-oauth-migration'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
 import { Route as OrganizationsIdOrSlugRouteImport } from './routes/organizations.$idOrSlug'
@@ -102,6 +103,11 @@ const SignupOffersRoute = SignupOffersRouteImport.update({
 const StokenCalculatorRoute = StokenCalculatorRouteImport.update({
   id: '/stoken-calculator',
   path: '/stoken-calculator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UpstreamOauthMigrationRoute = UpstreamOauthMigrationRouteImport.update({
+  id: '/upstream-oauth-migration',
+  path: '/upstream-oauth-migration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UsersRoute = UsersRouteImport.update({
@@ -244,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
@@ -277,6 +284,7 @@ export interface FileRoutesByTo {
   '/registry': typeof RegistryRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations': typeof OrganizationsIndexRoute
   '/projects': typeof ProjectsIndexRoute
@@ -310,6 +318,7 @@ export interface FileRoutesById {
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
@@ -348,6 +357,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
@@ -381,6 +391,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/upstream-oauth-migration'
     | '/projects/$idOrSlug'
     | '/organizations'
     | '/projects'
@@ -413,6 +424,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
@@ -450,6 +462,7 @@ export interface RootRouteChildren {
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
   SignupOffersRoute: typeof SignupOffersRoute
   StokenCalculatorRoute: typeof StokenCalculatorRoute
+  UpstreamOauthMigrationRoute: typeof UpstreamOauthMigrationRoute
   UsersRoute: typeof UsersRouteWithChildren
 }
 
@@ -537,6 +550,13 @@ declare module '@tanstack/react-router' {
       path: '/stoken-calculator'
       fullPath: '/stoken-calculator'
       preLoaderRoute: typeof StokenCalculatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/upstream-oauth-migration': {
+      id: '/upstream-oauth-migration'
+      path: '/upstream-oauth-migration'
+      fullPath: '/upstream-oauth-migration'
+      preLoaderRoute: typeof UpstreamOauthMigrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/users': {
@@ -832,6 +852,7 @@ const rootRouteChildren: RootRouteChildren = {
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
   SignupOffersRoute: SignupOffersRoute,
   StokenCalculatorRoute: StokenCalculatorRoute,
+  UpstreamOauthMigrationRoute: UpstreamOauthMigrationRoute,
   UsersRoute: UsersRouteWithChildren,
 }
 export const routeTree = rootRouteImport

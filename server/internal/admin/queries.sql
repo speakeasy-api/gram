@@ -1184,3 +1184,22 @@ RETURNING *;
 UPDATE signup_offers SET name = @name, stripe_promotion_code_id = @stripe_promotion_code_id,
  signup_flow = @signup_flow, enabled = @enabled, updated_at = clock_timestamp()
 WHERE id = @id RETURNING *;
+
+-- name: AdminListUpstreamOAuthMigrationOrganizations :many
+-- The organizations with a live MCP server signed in through a user session
+-- issuer, which are the only ones the upstream OAuth migration writes for.
+SELECT
+    om.id,
+    om.name,
+    om.slug,
+    count(s.id)::bigint AS servers
+FROM organization_metadata AS om
+JOIN projects AS p
+  ON p.organization_id = om.id
+ AND p.deleted IS FALSE
+JOIN mcp_servers AS s
+  ON s.project_id = p.id
+ AND s.deleted IS FALSE
+ AND s.user_session_issuer_id IS NOT NULL
+GROUP BY om.id, om.name, om.slug
+ORDER BY om.name, om.id;

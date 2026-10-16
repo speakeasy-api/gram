@@ -96,6 +96,12 @@ export const ADMIN_NAV_GROUPS = [
         icon: KeyRoundIcon,
       },
       {
+        to: "/upstream-oauth-migration",
+        label: "Upstream OAuth migration",
+        keywords: "oauth clients associations credentials backfill migrate",
+        icon: KeyRoundIcon,
+      },
+      {
         to: "/mcp-setup",
         label: "Admin MCP",
         keywords: "install connect agents claude codex cursor tailscale",
