@@ -602,6 +602,22 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField());
     fireEvent.click(enableButton());
     expect(state.calls).toEqual(["prepare"]);
+    expect(state.prepare).toHaveBeenCalledWith({
+      request: {
+        gramProject: "project",
+        prepareEMARequestBody: {
+          userSessionIssuerId: "session-issuer",
+          remoteSessionIssuerId: "issuer",
+          resource: "https://example.com/mcp",
+          resourceMetadata: undefined,
+          clientId: "first",
+          mechanism: "manual",
+          confirmGrants: ["urn:ietf:params:oauth:grant-type:jwt-bearer"],
+          scopes: [],
+          expectedGeneration: 0,
+        },
+      },
+    });
   });
 
   // On a federated sign-in only that identity provider can vouch; Speakeasy
@@ -1043,6 +1059,17 @@ describe("identity chaining vouched for by Speakeasy", () => {
       screen.getAllByRole("button", { name: "Turn off" }).at(-1)!,
     );
     expect(state.calls).toEqual(["unlink"]);
+    expect(state.unlink).toHaveBeenCalledWith({
+      request: {
+        gramProject: "project",
+        unlinkEMARequestBody: {
+          userSessionIssuerId: "session-issuer",
+          remoteSessionIssuerId: "issuer",
+          resource: "https://example.com/mcp",
+          expectedGeneration: 1,
+        },
+      },
+    });
   });
 
   it("has no chaining scope list of its own", () => {
@@ -1199,6 +1226,26 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(container.querySelector("section")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+  });
+
+  it("still lists Speakeasy as trusted when its issuer URL can't be read", () => {
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
+    render(
+      speakeasyField({
+        onlyWhenOn: true,
+        speakeasyIssuerUrl: undefined,
+      }),
+    );
+    const trusts = screen.getByRole("list", { name: /trusts$/ });
+    expect(within(trusts).getByText("Speakeasy")).toBeTruthy();
+    expect(
+      within(trusts).getByText(
+        /An organization admin adds Speakeasy’s issuer URL/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/until an identity provider can vouch/),
+    ).toBeNull();
   });
 });
 

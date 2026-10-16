@@ -88,6 +88,7 @@ export function EmaServiceWorkspace({
 }: {
   vendorIssuer: string;
 }): JSX.Element {
+  const organization = useOrganization();
   const services = useEmaServices();
   const row = services.rows.find((r) => r.vendorIssuer === vendorIssuer);
   useScrollToSection(Boolean(row));
@@ -174,7 +175,7 @@ export function EmaServiceWorkspace({
             </SettingsSection.Panel>
           </SettingsSection>
           <EmaAllowedProvidersEditor
-            key={row.vendorIssuer}
+            key={`${organization.id}:${row.vendorIssuer}`}
             serviceName={name}
             remoteSessionIssuerId={row.remoteSessionIssuerId}
             current={row.providers}

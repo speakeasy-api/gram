@@ -253,6 +253,26 @@ export function IdentityChainingSection({
             </Link>
           </Text>
         </SettingsSection.Body>
+      ) : speakeasyIssuer.data?.state === "verified_domain_required" ? (
+        <SettingsSection.Body>
+          <Text muted small>
+            Speakeasy vouches only for emails on your organization&apos;s
+            verified domains.{" "}
+            {orgAdmin ? (
+              <>
+                <Link
+                  className="underline underline-offset-4"
+                  to={`${orgRoutes.identity.href()}?tab=sso`}
+                >
+                  Verify a domain on the Single sign-on tab
+                </Link>{" "}
+                to turn this on.
+              </>
+            ) : (
+              "An organization admin can verify a domain to turn this on."
+            )}
+          </Text>
+        </SettingsSection.Body>
       ) : (
         <SettingsSection.Body>
           <Text muted small>

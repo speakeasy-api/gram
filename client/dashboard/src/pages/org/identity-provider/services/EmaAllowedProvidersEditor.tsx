@@ -456,6 +456,7 @@ export function EmaAllowedProvidersEditor({
                     size="sm"
                     disabled={
                       save.isPending ||
+                      !candidatesReady ||
                       changedUnderneath ||
                       !dirty ||
                       checked.length === 0 ||

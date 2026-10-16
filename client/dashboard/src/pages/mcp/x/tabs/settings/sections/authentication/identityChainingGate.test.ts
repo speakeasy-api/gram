@@ -78,6 +78,15 @@ describe("identityChainingProviders", () => {
       { ...rollouts, externalRollout: false },
     ],
     [
+      "the external rollout off, even with Speakeasy on",
+      trusting,
+      {
+        ...rollouts,
+        externalRollout: false,
+        speakeasyIssuer: speakeasy("enabled"),
+      },
+    ],
+    [
       "a trusted issuer without a sign-in client",
       {
         ...orgIssuer,
@@ -97,6 +106,18 @@ describe("identityChainingProviders", () => {
     ],
   ])("hides with %s", (_name, issuer, options) => {
     expect(identityChainingProviders(issuer, options)).toBeUndefined();
+  });
+
+  it("lets Speakeasy vouch for a trusted issuer without a sign-in client, as the server does", () => {
+    expect(
+      identityChainingProviders(
+        {
+          ...orgIssuer,
+          trustedRemoteSessionIssuerId: "okta",
+        } as UserSessionIssuer,
+        { ...rollouts, speakeasyIssuer: speakeasy("enabled") },
+      ),
+    ).toEqual({ external: false });
   });
 
   it.each(["keyless", "disabled", "signing_paused"] as const)(

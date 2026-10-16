@@ -200,6 +200,23 @@ describe("IdentityChainingSection", () => {
     ).toBe("/org/identity?tab=identity-providers");
   });
 
+  it("sends a verified-domain gap to the Single sign-on tab", () => {
+    state.speakeasy = { state: "verified_domain_required" };
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen
+        .getByRole("link", {
+          name: "Verify a domain on the Single sign-on tab",
+        })
+        .getAttribute("href"),
+    ).toBe("/org/identity?tab=sso");
+    expect(
+      screen.queryByRole("link", {
+        name: "Set up Speakeasy as an identity provider",
+      }),
+    ).toBeNull();
+  });
+
   it("asks someone who isn't an org admin to have Speakeasy set up", () => {
     state.orgAdmin = false;
     state.speakeasy = { state: "setup_required" };
@@ -371,6 +388,9 @@ describe("IdentityChainingSection", () => {
     state.clientsLoading = false;
     rerender(<IdentityChainingSection mcpServer={server} />);
     expect(scroll).toHaveBeenCalledTimes(1);
+    const section = document.getElementById("identity-chaining");
+    expect(section).not.toBeNull();
+    expect(scroll.mock.contexts[0]).toBe(section);
     rerender(<IdentityChainingSection mcpServer={server} />);
     expect(scroll).toHaveBeenCalledTimes(1);
   });

@@ -47,7 +47,6 @@ import {
   serviceName,
   addIssuerStep,
   crossAppAccessStep,
-  type ProviderView,
 } from "@/pages/org/identity-provider/services/emaServiceView";
 import { useOktaIssuerId } from "@/pages/org/identity-provider/services/useEmaServices";
 import {
@@ -535,9 +534,8 @@ export function IdentityChainingField({
     !vouchedFor(emaProviders.providers, {
       signInIssuerId: trustedIssuerId || undefined,
     });
-  const trusts = usableVouchers.filter(
-    (row): row is ProviderView & { issuerUrl: string } => !!row.issuerUrl,
-  );
+  // Speakeasy's issuer URL is withheld without org:read; it still vouches.
+  const trusts = usableVouchers;
   const noneUsable = !!emaProviders && usable.length === 0;
   // The vendor already trusts one of these, somewhere in the organization.
   const trusted = trusts.find((row) => row.lastAcceptedAt);
@@ -968,6 +966,13 @@ export function IdentityChainingField({
                       <Text muted small className="block">
                         An organization admin sets up {vendor} in {row.name}’s
                         Cross App Access.
+                      </Text>
+                    )
+                  ) : !row.issuerUrl ? (
+                    !row.lastAcceptedAt && (
+                      <Text muted small className="block">
+                        An organization admin adds Speakeasy’s issuer URL in{" "}
+                        {vendor}’s admin settings.
                       </Text>
                     )
                   ) : row.lastAcceptedAt ? (

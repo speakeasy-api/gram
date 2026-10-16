@@ -37,6 +37,10 @@ const mocks = vi.hoisted(() => ({
   speakeasyError: false,
   speakeasyRefetch: vi.fn(),
   oktaIssuerId: undefined as string | undefined,
+  orgId: "org",
+  savePending: false,
+  issuersState: "success" as "success" | "loading" | "error",
+  issuersRefetch: vi.fn(),
 }));
 vi.mock("./EmaServiceServers", () => ({
   EmaServiceServers: () => <h3>Affected servers</h3>,
@@ -47,7 +51,7 @@ vi.mock("./useEmaServices", async (importOriginal) => ({
   useOktaIssuerId: () => mocks.oktaIssuerId,
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: "org", slug: "example" }),
+  useOrganization: () => ({ id: mocks.orgId, slug: "example" }),
   useSession: () => mocks.session,
 }));
 vi.mock("@/hooks/useRBAC", () => ({
@@ -85,7 +89,12 @@ vi.mock("@gram/client/react-query/organizationUserSessionIssuers.js", () => ({
   }),
 }));
 vi.mock("@/lib/remote-identity", () => ({
-  useRemoteSessionIssuersByIds: () => ({ items: mocks.issuers }),
+  useRemoteSessionIssuersByIds: () => ({
+    items: mocks.issuersState === "success" ? mocks.issuers : [],
+    isLoading: mocks.issuersState === "loading",
+    isError: mocks.issuersState === "error",
+    refetch: mocks.issuersRefetch,
+  }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({
@@ -111,7 +120,7 @@ vi.mock(
       onSuccess: (result: unknown) => unknown;
       onError: (error: unknown) => unknown;
     }) => ({
-      isPending: false,
+      isPending: mocks.savePending,
       error: mocks.saveError,
       reset: () => {
         mocks.saveError = null;
@@ -254,6 +263,10 @@ beforeEach(() => {
   mocks.speakeasyError = false;
   mocks.speakeasyRefetch.mockReset();
   mocks.oktaIssuerId = "okta";
+  mocks.orgId = "org";
+  mocks.savePending = false;
+  mocks.issuersState = "success";
+  mocks.issuersRefetch.mockReset();
 });
 afterEach(cleanup);
 
@@ -706,6 +719,71 @@ describe("one service", () => {
     fireEvent.click(editButton());
     fireEvent.click(box("Okta"));
     expect(saveButton().disabled).toBe(false);
+  });
+
+  it("keeps a draft to its own organization", () => {
+    const { rerender } = show();
+    fireEvent.click(editButton());
+    expect(saveButton()).toBeTruthy();
+    mocks.orgId = "other-org";
+    rerender(tree());
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(editButton()).toBeTruthy();
+  });
+
+  it("holds Save while the identity providers it could add reload", () => {
+    const { rerender } = show();
+    fireEvent.click(editButton());
+    fireEvent.click(box("Okta"));
+    expect(saveButton().disabled).toBe(false);
+    mocks.issuersState = "loading";
+    rerender(tree());
+    expect(saveButton().disabled).toBe(true);
+  });
+
+  it("waits for the identity provider names before editing", () => {
+    mocks.issuersState = "loading";
+    show();
+    expect(editButton().disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Checking which identity providers you can choose from…",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("offers a retry when the identity provider names fail to load", () => {
+    mocks.issuersState = "error";
+    show();
+    expect(
+      screen.getByText(
+        /Couldn’t load the identity providers you can choose from/,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.issuersRefetch).toHaveBeenCalled();
+    expect(mocks.signInsRefetch).not.toHaveBeenCalled();
+  });
+
+  it("holds every control while a save is in flight", () => {
+    const { rerender } = show();
+    fireEvent.click(editButton());
+    fireEvent.click(box("Okta"));
+    mocks.savePending = true;
+    rerender(tree());
+    const saving = screen.getByRole("button", {
+      name: "Saving…",
+    }) as HTMLButtonElement;
+    expect(saving.disabled).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      within(screen.getByRole("list", { name: "Identity providers to accept" }))
+        .getAllByRole("checkbox")
+        .every((checkbox) => checkbox.hasAttribute("disabled")),
+    ).toBe(true);
   });
 
   it("waits for every identity provider it could add before editing", () => {

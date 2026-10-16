@@ -49,12 +49,14 @@ export function chainingVouchers(
     speakeasyUnknown = false,
   }: ChainingRollouts,
 ): ChainingProviders | undefined {
-  const external =
-    externalRollout &&
+  // The server treats a sign-in as federated only with both ids.
+  const federated =
     !!issuer.trustedRemoteSessionIssuerId &&
     !!issuer.trustedRemoteSessionClientId;
+  const external = externalRollout && federated;
   const speakeasy =
     speakeasyRollout &&
+    !federated &&
     (speakeasyUnknown || speakeasyIssuerOn(speakeasyIssuer));
   return external || speakeasy ? { external } : undefined;
 }
