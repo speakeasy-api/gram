@@ -65,6 +65,9 @@ SELECT page.id AS mcp_server_id,
        EXISTS (
          SELECT 1
          FROM meta_mcp_servers AS gateway
+         JOIN projects AS gateway_project
+           ON gateway_project.id = gateway.project_id
+          AND gateway_project.deleted IS FALSE
          WHERE gateway.user_session_issuer_id = page.user_session_issuer_id
            AND gateway.organization_id = page.organization_id
            AND gateway.deleted IS FALSE
@@ -156,6 +159,9 @@ WHERE s.id = @mcp_server_id::uuid
     AND NOT EXISTS (
       SELECT 1
       FROM meta_mcp_servers AS gateway
+      JOIN projects AS gateway_project
+        ON gateway_project.id = gateway.project_id
+       AND gateway_project.deleted IS FALSE
       WHERE gateway.user_session_issuer_id = s.user_session_issuer_id
         AND gateway.organization_id = p.organization_id
         AND gateway.deleted IS FALSE
