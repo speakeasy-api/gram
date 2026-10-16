@@ -5754,6 +5754,39 @@ WHERE c.organization_id = @organization_id::text
   AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
 GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
 
+-- name: ListEMAVendorIssuerCandidates :many
+-- Status only: every live issuer record a credential in the organization can
+-- name, so callers can pick the spellings that normalize to one vendor.
+SELECT i.id, i.issuer
+FROM remote_session_issuers i
+WHERE i.deleted IS FALSE
+  AND (i.organization_id = @organization_id::text
+    OR (i.organization_id IS NULL AND i.project_id IS NULL)
+    OR i.project_id IN (SELECT p.id FROM projects p WHERE p.organization_id = @organization_id::text AND p.deleted IS FALSE));
+
+-- name: ListEMAVendorAcceptanceForIssuers :many
+-- ListEMAVendorAcceptance restricted to credentials naming one of the given
+-- issuer records, for one vendor's views.
+SELECT c.ema_provider,
+  rc.remote_session_issuer_id AS external_issuer_id,
+  c.internal_session_issuer_id,
+  MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  AND (i.project_id = c.project_id OR (i.project_id IS NULL AND (i.organization_id = c.organization_id OR i.organization_id IS NULL)))
+LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
+WHERE c.organization_id = @organization_id::text
+  AND c.remote_session_issuer_id = ANY(@remote_session_issuer_ids::uuid[])
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
+
 -- name: RetireLegacyEMACredentialSlot :exec
 -- Only while remote_session_ema_credentials_subject_key still exists: it allows
 -- one live row per subject, so a new grant's slot replaces the old one as before.
