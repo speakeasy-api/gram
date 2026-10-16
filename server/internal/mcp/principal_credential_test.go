@@ -42,7 +42,6 @@ func TestPrincipalCredentialAuthenticatesAsItsAgent(t *testing.T) {
 	token, _, err := ti.principalCredentials.Mint(principalcredential.Credential{
 		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
 		Principal: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), AuthorizerUserID: ac.UserID,
-		Grants: []authz.Grant{connect},
 	})
 	require.NoError(t, err)
 
@@ -68,8 +67,16 @@ func TestPrincipalCredentialAuthenticatesAsItsAgent(t *testing.T) {
 	foreign.ToolsetID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	rejected := httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), rejected, token, ti.serverURL.String(), &foreign)
-	require.Error(t, err, "the credential's grants bound the resources it reaches")
+	require.Error(t, err, "the agent's and the authorizer's live grants bound the resources it reaches")
 	require.NotEmpty(t, rejected.Header().Get("WWW-Authenticate"))
+
+	removed, err := accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(t.Context(), accessrepo.DeletePrincipalGrantByIdentityParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), removed)
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
+	require.Error(t, err, "a grant the authorizer loses stops the already-issued credential")
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
 
 	_, err = agents.SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: ac.ActiveOrganizationID, ID: agent.ID})
 	require.NoError(t, err)

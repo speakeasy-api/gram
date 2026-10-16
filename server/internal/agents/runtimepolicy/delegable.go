@@ -33,6 +33,23 @@ func DelegableGrantsWithExclusions(agent, owner, caller []authz.Grant) ([]authz.
 	return delegableGrants(agent, owner, caller, true, nil)
 }
 
+// DelegatedRuntimeGrants derives the policy that bounds a credential storing
+// none of its own from live parent policies: the delegable subset of agent
+// within owner and delegator, exclusions carried, in the canonical form a
+// stored delegated policy decodes to. A workload acts for no user and passes
+// its agent's policy as all three.
+func DelegatedRuntimeGrants(agent, owner, delegator []authz.Grant) ([]authz.Grant, error) {
+	grants, err := DelegableGrantsWithExclusions(agent, owner, delegator)
+	if err != nil {
+		return nil, fmt.Errorf("derive delegable grants: %w", err)
+	}
+	policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
+	if err != nil {
+		return nil, fmt.Errorf("construct delegated policy: %w", err)
+	}
+	return policy.RuntimeGrants(), nil
+}
+
 func delegableGrants(agent, owner, caller []authz.Grant, carryExclusions bool, constraints []authz.Selector) ([]authz.Grant, error) {
 	candidates := make(map[string]authz.Grant)
 	visited := make(map[string]struct{})
