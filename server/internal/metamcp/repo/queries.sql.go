@@ -933,10 +933,9 @@ type ListMetaMCPProxiedMemberResourcesRow struct {
 	UpstreamUrl                string
 }
 
-// Every proxied member's authorization server and RFC 8707 resource, filtered
-// as ListMetaMCPMembersForRemoteSessionIssuer but across all issuers, so a
-// consent render resolves resource display ownership for every card from one
-// read.
+// Every proxied member's authorization server and RFC 8707 resource, with the
+// member filters of ListMetaMCPMembersForRemoteSessionClient, so a consent
+// render resolves resource display ownership for every card from one read.
 func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg ListMetaMCPProxiedMemberResourcesParams) ([]ListMetaMCPProxiedMemberResourcesRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPProxiedMemberResources, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
