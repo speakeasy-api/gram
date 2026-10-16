@@ -317,8 +317,8 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 // newOrganizationGatewayTokens resolves upstream credentials for the
 // authenticated subject the way a member's own endpoint would: partially,
 // so a member whose provider is not connected degrades on its own. A stored
-// gateway serving from credential choices uses it too, for its hosted
-// members, so the issuer's clients resolve only when one needs them.
+// gateway uses it too, for its hosted members, so the issuer's clients
+// resolve only when one needs them.
 func (s *Service) newOrganizationGatewayTokens(authentication *issuerGateAuthentication) *projectTokenCache {
 	endpoint := authentication.endpoint
 	return &projectTokenCache{
@@ -385,7 +385,7 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
-	if len(clients) == 0 || !s.upstreamSelectionServing(ctx, endpoint.OrganizationID) {
+	if len(clients) == 0 {
 		return clients, nil
 	}
 	// The issuer may bind clients for other servers sharing it. Consent offers
@@ -482,18 +482,13 @@ func (s *Service) clientTokenProjectIDs(ctx context.Context, endpoint *ResolvedM
 	if client.ProjectID.Valid {
 		return []uuid.UUID{client.ProjectID.UUID}, nil
 	}
-	byAssociation := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if s.upstreamSelectionServing(ctx, endpoint.OrganizationID) {
-		byAssociation = uuid.NullUUID{UUID: client.ID, Valid: true}
-	}
-	rows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionIssuer(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionIssuerParams{
+	rows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 		OrganizationID:        endpoint.OrganizationID,
 		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteSessionIssuerID: uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true},
-		RemoteSessionClientID: byAssociation,
+		RemoteSessionClientID: client.ID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list organization MCP servers for remote session issuer: %w", err)
+		return nil, fmt.Errorf("list organization MCP servers for remote session client: %w", err)
 	}
 	surface := requestNetworkSurface(ctx)
 	projectIDs := make([]uuid.UUID, 0, len(rows))

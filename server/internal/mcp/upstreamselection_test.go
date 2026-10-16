@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -22,7 +21,7 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// selectionFixture is one organization serving from credential choices.
+// selectionFixture is one organization serving MCP servers.
 type selectionFixture struct {
 	ti        *testInstance
 	projectID uuid.UUID
@@ -35,7 +34,6 @@ func newSelectionFixture(t *testing.T) (context.Context, selectionFixture) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	ti.features.SetFlag(feature.FlagUpstreamClientSelectionServing, authCtx.ActiveOrganizationID, true)
 	return ctx, selectionFixture{ti: ti, projectID: *authCtx.ProjectID, orgID: authCtx.ActiveOrganizationID}
 }
 
@@ -259,7 +257,7 @@ func TestUpstreamClientSelection_GatewayMembers(t *testing.T) {
 }
 
 // On an issuer shared by several servers, a server's consent page offers
-// only the clients configured for it once serving reads associations.
+// only the clients configured for it.
 func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testing.T) {
 	t.Parallel()
 	const upstream = "https://own-client.example.com/mcp"
@@ -272,12 +270,6 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-own", "", []uuid.UUID{fx.shared})
 	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "", []uuid.UUID{fx.shared})
 
-	code, html, _ := render(t, fx)
-	require.Equal(t, http.StatusOK, code, html)
-	require.Contains(t, html, "sel-own-rsi")
-	require.Contains(t, html, "sel-sibling-rsi", "with the flag off, every client the issuer binds is offered")
-
-	fx.ti.features.SetFlag(feature.FlagUpstreamClientSelectionServing, fx.orgID, true)
 	n, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 		OrganizationID:        fx.orgID,
 		RemoteSessionClientID: own,

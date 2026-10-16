@@ -11,10 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
-	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -81,9 +79,9 @@ type memberMCPStatusTarget struct {
 	remoteSessionIssuerID uuid.UUID
 	remoteMCPServerID     uuid.NullUUID
 	tunneledMCPServerID   uuid.NullUUID
-	// associatedClients is the server's associated upstream clients when the
-	// organization serves from associations; nil matches clients by the
-	// server's derived authorization server instead.
+	// associatedClients is a proxied server's associated upstream clients;
+	// nil, for a hosted server, matches clients by the server's derived
+	// authorization server instead.
 	associatedClients map[uuid.UUID]bool
 }
 
@@ -139,7 +137,7 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 	}
 	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
 	if target.associatedClients != nil && len(target.associatedClients) == 0 {
-		// Serving from associations, a server with none either needs no
+		// A proxied server with no associated client either needs no
 		// upstream sign-in or signs in through a client nobody configured for
 		// it, which the runtime refuses until an administrator does.
 		if target.remoteSessionIssuerID != uuid.Nil {
@@ -397,25 +395,11 @@ func memberMCPConnectionClients(clients []remotesessions.Client, target memberMC
 	return matched
 }
 
-// serverAssociatedClients returns, when the organization serves proxied MCP
-// servers from associations, the live clients associated with the server; nil
-// otherwise.
+// serverAssociatedClients returns the live clients associated with a proxied
+// server; nil for a hosted server, which keeps the derived match as the
+// runtime does.
 func (s *PluginsService) serverAssociatedClients(ctx context.Context, organizationID string, server mcpserversrepo.McpServer) (map[uuid.UUID]bool, error) {
-	// Hosted servers keep the derived match, as the runtime keeps them on it.
-	if s.mutationFlags == nil || !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
-		return nil, nil
-	}
-	org, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return nil, fmt.Errorf("load organization: %w", err)
-	}
-	enabled, err := s.mutationFlags.IsFlagEnabled(ctx, feature.FlagUpstreamClientSelectionServing, organizationID, feature.OrgProjectGroups(org.Slug, ""))
-	if err != nil {
-		// The status is read-only, so it reports the flag failure rather
-		// than answering from a path serving may not be using.
-		return nil, fmt.Errorf("evaluate upstream client selection flag: %w", err)
-	}
-	if !enabled {
+	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
 		return nil, nil
 	}
 	rows, err := upstreamclientsrepo.New(s.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{

@@ -374,13 +374,9 @@ func (s *Service) standaloneValidationTarget(
 		return ctx, none, errRemoteSessionUnroutable
 	}
 
-	// Serving from credential choices, a credential that chose this client
-	// routes only its token, by the client's own issuer.
-	chosenClient := s.upstreamSelectionServing(ctx, endpoint.OrganizationID)
-	backendIssuer := server.RemoteSessionIssuerID
-	if chosenClient {
-		backendIssuer = uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true}
-	}
+	// A credential that chose this client routes only its token, by the
+	// client's own issuer.
+	backendIssuer := uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true}
 	selected := tokens[client.RemoteSessionIssuerID]
 	selectedTokens := map[uuid.UUID]remotesessions.UpstreamToken{client.RemoteSessionIssuerID: selected}
 	selectedToken, err := routeUpstreamToken(ctx, logger, selectedTokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, backendIssuer)
@@ -392,19 +388,6 @@ func (s *Service) standaloneValidationTarget(
 		return ctx, none, fmt.Errorf("route selected upstream token for validation: %w", err)
 	}
 	token := selectedToken.Token
-	if !chosenClient {
-		// Issuer-derived serving routes the complete credential set, so the
-		// probe must reach the same credential through it.
-		routed, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID)
-		switch {
-		case errors.As(err, &routeErr), errors.Is(err, remotesessions.ErrNoValidToken):
-			return ctx, none, errRemoteSessionUnroutable
-		case err != nil:
-			return ctx, none, fmt.Errorf("route upstream token for validation: %w", err)
-		case routed.Token == "" || routed.Token != selectedToken.Token:
-			return ctx, none, errRemoteSessionUnroutable
-		}
-	}
 
 	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, &server)
 	if err != nil {

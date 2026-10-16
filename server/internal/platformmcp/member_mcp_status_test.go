@@ -204,8 +204,8 @@ func TestMemberMCPConnectionClientsSelectTargetIssuer(t *testing.T) {
 	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, byIssuer(uuid.Nil)))
 	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient}, byIssuer(targetIssuer)))
 
-	// Serving from associations, the server's own clients count whatever
-	// authorization server was derived for it.
+	// A proxied server's own clients count whatever authorization server was
+	// derived for it.
 	sameIssuerOther := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: targetIssuer}
 	associated := memberMCPStatusTarget{remoteSessionIssuerID: uuid.Nil, associatedClients: map[uuid.UUID]bool{otherClient.ID: true}}
 	require.Equal(t, []remotesessions.Client{otherClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient, sameIssuerOther}, associated))

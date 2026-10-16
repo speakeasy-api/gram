@@ -2,17 +2,15 @@
 //
 // A user session credential records, when it is issued, which upstream OAuth
 // client it uses for each MCP server it can reach, or that a server needs
-// none. With FlagUpstreamClientSelectionServing on, proxied (remote and
-// tunneled) servers resolve the caller's upstream credential through that
-// choice alone: the token comes from the chosen client and routes by that
+// none. Proxied (remote and tunneled) servers resolve the caller's upstream
+// credential through that choice alone: the token comes from the chosen client and routes by that
 // client's own remote session issuer, never by the issuer derived for the
 // server's user session issuer. A missing or unusable choice fails closed
 // with a reconnect challenge; it is never inferred on a request and never
 // replaced by another client.
 //
 // Credentials without a session row (principal credentials, agent keys,
-// assistant tokens) and hosted toolsets keep the issuer-derived path, as does
-// every request while the flag is off.
+// assistant tokens) and hosted toolsets keep the issuer-derived path.
 
 package mcp
 
@@ -29,12 +27,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -82,8 +78,7 @@ type upstreamSelector struct {
 }
 
 // upstreamSelectorFor returns the selector for the credential in ctx, or nil
-// when the request keeps the issuer-derived path: the flag is off for the
-// organization, or the credential has no session row.
+// when the credential has no session row and keeps the issuer-derived path.
 func (s *Service) upstreamSelectorFor(ctx context.Context, endpoint *ResolvedMcpEndpoint) (*upstreamSelector, error) {
 	identity, ok := mcpidentity.FromContext(ctx)
 	if !ok || identity.SessionJTI() == "" {
@@ -96,9 +91,6 @@ func (s *Service) upstreamSelectorFor(ctx context.Context, endpoint *ResolvedMcp
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID {
-		return nil, nil
-	}
-	if !s.upstreamSelectionServing(ctx, endpoint.OrganizationID) {
 		return nil, nil
 	}
 	policy, err := s.loadSessionPolicy(ctx, endpoint, identity.SessionJTI())
@@ -330,39 +322,10 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 	return tokens, nil
 }
 
-// upstreamSelectionServing reports whether the organization serves proxied
-// MCP servers from per-server client associations and credential choices.
-// An unavailable flag provider keeps the issuer-derived path, which is what
-// served before the rollout.
-func (s *Service) upstreamSelectionServing(ctx context.Context, organizationID string) bool {
-	if s.features == nil || organizationID == "" {
-		return false
-	}
-	slug := ""
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID == organizationID {
-		slug = authCtx.OrganizationSlug
-	}
-	if slug == "" {
-		org, err := organizations_repo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-		if err != nil {
-			s.logger.WarnContext(ctx, "load organization for upstream client selection flag", attr.SlogError(err))
-			return false
-		}
-		slug = org.Slug
-	}
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagUpstreamClientSelectionServing, organizationID, feature.OrgProjectGroups(slug, ""))
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate upstream client selection flag", attr.SlogError(err))
-		return false
-	}
-	return enabled
-}
-
-// serverAssociatedClients returns, when the organization serves from
-// associations, the live clients associated with each of serverIDs; nil
-// otherwise. A server with none maps to an empty set.
+// serverAssociatedClients returns the live clients associated with each of
+// serverIDs, nil for none. A server with no client maps to an empty set.
 func (s *Service) serverAssociatedClients(ctx context.Context, organizationID string, serverIDs []uuid.UUID) (map[uuid.UUID]map[uuid.UUID]bool, error) {
-	if len(serverIDs) == 0 || !s.upstreamSelectionServing(ctx, organizationID) {
+	if len(serverIDs) == 0 {
 		return nil, nil
 	}
 	rows, err := upstreamclientsrepo.New(s.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
@@ -382,11 +345,10 @@ func (s *Service) serverAssociatedClients(ctx context.Context, organizationID st
 	return associated, nil
 }
 
-// attachAssociatedClients records each proxied member's associated clients
-// when the organization serves from associations, so consent and gateway
-// eligibility match a client to the members it is configured for rather than
-// to every member sharing its authorization server. Hosted members, and every
-// member while the flag is off, keep the issuer match.
+// attachAssociatedClients records each proxied member's associated clients,
+// so consent and gateway eligibility match a client to the members it is
+// configured for rather than to every member sharing its authorization
+// server. Hosted members keep the issuer match.
 func (s *Service) attachAssociatedClients(ctx context.Context, organizationID string, members []metaMember) error {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
@@ -407,9 +369,9 @@ func (s *Service) attachAssociatedClients(ctx context.Context, organizationID st
 }
 
 // memberUsesClient reports whether a client authenticates for a member: one
-// of its associated clients when they are known, otherwise a client of the
-// member's authorization server in the member's own project when a project
-// owns it.
+// of a proxied member's associated clients, otherwise, for a hosted member, a
+// client of the member's authorization server in the member's own project
+// when a project owns it.
 func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, clientProjectID uuid.NullUUID) bool {
 	if member.associatedClients != nil {
 		return member.associatedClients[clientID]
@@ -421,7 +383,7 @@ func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, cli
 }
 
 // memberNeedsSignIn reports whether a member authenticates upstream through
-// a client: it has associated clients when they are known, otherwise it has a
+// a client: a proxied member with associated clients, or a member with a
 // derived authorization server. A member with no associated client that
 // still derives an authorization server signs in through a client nobody has
 // configured for it, so it needs setup rather than reading as needing none.

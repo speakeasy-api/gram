@@ -77,9 +77,9 @@ type metaMember struct {
 	// under its choices, nil otherwise.
 	upstreamUnavailable error
 
-	// associatedClients is a proxied member's associated upstream clients
-	// when the organization serves from associations; nil otherwise, which
-	// matches clients by authorization server instead.
+	// associatedClients is a proxied member's associated upstream clients;
+	// nil for a hosted member, which matches clients by authorization server
+	// instead.
 	associatedClients map[uuid.UUID]bool
 }
 

@@ -101,45 +101,39 @@ func (s *Service) claimingMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
 	client remotesessions.Client,
-) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, bool, error) {
+) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, bool, error) {
 	if client.RemoteSessionIssuerID == uuid.Nil {
 		return nil, false, nil
 	}
 
-	// Serving from associations, a member claims the clients configured for
-	// it rather than every client of its authorization server.
-	byAssociation := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if s.upstreamSelectionServing(ctx, endpoint.OrganizationID) {
-		byAssociation = uuid.NullUUID{UUID: client.ID, Valid: true}
-	}
-	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow
+	// A member claims the clients associated with it rather than every
+	// client of its authorization server.
+	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
 	if endpoint.IsOrganizationGateway() {
-		organizationRows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionIssuer(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionIssuerParams{
+		organizationRows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 			OrganizationID:        endpoint.OrganizationID,
 			ProjectID:             client.ProjectID,
-			RemoteSessionIssuerID: uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true},
-			RemoteSessionClientID: byAssociation,
+			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {
-			return nil, false, fmt.Errorf("list organization MCP servers for remote session issuer: %w", err)
+			return nil, false, fmt.Errorf("list organization MCP servers for remote session client: %w", err)
 		}
 		// Only servers the gateway serves on this surface claim, as only they
 		// are members of it here.
 		surface := requestNetworkSurface(ctx)
 		for _, row := range organizationRows {
 			if servableOnSurface(row.McpServerNetworkAccessMode, surface) {
-				rows = append(rows, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow(row))
+				rows = append(rows, metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow(row))
 			}
 		}
 	} else {
-		storedRows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{
+		storedRows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionClient(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionClientParams{
 			MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
 			ProjectID:             endpoint.ProjectID,
-			RemoteSessionIssuerID: uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true},
-			RemoteSessionClientID: byAssociation,
+			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {
-			return nil, false, fmt.Errorf("list meta MCP members for remote session issuer: %w", err)
+			return nil, false, fmt.Errorf("list meta MCP members for remote session client: %w", err)
 		}
 		rows = storedRows
 	}
@@ -159,8 +153,8 @@ func (s *Service) claimingMetaMembers(
 func (s *Service) authorizedMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
-	rows []metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow,
-) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, error) {
+	rows []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow,
+) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
@@ -170,7 +164,7 @@ func (s *Service) authorizedMetaMembers(
 		return nil, fmt.Errorf("load access grants: %w", err)
 	}
 
-	authorized := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, 0, len(rows))
+	authorized := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, 0, len(rows))
 	for _, row := range rows {
 		// Only proxy backends reach here, so mcp:connect is keyed on the
 		// mcp_servers id. Unknown visibility fails closed.
@@ -217,32 +211,12 @@ func (s *Service) gatewayMemberResourceScopes(
 		s.logger.WarnContext(ctx, "stamp consent subject for gateway member scopes", attr.SlogError(err))
 		return nil
 	}
-	// Clients on one authorization server, owned by the same project, resolve
-	// to the same member, so each pair is resolved once per render. The
-	// project matters on an organization gateway, where a project's client is
-	// claimed only by that project's members.
-	//
-	// Serving from associations, members claim a client through their own
-	// association, so two clients of one authorization server can belong to
-	// different members and each is resolved on its own.
-	type claimKey struct {
-		remoteSessionIssuerID uuid.UUID
-		projectID             uuid.UUID
-		clientID              uuid.UUID
-	}
-	byAssociation := s.upstreamSelectionServing(ctx, endpoint.OrganizationID)
-	byClaim := make(map[claimKey]memberScopes, len(clients))
+	// Members claim a client through their own association, so two clients
+	// of one authorization server can belong to different members and each is
+	// resolved on its own.
 	out := make(map[uuid.UUID]remotesessions.ResourceScopes, len(clients))
 	for _, c := range clients {
-		key := claimKey{remoteSessionIssuerID: c.RemoteSessionIssuerID, projectID: c.ProjectID.UUID, clientID: uuid.Nil}
-		if byAssociation {
-			key.clientID = c.ID
-		}
-		resolved, seen := byClaim[key]
-		if !seen {
-			resolved = s.gatewayMemberScopes(ctx, memberCtx, endpoint, c)
-			byClaim[key] = resolved
-		}
+		resolved := s.gatewayMemberScopes(ctx, memberCtx, endpoint, c)
 		if resolved.ok {
 			out[c.ID] = resolved.scopes
 		}
