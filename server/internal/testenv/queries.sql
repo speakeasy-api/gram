@@ -2034,6 +2034,7 @@ ORDER BY created_at, id;
 -- no application checks, so a test can prove the schema itself refuses a
 -- cross-tenant row.
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
-SELECT @project_id, @organization_id, @mcp_server_id, c.id, c.attachment_scope
-FROM remote_session_clients AS c
-WHERE c.id = @remote_session_client_id;
+VALUES (
+    @project_id, @organization_id, @mcp_server_id, @remote_session_client_id,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
+);
