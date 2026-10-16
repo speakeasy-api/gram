@@ -120,7 +120,7 @@ LIMIT 1;
 -- name: ResolveToolsetsForWrite :many
 -- Also locks the toolsets behind canonical wrappers named by slug, so server
 -- attachments take the toolset lock before the server lock, as deletion does.
-SELECT t.id, t.slug
+SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -363,11 +363,9 @@ INSERT INTO assistant_toolsets (
 );
 
 -- name: EnableMCPForToolsets :many
--- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
--- toolset attached to an assistant must be MCP-reachable for the runtime's
--- startup config to build; we enable on attach so users don't have to do it
--- separately. mcp_slug is required for an MCP-reachable toolset, so we skip
--- rows that lack one.
+-- Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
+-- attached toolsets are enabled so users don't have to do it separately; the
+-- caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
 UPDATE toolsets
 SET mcp_enabled = TRUE,
     updated_at = clock_timestamp()
