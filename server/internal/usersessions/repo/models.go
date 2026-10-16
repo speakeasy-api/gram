@@ -46,6 +46,8 @@ type UserSession struct {
 	// @access: confidential
 	SignInID uuid.NullUUID
 	// @access: confidential
+	CredentialID uuid.NullUUID
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
