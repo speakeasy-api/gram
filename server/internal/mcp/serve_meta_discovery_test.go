@@ -276,6 +276,32 @@ func TestGatewayDirectDescribesMembersConcurrently(t *testing.T) {
 	require.Contains(t, w.Body.String(), slugs[1]+"--ping")
 }
 
+func TestGatewayDirectBoundsTheWholeInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithMetaRuntime(t, testenv.NewMeterProvider(t), mcp.MetaRuntimeConfig{MemberCallTimeout: 500 * time.Millisecond, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0})
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	// Five batches of members that never answer would take five call timeouts
+	// one batch at a time; the inventory stops after its overall budget.
+	hang := func() bool {
+		<-time.After(3 * time.Second)
+		return true
+	}
+	for i := range 25 {
+		memberSlug := fmt.Sprintf("member%d-%s", i, uuid.NewString()[:8])
+		upstream := newListingUpstream(t, []any{map[string]any{"name": "ping", "inputSchema": map[string]any{"type": "object"}}}, hang)
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Member "+memberSlug, memberSlug, int32(i+1), upstream)
+	}
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	started := time.Now()
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Less(t, time.Since(started), 2*time.Second)
+	require.NotContains(t, w.Body.String(), "--ping")
+}
+
 func TestGatewayDirectGivesQueuedMembersTheirOwnDeadline(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPServiceWithMetaRuntime(t, testenv.NewMeterProvider(t), mcp.MetaRuntimeConfig{MemberCallTimeout: 1500 * time.Millisecond, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0})
