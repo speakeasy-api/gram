@@ -279,6 +279,19 @@ func (q *Queries) CountChatSessionLinksByKindFixture(ctx context.Context, arg Co
 	return count, err
 }
 
+const countDatabasesWithPrefixFixture = `-- name: CountDatabasesWithPrefixFixture :one
+SELECT count(*)::bigint AS databases FROM pg_catalog.pg_database
+WHERE starts_with(datname, $1::text)
+`
+
+// Databases whose name starts with a prefix, so a test can show clones are dropped.
+func (q *Queries) CountDatabasesWithPrefixFixture(ctx context.Context, prefix string) (int64, error) {
+	row := q.db.QueryRow(ctx, countDatabasesWithPrefixFixture, prefix)
+	var databases int64
+	err := row.Scan(&databases)
+	return databases, err
+}
+
 const countDemoSeedAPIKeysFixture = `-- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = $1
 `
