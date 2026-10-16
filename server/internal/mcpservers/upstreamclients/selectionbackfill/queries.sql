@@ -43,6 +43,7 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
         OR si.project_id IS NULL
@@ -120,12 +121,12 @@ VALUES (@id, @project_id, @organization_id, @remote_session_issuer_id, @client_i
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
 VALUES (@remote_session_client_id, @user_session_issuer_id);
 
--- name: SeedUnproxiedMCPServerFixture :exec
-INSERT INTO unproxied_mcp_servers (id, project_id, url) VALUES (@id, @project_id, 'https://upstream.example.com/mcp');
+-- name: SeedRemoteMCPServerFixture :exec
+INSERT INTO remote_mcp_servers (id, project_id, transport_type, url) VALUES (@id, @project_id, 'streamable-http', 'https://upstream.example.com/mcp');
 
 -- name: SeedMCPServerFixture :exec
-INSERT INTO mcp_servers (id, project_id, slug, unproxied_mcp_server_id, user_session_issuer_id, visibility)
-VALUES (@id, @project_id, @slug, @unproxied_mcp_server_id, sqlc.narg('user_session_issuer_id'), 'private');
+INSERT INTO mcp_servers (id, project_id, slug, remote_mcp_server_id, user_session_issuer_id, visibility)
+VALUES (@id, @project_id, @slug, @remote_mcp_server_id, sqlc.narg('user_session_issuer_id'), 'private');
 
 -- name: SeedMetaMCPServerFixture :exec
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name, user_session_issuer_id)
@@ -158,3 +159,10 @@ ORDER BY mcp_server_id;
 -- name: UnbindClientFixture :exec
 DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = @remote_session_client_id AND user_session_issuer_id = @user_session_issuer_id;
+
+-- name: SeedUnproxiedMCPServerFixture :exec
+INSERT INTO unproxied_mcp_servers (id, project_id, url) VALUES (@id, @project_id, 'https://unproxied.example.com/mcp');
+
+-- name: SeedUnproxiedMCPServerRowFixture :exec
+INSERT INTO mcp_servers (id, project_id, slug, unproxied_mcp_server_id, user_session_issuer_id, visibility)
+VALUES (@id, @project_id, @slug, @unproxied_mcp_server_id, @user_session_issuer_id, 'private');
