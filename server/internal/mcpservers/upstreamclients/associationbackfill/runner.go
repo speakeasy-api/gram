@@ -43,6 +43,11 @@ const (
 	// proves no single client and that has no association. It needs explicit
 	// configuration before cutover.
 	OutcomeAmbiguous Outcome = "ambiguous"
+
+	// OutcomeUnproxied is a hosted or unproxied server on a shared issuer
+	// whose configuration proves no single client. Serving keeps such servers
+	// on the issuer's bindings, so nothing needs deciding.
+	OutcomeUnproxied Outcome = "unproxied"
 )
 
 // Covered reports whether a server with this outcome has its associations
@@ -320,6 +325,8 @@ func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 		result.Outcome, decided = OutcomeMetadataMatch, matched
 	case first.LiveAssociations > 0:
 		result.Outcome = OutcomeConfigured
+	case !first.Proxied:
+		result.Outcome = OutcomeUnproxied
 	default:
 		// Includes a metadata match an administrator has since detached: the
 		// server is left for explicit configuration rather than re-associated.

@@ -2369,9 +2369,11 @@ FOR SHARE OF si;
 -- choices are never replaced.
 --
 -- Reach is a superset of what the credential is audience-bound to: every
--- server on the credential's user session issuer, every member of a gateway
--- signing in through it, and, for an organization issuer, every server in the
--- organization the organization gateway serves. A choice for a server the
+-- proxied (remote or tunneled) server on the credential's user session
+-- issuer, every proxied member of a gateway signing in through it, and, for an
+-- organization issuer, every proxied server in the organization the
+-- organization gateway serves. Hosted and unproxied servers keep serving from
+-- the issuer's bindings, so they need no choice. A choice for a server the
 -- credential is never presented to grants nothing, since the credential is
 -- admitted on its own path before a choice is read.
 --
@@ -2399,6 +2401,7 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
         OR si.project_id IS NULL

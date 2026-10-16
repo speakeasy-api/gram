@@ -72,13 +72,13 @@ func (o *migrationOrg) server(userIssuerID uuid.UUID) uuid.UUID {
 	o.t.Helper()
 	ctx := o.t.Context()
 	backendID, serverID := uuid.New(), uuid.New()
-	require.NoError(o.t, o.q.SeedUnproxiedMCPServerFixture(ctx, selectionbackfill.SeedUnproxiedMCPServerFixtureParams{ID: backendID, ProjectID: o.projectID}))
+	require.NoError(o.t, o.q.SeedRemoteMCPServerFixture(ctx, selectionbackfill.SeedRemoteMCPServerFixtureParams{ID: backendID, ProjectID: o.projectID}))
 	require.NoError(o.t, o.q.SeedMCPServerFixture(ctx, selectionbackfill.SeedMCPServerFixtureParams{
-		ID:                   serverID,
-		ProjectID:            o.projectID,
-		Slug:                 pgtype.Text{String: "s-" + serverID.String()[:8], Valid: true},
-		UnproxiedMcpServerID: uuid.NullUUID{UUID: backendID, Valid: true},
-		UserSessionIssuerID:  uuid.NullUUID{UUID: userIssuerID, Valid: true},
+		ID:                  serverID,
+		ProjectID:           o.projectID,
+		Slug:                pgtype.Text{String: "s-" + serverID.String()[:8], Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: backendID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: true},
 	}))
 	return serverID
 }
