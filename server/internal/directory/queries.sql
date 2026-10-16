@@ -461,3 +461,33 @@ WHERE directory_groups.organization_id = EXCLUDED.organization_id
   AND directory_groups.deleted IS FALSE
   AND directory_groups.workos_deleted IS FALSE
   AND directory_groups.workos_updated_at < EXCLUDED.workos_updated_at;
+
+-- name: InsertListedDirectoryUser :exec
+-- Saves a directory user read from a live WorkOS listing when no row exists
+-- for it yet. Events stay the source of truth: an existing row, live or
+-- deleted, is left as it is.
+INSERT INTO directory_users (
+  organization_id,
+  user_id,
+  workos_directory_user_id,
+  email,
+  attributes,
+  workos_created_at,
+  workos_updated_at
+)
+VALUES (
+  @organization_id,
+  @user_id,
+  @workos_directory_user_id,
+  @email,
+  @attributes,
+  @workos_created_at,
+  @workos_updated_at
+)
+ON CONFLICT (workos_directory_user_id) DO NOTHING;
+
+-- name: ListOpenDirectoryGroupMemberships :many
+SELECT workos_directory_user_id, workos_created_at
+FROM directory_user_group_memberships
+WHERE directory_group_id = @directory_group_id
+  AND deleted IS FALSE;
