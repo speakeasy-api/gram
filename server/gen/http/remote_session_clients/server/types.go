@@ -211,17 +211,18 @@ type PrepareEMAResponseBody struct {
 	// Scopes recorded on the binding when identity chaining was turned on.
 	// Identity chaining requests exactly these, without OpenID Connect scopes;
 	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
-	// Changes to the server connection apply only when it is turned on again.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
-	// Scopes turning identity chaining on again would record now, sorted: what an
+	// Scopes preparing identity chaining again would record now, sorted: what an
 	// interactive sign-in through the selected client requests for this server, or
 	// the recorded scopes when the binding has no server connection to follow or
 	// the connection names only OpenID Connect scopes while the recorded ones name
 	// others. Returned by readEMA and prepareEMA when a client is selected.
 	ConnectionScopes []string `form:"connection_scopes,omitempty" json:"connection_scopes,omitempty" xml:"connection_scopes,omitempty"`
-	// True when connection_scopes differs from scopes; turning identity chaining
-	// on again applies connection_scopes. Returned by readEMA and prepareEMA when
-	// a client is selected.
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
 	ScopesOutOfDate *bool `form:"scopes_out_of_date,omitempty" json:"scopes_out_of_date,omitempty" xml:"scopes_out_of_date,omitempty"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
@@ -258,17 +259,18 @@ type ReadEMAResponseBody struct {
 	// Scopes recorded on the binding when identity chaining was turned on.
 	// Identity chaining requests exactly these, without OpenID Connect scopes;
 	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
-	// Changes to the server connection apply only when it is turned on again.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
-	// Scopes turning identity chaining on again would record now, sorted: what an
+	// Scopes preparing identity chaining again would record now, sorted: what an
 	// interactive sign-in through the selected client requests for this server, or
 	// the recorded scopes when the binding has no server connection to follow or
 	// the connection names only OpenID Connect scopes while the recorded ones name
 	// others. Returned by readEMA and prepareEMA when a client is selected.
 	ConnectionScopes []string `form:"connection_scopes,omitempty" json:"connection_scopes,omitempty" xml:"connection_scopes,omitempty"`
-	// True when connection_scopes differs from scopes; turning identity chaining
-	// on again applies connection_scopes. Returned by readEMA and prepareEMA when
-	// a client is selected.
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
 	ScopesOutOfDate *bool `form:"scopes_out_of_date,omitempty" json:"scopes_out_of_date,omitempty" xml:"scopes_out_of_date,omitempty"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
@@ -305,17 +307,18 @@ type UnlinkEMAResponseBody struct {
 	// Scopes recorded on the binding when identity chaining was turned on.
 	// Identity chaining requests exactly these, without OpenID Connect scopes;
 	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
-	// Changes to the server connection apply only when it is turned on again.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
-	// Scopes turning identity chaining on again would record now, sorted: what an
+	// Scopes preparing identity chaining again would record now, sorted: what an
 	// interactive sign-in through the selected client requests for this server, or
 	// the recorded scopes when the binding has no server connection to follow or
 	// the connection names only OpenID Connect scopes while the recorded ones name
 	// others. Returned by readEMA and prepareEMA when a client is selected.
 	ConnectionScopes []string `form:"connection_scopes,omitempty" json:"connection_scopes,omitempty" xml:"connection_scopes,omitempty"`
-	// True when connection_scopes differs from scopes; turning identity chaining
-	// on again applies connection_scopes. Returned by readEMA and prepareEMA when
-	// a client is selected.
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
 	ScopesOutOfDate *bool `form:"scopes_out_of_date,omitempty" json:"scopes_out_of_date,omitempty" xml:"scopes_out_of_date,omitempty"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`

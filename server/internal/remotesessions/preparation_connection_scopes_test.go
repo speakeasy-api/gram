@@ -107,6 +107,45 @@ func TestPreparationScopes_ConnectionChangeAppliesOnlyOnTurnOn(t *testing.T) {
 	require.False(t, *readEMA(t, ti, ctx, in).ScopesOutOfDate)
 }
 
+func TestPreparationScopes_PrepareEMAOnAReadyBindingAppliesTheConnection(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	in.ConfirmGrants = []string{oauthwire.GrantTypeJWTBearer}
+	connectedPreparation(t, ti, ctx, in, in.Resource, []string{"files:read"})
+	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, "ready", prepared.State)
+
+	setPin(t, ti, ctx, in.Resource, []string{"files:write"})
+	apply := func(generation int64) *clientsgen.IdentityChainingPreparation {
+		t.Helper()
+		out, err := ti.service.PrepareEMA(ctx, &clientsgen.PrepareEMAPayload{
+			UserSessionIssuerID: in.UserSessionIssuerID.String(), RemoteSessionIssuerID: in.RemoteSessionIssuerID.String(), Resource: in.Resource,
+			Mechanism: "manual", ExpectedGeneration: generation,
+		})
+		require.NoError(t, err)
+		return out
+	}
+	stale := apply(prepared.Generation - 1)
+	require.Equal(t, "configuration_required", stale.State)
+	require.Equal(t, []string{"files:read"}, stale.Scopes, "a stale generation changes nothing")
+	require.Equal(t, prepared.Generation, stale.Generation)
+
+	before := preparationAuditCounts(t, ctx, ti)
+	applied := apply(prepared.Generation)
+	require.Equal(t, "ready", applied.State)
+	require.Equal(t, []string{"files:write"}, applied.Scopes)
+	require.Equal(t, []string{"files:write"}, applied.ConnectionScopes)
+	require.False(t, *applied.ScopesOutOfDate)
+	require.Greater(t, applied.Generation, prepared.Generation)
+	requirePreparationAuditDelta(t, before, preparationAuditCounts(t, ctx, ti), 0, 1, 0)
+
+	again := apply(applied.Generation)
+	require.Equal(t, "ready", again.State)
+	require.Equal(t, applied.Generation, again.Generation, "unchanged scopes keep the generation")
+	requirePreparationAuditDelta(t, before, preparationAuditCounts(t, ctx, ti), 0, 1, 0)
+}
+
 func TestPreparationScopes_OIDCOnlyConnectionIsRecordedWhole(t *testing.T) {
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)
