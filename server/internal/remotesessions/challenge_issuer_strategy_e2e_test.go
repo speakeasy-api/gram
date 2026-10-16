@@ -564,6 +564,7 @@ func TestRemoteLogin_NonceSentOnlyWithOpenIDScope(t *testing.T) {
 
 	_, plain := newSyntheticExpiryEnv(t, "nonce-plain-oauth", scopelessToken,
 		withIssuerScopes("read"),
+		withAuthorizeQuery("?nonce=baked"),
 	)
 	require.Equal(t, "read", scopeOf(t, plain.authURL))
 	require.False(t, nonceOf(t, plain.authURL), "a plain OAuth request carries no nonce")
@@ -586,5 +587,6 @@ func TestRemoteLogin_NonceSentOnlyWithOpenIDScope(t *testing.T) {
 		withOmitScopeFallback(),
 		withAuthorizeQuery("?scope=openid"),
 	)
+	require.Empty(t, scopeOf(t, omitted.authURL))
 	require.False(t, nonceOf(t, omitted.authURL), "an omitted scope is not an OpenID request")
 }

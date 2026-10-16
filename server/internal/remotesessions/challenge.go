@@ -1359,6 +1359,8 @@ func (m *ChallengeManager) mintAuthorization(
 	q.Set("code_challenge_method", "S256")
 	if nonce != "" {
 		q.Set("nonce", nonce)
+	} else {
+		q.Del("nonce")
 	}
 	switch {
 	case len(scopes) > 0:
