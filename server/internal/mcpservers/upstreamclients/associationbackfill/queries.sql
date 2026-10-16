@@ -193,6 +193,11 @@ WITH fronted AS (
     JOIN projects AS gp
       ON gp.id = g.project_id
      AND gp.deleted IS FALSE
+    JOIN user_session_issuers AS gi
+      ON gi.id = g.user_session_issuer_id
+     AND gi.deleted IS FALSE
+     AND (gi.project_id = g.project_id
+          OR (gi.project_id IS NULL AND gi.organization_id = g.organization_id))
     JOIN meta_mcp_server_members AS m
       ON m.meta_mcp_server_id = g.id
      AND m.project_id = g.project_id
@@ -202,7 +207,6 @@ WITH fronted AS (
      AND s.project_id = m.project_id
      AND s.deleted IS FALSE
     WHERE g.deleted IS FALSE
-      AND g.user_session_issuer_id IS NOT NULL
       AND (@organization_id::text = '' OR g.organization_id = @organization_id::text)
     UNION
     SELECT oi.id AS issuer_id, s.id AS server_id
@@ -239,7 +243,16 @@ SELECT f.issuer_id::uuid AS issuer_id,
            AND COALESCE(r.url, t.resource_identifier, '') <> ''
            AND rtrim(rs.resource, '/') = rtrim(COALESCE(r.url, t.resource_identifier), '/')
        )::boolean AS grant_match,
-       (s.remote_session_issuer_id IS NOT NULL AND c.remote_session_issuer_id = s.remote_session_issuer_id)::boolean AS derived_match,
+       EXISTS (
+         SELECT 1
+         FROM remote_session_issuers AS derived
+         WHERE derived.id = s.remote_session_issuer_id
+           AND derived.id = c.remote_session_issuer_id
+           AND derived.deleted IS FALSE
+           AND (derived.project_id = s.project_id
+                OR (derived.project_id IS NULL AND derived.organization_id = p.organization_id)
+                OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
+       )::boolean AS derived_match,
        EXISTS (
          SELECT 1
          FROM mcp_server_remote_session_clients AS recorded
@@ -280,9 +293,11 @@ ORDER BY f.issuer_id, s.id, c.id;
 
 -- name: BackfillGatewayAssociation :execrows
 -- Writes one decided gateway association, conditional on the evidence still
--- holding: the server is live and proxied, the issuer still fronts it, the
--- client is still bound to the issuer and in the server's tenant, and no row
--- was recorded for the pair meanwhile, so an explicit detach is never undone.
+-- holding: the server is live with a live source of its own project, the
+-- issuer is still a live gateway issuer fronting it (or still the
+-- organization's only organization-level issuer), the client is still bound
+-- to the issuer and in the server's tenant, and no row was recorded for the
+-- pair meanwhile, so an explicit detach is never undone.
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
 SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
 FROM mcp_servers AS s
@@ -300,11 +315,35 @@ JOIN remote_session_clients AS c
       OR (c.project_id IS NULL AND c.organization_id IS NULL))
 WHERE s.id = @mcp_server_id::uuid
   AND s.deleted IS FALSE
-  AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+  AND s.slug IS NOT NULL
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM remote_mcp_servers AS r
+      WHERE r.id = s.remote_mcp_server_id
+        AND r.project_id = s.project_id
+        AND r.deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM tunneled_mcp_servers AS t
+      WHERE t.id = s.tunneled_mcp_server_id
+        AND t.project_id = s.project_id
+        AND t.deleted IS FALSE
+    )
+  )
   AND (
     EXISTS (
       SELECT 1
       FROM meta_mcp_servers AS g
+      JOIN projects AS gp
+        ON gp.id = g.project_id
+       AND gp.deleted IS FALSE
+      JOIN user_session_issuers AS gi
+        ON gi.id = g.user_session_issuer_id
+       AND gi.deleted IS FALSE
+       AND (gi.project_id = g.project_id
+            OR (gi.project_id IS NULL AND gi.organization_id = g.organization_id))
       JOIN meta_mcp_server_members AS m
         ON m.meta_mcp_server_id = g.id
        AND m.project_id = g.project_id
@@ -320,6 +359,13 @@ WHERE s.id = @mcp_server_id::uuid
         AND oi.project_id IS NULL
         AND oi.organization_id = p.organization_id
         AND oi.deleted IS FALSE
+        AND (
+          SELECT count(*)
+          FROM user_session_issuers AS sibling
+          WHERE sibling.organization_id = oi.organization_id
+            AND sibling.project_id IS NULL
+            AND sibling.deleted IS FALSE
+        ) = 1
     )
   )
   AND NOT EXISTS (
@@ -339,8 +385,12 @@ INSERT INTO organization_metadata (id, name, slug) VALUES (@id, @id, @id);
 INSERT INTO projects (id, name, slug, organization_id) VALUES (@id, @slug, @slug, @organization_id);
 
 -- name: SeedUserSessionIssuerFixture :exec
-INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
-VALUES (@id, @project_id, @slug, 'interactive', interval '1 hour');
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
+VALUES (
+    @id, @project_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = @project_id),
+    @slug, 'interactive', interval '1 hour'
+);
 
 -- name: SeedRemoteSessionIssuerFixture :exec
 INSERT INTO remote_session_issuers (id, project_id, slug, issuer) VALUES (@id, @project_id, @slug, @issuer);
@@ -399,3 +449,6 @@ VALUES (@subject_urn, @user_session_issuer_id, @remote_session_client_id, 'encry
 
 -- name: SetDerivedIssuerFixture :exec
 UPDATE mcp_servers SET remote_session_issuer_id = @remote_session_issuer_id WHERE id = @id;
+
+-- name: SoftDeleteProjectFixture :exec
+UPDATE projects SET deleted_at = clock_timestamp() WHERE id = @id;

@@ -591,6 +591,12 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 // mcpRouteBase "mcp/gateway" resolves slug as an organization slug to that
 // organization's gateway instead.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
+	return s.loadResolvedMcpEndpointBySlug(ctx, logger, slug, mcpRouteBase, mcpmetrics.LegacyFallbackOAuth)
+}
+
+// loadResolvedMcpEndpointBySlug is LoadResolvedMcpEndpointBySlug with the
+// entry point its legacy fallback is attributed to.
+func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string, fallbackEntryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
 	if mcpRouteBase == organizationGatewayRouteBase {
 		gateway, err := s.loadOrganizationGateway(ctx, slug)
 		if err != nil {
@@ -618,7 +624,7 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 	case mcpendpoints.IsAddressMiss(err):
-		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase)
+		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase, fallbackEntryPoint)
 	default:
 		return nil, err
 	}

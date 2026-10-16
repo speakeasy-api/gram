@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -551,7 +552,14 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		}
 	}
 	if acceptedAudience == userSessionAudienceLegacy {
-		s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
+		s.metrics.RecordLegacyAudienceAccepted(ctx, s.logger, mcpmetrics.LegacyAudienceAccepted{
+			IssuerID:         endpoint.UserSessionIssuerID,
+			Slug:             endpoint.Slug,
+			ToolsetID:        endpoint.ToolsetID,
+			McpServerID:      endpoint.McpServerID,
+			ProjectID:        endpoint.ProjectID,
+			CustomDomainHost: customdomains.FromContext(ctx) != nil,
+		})
 	}
 	// An organization gateway serves the organization's users, each with the
 	// servers their own access reaches; an agent, workload, or anonymous

@@ -496,6 +496,21 @@ func newTestMCPServiceWithPoolConfig(
 	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, nil, guardianOpts...)
 }
 
+// newTestMCPServiceWithPlatformMCPReadTools composes the Platform MCP read
+// toolset into the service, for the tests that list or call its tools. The
+// other constructors serve that toolset empty: building the Platform MCP
+// runtime prepares every tool's JSON schema, and doing it in every fixture was
+// most of this package's CPU time. Spans are recorded as in
+// newTestMCPServiceWithScanSpans.
+func newTestMCPServiceWithPlatformMCPReadTools(t *testing.T) (context.Context, *testInstance, *tracetest.SpanRecorder) {
+	t.Helper()
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, true)
+	return ctx, ti, recorder
+}
+
 func newTestMCPServiceWithPoolConfigAndTemporal(
 	t *testing.T,
 	logger *slog.Logger,
@@ -509,6 +524,26 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	tracerProvider trace.TracerProvider,
 	funcs functions.ToolCaller,
 	callerAssertions *mcpauthz.Issuer,
+	guardianOpts ...func(*guardian.Policy),
+) (context.Context, *testInstance) {
+	t.Helper()
+	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, false, guardianOpts...)
+}
+
+func buildTestMCPService(
+	t *testing.T,
+	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
+	identityResolver mcp.IdentityResolver,
+	tunnelPublicConfig mcp.TunnelPublicConfig,
+	wrapCache func(cache.Cache) cache.Cache,
+	configurePool func(*pgxpool.Config),
+	withTemporal bool,
+	metaRuntime mcp.MetaRuntimeConfig,
+	tracerProvider trace.TracerProvider,
+	funcs functions.ToolCaller,
+	callerAssertions *mcpauthz.Issuer,
+	withPlatformMCPReadTools bool,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
@@ -633,21 +668,25 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		require.NoError(t, efficacySignaler.Shutdown(context.Background()))
 	})
 	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn, platformskills.WithEfficacySignaler(efficacySignaler))
-	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-		AssistantMemoryTools:          nil,
-		AssistantSkillTools:           assistantSkillTools,
-		AssistantTriggerTools:         nil,
-		ManagedAssistantInsightsTools: managedLogsTools,
+	var platformMCPReadTools []platformtools.ExternalTool
+	if withPlatformMCPReadTools {
 		// Composed the way the server composes it: descriptors admitted to the
 		// assistant audience, called directly by the adapter.
-		PlatformMCPReadTools: assistant_platform_mcp_adapter.ExternalTools(
+		platformMCPReadTools = assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
 				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
 			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),
-		),
+		)
+	}
+	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
+		AssistantMemoryTools:          nil,
+		AssistantSkillTools:           assistantSkillTools,
+		AssistantTriggerTools:         nil,
+		ManagedAssistantInsightsTools: managedLogsTools,
+		PlatformMCPReadTools:          platformMCPReadTools,
 	})
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}

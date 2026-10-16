@@ -216,6 +216,12 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 // userSessionIssuerID is the organization gateway's issuer, whose clients are
 // the only way a person connects a member that signs in upstream. uuid.Nil
 // (the agent gateway) skips that check.
+//
+// The organization gateway also drops servers backed by a toolset with
+// Platform tools, mirroring automatic plugin delivery: those toolsets serve
+// assistants and explicit MCP consumers, never a broad distribution surface.
+// The agent gateway keeps them: its members are what an agent key was
+// explicitly granted.
 func (s *Service) resolveOrganizationMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -244,6 +250,9 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
 		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
+			continue
+		}
+		if userSessionIssuerID != uuid.Nil && row.HasPlatformTool {
 			continue
 		}
 		candidates = append(candidates, metaMemberCandidate{

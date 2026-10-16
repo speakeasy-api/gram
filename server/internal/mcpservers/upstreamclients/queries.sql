@@ -94,6 +94,11 @@ ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO 
 WITH fronted AS (
     SELECT gateway.user_session_issuer_id AS issuer_id, member.mcp_server_id AS server_id
     FROM meta_mcp_servers AS gateway
+    JOIN user_session_issuers AS gateway_issuer
+      ON gateway_issuer.id = gateway.user_session_issuer_id
+     AND gateway_issuer.deleted IS FALSE
+     AND (gateway_issuer.project_id = gateway.project_id
+          OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = gateway.organization_id))
     JOIN meta_mcp_server_members AS member
       ON member.meta_mcp_server_id = gateway.id
      AND member.project_id = gateway.project_id
@@ -101,7 +106,6 @@ WITH fronted AS (
     WHERE gateway.project_id = @project_id::uuid
       AND gateway.organization_id = @organization_id::text
       AND gateway.deleted IS FALSE
-      AND gateway.user_session_issuer_id IS NOT NULL
     UNION
     SELECT organization_issuer.id AS issuer_id, s.id AS server_id
     FROM user_session_issuers AS organization_issuer
@@ -133,10 +137,16 @@ JOIN projects AS p
  AND p.deleted IS FALSE
 JOIN remote_session_client_user_session_issuers AS link
   ON link.user_session_issuer_id = f.issuer_id
+JOIN remote_session_issuers AS derived
+  ON derived.id = s.remote_session_issuer_id
+ AND derived.deleted IS FALSE
+ AND (derived.project_id = p.id
+      OR (derived.project_id IS NULL AND derived.organization_id = p.organization_id)
+      OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
 JOIN remote_session_clients AS c
   ON c.id = link.remote_session_client_id
  AND c.deleted IS FALSE
- AND c.remote_session_issuer_id = s.remote_session_issuer_id
+ AND c.remote_session_issuer_id = derived.id
  AND (c.project_id = p.id
       OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
       OR (c.project_id IS NULL AND c.organization_id IS NULL))
@@ -177,9 +187,9 @@ ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO 
 -- name: PruneUnservableAssociations :execrows
 -- Removes the project's associations no issuer can serve: the server is gone,
 -- the client is deleted, or the client is bound neither to the server's own
--- user session issuer nor to the issuer of a gateway fronting the server (a
--- gateway it is a member of, or its organization's issuer for the
--- organization gateway).
+-- user session issuer nor to the live issuer of a gateway fronting the server
+-- (a gateway it is a member of, or its organization's only organization-level
+-- issuer for the organization gateway).
 UPDATE mcp_server_remote_session_clients AS a
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
@@ -202,6 +212,14 @@ WHERE a.mcp_server_id = s.id
           OR EXISTS (
             SELECT 1
             FROM meta_mcp_servers AS gateway
+            JOIN projects AS gateway_project
+              ON gateway_project.id = gateway.project_id
+             AND gateway_project.deleted IS FALSE
+            JOIN user_session_issuers AS gateway_issuer
+              ON gateway_issuer.id = gateway.user_session_issuer_id
+             AND gateway_issuer.deleted IS FALSE
+             AND (gateway_issuer.project_id = s.project_id
+                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
             JOIN meta_mcp_server_members AS member
               ON member.meta_mcp_server_id = gateway.id
              AND member.project_id = gateway.project_id
@@ -217,6 +235,13 @@ WHERE a.mcp_server_id = s.id
               AND organization_issuer.project_id IS NULL
               AND organization_issuer.organization_id = a.organization_id
               AND organization_issuer.deleted IS FALSE
+              AND (
+              SELECT count(*)
+              FROM user_session_issuers AS sibling
+              WHERE sibling.organization_id = organization_issuer.organization_id
+                AND sibling.project_id IS NULL
+                AND sibling.deleted IS FALSE
+            ) = 1
           )
         )
     )
@@ -249,6 +274,14 @@ WHERE a.mcp_server_id = s.id
           OR EXISTS (
             SELECT 1
             FROM meta_mcp_servers AS gateway
+            JOIN projects AS gateway_project
+              ON gateway_project.id = gateway.project_id
+             AND gateway_project.deleted IS FALSE
+            JOIN user_session_issuers AS gateway_issuer
+              ON gateway_issuer.id = gateway.user_session_issuer_id
+             AND gateway_issuer.deleted IS FALSE
+             AND (gateway_issuer.project_id = s.project_id
+                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
             JOIN meta_mcp_server_members AS member
               ON member.meta_mcp_server_id = gateway.id
              AND member.project_id = gateway.project_id
@@ -264,6 +297,13 @@ WHERE a.mcp_server_id = s.id
               AND organization_issuer.project_id IS NULL
               AND organization_issuer.organization_id = a.organization_id
               AND organization_issuer.deleted IS FALSE
+              AND (
+              SELECT count(*)
+              FROM user_session_issuers AS sibling
+              WHERE sibling.organization_id = organization_issuer.organization_id
+                AND sibling.project_id IS NULL
+                AND sibling.deleted IS FALSE
+            ) = 1
           )
         )
     )
