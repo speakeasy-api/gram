@@ -138,14 +138,15 @@ type serverChoices map[uuid.UUID]usersessions_repo.ListUpstreamClientSelectionsR
 // forServer returns the usable choice for serverID, or
 // errUpstreamSelectionMissing or errUpstreamSelectionUnusable.
 func (c serverChoices) forServer(serverID uuid.UUID) (upstreamChoice, error) {
+	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 	row, ok := c[serverID]
 	switch {
 	case !ok:
-		return upstreamChoice{}, errUpstreamSelectionMissing
+		return none, errUpstreamSelectionMissing
 	case !row.Usable:
-		return upstreamChoice{}, errUpstreamSelectionUnusable
+		return none, errUpstreamSelectionUnusable
 	case row.NoAuth:
-		return upstreamChoice{}, nil
+		return none, nil
 	}
 	return upstreamChoice{clientID: row.RemoteSessionClientID, remoteSessionIssuerID: row.RemoteSessionIssuerID}, nil
 }
@@ -256,7 +257,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 			tokens, err := s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, member.chosenClientID.UUID, true)
 			switch {
 			case errors.Is(err, remotesessions.ErrChosenClientUnbound):
-				return nil, err
+				return nil, fmt.Errorf("resolve chosen client: %w", err)
 			case err != nil:
 				return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 			}
@@ -423,7 +424,7 @@ func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, cli
 // still derives an authorization server signs in through a client nobody has
 // configured for it, so it needs setup rather than reading as needing none.
 func memberNeedsSignIn(member metaMember) bool {
-	if member.associatedClients != nil && len(member.associatedClients) > 0 {
+	if len(member.associatedClients) > 0 {
 		return true
 	}
 	return member.remoteSessionIssuerID.Valid
