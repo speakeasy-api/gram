@@ -62,8 +62,9 @@ type LocalFixturesOptions struct {
 // top of the seeded data, none of which belongs in the shared demo org:
 //
 //   - you, as a real member with the Admin role and platform super-admin;
-//   - the system roles and their grants, plus a direct chat:read grant so the
-//     Agent Sessions list shows the seeded chats rather than only your own;
+//   - the system roles and their grants, plus direct chat:read and log:read
+//     grants so Agent Sessions shows the seeded chats rather than only your
+//     own, and Tool Logs opens at all;
 //   - a fixed API key and default environment, both with well-known ids so
 //     mise.toml can hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
@@ -132,6 +133,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"link org to the dev-idp", localLinkWorkOSOrgSQL, []any{spec.OrgID, spec.WorkOSOrgID}},
 		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, workosID}},
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
+		{"grant tool log visibility", localToolLogVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"grant local Channels administration", localChannelsAccessSQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
@@ -351,6 +353,15 @@ INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, 'user:' || $2, 'chat:read',
         jsonb_build_object('resource_kind', 'chat', 'resource_id', '*'))
 ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+// log:read is likewise held by no system role, so without it the Tool Logs page
+// and the session Tool calls view would be closed to the local admin.
+const localToolLogVisibilitySQL = `
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES ($1, 'user:' || $2, 'log:read', NULL,
+        jsonb_build_object('resource_kind', 'project', 'resource_id', '*'))
+ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING
 `
 
 // platform_mcp is the default-on organization entitlement locally; the shared

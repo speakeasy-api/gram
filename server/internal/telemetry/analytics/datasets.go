@@ -17,6 +17,7 @@ var Sessions = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "session_id",
+			Typeahead: "session_id",
 		},
 		// A session opens broken down by who was in it: text lives on events,
 		// not on the collapsed session row.
@@ -28,6 +29,7 @@ var Sessions = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "user_email",
+			Typeahead:    "user_email",
 		},
 		{
 			Name:      "model",
@@ -35,6 +37,7 @@ var Sessions = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "model",
+			Typeahead: "model",
 		},
 		{
 			Name:      "surface",
@@ -42,6 +45,7 @@ var Sessions = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "surface",
+			Typeahead: "surface",
 		},
 		{
 			Name:      "provider",
@@ -49,6 +53,7 @@ var Sessions = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "provider",
+			Typeahead: "provider",
 		},
 		{
 			Name:         "turn_count",
@@ -91,6 +96,7 @@ var ToolCalls = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "tool_call_id",
+			Typeahead: "event_id",
 		},
 		{
 			Name:         "tool_name",
@@ -100,6 +106,7 @@ var ToolCalls = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "tool_name",
+			Typeahead:    "tool_name",
 		},
 		// Every MCP call carries the tool name mcp_tool; the server and tool the
 		// producer named are what tell them apart.
@@ -110,6 +117,7 @@ var ToolCalls = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "mcp_server_name",
+			Typeahead:    "mcp_server_name",
 			Description:  mcpServerDescription,
 			Lookup:       MCPServerDisplayNamesLookup,
 		},
@@ -119,6 +127,7 @@ var ToolCalls = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "mcp_tool_name",
+			Typeahead: "mcp_tool_name",
 		},
 		{
 			Name:         "session",
@@ -127,6 +136,7 @@ var ToolCalls = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "session_id",
+			Typeahead:    "session_id",
 		},
 		{
 			Name:         "user",
@@ -135,6 +145,7 @@ var ToolCalls = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "user_email",
+			Typeahead:    "user_email",
 		},
 		{
 			Name:      "surface",
@@ -142,6 +153,7 @@ var ToolCalls = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "surface",
+			Typeahead: "surface",
 		},
 		// status reads outcome in agent vocabulary, not a protocol status
 		// code: ok, error, rejected (a call a decision blocked) or refused (a
@@ -153,6 +165,7 @@ var ToolCalls = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "status",
+			Typeahead: "outcome",
 		},
 		{
 			Name:         "duration_ms",
@@ -185,6 +198,7 @@ var Skills = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "tool_call_id",
+			Typeahead: "event_id",
 		},
 		{
 			Name:         "skill",
@@ -194,6 +208,7 @@ var Skills = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "skill_name",
+			Typeahead:    "skill_name",
 		},
 		{
 			Name:         "session",
@@ -202,6 +217,7 @@ var Skills = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "session_id",
+			Typeahead:    "session_id",
 		},
 		{
 			Name:         "user",
@@ -210,6 +226,7 @@ var Skills = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "user_email",
+			Typeahead:    "user_email",
 		},
 		{
 			Name:      "surface",
@@ -217,6 +234,7 @@ var Skills = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "surface",
+			Typeahead: "surface",
 		},
 		// status is the invocation's outcome in the same vocabulary as a tool
 		// call's: ok, error, rejected or refused.
@@ -226,6 +244,7 @@ var Skills = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "status",
+			Typeahead: "outcome",
 		},
 		{
 			Name:         "duration_ms",

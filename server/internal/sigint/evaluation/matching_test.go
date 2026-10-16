@@ -7,7 +7,6 @@ import (
 
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -26,8 +25,8 @@ func TestSensorMatchingSkipsContentResolution(t *testing.T) {
 	}
 	h, pub := handler(t, m, definitions, nil, testenv.NewMeterProvider(t))
 	row := storedMessage(m)
-	row.ChatMessage.ContentRaw = []byte("invalid json must not be read")
-	h.messages = storedMessages{row.ChatMessage.ID: row}
+	row.ContentRaw = []byte("invalid json must not be read")
+	h.messages = storedMessages{row.ID: row}
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Empty(t, pub.readings)
 }
@@ -38,11 +37,11 @@ func TestSensorMatchingIsolatesInvalidPredicates(t *testing.T) {
 	definitions := partialSensors()
 	definitions[0].MatchExpression = "message.unknown == true"
 	definitions[1].MatchExpression = `message.role == "user"`
-	c := classifiertest.NewMock(t)
-	c.On("Classify", mock.Anything, mock.MatchedBy(func(req *classifier.Request) bool { return len(req.Questions) == 1 })).Return(partialResult(false)).Once()
+	c, requests := newRecordingClassifier(t)
 	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Len(t, pub.readings, 1)
+	testenv.RequireYAMLGolden(t, "testdata/requests/matching-user.golden.yaml", requests.snapshot(t))
 }
 
 func TestMatchingExpressionChangesDefinitionNotReadingIdentity(t *testing.T) {
@@ -67,14 +66,12 @@ func TestAssistantSensorMatchesPersistedRole(t *testing.T) {
 	definitions := partialSensors()
 	definitions[0].MatchExpression = matching.DefaultExpression
 	definitions[1].MatchExpression = `message.role == "assistant"`
-	c := classifiertest.NewMock(t)
-	c.On("Classify", mock.Anything, mock.MatchedBy(func(req *classifier.Request) bool {
-		return len(req.Questions) == 1 && req.Questions[0].Key == "other/a"
-	})).Return(partialResult(false)).Once()
+	c, requests := newRecordingClassifier(t)
 	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Len(t, pub.readings, 1)
 	require.Equal(t, "other", pub.readings[0].GetSensorId())
+	testenv.RequireYAMLGolden(t, "testdata/requests/matching-assistant.golden.yaml", requests.snapshot(t))
 }
 
 func TestMatchingCancellationAfterDefinitionLoadRetries(t *testing.T) {
@@ -112,13 +109,11 @@ func TestMatchingFailureReasons(t *testing.T) {
 			m := message()
 			definitions := partialSensors()
 			definitions[0].MatchExpression = tc.expression
-			c := classifiertest.NewMock(t)
-			c.On("Classify", mock.Anything, mock.MatchedBy(func(req *classifier.Request) bool {
-				return len(req.Questions) == 1 && req.Questions[0].Key == "other/a"
-			})).Return(partialResult(false)).Once()
+			c, requests := newRecordingClassifier(t)
 			h, pub := handler(t, m, definitions, c, meters)
 			require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 			require.Len(t, pub.readings, 1)
+			testenv.RequireYAMLGolden(t, "testdata/requests/matching-user.golden.yaml", requests.snapshot(t))
 			var data metricdata.ResourceMetrics
 			require.NoError(t, reader.Collect(t.Context(), &data))
 			found := false

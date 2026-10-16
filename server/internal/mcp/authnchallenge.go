@@ -124,6 +124,14 @@ type EndpointRef struct {
 	// server. False for every state minted by a per-endpoint authorization
 	// server, including those minted before shared ones existed.
 	SharedAuthorizationServer bool `json:"shared_authorization_server,omitempty"`
+
+	// UseAuthenticationHost snapshots the issuer's use_authentication_host at
+	// mint time. The setting moves the authorization server, and with it the
+	// issuer and the host its consent page and browser binding live on, so a
+	// flow continues only while the setting is unchanged. New states always
+	// set it; nil preserves compatibility only for states minted before this
+	// field existed, which expire within the challenge TTL.
+	UseAuthenticationHost *bool `json:"use_authentication_host,omitempty"`
 }
 
 // AuthnChallengeState is the in-flight context of a single Speakeasy-as-AS authn
@@ -194,6 +202,10 @@ type AuthnChallengeState struct {
 	// or failed upstream leg — and a deliberate disconnect — return the user to
 	// a page they can act on instead of bouncing them out again.
 	AutoConnectDone bool `json:"auto_connect_done,omitempty"`
+	// FocusServer is the gateway server a first-party connect was opened
+	// for, so the consent page lands on that server's connect page. Empty
+	// lands on the gateway's own page.
+	FocusServer string `json:"focus_server,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)

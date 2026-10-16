@@ -122,7 +122,16 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
 	}
 
+	// A card on a gateway server's connect page posts that server, so every
+	// action returns the user to the page they acted on.
+	focusServer := r.PostForm.Get("server")
+	if len(focusServer) > maxFocusServerLength {
+		return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
+	}
 	backURL := endpoint.consentPath() + "?state=" + url.QueryEscape(stateID)
+	if focusServer != "" {
+		backURL += "&server=" + url.QueryEscape(focusServer)
+	}
 
 	// Auto refresh is only the subject's choice while the organization lets
 	// them choose. Under either managed policy the posted value is ignored, so
@@ -148,7 +157,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, autoRefresh)
+		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, autoRefresh, focusServer)
 		if berr != nil {
 			return berr
 		}
@@ -275,6 +284,7 @@ func (s *Service) buildRemoteConnectURL(
 	client remotesessions.Client,
 	bound []remotesessions.Client,
 	autoRefresh *bool,
+	focusServer string,
 ) (string, bool, error) {
 	// endpoint.UpstreamResource only when no other bound client can claim
 	// it: under multi-binding it may belong to a different client's
@@ -306,16 +316,10 @@ func (s *Service) buildRemoteConnectURL(
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
 	}
 
-	// The upstream callback returns to the consent page. Remote sessions
-	// rebuild a per-endpoint consent URL from the slug, so a challenge on a
-	// shared authorization server names its own consent page instead.
-	consentURL := ""
-	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
-		sharedConsentURL, err := shared.consentURL(challengeState.ID)
-		if err != nil {
-			return "", false, oops.E(oops.CodeUnexpected, err, "build shared consent URL").LogError(ctx, logger)
-		}
-		consentURL = sharedConsentURL
+	// The upstream callback returns to the consent page.
+	consentURL, err := s.remoteLoginConsentURL(endpoint, challengeState)
+	if err != nil {
+		return "", false, oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
 	// The login runs in the client's own project. An organization-level client
 	// on an organization gateway belongs to none, so it runs in the project of
@@ -337,6 +341,7 @@ func (s *Service) buildRemoteConnectURL(
 		ResourceMcpServerID: resourceMember.serverID,
 		FinalRedirectURI:    "",
 		ConsentURL:          consentURL,
+		ConsentServer:       focusServer,
 		Resource:            clientResource,
 		AutoRefresh:         autoRefresh,
 		Authority:           challengeState.Endpoint.Authority,

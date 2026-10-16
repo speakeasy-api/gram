@@ -41,12 +41,14 @@ type Evaluator struct {
 	classifier classifier.Classifier
 	failures   metric.Int64Counter
 	skipped    metric.Int64Counter
+	truncated  metric.Int64Counter
 	slots      chan struct{}
 }
 
 // NewEvaluator injects a classifier configured with the platform's credentials.
 // Runtime concurrency is bounded across all adapters sharing this instance.
 func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Source, features Features, publisher gcp.Publisher[*sigintv1.Reading], c classifier.Classifier) (*Evaluator, error) {
+	logger = logger.With(attr.SlogComponent("sigint-evaluator"))
 	meter := meters.Meter("github.com/speakeasy-api/gram/server/internal/sigint/evaluation")
 
 	failures, err := meter.Int64Counter("gram.sigint.evaluation.failures", metric.WithDescription("Terminal sensor or event evaluations acknowledged without a reading"))
@@ -59,7 +61,12 @@ func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Sourc
 		return nil, fmt.Errorf("create sensor skip counter: %w", err)
 	}
 
-	return &Evaluator{logger: logger, source: source, features: features, publisher: publisher, classifier: c, failures: failures, skipped: skipped, slots: make(chan struct{}, 4)}, nil
+	truncated, err := meter.Int64Counter("gram.sigint.evaluation.window_truncations", metric.WithDescription("Sensor evaluation attempts using less available history because of the content budget"))
+	if err != nil {
+		return nil, fmt.Errorf("create sensor window truncation counter: %w", err)
+	}
+
+	return &Evaluator{logger: logger, source: source, features: features, publisher: publisher, classifier: c, failures: failures, skipped: skipped, truncated: truncated, slots: make(chan struct{}, 4)}, nil
 }
 
 func (h *Evaluator) terminal(ctx context.Context, event Event, reason string, details ...slog.Attr) {
@@ -110,6 +117,7 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	}
 
 	var compiled []compiledSensor
+	maxSize := 1
 	matchMessage := in.MatchingMessage()
 	for _, sensor := range sensors {
 		matched, err := matching.Match(ctx, sensor.MatchExpression, matchMessage)
@@ -143,12 +151,74 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 			continue
 		}
 		compiled = append(compiled, item)
+		maxSize = max(maxSize, item.windowSize)
 	}
 	if len(compiled) == 0 {
 		return nil
 	}
 
-	state, err := in.Resolve(ctx)
+	buffer := in.NewBuffer(maxSize)
+	// Every group needs the target. Resolve it once before processing groups so
+	// failed target reads are neither repeated nor counted once per window size.
+	target, err := buffer.Resolve(ctx, 1)
+	if err != nil {
+		return h.evaluateGroup(ctx, event, compiled, target.State, err)
+	}
+
+	// Ascending sizes let small windows succeed even when older content is invalid.
+	// Larger windows reuse the newest contiguous context that fits the budget.
+	var retry error
+	for size := 1; size <= maxSize; size++ {
+		var sensors []compiledSensor
+		for _, sensor := range compiled {
+			if sensor.windowSize == size {
+				sensors = append(sensors, sensor)
+			}
+		}
+		if len(sensors) == 0 {
+			continue
+		}
+		var resolved ResolvedInput
+		var err error
+		if size == 1 {
+			resolved = target
+		} else {
+			resolved, err = buffer.Resolve(ctx, size)
+		}
+		if err == nil && resolved.Truncated {
+			h.truncated.Add(ctx, int64(len(sensors)), metric.WithAttributes(
+				attribute.String("reason", "content_too_large"),
+				attribute.Int("requested_window_size", size),
+				attribute.Int("effective_window_size", resolved.MessageCount),
+			))
+			attrs := []slog.Attr{
+				attr.SlogWideEvent(),
+				attr.SlogOrganizationID(event.OrganizationID),
+				attr.SlogProjectID(event.ProjectID),
+				attr.SlogSigintEventID(event.Subject.GetId()),
+				attr.SlogSigintEventKind(event.Subject.GetKind()),
+				attr.SlogReason("content_too_large"),
+				attr.SlogSigintRequestedWindowSize(size),
+				attr.SlogSigintEffectiveWindowSize(resolved.MessageCount),
+				attr.SlogSigintContentBudgetBytes(maxContentBytes),
+			}
+			if message := event.Subject.GetConversationMessage(); message != nil {
+				attrs = append(attrs, attr.SlogChatID(message.GetConversationId()), attr.SlogMessageID(event.Subject.GetId()))
+			}
+			for _, sensor := range sensors {
+				h.logger.LogAttrs(ctx, slog.LevelWarn, "sensor evaluation window truncated", append(attrs,
+					attr.SlogSigintSensorID(sensor.id),
+					attr.SlogSigintSensorMode(sensor.mode),
+					attr.SlogSigintSensorDefinitionHash(sensor.hash),
+				)...)
+			}
+		}
+		retry = errors.Join(retry, h.evaluateGroup(ctx, event, sensors, resolved.State, err))
+	}
+	return retry
+}
+
+func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []compiledSensor, state classifier.Entry, err error) error {
 	if err != nil {
 		if terminal, ok := errors.AsType[*permanentError](err); ok {
 			h.terminal(ctx, event, terminal.reason)
