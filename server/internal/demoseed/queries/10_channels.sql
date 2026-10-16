@@ -1,8 +1,9 @@
 -- Channels: the organization-scoped conversation surface. Its rows hang off
--- the organization's canonical default project, so most of them ride the
--- projects delete cascade; the deletes below are explicit anyway to keep the
--- reseed readable, and channels_state needs one because both its foreign keys
--- are ON DELETE SET NULL.
+-- the organization's canonical default project and ride that project's delete
+-- cascade; the deletes below are explicit anyway to keep the reseed readable.
+-- channels_state needs its own for a real reason: its project foreign key is
+-- composite and project_id is nullable, so a row that never recorded a project
+-- escapes the cascade (MATCH SIMPLE does not enforce a partially NULL key).
 
 -- name: ChannelsCountStrayState :one
 -- The superseded Channels document is NOT the seed's to destroy. A developer
@@ -43,8 +44,8 @@ DELETE FROM channels_settings WHERE organization_id = @org_id::text;
 
 -- name: ChannelsDeleteState :exec
 -- Only an empty placeholder document is removed; ChannelsCountStrayState has
--- already refused anything with content in it. Both of this table's foreign
--- keys are ON DELETE SET NULL, so the projects delete leaves the row behind.
+-- already refused anything with content in it. A row whose project_id is NULL
+-- is not reached by the projects cascade, so it would otherwise survive.
 DELETE FROM channels_state WHERE organization_id = @org_id::text;
 
 -- name: ChannelsInsertSettings :exec
