@@ -120,3 +120,16 @@ func TestMessageResourceArgumentsRejectUnknownParameters(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalid, "query %q was accepted", query)
 	}
 }
+
+func TestInitializeNegotiatesAHandshakeRevision(t *testing.T) {
+	t.Parallel()
+	for requested, want := range map[string]string{
+		"2025-06-18": "2025-06-18",
+		"2024-11-05": "2024-11-05",
+		"2026-07-28": "2025-11-25",
+		"2099-01-01": "2025-11-25",
+		"":           "2025-11-25",
+	} {
+		require.Equal(t, want, negotiateHandshakeVersion(requested), requested)
+	}
+}

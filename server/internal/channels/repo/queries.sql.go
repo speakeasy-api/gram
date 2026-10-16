@@ -567,9 +567,17 @@ func (q *Queries) FixtureCountRows(ctx context.Context, organizationID string) (
 const fixtureCountRowsOutsideDefaultProject = `-- name: FixtureCountRowsOutsideDefaultProject :one
 WITH target AS (
     SELECT $1::text AS organization_id
+), canonical AS (
+    -- The same ordering EnsureChannelsSettings uses to pick the owner.
+    SELECT project.id FROM projects project, target
+    WHERE project.organization_id = target.organization_id
+      AND project.deleted IS FALSE
+    ORDER BY (project.slug = 'default') DESC, project.created_at ASC, project.id ASC
+    LIMIT 1
 ), foreign_projects AS (
     SELECT p.id FROM projects p, target
-    WHERE p.organization_id = target.organization_id AND p.slug <> 'default'
+    WHERE p.organization_id = target.organization_id
+      AND p.id NOT IN (SELECT id FROM canonical)
 )
 SELECT (
     (SELECT count(*) FROM channels_settings s WHERE s.project_id IN (SELECT id FROM foreign_projects))
@@ -584,7 +592,7 @@ SELECT (
 `
 
 // Rows of every project-owned Channels table that are stored under any project
-// other than the organization's default one.
+// other than the organization's canonical Channels project.
 func (q *Queries) FixtureCountRowsOutsideDefaultProject(ctx context.Context, organizationID string) (int64, error) {
 	row := q.db.QueryRow(ctx, fixtureCountRowsOutsideDefaultProject, organizationID)
 	var column_1 int64

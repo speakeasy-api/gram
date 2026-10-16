@@ -118,7 +118,7 @@ func (h *Handler) snapshot(ctx context.Context, q *repo.Queries, p Principal, ac
 		ThreadsNextAfter: page.nextCursor.encode(),
 		Limits:           h.limitsSummary(),
 		Grants:           nil,
-		Viewer:           newViewerView(p, acc),
+		Viewer:           acc.effective(p),
 	}
 	if p.CanAdmin {
 		grants, err := h.grants(ctx, q, p)
@@ -191,7 +191,7 @@ func (h *Handler) administrativeSnapshot(ctx context.Context, q *repo.Queries, p
 		ThreadsNextAfter: "",
 		Limits:           h.limitsSummary(),
 		Grants:           grants,
-		Viewer:           newViewerView(p, acc),
+		Viewer:           acc.effective(p),
 	}, nil
 }
 

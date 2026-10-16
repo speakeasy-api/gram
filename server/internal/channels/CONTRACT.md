@@ -202,15 +202,15 @@ Every `/channels/api` error body is `{"error": string}`.
 
 `/channels/mcp` answers an unauthenticated request with 401 and a
 `WWW-Authenticate` challenge naming the Channels resource metadata, and a
-malformed JSON-RPC body with 400. Every other failure is HTTP 200 carrying a
-JSON-RPC `error` object:
+malformed JSON-RPC body or a request without an `id` with 400. Every other
+failure of a valid request is HTTP 200 carrying a JSON-RPC `error` object:
 
-| code     | meaning                                                                       |
-| -------- | ----------------------------------------------------------------------------- |
-| `-32000` | the operation was refused; `message` says why (denied, invalid, rate limited) |
-| `-32601` | unknown method                                                                |
-| `-32602` | invalid subscription parameters or unknown resource                           |
-| `-32603` | unexpected server failure (generic message; detail is logged server-side)     |
+| code     | meaning                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `-32000` | the operation was refused; `message` says why (denied, invalid, rate limited, unknown resource on `resources/read`) |
+| `-32601` | unknown method                                                                                                      |
+| `-32602` | invalid subscription parameters or unknown subscribed resource                                                      |
+| `-32603` | unexpected server failure (generic message; detail is logged server-side)                                           |
 
 Every MCP result carries `resultType: "complete"` and the server identity under
 `_meta["io.modelcontextprotocol/serverInfo"]`. The results of server/discover,

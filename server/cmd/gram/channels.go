@@ -256,7 +256,7 @@ func newChannelsAccessService(config platformMCPConfig) *platformmcp.ChannelsAcc
 	if !config.ChannelsEnabled {
 		return nil
 	}
-	return platformmcp.NewChannelsAccessService(config.Authz, config.ServerURL)
+	return platformmcp.NewChannelsAccessService(config.Authz, config.DB, config.ServerURL)
 }
 
 // channelsProtocolVersionSupported admits a request that declares no version

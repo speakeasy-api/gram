@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,7 +19,11 @@ import (
 const (
 	// maxRequestBytes bounds any single request body.
 	maxRequestBytes = 65536
-	protocolVersion = mcpversions.Version20260728
+
+	// latestHandshakeVersion is the newest revision that still opens with
+	// initialize. MCP 2026-07-28 has no initialize, so a client that asks for
+	// a revision initialize cannot speak is answered with this one.
+	latestHandshakeVersion = mcpversions.Version20251125
 
 	// metaKeyServerInfo is the _meta key MCP 2026-07-28 reserves for the
 	// server's identity on every result of its stateless protocol.
@@ -271,8 +276,16 @@ var errUnknownMethod = errors.New("method not found")
 func (h *Handler) callMCP(r *http.Request, req rpcRequest) (any, error) {
 	switch req.Method {
 	case "initialize":
+		var params struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		}
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &params); err != nil {
+				return nil, fmt.Errorf("%w: invalid initialize parameters", ErrInvalid)
+			}
+		}
 		return map[string]any{
-			"protocolVersion": protocolVersion,
+			"protocolVersion": negotiateHandshakeVersion(params.ProtocolVersion),
 			"serverInfo":      serverIdentity,
 			"capabilities":    serverCapabilities(),
 			"instructions":    serverInstructions,
@@ -336,6 +349,16 @@ func (h *Handler) callMCP(r *http.Request, req rpcRequest) (any, error) {
 	default:
 		return nil, errUnknownMethod
 	}
+}
+
+// negotiateHandshakeVersion answers initialize with the client's requested
+// revision when it is a handshake revision this endpoint serves, and with the
+// newest handshake revision otherwise, as the handshake requires.
+func negotiateHandshakeVersion(requested string) string {
+	if requested != mcpversions.Version20260728 && slices.Contains(SupportedProtocolVersions, requested) {
+		return requested
+	}
+	return latestHandshakeVersion
 }
 
 func serverCapabilities() map[string]any {

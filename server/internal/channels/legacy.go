@@ -143,10 +143,11 @@ type ConversionOptions struct {
 	OrganizationID string
 }
 
-// legacyDocumentPage is how many legacy documents one listing query reads. A
-// development database holds a handful; paging keeps an unscoped run complete
-// however many there are.
-const legacyDocumentPage = 1000
+// legacyDocumentPage is how many legacy documents one listing query reads and
+// converts before reading the next. Each document holds an organization's
+// whole proof-of-concept state, so a small page bounds memory while paging
+// keeps an unscoped run complete however many documents there are.
+const legacyDocumentPage = 50
 
 // ConvertLegacyState copies the superseded channels_state document into the
 // normalized tables.
@@ -166,9 +167,11 @@ func ConvertLegacyState(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 		return result, fmt.Errorf("%w: no database", ErrUnavailable)
 	}
 	queries := repo.New(db)
-	var documents []repo.ListLegacyChannelsStatesRow
+	var failures []error
 	after := ""
 	for {
+		// Each page is converted before the next is read, so memory holds at
+		// most one page of documents however many there are.
 		page, err := queries.ListLegacyChannelsStates(ctx, repo.ListLegacyChannelsStatesParams{
 			OrganizationID:      opts.OrganizationID,
 			AfterOrganizationID: after,
@@ -177,33 +180,32 @@ func ConvertLegacyState(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 		if err != nil {
 			return result, fmt.Errorf("list legacy channels documents: %w", err)
 		}
-		documents = append(documents, page...)
+		for _, document := range page {
+			imported, err := convertOne(ctx, db, queries, document, opts)
+			if err != nil {
+				// A failure is reported, never swallowed: the whole point of
+				// this command is that an operator knows what happened to
+				// their data.
+				logger.ErrorContext(ctx, "channels legacy conversion failed for an organization",
+					attr.SlogOrganizationID(document.OrganizationID), attr.SlogError(err))
+				result.Refused = append(result.Refused, ConversionRefusal{
+					OrganizationID: document.OrganizationID,
+					Reason:         err.Error(),
+				})
+				failures = append(failures, fmt.Errorf("organization %s: %w", document.OrganizationID, err))
+				continue
+			}
+			result.Organizations++
+			result.Instances += imported.Instances
+			result.Conversations += imported.Conversations
+			result.Messages += imported.Messages
+			result.SkippedMessages += imported.SkippedMessages
+			result.Mappings = append(result.Mappings, imported.Mappings...)
+		}
 		if len(page) < legacyDocumentPage {
 			break
 		}
 		after = page[len(page)-1].OrganizationID
-	}
-	var failures []error
-	for _, document := range documents {
-		imported, err := convertOne(ctx, db, queries, document, opts)
-		if err != nil {
-			// A failure is reported, never swallowed: the whole point of this
-			// command is that an operator knows what happened to their data.
-			logger.ErrorContext(ctx, "channels legacy conversion failed for an organization",
-				attr.SlogOrganizationID(document.OrganizationID), attr.SlogError(err))
-			result.Refused = append(result.Refused, ConversionRefusal{
-				OrganizationID: document.OrganizationID,
-				Reason:         err.Error(),
-			})
-			failures = append(failures, fmt.Errorf("organization %s: %w", document.OrganizationID, err))
-			continue
-		}
-		result.Organizations++
-		result.Instances += imported.Instances
-		result.Conversations += imported.Conversations
-		result.Messages += imported.Messages
-		result.SkippedMessages += imported.SkippedMessages
-		result.Mappings = append(result.Mappings, imported.Mappings...)
 	}
 	if len(failures) > 0 {
 		return result, fmt.Errorf("convert channels documents: %w", errors.Join(failures...))

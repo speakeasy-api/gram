@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/channels"
 )
 
 const getMyChannelsAccessName = "get_my_channels_access"
@@ -64,17 +66,19 @@ type GetMyChannelsAccessOutput struct {
 // ChannelsAccessService answers get_my_channels_access.
 type ChannelsAccessService struct {
 	engine    *authz.Engine
+	db        *pgxpool.Pool
 	serverURL *url.URL
 }
 
 // NewChannelsAccessService returns a service that reports Channels access
-// against engine and names the endpoint under serverURL.
-func NewChannelsAccessService(engine *authz.Engine, serverURL *url.URL) *ChannelsAccessService {
-	return &ChannelsAccessService{engine: engine, serverURL: serverURL}
+// against engine, applies access exceptions stored in db, and names the
+// endpoint under serverURL.
+func NewChannelsAccessService(engine *authz.Engine, db *pgxpool.Pool, serverURL *url.URL) *ChannelsAccessService {
+	return &ChannelsAccessService{engine: engine, db: db, serverURL: serverURL}
 }
 
 func (s *ChannelsAccessService) valid() bool {
-	return s != nil && s.engine != nil && s.serverURL != nil
+	return s != nil && s.engine != nil && s.db != nil && s.serverURL != nil
 }
 
 // Get reports the principal's own Channels permissions.
@@ -83,7 +87,8 @@ func (s *ChannelsAccessService) valid() bool {
 // None of them implies another, and none of them is implied by mcp:connect or
 // org:admin membership, so a single combined check would quietly widen one of
 // them. The evaluation reads the live grants PrepareExternalContext resolved
-// for this request rather than anything carried on the token.
+// for this request rather than anything carried on the token, and the member's
+// Channels access exception, if any, is then applied to them.
 func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal) (GetMyChannelsAccessOutput, error) {
 	permissions := make([]bool, 0, 3)
 	for _, scope := range []authz.Scope{authz.ScopeChannelsConnect, authz.ScopeChannelsAdmin, authz.ScopeChannelsReadAll} {
@@ -93,11 +98,25 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal) (G
 		}
 		permissions = append(permissions, allowed)
 	}
+	// The answer is the access the Channels endpoint enforces: an access
+	// exception overrides the role-granted connect and read-all permissions,
+	// through the same resolution the endpoint itself uses.
+	effective, err := channels.ResolveEffectiveAccess(ctx, s.db, channels.Principal{
+		OrganizationID: principal.OrganizationID,
+		SubjectID:      principal.UserID,
+		SubjectName:    "",
+		CanConnect:     permissions[0],
+		CanAdmin:       permissions[1],
+		CanReadAll:     permissions[2],
+	})
+	if err != nil {
+		return GetMyChannelsAccessOutput{}, fmt.Errorf("resolve channels access: %w", err)
+	}
 	output := GetMyChannelsAccessOutput{
 		EndpointURL:             channelsResource(platformBaseURL(ctx, s.serverURL)),
-		CanConnect:              permissions[0],
-		CanAdminister:           permissions[1],
-		CanReadAllConversations: permissions[2],
+		CanConnect:              effective.CanConnect,
+		CanAdminister:           effective.CanAdmin,
+		CanReadAllConversations: effective.CanReadAll,
 	}
 	switch {
 	case output.CanConnect:
