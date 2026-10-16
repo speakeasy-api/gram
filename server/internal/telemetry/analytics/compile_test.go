@@ -59,7 +59,7 @@ func TestCompileGrouped(t *testing.T) {
 	require.Contains(t, plan.SQL, "count() AS count")
 	require.Contains(t, plan.SQL, "sum(tool_call_count) AS tool_calls")
 	require.Contains(t, plan.SQL, "quantile(0.95)((ended_at - started_at) / 1e9) AS p95_duration_seconds")
-	require.Contains(t, plan.SQL, "LIMIT 1 BY organization_id, project_id, record_id", "the source query de-duplicates before anything aggregates")
+	require.Contains(t, plan.SQL, "GROUP BY organization_id, project_id, session_id) AS src", "the source query folds before anything aggregates")
 	require.Contains(t, plan.SQL, "WHERE surface IN (?,?)")
 	require.Contains(t, plan.SQL, "GROUP BY time_bucket, user, model")
 	require.Contains(t, plan.SQL, "ORDER BY tool_calls DESC, time_bucket ASC, user ASC, model ASC")

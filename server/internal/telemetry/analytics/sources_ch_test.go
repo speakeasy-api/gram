@@ -179,7 +179,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Equal(t, "dev@example.com", got[0].user)
 		require.Equal(t, "claude-sonnet-4", got[0].model, "the trailing hook row, which states no model, does not blank it")
 		require.Equal(t, "s2", got[1].id)
-		require.Zero(t, got[1].turns, "an empty turn id is not a turn, and the record withdrawn from s2 brings none with it")
+		require.Equal(t, int64(1), got[1].turns, "the append log keeps the record filed under s2, so withdrawing it later does not remove it")
 		require.Zero(t, got[1].toolCalls)
 	})
 
@@ -261,32 +261,12 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		// Only the result named the skill, and the decision still counts
 		// towards the row: the invocation starts when it was decided and its
 		// status is that decision. A predicate on the raw rows would have
-		// dropped the decision before the collapse and lost both.
+		// dropped the decision before the fold and lost both.
 		require.Equal(t, "tc4", got[1].id)
 		require.Equal(t, "release", got[1].skill)
 		require.Equal(t, "rejected", got[1].status)
 		require.Equal(t, base+7, got[1].startedAt)
 		require.Equal(t, base+8, got[1].endedAt)
-	})
-
-	t.Run("deduped keeps one copy of a re-emitted record, the latest observed", func(t *testing.T) {
-		t.Parallel()
-		// Every measure above is idempotent under duplicates by design, so the
-		// collapse cannot be seen through them. Read the scan itself.
-		inner, args, err := collapsedAgentEvents(qc).ToSql()
-		require.NoError(t, err)
-		result, err := conn.Query(t.Context(), "SELECT record_id, text FROM ("+inner+") WHERE record_id = 'r1'", args...)
-		require.NoError(t, err)
-		defer func() { require.NoError(t, result.Close()) }()
-
-		var copies []string
-		for result.Next() {
-			var recordID, text string
-			require.NoError(t, result.Scan(&recordID, &text))
-			copies = append(copies, text)
-		}
-		require.NoError(t, result.Err())
-		require.Equal(t, []string{"re-emitted"}, copies, "one copy survives, and it is the one observed last")
 	})
 }
 

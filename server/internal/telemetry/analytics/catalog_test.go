@@ -178,14 +178,15 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 	})
 }
 
-func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
+func TestSourceQueriesNeverSortTheWindow(t *testing.T) {
 	t.Parallel()
 
 	qc := QueryContext{Tenant: Tenant{OrganizationID: "org", ProjectID: "proj"}, Window: Window{FromUnixNano: 1, ToUnixNano: 2}}
 
 	sessions, args, err := Sessions.Source.Rows(qc).ToSql()
 	require.NoError(t, err)
-	require.Contains(t, sessions, "LIMIT 1 BY organization_id, project_id, record_id")
+	require.NotContains(t, sessions, "LIMIT 1 BY")
+	require.Contains(t, sessions, "FROM agent_events WHERE")
 	require.Contains(t, sessions, "GROUP BY organization_id, project_id, session_id")
 	require.Equal(t, []any{"org", "proj", int64(1), int64(2), ""}, args)
 
@@ -290,5 +291,5 @@ func TestDimensionValuesWithoutTypeaheadReadTheRows(t *testing.T) {
 	plan, err := CompileValues(MustCatalog(nil, &ds), Tenant{OrganizationID: "org", ProjectID: "proj"}, nil, ValuesRequest{Dataset: ds.Name, Dimension: "model", FromUnixNano: 1, ToUnixNano: 2, Limit: 0})
 	require.NoError(t, err)
 	require.Contains(t, plan.SQL, "SELECT model AS value, count() AS n FROM (")
-	require.Contains(t, plan.SQL, "LIMIT 1 BY")
+	require.Contains(t, plan.SQL, "GROUP BY organization_id, project_id, session_id) AS src")
 }
