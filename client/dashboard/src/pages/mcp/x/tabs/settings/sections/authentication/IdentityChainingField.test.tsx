@@ -1305,4 +1305,39 @@ describe("identity chaining connection scopes", () => {
     expect(applyButton()).toBeNull();
     expect(screen.getByText("Turning it on again applies them.")).toBeTruthy();
   });
+
+  it("checks the recorded scopes when Turn on can't follow the connection", () => {
+    const scoped = [
+      { ...clients[0], scope: ["read"] },
+    ] as RemoteSessionClient[];
+    read.data = {
+      ...bound("first"),
+      state: "transient_failure",
+      scopes: ["write"],
+      connectionScopes: ["write"],
+      scopesOutOfDate: false,
+    };
+    render(
+      <IdentityChainingField
+        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+        providers={{ external: false }}
+        linkedClients={scoped}
+        resource="https://example.com/mcp"
+      />,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Turn on" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("holds Turn off while the connection's scopes are applying", () => {
+    read.data = outOfDate;
+    render(field());
+    const turnOff = () =>
+      screen.getByRole("button", { name: "Turn off" }) as HTMLButtonElement;
+    expect(turnOff().disabled).toBe(false);
+    fireEvent.click(applyButton()!);
+    expect(turnOff().disabled).toBe(true);
+  });
 });

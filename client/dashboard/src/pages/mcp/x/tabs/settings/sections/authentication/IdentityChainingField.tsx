@@ -397,10 +397,10 @@ export function IdentityChainingField({
   const scopes = bound
     ? sanitizeChainingScopes(storedScopes)
     : defaultChainingScopes(selected?.scope);
-  // A linked client's binding records the connection's scopes, not these.
+  // prepareEMA skips the scope check only when it follows the connection (scopesOutOfDate).
   const scopesValid =
     selected != null &&
-    ((bound && read.data?.connectionScopes !== undefined) ||
+    ((bound && read.data?.scopesOutOfDate === true) ||
       chainingScopesAllowed(scopes, selected.scope));
   const [confirmDisable, setConfirmDisable] = useState(false);
 
@@ -588,7 +588,9 @@ export function IdentityChainingField({
     );
   };
 
-  const pending = read.isFetching || prepare.isPending || unlink.isPending;
+  const [applyingScopes, setApplyingScopes] = useState(false);
+  const pending =
+    read.isFetching || prepare.isPending || unlink.isPending || applyingScopes;
   const ready = bound && read.data?.state === "ready";
   const canWrite = hasScope("project:write", project.id);
   const shownState = read.data ? displayedChainingState(read.data) : null;
@@ -757,6 +759,7 @@ export function IdentityChainingField({
             canApply={ready && canWrite && !grantsBlocked}
             canWrite={canWrite}
             busy={pending}
+            onApplyingChange={setApplyingScopes}
           />
         )}
         <ApiErrorAlert error={error} />
@@ -1140,6 +1143,7 @@ function ScopesOutOfDateNotice({
   canApply,
   canWrite,
   busy,
+  onApplyingChange,
 }: {
   gramProject: string;
   target: {
@@ -1153,6 +1157,7 @@ function ScopesOutOfDateNotice({
   canApply: boolean;
   canWrite: boolean;
   busy: boolean;
+  onApplyingChange: (applying: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [conflict, setConflict] = useState(false);
@@ -1182,6 +1187,7 @@ function ScopesOutOfDateNotice({
       toast.success("Enterprise Managed Authorization uses the new scopes");
     },
     onError: () => undefined,
+    onSettled: () => onApplyingChange(false),
   });
   return (
     <div className="space-y-2 pt-2">
@@ -1209,6 +1215,7 @@ function ScopesOutOfDateNotice({
           disabled={busy || apply.isPending}
           onClick={() => {
             setConflict(false);
+            onApplyingChange(true);
             apply.mutate({
               request: {
                 gramProject,
