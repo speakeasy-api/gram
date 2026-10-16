@@ -753,6 +753,24 @@ func (q *Queries) PostflightCountRemovedGatewayMembers(ctx context.Context, proj
 	return count, err
 }
 
+const postflightCountServerToolMetadata = `-- name: PostflightCountServerToolMetadata :one
+SELECT count(*) FROM mcp_server_tool_metadata
+WHERE project_id = $1::uuid AND deleted IS FALSE
+  AND mcp_server_id = $2::uuid
+`
+
+type PostflightCountServerToolMetadataParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+}
+
+func (q *Queries) PostflightCountServerToolMetadata(ctx context.Context, arg PostflightCountServerToolMetadataParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountServerToolMetadata, arg.ProjectID, arg.McpServerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountSetupTasks = `-- name: PostflightCountSetupTasks :one
 SELECT count(*) FROM organization_setup_tasks
 WHERE organization_id = $1::text
