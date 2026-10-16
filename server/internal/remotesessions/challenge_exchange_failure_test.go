@@ -19,6 +19,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 		contentType string
 		body        string
 		want        string
+		wantCode    oops.Code
 	}{
 		{
 			name:        "registered code",
@@ -26,6 +27,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			contentType: "application/json",
 			body:        `{"error":"invalid_grant","error_description":"Grant not found or authorization code expired"}`,
 			want:        "token exchange with the identity provider failed: invalid_grant",
+			wantCode:    oops.CodeUnauthorized,
 		},
 		{
 			name:        "registered code wins over status",
@@ -33,6 +35,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			contentType: "application/json",
 			body:        `{"error":"invalid_client"}`,
 			want:        "token exchange with the identity provider failed: invalid_client",
+			wantCode:    oops.CodeUnauthorized,
 		},
 		{
 			name:        "unregistered code",
@@ -40,6 +43,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			contentType: "application/json",
 			body:        `{"error":"app_not_enabled","error_description":"Click here to fix: https://evil.example"}`,
 			want:        "token exchange with the identity provider failed: HTTP 400",
+			wantCode:    oops.CodeUnauthorized,
 		},
 		{
 			name:        "non-oauth body",
@@ -47,6 +51,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			contentType: "text/html",
 			body:        `<html>Bad Request</html>`,
 			want:        "token exchange with the identity provider failed: HTTP 400",
+			wantCode:    oops.CodeUnauthorized,
 		},
 		{
 			name:        "server error without body",
@@ -54,6 +59,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			contentType: "text/plain",
 			body:        ``,
 			want:        "token exchange with the identity provider failed: HTTP 503",
+			wantCode:    oops.CodeUnavailable,
 		},
 		{
 			name:        "error body under 200",
@@ -61,6 +67,23 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			contentType: "application/json",
 			body:        `{"error":"bad_verification_code","error_description":"The code passed is incorrect or expired."}`,
 			want:        "token exchange with the identity provider failed: invalid_grant",
+			wantCode:    oops.CodeUnauthorized,
+		},
+		{
+			name:        "undecodable error body under 200",
+			status:      http.StatusOK,
+			contentType: "application/json",
+			body:        `{"error":"invalid_grant","expires_in":""}`,
+			want:        "token exchange with the identity provider failed: invalid_grant",
+			wantCode:    oops.CodeUnauthorized,
+		},
+		{
+			name:        "server_error under 200",
+			status:      http.StatusOK,
+			contentType: "application/json",
+			body:        `{"error":"server_error"}`,
+			want:        "token exchange with the identity provider failed: server_error",
+			wantCode:    oops.CodeGatewayError,
 		},
 		{
 			name:        "unregistered code under 200",
@@ -68,6 +91,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			contentType: "application/json",
 			body:        `{"error":"app_not_enabled"}`,
 			want:        "token exchange with the identity provider failed",
+			wantCode:    oops.CodeUnauthorized,
 		},
 		{
 			name:        "malformed body under 200",
@@ -75,6 +99,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			contentType: "text/html",
 			body:        `<html>OK</html>`,
 			want:        "token exchange with the identity provider failed",
+			wantCode:    oops.CodeUnauthorized,
 		},
 		{
 			name:        "no access token under 200",
@@ -82,6 +107,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			contentType: "application/json",
 			body:        `{"token_type":"Bearer"}`,
 			want:        "token exchange with the identity provider failed",
+			wantCode:    oops.CodeUnauthorized,
 		},
 	}
 	for _, tc := range cases {
@@ -98,7 +124,7 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 
 			var shareable *oops.ShareableError
 			require.ErrorAs(t, err, &shareable)
-			require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+			require.Equal(t, tc.wantCode, shareable.Code)
 			require.Equal(t, tc.want, shareable.Error(), "the provider's free-text description is never echoed")
 		})
 	}
