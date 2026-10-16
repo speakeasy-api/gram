@@ -70,7 +70,7 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindMCP
 	case "mcp":
 		return ResourceKindMCP
-	case "org":
+	case "org", "channels":
 		return ResourceKindOrg
 	case "environment":
 		return ResourceKindEnvironment

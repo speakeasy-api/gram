@@ -104,6 +104,9 @@ export const Slug = {
   WorkloadBlockedWrite: "workload:blocked_write",
   OrgDeviceAgentSync: "org:device_agent_sync",
   OrgHooksIngest: "org:hooks_ingest",
+  ChannelsConnect: "channels:connect",
+  ChannelsAdmin: "channels:admin",
+  ChannelsReadAll: "channels:read_all",
 } as const;
 /**
  * Unique scope identifier.

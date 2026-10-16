@@ -65,3 +65,22 @@ func platformResource(base *url.URL) string {
 func platformProtectedResourceMetadataURL(base *url.URL) string {
 	return base.JoinPath(".well-known", "oauth-protected-resource", "platform-mcp").String()
 }
+
+// channelsResource is the RFC 8707 resource identifier of the Channels
+// endpoint on base. Channels shares this authorization server, login and
+// connection records, but it is a distinct audience: a token minted for one
+// resource must never authenticate the other. Every construction of either
+// audience goes through these two helpers so the authorize leg, the token
+// leg, the bearer check and the discovery document cannot drift apart.
+func channelsResource(base *url.URL) string {
+	return base.JoinPath("channels", "mcp").String()
+}
+
+// ChannelsProtectedResourceMetadataURL is the RFC 9728 metadata document for
+// the Channels resource on the platform host a request arrived on. The
+// Channels endpoint returns it in the WWW-Authenticate challenge of every
+// 401, which is how a client discovers it must authorize for the Channels
+// audience rather than reuse a Platform MCP token.
+func ChannelsProtectedResourceMetadataURL(ctx context.Context, serverURL *url.URL) string {
+	return platformBaseURL(ctx, serverURL).JoinPath(".well-known", "oauth-protected-resource", "channels", "mcp").String()
+}

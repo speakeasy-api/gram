@@ -57,13 +57,37 @@ func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encrypt
 }
 
 func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Principal, error) {
+	if a == nil || a.baseURL == nil {
+		return Principal{}, ErrUnavailable
+	}
+	base := platformBaseURL(ctx, a.baseURL)
+	return a.authenticateResource(ctx, token, platformResource(base), platformResource(base), SurfacePlatformMCP)
+}
+
+// AuthenticateChannels validates only tokens minted for the dedicated Channels
+// resource, and returns a principal tagged with SurfaceChannels. The audience
+// check is what stops a Platform MCP token reaching Channels; the surface tag
+// is what stops a Channels token satisfying a check this package wrote for its
+// own endpoint, should the two ever share a code path.
+func (a *JWTAuthenticator) AuthenticateChannels(ctx context.Context, token string) (Principal, error) {
+	if a == nil || a.baseURL == nil {
+		return Principal{}, ErrUnavailable
+	}
+	base := platformBaseURL(ctx, a.baseURL)
+	return a.authenticateResource(ctx, token, channelsResource(base), platformResource(base), SurfaceChannels)
+}
+
+// authenticateResource accepts a token whose audience is exactly resource and
+// whose issuer is the authorization server on the same platform origin. Both
+// audiences share that one authorization server, so the issuer is the same for
+// both and only the audience tells them apart.
+func (a *JWTAuthenticator) authenticateResource(ctx context.Context, token, resource, issuer string, surface ActingSurface) (Principal, error) {
 	if a.signer == nil || a.store == nil || a.credentials == nil || a.baseURL == nil {
 		return Principal{}, ErrUnavailable
 	}
 
-	resource := platformResource(platformBaseURL(ctx, a.baseURL))
 	claims, err := a.signer.ValidateExactAudience(token, resource)
-	if err != nil || claims.Issuer != resource {
+	if err != nil || claims.Issuer != issuer {
 		return Principal{}, ErrUnauthorized
 	}
 	subject, err := urn.ParseSessionSubject(claims.Subject)
@@ -87,7 +111,7 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 	}
 
 	return Principal{
-		Surface:        SurfacePlatformMCP,
+		Surface:        surface,
 		UserID:         subject.ID,
 		OrganizationID: session.OrganizationID,
 		ConnectionID:   session.ConnectionID.String(),
@@ -367,6 +391,7 @@ type PostgresReader struct {
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
 	organizationGateway       *OrganizationGatewayService
+	channelsAccess            *ChannelsAccessService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -403,6 +428,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindingList:           nil,
 		chatMetadata:              nil,
 		organizationGateway:       nil,
+		channelsAccess:            nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -604,6 +630,16 @@ func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *Postgre
 func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.organizationGateway = service
+	}
+	return r
+}
+
+// WithChannelsAccess serves get_my_channels_access. A nil or incomplete
+// service leaves the tool registered as a stub, so it does not appear on and
+// disappear from the catalogue as the rollout flips.
+func (r *PostgresReader) WithChannelsAccess(service *ChannelsAccessService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.channelsAccess = service
 	}
 	return r
 }

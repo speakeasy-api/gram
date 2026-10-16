@@ -17,7 +17,10 @@ func (s *seeder) postflight(ctx context.Context) error {
 	if err := s.postflightCore(ctx); err != nil {
 		return err
 	}
-	return s.postflightIdentity(ctx)
+	if err := s.postflightIdentity(ctx); err != nil {
+		return err
+	}
+	return s.postflightChannels(ctx)
 }
 
 // postflightCountCheck is one count query and the condition that fails it.

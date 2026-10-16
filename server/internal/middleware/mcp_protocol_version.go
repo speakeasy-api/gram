@@ -94,6 +94,8 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// beside it, and the tail is an agent id rather than a slug, so every
 		// one-segment tail here is the endpoint itself.
 		return isEndpointSlug(tail)
+	case "channels":
+		return tail == "mcp"
 	case "platform-mcp":
 		// POST /platform-mcp is Speakeasy's own platform MCP server
 		// (internal/platformmcp), served by the go-sdk's Streamable HTTP

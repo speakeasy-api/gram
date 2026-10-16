@@ -405,6 +405,14 @@ func GetMCPClientInfo(ctx context.Context) (MCPClientInfo, bool) {
 // RBAC to enforce for every other human-driven surface.
 const ActingSurfacePlatformMCP = "platform_mcp"
 
+// ActingSurfaceChannels marks a call arriving through the Channels endpoint.
+// Channels shares the Platform MCP authorization server and account but is a
+// separate audience with its own permissions, so it carries its own surface.
+// It is named here for the same reason Platform MCP is: a Channels call
+// carries a real user and no browser session, and RBAC has to know that a
+// missing session on this surface means "enforce" rather than "internal path".
+const ActingSurfaceChannels = "channels"
+
 func SetActingSurface(ctx context.Context, value string) context.Context {
 	return context.WithValue(ctx, actingSurfaceContextKey, value)
 }

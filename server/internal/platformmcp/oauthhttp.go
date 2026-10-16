@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -68,8 +69,10 @@ var (
 )
 
 type oauthPageData struct {
-	Title string
-	Kind  string
+	SurfaceName string
+	Channels    bool
+	Title       string
+	Kind        string
 	// ClientName is attacker-chosen for any CIMD-resolved client: it comes
 	// from a document served at a URL the client picked. ClientIDOrigin is
 	// the trust anchor that name lacks — the host the document was fetched
@@ -119,7 +122,8 @@ type oauthChallenge struct {
 	// browser legs after the identity provider return there, and the
 	// authorization code is bound to that origin's resource. Empty means the
 	// configured base URL.
-	BaseURL string `json:"base_url,omitempty"`
+	BaseURL  string `json:"base_url,omitempty"`
+	Resource string `json:"resource,omitempty"`
 }
 
 func (c oauthChallenge) CacheKey() string              { return platformOAuthChallengePrefix + c.ID }
@@ -161,6 +165,10 @@ type OAuthHTTP struct {
 	// provider stores the callback URL, so it stays pinned when the server
 	// URL moves.
 	idpCallbackBaseURL *url.URL
+	// channelsEnabled is the deployment-scoped Channels rollout gate. False
+	// withholds the Channels audience entirely: its resource metadata is not
+	// served and no authorization can be bound to it.
+	channelsEnabled bool
 }
 
 type OAuthHTTPConfig struct {
@@ -183,6 +191,11 @@ type OAuthHTTPConfig struct {
 	// IDPCallbackBaseURL is the pinned origin of the identity provider
 	// callback. Nil uses BaseURL.
 	IDPCallbackBaseURL *url.URL
+	// ChannelsEnabled turns on the Channels OAuth audience. It is the same
+	// deployment-scoped rollout gate that decides whether the Channels
+	// endpoints are served at all, so the advertised audience and the
+	// reachable endpoint appear and disappear together.
+	ChannelsEnabled bool
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
@@ -230,6 +243,7 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		cimdAdmission: admission.NewMetrics(meterProvider, logger),
 
 		idpCallbackBaseURL: &idpCallbackBaseURL,
+		channelsEnabled:    config.ChannelsEnabled,
 	}, nil
 }
 
@@ -244,6 +258,13 @@ func (s *OAuthHTTP) Attach(mux interface {
 	Handle(string, string, http.HandlerFunc)
 }) {
 	mux.Handle("GET", "/.well-known/oauth-protected-resource/platform-mcp", handlerFunc(s.ProtectedResourceHandler()))
+	// Channels discovery is registered only where Channels is rolled out. A
+	// deployment without it answers 404 for the metadata document, the same
+	// as for the endpoint itself, rather than advertising an audience whose
+	// resource is not served and for which no token can be minted.
+	if s.channelsEnabled {
+		mux.Handle("GET", "/.well-known/oauth-protected-resource/channels/mcp", handlerFunc(s.ChannelsProtectedResourceHandler()))
+	}
 	mux.Handle("GET", "/.well-known/oauth-authorization-server/platform-mcp", handlerFunc(s.AuthorizationServerHandler()))
 	mux.Handle("POST", "/platform-mcp/register", handlerFunc(s.RegisterHandler()))
 	mux.Handle("GET", "/platform-mcp/authorize", handlerFunc(s.AuthorizeHandler()))
@@ -372,12 +393,17 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			return
 		}
 
+		resource, resourceErr := s.requestedResource(r.Context(), r.URL.Query().Get("resource"))
+		if resourceErr != nil {
+			writeOAuthError(w, http.StatusBadRequest, "invalid_target", "unsupported resource")
+			return
+		}
 		csrfToken, err := opaqueToken()
 		if err != nil {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
 			return
 		}
-		challenge := oauthChallenge{ID: uuid.NewString(), ClientID: request.ClientID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrfToken, OrganizationID: "", Subject: "", CreatedAt: time.Now(), BaseURL: platformBaseURL(r.Context(), s.baseURL).String()}
+		challenge := oauthChallenge{ID: uuid.NewString(), ClientID: request.ClientID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrfToken, OrganizationID: "", Subject: "", CreatedAt: time.Now(), BaseURL: platformBaseURL(r.Context(), s.baseURL).String(), Resource: resource}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization")
 			return
@@ -475,7 +501,9 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:         "Choose an organization · Platform MCP",
+		Title:         "Choose an organization · " + s.challengeSurfaceName(challenge),
+		SurfaceName:   s.challengeSurfaceName(challenge),
+		Channels:      s.challengeIsChannels(challenge),
 		Kind:          "organization",
 		ClientName:    client.Name,
 		Organizations: organizations,
@@ -589,7 +617,9 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:            "Connect Platform MCP",
+		Title:            "Connect " + s.challengeSurfaceName(challenge),
+		SurfaceName:      s.challengeSurfaceName(challenge),
+		Channels:         s.challengeIsChannels(challenge),
 		Kind:             "connect",
 		ClientName:       client.Name,
 		ClientIDOrigin:   clientIDOrigin(client),
@@ -636,11 +666,15 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	principal := Principal{UserID: subject.ID, OrganizationID: challenge.OrganizationID, ConnectionID: "pending", Generation: "pending", ClientID: challenge.ClientID}
-	if err := s.gateAndAuthorize(r.Context(), principal); err != nil {
+	if err := s.gateAndAuthorizeResource(r.Context(), principal, challenge.Resource); err != nil {
 		writeAuthorizationGateError(w, r, challenge, err)
 		return
 	}
-	code, err := s.credentials.Issue(authorizationCodeCredential, challenge.OrganizationID, platformResource(s.challengeBaseURL(challenge)))
+	resource := challenge.Resource
+	if resource == "" {
+		resource = platformResource(s.challengeBaseURL(challenge))
+	}
+	code, err := s.credentials.Issue(authorizationCodeCredential, challenge.OrganizationID, resource)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
 		return
@@ -690,7 +724,6 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 			}()
 		}
 		now := s.now()
-		resource := s.resource(r.Context())
 		clientID, clientSecret := clientCredentials(r)
 		client, err := s.authenticateClient(r.Context(), clientID, clientSecret, now)
 		if err != nil {
@@ -705,8 +738,13 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				return
 			}
 			code, err := s.credentials.decode(authorizationCodeCredential, request.Code)
-			if err != nil || s.boundResource(code) != resource {
+			if err != nil || !s.servesResource(r.Context(), s.boundResource(code)) {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid")
+				return
+			}
+			resource, ok := s.grantResource(code, r.PostForm.Get("resource"))
+			if !ok {
+				writeOAuthError(w, http.StatusBadRequest, "invalid_target", "resource does not match this authorization")
 				return
 			}
 			input := platformoauth.ConsumeGrantInput{OrganizationID: code.OrganizationID, Code: request.Code, ClientID: client.ID, RedirectURI: request.RedirectURI, CodeVerifier: request.CodeVerifier, Now: now}
@@ -723,8 +761,13 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				return
 			}
 			refresh, err := s.credentials.decode(refreshTokenCredential, request.RefreshToken)
-			if err != nil || s.boundResource(refresh) != resource {
+			if err != nil || !s.servesResource(r.Context(), s.boundResource(refresh)) {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
+				return
+			}
+			resource, ok := s.grantResource(refresh, r.PostForm.Get("resource"))
+			if !ok {
+				writeOAuthError(w, http.StatusBadRequest, "invalid_target", "resource does not match this refresh token")
 				return
 			}
 			refreshHash := opaqueHash(request.RefreshToken)
@@ -738,7 +781,7 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
 				return
 			}
-			if err := s.gateAndAuthorize(r.Context(), Principal{UserID: subject.ID, OrganizationID: old.Connection.OrganizationID, ConnectionID: old.Connection.ID, Generation: old.Connection.Generation, ClientID: client.ID}); err != nil {
+			if err := s.gateAndAuthorizeResource(r.Context(), Principal{UserID: subject.ID, OrganizationID: old.Connection.OrganizationID, ConnectionID: old.Connection.ID, Generation: old.Connection.Generation, ClientID: client.ID}, resource); err != nil {
 				if errors.Is(err, ErrForbidden) && !errors.Is(err, errPlatformMCPDisabled) {
 					if markErr := s.store.MarkAuthorizationLost(r.Context(), old.Connection.OrganizationID, old.Connection.ID, old.Connection.Generation, now); markErr != nil {
 						writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access change could not be recorded")
@@ -801,7 +844,7 @@ func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	principal := Principal{UserID: subject.ID, OrganizationID: connection.OrganizationID, ConnectionID: connection.ID, Generation: connection.Generation, ClientID: clientID}
-	if err := s.gateAndAuthorize(r.Context(), principal); err != nil {
+	if err := s.gateAndAuthorizeResource(r.Context(), principal, resource); err != nil {
 		writeTokenGateError(w, err)
 		return
 	}
@@ -812,7 +855,7 @@ func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request,
 	}
 	accessExpiresAt := minTime(now.Add(platformAccessTokenLifetime), connection.AuthorizationExpiresAt)
 	refreshExpiresAt := minTime(now.Add(platformRefreshTokenLifetime), connection.AuthorizationExpiresAt)
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: resource, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: s.resource(r.Context()), ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -843,7 +886,7 @@ func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Req
 	}
 	accessExpiresAt := minTime(now.Add(platformAccessTokenLifetime), old.Connection.AuthorizationExpiresAt)
 	refreshExpiresAt := minTime(now.Add(platformRefreshTokenLifetime), old.Connection.AuthorizationExpiresAt)
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: resource, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: s.resource(r.Context()), ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -894,12 +937,36 @@ func minTime(a, b time.Time) time.Time {
 }
 
 func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) error {
-	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID)
-	if err != nil {
-		return fmt.Errorf("check platform mcp feature gate: %w: %w", ErrUnavailable, err)
+	return s.gateAndAuthorizeResource(ctx, principal, "")
+}
+
+// isChannelsResource reports whether resource is the Channels audience, on
+// either the platform host this request arrived on or the configured one.
+//
+// The Platform MCP feature gate deliberately does not apply to Channels.
+// Channels is enabled per organization in its own state and carries its own
+// channels:connect / channels:admin / channels:read_all permissions, which its
+// handler re-evaluates on every operation and every SSE tick. Admission here
+// therefore establishes only live organization membership; it is not an
+// authorization to read or post anything. Making this exemption depend on the
+// resource rather than on which code path called keeps a Platform MCP
+// authorization from ever taking the ungated branch.
+func (s *OAuthHTTP) isChannelsResource(ctx context.Context, resource string) bool {
+	if resource == "" || !s.channelsEnabled {
+		return false
 	}
-	if !enabled {
-		return errPlatformMCPDisabled
+	return resource == channelsResource(platformBaseURL(ctx, s.baseURL)) || resource == channelsResource(s.baseURL)
+}
+
+func (s *OAuthHTTP) gateAndAuthorizeResource(ctx context.Context, principal Principal, resource string) error {
+	if !s.isChannelsResource(ctx, resource) {
+		enabled, err := s.gate.Enabled(ctx, principal.OrganizationID)
+		if err != nil {
+			return fmt.Errorf("check platform mcp feature gate: %w: %w", ErrUnavailable, err)
+		}
+		if !enabled {
+			return errPlatformMCPDisabled
+		}
 	}
 	if err := s.authorizer.RequireLiveMembership(ctx, principal); err != nil {
 		if isAuthorizationDenied(err) {
@@ -1072,6 +1139,34 @@ func (s *OAuthHTTP) challengeBaseURL(challenge oauthChallenge) *url.URL {
 // issued for. Credentials that predate resource binding were all issued for
 // the configured base URL's resource, so they keep working there and only
 // there.
+// servesResource reports whether resource is one this request's platform host
+// serves. A credential bound to another host is not usable here: platform
+// sessions are host-only and an access token is accepted only on the host its
+// audience names, so minting one for a foreign audience would hand back a
+// credential this origin cannot use. Callers report the failure as an invalid
+// grant, because that is what a credential presented on the wrong host is.
+func (s *OAuthHTTP) servesResource(ctx context.Context, resource string) bool {
+	_, err := s.requestedResource(ctx, resource)
+	return err == nil
+}
+
+// grantResource is the audience a token request mints for. It comes from the
+// presented authorization code or refresh token, never from the request: the
+// audience is fixed by what the operator consented to on the authorize leg, so
+// a client cannot widen it, and a client that omits the optional resource
+// parameter on refresh does not silently fall back to the other audience and
+// lose its grant. An explicitly supplied resource must match exactly, which is
+// how a client that believes it holds a credential for one surface finds out
+// it does not. Callers check servesResource first, so the audience returned
+// here is always one this host serves.
+func (s *OAuthHTTP) grantResource(credential credentialPayload, requested string) (string, bool) {
+	bound := s.boundResource(credential)
+	if requested != "" && requested != bound {
+		return "", false
+	}
+	return bound, true
+}
+
 func (s *OAuthHTTP) boundResource(credential credentialPayload) string {
 	if credential.Resource == "" {
 		return platformResource(s.baseURL)
@@ -1150,6 +1245,9 @@ func (s *OAuthHTTP) renderOAuthPage(w http.ResponseWriter, data oauthPageData) {
 		return
 	}
 	data.ScriptNonce = scriptNonce
+	if data.SurfaceName == "" {
+		data.SurfaceName = "Platform MCP"
+	}
 
 	var page strings.Builder
 	if err := oauthPageTemplate.Execute(&page, data); err != nil {
@@ -1219,4 +1317,57 @@ func opaqueToken() (string, error) {
 		return "", fmt.Errorf("generate opaque token: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes), nil
+}
+
+// ChannelsProtectedResourceHandler advertises the channels audience while reusing
+// the existing control-plane authorization server and account connection.
+//
+// It answers only on first-party platform hosts, like the Channels endpoint it
+// describes: a custom domain or private-network ingress serves no Channels
+// resource, so advertising one there would name an endpoint that returns 404.
+func (s *OAuthHTTP) ChannelsProtectedResourceHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if origin, ok := requestorigin.FromContext(r.Context()); ok && origin.Surface != requestorigin.SurfacePlatform {
+			http.NotFound(w, r)
+			return
+		}
+		base := platformBaseURL(r.Context(), s.baseURL)
+		writeJSON(w, http.StatusOK, map[string]any{"resource": channelsResource(base), "authorization_servers": []string{platformResource(base)}, "bearer_methods_supported": []string{"header"}})
+	})
+}
+
+func (s *OAuthHTTP) requestedResource(ctx context.Context, requested string) (string, error) {
+	base := platformBaseURL(ctx, s.baseURL)
+	platform := platformResource(base)
+	channels := channelsResource(base)
+	if requested == "" || requested == platform {
+		return platform, nil
+	}
+	if requested == channels && s.channelsEnabled {
+		return channels, nil
+	}
+	return "", fmt.Errorf("unsupported OAuth resource")
+}
+
+// challengeResource is the audience this authorization was started for. An
+// authorization that predates resource binding is a Platform MCP one.
+func (s *OAuthHTTP) challengeResource(challenge oauthChallenge) string {
+	if challenge.Resource == "" {
+		return platformResource(s.challengeBaseURL(challenge))
+	}
+	return challenge.Resource
+}
+
+// challengeIsChannels discriminates the consent screen on the bound audience
+// rather than on its own display string, so renaming a surface can never
+// change which product the operator is told they are authorizing.
+func (s *OAuthHTTP) challengeIsChannels(challenge oauthChallenge) bool {
+	return s.challengeResource(challenge) == channelsResource(s.challengeBaseURL(challenge))
+}
+
+func (s *OAuthHTTP) challengeSurfaceName(challenge oauthChallenge) string {
+	if s.challengeIsChannels(challenge) {
+		return "Speakeasy Channels"
+	}
+	return "Platform MCP"
 }

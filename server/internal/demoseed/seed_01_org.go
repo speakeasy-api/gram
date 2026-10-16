@@ -106,7 +106,7 @@ func (s *seeder) orgMetadata(ctx context.Context) error {
 func (s *seeder) orgPurge(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
-	return runOrgSteps([]orgStep{
+	if err := runOrgSteps([]orgStep{
 		// Killswitch aggregates retain canonical MCP server keys in immutable
 		// snapshots. Clear every org-scoped aggregate and replay receipt before
 		// the referenced servers/toolsets, including rows created by local
@@ -264,6 +264,13 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete sigint custom signals", func() error {
 			return s.q.OrgDeleteSigintCustomSignals(ctx, org)
 		}},
+	}); err != nil {
+		return err
+	}
+	if err := runOrgSteps(s.channelsPurgeSteps(ctx)); err != nil {
+		return err
+	}
+	return runOrgSteps([]orgStep{
 		{"delete projects", func() error { return s.q.OrgDeleteProjects(ctx, org) }},
 	})
 }

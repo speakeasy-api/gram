@@ -233,6 +233,8 @@ const SUBJECT_TYPE_LABELS: Record<string, string> = {
   otel_forwarding_config: "OpenTelemetry forwarding",
   api_key: "API key",
   chat_session: "Chat session",
+  channels_settings: "Organization",
+  channels_access: "Member",
 };
 
 function subjectTypeLabel(subjectType: string): string {

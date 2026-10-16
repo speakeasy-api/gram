@@ -53,24 +53,45 @@ func TestJWTAuthenticatorBindsTokensToPlatformHost(t *testing.T) {
 	connection := platformoauth.Connection{ID: uuid.NewString(), ClientID: client.ID, Subject: userSubjectURN(userID), OrganizationID: organizationID, Generation: uuid.NewString(), AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterConnection(ctx, connection))
 
-	mint := func(baseURL string) string {
+	mint := func(baseURL, path string) string {
 		t.Helper()
-		resource := baseURL + "/platform-mcp"
+		resource := baseURL + path
 		jti, err := codec.Issue(accessJTICredential, organizationID, resource)
 		require.NoError(t, err)
 		expiresAt := now.Add(time.Hour)
-		token, jti, err := signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: userID}, Audience: resource, Issuer: resource, ExpiresAt: &expiresAt, ClientID: client.ID, JTI: jti})
+		// Both audiences are issued by the one authorization server on the
+		// same platform origin.
+		issuer := baseURL + "/platform-mcp"
+		token, jti, err := signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: userID}, Audience: resource, Issuer: issuer, ExpiresAt: &expiresAt, ClientID: client.ID, JTI: jti})
 		require.NoError(t, err)
 		require.NoError(t, store.CreateSession(ctx, platformoauth.Session{ID: uuid.NewString(), ClientID: client.ID, Connection: connection, JTI: jti, RefreshHash: "refresh-" + uuid.NewString(), ExpiresAt: expiresAt, RefreshExpiresAt: expiresAt}))
 		return token
 	}
-	canonicalToken := mint(testCanonicalBaseURL)
-	extraToken := mint(testExtraHostBaseURL)
+	canonicalToken := mint(testCanonicalBaseURL, "/platform-mcp")
+	extraToken := mint(testExtraHostBaseURL, "/platform-mcp")
+	channelsToken := mint(testCanonicalBaseURL, "/channels/mcp")
 
 	base, err := url.Parse(testCanonicalBaseURL)
 	require.NoError(t, err)
 	authenticator, err := NewJWTAuthenticator(signer, conn, encryptionClient, base)
 	require.NoError(t, err)
+	channelsPrincipal, err := authenticator.AuthenticateChannels(ctx, channelsToken)
+	require.NoError(t, err)
+	// The audience check keeps the two endpoints apart on the wire; the surface
+	// tag keeps them apart inside this package, where surface() would otherwise
+	// read an untagged principal as a Platform MCP one.
+	require.Equal(t, SurfaceChannels, channelsPrincipal.Surface)
+	require.False(t, externalRiskAudiencePrincipal(channelsPrincipal))
+	platformPrincipal, err := authenticator.Authenticate(ctx, canonicalToken)
+	require.NoError(t, err)
+	require.Equal(t, SurfacePlatformMCP, platformPrincipal.Surface)
+	_, err = authenticator.Authenticate(ctx, channelsToken)
+	require.ErrorIs(t, err, ErrUnauthorized)
+	_, err = authenticator.AuthenticateChannels(ctx, canonicalToken)
+	require.ErrorIs(t, err, ErrUnauthorized)
+	extraCtx := requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: testExtraHostBaseURL})
+	_, err = authenticator.AuthenticateChannels(extraCtx, channelsToken)
+	require.ErrorIs(t, err, ErrUnauthorized)
 	for _, tc := range []struct {
 		name    string
 		surface requestorigin.Surface
