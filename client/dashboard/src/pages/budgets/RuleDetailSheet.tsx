@@ -199,7 +199,12 @@ function RuleDetail({
         </section>
 
         {/* Who is driving the spend */}
-        {attributesLoading ? (
+        {!knownWindow ? (
+          <p className="text-muted-foreground text-xs">
+            Usage preview is unavailable for this window. Refresh the page for
+            updated support.
+          </p>
+        ) : attributesLoading ? (
           <Text muted small>
             Loading target attributes…
           </Text>
@@ -207,11 +212,10 @@ function RuleDetail({
           <Text muted small>
             Could not load target attributes. Refresh the page to preview usage.
           </Text>
-        ) : !knownWindow || !isSupportedRuleTarget(rule.target, attributes) ? (
+        ) : !isSupportedRuleTarget(rule.target, attributes) ? (
           <p className="text-muted-foreground text-xs">
-            Usage preview is unavailable for this{" "}
-            {!knownWindow ? "window" : "target condition"}. Refresh the page for
-            updated support.
+            Usage preview is unavailable for this target condition. Refresh the
+            page for updated support.
           </p>
         ) : (
           <PeopleSection

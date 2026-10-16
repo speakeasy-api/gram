@@ -698,7 +698,16 @@ function TargetConditionField({
   };
 
   const attribute = actorAttribute(attributes, condition.attribute);
-  const operators = operatorsForAttribute(attribute);
+  const operators = [...operatorsForAttribute(attribute)];
+  // A custom attribute may be absent from the catalog. Preserve its saved
+  // operator as a selectable option instead of showing an empty selection.
+  if (
+    !attribute &&
+    isRuleTargetOperator(condition.operator) &&
+    !operators.includes(condition.operator)
+  ) {
+    operators.push(condition.operator);
+  }
 
   if (readOnly || !isRuleTargetOperator(condition.operator)) {
     return (
@@ -715,6 +724,7 @@ function TargetConditionField({
         <Select
           value={condition.attribute}
           onValueChange={(attributeName) => {
+            if (attributeName === condition.attribute) return;
             const nextAttribute = actorAttribute(attributes, attributeName);
             const operator = operatorsForAttribute(nextAttribute)[0];
             if (!operator) return;
@@ -729,6 +739,11 @@ function TargetConditionField({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            {!attribute && condition.attribute && (
+              <SelectItem value={condition.attribute}>
+                {attributeLabel(condition.attribute)}
+              </SelectItem>
+            )}
             {attributes.map((attr) => (
               <SelectItem
                 key={attr.name}
