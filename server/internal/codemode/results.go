@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-
-	"github.com/santhosh-tekuri/jsonschema/v6"
+	"strings"
 )
 
 // NormalizeResult preserves structured and content results without exposing _meta.
@@ -61,6 +60,8 @@ type DispatchError struct {
 	BeforeInvoke bool
 	// Code is a public error code; private causes stay in Speakeasy logs.
 	Code string
+	// Rejection is the member's own refusal of the call, shown to the program.
+	Rejection string
 }
 
 func (e *DispatchError) Error() string { return e.Code }
@@ -69,50 +70,28 @@ func failedResult(outcome, code string) *ToolResult {
 	return &ToolResult{Outcome: outcome, Warnings: nil, OK: false, Data: json.RawMessage("null"), Content: json.RawMessage("[]"), Error: code}
 }
 
-// ValidateArguments checks original input schemas without loading remote refs.
-func ValidateArguments(definition, arguments json.RawMessage) error {
+// validateArgumentShape bounds arguments before dispatch; input schemas are
+// the member's to enforce.
+func validateArgumentShape(arguments json.RawMessage) error {
 	var object map[string]json.RawMessage
 	if len(arguments) > MaxResultBytes || json.Unmarshal(arguments, &object) != nil || object == nil {
 		return fmt.Errorf("arguments must be a bounded JSON object")
 	}
-	return validateSchemaField(definition, "inputSchema", arguments, true)
+	return nil
 }
 
-func validateSchemaField(definition json.RawMessage, field string, value json.RawMessage, required bool) error {
-	// Schema compilation is bounded independently of the aggregate catalog.
-	const maxSchemaBytes = 128 << 10 // 128 KiB
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(definition, &fields); err != nil {
-		return fmt.Errorf("invalid tool definition")
+// maxRejectionBytes bounds a member's refusal message shown to the program.
+const maxRejectionBytes = 1 << 10
+
+// rejectedResult reports a member's definitive refusal, such as an unknown
+// tool or invalid arguments, as a completed failed call the program can fix.
+func rejectedResult(message string) *ToolResult {
+	if len(message) > maxRejectionBytes {
+		message = strings.ToValidUTF8(message[:maxRejectionBytes], "")
 	}
-	raw := fields[field]
-	if len(raw) == 0 && !required {
-		return nil
-	}
-	if len(raw) == 0 || len(raw) > maxSchemaBytes {
-		return fmt.Errorf("missing or oversized %s", field)
-	}
-	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+	content, err := json.Marshal([]map[string]string{{"type": "text", "text": message}})
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", field, err)
+		content = json.RawMessage("[]")
 	}
-	compiler := jsonschema.NewCompiler()
-	// No file or network loader: only definitions in this schema are resolvable.
-	compiler.UseLoader(nil)
-	const schemaURL = "urn:gram:code-mode:schema"
-	if err := compiler.AddResource(schemaURL, document); err != nil {
-		return fmt.Errorf("load %s: %w", field, err)
-	}
-	schema, err := compiler.Compile(schemaURL)
-	if err != nil {
-		return fmt.Errorf("compile %s: %w", field, err)
-	}
-	data, err := jsonschema.UnmarshalJSON(bytes.NewReader(value))
-	if err != nil {
-		return fmt.Errorf("parse value: %w", err)
-	}
-	if err := schema.Validate(data); err != nil {
-		return fmt.Errorf("invalid %s value: %w", field, err)
-	}
-	return nil
+	return &ToolResult{Outcome: "completed", Warnings: nil, OK: false, Data: json.RawMessage("null"), Content: content, Error: "tool_call_rejected"}
 }

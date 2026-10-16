@@ -53,10 +53,6 @@ type Catalog struct {
 // Lister loads member catalogs under the authorization refresh that produced it.
 type Lister func(context.Context, string) (*Catalog, error)
 
-// Dispatch calls a resolved tool through the same member snapshot that
-// produced its definition and fingerprint.
-type Dispatch func(json.RawMessage) (json.RawMessage, error)
-
 // Backend owns authentication and existing gateway routing. Every method must
 // refresh current authorization and intersect it with the admitted member IDs.
 type Backend interface {
@@ -65,82 +61,45 @@ type Backend interface {
 	Members(context.Context) ([]Server, Lister, error)
 	// List loads one member's live permitted catalog.
 	List(context.Context, string) (*Catalog, error)
-	// Resolve reads one tool's current definition and destination and binds
-	// a Dispatch to that read, so the call reaches exactly what was fingerprinted.
-	Resolve(context.Context, string) (*Tool, Dispatch, error)
+	// Describe reads one tool's current definition from its member's listing.
+	Describe(context.Context, string) (*Tool, error)
+	// Call dispatches one tool without listing its member first. The member's
+	// own reply is authoritative for unknown tools and invalid arguments.
+	Call(context.Context, string, json.RawMessage) (json.RawMessage, error)
 }
 
-// CatalogHost holds only one execution's restrictions and resolved identities.
+// CatalogHost holds only one execution's restrictions.
 type CatalogHost struct {
 	backend        Backend
 	scope          string
 	allowed        map[string]bool
 	allowedServers map[string]bool
-	mu             sync.Mutex
-	pins           map[string]string
 }
 
 // NewHost binds a fresh execution to a backend and an optional narrowing list.
 // A nil list permits the admitted catalog; a non-nil empty list permits no tools.
-func NewHost(ctx context.Context, backend Backend, scope string, tools []string) (*CatalogHost, error) {
-	host := &CatalogHost{backend: backend, scope: scope, allowed: nil, allowedServers: nil, mu: sync.Mutex{}, pins: make(map[string]string)}
-	if tools != nil {
-		if len(tools) > MaxCatalogTools {
-			return nil, fmt.Errorf("too many selected tools")
+func NewHost(_ context.Context, backend Backend, scope string, tools []string) (*CatalogHost, error) {
+	host := &CatalogHost{backend: backend, scope: scope, allowed: nil, allowedServers: nil}
+	if tools == nil {
+		return host, nil
+	}
+	if len(tools) > MaxCatalogTools {
+		return nil, fmt.Errorf("too many selected tools")
+	}
+	// The list only narrows what the run may reach, so it is not checked
+	// against member listings up front; a missing tool fails when called.
+	host.allowed = make(map[string]bool, len(tools))
+	host.allowedServers = make(map[string]bool)
+	for _, path := range tools {
+		member, _, err := splitPath(path)
+		if err != nil || host.allowed[path] {
+			return nil, fmt.Errorf("invalid or duplicate selected tool")
 		}
-		host.allowed = make(map[string]bool, len(tools))
-		for _, path := range tools {
-			if _, _, err := splitPath(path); err != nil || host.allowed[path] {
-				return nil, fmt.Errorf("invalid or duplicate selected tool")
-			}
-			host.allowed[path] = true
-		}
-		// Resolve each member once for admission, even for a large allow list.
-		members := make(map[string]bool)
-		for path := range host.allowed {
-			member, _, _ := splitPath(path)
-			members[member] = true
-		}
-		if len(members) > maxMembers {
-			return nil, fmt.Errorf("too many selected members")
-		}
-		host.allowedServers = members
-		found := make(map[string]bool)
-		var foundMu sync.Mutex
-		group, groupCtx := errgroup.WithContext(ctx)
-		group.SetLimit(discoveryConcurrency)
-		for member := range members {
-			group.Go(func() error {
-				memberCtx, cancel := context.WithTimeout(groupCtx, memberDeadline)
-				defer cancel()
-				catalog, err := load(memberCtx, backend.List, member)
-				if err != nil {
-					if errors.Is(err, ErrExecutionRevoked) {
-						return err
-					}
-					return ErrToolUnavailable
-				}
-				for _, tool := range catalog.Tools {
-					if !host.allowed[tool.Path] {
-						continue
-					}
-					foundMu.Lock()
-					found[tool.Path] = true
-					foundMu.Unlock()
-					if err := host.pin(tool); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-		}
-		if err := group.Wait(); err != nil {
-			return nil, fmt.Errorf("resolve selected tools: %w", err)
-		}
-
-		if len(found) != len(host.allowed) {
-			return nil, ErrToolUnavailable
-		}
+		host.allowed[path] = true
+		host.allowedServers[member] = true
+	}
+	if len(host.allowedServers) > maxMembers {
+		return nil, fmt.Errorf("too many selected members")
 	}
 	return host, nil
 }
@@ -263,41 +222,17 @@ func load(ctx context.Context, list Lister, server string) (*Catalog, error) {
 	return catalog, nil
 }
 
-func (h *CatalogHost) resolve(ctx context.Context, path string) (*Tool, Dispatch, error) {
-	if _, _, err := splitPath(path); err != nil || !h.permitted(path) {
-		return nil, nil, ErrToolUnavailable
-	}
-	tool, dispatch, err := h.backend.Resolve(ctx, path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("resolve tool: %w", err)
-	}
-	if tool == nil || dispatch == nil || tool.Path != path || tool.Fingerprint == "" || len(tool.Definition) > MaxCatalogBytes {
-		return nil, nil, fmt.Errorf("invalid resolved tool")
-	}
-	if err := h.pin(*tool); err != nil {
-		return nil, nil, err
-	}
-	return tool, dispatch, nil
-}
-
-func (h *CatalogHost) pin(tool Tool) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if previous, ok := h.pins[tool.Path]; ok && previous != tool.Fingerprint {
-		return fmt.Errorf("tool_changed: rediscover in a new execution")
-	}
-	if _, exists := h.pins[tool.Path]; !exists && len(h.pins) >= MaxCatalogTools {
-		return fmt.Errorf("too many resolved tools")
-	}
-	h.pins[tool.Path] = tool.Fingerprint
-	return nil
-}
-
-// Describe loads and pins an exact definition, then generates a Python example.
+// Describe loads an exact definition, then generates a Python example.
 func (h *CatalogHost) Describe(ctx context.Context, path string) (*Description, error) {
-	tool, _, err := h.resolve(ctx, path)
+	if _, _, err := splitPath(path); err != nil || !h.permitted(path) {
+		return nil, ErrToolUnavailable
+	}
+	tool, err := h.backend.Describe(ctx, path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("describe tool: %w", err)
+	}
+	if tool == nil || tool.Path != path || len(tool.Definition) > MaxCatalogBytes {
+		return nil, fmt.Errorf("invalid described tool")
 	}
 	definition, err := publicDefinition(tool.Definition, tool.Path)
 	if err != nil {
@@ -315,37 +250,41 @@ func (h *CatalogHost) Describe(ctx context.Context, path string) (*Description, 
 	return description, nil
 }
 
-// Call validates arguments before invoking the existing authoritative dispatcher.
+// Call dispatches without re-reading the member's catalog: grants are checked
+// by name on every call, and the member rejects unknown tools and invalid
+// arguments itself, which the program sees as a completed failed call.
 func (h *CatalogHost) Call(ctx context.Context, path string, arguments json.RawMessage) (*ToolResult, error) {
-	tool, dispatch, err := h.resolve(ctx, path)
-	if err != nil {
-		return nil, err
+	if _, _, err := splitPath(path); err != nil || !h.permitted(path) {
+		return nil, ErrToolUnavailable
 	}
-	if err := ValidateArguments(tool.Definition, arguments); err != nil {
+	if err := validateArgumentShape(arguments); err != nil {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("call cancelled before dispatch: %w", err)
 	}
-	raw, err := dispatch(arguments)
+	raw, err := h.backend.Call(ctx, path, arguments)
 	if err != nil {
 		if errors.Is(err, ErrExecutionRevoked) {
 			return nil, fmt.Errorf("invoke tool: %w", err)
 		}
 		var dispatch *DispatchError
-		if errors.As(err, &dispatch) && dispatch.BeforeInvoke {
-			return nil, dispatch
+		if !errors.As(err, &dispatch) {
+			// Anything but a DispatchError happened before dispatch began.
+			return nil, fmt.Errorf("call tool: %w", err)
 		}
-		return failedResult("unknown", "tool_call_outcome_unknown"), nil
+		switch {
+		case dispatch.BeforeInvoke:
+			return nil, dispatch
+		case dispatch.Rejection != "":
+			return rejectedResult(dispatch.Rejection), nil
+		default:
+			return failedResult("unknown", "tool_call_outcome_unknown"), nil
+		}
 	}
 	result, err := NormalizeResult(raw)
 	if err != nil {
 		return failedResult("completed", "tool_result_unavailable"), nil
-	}
-	if result.OK && string(result.Data) != "null" {
-		if err := validateSchemaField(tool.Definition, "outputSchema", result.Data, false); err != nil {
-			result.Warnings = append(result.Warnings, "structured output does not satisfy its declared schema")
-		}
 	}
 	// Re-encoding can grow a result past the callback budget, which would otherwise cancel the whole execution.
 	if err := boundedJSON(result); err != nil {
