@@ -11,10 +11,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
-// channelsPurgeSteps clears the tenant's Channels rows. Most of them also
-// cascade from the projects delete, but channels_state does not: both of its
-// foreign keys are ON DELETE SET NULL, so it would survive a reseed. The
-// steps are spliced into orgPurge ahead of the projects delete.
+// channelsPurgeSteps clears the tenant's Channels rows. They also cascade from
+// the projects delete, except a channels_state row with a NULL project_id,
+// whose composite project foreign key is not enforced and so survives.
+//
+// The steps are spliced into orgPurge AHEAD of the projects delete, and that
+// order is load-bearing: channels_state cascades from the project now, so a
+// guard placed after the projects delete would find nothing to refuse and the
+// document would already be gone. Keep the guard in front of it.
 func (s *seeder) channelsPurgeSteps(ctx context.Context) []orgStep {
 	org := s.orgID()
 	return []orgStep{
