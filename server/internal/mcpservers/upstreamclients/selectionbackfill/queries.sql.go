@@ -123,13 +123,21 @@ WITH session_issuer AS (
       AND usi.deleted IS FALSE
 ),
 reachable AS (
-    SELECT s.id, s.user_session_issuer_id
+    SELECT s.id, s.user_session_issuer_id,
+           s.remote_session_issuer_id AS derived_issuer_id,
+           COALESCE(rms.url, tms.resource_identifier, '') AS upstream
     FROM mcp_servers AS s
     JOIN projects AS p
       ON p.id = s.project_id
      AND p.deleted IS FALSE
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
+    LEFT JOIN remote_mcp_servers AS rms
+      ON rms.id = s.remote_mcp_server_id
+     AND rms.deleted IS FALSE
+    LEFT JOIN tunneled_mcp_servers AS tms
+      ON tms.id = s.tunneled_mcp_server_id
+     AND tms.deleted IS FALSE
     WHERE s.deleted IS FALSE
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
@@ -181,7 +189,27 @@ SELECT r.id AS mcp_server_id,
            ON c.id = link.remote_session_client_id
           AND c.deleted IS FALSE
          WHERE link.user_session_issuer_id = r.user_session_issuer_id
-       )::bigint AS issuer_bound_clients
+       )::bigint AS issuer_bound_clients,
+       (
+         SELECT count(*)
+         FROM remote_session_client_user_session_issuers AS gateway_link
+         JOIN remote_session_clients AS gateway_client
+           ON gateway_client.id = gateway_link.remote_session_client_id
+          AND gateway_client.deleted IS FALSE
+         WHERE gateway_link.user_session_issuer_id = $3
+           AND (
+             (r.derived_issuer_id IS NOT NULL AND gateway_client.remote_session_issuer_id = r.derived_issuer_id)
+             OR EXISTS (
+               SELECT 1
+               FROM remote_sessions AS rs
+               WHERE rs.user_session_issuer_id = gateway_link.user_session_issuer_id
+                 AND rs.remote_session_client_id = gateway_client.id
+                 AND rs.deleted IS FALSE
+                 AND r.upstream <> ''
+                 AND rtrim(rs.resource, '/') = rtrim(r.upstream, '/')
+             )
+           )
+       )::bigint AS evidence_clients
 FROM reachable AS r
 ORDER BY r.id
 `
@@ -198,6 +226,7 @@ type ListUpstreamClientSelectionCoverageRow struct {
 	EligibleClients    int64
 	AssociatedClients  int64
 	IssuerBoundClients int64
+	EvidenceClients    int64
 }
 
 // Every server one credential can reach, with its recorded choice and the
@@ -219,6 +248,7 @@ func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg L
 			&i.EligibleClients,
 			&i.AssociatedClients,
 			&i.IssuerBoundClients,
+			&i.EvidenceClients,
 		); err != nil {
 			return nil, err
 		}
@@ -282,6 +312,28 @@ type SeedClientBindingFixtureParams struct {
 
 func (q *Queries) SeedClientBindingFixture(ctx context.Context, arg SeedClientBindingFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedClientBindingFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
+const seedGrantFixture = `-- name: SeedGrantFixture :exec
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, resource)
+VALUES ($1, $2, $3, 'encrypted', $4)
+`
+
+type SeedGrantFixtureParams struct {
+	SubjectUrn            urn.SessionSubject
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	Resource              pgtype.Text
+}
+
+func (q *Queries) SeedGrantFixture(ctx context.Context, arg SeedGrantFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedGrantFixture,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+	)
 	return err
 }
 

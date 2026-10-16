@@ -46,8 +46,10 @@ const (
 	OutcomeUnreachableClient Outcome = "unreachable_client"
 
 	// OutcomeUnassociated is a pair whose server has no associated client
-	// although its issuer binds some: the server association backfill left
-	// it unresolved, and an administrator must configure it first.
+	// although its issuer binds some, or the credential's issuer binds a
+	// client a grant or the server's derived authorization server ties to it:
+	// the server association backfill left it unresolved, and an
+	// administrator must configure it first.
 	OutcomeUnassociated Outcome = "unassociated"
 )
 
@@ -72,7 +74,7 @@ func Classify(row ListUpstreamClientSelectionCoverageRow) Outcome {
 		return OutcomeAmbiguous
 	case row.AssociatedClients > 0:
 		return OutcomeUnreachableClient
-	case row.IssuerBoundClients > 0:
+	case row.IssuerBoundClients > 0 || row.EvidenceClients > 0:
 		return OutcomeUnassociated
 	default:
 		return OutcomeNoAuth
