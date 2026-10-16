@@ -1724,7 +1724,6 @@ WITH reached AS (
      AND (usi.project_id = p.id
           OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
     WHERE s.deleted IS FALSE
-      AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
     UNION
     SELECT g.organization_id, m.mcp_server_id AS server_id
     FROM meta_mcp_servers AS g
@@ -1776,9 +1775,8 @@ type AdminListUpstreamOAuthMigrationOrganizationsRow struct {
 }
 
 // The organizations the upstream OAuth migration writes for: those with a
-// live proxied MCP server that a live issuer of its own tenant signs in
-// through, either the server's own user session issuer or the issuer of a
-// gateway fronting it. servers counts those servers.
+// live MCP server on a live user session issuer of its own tenant, or a live
+// proxied server fronted by a gateway issuer. servers counts those servers.
 func (q *Queries) AdminListUpstreamOAuthMigrationOrganizations(ctx context.Context) ([]AdminListUpstreamOAuthMigrationOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, adminListUpstreamOAuthMigrationOrganizations)
 	if err != nil {
