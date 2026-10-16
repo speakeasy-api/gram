@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/Button";
 import { useMemo, useState } from "react";
 import { Users } from "lucide-react";
 import { toast } from "sonner";
+import { InstallModeList } from "./InstallModeList";
+import { DEFAULT_INSTALL_MODE, type InstallMode } from "./install-modes";
 import {
   audienceKindForPrincipal,
   audienceMapByUrn,
@@ -32,8 +34,6 @@ import {
   memberMapByUrn,
   memberCountDescription,
   principalIcon,
-  selectMutuallyExclusivePluginAudiences,
-  WILDCARD_PRINCIPAL,
 } from "./principals";
 
 const COLLAPSE_MEMBER_ASSIGNMENTS_AT = 5;
@@ -209,14 +209,15 @@ function AssignmentsEditor({
   );
   const memberByUrn = useMemo(() => memberMapByUrn(members), [members]);
 
-  // Preserve existing assignments exactly as stored. Exclusivity is only
-  // applied after the user changes the selection in this editor.
+  // Seed the draft from the stored assignments.
   const initialUrns = useMemo(
     () => assignments.map((a) => a.principalUrn),
     [assignments],
   );
   const [selected, setSelected] = useState<string[]>(initialUrns);
-  const isEveryoneSelected = selected.includes(WILDCARD_PRINCIPAL);
+  const [modeByUrn, setModeByUrn] = useState<Record<string, InstallMode>>(() =>
+    Object.fromEntries(assignments.map((a) => [a.principalUrn, a.installMode])),
+  );
 
   const audienceByUrn = useMemo(() => audienceMapByUrn(audiences), [audiences]);
   const canSelectAudiences =
@@ -338,20 +339,6 @@ function AssignmentsEditor({
         : options,
     [legacyOptions, options],
   );
-  const pickerOptions = useMemo(
-    () =>
-      groupedOptions.map((group) => ({
-        ...group,
-        options: group.options.map((option) => ({
-          ...option,
-          className:
-            isEveryoneSelected && option.value !== WILDCARD_PRINCIPAL
-              ? "opacity-60"
-              : undefined,
-        })),
-      })),
-    [groupedOptions, isEveryoneSelected],
-  );
 
   const mutation = useSetPluginAssignmentsMutation({
     onSuccess: () => {
@@ -364,19 +351,29 @@ function AssignmentsEditor({
   });
 
   const handleSave = () => {
+    const principalUrns = Array.from(new Set(selected));
     mutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
         setPluginAssignmentsForm: {
           pluginId,
-          principalUrns: Array.from(new Set(selected)),
+          principalUrns,
+          installModes: Object.fromEntries(
+            principalUrns.map((urn) => [
+              urn,
+              modeByUrn[urn] ?? DEFAULT_INSTALL_MODE,
+            ]),
+          ),
         },
       },
     });
   };
 
-  const handleSelectionChange = (next: string[]) => {
-    setSelected(selectMutuallyExclusivePluginAudiences(selected, next));
+  const handleModeChange = (principalUrns: string[], mode: InstallMode) => {
+    setModeByUrn((current) => ({
+      ...current,
+      ...Object.fromEntries(principalUrns.map((urn) => [urn, mode])),
+    }));
   };
 
   return (
@@ -386,9 +383,9 @@ function AssignmentsEditor({
           Assigned audiences
         </label>
         <MultiSelect
-          options={pickerOptions}
+          options={groupedOptions}
           value={selected}
-          onValueChange={handleSelectionChange}
+          onValueChange={setSelected}
           placeholder="Select audiences"
           badgeClassName="h-6 gap-1.5 px-1.5 font-sans text-xs normal-case tracking-normal"
           searchable
@@ -431,6 +428,14 @@ function AssignmentsEditor({
           Select the specific audiences that should receive this plugin.
           Assignments apply when a device next syncs.
         </Text>
+        <InstallModeList
+          principalUrns={selected}
+          modeByUrn={modeByUrn}
+          onModeChange={handleModeChange}
+          memberByUrn={memberByUrn}
+          audienceByUrn={audienceByUrn}
+          disabled={mutation.isPending}
+        />
       </div>
       <SheetFooter className="px-6 pb-6">
         <Button
