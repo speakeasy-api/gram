@@ -5279,6 +5279,11 @@ VALUES (
 )
 RETURNING id;
 
+-- name: SetRemoteSessionIssuerURLFixture :execrows
+-- TEST FIXTURE ONLY. Respells a project issuer's stored URL.
+UPDATE remote_session_issuers SET issuer = @issuer
+WHERE id = @id AND project_id = @project_id::uuid;
+
 -- name: ListEMACredentialsFixture :many
 -- TEST FIXTURE ONLY. Every credential slot in a project, live and retired.
 SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at
@@ -5746,27 +5751,6 @@ LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.
   AND t.deleted IS FALSE
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
 WHERE c.organization_id = @organization_id::text
-  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
-GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
-
--- name: ListEMAVendorAcceptanceForIssuers :many
--- ListEMAVendorAcceptance for one vendor, named by its issuer spellings.
-SELECT i.issuer, c.ema_provider,
-  rc.remote_session_issuer_id AS external_issuer_id,
-  c.internal_session_issuer_id,
-  MAX(c.updated_at)::timestamptz AS last_accepted_at
-FROM remote_session_ema_credentials c
-JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
-JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
-  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
-  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
-  AND b.state IS DISTINCT FROM 'unlinked'
-JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
-  AND (i.project_id = c.project_id OR (i.project_id IS NULL AND (i.organization_id = c.organization_id OR i.organization_id IS NULL)))
-LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
-  AND t.deleted IS FALSE
-LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
-WHERE c.organization_id = @organization_id::text AND i.issuer = ANY(@issuers::text[])
   AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
 GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
 

@@ -231,9 +231,10 @@ type PrepareEMAResponseBody struct {
 	// usable here; entries with unavailable_reason cannot serve. Returned by
 	// readEMA only.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
-	// When the vendor last accepted an assertion for this binding, from a provider
-	// that can serve it now, so chaining has worked for it. Omitted when it never
-	// has. Returned by readEMA only.
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
@@ -279,9 +280,10 @@ type ReadEMAResponseBody struct {
 	// usable here; entries with unavailable_reason cannot serve. Returned by
 	// readEMA only.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
-	// When the vendor last accepted an assertion for this binding, from a provider
-	// that can serve it now, so chaining has worked for it. Omitted when it never
-	// has. Returned by readEMA only.
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
@@ -327,9 +329,10 @@ type UnlinkEMAResponseBody struct {
 	// usable here; entries with unavailable_reason cannot serve. Returned by
 	// readEMA only.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
-	// When the vendor last accepted an assertion for this binding, from a provider
-	// that can serve it now, so chaining has worked for it. Omitted when it never
-	// has. Returned by readEMA only.
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 

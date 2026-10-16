@@ -230,6 +230,11 @@ func TestEMAAcceptance_CountsOnlyTheBindingsCurrentGenerationClientAndLiveProjec
 	plant(in.ClientID, pgtype.Int8{})
 	require.Equal(t, []int{1, 1, 1, 1}, counted(), "the current generation's credential counts")
 
+	respelled, err := q.SetRemoteSessionIssuerURLFixture(ctx, repo.SetRemoteSessionIssuerURLFixtureParams{Issuer: "https://IDP.Example.com", ID: in.RemoteSessionIssuerID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, respelled)
+	require.Equal(t, []int{1, 1, 1, 1}, counted(), "a host-case spelling of the vendor issuer still counts")
+
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, *auth.ProjectID)
 	require.NoError(t, err)
 	require.Equal(t, []int{0, 0, 0, 0}, counted(), "a deleted project's credentials count nowhere")

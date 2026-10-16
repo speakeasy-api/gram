@@ -28,7 +28,7 @@ var IdentityChainingPreparation = Type("IdentityChainingPreparation", func() {
 	Attribute("scopes_out_of_date", Boolean, "True when connection_scopes differs from scopes; prepareEMA with the current expected_generation applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.")
 	Attribute("grant_source", String, "Provenance of recorded grants, not provider trust.")
 	Attribute("ema_providers", shared.EMAProviderOrder, "The EMA providers the vendor accepts, resolved for this endpoint. A provider vouches only where the endpoint's sign-in goes through it, so at most one is usable here; entries with unavailable_reason cannot serve. Returned by readEMA only.")
-	Attribute("last_accepted_at", String, "When the vendor last accepted an assertion for this binding, from a provider that can serve it now, so chaining has worked for it. Omitted when it never has. Returned by readEMA only.", func() {
+	Attribute("last_accepted_at", String, "When the vendor last accepted an assertion for this binding from a provider that can serve it now, so chaining has worked for it. Omitted when none is recorded for a usable provider or acceptance could not be read. Returned by readEMA only.", func() {
 		Format(FormatDateTime)
 	})
 	Required("state", "stage", "remediation", "retryable", "generation", "resource", "scopes", "grant_source")
