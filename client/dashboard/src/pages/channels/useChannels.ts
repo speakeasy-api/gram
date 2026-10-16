@@ -39,14 +39,14 @@ export const SNAPSHOT_INTERVAL_MS = 10_000;
 /** One screenful or so of past messages per request. */
 export const HISTORY_PAGE_SIZE = 50;
 /** Conversations read per request when the list runs past the snapshot. */
-export const CONVERSATION_PAGE_SIZE = 100;
+const CONVERSATION_PAGE_SIZE = 100;
 /** The most a single catch-up read may carry; the server bounds it too. */
 const DELTA_LIMIT = 200;
 /** Long enough that a lost tab disappears on its own, short enough to notice. */
 const LEASE_SECONDS = 300;
 const HEARTBEAT_MS = 120_000;
 
-export interface ChannelsAction {
+interface ChannelsAction {
   operation: string;
   args?: Record<string, unknown>;
   /** Operations that speak as the viewer need their browser session first. */
@@ -70,6 +70,8 @@ export interface ChannelsWorkspace {
   /** When the last successful read landed, so staleness can be honest. */
   lastReadAt: number | undefined;
   isActing: boolean;
+  /** The current error came from an action, not from reading. */
+  actionFailed: boolean;
   canAdmin: boolean;
   canParticipate: boolean;
   sessionInstanceId: string | undefined;
@@ -192,6 +194,26 @@ export function useChannelsWorkspace(
     if (snapshotIsComplete) setPages(NO_PAGES);
   }, [snapshotIsComplete]);
 
+  // When the snapshot's first page ends somewhere new, a conversation can sit
+  // between that boundary and the pages already read. Walking again from the
+  // snapshot's boundary brings it back; the pages already held stay listed.
+  const snapshotBoundary = snapshot.data?.threadsNextAfter;
+  const lastBoundary = useRef(snapshotBoundary);
+  useEffect(() => {
+    if (lastBoundary.current === snapshotBoundary) return;
+    lastBoundary.current = snapshotBoundary;
+    setPages((held) =>
+      held === NO_PAGES
+        ? held
+        : {
+            ...held,
+            nextAfter: undefined,
+            hasMore: undefined,
+            error: undefined,
+          },
+    );
+  }, [snapshotBoundary]);
+
   const cursor = useRef(0);
   useEffect(() => {
     cursor.current = store.cursor;
@@ -296,6 +318,7 @@ export function useChannelsWorkspace(
           page: { ...page, messages: page.messages ?? [] },
         });
       } catch (failure) {
+        if (revoked(failure)) setReadError(failure as Error);
         // Opening a conversation reconciles its history in the background,
         // and the tail is already on screen. Only a page the viewer asked for
         // is worth reporting; the rest leaves the offer to load it in place.
@@ -368,6 +391,7 @@ export function useChannelsWorkspace(
         }));
       })
       .catch((failure: Error) => {
+        if (revoked(failure)) setReadError(failure);
         setPages((held) => ({
           ...held,
           loading: false,
@@ -386,10 +410,22 @@ export function useChannelsWorkspace(
   // Only a session the organization can still see is safe to speak through:
   // an abandoned lease has to be reclaimed before it can post again. A lease
   // the server just issued counts until it runs out.
-  const liveSessionId = dashboardSessionIn(data, userId)?.id;
-  const heldSessionId =
-    opened && opened.expiresAt > Date.now() ? opened.id : undefined;
-  const sessionInstanceId = liveSessionId ?? heldSessionId;
+  const sessionAt = useCallback(
+    (now: number) => {
+      const liveSessionId = dashboardSessionIn(data, userId, now)?.id;
+      const heldSessionId =
+        opened && opened.expiresAt > now ? opened.id : undefined;
+      return liveSessionId ?? heldSessionId;
+    },
+    [data, userId, opened],
+  );
+  const sessionInstanceId = sessionAt(Date.now());
+  // A background tab can sit idle past its lease without rendering again, so
+  // a send checks the lease when it happens, not when the page last drew.
+  const currentSession = useRef(sessionAt);
+  useEffect(() => {
+    currentSession.current = sessionAt;
+  }, [sessionAt]);
 
   // Simultaneous sends, or a send racing a reload, must not each open a
   // session. One request is in flight at a time; the server itself reclaims.
@@ -416,7 +452,10 @@ export function useChannelsWorkspace(
   const action = useMutation({
     mutationFn: async ({ operation, args, withSession }: ChannelsAction) => {
       const speaker = withSession
-        ? { instanceId: sessionInstanceId ?? (await ensureSession()) }
+        ? {
+            instanceId:
+              currentSession.current(Date.now()) ?? (await ensureSession()),
+          }
         : undefined;
       return channelsRequest<unknown>(projectSlug, operation, {
         ...speaker,
@@ -456,6 +495,7 @@ export function useChannelsWorkspace(
     reconnecting: !accessDenied && (readError !== null || snapshot.isError),
     lastReadAt,
     isActing: action.isPending,
+    actionFailed: action.error !== null,
     canAdmin: data?.grants !== undefined,
     canParticipate: live,
     sessionInstanceId,

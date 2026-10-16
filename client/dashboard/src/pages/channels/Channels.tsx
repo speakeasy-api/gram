@@ -68,6 +68,12 @@ function ChannelsBoard({
   const pendingPost = useRef<
     { threadId: string; text: string; key: string } | undefined
   >(undefined);
+  // The last action attempted, so a failed one can be retried as it was.
+  const lastAttempt = useRef<(() => Promise<unknown>) | undefined>(undefined);
+  const attempt = (action: () => Promise<unknown>) => {
+    lastAttempt.current = action;
+    void action();
+  };
 
   const members = useMembers().data?.members;
   const resolveOwner = useCallback(
@@ -183,13 +189,15 @@ function ChannelsBoard({
     setDrafts((current) => ({ ...current, [selectedId]: "" }));
   };
 
-  const createThread = async (title: string) => {
+  const createThread = async (title: string): Promise<boolean> => {
     const created = await workspace.run({
       operation: "channels_create_thread",
       withSession: true,
       args: { title },
     });
-    if (created) selectThread((created as ChannelThread).id);
+    if (!created) return false;
+    selectThread((created as ChannelThread).id);
+    return true;
   };
 
   const startDirect = async (instanceId: string) => {
@@ -241,7 +249,7 @@ function ChannelsBoard({
             : throttled
               ? "Your organization's send limit was reached. Send again in a moment; the message is kept and will not be duplicated."
               : rejected
-                ? "Change what it says below and send it again. Nothing you typed was lost."
+                ? "Check what you entered and try again. Nothing you typed was lost."
                 : "Retrying every few seconds. Anything you have typed is kept."}{" "}
         <span className="text-muted-foreground block break-words">
           {workspace.error.message}
@@ -252,7 +260,11 @@ function ChannelsBoard({
             variant="secondary"
             icon="refresh-cw"
             className="mt-2"
-            onClick={workspace.refresh}
+            onClick={() => {
+              if (workspace.actionFailed && lastAttempt.current)
+                attempt(lastAttempt.current);
+              else workspace.refresh();
+            }}
           >
             <Button.Text>Try again now</Button.Text>
           </Button>
@@ -321,10 +333,12 @@ function ChannelsBoard({
                   <Button
                     disabled={workspace.isActing}
                     onClick={() =>
-                      void workspace.run({
-                        operation: "channels_admin",
-                        args: { enabled: true },
-                      })
+                      attempt(() =>
+                        workspace.run({
+                          operation: "channels_admin",
+                          args: { enabled: true },
+                        }),
+                      )
                     }
                   >
                     <Button.Text>Turn on Channels</Button.Text>
@@ -345,12 +359,18 @@ function ChannelsBoard({
           <ConversationList
             className={cn(
               "min-w-0 lg:flex lg:border-r",
-              selectedId && "hidden",
+              // Only a conversation that resolved replaces the list, so a
+              // link to one that is not listed never strands a narrow window.
+              selected && "hidden",
             )}
             conversations={conversations}
             selectedId={selectedId}
             onSelect={selectThread}
-            onCreate={(title) => void createThread(title)}
+            onCreate={(title) => {
+              const create = () => createThread(title);
+              lastAttempt.current = create;
+              return create();
+            }}
             canParticipate={workspace.canParticipate}
             maxTitleBytes={workspace.limits.titleBytes}
             busy={workspace.isActing}
@@ -360,7 +380,7 @@ function ChannelsBoard({
             onLoadMore={workspace.loadMoreConversations}
           />
           <ConversationPane
-            className={cn("min-w-0 lg:flex", !selectedId && "hidden")}
+            className={cn("min-w-0 lg:flex", !selected && "hidden")}
             conversation={selected}
             history={history}
             snapshot={data}
@@ -385,23 +405,27 @@ function ChannelsBoard({
             }
             draft={draft}
             onDraftChange={setDraft}
-            onSend={() => void send()}
+            onSend={() => attempt(send)}
             sending={workspace.isActing}
             maxBytes={workspace.limits.messageBytes}
             canParticipate={workspace.canParticipate}
             reconnecting={workspace.reconnecting}
             lastReadAt={workspace.lastReadAt}
             onToggleFollow={() =>
-              void workspace.run({
-                operation: "channels_follow",
-                args: { threadId: selectedId, follow: !selected?.followed },
-              })
+              attempt(() =>
+                workspace.run({
+                  operation: "channels_follow",
+                  args: { threadId: selectedId, follow: !selected?.followed },
+                }),
+              )
             }
             onToggleMute={() =>
-              void workspace.run({
-                operation: "channels_follow",
-                args: { threadId: selectedId, muted: !selected?.muted },
-              })
+              attempt(() =>
+                workspace.run({
+                  operation: "channels_follow",
+                  args: { threadId: selectedId, muted: !selected?.muted },
+                }),
+              )
             }
             onLoadOlder={() => workspace.loadOlder(selectedId)}
             onConnectAgent={() => setSettingsOpen(true)}
@@ -414,7 +438,7 @@ function ChannelsBoard({
             sessionInstanceId={workspace.sessionInstanceId}
             canParticipate={workspace.canParticipate}
             busy={workspace.isActing}
-            onMessage={(instanceId) => void startDirect(instanceId)}
+            onMessage={(instanceId) => attempt(() => startDirect(instanceId))}
             onConnectAgent={() => setSettingsOpen(true)}
           />
         </div>
@@ -434,7 +458,7 @@ function ChannelsBoard({
             busy={workspace.isActing}
             onMessage={(instanceId) => {
               setPresenceOpen(false);
-              void startDirect(instanceId);
+              attempt(() => startDirect(instanceId));
             }}
             onConnectAgent={() => {
               setPresenceOpen(false);
@@ -462,7 +486,9 @@ function ChannelsBoard({
               : undefined
           }
           sessionInstanceId={workspace.sessionInstanceId}
-          onRun={(operation, args) => void workspace.run({ operation, args })}
+          onRun={(operation, args) =>
+            attempt(() => workspace.run({ operation, args }))
+          }
         />
       ) : null}
     </div>

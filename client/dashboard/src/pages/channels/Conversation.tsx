@@ -115,7 +115,9 @@ export function ConversationPane({
    * list's own height and scroll position both move between the request and
    * the page arriving, so a later reading of them is not the reader's intent.
    */
-  const askedFromEnd = useRef<number | undefined>(undefined);
+  const askedFromEnd = useRef<
+    { distance: number; newestId: number } | undefined
+  >(undefined);
   const openedConversation = useRef<string | undefined>(undefined);
   const oldestHeld = useRef<number | undefined>(undefined);
   const newestHeld = useRef(0);
@@ -151,12 +153,16 @@ export function ConversationPane({
       askedFromEnd.current = undefined;
       // A conversation's first page arrives as a prepend too, and a reader who
       // has not scrolled away yet belongs at the newest message.
+      // Messages that arrived at the bottom while the page was on its way
+      // add height below the reader, not above, so they do not count.
       element.scrollTop =
         asked === undefined
           ? following.current
             ? element.scrollHeight
             : element.scrollTop
-          : element.scrollHeight - asked;
+          : element.scrollHeight -
+            asked.distance -
+            heightAfter(element, asked.newestId);
       return;
     }
     if (following.current && element.scrollHeight > element.clientHeight) {
@@ -167,7 +173,10 @@ export function ConversationPane({
   const loadOlder = () => {
     const element = scroller.current;
     if (element)
-      askedFromEnd.current = element.scrollHeight - element.scrollTop;
+      askedFromEnd.current = {
+        distance: element.scrollHeight - element.scrollTop,
+        newestId: newestHeld.current,
+      };
     onLoadOlder();
   };
 
@@ -407,6 +416,16 @@ export function ConversationPane({
   );
 }
 
+/** The height of the rendered messages newer than `id`. */
+function heightAfter(list: HTMLElement, id: number): number {
+  let height = 0;
+  for (const row of list.querySelectorAll<HTMLElement>("[data-message-id]")) {
+    if (Number(row.dataset.messageId) > id)
+      height += row.getBoundingClientRect().height;
+  }
+  return height;
+}
+
 /** Whether the top of the list has anything to report about older messages. */
 function hasOlderRow(history: ThreadHistory): boolean {
   return (
@@ -493,7 +512,7 @@ function MessageRow({
       GROUPING_WINDOW_MS;
 
   return (
-    <li>
+    <li data-message-id={message.id}>
       {newDay ? (
         <div className="flex items-center gap-3 py-4">
           <span className="text-eyebrow">{dayLabel(message.createdAt)}</span>
@@ -571,13 +590,17 @@ function Composer({
   // reaches it sooner than its character count suggests.
   const remaining = maxBytes - encoder.encode(draft).length;
   const tooLong = remaining < 0;
+  const canSend = !disabled && draft.trim() !== "" && !sending && !tooLong;
+  const submit = () => {
+    if (canSend) onSend();
+  };
 
   return (
     <form
       className="border-t px-6 py-4"
       onSubmit={(event) => {
         event.preventDefault();
-        onSend();
+        submit();
       }}
     >
       <div className="flex w-full items-end gap-2">
@@ -608,7 +631,7 @@ function Composer({
                 !event.nativeEvent.isComposing
               ) {
                 event.preventDefault();
-                onSend();
+                submit();
               }
             }}
           />
@@ -617,7 +640,7 @@ function Composer({
           type="submit"
           icon="arrow-up"
           aria-label="Send message"
-          disabled={disabled || !draft.trim() || sending || tooLong}
+          disabled={!canSend}
           tooltip="Send (Enter)"
         />
       </div>
@@ -628,11 +651,26 @@ function Composer({
         )}
       >
         {tooLong
-          ? `Too long to send. Remove about ${-remaining} characters.`
+          ? `Too long to send. Remove about ${charactersOver(draft, -remaining)} characters.`
           : remaining < 500
-            ? `${remaining} characters left.`
+            ? "Close to the size limit."
             : "Plain text only. Enter sends, Shift+Enter adds a line."}
       </p>
     </form>
   );
+}
+
+/**
+ * How many characters, from the end, cover the bytes over the limit. Accented
+ * and emoji characters take more than one byte each.
+ */
+function charactersOver(draft: string, bytesOver: number): number {
+  const characters = Array.from(draft);
+  let removed = 0;
+  let freed = 0;
+  while (freed < bytesOver && removed < characters.length) {
+    removed++;
+    freed += encoder.encode(characters[characters.length - removed]).length;
+  }
+  return removed;
 }

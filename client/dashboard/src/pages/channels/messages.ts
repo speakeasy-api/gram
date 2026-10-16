@@ -139,16 +139,29 @@ export function messageReducer(
       // Ignore it entirely so it cannot reintroduce rows after a retention reset.
       if (snapshot.cursor < store.cursor) return store;
       const absorbed = absorb(store, snapshot.messages, snapshot.cursor);
-      // Nothing older than the tail exists anywhere, so every conversation in
-      // it is already complete and none of them need a history request.
+      // Nothing older than the tail exists anywhere, so the tail is every
+      // readable message: each conversation is complete, and anything held
+      // that the tail no longer carries was removed.
       if (snapshot.hasMore !== false) return absorbed;
+      const surviving = bucket(snapshot.messages);
       let byThread = absorbed.byThread;
-      for (const threadId of Object.keys(snapshot.threads)) {
+      const threadIds = new Set([
+        ...Object.keys(snapshot.threads),
+        ...Object.keys(absorbed.byThread),
+      ]);
+      for (const threadId of threadIds) {
         const history = historyOf(absorbed, threadId);
-        if (history.hasMore === false) continue;
+        const kept = surviving[threadId] ?? NO_MESSAGES;
+        // Held messages are a superset of the tail's, so equal lengths mean
+        // nothing was removed.
+        const messages =
+          kept.length === history.messages.length ? history.messages : kept;
+        if (history.hasMore === false && messages === history.messages)
+          continue;
         if (byThread === absorbed.byThread) byThread = { ...byThread };
         byThread[threadId] = {
           ...history,
+          messages,
           hasMore: false,
           nextBefore: undefined,
         };

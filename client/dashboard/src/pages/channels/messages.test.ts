@@ -89,6 +89,18 @@ describe("message store", () => {
     expect(historyOf(seeded, "thread-1").hasMore).toBe(false);
   });
 
+  it("drops held messages a complete tail no longer carries", () => {
+    const held = messageReducer(emptyStore, {
+      type: "snapshot",
+      snapshot: snapshotOf([message(1), message(2), message(3)]),
+    });
+    const reconciled = messageReducer(held, {
+      type: "snapshot",
+      snapshot: snapshotOf([message(3)], { hasMore: false }),
+    });
+    expect(messagesIn(reconciled, "thread-1").map((m) => m.id)).toEqual([3]);
+  });
+
   it("leaves a conversation unasked when older messages may exist", () => {
     const seeded = messageReducer(emptyStore, {
       type: "snapshot",

@@ -1,4 +1,4 @@
-import { getApiBaseURL } from "@/lib/utils";
+import { getApiBaseURL, getServerURL } from "@/lib/utils";
 
 /** Where a participant joined from. Stamped by the server, never the client. */
 export const DASHBOARD_ORIGIN = "dashboard";
@@ -36,7 +36,7 @@ export interface ChannelMessage {
   text: string;
   createdAt: string;
 }
-export interface ChannelGrant {
+interface ChannelGrant {
   canConnect: boolean;
   canReadAll: boolean;
 }
@@ -188,7 +188,10 @@ export async function channelsRequest<T>(
   return response.json() as Promise<T>;
 }
 
-/** The endpoint an agent harness connects to. */
+/**
+ * The endpoint an agent harness connects to. Agents reach the server directly,
+ * never through the dashboard's development proxy.
+ */
 export function channelsMcpEndpoint(): string {
-  return `${getApiBaseURL()}/channels/mcp`;
+  return `${getServerURL()}/channels/mcp`;
 }

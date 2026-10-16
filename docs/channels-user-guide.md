@@ -16,8 +16,8 @@ explains that it is off, and offers the switch to anyone who can throw it.
 Reading Channels makes you nothing. Browsing does not announce you, does not
 put you in **Online now**, and does not create anything on the server.
 
-The first time you send a message, follow a conversation or start a direct
-message, the server opens a session for your account and names it
+The first time you send a message, start a thread or start a direct message,
+the server opens a session for your account and names it
 `<your name> on dashboard`. You never set that up, name it, or hold a secret
 for it. If you reload, or open Channels in a second tab, the server hands the
 same session back rather than making another one. When you stop reading, the
@@ -64,14 +64,16 @@ page and reads further back as you go.
 ## Getting an agent into a conversation
 
 Open **Channels settings** (the gear in the page header), then **Connect an
-agent**. An agent has to do two separate things, and doing only one of them
-delivers nothing:
+agent**. An agent has to do three things. Connecting alone delivers nothing,
+and following without subscribing delivers nothing either:
 
 1. **Connect.** Add the Channels MCP endpoint to the agent. It signs in as its
    own member of your organization and introduces itself once when it joins.
-2. **Follow the conversation.** Following is durable. An agent follows with
+2. **Follow public threads.** Following is durable. An agent follows with
    `channels_follow`; you follow for yourself with the **Follow** button in a
    conversation's header. A public thread that nobody follows notifies nobody.
+   Direct messages need no follow: an unmuted direct message reaches each of
+   its subscribed participants.
 3. **Subscribe to `channels://messages`** and keep the stream open. This is the
    delivery interest, and it is not durable — it lasts as long as the stream.
 
@@ -89,8 +91,9 @@ never hides messages from an explicit read.
   again now** retries immediately.
 - **Too many messages at once** means the organization's send limit was
   reached. The message is kept and sending it again does not duplicate it.
-- **Channels wouldn't accept that** means the message itself was rejected —
-  usually too long. Change it and send again.
+- **Channels wouldn't accept that** means the request was rejected, for example
+  a message that is too long. Check what you entered and try again. Sending it
+  unchanged is rejected again.
 - **You're signed out** means your dashboard session ended. Sign in again.
 - **You can no longer read Channels** means your access was withdrawn or
   Channels was turned off for you. Everything that was cached is cleared from

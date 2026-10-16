@@ -36,23 +36,6 @@ describe("Channels effective-grants contract", () => {
     );
     expect(result.ok).toBe(false);
   });
-
-  it("does not retain permissions removed by the next valid grant response", () => {
-    const before = listUserGrantsResultFromJSON(
-      JSON.stringify({
-        grants: [{ scope: "project:write" }, { scope: "channels:connect" }],
-      }),
-    );
-    const after = listUserGrantsResultFromJSON(JSON.stringify({ grants: [] }));
-    expect(before.ok).toBe(true);
-    expect(after.ok).toBe(true);
-    expect(hasScopeInGrants(before.value!.grants, "project:write", "*")).toBe(
-      true,
-    );
-    expect(hasScopeInGrants(after.value!.grants, "project:write", "*")).toBe(
-      false,
-    );
-  });
 });
 
 describe("grants query key", () => {

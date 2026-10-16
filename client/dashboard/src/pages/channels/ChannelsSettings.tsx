@@ -247,7 +247,13 @@ export function ChannelsSettings({
                   size="sm"
                   variant="secondary"
                   icon="plus"
-                  onClick={() => setAdding(true)}
+                  onClick={() => {
+                    // Each exception starts from the defaults, so a private-read
+                    // choice made for one member never carries to the next.
+                    setCanConnect(true);
+                    setCanReadAll(false);
+                    setAdding(true);
+                  }}
                 >
                   <Button.Text>Add an exception</Button.Text>
                 </Button>

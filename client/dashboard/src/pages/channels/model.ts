@@ -11,7 +11,7 @@ import { emptyStore, messagesIn, type MessageStore } from "./messages";
 /** What the viewer has already read, keyed by conversation. */
 export type ReadMarks = Record<string, number>;
 
-export type ConversationKind = "thread" | "direct";
+type ConversationKind = "thread" | "direct";
 
 export interface Conversation {
   id: string;
@@ -42,7 +42,7 @@ export interface Speaker {
   isYou: boolean;
 }
 
-export interface PresenceEntry {
+interface PresenceEntry {
   instance: ChannelInstance;
   name: string;
   isAgent: boolean;
@@ -62,7 +62,7 @@ export type ResolveOwner = (subjectId: string) => string | undefined;
 const UNKNOWN_OWNER = "Former member";
 const UNNAMED_AGENT = "Unnamed agent";
 
-export function isAgent(
+function isAgent(
   participant: ChannelInstance | ChannelParticipant | undefined,
 ): boolean {
   return participant?.origin !== DASHBOARD_ORIGIN;
@@ -76,7 +76,7 @@ function participantOf(
   return snapshot.instances[instanceId] ?? snapshot.participants?.[instanceId];
 }
 
-export function isOnline(instance: ChannelInstance, now = Date.now()): boolean {
+function isOnline(instance: ChannelInstance, now = Date.now()): boolean {
   return Date.parse(instance.expiresAt) > now;
 }
 
@@ -241,13 +241,12 @@ function unreadCount(
     if (message.id <= mark) break;
     if (message.subjectId !== viewerId) unread++;
   }
-  if (unread > 0) return unread;
   const unloaded =
     newest &&
     newest.id > mark &&
     newest.subjectId !== viewerId &&
     newest.id > (messages[messages.length - 1]?.id ?? 0);
-  return unloaded ? 1 : 0;
+  return unread + (unloaded ? 1 : 0);
 }
 
 /** Groups live participants by the person who owns them, viewer first. */

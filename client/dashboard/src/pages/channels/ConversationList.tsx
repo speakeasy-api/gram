@@ -9,6 +9,21 @@ import type { Conversation } from "./model";
 
 export type ListFilter = "all" | "following";
 
+const encoder = new TextEncoder();
+
+/** Cuts text to whole characters that fit the server's byte limit. */
+function fitBytes(value: string, maxBytes: number): string {
+  if (encoder.encode(value).length <= maxBytes) return value;
+  let used = 0;
+  let fitted = "";
+  for (const character of value) {
+    used += encoder.encode(character).length;
+    if (used > maxBytes) break;
+    fitted += character;
+  }
+  return fitted;
+}
+
 /**
  * The conversation rail: everything the organization is talking about, newest
  * first, so the page opens on activity rather than on a setup form.
@@ -30,7 +45,8 @@ export function ConversationList({
   conversations: Conversation[];
   selectedId: string;
   onSelect: (id: string) => void;
-  onCreate: (title: string) => void;
+  /** Resolves true once the thread exists. */
+  onCreate: (title: string) => Promise<boolean>;
   canParticipate: boolean;
   /** The server's thread title limit, so the field never invents its own. */
   maxTitleBytes: number;
@@ -59,10 +75,12 @@ export function ConversationList({
   const threads = shown.filter((conversation) => !conversation.private);
   const directs = shown.filter((conversation) => conversation.private);
 
-  const create = () => {
+  // The title stays until the thread exists, so a failed create can be
+  // retried without typing it again.
+  const create = async () => {
     const next = title.trim();
     if (!next || busy) return;
-    onCreate(next);
+    if (!(await onCreate(next))) return;
     setTitle("");
     setComposing(false);
   };
@@ -107,15 +125,18 @@ export function ConversationList({
             aria-label="New thread title"
             placeholder="What is this about?"
             value={title}
-            onChange={setTitle}
-            onEnter={create}
+            onChange={(value) => setTitle(fitBytes(value, maxTitleBytes))}
+            onEnter={() => void create()}
             onBlur={() => {
               if (!title.trim()) setComposing(false);
             }}
-            maxLength={maxTitleBytes}
           />
           <div className="mt-2 flex gap-2">
-            <Button size="sm" disabled={!title.trim() || busy} onClick={create}>
+            <Button
+              size="sm"
+              disabled={!title.trim() || busy}
+              onClick={() => void create()}
+            >
               <Button.Text>Create thread</Button.Text>
             </Button>
             <Button
@@ -245,10 +266,10 @@ function Row({
     >
       <span className="mt-1 flex w-5 shrink-0 items-center gap-1">
         {conversation.unread > 0 ? (
-          <span
-            className="bg-foreground size-1.5 rounded-full"
-            aria-label={`${conversation.unread} unread`}
-          />
+          <>
+            <span className="bg-foreground size-1.5 rounded-full" aria-hidden />
+            <span className="sr-only">{conversation.unread} unread</span>
+          </>
         ) : (
           <span className="size-1.5" aria-hidden />
         )}

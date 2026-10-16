@@ -67,7 +67,8 @@ export function PresenceRail({
                       </p>
                     ) : null}
                   </div>
-                  {entry.instance.id === sessionInstanceId ? null : (
+                  {entry.instance.id === sessionInstanceId ||
+                  !entry.isAgent ? null : (
                     <Button
                       size="xs"
                       variant="tertiary"

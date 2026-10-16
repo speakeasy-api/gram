@@ -494,6 +494,9 @@ describe("Channels", () => {
     const conversations = screen.getByLabelText("Conversations");
     messages.scrollTop = 135;
     conversations.scrollTop = 72;
+    // The held refresh answers with what the server had when it was asked;
+    // the message that arrives afterwards reaches the page through a read.
+    const asked = { ...snapshot, messages: [...snapshot.messages] };
     snapshot.messages.push({
       id: 2,
       threadId: "thread-2",
@@ -504,7 +507,7 @@ describe("Channels", () => {
     });
     snapshot.cursor = 2;
     await act(async () => {
-      completeRefresh({ ...snapshot });
+      completeRefresh(asked);
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
     });
 

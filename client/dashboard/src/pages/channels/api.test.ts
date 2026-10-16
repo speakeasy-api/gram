@@ -48,16 +48,17 @@ describe("Channels browser API", () => {
     );
   });
 
-  it("reports authentication and permission errors without a fallback login", async () => {
-    const fetcher = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: "authentication required" }), {
-        status: 401,
-      }),
-    );
+  it.each([
+    [401, "authentication required"],
+    [403, "forbidden"],
+  ])("reports a %i without a fallback login", async (status, error) => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ error }), { status }));
     vi.stubGlobal("fetch", fetcher);
     await expect(channelsRequest("test-project")).rejects.toMatchObject({
-      message: "authentication required",
-      status: 401,
+      message: error,
+      status,
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
