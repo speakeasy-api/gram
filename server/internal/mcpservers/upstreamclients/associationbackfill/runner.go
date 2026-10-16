@@ -1,7 +1,11 @@
-// Package upstreamclientsbackfill records the MCP server upstream OAuth client
+// Package associationbackfill records the MCP server upstream OAuth client
 // associations that existing configuration proves, and reports the servers
-// whose configuration proves none; see UPSTREAM_CLIENTS_BACKFILL.md.
-package upstreamclientsbackfill
+// whose configuration proves none. A dry run decides without writing. Every
+// write is conditional on the evidence it was decided from, so a run is
+// idempotent and a concurrent configuration change is skipped rather than
+// overwritten; rerunning picks it up. An ambiguous server is never guessed:
+// it stays a gap until an administrator configures it.
+package associationbackfill
 
 import (
 	"context"
