@@ -129,7 +129,7 @@ func (s *seeder) seedChannels(ctx context.Context) error {
 			Label:       inst.label,
 			Note:        inst.note,
 			AnnounceSeq: inst.announceSeq,
-			ExpiresAt:   pgtype.Timestamptz{Time: s.now.Add(24 * time.Hour), Valid: true},
+			ExpiresAt:   pgtype.Timestamptz{Time: s.now.Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("insert channels instance %s: %w", inst.key, err)
 		}
@@ -143,6 +143,7 @@ func (s *seeder) seedChannels(ctx context.Context) error {
 		{
 			ID: s.det("channels-thread-release"), OrgID: org, ProjectID: proj,
 			Title: "Release readiness", Private: false,
+			EndpointPairKey:    pgtype.Text{String: "", Valid: false},
 			CreatedBySubjectID: s.userID("amara"),
 			AnnounceSeq:        4, LastMessageSeq: 2, MessageCount: 2,
 		},
@@ -193,7 +194,7 @@ func (s *seeder) seedChannels(ctx context.Context) error {
 			Seq:            msg.seq,
 			Body:           msg.body,
 			IdempotencyKey: s.name(msg.key),
-			CreatedAt:      pgtype.Timestamptz{Time: s.now.Add(-time.Duration(msg.ageMinutes) * time.Minute), Valid: true},
+			CreatedAt:      pgtype.Timestamptz{Time: s.now.Add(-time.Duration(msg.ageMinutes) * time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("insert channels message %s: %w", msg.key, err)
 		}
