@@ -1,3 +1,4 @@
+import { isKnownEnumValue } from "@/lib/enum";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -376,6 +377,10 @@ export function ClientAssertionAudienceField({
   onChange: (value: AuthAudienceFormat) => void;
   disabled?: boolean;
 }): JSX.Element {
+  const isKnown = isKnownEnumValue(
+    UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+    value,
+  );
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">
@@ -390,6 +395,11 @@ export function ClientAssertionAudienceField({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
+          {!isKnown && (
+            <SelectItem value={value} disabled>
+              Unsupported audience format
+            </SelectItem>
+          )}
           <SelectItem
             value={
               UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer

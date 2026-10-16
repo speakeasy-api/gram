@@ -1,3 +1,5 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import { makeConnection } from "./tabs/setup/testFixtures";
 import { describe, expect, it } from "vitest";
 import type { IdentityProviderConnectionChecklistItem } from "@gram/client/models/components/identityproviderconnectionchecklistitem.js";
 
@@ -8,6 +10,7 @@ import {
   dpopObservation,
   groupChecklist,
   isConnectionChecked,
+  isConnected,
   isConnectionVerified,
   usesClientSecret,
 } from "./connectionView";
@@ -168,4 +171,16 @@ describe("usesClientSecret", () => {
       usesClientSecret({ listingMode: "custom_app", jwksUrl: undefined }),
     ).toBe(false);
   });
+});
+
+it("does not treat future connection statuses as connected or ready to configure", () => {
+  const connection = {
+    ...makeConnection(),
+    status: unrecognized("future_status"),
+  };
+  expect(isConnected(connection)).toBe(false);
+  expect(connectionStep(connection)).toBe("unknown");
+  expect(connectionStep({ ...connection, clientIdSubmitted: false })).toBe(
+    "unknown",
+  );
 });

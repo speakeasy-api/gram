@@ -1,3 +1,4 @@
+import { supportsAudienceEditing } from "./manageAccessState";
 import { enumPresentation } from "@/lib/enum";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
@@ -244,6 +245,17 @@ export function effectiveReach(
   /** The person these rules reach, so their own rules here take precedence. */
   principalUrn?: string,
 ): EffectiveReach | null {
+  // An unknown level might grant or deny access; do not infer either.
+  if (!supportsAudienceEditing(allReaching)) {
+    return {
+      toolsLabel: "Access unknown",
+      capabilities: [],
+      scopedLevels: [],
+      excluded: [],
+      grantedBy: [],
+      reachableTools: [],
+    };
+  }
   const reaching = withoutOutrankedBlocks(allReaching, principalUrn);
   const granting = reaching.filter(
     (entry) => capabilitiesOf(entry.level).length > 0,
@@ -413,8 +425,8 @@ export function narrowingLabel(entry: {
   tools?: string[];
   dispositions?: string[];
 }): string {
-  const dispositions = (entry.dispositions ?? []).map(
-    (disposition) => DISPOSITION_LABEL[disposition] ?? disposition,
+  const dispositions = (entry.dispositions ?? []).map((disposition) =>
+    enumPresentation(DISPOSITION_LABEL, disposition, "unknown annotation"),
   );
   const tools = entry.tools ?? [];
 

@@ -1,4 +1,8 @@
-import { requireKnownEnumValue } from "@/lib/enum";
+import {
+  enumPresentation,
+  isKnownEnumValue,
+  requireKnownEnumValue,
+} from "@/lib/enum";
 import {
   InputStrategy,
   Mode,
@@ -247,11 +251,15 @@ export function SensorsTab(): JSX.Element {
       width: "160px",
       render: (sensor) => (
         <div>
-          <Text small>{MODE_LABELS[sensor.mode]}</Text>
+          <Text small>
+            {enumPresentation(MODE_LABELS, sensor.mode, "Unknown mode")}
+          </Text>
           <Text small muted>
             {sensor.inputStrategy === "sliding_window"
               ? `Up to ${sensor.windowSize} messages`
-              : "Current message only"}
+              : sensor.inputStrategy === "single_message"
+                ? "Current message only"
+                : "Unknown message context"}
           </Text>
         </div>
       ),
@@ -294,6 +302,14 @@ export function SensorsTab(): JSX.Element {
                 {
                   label: "Edit",
                   icon: "pencil",
+                  disabled:
+                    !isKnownEnumValue(Mode, sensor.mode) ||
+                    !isKnownEnumValue(InputStrategy, sensor.inputStrategy),
+                  description:
+                    !isKnownEnumValue(Mode, sensor.mode) ||
+                    !isKnownEnumValue(InputStrategy, sensor.inputStrategy)
+                      ? "Refresh the page before editing this sensor."
+                      : undefined,
                   onClick: () => {
                     setEditorError(null);
                     setEditorSensor(sensor);

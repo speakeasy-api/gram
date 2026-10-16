@@ -1,3 +1,4 @@
+import { supportsAudienceEditing } from "./manageAccessState";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
@@ -103,6 +104,8 @@ export interface AccessRow {
   memberIds: string[];
   /** True when no rule on this row names this server. */
   inheritedOnly: boolean;
+  /** A reaching rule cannot be interpreted by this dashboard version. */
+  accessUnknown: boolean;
 }
 
 /** Whether a rule reaches this principal, directly or through a role. */
@@ -189,6 +192,7 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
         },
         memberIds: [],
         inheritedOnly: true,
+        accessUnknown: false,
       };
       rows.set(entry.principalUrn, row);
     }
@@ -203,6 +207,10 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
   for (const row of rows.values()) {
     for (const entry of entries) {
       if (!reaches(entry, row)) continue;
+      if (!supportsAudienceEditing([entry])) {
+        row.accessUnknown = true;
+        continue;
+      }
       const own = entry.principalUrn === row.principalUrn;
       const blocked = blockedScope(entry.level);
 
@@ -409,6 +417,15 @@ export function scopeState(
   scope: ScopeKey,
   catalog: ToolSelectionTool[] = [],
 ): ScopeState {
+  if (row.accessUnknown) {
+    return {
+      value: "Access unknown",
+      granted: false,
+      subtracts: false,
+      canRevoke: false,
+      capped: false,
+    };
+  }
   const cell = row.cells[scope];
   const reachable = reachableTools(cell, catalog);
   const closed = isClosed(cell, reachable);
@@ -524,6 +541,7 @@ export function accessSummary(
   row: AccessRow,
   catalog: ToolSelectionTool[] = [],
 ): string {
+  if (row.accessUnknown) return "Access unknown";
   const granted = SCOPE_ROWS.filter(
     ({ key }) => scopeState(row, key, catalog).granted,
   );

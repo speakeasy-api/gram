@@ -1,3 +1,5 @@
+import { mcpServerVisibilityUpdateForm } from "@/lib/mcp-server-visibility";
+import { handleError } from "@/lib/errors";
 import { isKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { RequireScope } from "@/components/require-scope";
@@ -75,28 +77,22 @@ export function ToolFilteringSection({
   // mcpServers.update is a full-record replace for the optional UUID
   // references, so every field has to be re-sent or it gets nulled.
   const applyGroup = (groupId: string | null) => {
-    if (
-      !isKnownEnumValue(
-        KnownUpdateMcpServerFormVisibility,
+    try {
+      const form = mcpServerVisibilityUpdateForm(
+        mcpServer,
         mcpServer.visibility,
-      )
-    )
-      return;
-    updateMcpServer.mutate({
-      request: {
-        updateMcpServerForm: {
-          id: mcpServer.id,
-          name: mcpServer.name ?? undefined,
-          remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-          tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-          toolsetId: mcpServer.toolsetId ?? undefined,
-          unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
-          environmentId: mcpServer.environmentId ?? undefined,
-          visibility: mcpServer.visibility,
-          toolVariationsGroupId: groupId ?? undefined,
+      );
+      updateMcpServer.mutate({
+        request: {
+          updateMcpServerForm: {
+            ...form,
+            toolVariationsGroupId: groupId ?? undefined,
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      handleError(error, { title: "Couldn't update tool filtering" });
+    }
   };
 
   const createGroup = useCreateGlobalToolVariationGroupMutation({
@@ -167,7 +163,17 @@ export function ToolFilteringSection({
                     !supportsEditing || isSaving || groupsQuery.isLoading
                   }
                   onClick={() => {
-                    if (supportsEditing) createGroup.mutate({});
+                    try {
+                      mcpServerVisibilityUpdateForm(
+                        mcpServer,
+                        mcpServer.visibility,
+                      );
+                      createGroup.mutate({});
+                    } catch (error) {
+                      handleError(error, {
+                        title: "Couldn't enable tool filtering",
+                      });
+                    }
                   }}
                 >
                   {createGroup.isPending && (

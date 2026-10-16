@@ -209,7 +209,7 @@ describe("unknown audience values", () => {
   });
 
   it.each(["future_level", "__proto__", "constructor"])(
-    "does not let %s add tools or grant attribution",
+    "shows access as unknown for %s without inferring grants or blocks",
     (level) => {
       const unknown = entry({
         principalUrn: "user:future",
@@ -217,17 +217,30 @@ describe("unknown audience values", () => {
         level: unrecognized(level),
         tools: ["Delete"],
       });
-      expect(effectiveReach([known, unknown])).toEqual(effectiveReach([known]));
-      expect(effectiveReach([unknown])).toBeNull();
+      for (const rules of [
+        [known, unknown],
+        [unknown],
+        [gtmGrant, adminBlock, unknown],
+      ]) {
+        expect(effectiveReach(rules)).toEqual({
+          toolsLabel: "Access unknown",
+          capabilities: [],
+          scopedLevels: [],
+          excluded: [],
+          grantedBy: [],
+          reachableTools: [],
+        });
+        expect(blockingRules(rules)).toEqual([]);
+      }
     },
   );
 
-  it("does not let an unknown unnarrowed level hide known narrowed access", () => {
+  it("does not claim known access survives an unknown block level", () => {
     const unknown = entry({
       principalUrn: "user:future",
-      level: unrecognized("future_level"),
+      level: unrecognized("future_block"),
     });
-    expect(effectiveReach([known, unknown])).toEqual(effectiveReach([known]));
+    expect(effectiveReach([known, unknown])?.toolsLabel).toBe("Access unknown");
   });
 
   it.each(["future_kind", "__proto__", "constructor"])(

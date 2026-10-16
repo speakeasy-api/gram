@@ -17,8 +17,8 @@ import type { CatalogEntry, SetupBlock, SetupDefinition } from "./definition";
 
 /**
  * The catalog the server ships, as the renderer's types. The server validates
- * every entry when it loads, so this only reshapes: an empty optional field
- * becomes absent and a block keeps only the fields its type uses.
+ * every entry when it loads. Platforms using controls this dashboard cannot
+ * represent are hidden; supported entries are reshaped for the renderer.
  */
 export function useCatalogEntries(): {
   entries: CatalogEntry[];

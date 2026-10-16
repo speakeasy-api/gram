@@ -127,6 +127,7 @@ function RuleDetail({
   const events = useMemo(() => sortEventsByRecency(ruleEvents), [ruleEvents]);
 
   const actors = preview?.actors ?? [];
+  const knownWindow = Object.hasOwn(WINDOW_LABELS, rule.windowKind);
 
   return (
     <>
@@ -158,8 +159,11 @@ function RuleDetail({
             </Text>
             <span className="text-muted-foreground text-xs">
               {enumPresentation(WINDOW_LABELS, rule.windowKind, "Unknown")}{" "}
-              window · resets in {timeUntilWindowReset(rule.windowKind)} · warns
-              at {rule.warnAtPct}%
+              window
+              {knownWindow && (
+                <> · resets in {timeUntilWindowReset(rule.windowKind)}</>
+              )}{" "}
+              · warns at {rule.warnAtPct}%
             </span>
           </div>
           {usage ? (
@@ -185,13 +189,20 @@ function RuleDetail({
         </section>
 
         {/* Who is driving the spend */}
-        <PeopleSection
-          actors={actors}
-          matchedCount={preview?.matchedCount ?? 0}
-          loading={actorsLoading}
-          error={actorsError}
-          onRetry={retryActors}
-        />
+        {!knownWindow ? (
+          <p className="text-muted-foreground text-xs">
+            Usage preview is unavailable for this window. Refresh the page for
+            updated support.
+          </p>
+        ) : (
+          <PeopleSection
+            actors={actors}
+            matchedCount={preview?.matchedCount ?? 0}
+            loading={actorsLoading}
+            error={actorsError}
+            onRetry={retryActors}
+          />
+        )}
 
         {/* Lifecycle events */}
         <section className="space-y-2">

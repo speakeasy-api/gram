@@ -444,3 +444,13 @@ it("passes the mapping-status toolbar filter to the paginated query", () => {
     expect.objectContaining({ mappingStatus: "needs_review" }),
   );
 });
+
+it("ignores an unsupported mapping filter from the URL", () => {
+  show(
+    <SlackDirectory connections={[connection]} />,
+    "&slack_mapping=future_status",
+  );
+  expect(mocks.query).toHaveBeenCalledWith(
+    expect.objectContaining({ mappingStatus: undefined }),
+  );
+});

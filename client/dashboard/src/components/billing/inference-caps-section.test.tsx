@@ -1242,6 +1242,28 @@ describe("InferenceCapsSection", () => {
     expect(lastSentCap()).toEqual({ keyType: "chat", monthlyCredits: 250 });
   });
 
+  it("keeps unknown caps free of duplicate anchors and announces through a known editable cap", () => {
+    loadedCaps([
+      cap({ keyType: unrecognized("future_inference") }),
+      cap({ keyType: unrecognized("another_future_inference") }),
+      otherCap(),
+    ]);
+    subscriptionState({ data: { status: "active" }, isFetching: true });
+    render(<InferenceCapsSection />);
+    expect(document.querySelectorAll(`#${INFERENCE_CAPS_ANCHOR}`)).toHaveLength(
+      1,
+    );
+    const ids = Array.from(
+      document.querySelectorAll("[id]"),
+      (element) => element.id,
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.some((id) => id.includes("future_inference"))).toBe(false);
+    const statuses = screen.getAllByRole("status");
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]!.textContent).toMatch(/checking your subscription/i);
+  });
+
   it("mounts no mutation when every key is disabled", () => {
     loadedCaps([otherCap({ disabled: true }), securityCap({ disabled: true })]);
 

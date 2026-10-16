@@ -1,5 +1,5 @@
 import type { EventType as BudgetEventFilter } from "@gram/client/models/operations/listspendruleevents.js";
-import { requireKnownEnumValue } from "@/lib/enum";
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
 import {
   CreateSpendRuleRequestBodyAction,
   WindowKind,
@@ -353,6 +353,8 @@ export function usePreviewBudgetRule(): {
       input: PreviewRuleInput,
       opts?: { onSuccess?: (result: PreviewSpendRuleResult) => void },
     ) => {
+      // Stored rules may use windows this dashboard cannot preview yet.
+      if (!isKnownEnumValue(WindowKind, input.windowKind)) return;
       mutate(
         {
           request: {
@@ -360,7 +362,7 @@ export function usePreviewBudgetRule(): {
               target: input.target,
               limitUsd: input.limitUsd,
               warnAtPct: input.warnAtPct,
-              windowKind: requireKnownEnumValue(WindowKind, input.windowKind),
+              windowKind: input.windowKind,
             },
           },
         },

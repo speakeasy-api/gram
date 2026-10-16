@@ -265,6 +265,37 @@ describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
 });
 
 describe("ModifyRemoteIdentityProviderSheet", () => {
+  it("blocks saving after selecting JWT when the stored audience is unsupported", () => {
+    fixture.authMethod = "client_secret_post";
+    fixture.audienceFormat = "future_audience";
+    renderSheet();
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Authentication method" }),
+      { target: { value: "private_key_jwt" } },
+    );
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toHaveProperty("disabled", true);
+    fireEvent.click(save);
+    expect(sdk.updateIssuer).not.toHaveBeenCalled();
+    expect(sdk.updateClient).not.toHaveBeenCalled();
+  });
+
+  it("preserves an unknown audience on a non-JWT save", async () => {
+    fixture.authMethod = "client_secret_post";
+    fixture.audienceFormat = "future_audience";
+    renderSheet();
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toHaveProperty("disabled", false);
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(sdk.updateClient).toHaveBeenCalledWith({
+        updateRemoteSessionClientForm: expect.objectContaining({
+          tokenEndpointAuthAudienceFormat: undefined,
+        }),
+      }),
+    );
+  });
+
   it.each(["method", "audience"])(
     "prevents modifying unsupported client %s",
     (kind) => {

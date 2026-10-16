@@ -95,14 +95,12 @@ export function inferenceCapLabel(keyType: InferenceSpendCapKeyType): string {
   return `${capCopy(keyType).name} cap`;
 }
 
-/** The anchor for a cap's own control, unique per key and free of identifiers. */
+/** Known caps link to their control; unsupported caps link to the section. */
 export function inferenceCapAnchor(keyType: InferenceSpendCapKeyType): string {
   const copy = capCopy(keyType);
-  const slug =
-    copy === UNKNOWN_CAP_COPY
-      ? `unknown-${encodeURIComponent(keyType)}`
-      : copy.slug;
-  return `${INFERENCE_CAPS_ANCHOR}-${slug}`;
+  return copy === UNKNOWN_CAP_COPY
+    ? INFERENCE_CAPS_ANCHOR
+    : `${INFERENCE_CAPS_ANCHOR}-${copy.slug}`;
 }
 
 /** Whether an element id is one this section answers for. */
@@ -128,7 +126,9 @@ export function inferenceCapPausedNote(
 export function inferenceCapRaiseLabel(
   keyType: InferenceSpendCapKeyType,
 ): string {
-  return `Raise ${capCopy(keyType).name.toLowerCase()} cap`;
+  const copy = capCopy(keyType);
+  if (copy === UNKNOWN_CAP_COPY) return "View inference caps";
+  return `Raise ${copy.name.toLowerCase()} cap`;
 }
 
 /**

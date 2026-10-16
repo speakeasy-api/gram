@@ -1,4 +1,5 @@
-import type { MappingStatus } from "@gram/client/models/operations/listslackdirectorymembers.js";
+import { isKnownEnumValue } from "@/lib/enum";
+import { MappingStatus } from "@gram/client/models/operations/listslackdirectorymembers.js";
 import { syncInProgress } from "./syncView";
 import { useEffect, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -130,7 +131,10 @@ export function SlackDirectory({
   // Links from a person's identity page prefill the search with a Slack ID.
   const [search, setSearch] = useState(() => params.get("slack_search") ?? "");
   const connectionId = values.slack_workspace ?? undefined;
-  const mappingStatus = values.slack_mapping as MappingStatus | null;
+  const rawMappingStatus = values.slack_mapping ?? undefined;
+  const mappingStatus = isKnownEnumValue(MappingStatus, rawMappingStatus)
+    ? rawMappingStatus
+    : undefined;
   // Remount pagination when the directory scope changes, including browser navigation.
   return (
     <section className="space-y-5" aria-label="Slack member directory">

@@ -443,7 +443,8 @@ function ModifyRemoteIdentityProviderSheetBody({
   }, [primaryClient]);
 
   const supportsClientEditing =
-    (primaryClient?.tokenEndpointAuthAudienceFormat === undefined ||
+    (!isPrivateKeyJwtAuthMethod(tokenEndpointAuthMethod) ||
+      primaryClient?.tokenEndpointAuthAudienceFormat === undefined ||
       isKnownEnumValue(
         UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
         primaryClient.tokenEndpointAuthAudienceFormat,
@@ -611,9 +612,11 @@ function ModifyRemoteIdentityProviderSheetBody({
           <ClientAssertionAudienceField
             value={
               authAudienceFormat ??
+              primaryClient?.tokenEndpointAuthAudienceFormat ??
               UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
             }
             onChange={setAuthAudienceFormat}
+            disabled={!supportsClientEditing}
           />
         )}
 

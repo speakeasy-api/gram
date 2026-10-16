@@ -19,8 +19,9 @@ describe("buildAccessRows", () => {
     });
     const rows = buildAccessRows([target], []);
     expect(rows[0]).toMatchObject({ stored: "unknown", enforceable: false });
-    expect(effectiveDecision(rows[0]!, new Map())).toBe("unknown");
-    expect(countDecisions(rows, new Map())).toEqual({
+    const staleDraft = new Map([[target.id, "approved" as const]]);
+    expect(effectiveDecision(rows[0]!, staleDraft)).toBe("unknown");
+    expect(countDecisions(rows, staleDraft)).toEqual({
       approved: 0,
       blocked: 0,
       unreviewed: 0,

@@ -211,3 +211,17 @@ describe("Okta workspace", () => {
     expect(screen.queryByText(/Okta content:/)).toBeNull();
   });
 });
+
+it.each(["setup", "applications", "cross-app-access"])(
+  "blocks unknown status on the %s view",
+  (view) => {
+    mocks.query.data.connection = {
+      status: "future_status",
+      orgUrl: "https://example.okta.com",
+    };
+    show(view);
+    expect(screen.getByText(/Connection status is unknown/)).toBeTruthy();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByText(/Okta content:/)).toBeNull();
+  },
+);

@@ -100,7 +100,7 @@ function ChangeRow({
   return (
     <li className="flex items-start gap-3 py-3">
       <Badge
-        variant={enumPresentation(severityVariant, change.severity, "neutral")}
+        variant={enumPresentation(severityVariant, change.severity, "warning")}
         size="sm"
         className="mt-0.5 w-20 shrink-0 justify-center text-center"
       >
