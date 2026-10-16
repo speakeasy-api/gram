@@ -14,7 +14,7 @@ export function usePluginServerQueries({
   canReadServers: boolean;
   toolsetsQuery: Pick<
     ReturnType<typeof useListToolsets>,
-    "data" | "isLoading" | "error"
+    "data" | "isLoading" | "error" | "refetch"
   >;
   serversQuery: Pick<
     ReturnType<typeof useMcpServers>,
@@ -22,7 +22,7 @@ export function usePluginServerQueries({
   >;
   endpointsQuery: Pick<
     ReturnType<typeof useMcpEndpoints>,
-    "data" | "isLoading" | "error"
+    "data" | "isLoading" | "error" | "refetch"
   >;
 } {
   const project = useProject();

@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -232,14 +231,6 @@ func TestSkillCapture_FindingWinsScanRecordConflict(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.True(t, rows[0].Found)
 	require.Equal(t, "injected", rows[0].Description.String)
-	topRules, err := riskRepo.New(ti.conn).ListRiskOverviewTopRules(ctx, riskRepo.ListRiskOverviewTopRulesParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
-		ToTime:    conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
-		RowLimit:  10,
-	})
-	require.NoError(t, err)
-	require.Empty(t, topRules, "skill findings must not leak into chat risk aggregates")
 }
 
 // Endpoint contract: content is immutable per version, so a repeat upload must

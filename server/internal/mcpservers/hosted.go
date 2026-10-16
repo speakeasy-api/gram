@@ -10,7 +10,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -51,7 +50,7 @@ func (s *Service) WithHostedServerWriter(writer HostedServerWriter) *Service {
 	return s
 }
 
-func (s *Service) updateHostedServer(ctx context.Context, logger *slog.Logger, existing repo.McpServer, payload *gen.UpdateMcpServerPayload, ids serverIDs) (*types.McpServer, error) {
+func (s *Service) updateHostedServer(ctx context.Context, logger *slog.Logger, organizationID string, existing repo.McpServer, payload *gen.UpdateMcpServerPayload, ids serverIDs) (*types.McpServer, error) {
 	if s.hostedServers == nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP servers through the toolset")
 	}
@@ -95,7 +94,8 @@ func (s *Service) updateHostedServer(ctx context.Context, logger *slog.Logger, e
 	if err != nil {
 		return nil, err //nolint:wrapcheck // The writer returns oops errors whose codes reach the caller.
 	}
-	return mv.BuildMcpServerView(updated), nil
+	view, _ := s.buildMcpServerView(ctx, organizationID, updated)
+	return view, nil
 }
 
 // deleteHostedServer disables rather than tombstones: the wrapper id is the toolset id and cannot be reused.

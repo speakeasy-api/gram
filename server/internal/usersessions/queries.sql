@@ -375,6 +375,65 @@ WHERE sqlc.narg('cursor')::uuid IS NULL OR attachment.id < sqlc.narg('cursor')::
 ORDER BY attachment.id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: CountOrganizationManagedUserSessionIssuerMCPServers :one
+-- How many servers ListOrganizationManagedUserSessionIssuerMCPServers lists,
+-- by the same rules.
+SELECT (
+    (
+        SELECT COUNT(*)
+        FROM mcp_servers AS server
+        JOIN projects AS project ON project.id = server.project_id
+        WHERE server.user_session_issuer_id = @user_session_issuer_id::uuid
+          AND server.deleted IS FALSE
+          AND project.organization_id = @organization_id::text
+          AND project.deleted IS FALSE
+    ) + (
+        SELECT COUNT(*)
+        FROM toolsets AS toolset
+        JOIN projects AS project ON project.id = toolset.project_id
+        WHERE toolset.user_session_issuer_id = @user_session_issuer_id::uuid
+          AND toolset.deleted IS FALSE
+          AND project.organization_id = @organization_id::text
+          AND project.deleted IS FALSE
+          AND NOT EXISTS (
+              SELECT 1
+              FROM mcp_servers AS server
+              WHERE server.toolset_id = toolset.id
+                AND server.project_id = toolset.project_id
+                AND server.deleted IS FALSE
+          )
+    ) + (
+        SELECT COUNT(*)
+        FROM meta_mcp_servers AS meta_server
+        JOIN projects AS project ON project.id = meta_server.project_id
+        WHERE meta_server.user_session_issuer_id = @user_session_issuer_id::uuid
+          AND meta_server.deleted IS FALSE
+          AND project.organization_id = @organization_id::text
+          AND project.deleted IS FALSE
+    )
+)::int AS server_count;
+
+-- name: SetOrganizationManagedUserSessionIssuerAuthenticationHost :one
+-- Moves an issuer onto or off the authentication host, with the issuer URL
+-- its shared authorization server is pinned to there. NULL leaves it
+-- unpinned.
+UPDATE user_session_issuers AS issuer
+SET use_authentication_host = @use_authentication_host,
+    pinned_issuer_url = sqlc.narg('pinned_issuer_url'),
+    updated_at = clock_timestamp()
+WHERE issuer.id = @id
+  AND issuer.deleted IS FALSE
+  AND (
+    issuer.organization_id = @organization_id::text
+    OR EXISTS (
+      SELECT 1 FROM projects AS project
+      WHERE project.id = issuer.project_id
+        AND project.organization_id = @organization_id::text
+        AND project.deleted IS FALSE
+    )
+  )
+RETURNING issuer.*;
+
 -- name: GetOrganizationManagedUserSessionIssuerByIDForUpdate :one
 SELECT issuer.*
 FROM user_session_issuers AS issuer

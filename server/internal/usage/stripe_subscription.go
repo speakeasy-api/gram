@@ -28,15 +28,18 @@ const (
 )
 
 type StripeSubscription struct {
-	Status             string
-	CurrentPeriodStart string
-	CurrentPeriodEnd   string
-	TrialStart         *string
-	TrialEnd           *string
-	CancelAtPeriodEnd  bool
-	CancelAt           *string
-	CanceledAt         *string
-	PaymentFailed      bool
+	DiscountDescription     *string
+	DiscountEndsAt          *string
+	GatewayPromotionApplied *bool
+	Status                  string
+	CurrentPeriodStart      string
+	CurrentPeriodEnd        string
+	TrialStart              *string
+	TrialEnd                *string
+	CancelAtPeriodEnd       bool
+	CancelAt                *string
+	CanceledAt              *string
+	PaymentFailed           bool
 }
 
 type BillingActor struct {
@@ -307,21 +310,27 @@ func (s *Service) recordStripeBillingAction(
 
 func buildStripeSubscriptionView(state *stripeclient.SubscriptionState) *StripeSubscription {
 	return &StripeSubscription{
-		Status:             state.Status,
-		CurrentPeriodStart: state.CurrentPeriodStart.Format(time.RFC3339),
-		CurrentPeriodEnd:   state.CurrentPeriodEnd.Format(time.RFC3339),
-		TrialStart:         formatOptionalStripeTime(state.TrialStart),
-		TrialEnd:           formatOptionalStripeTime(state.TrialEnd),
-		CancelAtPeriodEnd:  state.CancelAtPeriodEnd,
-		CancelAt:           formatOptionalStripeTime(state.CancelAt),
-		CanceledAt:         formatOptionalStripeTime(state.CanceledAt),
-		PaymentFailed:      state.PaymentFailed,
+		DiscountDescription:     state.DiscountDescription,
+		DiscountEndsAt:          formatOptionalStripeTime(state.DiscountEndsAt),
+		GatewayPromotionApplied: new(state.GatewayPromotionApplied),
+		Status:                  state.Status,
+		CurrentPeriodStart:      state.CurrentPeriodStart.Format(time.RFC3339),
+		CurrentPeriodEnd:        state.CurrentPeriodEnd.Format(time.RFC3339),
+		TrialStart:              formatOptionalStripeTime(state.TrialStart),
+		TrialEnd:                formatOptionalStripeTime(state.TrialEnd),
+		CancelAtPeriodEnd:       state.CancelAtPeriodEnd,
+		CancelAt:                formatOptionalStripeTime(state.CancelAt),
+		CanceledAt:              formatOptionalStripeTime(state.CanceledAt),
+		PaymentFailed:           state.PaymentFailed,
 	}
 }
 
 func stripeSubscriptionGenView(value *StripeSubscription) *gen.StripeSubscription {
 	return &gen.StripeSubscription{
-		Status: value.Status, CurrentPeriodStart: value.CurrentPeriodStart, CurrentPeriodEnd: value.CurrentPeriodEnd,
+		DiscountDescription:     value.DiscountDescription,
+		DiscountEndsAt:          value.DiscountEndsAt,
+		GatewayPromotionApplied: value.GatewayPromotionApplied,
+		Status:                  value.Status, CurrentPeriodStart: value.CurrentPeriodStart, CurrentPeriodEnd: value.CurrentPeriodEnd,
 		TrialStart: value.TrialStart, TrialEnd: value.TrialEnd, CancelAtPeriodEnd: value.CancelAtPeriodEnd,
 		CancelAt: value.CancelAt, CanceledAt: value.CanceledAt, PaymentFailed: value.PaymentFailed,
 	}

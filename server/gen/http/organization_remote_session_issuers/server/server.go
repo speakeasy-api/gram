@@ -31,6 +31,7 @@ type Server struct {
 	GetIssuerMigratePreflight   http.Handler
 	MigrateIssuer               http.Handler
 	SetEMAProviders             http.Handler
+	ListEMAServices             http.Handler
 	FetchIssuerMetadata         http.Handler
 	RefreshIssuerMetadata       http.Handler
 }
@@ -73,6 +74,7 @@ func New(
 			{"GetIssuerMigratePreflight", "GET", "/rpc/organizationRemoteSessionIssuers.getMigratePreflight"},
 			{"MigrateIssuer", "POST", "/rpc/organizationRemoteSessionIssuers.migrate"},
 			{"SetEMAProviders", "POST", "/rpc/organizationRemoteSessionIssuers.setEMAProviders"},
+			{"ListEMAServices", "GET", "/rpc/organizationRemoteSessionIssuers.listEMAServices"},
 			{"FetchIssuerMetadata", "POST", "/rpc/organizationRemoteSessionIssuers.fetchMetadata"},
 			{"RefreshIssuerMetadata", "POST", "/rpc/organizationRemoteSessionIssuers.refreshMetadata"},
 		},
@@ -87,6 +89,7 @@ func New(
 		GetIssuerMigratePreflight:   NewGetIssuerMigratePreflightHandler(e.GetIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
 		MigrateIssuer:               NewMigrateIssuerHandler(e.MigrateIssuer, mux, decoder, encoder, errhandler, formatter),
 		SetEMAProviders:             NewSetEMAProvidersHandler(e.SetEMAProviders, mux, decoder, encoder, errhandler, formatter),
+		ListEMAServices:             NewListEMAServicesHandler(e.ListEMAServices, mux, decoder, encoder, errhandler, formatter),
 		FetchIssuerMetadata:         NewFetchIssuerMetadataHandler(e.FetchIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
 		RefreshIssuerMetadata:       NewRefreshIssuerMetadataHandler(e.RefreshIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -108,6 +111,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetIssuerMigratePreflight = m(s.GetIssuerMigratePreflight)
 	s.MigrateIssuer = m(s.MigrateIssuer)
 	s.SetEMAProviders = m(s.SetEMAProviders)
+	s.ListEMAServices = m(s.ListEMAServices)
 	s.FetchIssuerMetadata = m(s.FetchIssuerMetadata)
 	s.RefreshIssuerMetadata = m(s.RefreshIssuerMetadata)
 }
@@ -129,6 +133,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetIssuerMigratePreflightHandler(mux, h.GetIssuerMigratePreflight)
 	MountMigrateIssuerHandler(mux, h.MigrateIssuer)
 	MountSetEMAProvidersHandler(mux, h.SetEMAProviders)
+	MountListEMAServicesHandler(mux, h.ListEMAServices)
 	MountFetchIssuerMetadataHandler(mux, h.FetchIssuerMetadata)
 	MountRefreshIssuerMetadataHandler(mux, h.RefreshIssuerMetadata)
 }
@@ -711,6 +716,60 @@ func NewSetEMAProvidersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setEMAProviders")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListEMAServicesHandler configures the mux to serve the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint.
+func MountListEMAServicesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizationRemoteSessionIssuers.listEMAServices", f)
+}
+
+// NewListEMAServicesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizationRemoteSessionIssuers" service
+// "listEMAServices" endpoint.
+func NewListEMAServicesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListEMAServicesRequest(mux, decoder)
+		encodeResponse = EncodeListEMAServicesResponse(encoder)
+		encodeError    = EncodeListEMAServicesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listEMAServices")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -45,6 +46,12 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	if err != nil {
 		return nil, err
 	}
+	var expected []EMAProvider
+	if payload.ExpectedProviders != nil {
+		if expected, err = parseEMAProviders(payload.ExpectedProviders); err != nil {
+			return nil, err
+		}
+	}
 	// Restoring the external default stays possible with the rollout off, so
 	// a saved order can always be undone.
 	if len(providers) > 0 {
@@ -76,13 +83,17 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "the remote session issuer's URL is not an issuer identifier")
 	}
-	if err := resolveEMAProviderIDs(ctx, logger, q, org, providers); err != nil {
-		return nil, err
-	}
-
 	beforeRows, err := q.ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: org, VendorIssuer: vendor})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
+	}
+	// A stale edit conflicts before its providers are checked, so one naming a
+	// since-deleted provider reads as changed, not invalid.
+	if payload.ExpectedProviders != nil && !savedOrderMatches(beforeRows, expected) {
+		return nil, oops.E(oops.CodeConflict, nil, "the EMA provider order changed since you started editing; review it and try again").LogInfo(ctx, logger)
+	}
+	if err := resolveEMAProviderIDs(ctx, logger, q, org, providers); err != nil {
+		return nil, err
 	}
 	before := &audit.RemoteSessionIssuerEMAProviders{VendorIssuer: vendor, Providers: make([]audit.RemoteSessionIssuerEMAProvider, 0, len(beforeRows))}
 	for _, row := range beforeRows {
@@ -163,6 +174,27 @@ func (s *Service) requireEMAProviders(ctx context.Context, logger *slog.Logger, 
 	return nil
 }
 
+// savedOrderMatches reports whether the saved rows are the order a caller
+// expected, entry by entry. The organization has one Speakeasy issuer, so a
+// Speakeasy entry matches by kind.
+func savedOrderMatches(rows []repo.ListEMAProvidersRow, expected []EMAProvider) bool {
+	if len(rows) != len(expected) {
+		return false
+	}
+	for i, row := range rows {
+		want := expected[i]
+		switch {
+		case row.RemoteSessionIssuerID.Valid:
+			if want.Kind != EMAProviderExternal || want.RemoteSessionIssuerID != row.RemoteSessionIssuerID.UUID {
+				return false
+			}
+		case want.Kind != EMAProviderSpeakeasy:
+			return false
+		}
+	}
+	return true
+}
+
 // maxEMAProviders bounds an order's length; the API documents it.
 const maxEMAProviders = 10
 
@@ -178,7 +210,7 @@ func parseEMAProviders(in []*types.EMAProviderInput) ([]EMAProvider, error) {
 		if p == nil {
 			return nil, oops.E(oops.CodeBadRequest, nil, "providers must not contain null entries")
 		}
-		entry := EMAProvider{Kind: EMAProviderKind(p.Kind), RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}
+		entry := EMAProvider{Kind: EMAProviderKind(p.Kind), RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil}
 		switch {
 		case entry.Kind == EMAProviderExternal && p.RemoteSessionIssuerID == nil:
 			return nil, oops.E(oops.CodeBadRequest, nil, "external providers need remote_session_issuer_id")
@@ -241,12 +273,19 @@ func (s *Service) emaProvidersView(ctx context.Context, logger *slog.Logger, q *
 }
 
 // liveEMAProvidersView runs after the order's transaction releases its
-// locks. A failed readiness read is reported as readiness_unknown: it must
-// never fail a read, or a write that already committed.
+// locks, and stamps each provider's organization-wide acceptance so the field
+// means the same on every response. A failed readiness read is reported as
+// readiness_unknown, and a failed acceptance read leaves acceptance out: it
+// must never fail a read, or a write that already committed.
 func (s *Service) liveEMAProvidersView(ctx context.Context, logger *slog.Logger, organizationID string, order EMAProviderOrder) *types.EMAProviderOrder {
 	order, err := ApplyEMAProviderReadiness(ctx, organizationID, order, s.speakeasyReadiness)
 	if err != nil {
 		logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err))
+	}
+	if accepted, err := VendorEMAAcceptance(ctx, repo.New(s.db), organizationID, order.VendorIssuer); err != nil {
+		logger.WarnContext(ctx, "read ema vendor acceptance", attr.SlogError(err))
+	} else {
+		order = StampEMAProviderLastAccepted(order, accepted)
 	}
 	return EMAProviderOrderView(order)
 }
@@ -255,7 +294,7 @@ func (s *Service) liveEMAProvidersView(ctx context.Context, logger *slog.Logger,
 func EMAProviderOrderView(order EMAProviderOrder) *types.EMAProviderOrder {
 	out := &types.EMAProviderOrder{VendorIssuer: order.VendorIssuer, IsDefault: order.IsDefault, Providers: make([]*types.EMAProvider, 0, len(order.Providers))}
 	for _, p := range order.Providers {
-		view := &types.EMAProvider{Kind: string(p.Kind), RemoteSessionIssuerID: nil, InternalSessionIssuerID: nil, UnavailableReason: nil}
+		view := &types.EMAProvider{Kind: string(p.Kind), RemoteSessionIssuerID: nil, InternalSessionIssuerID: nil, UnavailableReason: nil, LastAcceptedAt: nil}
 		if p.RemoteSessionIssuerID != uuid.Nil {
 			view.RemoteSessionIssuerID = conv.PtrEmpty(p.RemoteSessionIssuerID.String())
 		}
@@ -264,6 +303,9 @@ func EMAProviderOrderView(order EMAProviderOrder) *types.EMAProviderOrder {
 		}
 		if p.Unavailable != "" {
 			view.UnavailableReason = conv.PtrEmpty(string(p.Unavailable))
+		}
+		if p.LastAcceptedAt != nil {
+			view.LastAcceptedAt = conv.PtrEmpty(p.LastAcceptedAt.UTC().Format(time.RFC3339))
 		}
 		out.Providers = append(out.Providers, view)
 	}
