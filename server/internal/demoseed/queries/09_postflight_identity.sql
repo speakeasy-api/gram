@@ -152,8 +152,33 @@ WHERE id = @workforce_issuer::uuid
 SELECT count(*) FROM user_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
--- Linear's remote identity provider, the identity chaining example, and
--- Jamf Pro.
+-- EMA: two ready bindings, no cached credentials, and one saved provider
+-- order. The workforce sign-in must not trust the fictional provider.
+-- name: PostflightIDWorkforceTrustsEMAProvider :one
+SELECT count(*) FROM user_session_issuers
+WHERE id = @workforce_issuer::uuid
+  AND organization_id = @org_id::text
+  AND trusted_remote_session_issuer_id = @ema_provider::uuid;
+
+-- name: PostflightIDReadyEMABindings :one
+SELECT count(*) FROM remote_session_ema_bindings
+WHERE organization_id = @org_id::text AND project_id = @project_id::uuid
+  AND state = 'ready';
+
+-- name: PostflightIDEMACredentials :one
+SELECT count(*) FROM remote_session_ema_credentials
+WHERE organization_id = @org_id::text;
+
+-- name: PostflightIDTrustedIssuerSessions :one
+SELECT count(*) FROM trusted_issuer_sessions
+WHERE organization_id = @org_id::text;
+
+-- name: PostflightIDSavedEMAProviders :one
+SELECT count(*) FROM remote_session_ema_providers
+WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- Linear's remote identity provider, the identity chaining example, Jamf
+-- Pro, and the two EMA services' authorization servers.
 -- name: PostflightIDProjectRemoteSessionIssuers :one
 SELECT count(*) FROM remote_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;

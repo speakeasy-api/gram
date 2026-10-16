@@ -25,7 +25,10 @@ var IdentityChainingPreparation = Type("IdentityChainingPreparation", func() {
 	})
 	Attribute("scopes", ArrayOf(String))
 	Attribute("grant_source", String, "Provenance of recorded grants, not provider trust.")
-	Attribute("ema_providers", shared.EMAProviderOrder, "The vendor's EMA provider order resolved for this endpoint. Identity chaining tries the providers that can serve, in order; entries with unavailable_reason are skipped. Returned by readEMA only.")
+	Attribute("ema_providers", shared.EMAProviderOrder, "The EMA providers the vendor accepts, resolved for this endpoint. A provider vouches only where the endpoint's sign-in goes through it, so at most one is usable here; entries with unavailable_reason cannot serve. Returned by readEMA only.")
+	Attribute("last_accepted_at", String, "When the vendor last accepted an assertion for this binding from a provider that can serve it now, so chaining has worked for it. Omitted when none is recorded for a usable provider or acceptance could not be read. Returned by readEMA only.", func() {
+		Format(FormatDateTime)
+	})
 	Required("state", "stage", "remediation", "retryable", "generation", "resource", "scopes", "grant_source")
 })
 

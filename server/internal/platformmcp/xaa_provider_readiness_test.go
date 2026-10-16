@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -66,8 +67,25 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	require.NotNil(t, output.IdentityChaining)
 	require.True(t, output.IdentityChaining.Served)
 	require.Equal(t, string(remotesessions.EMAProviderSpeakeasy), output.IdentityChaining.Providers[0].Kind)
+	require.Nil(t, output.IdentityChaining.Providers[0].LastAcceptedAt, "no credential has been accepted yet")
 	require.Len(t, output.IdentityChaining.Bindings, 1)
 	require.Equal(t, 1, okta.calls, "the Okta reader reported no connection before the fallback")
+
+	binding, err := remotesessionsrepo.New(conn).GetEMABinding(ctx, remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: f.issuerA, Resource: "https://upstream.example.test/mcp"})
+	require.NoError(t, err)
+	accepted := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	_, err = remotesessionsrepo.New(conn).PlantEMACredentialFixture(ctx, remotesessionsrepo.PlantEMACredentialFixtureParams{
+		OrganizationID: conv.ToPGText(f.organizationID), ProjectID: conv.ToNullUUID(f.projectID), UserSessionIssuerID: conv.ToNullUUID(f.userIssuer),
+		RemoteSessionIssuerID: conv.ToNullUUID(f.issuerA), RemoteSessionClientID: binding.RemoteSessionClientID, Resource: "https://upstream.example.test/mcp",
+		SubjectUrn: urn.NewUserSubject(user).String(), EmaProvider: string(remotesessions.EMAProviderSpeakeasy), Retired: false, UpdatedAt: conv.ToPGTimestamptz(accepted),
+		InternalSessionIssuerID: conv.ToNullUUID(internal.ID), TrustedIssuerSessionID: uuid.NullUUID{}, BindingGeneration: pgtype.Int8{},
+	})
+	require.NoError(t, err)
+	_, output, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
+	require.NoError(t, err)
+	require.NotNil(t, output.IdentityChaining)
+	require.NotNil(t, output.IdentityChaining.Providers[0].LastAcceptedAt)
+	require.Equal(t, accepted.Format(time.RFC3339), *output.IdentityChaining.Providers[0].LastAcceptedAt, "the readiness view reports when the vendor last accepted a Speakeasy assertion")
 
 	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin}), f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
@@ -95,4 +113,25 @@ func requireXAARefusal(t *testing.T, result *mcp.CallToolResult, code string) {
 	content, ok := result.Content[0].(*mcp.TextContent)
 	require.True(t, ok)
 	require.Contains(t, content.Text, `"code":"`+code+`"`)
+}
+
+func TestSpeakeasyReadinessViewFollowsSignIn(t *testing.T) {
+	t.Parallel()
+	speakeasy := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.New(), Unavailable: "", LastAcceptedAt: nil}
+	external := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: uuid.New(), InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil}
+	order := func(providers ...remotesessions.EMAProvider) remotesessions.EMAProviderOrder {
+		return remotesessions.EMAProviderOrder{VendorIssuer: "https://vendor.example.test", IsDefault: false, Providers: providers}
+	}
+	require.True(t, speakeasyReadinessView(order(speakeasy), false))
+	require.True(t, speakeasyReadinessView(order(speakeasy, external), false), "a Speakeasy sign-in is vouched for by Speakeasy")
+	require.False(t, speakeasyReadinessView(order(speakeasy, external), true), "a federated sign-in is vouched for by its external issuer")
+	require.True(t, speakeasyReadinessView(order(speakeasy), true), "with no external issuer named there is no connection to describe")
+	require.False(t, speakeasyReadinessView(order(external), false))
+
+	disabled := speakeasy
+	disabled.Unavailable = remotesessions.EMAProviderDisabled
+	require.True(t, speakeasyReadinessView(order(disabled), false), "a disabled Speakeasy issuer keeps the identity-chaining view")
+	require.True(t, speakeasyReadinessView(order(disabled, external), false))
+	require.True(t, speakeasyReadinessView(order(disabled), true))
+	require.False(t, speakeasyReadinessView(order(disabled, external), true))
 }
