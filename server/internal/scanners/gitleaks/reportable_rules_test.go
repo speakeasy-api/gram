@@ -22,4 +22,10 @@ func TestReportableRuleIDsReflectEffectiveScannerConfig(t *testing.T) {
 	second, err := ReportableRuleIDs()
 	require.NoError(t, err)
 	require.Equal(t, first, second)
+
+	// Callers own the slice they receive: changing it leaves the next call intact.
+	first[0] = "mutated"
+	third, err := ReportableRuleIDs()
+	require.NoError(t, err)
+	require.Equal(t, second, third)
 }
