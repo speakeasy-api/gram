@@ -6,12 +6,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/users"
 )
@@ -95,9 +97,22 @@ func TestLocalFixturesReseed(t *testing.T) {
 	blob := assetstest.NewTestBlobStore(t)
 
 	opts := LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}
+	codeGatewayMode := func() string {
+		servers, err := metamcprepo.New(db).ListMetaMCPServers(ctx, metamcprepo.ListMetaMCPServersParams{OrganizationID: spec.OrgID, ProjectID: uuid.MustParse(spec.ProjectID())})
+		require.NoError(t, err)
+		for _, server := range servers {
+			if server.MetaMcpServer.Name == "Python Code Gateway" {
+				return server.MetaMcpServer.DiscoveryMode
+			}
+		}
+		require.FailNow(t, "Python Code Gateway not seeded")
+		return ""
+	}
 	for range 2 {
 		seedLocalPostgres(ctx, t, db, spec)
+		require.Equal(t, "progressive", codeGatewayMode(), "the shared seed has no code runtime to serve Code Mode")
 		require.NoError(t, RunLocalFixtures(ctx, logger, db, blob, nil, opts))
+		require.Equal(t, "code_mode", codeGatewayMode())
 	}
 
 	seedUserID := devidentity.DeterministicUserID(testDeveloperEmail)

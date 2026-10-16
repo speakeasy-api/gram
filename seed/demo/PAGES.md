@@ -338,3 +338,13 @@ The seeded gateway uses Progressive discovery. Settings shows this default and I
 Browser verification: [~] — follow check 31 in `seed/demo/verify.md`.
 
 Consent screens offer the tool picker. On the Acme Agent Gateway it groups the members' tools by server, and the approved choice limits the connection in every discovery mode.
+
+### Python code mode
+
+**Python Code Gateway** has two hosted members. The shared demo org has no code
+runtime, so the shared seed stores it as Progressive. The local seed switches it
+to `code_mode`. There, Inspect exposes one native `execute`, its generated
+description and prefixes, and a Python editor with results, printed output and
+nested calls. New explicit Code selections require a configured runtime. Without
+one, a stored `code_mode` gateway or connection is served in Progressive mode. Shared demo definitions are inert; use local fixtures
+for actual calls. Follow check 32 in `seed/demo/verify.md`.

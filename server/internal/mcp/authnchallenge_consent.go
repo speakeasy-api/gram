@@ -112,9 +112,14 @@ type consentTemplateData struct {
 	// PrefillDiscoveryMode is the mode this subject chose on its previous
 	// connection; empty selects the gateway default.
 	PrefillDiscoveryMode metamcp.DiscoveryMode
-	ClientName           string
-	MCPSlug              string
-	MCPRouteBase         string
+	// GatewayDefaultMode labels the gateway default: inside the discovery choice
+	// when it is offered, and as a read-only row otherwise.
+	GatewayDefaultMode string
+	// ShowCodeMode exposes the Python choice only when the runtime allows new selections.
+	ShowCodeMode bool
+	ClientName   string
+	MCPSlug      string
+	MCPRouteBase string
 	// SharedConsentPath is the consent page path on the issuer's shared
 	// authorization server when it is serving the request. Empty when the
 	// endpoint's own authorization server is, whose consent page lives under
@@ -731,7 +736,31 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		prefillDiscoveryMode = s.consentDiscoveryModePrefill(ctx, endpoint, *challengeState.Subject, clientRowID)
 	}
 
+	gatewayDefaultMode := ""
+	if endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() && focusServer == "" {
+		metaServer, readErr := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+			ID: endpoint.MetaMcpServerID.UUID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
+		})
+		if readErr != nil {
+			return oops.E(oops.CodeUnexpected, readErr, "read gateway discovery mode").LogError(ctx, logger)
+		}
+		switch metaServer.DiscoveryMode {
+		case "code_mode":
+			gatewayDefaultMode = "Code Mode"
+			// admitMetaGate serves Code Mode gateways as Progressive while the runtime is off.
+			if !s.CodeModeAvailable(ctx, endpoint.OrganizationID, endpoint.ProjectID) {
+				gatewayDefaultMode = "Progressive"
+			}
+		case "direct":
+			gatewayDefaultMode = "Direct"
+		case "progressive":
+			gatewayDefaultMode = "Progressive"
+		default:
+			gatewayDefaultMode = "Unavailable"
+		}
+	}
 	data := consentTemplateData{
+		GatewayDefaultMode:      gatewayDefaultMode,
 		ClientName:              clientName,
 		MCPSlug:                 endpoint.Slug,
 		MCPRouteBase:            endpoint.RouteBase,
@@ -754,6 +783,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ShowToolsIsland:         showToolsIsland,
 		ShowDiscoveryMode:       showDiscoveryMode,
 		PrefillDiscoveryMode:    prefillDiscoveryMode,
+		ShowCodeMode:            showDiscoveryMode && s.CodeModeAvailable(ctx, endpoint.OrganizationID, endpoint.ProjectID),
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,

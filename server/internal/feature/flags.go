@@ -210,6 +210,7 @@ const (
 // to VariantAssistantToolsLegacy, which is the pre-rollout behaviour, so a
 // PostHog outage can never strip the managed assistant's tools.
 const (
+
 	// VariantAssistantToolsLegacy serves the managed assistant the
 	// "managed-assistant" platform toolset (logs, chats, users, risk,
 	// deployments, skills, plugins, docs, changelog).
@@ -237,6 +238,7 @@ func AssistantToolsVariant(variant Variant) Variant {
 // pre-rollout behaviour, so a PostHog outage never changes which engine
 // enforces a policy.
 const (
+
 	// VariantRiskLLMOff runs the legacy engines only (gitleaks, Presidio,
 	// prompt-injection, destructive-tool, CLI-destructive).
 	VariantRiskLLMOff Variant = "off"

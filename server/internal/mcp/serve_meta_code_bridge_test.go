@@ -1,0 +1,317 @@
+package mcp_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	serverrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testmcp"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCodeBridgePreservesUnknownOutcomeAfterUpstreamFailure(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newRecordingUpstream(t, "write")
+	target, err := url.Parse(upstream.url)
+	require.NoError(t, err)
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	var writes atomic.Int64
+	failure := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var request struct {
+			Method string `json:"method"`
+		}
+		_ = json.Unmarshal(body, &request)
+		if request.Method == "tools/call" {
+			writes.Add(1)
+			// A side effect occurred, but the proxy cannot recover its reply.
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(failure.Close)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, failure.URL)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, nil)
+	result, err := host.Call(ctx, "remote--write", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.False(t, result.OK)
+	require.Equal(t, "unknown", result.Outcome)
+	require.Equal(t, "tool_call_outcome_unknown", result.Error)
+	require.EqualValues(t, 1, writes.Load(), "a failed result must not replay a write")
+}
+
+func TestCodeBridgeDiscoversHostedRemoteAndTunnelMembers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	hosted := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted", 0, "public", "list")
+	remote := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 1, remote.url)
+	tunnel := &fakeTunnelGateway{t: t, agentSessionID: "code-agent", backendSessionID: "code-backend", toolNames: []string{"ping"}}
+	tunnelID, _ := seedTunneledMetaMember(t, ctx, ti, *auth.ProjectID, gateway.ID, "Tunnel", "tunnel", 2, "")
+	upstream := httptest.NewServer(tunnel)
+	t.Cleanup(upstream.Close)
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), upstream.URL, time.Hour))
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, nil)
+	servers, err := host.Servers(ctx, codemode.PageArgs{})
+	require.NoError(t, err)
+	require.Len(t, servers.Items, 3)
+	page, err := host.Search(ctx, codemode.SearchArgs{})
+	require.NoError(t, err)
+	require.False(t, page.Incomplete, "%+v", page.FailedMembers)
+	paths := make([]string, 0, len(page.Items))
+	for _, item := range page.Items {
+		paths = append(paths, item.Path)
+	}
+	require.Contains(t, paths, hosted.slug+"--list")
+	require.Contains(t, paths, "remote--ping")
+	require.Contains(t, paths, "tunnel--ping")
+	for _, path := range []string{"remote--ping", "tunnel--ping"} {
+		description, err := host.Describe(ctx, path)
+		require.NoError(t, err)
+		require.Contains(t, string(description.Definition), "inputSchema")
+		result, err := host.Call(ctx, path, json.RawMessage(`{}`))
+		require.NoError(t, err)
+		require.True(t, result.OK, "%+v", result)
+		require.Contains(t, string(result.Content), "pong")
+	}
+	// The fixture has no HTTP URL. The shared executor reports this after
+	// accepting dispatch, so the bridge conservatively retains an unknown outcome.
+	result, err := host.Call(ctx, hosted.slug+"--list", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.False(t, result.OK)
+	require.Equal(t, "unknown", result.Outcome)
+	require.Equal(t, "tool_call_outcome_unknown", result.Error)
+	result, err = host.Call(ctx, hosted.slug+"--missing", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.Equal(t, "completed", result.Outcome)
+	require.Equal(t, "tool_call_rejected", result.Error)
+	require.Contains(t, string(result.Content), "tool not found")
+}
+
+func TestCodeBridgeObservesEndpointAndGrantRevocation(t *testing.T) {
+	t.Parallel()
+	for _, change := range []string{"endpoint", "issuer", "grant"} {
+		t.Run(change, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+			upstream := newRecordingUpstream(t, "ping")
+			memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, upstream.url)
+			if change == "grant" {
+				member, err := serverrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, serverrepo.GetMCPServerByIDAndProjectIDParams{ID: memberID, ProjectID: *auth.ProjectID})
+				require.NoError(t, err)
+				_, err = serverrepo.New(ti.conn).UpdateMCPServer(ctx, serverrepo.UpdateMCPServerParams{ID: member.ID, ProjectID: member.ProjectID, Name: member.Name, Slug: member.Slug, EnvironmentID: member.EnvironmentID, UserSessionIssuerID: member.UserSessionIssuerID, RemoteMcpServerID: member.RemoteMcpServerID, TunneledMcpServerID: member.TunneledMcpServerID, ToolsetID: member.ToolsetID, UnproxiedMcpServerID: member.UnproxiedMcpServerID, ToolVariationsGroupID: member.ToolVariationsGroupID, Visibility: "private"})
+				require.NoError(t, err)
+			}
+			host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, nil)
+			// The call reads no catalog, so authorization alone gates it.
+			result, err := host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
+			require.NoError(t, err)
+			require.True(t, result.OK, "%+v", result)
+			switch change {
+			case "endpoint":
+				_, err = endpointrepo.New(ti.conn).SoftDeleteMCPEndpointsByMetaMCPServerID(ctx, endpointrepo.SoftDeleteMCPEndpointsByMetaMCPServerIDParams{MetaMcpServerID: gateway.ID, ProjectID: gateway.ProjectID})
+			case "issuer":
+				replacement := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+				_, err = metamcprepo.New(ti.conn).UpdateMetaMCPServer(ctx, metamcprepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: gateway.ProjectID, OrganizationID: gateway.OrganizationID, Name: gateway.Name, UserSessionIssuerID: uuid.NullUUID{UUID: replacement, Valid: true}})
+			case "grant":
+				_, err = accessrepo.New(ti.conn).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{OrganizationID: auth.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID)})
+			}
+			require.NoError(t, err)
+			before := upstream.requestCount()
+			_, err = host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
+			require.Error(t, err)
+			require.Equal(t, before, upstream.requestCount())
+		})
+	}
+}
+
+func TestCodeBridgeStopsWhenGatewayIsDisabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, upstream.url)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, nil)
+	_, err := host.Describe(ctx, "remote--ping")
+	require.NoError(t, err)
+	_, err = metamcprepo.New(ti.conn).UpdateMetaMCPServer(ctx, metamcprepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: gateway.ProjectID, OrganizationID: gateway.OrganizationID, Name: gateway.Name, UserSessionIssuerID: gateway.UserSessionIssuerID, Visibility: pgtype.Text{String: "disabled", Valid: true}})
+	require.NoError(t, err)
+	before := upstream.requestCount()
+	_, err = host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
+	require.ErrorIs(t, err, codemode.ErrExecutionRevoked)
+	require.Equal(t, before, upstream.requestCount())
+	_, err = metamcprepo.New(ti.conn).UpdateMetaMCPServer(ctx, metamcprepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: gateway.ProjectID, OrganizationID: gateway.OrganizationID, Name: gateway.Name, UserSessionIssuerID: gateway.UserSessionIssuerID, Visibility: pgtype.Text{String: "private", Valid: true}})
+	require.NoError(t, err)
+	_, err = host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
+	require.ErrorIs(t, err, codemode.ErrExecutionRevoked, "re-enabling the gateway cannot resume this execution")
+}
+
+func TestCodeBridgeHonorsToolSelection(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Approved", "approved", 0, upstream.url)
+	selection, err := toolfilter.NewSessionSelection("meta_mcp_server:"+gateway.ID.String(), uuid.New(), []toolfilter.AllowEntry{
+		{Type: toolfilter.AllowTypeTool, Name: "approved--ping", Mode: nil, Tools: nil},
+	})
+	require.NoError(t, err)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, selection)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "New", "new", 1, upstream.url)
+	page, err := host.Search(ctx, codemode.SearchArgs{})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.Equal(t, "approved--ping", page.Items[0].Path)
+	_, err = host.Call(ctx, "new--ping", json.RawMessage(`{}`))
+	require.Error(t, err, "a callback cannot reach a tool outside the selection")
+}
+
+func TestCodeBridgeOmitsMembersWithNoPermittedTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Approved", "approved", 0, upstream.url)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Other", "other", 1, upstream.url)
+	selection, err := toolfilter.NewSessionSelection("meta_mcp_server:"+gateway.ID.String(), uuid.New(), []toolfilter.AllowEntry{
+		{Type: toolfilter.AllowTypeTool, Name: "approved--ping", Mode: nil, Tools: nil},
+	})
+	require.NoError(t, err)
+
+	servers, _, err := mcp.NewTestMetaCodeBackend(t, ctx, ti.service, gateway.ID, selection).Members(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []codemode.Server{{Slug: "approved", Name: "Approved"}}, servers)
+
+	servers, _, err = mcp.NewTestMetaCodeBackend(t, ctx, ti.service, gateway.ID, nil).Members(ctx)
+	require.NoError(t, err)
+	require.Len(t, servers, 2, "an unrestricted session keeps every member")
+}
+
+// TestCodeBridgeCallsWithoutListingAndDropsSwappedDestination pins the call
+// path: a call dispatches without reading the member's catalog, the member's
+// own refusal reaches the program as a completed failure, and a member now
+// served by a different backend is dropped before any call.
+func TestCodeBridgeCallsWithoutListingAndDropsSwappedDestination(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	original := newRecordingUpstream(t, "ping")
+	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, original.url)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, nil)
+	count := func(u *recordingUpstream, method string) int {
+		n := 0
+		for _, req := range u.journal() {
+			if req.rpcMethod == method {
+				n++
+			}
+		}
+		return n
+	}
+
+	for range 2 {
+		result, err := host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
+		require.NoError(t, err)
+		require.True(t, result.OK, "%+v", result)
+	}
+	require.Equal(t, 2, count(original, "tools/call"))
+	require.Zero(t, count(original, "tools/list"), "a call never reads the member catalog")
+
+	result, err := host.Call(ctx, "remote--missing", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.Equal(t, "completed", result.Outcome)
+	require.False(t, result.OK)
+	require.Equal(t, "tool_call_rejected", result.Error)
+	require.Contains(t, string(result.Content), "missing")
+
+	replacement := newRecordingUpstream(t, "ping")
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: *auth.ProjectID, TransportType: "streamable-http", Url: replacement.url})
+	row, err := serverrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, serverrepo.GetMCPServerByIDAndProjectIDParams{ID: memberID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	_, err = serverrepo.New(ti.conn).UpdateMCPServer(ctx, serverrepo.UpdateMCPServerParams{Name: row.Name, Slug: row.Slug, EnvironmentID: row.EnvironmentID, UserSessionIssuerID: row.UserSessionIssuerID, RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, TunneledMcpServerID: row.TunneledMcpServerID, ToolsetID: row.ToolsetID, UnproxiedMcpServerID: row.UnproxiedMcpServerID, ToolVariationsGroupID: row.ToolVariationsGroupID, Visibility: row.Visibility, ID: row.ID, ProjectID: row.ProjectID})
+	require.NoError(t, err)
+
+	calls := count(original, "tools/call")
+	_, err = host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
+	require.Error(t, err)
+	require.Equal(t, calls, count(original, "tools/call"))
+	require.Empty(t, replacement.journal(), "a swapped backend must not be dialed")
+}
+
+// TestCodeBridgeLiveAnnotationGrantWithoutDescribe: a call that skipped
+// discovery is still held to a live annotation grant, which lists on the
+// call's own session; the refused tool never runs.
+func TestCodeBridgeLiveAnnotationGrantWithoutDescribe(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, []testmcp.Tool{
+		{Name: "read_docs", Annotations: &mcpsdk.ToolAnnotations{ReadOnlyHint: true}, InputSchema: map[string]any{"type": "object"}, Response: testmcp.ToolResponse{Content: []map[string]any{{"type": "text", "text": "read ok"}}}},
+		{Name: "delete_docs", InputSchema: map[string]any{"type": "object"}, Response: testmcp.ToolResponse{Content: []map[string]any{{"type": "text", "text": "delete ok"}}}},
+	})
+	t.Cleanup(upstream.Close)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Docs", "docs", 0, upstream.URL)
+	live := toolfilter.AnnotationModeLive
+	selection, err := toolfilter.NewSessionSelection("meta_mcp_server:"+gateway.ID.String(), uuid.New(), []toolfilter.AllowEntry{
+		{Type: toolfilter.AllowTypeAnnotation, Name: toolfilter.AnnotationReadOnly, Mode: &live, Tools: nil},
+	})
+	require.NoError(t, err)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, selection)
+
+	result, err := host.Call(ctx, "docs--read_docs", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.True(t, result.OK, "%+v", result)
+	require.Contains(t, string(result.Content), "read ok")
+
+	_, err = host.Call(ctx, "docs--delete_docs", json.RawMessage(`{}`))
+	var refusal *codemode.DispatchError
+	require.ErrorAs(t, err, &refusal)
+	require.True(t, refusal.BeforeInvoke, "the gateway refused the call before the member saw it")
+}

@@ -967,3 +967,43 @@ func TestConsentTemplateAgentAccessUsesExistingProviderCard(t *testing.T) {
 	require.NotContains(t, html, "data-agent-connection-list")
 	require.Contains(t, html, `value="disconnect"`)
 }
+
+func TestConsentTemplateCodeChoiceAndStoredDefault(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                     string
+		discovery, code, offered bool
+	}{
+		{name: "available", discovery: true, code: true, offered: true},
+		{name: "runtime unavailable", discovery: true, code: false, offered: false},
+		{name: "no choice offered", discovery: false, code: false, offered: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var page bytes.Buffer
+			require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
+				ConsentEnabled: true, ShowDiscoveryMode: tc.discovery, ShowCodeMode: tc.code, GatewayDefaultMode: "Code Mode",
+			}))
+			html := normalizeWhitespace(page.String())
+			require.Equal(t, tc.discovery, strings.Contains(html, `<option value="">Gateway default (Code Mode)</option>`))
+			require.Equal(t, !tc.discovery, strings.Contains(html, `<dt class="text-eyebrow">Discovery mode</dt>`))
+			require.Equal(t, !tc.discovery, strings.Contains(html, `>Code Mode (gateway default). Connections without an override follow this setting.</dd>`))
+			require.Equal(t, tc.offered, strings.Contains(html, `<option value="code_mode">Code Mode</option>`))
+			require.Equal(t, tc.offered, strings.Contains(html, `Code Mode exposes one execute tool`))
+		})
+	}
+}
+
+func TestConsentTemplatePrefillsStoredCodeModeOnlyWhenOffered(t *testing.T) {
+	t.Parallel()
+	for _, code := range []bool{true, false} {
+		var page bytes.Buffer
+		require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
+			ConsentEnabled: true, ShowDiscoveryMode: true, ShowCodeMode: code, PrefillDiscoveryMode: "code_mode",
+		}))
+		html := normalizeWhitespace(page.String())
+		require.Equal(t, code, strings.Contains(html, `<option value="code_mode" selected>Code Mode</option>`))
+		require.NotContains(t, html, `value="progressive" selected`)
+		require.NotContains(t, html, `value="direct" selected`)
+	}
+}

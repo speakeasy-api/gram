@@ -55,6 +55,7 @@ func newApp() *cli.App {
 			newAdminSeedCommand(),
 			newCustomerUsageSeedCommand(),
 			newAccountStateCommand(),
+			newCodeRuntimeSmokeCommand(),
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {
