@@ -27,7 +27,8 @@ CREATE TABLE `gram`.`tool_calls` (
   `started_at_unix_nano` SimpleAggregateFunction(min, Int64) COMMENT 'Earliest observation of the call.
 @access: confidential',
   `ended_at_unix_nano` SimpleAggregateFunction(max, Int64) COMMENT 'Latest observation of the call.
-@access: confidential'
+@access: confidential',
+  INDEX `idx_tool_calls_started_at` ((started_at_unix_nano)) TYPE minmax
 ) ENGINE = AggregatingMergeTree
 PRIMARY KEY (`organization_id`, `project_id`, `event_id`) ORDER BY (`organization_id`, `project_id`, `event_id`) TTL fromUnixTimestamp64Nano(started_at_unix_nano) + toIntervalDay(90) SETTINGS index_granularity = 8192 COMMENT 'One row per tool call, folded from agent_events by tool_calls_mv as records arrive. Read with the -Merge combinators and GROUP BY organization_id, project_id, event_id. Filled forward only, from the time the view was created.';
 -- create "tool_calls_mv" view
