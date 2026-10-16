@@ -110,7 +110,11 @@ type ListAccessMembersOutput struct {
 	TotalMatches SubjectCount   `json:"total_matches"`
 	Suppressed   bool           `json:"suppressed"`
 	Truncated    bool           `json:"truncated"`
-	ExpiresAt    string         `json:"expires_at,omitempty"`
+
+	// ExactEmailMatch reports that the cohort was smaller than five and the
+	// single member returned is the one whose complete email equals the query.
+	ExactEmailMatch bool   `json:"exact_email_match"`
+	ExpiresAt       string `json:"expires_at,omitempty"`
 }
 
 type GetMemberMCPAccessInput struct {
@@ -345,16 +349,30 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 		total = rows[0].TotalMatches
 	}
 	output := ListAccessMembersOutput{
-		Members:      []AccessMember{},
-		TotalMatches: NewSubjectCount(total),
-		Suppressed:   total > 0 && total < SubjectSuppressionThreshold,
-		Truncated:    total > int64(len(rows)),
-		ExpiresAt:    "",
+		Members:         []AccessMember{},
+		TotalMatches:    NewSubjectCount(total),
+		Suppressed:      total > 0 && total < SubjectSuppressionThreshold,
+		Truncated:       total > int64(len(rows)),
+		ExactEmailMatch: false,
+		ExpiresAt:       "",
+	}
+	if total == 0 {
+		return output, nil
 	}
 	// Organization-privacy rules do not allow a row-bearing response to reveal
-	// a filtered cohort smaller than five. Return only the suppressed count.
-	if output.Suppressed || total == 0 {
-		return output, nil
+	// a filtered cohort smaller than five. The one exception is a query that
+	// is a member's complete email: the administrator already knows who they
+	// are looking for, so returning only that member reveals nothing beyond
+	// membership, which the dashboard's member list shows them anyway.
+	if output.Suppressed {
+		if !rows[0].ExactEmailMatch.Bool {
+			return output, nil
+		}
+		rows = rows[:1]
+		output.TotalMatches = NewSubjectCount(1)
+		output.Suppressed = false
+		output.Truncated = false
+		output.ExactEmailMatch = true
 	}
 
 	now := s.now().UTC()

@@ -8406,47 +8406,51 @@ WITH member_roles AS (
     AND COALESCE(r.id, g.id) IS NOT NULL
   GROUP BY ora.workos_user_id
 ), matching AS (
-  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
+  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids,
+    ($3::text <> '' AND lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))) = $3::text) AS exact_email_match
   FROM organization_user_relationships rel
   JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
   LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
   WHERE rel.organization_id = $2 AND rel.deleted IS FALSE
-    AND ($3::text = '' OR $3::text = ANY(m.role_ids))
-    AND ($4::text = ''
-      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
-      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
+    AND ($4::text = '' OR $4::text = ANY(m.role_ids))
+    AND ($3::text = ''
+      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), $3::text) > 0
+      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), $3::text) > 0
       OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
-        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0))
+        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), $3::text) > 0))
 )
-SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
+SELECT id, display_name, email, role_ids, exact_email_match, count(*) OVER ()::bigint AS total_matches
 FROM matching
-ORDER BY email, id
+ORDER BY exact_email_match DESC, email, id
 LIMIT $1
 `
 
 type SearchPlatformMCPAccessMembersParams struct {
 	ResultLimit    int32
 	OrganizationID string
-	RoleID         string
 	Query          string
+	RoleID         string
 }
 
 type SearchPlatformMCPAccessMembersRow struct {
-	ID           string
-	DisplayName  string
-	Email        string
-	RoleIds      []string
-	TotalMatches int64
+	ID              string
+	DisplayName     string
+	Email           string
+	RoleIds         []string
+	ExactEmailMatch pgtype.Bool
+	TotalMatches    int64
 }
 
 // Count distinct members and return only a bounded page from the same snapshot.
 // Active local role assignments follow the access roster's WorkOS identity join.
+// A member whose whole normalized email equals the query sorts first, so a
+// small result page always carries the exact match the caller asked for.
 func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg SearchPlatformMCPAccessMembersParams) ([]SearchPlatformMCPAccessMembersRow, error) {
 	rows, err := q.db.Query(ctx, searchPlatformMCPAccessMembers,
 		arg.ResultLimit,
 		arg.OrganizationID,
-		arg.RoleID,
 		arg.Query,
+		arg.RoleID,
 	)
 	if err != nil {
 		return nil, err
@@ -8460,6 +8464,7 @@ func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg Search
 			&i.DisplayName,
 			&i.Email,
 			&i.RoleIds,
+			&i.ExactEmailMatch,
 			&i.TotalMatches,
 		); err != nil {
 			return nil, err

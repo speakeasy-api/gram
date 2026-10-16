@@ -32,7 +32,7 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 		Members:      []AccessMember{{MaskedIdentity: "a***@e***", Roles: []string{"Operators"}, Reference: "opaque-member", Version: "opaque-version"}},
 		TotalMatches: NewSubjectCount(7), Suppressed: false, Truncated: false, ExpiresAt: "2026-09-04T12:10:00Z",
 	}
-	require.ElementsMatch(t, []string{"members", "masked_identity", "roles", "reference", "version", "total_matches", "suppressed", "truncated", "expires_at"}, decodeKeys(t, members))
+	require.ElementsMatch(t, []string{"members", "masked_identity", "roles", "reference", "version", "total_matches", "suppressed", "truncated", "exact_email_match", "expires_at"}, decodeKeys(t, members))
 
 	memberAccess := GetMemberMCPAccessOutput{Servers: []MemberMCPAccessRow{{
 		ProjectID: uuid.NewString(), ProjectName: "Default", MCPID: uuid.NewString(), MCPName: "Tasks",
