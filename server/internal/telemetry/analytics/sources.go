@@ -59,9 +59,6 @@ func quotedList(values []string) string {
 // then one row per Key folded from Columns. Rows is that fold, for queries.
 // Observations is the predicates alone, for listing a dimension's values.
 type Source struct {
-	// Table, when set, already holds one row of aggregate states per Key,
-	// filled from agent_events as records arrive, and Columns merge those
-	// states. Rows then reads it instead of collapsing and folding the window.
 	Table   string
 	Where   []squirrel.Sqlizer
 	Key     string
@@ -87,10 +84,8 @@ func (s Source) Rows(qc QueryContext) squirrel.SelectBuilder {
 	return builder
 }
 
-// fromTable reads one row per Key from the source's table. The call's start
-// decides whether it falls inside the window. Until merges catch up a call
-// can sit in several partial rows, so the started_at index only picks the
-// keys, and every row of those keys is merged.
+// fromTable picks keys by start, then merges all their rows: a key can still
+// be split across unmerged parts.
 func (s Source) fromTable(qc QueryContext) squirrel.SelectBuilder {
 	tenant := squirrel.Eq{"organization_id": qc.Tenant.OrganizationID, "project_id": qc.Tenant.ProjectID}
 	keys := sq.Select(s.Key).
@@ -175,9 +170,8 @@ var sessionsSource = Source{
 }
 
 // toolCallsSource is one row per tool call (decision, call, result), Skill
-// invocations included, read from the tool_calls table that tool_calls_mv
-// fills. A blocked call has only its decision, so that row is the call and
-// its status is rejected.
+// invocations included. A blocked call has only its decision, so that row is
+// the call and its status is rejected.
 var toolCallsSource = Source{
 	Where: []squirrel.Sqlizer{
 		squirrel.Eq{"event_type": toolCallEventTypes},
