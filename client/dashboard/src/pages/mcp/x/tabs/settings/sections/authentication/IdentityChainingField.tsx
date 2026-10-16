@@ -637,7 +637,12 @@ export function IdentityChainingField({
     )),
   );
 
-  if (onlyWhenOn && (resolvingClients || (!canUnlink && !staleBindings.length)))
+  const error = read.error ?? prepare.error ?? unlink.error;
+
+  if (
+    onlyWhenOn &&
+    (resolvingClients || (!canUnlink && !staleBindings.length && !error))
+  )
     return null;
 
   if (resolvingClients) {
@@ -651,7 +656,12 @@ export function IdentityChainingField({
 
   // Who can vouch is unknown, so only turning bindings off is offered.
   if (onlyWhenOn && !canUnlink)
-    return frame(<SettingsSection.Body>{staleNotices}</SettingsSection.Body>);
+    return frame(
+      <SettingsSection.Body>
+        <ApiErrorAlert error={error} />
+        {staleNotices}
+      </SettingsSection.Body>,
+    );
 
   if (candidates.length === 0) {
     return frame(
@@ -749,7 +759,7 @@ export function IdentityChainingField({
             busy={pending}
           />
         )}
-        <ApiErrorAlert error={read.error ?? prepare.error ?? unlink.error} />
+        <ApiErrorAlert error={error} />
         {staleNotices}
       </SettingsSection.Body>
 

@@ -14,7 +14,10 @@ import type { ChainingProviders } from "./identityChainingGate";
 
 const pending = vi.hoisted(() => ({ prepare: false, unlink: false }));
 const unlinked = { state: "unlinked", scopes: [] };
-const read = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
+const read = vi.hoisted(() => ({
+  data: {} as Record<string, unknown>,
+  error: null as unknown,
+}));
 // Reads of bindings on clients the metadata filter dropped, by issuer.
 const staleRead = vi.hoisted(() => ({
   byIssuer: {} as Record<string, Record<string, unknown>>,
@@ -43,7 +46,7 @@ vi.mock("@tanstack/react-query", () => ({
           isFetching: false,
           data: (queryKey[6] as string[]).map((id) => staleRead.byIssuer[id]),
         }
-      : { isFetching: false, data: read.data },
+      : { isFetching: false, data: read.data, error: read.error },
   useQueryClient: () => ({
     setQueryData: (
       _key: unknown,
@@ -208,6 +211,7 @@ const bound = (clientId: string) => ({
 
 beforeEach(() => {
   read.data = unlinked;
+  read.error = null;
   staleRead.byIssuer = {};
   scopeChecks.length = 0;
   issuerNames.items = [];
@@ -1167,6 +1171,20 @@ describe("identity chaining vouched for by Speakeasy", () => {
       screen.getByText(/still on through client wiki-client/),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+  });
+
+  it("shows a failed read when only an on binding should show", () => {
+    read.data = undefined as unknown as Record<string, unknown>;
+    read.error = new Error("binding lookup failed");
+    const { container } = render(
+      speakeasyField({
+        onlyWhenOn: true,
+        frame: (content) => <section>{content}</section>,
+      }),
+    );
+    expect(container.querySelector("section")).toBeTruthy();
+    expect(screen.getByText(/binding lookup failed/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
 
