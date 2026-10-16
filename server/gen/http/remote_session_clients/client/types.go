@@ -22,15 +22,16 @@ type PrepareEMARequestBody struct {
 	Resource string `form:"resource" json:"resource" xml:"resource"`
 	// Explicit selected client row ID; never inferred.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// The scopes a DCR registration asks for. Turning identity chaining on records
-	// the server connection's scopes (what an interactive sign-in through the
-	// selected client requests) and ignores these, unless the client is not linked
-	// to the user session issuer, no single remote MCP server signing in directly
-	// through it serves the resource (a gateway member qualified through another
-	// sign-in issuer is not resolved), or the connection names only OpenID Connect
-	// scopes while these name others; then these are recorded, and a scope outside
-	// the client's registered scope reports manual_setup_required. With neither
-	// naming a scope, nothing is recorded and identity chaining requests no scope.
+	// The scopes this preparation request supplies, which a DCR registration
+	// always asks for. Turning identity chaining on records the server
+	// connection's scopes (what an interactive sign-in through the selected client
+	// requests) and ignores these, unless the client is not linked to the user
+	// session issuer, no single remote MCP server signing in directly through it
+	// serves the resource (a gateway member qualified through another sign-in
+	// issuer is not resolved), or the connection names only OpenID Connect scopes
+	// while these name others; then these are recorded, and a scope outside the
+	// client's registered scope reports manual_setup_required. With neither naming
+	// a scope, nothing is recorded and identity chaining requests no scope.
 	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	Mechanism string   `form:"mechanism" json:"mechanism" xml:"mechanism"`
 	// Explicit DCR authentication method.
