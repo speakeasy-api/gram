@@ -14589,6 +14589,7 @@ CREATE TABLE IF NOT EXISTS sigint_sensors (
   enabled boolean NOT NULL DEFAULT true,
   input_strategy TEXT,
   window_size INTEGER,
+  min_confidence double precision,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -14610,6 +14611,8 @@ COMMENT ON COLUMN sigint_sensors.enabled IS '@access: confidential';
 COMMENT ON COLUMN sigint_sensors.input_strategy IS 'Absent means single_message; sliding_window supplies preceding conversation context.
 @access: confidential';
 COMMENT ON COLUMN sigint_sensors.window_size IS 'Total messages including the target; absent means five for sliding windows.
+@access: confidential';
+COMMENT ON COLUMN sigint_sensors.min_confidence IS 'Classifier confidence (0 to 1) below which answers count as uncertain when readings are queried; absent means every answer counts.
 @access: confidential';
 COMMENT ON COLUMN sigint_sensors.created_at IS '@access: confidential';
 COMMENT ON COLUMN sigint_sensors.updated_at IS '@access: confidential';
