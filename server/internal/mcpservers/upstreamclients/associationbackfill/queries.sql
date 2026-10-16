@@ -22,9 +22,15 @@ WITH page AS (
            p.organization_id,
            s.user_session_issuer_id,
            s.remote_mcp_server_id,
-           s.tunneled_mcp_server_id,
            s.toolset_id,
-           rms.url AS remote_url
+           rms.url AS remote_url,
+           EXISTS (
+             SELECT 1
+             FROM tunneled_mcp_servers AS tms
+             WHERE tms.id = s.tunneled_mcp_server_id
+               AND tms.project_id = s.project_id
+               AND tms.deleted IS FALSE
+           ) AS tunneled_live
     FROM mcp_servers AS s
     JOIN projects AS p
       ON p.id = s.project_id
@@ -53,7 +59,7 @@ SELECT page.id AS mcp_server_id,
        page.user_session_issuer_id::uuid AS user_session_issuer_id,
        (page.remote_mcp_server_id IS NOT NULL)::boolean AS remote_backed,
        (page.toolset_id IS NOT NULL)::boolean AS hosted,
-       (page.remote_mcp_server_id IS NOT NULL OR page.tunneled_mcp_server_id IS NOT NULL)::boolean AS proxied,
+       (page.remote_url IS NOT NULL OR page.tunneled_live)::boolean AS proxied,
        (
          SELECT count(*)
          FROM mcp_servers AS other
@@ -454,3 +460,7 @@ UPDATE mcp_servers SET remote_session_issuer_id = @remote_session_issuer_id WHER
 
 -- name: SoftDeleteProjectFixture :exec
 UPDATE projects SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: SoftDeleteRemoteMCPServersOfServerFixture :exec
+UPDATE remote_mcp_servers SET deleted_at = clock_timestamp()
+WHERE id = (SELECT s.remote_mcp_server_id FROM mcp_servers AS s WHERE s.id = @mcp_server_id);

@@ -293,3 +293,16 @@ func TestRunIgnoresAGatewayIssuerOfAnotherProject(t *testing.T) {
 	require.Empty(t, report.GatewayResults, "a gateway issuer scoped to another project fronts nothing here")
 	require.Empty(t, f.associations(member))
 }
+
+func TestRunTreatsAServerWhoseSourceIsDeletedAsUnproxied(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.userIssuer()
+	server := f.server(issuer, "https://deleted-source.example.com/mcp")
+	f.server(issuer, "https://sibling.example.com/mcp")
+	f.client(issuer, "https://as.example.com")
+	require.NoError(t, f.q.SoftDeleteRemoteMCPServersOfServerFixture(t.Context(), server))
+
+	report := f.run(false)
+	require.Equal(t, OutcomeUnproxied, resultFor(t, report, server).Outcome, "a server without a live source serves nothing through a client")
+}
