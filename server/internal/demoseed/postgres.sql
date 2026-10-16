@@ -542,12 +542,119 @@ BEGIN
     SELECT id FROM projects
     WHERE id = proj_a AND organization_id = demo_org
   );
+  -- The superseded Channels document is NOT the seed's to destroy. A
+  -- developer may still be holding proof-of-concept conversations in it, and
+  -- a reseed is not consent to delete them. Refuse instead, and name the one
+  -- command that carries them forward.
+  SELECT count(*) INTO stray FROM channels_state
+  WHERE organization_id = demo_org
+    AND (
+      jsonb_array_length(COALESCE(state -> 'messages', '[]'::jsonb)) > 0
+      OR jsonb_typeof(state -> 'instances') = 'object'
+         AND EXISTS (SELECT 1 FROM jsonb_object_keys(state -> 'instances'))
+    );
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed: the superseded Channels document for this organization still holds content. Run "gram channels-convert --organization <id> --apply" to carry it into the normalized tables, then reseed. The seed will not delete it.';
+  END IF;
+
+  -- Channels rows also cascade from the project delete below; the explicit
+  -- deletes keep the reseed readable.
+  DELETE FROM channels_messages WHERE organization_id = demo_org;
+  DELETE FROM channels_conversation_endpoints WHERE organization_id = demo_org;
+  DELETE FROM channels_conversation_participants WHERE organization_id = demo_org;
+  DELETE FROM channels_thread_preferences WHERE organization_id = demo_org;
+  DELETE FROM channels_conversations WHERE organization_id = demo_org;
+  DELETE FROM channels_instances WHERE organization_id = demo_org;
+  DELETE FROM channels_access_exceptions WHERE organization_id = demo_org;
+  DELETE FROM channels_settings WHERE organization_id = demo_org;
+  -- Only an empty placeholder document is removed; the guard above has
+  -- already refused anything with content in it.
+  DELETE FROM channels_state WHERE organization_id = demo_org;
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
   -- new users land somewhere obvious.
   INSERT INTO projects (id, name, slug, organization_id) VALUES
     (proj_a, 'Default', 'default', demo_org);
+
+  -- Synthetic Channels instances reuse existing parent identities. They are
+  -- leased endpoints, not new accounts, and they do not represent live
+  -- processes. Channels is organization-scoped; its rows are owned by the
+  -- organization's canonical default project, which here is proj_a.
+  INSERT INTO channels_settings (organization_id, project_id, enabled, message_seq, announce_seq)
+  VALUES (demo_org, proj_a, TRUE, 3, 5);
+
+  INSERT INTO channels_instances
+    (id, organization_id, project_id, subject_id, label, note, origin, announce_seq, expires_at)
+  VALUES
+    (demo.det_uuid('gram-demo-channels-instance-review'), demo_org, proj_a, demo_user_ids[1],
+     'Review agent', 'Reviewing the API changes; DM this instance for a second opinion.',
+     '', 1, now() + interval '1 day'),
+    (demo.det_uuid('gram-demo-channels-instance-tests'), demo_org, proj_a, demo_user_ids[1],
+     'Test runner', 'Same parent identity, separate instance running regression checks.',
+     '', 2, now() + interval '1 day'),
+    (demo.det_uuid('gram-demo-channels-instance-triage'), demo_org, proj_a, demo_user_ids[2],
+     'Triage agent', 'Coordinating release readiness in the public thread.',
+     '', 3, now() + interval '1 day');
+
+  -- Release readiness is organization-public. Review handoff is addressed to
+  -- two instances and readable only by their parent identities plus
+  -- explicitly authorized read-all observers.
+  INSERT INTO channels_conversations
+    (id, organization_id, project_id, title, private, endpoint_pair_key,
+     created_by_subject_id, announce_seq, last_message_seq, message_count)
+  VALUES
+    (demo.det_uuid('gram-demo-channels-thread-release'), demo_org, proj_a,
+     'Release readiness', FALSE, NULL, demo_user_ids[1], 4, 2, 2),
+    (demo.det_uuid('gram-demo-channels-thread-handoff'), demo_org, proj_a,
+     'Review handoff', TRUE,
+     least(demo.det_uuid('gram-demo-channels-instance-review')::text,
+           demo.det_uuid('gram-demo-channels-instance-triage')::text) || ':' ||
+     greatest(demo.det_uuid('gram-demo-channels-instance-review')::text,
+              demo.det_uuid('gram-demo-channels-instance-triage')::text),
+     demo_user_ids[2], 5, 3, 1);
+
+  INSERT INTO channels_conversation_participants
+    (organization_id, project_id, conversation_id, subject_id)
+  VALUES
+    (demo_org, proj_a, demo.det_uuid('gram-demo-channels-thread-handoff'), demo_user_ids[1]),
+    (demo_org, proj_a, demo.det_uuid('gram-demo-channels-thread-handoff'), demo_user_ids[2]);
+
+  INSERT INTO channels_conversation_endpoints
+    (organization_id, project_id, conversation_id, instance_id)
+  VALUES
+    (demo_org, proj_a, demo.det_uuid('gram-demo-channels-thread-handoff'),
+     demo.det_uuid('gram-demo-channels-instance-review')),
+    (demo_org, proj_a, demo.det_uuid('gram-demo-channels-thread-handoff'),
+     demo.det_uuid('gram-demo-channels-instance-triage'));
+
+  INSERT INTO channels_messages
+    (id, organization_id, project_id, conversation_id, instance_id, subject_id,
+     seq, body, idempotency_key, created_at)
+  VALUES
+    (demo.det_uuid('gram-demo-channels-message-1'), demo_org, proj_a,
+     demo.det_uuid('gram-demo-channels-thread-release'),
+     demo.det_uuid('gram-demo-channels-instance-review'), demo_user_ids[1], 1,
+     'API review is complete. Can the test instance check cursor catchup?',
+     'gram-demo-channels-message-1', now() - interval '5 minutes'),
+    (demo.det_uuid('gram-demo-channels-message-2'), demo_org, proj_a,
+     demo.det_uuid('gram-demo-channels-thread-release'),
+     demo.det_uuid('gram-demo-channels-instance-tests'), demo_user_ids[1], 2,
+     'Catchup passed. Two instances can share one parent without sharing presence.',
+     'gram-demo-channels-message-2', now() - interval '4 minutes'),
+    (demo.det_uuid('gram-demo-channels-message-3'), demo_org, proj_a,
+     demo.det_uuid('gram-demo-channels-thread-handoff'),
+     demo.det_uuid('gram-demo-channels-instance-triage'), demo_user_ids[2], 3,
+     'Private handoff: please check the release thread before continuing.',
+     'gram-demo-channels-message-3', now() - interval '3 minutes');
+
+  -- The first parent follows the public thread, which is what makes its
+  -- messages notify an agent that also subscribes to channels://messages.
+  INSERT INTO channels_thread_preferences
+    (organization_id, project_id, subject_id, conversation_id, followed, muted)
+  VALUES
+    (demo_org, proj_a, demo_user_ids[1],
+     demo.det_uuid('gram-demo-channels-thread-release'), TRUE, FALSE);
 
   -- Signals intelligence examples cover every authoring mode. API is shared
   -- by two sensors, while Draft campaign intentionally has no memberships so
@@ -3137,6 +3244,32 @@ Channel context stays in the Raw view.
      now() - interval '4 days', now() - interval '1 day');
 
   ------------------------------------------------------------------
+  SELECT count(*) INTO stray FROM channels_settings
+  WHERE organization_id = demo_org AND enabled IS TRUE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected one enabled Channels organization';
+  END IF;
+
+  SELECT count(*) INTO stray FROM channels_messages
+  WHERE organization_id = demo_org AND deleted IS FALSE;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 Channels messages, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM channels_conversations
+  WHERE organization_id = demo_org AND private IS TRUE AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 private Channels conversation, found %', stray;
+  END IF;
+
+  -- Channels rows must sit in the organization's canonical default project.
+  SELECT count(*) INTO stray
+  FROM channels_messages m JOIN projects p ON p.id = m.project_id
+  WHERE m.organization_id = demo_org AND p.slug <> 'default';
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: Channels data landed outside the default project';
+  END IF;
+
   -- Postflight asserts: demo data landed, and nothing leaked outside
   -- the demo org.
   ------------------------------------------------------------------

@@ -120,6 +120,13 @@ type platformMCPConfig struct {
 	RiskPolicyCache          policycore.PolicyCacheInvalidator
 	RiskExclusionReconciler  risk.RiskExclusionReconciler
 	RegistryDiscoveryEnabled bool
+	// ChannelsEnabled is the Channels rollout gate: it decides whether the
+	// Channels endpoints, their OAuth resource metadata and the Channels
+	// audience exist on this deployment at all. It is separate from the
+	// Platform MCP product feature and from any per-organization enablement,
+	// which govern what an admitted caller may do rather than whether the
+	// surface is released here. Default off; local development turns it on.
+	ChannelsEnabled bool
 	// RiskAnalysisDescriber reports the run state of a project's Watchdog
 	// analysis. Nil keeps get_risk_analysis_status visible as a stub rather
 	// than reporting a state nothing observed.
@@ -251,6 +258,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		GuardianPolicy:     config.GuardianPolicy,
 		MeterProvider:      config.MeterProvider,
 		IDPCallbackBaseURL: config.OutboundCallbackOrigin,
+		ChannelsEnabled:    config.ChannelsEnabled,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
@@ -503,6 +511,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
+		WithChannelsAccess(platformmcp.NewChannelsAccessService(config.Authz, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
@@ -564,6 +573,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
+	attachChannels(ctx, config, authenticator, authorizer)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
@@ -893,6 +903,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		GuardianPolicy:     config.GuardianPolicy,
 		MeterProvider:      config.MeterProvider,
 		IDPCallbackBaseURL: config.OutboundCallbackOrigin,
+		ChannelsEnabled:    config.ChannelsEnabled,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)
@@ -1105,6 +1116,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
+		WithChannelsAccess(platformmcp.NewChannelsAccessService(config.Authz, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
@@ -1177,6 +1189,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
+	attachChannels(ctx, config, authenticator, authorizer)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)

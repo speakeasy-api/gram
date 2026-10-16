@@ -361,6 +361,12 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_ENABLED"},
 			Value:   false,
 		},
+		&cli.BoolFlag{
+			Name:    "channels-enabled",
+			Usage:   "Serve the Channels endpoints, their OAuth resource metadata and the Channels audience",
+			EnvVars: []string{"GRAM_CHANNELS_ENABLED"},
+			Value:   false,
+		},
 
 		&cli.StringFlag{
 			Name:     "server-url",
@@ -1907,6 +1913,7 @@ func newStartCommand() *cli.Command {
 				SessionPortability:        platformmcp.FeatureChecker(sessionPortabilityEnabled),
 				LocalFixture:              platformFixture,
 				RegistryDiscoveryEnabled:  c.Bool("registry-discovery-enabled"),
+				ChannelsEnabled:           c.Bool("channels-enabled"),
 			})
 			if err != nil {
 				return err

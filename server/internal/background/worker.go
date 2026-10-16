@@ -624,6 +624,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
+	temporalWorker.RegisterActivity(activities.CleanupChannelsHistory)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
@@ -762,6 +763,7 @@ func NewTemporalWorker(
 	// Killswitch expiry history and receipt retention
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(ChannelsRetentionWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
@@ -837,6 +839,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddChannelsRetentionSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add channels retention schedule", attr.SlogError(err))
 	}
 
 	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {

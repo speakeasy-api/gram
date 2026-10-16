@@ -57,6 +57,9 @@ export const ListRoleGrantScope = {
   WorkloadBlockedWrite: "workload:blocked_write",
   OrgDeviceAgentSync: "org:device_agent_sync",
   OrgHooksIngest: "org:hooks_ingest",
+  ChannelsConnect: "channels:connect",
+  ChannelsAdmin: "channels:admin",
+  ChannelsReadAll: "channels:read_all",
 } as const;
 /**
  * The scope slug this grant applies to.
@@ -107,6 +110,9 @@ export const SubScopes = {
   WorkloadBlockedWrite: "workload:blocked_write",
   OrgDeviceAgentSync: "org:device_agent_sync",
   OrgHooksIngest: "org:hooks_ingest",
+  ChannelsConnect: "channels:connect",
+  ChannelsAdmin: "channels:admin",
+  ChannelsReadAll: "channels:read_all",
 } as const;
 export type SubScopes = ClosedEnum<typeof SubScopes>;
 

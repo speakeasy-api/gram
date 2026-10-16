@@ -132,6 +132,10 @@ GRAM_RISK_LLM_API_KEY = ""
 ###############################################
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
+## Channels rollout gate. Off unless set, including in production: the server
+## then serves no Channels endpoint, no Channels OAuth resource metadata and
+## mints no Channels audience. Local development opts in explicitly here.
+GRAM_CHANNELS_ENABLED = "true"
 GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
 ## Public listener hosts accept IPv4 or bracketed IPv6 literals (e.g. [::1]).
 ## Empty uses wildcard public listeners; health/control listeners use loopback.

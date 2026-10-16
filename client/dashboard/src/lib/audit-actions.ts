@@ -54,6 +54,8 @@ export const AUDIT_ACTIONS = [
   "billing_metadata:create_stripe_portal",
   "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
+  "channels:update_access",
+  "channels:update_settings",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -498,6 +500,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
+    case "channels:update_access":
+      return "changed Channels access for";
+    case "channels:update_settings":
+      return "changed Channels availability for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":

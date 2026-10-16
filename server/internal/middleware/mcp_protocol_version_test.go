@@ -289,3 +289,11 @@ func TestMCPProtocolVersionTelemetryToleratesMissingSpan(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 }
+
+func TestChannelsMCPProtocolVersionTelemetry(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+		got := recordSpanForRequest(t, method, "/channels/mcp", mcpversions.Version20260728)
+		require.Equal(t, mcpversions.Version20260728, got[string(attr.McpNegotiatedProtocolVersionKey)])
+	}
+}

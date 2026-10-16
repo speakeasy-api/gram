@@ -132,6 +132,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"link org to the dev-idp", localLinkWorkOSOrgSQL, []any{spec.OrgID, spec.WorkOSOrgID}},
 		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, workosID}},
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
+		{"grant local Channels administration", localChannelsAccessSQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
 		{"verify developer email domain", localVerifiedDomainSQL, []any{spec.OrgID, emailDomain(dev.Email)}},
@@ -331,6 +332,20 @@ DO UPDATE SET deleted_at = NULL, updated_at = clock_timestamp()
 // chat:read is deliberately absent from the Admin system role, so the seeded
 // chats (owned by the fictional teammates) would otherwise be invisible:
 // without it chatVisibilityScope falls back to own-sessions-only.
+// Existing system-role grant sets are intentionally not backfilled. Give the
+// local developer explicit Channels scopes without changing other tenants.
+const localChannelsAccessSQL = `
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT $1, 'user:' || $2::text, requested.scope,
+       jsonb_build_object('resource_kind', 'org', 'resource_id', $1::text)
+FROM unnest(ARRAY['channels:connect', 'channels:admin', 'channels:read_all']) AS requested(scope)
+WHERE NOT EXISTS (
+  SELECT 1 FROM principal_grants g
+  WHERE g.organization_id = $1 AND g.principal_urn = 'user:' || $2::text
+    AND g.scope = requested.scope
+)
+`
+
 const localSessionVisibilitySQL = `
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, 'user:' || $2, 'chat:read',

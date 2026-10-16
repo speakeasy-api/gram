@@ -118,6 +118,7 @@ func TestWorkers_RegisterSchedulesSkipsFleetWideOnPreviewQueue(t *testing.T) {
 		slackDirectorySweepScheduleID(env.Queue()),
 		oktaApplicationSyncCoordinatorScheduleID(queue),
 		fmt.Sprintf("v1:trusted-delegation-cleanup:%s", queue),
+		fmt.Sprintf("v1:channels-retention:%s", queue),
 		fmt.Sprintf("v1:tenant-dimensions-sync:%s", queue),
 		indexToolsetSweepScheduleID(queue),
 	}

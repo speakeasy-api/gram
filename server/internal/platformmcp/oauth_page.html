@@ -231,7 +231,7 @@
         <header class="header">
           <h1 id="page-title">Choose an organization</h1>
           <p>
-            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
+            <strong>{{.ClientName}}</strong> requests access to {{.SurfaceName}}.
           </p>
         </header>
         <dl class="info">
@@ -242,7 +242,8 @@
           <input type="hidden" name="state" value="{{.State}}" />
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
           <label class="field-label" for="organization_id"
-            >Organization to administer</label
+            >{{if .Channels}}Organization to connect{{else}}Organization to
+            administer{{end}}</label
           >
           <select id="organization_id" name="organization_id">
             {{range .Organizations}}
@@ -253,10 +254,18 @@
         </form>
         {{else if eq .Kind "connect"}}
         <header class="header">
-          <h1 id="page-title">Connect Platform MCP</h1>
+          <h1 id="page-title">Connect {{.SurfaceName}}</h1>
           <p>
+            {{if .Channels}}
+            Allow <strong>{{.ClientName}}</strong> to use Speakeasy Channels in
+            <strong>{{.OrganizationName}}</strong>. This application can read
+            and send messages only where your channel permissions allow.
+            Channel administration and reading all channel messages require
+            separate permissions. Connecting does not grant those permissions.
+            {{else}}
             Allow <strong>{{.ClientName}}</strong> to administer
             <strong>{{.OrganizationName}}</strong> through Platform MCP.
+            {{end}}
           </p>
         </header>
         <dl class="info">

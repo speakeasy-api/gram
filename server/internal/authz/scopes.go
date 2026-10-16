@@ -73,6 +73,14 @@ const (
 	ScopeOrgHooksIngest     Scope = "org:hooks_ingest"
 )
 
+// Channels permissions are independent: administration does not imply connecting
+// or reading other members' messages, and MCP grants do not grant channel access.
+const (
+	ScopeChannelsConnect Scope = "channels:connect"
+	ScopeChannelsAdmin   Scope = "channels:admin"
+	ScopeChannelsReadAll Scope = "channels:read_all"
+)
+
 type scopeVisibility int
 
 const (
@@ -86,6 +94,14 @@ const (
 )
 
 var adminScopes = []Scope{
+	ScopeChannelsConnect,
+	ScopeChannelsAdmin,
+	// channels:read_all is intentionally NOT an administrator default. It
+	// discloses the content of other members' private conversations, which
+	// administering Channels does not require: an administrator configures
+	// instances and membership without reading what was said in them. An
+	// organization that does need a transcript reviewer grants the scope
+	// explicitly through a custom role, the same way chat:read is granted.
 	ScopeOrgRead,
 	ScopeOrgAdmin,
 	ScopeProjectRead,
@@ -127,6 +143,9 @@ var adminScopes = []Scope{
 // to clients as a first-class permission or only used internally for storage
 // and evaluation.
 var scopeVisibilityByScope = map[Scope]scopeVisibility{
+	ScopeChannelsConnect:         scopeVisibilityUserVisible,
+	ScopeChannelsAdmin:           scopeVisibilityUserVisible,
+	ScopeChannelsReadAll:         scopeVisibilityUserVisible,
 	ScopeRoot:                    scopeVisibilityInternal,
 	ScopeOrgRead:                 scopeVisibilityUserVisible,
 	ScopeOrgBlockedRead:          scopeVisibilityInternal,
@@ -248,6 +267,9 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // meaning "cannot see or manage". Anything that takes a principal off a
 // server entirely writes all three.
 var scopeExpansions = map[Scope][]Scope{
+	ScopeChannelsConnect:         nil,
+	ScopeChannelsAdmin:           nil,
+	ScopeChannelsReadAll:         nil,
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
 	ScopeOrgBlockedRead:          nil,
@@ -298,6 +320,9 @@ var scopeExpansions = map[Scope][]Scope{
 // stores exception grants for it. Broader blocklist scopes are handled by
 // scopeExpansions on the blocklist scope itself.
 var scopeExclusions = map[Scope]Scope{
+	ScopeChannelsConnect:         "",
+	ScopeChannelsAdmin:           "",
+	ScopeChannelsReadAll:         "",
 	ScopeRoot:                    "",
 	ScopeOrgRead:                 ScopeOrgBlockedRead,
 	ScopeOrgBlockedRead:          "",

@@ -41,6 +41,10 @@ const (
 	// SurfacePlatformMCP is the OAuth-authenticated Platform MCP endpoint,
 	// where a third-party agent acts on a user's behalf.
 	SurfacePlatformMCP Surface = "platform_mcp"
+	// SurfaceChannels is the Channels endpoint, where an agent instance or a
+	// person's dashboard session acts under a Channels permission rather than
+	// through the Platform MCP audience.
+	SurfaceChannels Surface = "channels"
 	// SurfaceProjectAssistant is a project's managed assistant acting during a
 	// user's turn.
 	SurfaceProjectAssistant Surface = "project_assistant"
@@ -69,6 +73,7 @@ var knownSurfaces = map[Surface]struct{}{
 	SurfaceDashboard:          {},
 	SurfaceAPIKey:             {},
 	SurfacePlatformMCP:        {},
+	SurfaceChannels:           {},
 	SurfaceProjectAssistant:   {},
 	SurfaceAdmin:              {},
 	SurfaceAdminMCP:           {},

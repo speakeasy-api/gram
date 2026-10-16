@@ -43,6 +43,13 @@ const (
 	// SurfaceDashboard is an authenticated dashboard session completing work a
 	// Platform MCP flow started, such as a provider setup handoff.
 	SurfaceDashboard ActingSurface = "dashboard"
+	// SurfaceChannels is the Channels endpoint. It shares this package's
+	// account, OAuth server and connection records, but its tokens carry a
+	// different audience and it exposes none of this package's tools, so a
+	// Channels principal must never satisfy a check written for the Platform
+	// MCP surface. surface() defaults an unset surface to SurfacePlatformMCP,
+	// so every Channels principal sets this explicitly.
+	SurfaceChannels ActingSurface = contextvalues.ActingSurfaceChannels
 )
 
 // Principal is the identity a Platform MCP call acts under.

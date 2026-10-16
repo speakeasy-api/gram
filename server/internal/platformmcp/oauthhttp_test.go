@@ -538,6 +538,9 @@ func newTestOAuthHTTP(t *testing.T) *OAuthHTTP {
 		Organizations: testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
 		Signer:        sessiontokens.NewSigner("test-key"),
 		Encryption:    testEncryption(t),
+		// Channels behaviour is asserted where it is served; a deployment
+		// without the rollout gate is covered by its own test.
+		ChannelsEnabled: true,
 	})
 	require.NoError(t, err)
 	return service

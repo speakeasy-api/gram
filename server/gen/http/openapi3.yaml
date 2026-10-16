@@ -102344,6 +102344,9 @@ components:
                         - workload:blocked_write
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                 selectors:
                     type: array
                     items:
@@ -102397,6 +102400,9 @@ components:
                             - workload:blocked_write
                             - org:device_agent_sync
                             - org:hooks_ingest
+                            - channels:connect
+                            - channels:admin
+                            - channels:read_all
                     description: The inherited scopes the primary scope grants.
             required:
                 - scope
@@ -109243,6 +109249,9 @@ components:
                         - workload:write
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
             description: Form for requesting access to a scope.
             required:
                 - scope
@@ -111355,6 +111364,9 @@ components:
                         - workload:blocked_write
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                 selectors:
                     type: array
                     items:
@@ -111750,6 +111762,9 @@ components:
                         - workload:blocked_write
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                 visibility:
                     type: string
                     description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
