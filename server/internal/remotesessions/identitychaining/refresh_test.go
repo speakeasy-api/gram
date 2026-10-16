@@ -21,6 +21,13 @@ func TestRefreshDecisionFor(t *testing.T) {
 	refused := newOutcome(StageExchange, ReasonAccessDenied, ConfidenceVerified, false)
 	refused.Cached = true
 	configuration := newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
+	// A reconnected interactive session routes without chaining, so even a
+	// refusal no sign-in repairs is served once the human reconnects.
+	cachedRefusal := func(stage Stage, reason Reason) Outcome {
+		o := newOutcome(stage, reason, ConfidenceVerified, false)
+		o.Cached = true
+		return o
+	}
 	for _, tc := range []struct {
 		name     string
 		failures []Outcome
@@ -44,6 +51,9 @@ func TestRefreshDecisionFor(t *testing.T) {
 		{"recent refusal after a disabled provider", []Outcome{unavailableBecause(remotesessions.EMAProviderDisabled), refused}, RefreshRefused},
 		{"recent refusal while another provider is paused", []Outcome{refused, unavailableBecause(remotesessions.EMAProviderSigningPaused)}, RefreshUnconfirmed},
 		{"configuration failure", []Outcome{configuration}, RefreshUnconfirmed},
+		{"recent configuration refusal", []Outcome{cachedRefusal(StageExchange, ReasonConfigurationRequired)}, RefreshRefused},
+		{"recent invalid target", []Outcome{cachedRefusal(StageExchange, ReasonInvalidTarget)}, RefreshRefused},
+		{"recent unknown rejection", []Outcome{cachedRefusal(StageRedemption, ReasonUnknownRejection)}, RefreshRefused},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -154,6 +154,23 @@ func cacheEMAEndpointResource(t *testing.T, ctx context.Context, ti *testInstanc
 	return key
 }
 
+// installNonProbingChainer serves the fixture with a production chainer whose
+// live discovery fails the test, reading cached discovery through cached.
+func (f chainedRefreshFixture) installNonProbingChainer(t *testing.T, cached func(*remotesessions.ChallengeManager) func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error)) {
+	t.Helper()
+	logger := testenv.NewLogger(t)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	challenges := remotesessions.NewChallengeManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, f.ti.enc, policy, nil, f.ti.cacheAdapter, f.ti.serverURL)
+	chainer := identitychaining.New(logger, f.ti.conn, f.ti.enc, challenges, remotesessions.NewDelegationService(f.ti.conn, f.ti.enc, challenges), nil, f.ti.cacheAdapter)
+	chainer.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
+		t.Error("the token endpoint must never probe the upstream")
+		return protectedresource.EndpointResource{}, errors.New("unexpected probe")
+	})
+	chainer.SetCachedResourceResolver(cached(challenges))
+	f.ti.service.SetIdentityChainer(chainer)
+}
+
 // retainDelegation records the human's retained delegation in status, its
 // assertion already expired; a durable one also holds a refresh grant.
 func (f chainedRefreshFixture) retainDelegation(t *testing.T, ctx context.Context, status string) {
@@ -245,19 +262,11 @@ func TestHandleToken_ChainedRefreshProceedsThroughTransientDiscoveryFailure(t *t
 	ctx, f := newChainedRefreshFixture(t)
 	// A delegation that would otherwise demand a reconnect.
 	f.retainDelegation(t, ctx, "reauthentication_required")
-	logger := testenv.NewLogger(t)
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
-	require.NoError(t, err)
-	challenges := remotesessions.NewChallengeManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, f.ti.enc, policy, nil, f.ti.cacheAdapter, f.ti.serverURL)
-	chainer := identitychaining.New(logger, f.ti.conn, f.ti.enc, challenges, remotesessions.NewDelegationService(f.ti.conn, f.ti.enc, challenges), nil, f.ti.cacheAdapter)
-	chainer.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
-		t.Error("the token endpoint must never probe the upstream")
-		return protectedresource.EndpointResource{}, errors.New("unexpected probe")
+	f.installNonProbingChainer(t, func(*remotesessions.ChallengeManager) func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error) {
+		return func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error) {
+			return protectedresource.EndpointResource{}, true, errors.New("endpoint resource discovery temporarily unavailable")
+		}
 	})
-	chainer.SetCachedResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error) {
-		return protectedresource.EndpointResource{}, true, errors.New("endpoint resource discovery temporarily unavailable")
-	})
-	f.ti.service.SetIdentityChainer(chainer)
 	res := f.refresh(t, ctx)
 	require.Equal(t, http.StatusOK, res.code, "a transient fault never costs the client its session: %s", res.body)
 }
@@ -266,6 +275,9 @@ func TestHandleToken_ChainedRefreshWithColdDiscoveryCacheProceeds(t *testing.T) 
 	t.Parallel()
 	ctx, f := newChainedRefreshFixture(t)
 	f.retainDelegation(t, ctx, "reauthentication_required")
+	f.installNonProbingChainer(t, func(challenges *remotesessions.ChallengeManager) func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error) {
+		return challenges.CachedEMAResource
+	})
 	requireRefreshReconnect(t, f.refresh(t, ctx))
 
 	require.NoError(t, f.ti.cacheAdapter.Delete(ctx, f.resourceKey))

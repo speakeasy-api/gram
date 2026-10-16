@@ -201,6 +201,32 @@ func TestConsentTemplateRendersRejectedChainedServiceWithPrimaryConnect(t *testi
 	require.Contains(t, html, "0 of 1 connected")
 }
 
+// The runtime answers a definitive chaining refusal on a stale linked session
+// with the reconnect challenge, relying on the consent page to offer a
+// separate sign-in. Pin that every such refusal, repairable or not, leaves the
+// chained card with a Connect action.
+func TestConsentChainedCardOffersConnectForEveryDefinitiveRefusal(t *testing.T) {
+	t.Parallel()
+
+	for _, reason := range []identitychaining.Reason{
+		identitychaining.ReasonConfigurationRequired, identitychaining.ReasonReauthenticationRequired, identitychaining.ReasonInvalidTarget,
+		identitychaining.ReasonScopePolicyDenied, identitychaining.ReasonAccessDenied, identitychaining.ReasonInvalidClient,
+		identitychaining.ReasonInvalidGrant, identitychaining.ReasonMalformedAssertion, identitychaining.ReasonMalformedResponse,
+		identitychaining.ReasonInsufficientScope, identitychaining.ReasonUnknownRejection, identitychaining.ReasonIneligibleIdentity,
+	} {
+		for _, stage := range []identitychaining.Stage{identitychaining.StageSelection, identitychaining.StageAuthorization, identitychaining.StageExchange, identitychaining.StageRedemption} {
+			outcome := identitychaining.Outcome{Stage: stage, Reason: reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+			checked := classifyChainCheck(outcome, "Example")
+			require.Contains(t, []string{chainCheckRejected, chainCheckUnknown}, checked.Status, "%s at %s", reason, stage)
+			if checked.Status == chainCheckRejected {
+				require.Contains(t, checked.Message, "use a separate sign-in", "%s at %s", reason, stage)
+			}
+			html := renderChainedCard(t, checked.Status, checked.Message, 0)
+			require.Regexp(t, `name="action" value="connect" class="[^"]*" data-connect-link`, html, "%s at %s", reason, stage)
+		}
+	}
+}
+
 func TestShouldAutoCloseFirstPartyKeepsChainedCardOpen(t *testing.T) {
 	t.Parallel()
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{{Chained: true}}), "chaining alone has not connected anything")
