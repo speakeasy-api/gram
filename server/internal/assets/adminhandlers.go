@@ -38,10 +38,16 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		return nil, fmt.Errorf("authorize global operation: %w", err)
 	}
 
+	return s.StorePlatformImage(ctx, logger, operatorEmail, reader, payload.ContentLength, payload.ContentType)
+}
+
+// StorePlatformImage stores a publicly served platform-tier image. Callers
+// must already have authorized a platform-wide staff write for operatorEmail.
+func (s *Service) StorePlatformImage(ctx context.Context, logger *slog.Logger, operatorEmail string, reader io.Reader, contentLength int64, contentType string) (*admingen.UploadImageResult, error) {
 	result, err := s.downloadAuthorizedAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
-		contentLength: payload.ContentLength,
-		contentType:   payload.ContentType,
+		contentLength: contentLength,
+		contentType:   contentType,
 	})
 	if err != nil {
 		return nil, err
@@ -71,13 +77,13 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		}}, nil
 	}
 
-	inContentType, _, err := mime.ParseMediaType(payload.ContentType)
+	inContentType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse content type: %w", err), "error parsing content type")
 	}
 
 	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
-		contentLength: payload.ContentLength,
+		contentLength: contentLength,
 		inputMimeType: inContentType,
 		allowedTypes:  []string{"image/png", "image/jpeg", "image/gif", "image/webp"},
 	})
@@ -92,7 +98,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		organizationID: "",
 		filename:       filename,
 		contentType:    mimeType,
-		contentLength:  payload.ContentLength,
+		contentLength:  contentLength,
 		file:           result.file,
 	})
 	if err != nil {
@@ -105,7 +111,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		Sha256:        result.hash,
 		Kind:          "image",
 		ContentType:   inContentType,
-		ContentLength: payload.ContentLength,
+		ContentLength: contentLength,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create platform asset in database: %w", err), "error saving document info").LogError(ctx, logger)

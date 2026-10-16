@@ -60,7 +60,7 @@ func TestFeatureWriteEntitlementsEnableDisableAndPreserveConnectionState(t *test
 				id := uuid.MustParse(prepared.ProposalID)
 				proposal, err := f.store.GetForOwner(ctx, id, f.owner)
 				require.NoError(t, err)
-				view, err := writer.view(proposal)
+				view, err := writer.view(t.Context(), proposal)
 				require.NoError(t, err)
 				require.Equal(t, preview.SideEffects, view.SideEffects)
 				_, err = f.store.Approve(ctx, id, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, writer.revalidate)

@@ -51,6 +51,7 @@ type Runtime struct {
 	server        *mcp.Server
 	resourceURL   string
 	writes        *writeTools
+	uploads       http.Handler
 }
 
 // OrganizationReader is the existing admin service read contract. The runtime
@@ -135,6 +136,15 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registerRegistryTools(server, registryReader)
 	registerServerHealthTools(server, reader, projectReader, serverHealthReader)
 	return runtime
+}
+
+// UploadHandler serves signed image uploads. It answers 404 until an upload
+// write is attached.
+func (r *Runtime) UploadHandler() http.Handler {
+	if r.uploads == nil {
+		return http.NotFoundHandler()
+	}
+	return r.uploads
 }
 
 func (r *Runtime) Handler() http.Handler {

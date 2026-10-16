@@ -183,15 +183,15 @@ func TestOrganizationAccessViewRejectsGlobalAndWrongTargets(t *testing.T) {
 	preview, err := json.Marshal(organizationAccessPreview{OrganizationID: "synthetic-a", Name: "Synthetic A", Slug: "synthetic-a", EnabledBefore: true, EnabledAfter: false, SideEffects: organizationAccessSideEffects})
 	require.NoError(t, err)
 	proposal := Proposal{Operation: OperationDisableOrganization, SchemaVersion: 1, Target: ProposalTarget{OrganizationID: "synthetic-a"}, Preview: preview}
-	view, err := writer.view(proposal)
+	view, err := writer.view(t.Context(), proposal)
 	require.NoError(t, err)
 	require.False(t, view.PlatformGlobal)
 	proposal.PlatformGlobal = true
-	_, err = writer.view(proposal)
+	_, err = writer.view(t.Context(), proposal)
 	require.ErrorIs(t, err, ErrProposalInvalidated)
 	proposal.PlatformGlobal = false
 	proposal.Target.OrganizationID = "synthetic-b"
-	_, err = writer.view(proposal)
+	_, err = writer.view(t.Context(), proposal)
 	require.ErrorIs(t, err, ErrProposalInvalidated)
 }
 

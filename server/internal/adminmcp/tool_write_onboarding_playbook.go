@@ -263,7 +263,7 @@ func (o *onboardingPlaybookWriter) prepare(ctx context.Context, input PrepareOnb
 
 // view renders the stored preview for the approval page. A preview that does
 // not name the proposal's own organization is never shown.
-func (o *onboardingPlaybookWriter) view(proposal Proposal) (proposalView, error) {
+func (o *onboardingPlaybookWriter) view(_ context.Context, proposal Proposal) (proposalView, error) {
 	var preview onboardingPlaybookPreview
 	if err := json.Unmarshal(proposal.Preview, &preview); err != nil || preview.OrganizationID == "" || preview.OrganizationID != proposal.Target.OrganizationID || preview.PlaybookID == "" || len(preview.Steps) == 0 {
 		return proposalView{}, ErrProposalInvalidated

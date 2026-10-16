@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
+	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -56,7 +60,7 @@ type approvableOperation interface {
 	// approval transaction's locks.
 	revalidate(ctx context.Context, tx pgx.Tx, proposal Proposal) error
 	// view turns the stored, digested preview into rows for the approval page.
-	view(proposal Proposal) (proposalView, error)
+	view(ctx context.Context, proposal Proposal) (proposalView, error)
 }
 
 // operationWriter is one implemented write. The shared execute and status
@@ -107,6 +111,8 @@ type proposalView struct {
 	Changes []proposalViewChange
 	// SideEffects describes what else the change triggers.
 	SideEffects string
+	// Image is an optional inline preview of uploaded image bytes.
+	Image template.URL
 }
 
 type proposalViewChange struct {
@@ -217,13 +223,26 @@ func registerWriteTools(server *mcp.Server, tools *writeTools) {
 	})
 }
 
+// WriteDependencies are the domain services that implemented writes call.
+type WriteDependencies struct {
+	Features *productfeatures.Client
+	Registry *mcpregistry.Service
+	// Images and Cache back publish_platform_image. Images is nil when the
+	// admin server has no asset storage, which leaves that write unimplemented.
+	Images  PlatformImageStore
+	Cache   cache.Cache
+	SiteURL *url.URL
+	Logger  *slog.Logger
+}
+
 // AttachWrites registers the implemented write operations. Switching on an
 // operation that has no implementation is a startup error, so a misconfigured
 // server cannot expose an unreviewed write.
-func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures.Client, registry *mcpregistry.Service, writes WriteConfig) error {
-	if runtime == nil || oauth == nil || oauth.Approval == nil || features == nil || registry == nil {
+func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, writes WriteConfig) error {
+	if runtime == nil || oauth == nil || oauth.Approval == nil || deps.Features == nil || deps.Registry == nil {
 		return errors.New("staff write tools are not configured")
 	}
+	features := deps.Features
 	auditLogger := audit.NewLogger()
 	store := oauth.Approval.store
 	tools := newWriteTools(store, writes, oauth.Resource(), map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
@@ -235,8 +254,13 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 		OperationEnableOrganization:                   &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationEnableOrganization},
 		OperationDisableOrganization:                  &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationDisableOrganization},
 		OperationUpdateSupportMatrix:                  &supportMatrixWriter{store: store, writes: writes, baseURL: oauth.Resource()},
-		OperationCreateRegistryEntry:                  &registryEntryWriter{store: store, registry: registry, writes: writes, baseURL: oauth.Resource()},
+		OperationCreateRegistryEntry:                  &registryEntryWriter{store: store, registry: deps.Registry, writes: writes, baseURL: oauth.Resource()},
 	})
+	if deps.Images != nil && deps.Cache != nil && deps.SiteURL != nil && deps.Logger != nil {
+		images := &platformImageWriter{store: store, cache: deps.Cache, images: deps.Images, siteURL: deps.SiteURL, writes: writes, baseURL: oauth.Resource(), logger: deps.Logger, now: time.Now}
+		tools.writers[OperationPublishPlatformImage] = images
+		runtime.uploads = images.UploadHandler()
+	}
 	for _, op := range writes.EnabledOperations() {
 		if tools.writers[op] == nil {
 			return fmt.Errorf("admin MCP write operation %q is not implemented", op)

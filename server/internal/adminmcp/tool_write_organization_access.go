@@ -141,7 +141,7 @@ func (w *organizationAccessWriter) prepare(ctx context.Context, input PrepareOrg
 	return proposalOutput(proposal, replay, w.baseURL), nil
 }
 
-func (w *organizationAccessWriter) view(proposal Proposal) (proposalView, error) {
+func (w *organizationAccessWriter) view(_ context.Context, proposal Proposal) (proposalView, error) {
 	if proposal.Operation != w.operation || proposal.SchemaVersion != 1 || proposal.PlatformGlobal || proposal.Target.ProjectID.Valid || proposal.Target.ResourceKind != "" || proposal.Target.ResourceID != "" {
 		return proposalView{}, ErrProposalInvalidated
 	}

@@ -36,7 +36,7 @@ func newOrganizationWhitelistWriter(t *testing.T, f proposalFixture) (*organizat
 	runtime := NewRuntime(nil, "")
 	oauth := &StaffOAuth{Approval: &StaffProposalApproval{store: f.store}}
 	config := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationWhitelist: true}} //nolint:exhaustive // Only whitelisting is enabled.
-	require.NoError(t, AttachWrites(runtime, oauth, &productfeatures.Client{}, mcpregistry.New(nil, nil), config))
+	require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
 	writer, ok := runtime.writes.writers[OperationSetOrganizationWhitelist].(*organizationWhitelistWriter)
 	require.True(t, ok)
 	return writer, runtime.writes
@@ -68,7 +68,7 @@ func TestOrganizationWhitelistPrepareExecuteAndReplay(t *testing.T) {
 	require.Equal(t, before.Whitelisted, preview.Target.Whitelisted)
 	require.Equal(t, input.Whitelisted, preview.After)
 	require.Contains(t, preview.SideEffects, "not credential revocation")
-	view, err := writer.view(Proposal{Operation: OperationSetOrganizationWhitelist, SchemaVersion: 1, Target: ProposalTarget{OrganizationID: f.orgA}, Arguments: json.RawMessage(`{"whitelisted":true}`), Preview: prepared.Preview})
+	view, err := writer.view(t.Context(), Proposal{Operation: OperationSetOrganizationWhitelist, SchemaVersion: 1, Target: ProposalTarget{OrganizationID: f.orgA}, Arguments: json.RawMessage(`{"whitelisted":true}`), Preview: prepared.Preview})
 	require.NoError(t, err)
 	require.Len(t, view.Changes, 3)
 	again, err := writer.prepare(ctx, input)
@@ -230,7 +230,7 @@ func TestOrganizationWhitelistViewRejectsWrongEnvelope(t *testing.T) {
 		{Operation: OperationSetOrganizationWhitelist, SchemaVersion: 1, Target: ProposalTarget{OrganizationID: "synthetic-a", ProjectID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}, Arguments: json.RawMessage(`{"whitelisted":true}`), Preview: preview},
 		{Operation: OperationSetOrganizationWhitelist, SchemaVersion: 1, Target: ProposalTarget{OrganizationID: "synthetic-a"}, Arguments: json.RawMessage(`{"whitelisted":false}`), Preview: preview},
 	} {
-		_, err := writer.view(proposal)
+		_, err := writer.view(t.Context(), proposal)
 		require.ErrorIs(t, err, ErrProposalInvalidated)
 		if proposal.Target.ProjectID.Valid || proposal.PlatformGlobal {
 			_, err = writer.expectedState(t.Context(), nil, proposal)

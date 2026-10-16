@@ -58,7 +58,7 @@ func TestRegistryEntryWriterCreatesPublishedEntryAndReplays(t *testing.T) {
 	require.NoError(t, err)
 	stored, err := f.store.GetForOwner(t.Context(), proposalID, f.owner)
 	require.NoError(t, err)
-	view, err := writer.view(stored)
+	view, err := writer.view(t.Context(), stored)
 	require.NoError(t, err)
 	require.True(t, view.PlatformGlobal)
 	require.Empty(t, view.OrganizationID, "global proposals must not invent a tenant target")
@@ -140,6 +140,6 @@ func TestRegistryEntryWriterViewRejectsTenantTarget(t *testing.T) {
 	proposal, err := f.store.GetForOwner(t.Context(), proposalID, f.owner)
 	require.NoError(t, err)
 	proposal.Target.OrganizationID = f.orgA
-	_, err = writer.view(proposal)
+	_, err = writer.view(t.Context(), proposal)
 	require.ErrorIs(t, err, ErrProposalInvalidated)
 }

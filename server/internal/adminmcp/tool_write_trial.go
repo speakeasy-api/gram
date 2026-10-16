@@ -197,7 +197,7 @@ func (w *trialWriter) prepare(ctx context.Context, input PrepareTrialExtensionIn
 
 // view renders the stored preview for the approval page. A preview that does
 // not name the proposal's own organization is never shown.
-func (w *trialWriter) view(proposal Proposal) (proposalView, error) {
+func (w *trialWriter) view(_ context.Context, proposal Proposal) (proposalView, error) {
 	var preview trialPreview
 	if err := json.Unmarshal(proposal.Preview, &preview); err != nil || preview.OrganizationID == "" || preview.OrganizationID != proposal.Target.OrganizationID || !validTrialExtensionDays(preview.Days) {
 		return proposalView{}, ErrProposalInvalidated
