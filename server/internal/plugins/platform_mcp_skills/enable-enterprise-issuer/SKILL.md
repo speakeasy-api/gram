@@ -28,7 +28,8 @@ read-only; it cannot enable, disable, rotate, or replace an issuer.
    **Organization** → **IDP and SSO** → **Single sign-on**, then read the issuer
    again. This workflow has no domain tool: do not verify domains yourself or
    change sign-in providers or deployment settings to bypass it. The same
-   handoff applies when `get_xaa_readiness` reports `verified_domain_required`.
+   handoff applies when `get_xaa_readiness` reports `verified_domain_required`;
+   after the domain is verified, call `get_xaa_readiness` again.
 
 ## Guide setup and retrieve the issuer
 
