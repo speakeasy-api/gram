@@ -2209,7 +2209,9 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     status AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'How the call ended: ok, error, rejected or refused.\n@access: confidential',
     duration_nano AggregateFunction(argMaxIf, Int64, Int64, UInt8) COMMENT 'How long the call took, in nanoseconds.\n@access: confidential',
     started_at_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest observation of the call.\n@access: confidential',
-    ended_at_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest observation of the call.\n@access: confidential'
+    ended_at_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest observation of the call.\n@access: confidential',
+
+    INDEX idx_tool_calls_started_at started_at_unix_nano TYPE minmax GRANULARITY 1
 ) ENGINE = AggregatingMergeTree
 ORDER BY (organization_id, project_id, event_id)
 TTL fromUnixTimestamp64Nano(started_at_unix_nano) + INTERVAL 90 DAY
