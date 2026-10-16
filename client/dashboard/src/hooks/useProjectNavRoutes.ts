@@ -122,13 +122,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      // Watchdog supersedes the Risk Overview page: with the flag on, it is
-      // the Secure section's landing surface and the legacy overview nav item
-      // hides (its route stays reachable by direct URL). Risk Events shows in
-      // both modes, directly below the landing surface.
       ...(isRiskWatchdogEnabled
         ? [{ route: routes.watchdog, scope: read }]
-        : [{ route: routes.riskOverview, scope: read }]),
+        : []),
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.costs, scope: observe },

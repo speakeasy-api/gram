@@ -32,13 +32,15 @@ func (s *StubClient) getLocalCustomerTier(ctx context.Context, orgID string) (*T
 	if err != nil {
 		return nil, false, fmt.Errorf("check local account profiles: %w", err)
 	}
+	// Without a fixture, report no tier so reconciliation keeps the persisted
+	// tier.
 	if !exists {
-		return new(TierPro), true, nil
+		return nil, false, nil
 	}
 
 	marker, err := q.GetAccountProfile(ctx, conv.ToPGText(orgID))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return new(TierPro), true, nil
+		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, fmt.Errorf("read local account profile: %w", err)

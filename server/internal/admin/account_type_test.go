@@ -24,8 +24,12 @@ import (
 	"time"
 )
 
-//nolint:paralleltest // Cases reuse organization IDs in the shared Redis database and must remain sequential.
 func TestAccountTypeTransitionMatrix(t *testing.T) {
+	t.Parallel()
+	// Database clones are serialized, so the cases share one and stay
+	// independent through their own organization and Stripe identities.
+	sharedDB, err := infra.CloneTestDatabase(t, "admintestdb")
+	require.NoError(t, err)
 	tiers := []string{"free", "pro", "payg", "enterprise"}
 	for _, source := range tiers {
 		for _, target := range tiers {
@@ -43,18 +47,22 @@ func TestAccountTypeTransitionMatrix(t *testing.T) {
 					{"mixed", []string{"trial_demotion", "billing_inactive", "admin_lock", "future_cause"}},
 					{"unclassified", nil},
 				} {
-					t.Run(source+"_to_"+target+map[bool]string{true: "/bulk/", false: "/single/"}[bulk]+state.name, func(t *testing.T) {
-						ctx, svc, db := newTestAdminService(t)
-						id := "org_tier_matrix"
+					entry := map[bool]string{true: "bulk", false: "single"}[bulk]
+					t.Run(source+"_to_"+target+"/"+entry+"/"+state.name, func(t *testing.T) {
+						t.Parallel()
+						ctx, svc, db := newTestAdminServiceOnDB(t, sharedDB)
+						// Product features are also cached in the shared Redis by organization ID.
+						id := "org_tier_matrix_" + source + "_" + target + "_" + entry + "_" + state.name
+						customerID, subscriptionID := "cus_"+id, "sub_"+id
 						seedOrg(t, ctx, db, orgFixture{id: id, name: id, slug: id, accountType: source})
 						sourceRuntime := source == "payg" || source == "enterprise"
 						tx := testenv.BeginTx(t, ctx, db)
 						require.NoError(t, productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, id, sourceRuntime))
 						require.NoError(t, tx.Commit(ctx))
 						if target == "payg" {
-							require.NoError(t, usagerepo.New(db).CreateStripeBillingMetadataFixture(ctx, usagerepo.CreateStripeBillingMetadataFixtureParams{OrganizationID: id, StripeCustomerID: conv.ToPGText("cus_test")}))
-							require.NoError(t, usagerepo.New(db).SetStripeSubscriptionFixture(ctx, usagerepo.SetStripeSubscriptionFixtureParams{OrganizationID: id, StripeSubscriptionID: conv.ToPGText("sub_test")}))
-							svc.billing = &fakeBillingOperations{subscriptionByID: &stripeclient.SubscriptionState{ID: "sub_test", CustomerID: "cus_test", Status: "active", BillingCycleAnchor: time.Now()}}
+							require.NoError(t, usagerepo.New(db).CreateStripeBillingMetadataFixture(ctx, usagerepo.CreateStripeBillingMetadataFixtureParams{OrganizationID: id, StripeCustomerID: conv.ToPGText(customerID)}))
+							require.NoError(t, usagerepo.New(db).SetStripeSubscriptionFixture(ctx, usagerepo.SetStripeSubscriptionFixtureParams{OrganizationID: id, StripeSubscriptionID: conv.ToPGText(subscriptionID)}))
+							svc.billing = &fakeBillingOperations{subscriptionByID: &stripeclient.SubscriptionState{ID: subscriptionID, CustomerID: customerID, Status: "active", BillingCycleAnchor: time.Now()}}
 						}
 						for _, kt := range openrouter.AllKeyTypes {
 							seedOpenRouterKey(t, ctx, db, id, keyFixture{keyType: kt, monthlyCredits: 1})

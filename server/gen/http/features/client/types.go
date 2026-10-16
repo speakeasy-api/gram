@@ -75,9 +75,6 @@ type GetProductFeaturesResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool `form:"remote_session_auto_refresh_enforced_enabled,omitempty" json:"remote_session_auto_refresh_enforced_enabled,omitempty" xml:"remote_session_auto_refresh_enforced_enabled,omitempty"`
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled *bool `form:"consent_tool_filtering_enabled,omitempty" json:"consent_tool_filtering_enabled,omitempty" xml:"consent_tool_filtering_enabled,omitempty"`
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -701,7 +698,6 @@ func NewGetProductFeaturesProductFeaturesOK(body *GetProductFeaturesResponseBody
 		CustomerManagedEncryptionKeysEnabled:    body.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         body.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: body.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,

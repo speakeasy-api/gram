@@ -3,80 +3,6 @@ package analytics
 // The field literals below state only what a field has; an omitted field is
 // its zero value by design, and the file is excluded from exhaustruct for it.
 
-// Sessions is one row per agent session, collapsed from observed events.
-var Sessions = &Dataset{
-	Name:        "sessions",
-	Kind:        KindEvent,
-	Grain:       "session",
-	Description: "One row per agent session, collapsed from observed events. count counts sessions.",
-	TimeExpr:    "started_at",
-	Fields: []Field{
-		{
-			Name:      "session",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "session_id",
-		},
-		// A session opens broken down by who was in it: text lives on events,
-		// not on the collapsed session row.
-		{
-			Name:         "user",
-			Type:         TypeString,
-			Role:         RoleDimension,
-			Default:      true,
-			Operators:    equalsIn,
-			Aggregations: countDistinct,
-			Expr:         "user_email",
-		},
-		{
-			Name:      "model",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "model",
-		},
-		{
-			Name:      "surface",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "surface",
-		},
-		{
-			Name:      "provider",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "provider",
-		},
-		{
-			Name:         "turn_count",
-			Type:         TypeInt64,
-			Role:         RoleMeasure,
-			Aggregations: []Aggregation{AggregationSum, AggregationAvg},
-			Expr:         "turn_count",
-		},
-		{
-			Name:         "tool_call_count",
-			Type:         TypeInt64,
-			Role:         RoleMeasure,
-			Aggregations: []Aggregation{AggregationSum, AggregationAvg},
-			Expr:         "tool_call_count",
-		},
-		// The time columns are Int64 nanoseconds, hence the division.
-		{
-			Name:         "duration_seconds",
-			Type:         TypeFloat64,
-			Role:         RoleMeasure,
-			Unit:         "s",
-			Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95},
-			Expr:         "(ended_at - started_at) / 1e9",
-		},
-	},
-	Source: sessionsSource,
-}
-
 // ToolCalls is one row per tool call, resolved to its terminal observation.
 var ToolCalls = &Dataset{
 	Name:        "tool_calls",
@@ -91,6 +17,7 @@ var ToolCalls = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "tool_call_id",
+			Typeahead: "event_id",
 		},
 		{
 			Name:         "tool_name",
@@ -100,6 +27,7 @@ var ToolCalls = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "tool_name",
+			Typeahead:    "tool_name",
 		},
 		// Every MCP call carries the tool name mcp_tool; the server and tool the
 		// producer named are what tell them apart.
@@ -110,6 +38,7 @@ var ToolCalls = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "mcp_server_name",
+			Typeahead:    "mcp_server_name",
 			Description:  mcpServerDescription,
 			Lookup:       MCPServerDisplayNamesLookup,
 		},
@@ -119,6 +48,7 @@ var ToolCalls = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "mcp_tool_name",
+			Typeahead: "mcp_tool_name",
 		},
 		{
 			Name:         "session",
@@ -127,6 +57,7 @@ var ToolCalls = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "session_id",
+			Typeahead:    "session_id",
 		},
 		{
 			Name:         "user",
@@ -135,6 +66,7 @@ var ToolCalls = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "user_email",
+			Typeahead:    "user_email",
 		},
 		{
 			Name:      "surface",
@@ -142,6 +74,7 @@ var ToolCalls = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "surface",
+			Typeahead: "surface",
 		},
 		// status reads outcome in agent vocabulary, not a protocol status
 		// code: ok, error, rejected (a call a decision blocked) or refused (a
@@ -153,6 +86,7 @@ var ToolCalls = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "status",
+			Typeahead: "outcome",
 		},
 		{
 			Name:         "duration_ms",
@@ -185,6 +119,7 @@ var Skills = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "tool_call_id",
+			Typeahead: "event_id",
 		},
 		{
 			Name:         "skill",
@@ -194,6 +129,7 @@ var Skills = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "skill_name",
+			Typeahead:    "skill_name",
 		},
 		{
 			Name:         "session",
@@ -202,6 +138,7 @@ var Skills = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "session_id",
+			Typeahead:    "session_id",
 		},
 		{
 			Name:         "user",
@@ -210,6 +147,7 @@ var Skills = &Dataset{
 			Operators:    equalsIn,
 			Aggregations: countDistinct,
 			Expr:         "user_email",
+			Typeahead:    "user_email",
 		},
 		{
 			Name:      "surface",
@@ -217,6 +155,7 @@ var Skills = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "surface",
+			Typeahead: "surface",
 		},
 		// status is the invocation's outcome in the same vocabulary as a tool
 		// call's: ok, error, rejected or refused.
@@ -226,6 +165,7 @@ var Skills = &Dataset{
 			Role:      RoleDimension,
 			Operators: equalsIn,
 			Expr:      "status",
+			Typeahead: "outcome",
 		},
 		{
 			Name:         "duration_ms",
@@ -257,4 +197,4 @@ var Lookups = []*Lookup{
 }
 
 // Default is the v1 catalog: every dataset reads agent_events.
-var Default = MustCatalog(Lookups, Sessions, ToolCalls, Skills)
+var Default = MustCatalog(Lookups, ToolCalls, Skills)

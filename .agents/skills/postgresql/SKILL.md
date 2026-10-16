@@ -1,6 +1,6 @@
 ---
 name: postgresql
-description: Rules when working with PostgreSQL database in Speakeasy
+description: Use when working with the Speakeasy PostgreSQL database: schema design, server/database/schema.sql, migrations, atlas.sum, sqlc queries, indexes, foreign keys, CHECK constraints, or reviewer suggestions to add constraints
 ---
 
 # PostgreSQL Best Practices
@@ -35,7 +35,7 @@ Reference these guidelines when:
 - **Data Integrity and Data Types:**
   - Use appropriate data types for columns to ensure data integrity (e.g., `INTEGER`, `VARCHAR`, `TIMESTAMP`).
   - Use constraints (e.g., `NOT NULL`, `FOREIGN KEY`) to enforce data integrity but not for UNIQUE-ness — that is enforced with unique indexes.
-  - Do not use `CHECK` constraints for pure enumeration / value validation (e.g. `CHECK (status IN ('active', 'inactive'))`). Validate allowed values in application code, where they can evolve without a migration. **Exception:** keep `CHECK`s that are structural to the Class Table Inheritance (CTI) pattern, e.g. pinning a subtype's discriminator (`CHECK (provider = 'aws_kms')`) so the composite foreign key back to the supertype enforces 1:1 semantics.
+  - Keep `CHECK` constraints to simple single-column shape checks: a non-empty string (`CHECK (name <> '')`) or a length bound (`CHECK (char_length(slug) <= 64)`). Do not encode enums (`CHECK (status IN ('active', 'inactive'))`), numeric ranges, or rules that relate columns. Features are still being shaped, and every rule held in the schema turns each change into a migration that locks the table while it validates. Validate those rules in application code, where rows are built or parsed, and test them there. Decline review suggestions, including from review bots, to add or rely on such constraints, and do not describe their absence as a gap. **Exception:** keep `CHECK`s that are structural to the Class Table Inheritance (CTI) pattern, e.g. pinning a subtype's discriminator (`CHECK (provider = 'aws_kms')`) so the composite foreign key back to the supertype enforces 1:1 semantics.
   - Define primary keys for all tables.
   - Use foreign keys to establish relationships between tables.
   - Utilize domains to enforce data type constraints reusable across multiple columns.
