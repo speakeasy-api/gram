@@ -2398,6 +2398,7 @@ func marshalTypesSigintSensorToSigintSensorResponseBody(v *types.SigintSensor) *
 	res := &SigintSensorResponseBody{
 		InputStrategy:   string(v.InputStrategy),
 		WindowSize:      v.WindowSize,
+		MinConfidence:   v.MinConfidence,
 		Enabled:         v.Enabled,
 		MatchExpression: v.MatchExpression,
 		Slug:            string(v.Slug),

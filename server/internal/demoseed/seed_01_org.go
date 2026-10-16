@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 )
@@ -332,6 +333,7 @@ func (s *seeder) orgProject(ctx context.Context) error {
 			Enabled:       sen.enabled,
 			InputStrategy: sen.inputStrategy,
 			WindowSize:    sen.windowSize,
+			MinConfidence: conv.PtrToPGFloat8(sen.minConfidence),
 		}); err != nil {
 			return fmt.Errorf("insert demo sigint sensor %s: %w", sen.key, err)
 		}
@@ -492,20 +494,21 @@ type demoSigintSensor struct {
 	key, name, slug, desc, instructions, mode, inputStrategy string
 	enabled                                                  bool
 	windowSize                                               int32
+	minConfidence                                            *float64
 }
 
 // demoSigintSensors show current-message context, five- and ten-message
-// sliding windows, and a disabled draft. The ClickHouse readings are generated
-// for the enabled ones.
+// sliding windows, a minimum classifier confidence, and a disabled draft. The
+// ClickHouse readings are generated for the enabled ones.
 var demoSigintSensors = []demoSigintSensor{
 	{"service-areas", "Service areas", "service-areas", "Labels every service area discussed in a conversation.",
-		"Select every product service that materially appears in the target message.", "multi_label", "single_message", true, 5},
+		"Select every product service that materially appears in the target message.", "multi_label", "single_message", true, 5, nil},
 	{"primary-service", "Primary service", "primary-service", "Chooses the service most central to a conversation.",
-		"Choose the single service that best describes the target request.", "exclusive", "sliding_window", true, 5},
+		"Choose the single service that best describes the target request.", "exclusive", "sliding_window", true, 5, new(0.6)},
 	{"impact", "Customer impact", "customer-impact", "Orders conversations by customer impact.",
-		"Score the target message impact from low to high using the supplied levels.", "ordered_score", "sliding_window", true, 10},
+		"Score the target message impact from low to high using the supplied levels.", "ordered_score", "sliding_window", true, 10, nil},
 	{"draft-campaign", "Draft campaign", "draft-campaign", "An incomplete campaign classifier awaiting its labels.",
-		"", "multi_label", "single_message", false, 5},
+		"", "multi_label", "single_message", false, 5, nil},
 }
 
 // demoSigintMembership places one signal at a position in a sensor.

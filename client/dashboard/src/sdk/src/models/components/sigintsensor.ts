@@ -69,6 +69,10 @@ export type SigintSensor = {
    */
   matchExpression: string;
   /**
+   * Classifier confidence, from 0 to 1, below which answers count as uncertain when readings are queried. Absent means every answer counts. Confidence describes how decided the classifier's own distribution is, not measured accuracy.
+   */
+  minConfidence?: number | undefined;
+  /**
    * How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.
    */
   mode: SigintSensorMode;
@@ -122,6 +126,7 @@ export const SigintSensor$inboundSchema: z.ZodMiniType<SigintSensor, unknown> =
       input_strategy: SigintSensorInputStrategy$inboundSchema,
       instructions: z.optional(z.string()),
       match_expression: z.string(),
+      min_confidence: z.optional(z.number()),
       mode: SigintSensorMode$inboundSchema,
       name: z.string(),
       project_id: z.string(),
@@ -138,6 +143,7 @@ export const SigintSensor$inboundSchema: z.ZodMiniType<SigintSensor, unknown> =
         "created_at": "createdAt",
         "input_strategy": "inputStrategy",
         "match_expression": "matchExpression",
+        "min_confidence": "minConfidence",
         "project_id": "projectId",
         "signal_ids": "signalIds",
         "updated_at": "updatedAt",

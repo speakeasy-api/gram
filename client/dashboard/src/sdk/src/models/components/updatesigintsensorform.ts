@@ -37,6 +37,10 @@ export type UpdateSigintSensorFormMode = ClosedEnum<
 
 export type UpdateSigintSensorForm = {
   /**
+   * Turn the minimum confidence off so every answer counts. Must not be true when min_confidence is set.
+   */
+  clearMinConfidence?: boolean | undefined;
+  /**
    * Replacement description; empty clears it
    */
   description?: string | undefined;
@@ -60,6 +64,10 @@ export type UpdateSigintSensorForm = {
    * Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission preserves it
    */
   matchExpression?: string | undefined;
+  /**
+   * Replacement classifier confidence, from 0 to 1, below which answers count as uncertain; omission preserves it. Applies to past readings too, without re-evaluation.
+   */
+  minConfidence?: number | undefined;
   /**
    * How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.
    */
@@ -94,12 +102,14 @@ export const UpdateSigintSensorFormMode$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type UpdateSigintSensorForm$Outbound = {
+  clear_min_confidence?: boolean | undefined;
   description?: string | undefined;
   enabled?: boolean | undefined;
   id: string;
   input_strategy?: string | undefined;
   instructions?: string | undefined;
   match_expression?: string | undefined;
+  min_confidence?: number | undefined;
   mode?: string | undefined;
   name?: string | undefined;
   signal_ids?: Array<string> | undefined;
@@ -113,6 +123,7 @@ export const UpdateSigintSensorForm$outboundSchema: z.ZodMiniType<
   UpdateSigintSensorForm
 > = z.pipe(
   z.object({
+    clearMinConfidence: z.optional(z.boolean()),
     description: z.optional(z.string()),
     enabled: z.optional(z.boolean()),
     id: z.string(),
@@ -121,6 +132,7 @@ export const UpdateSigintSensorForm$outboundSchema: z.ZodMiniType<
     ),
     instructions: z.optional(z.string()),
     matchExpression: z.optional(z.string()),
+    minConfidence: z.optional(z.number()),
     mode: z.optional(UpdateSigintSensorFormMode$outboundSchema),
     name: z.optional(z.string()),
     signalIds: z.optional(z.array(z.string())),
@@ -129,8 +141,10 @@ export const UpdateSigintSensorForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      clearMinConfidence: "clear_min_confidence",
       inputStrategy: "input_strategy",
       matchExpression: "match_expression",
+      minConfidence: "min_confidence",
       signalIds: "signal_ids",
       windowSize: "window_size",
     });

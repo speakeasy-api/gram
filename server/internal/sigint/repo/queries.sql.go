@@ -53,7 +53,8 @@ INSERT INTO sigint_sensors (
     enabled,
     match_expression,
     input_strategy,
-    window_size
+    window_size,
+    min_confidence
 )
 VALUES (
     $1,
@@ -66,9 +67,10 @@ VALUES (
     $8,
     $9,
     $10,
-    $11
+    $11,
+    $12
 )
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, min_confidence, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSensorParams struct {
@@ -83,6 +85,7 @@ type CreateSensorParams struct {
 	MatchExpression string
 	InputStrategy   pgtype.Text
 	WindowSize      pgtype.Int4
+	MinConfidence   pgtype.Float8
 }
 
 func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (SigintSensor, error) {
@@ -98,6 +101,7 @@ func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (Sig
 		arg.MatchExpression,
 		arg.InputStrategy,
 		arg.WindowSize,
+		arg.MinConfidence,
 	)
 	var i SigintSensor
 	err := row.Scan(
@@ -112,6 +116,7 @@ func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (Sig
 		&i.Enabled,
 		&i.InputStrategy,
 		&i.WindowSize,
+		&i.MinConfidence,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -181,7 +186,7 @@ SET deleted_at = clock_timestamp(),
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, min_confidence, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteSensorParams struct {
@@ -204,6 +209,7 @@ func (q *Queries) DeleteSensor(ctx context.Context, arg DeleteSensorParams) (Sig
 		&i.Enabled,
 		&i.InputStrategy,
 		&i.WindowSize,
+		&i.MinConfidence,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -312,6 +318,7 @@ SELECT
     sensor.match_expression,
     COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
     COALESCE(sensor.window_size, 5)::integer AS window_size,
+    sensor.min_confidence,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -345,6 +352,7 @@ type GetSensorRow struct {
 	MatchExpression string
 	InputStrategy   string
 	WindowSize      int32
+	MinConfidence   pgtype.Float8
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -365,6 +373,7 @@ func (q *Queries) GetSensor(ctx context.Context, arg GetSensorParams) (GetSensor
 		&i.MatchExpression,
 		&i.InputStrategy,
 		&i.WindowSize,
+		&i.MinConfidence,
 		&i.SignalIds,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -385,6 +394,7 @@ SELECT
     sensor.match_expression,
     COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
     COALESCE(sensor.window_size, 5)::integer AS window_size,
+    sensor.min_confidence,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -419,6 +429,7 @@ type GetSensorsByIDsRow struct {
 	MatchExpression string
 	InputStrategy   string
 	WindowSize      int32
+	MinConfidence   pgtype.Float8
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -445,6 +456,7 @@ func (q *Queries) GetSensorsByIDs(ctx context.Context, arg GetSensorsByIDsParams
 			&i.MatchExpression,
 			&i.InputStrategy,
 			&i.WindowSize,
+			&i.MinConfidence,
 			&i.SignalIds,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -537,6 +549,7 @@ SELECT
     sensor.match_expression,
     COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
     COALESCE(sensor.window_size, 5)::integer AS window_size,
+    sensor.min_confidence,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -573,6 +586,7 @@ type ListSensorsRow struct {
 	MatchExpression string
 	InputStrategy   string
 	WindowSize      int32
+	MinConfidence   pgtype.Float8
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -599,6 +613,7 @@ func (q *Queries) ListSensors(ctx context.Context, arg ListSensorsParams) ([]Lis
 			&i.MatchExpression,
 			&i.InputStrategy,
 			&i.WindowSize,
+			&i.MinConfidence,
 			&i.SignalIds,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -626,6 +641,7 @@ SELECT
     sensor.match_expression,
     COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
     COALESCE(sensor.window_size, 5)::integer AS window_size,
+    sensor.min_confidence,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -664,6 +680,7 @@ type ListSensorsForSignalRow struct {
 	MatchExpression string
 	InputStrategy   string
 	WindowSize      int32
+	MinConfidence   pgtype.Float8
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -690,6 +707,7 @@ func (q *Queries) ListSensorsForSignal(ctx context.Context, arg ListSensorsForSi
 			&i.MatchExpression,
 			&i.InputStrategy,
 			&i.WindowSize,
+			&i.MinConfidence,
 			&i.SignalIds,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1140,11 +1158,12 @@ SET name = $1,
     match_expression = $7,
     input_strategy = $8,
     window_size = $9,
+    min_confidence = $10,
     updated_at = clock_timestamp()
-WHERE id = $10
-  AND project_id = $11
+WHERE id = $11
+  AND project_id = $12
   AND deleted IS FALSE
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, min_confidence, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateSensorParams struct {
@@ -1157,6 +1176,7 @@ type UpdateSensorParams struct {
 	MatchExpression string
 	InputStrategy   pgtype.Text
 	WindowSize      pgtype.Int4
+	MinConfidence   pgtype.Float8
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
 }
@@ -1172,6 +1192,7 @@ func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (Sig
 		arg.MatchExpression,
 		arg.InputStrategy,
 		arg.WindowSize,
+		arg.MinConfidence,
 		arg.ID,
 		arg.ProjectID,
 	)
@@ -1188,6 +1209,7 @@ func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (Sig
 		&i.Enabled,
 		&i.InputStrategy,
 		&i.WindowSize,
+		&i.MinConfidence,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

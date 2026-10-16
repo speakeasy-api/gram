@@ -78,6 +78,12 @@ type AuthoringInput struct {
 	// WindowSize includes the target and is retained when switching strategies.
 	WindowSize *int `json:"window_size,omitempty" jsonschema:"total sliding window messages, from 2 to 10; defaults to 5; omission preserves updates"`
 
+	// MinConfidence marks answers below this classifier confidence as uncertain when readings are queried.
+	MinConfidence *float64 `json:"min_confidence,omitempty" jsonschema:"classifier confidence from 0 to 1 below which answers count as uncertain; omission leaves it off on creation and preserves it on updates. Confidence is how decided the classifier's own distribution is, not accuracy"`
+
+	// ClearMinConfidence turns the minimum confidence off on updates.
+	ClearMinConfidence *bool `json:"clear_min_confidence,omitempty" jsonschema:"update_sensor only: true turns the minimum confidence off so every answer counts; do not combine with min_confidence"`
+
 	// Signals is the complete ordered sensor membership when supplied.
 	Signals *[]SignalReference `json:"signals,omitempty"`
 }
@@ -231,13 +237,13 @@ func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input Auth
 	case "update_signal":
 		result.Signal, err = s.UpdateSignalWithTx(ctx, tx, &gen.UpdateSignalPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, ClassifierCriteria: input.Criteria, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	case "create_sensor":
-		result.Sensor, err = s.CreateSensorWithTx(ctx, tx, &gen.CreateSensorPayload{Name: *input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: types.SigintSensorMode(*input.Mode), MatchExpression: input.MatchExpression, Enabled: input.Enabled, InputStrategy: input.InputStrategy, WindowSize: input.WindowSize, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
+		result.Sensor, err = s.CreateSensorWithTx(ctx, tx, &gen.CreateSensorPayload{Name: *input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: types.SigintSensorMode(*input.Mode), MatchExpression: input.MatchExpression, Enabled: input.Enabled, InputStrategy: input.InputStrategy, WindowSize: input.WindowSize, MinConfidence: input.MinConfidence, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	case "update_sensor":
 		var mode *types.SigintSensorMode
 		if input.Mode != nil {
 			mode = new(types.SigintSensorMode(*input.Mode))
 		}
-		result.Sensor, err = s.UpdateSensorWithTx(ctx, tx, &gen.UpdateSensorPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: mode, MatchExpression: input.MatchExpression, Enabled: input.Enabled, InputStrategy: input.InputStrategy, WindowSize: input.WindowSize, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
+		result.Sensor, err = s.UpdateSensorWithTx(ctx, tx, &gen.UpdateSensorPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: mode, MatchExpression: input.MatchExpression, Enabled: input.Enabled, InputStrategy: input.InputStrategy, WindowSize: input.WindowSize, MinConfidence: input.MinConfidence, ClearMinConfidence: input.ClearMinConfidence, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	}
 	if err != nil {
 		return result, err
@@ -267,11 +273,11 @@ func validateAuthoringInput(input AuthoringInput) error {
 	default:
 		return invalid()
 	}
-	if input.Operation == "create_sensor" && input.Mode == nil {
+	if input.Operation == "create_sensor" && (input.Mode == nil || input.ClearMinConfidence != nil) {
 		return invalid()
 	}
 	if input.Operation == "create_signal" || input.Operation == "update_signal" {
-		if input.Signals != nil || input.Instructions != nil || input.Mode != nil || input.MatchExpression != nil || input.Enabled != nil || input.InputStrategy != nil || input.WindowSize != nil {
+		if input.Signals != nil || input.Instructions != nil || input.Mode != nil || input.MatchExpression != nil || input.Enabled != nil || input.InputStrategy != nil || input.WindowSize != nil || input.MinConfidence != nil || input.ClearMinConfidence != nil {
 			return invalid()
 		}
 	} else if input.Criteria != nil {

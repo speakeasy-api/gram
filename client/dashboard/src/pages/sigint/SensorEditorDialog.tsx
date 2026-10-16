@@ -25,6 +25,8 @@ import { useMemo, useState, type FormEvent } from "react";
 export interface SensorDraft {
   inputStrategy: SigintSensor["inputStrategy"];
   windowSize: number;
+  /** Null turns the minimum off so every answer counts. */
+  minConfidence: number | null;
   enabled: boolean;
   slug?: string;
   name: string;
@@ -81,6 +83,16 @@ function signalLimit(mode: SigintSensorMode): number {
   return Number.POSITIVE_INFINITY;
 }
 
+const OTHER_SIGNAL_PATTERN = /\b(other|none|unknown|unclear)\b/i;
+
+function parseMinConfidence(value: string): number | null | undefined {
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) return undefined;
+  return parsed;
+}
+
 function validateName(name: string): string | null {
   const length = Array.from(name.trim()).length;
   if (length === 0) return "Enter a name.";
@@ -119,6 +131,9 @@ export function SensorEditorDialog({
     SigintSensor["inputStrategy"]
   >(sensor?.inputStrategy ?? "single_message");
   const [windowSize, setWindowSize] = useState(String(sensor?.windowSize ?? 5));
+  const [minConfidence, setMinConfidence] = useState(
+    sensor?.minConfidence == null ? "" : String(sensor.minConfidence),
+  );
   const [slug, setSlug] = useState(sensor?.slug ?? "");
   const [description, setDescription] = useState(sensor?.description ?? "");
   const [instructions, setInstructions] = useState(sensor?.instructions ?? "");
@@ -156,7 +171,17 @@ export function SensorEditorDialog({
   ) {
     windowSizeError = "Enter a whole number from 2 to 10.";
   }
+  const minConfidenceValue = parseMinConfidence(minConfidence);
+  const minConfidenceError =
+    minConfidenceValue === undefined
+      ? "Enter a number from 0 to 1, or leave it empty."
+      : null;
   const selectedMode = MODE_OPTIONS.find((option) => option.value === mode)!;
+  const missingOtherSignal =
+    mode === "exclusive" &&
+    !signalIds.some((id) =>
+      OTHER_SIGNAL_PATTERN.test(signalsById.get(id)?.name ?? ""),
+    );
 
   const move = (index: number, offset: -1 | 1): void => {
     const destination = index + offset;
@@ -177,6 +202,7 @@ export function SensorEditorDialog({
       nameValidation ||
       slugValidation ||
       windowSizeError ||
+      minConfidenceError ||
       tooManySignals
     )
       return;
@@ -185,6 +211,7 @@ export function SensorEditorDialog({
     onSave({
       inputStrategy,
       windowSize: savedWindowSize,
+      minConfidence: minConfidenceValue ?? null,
       enabled,
       name: name.trim(),
       slug: slug.trim() || undefined,
@@ -275,6 +302,19 @@ export function SensorEditorDialog({
                 </Select>
               )}
             />
+            <InputField
+              label="Minimum classifier confidence"
+              type="number"
+              min={0}
+              max={1}
+              step={0.01}
+              placeholder="Off"
+              value={minConfidence}
+              onChange={(event) => setMinConfidence(event.target.value)}
+              disabled={!canWrite || pending}
+              error={submitted ? minConfidenceError : null}
+              hint="From 0 to 1. Answers the classifier is less sure of are counted as uncertain. This is the classifier's own confidence, not accuracy. Changes also apply to past readings. Leave empty to count every answer."
+            />
           </div>
           <div className="grid gap-5 md:grid-cols-2">
             <AnyField
@@ -357,6 +397,13 @@ export function SensorEditorDialog({
                 Reuse any signal in the project. {selectedMode.description}
               </p>
             </div>
+            {missingOtherSignal ? (
+              <p className="text-muted-foreground text-sm">
+                Exclusive sensors always pick one signal. Add an
+                &ldquo;Other&rdquo; or &ldquo;None of the above&rdquo; signal so
+                messages that fit no option still get an honest answer.
+              </p>
+            ) : null}
             {tooManySignals ? (
               <Alert variant="error">
                 {selectedMode.label} sensors support at most {signalLimit(mode)}{" "}

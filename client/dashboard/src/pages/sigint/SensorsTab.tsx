@@ -248,6 +248,11 @@ export function SensorsTab(): JSX.Element {
               ? `Up to ${sensor.windowSize} messages`
               : "Current message only"}
           </Text>
+          {sensor.minConfidence != null ? (
+            <Text small muted>
+              Min. confidence {sensor.minConfidence}
+            </Text>
+          ) : null}
         </div>
       ),
     },
@@ -312,16 +317,29 @@ export function SensorsTab(): JSX.Element {
     if (!canWrite || mutationPending) return;
     setEditorError(null);
     try {
+      const { minConfidence, ...rest } = draft;
       if (editorSensor) {
+        const clearMinConfidence =
+          minConfidence === null && editorSensor.minConfidence != null;
         await update.mutateAsync({
           request: {
-            updateSigintSensorForm: { id: editorSensor.id, ...draft },
+            updateSigintSensorForm: {
+              id: editorSensor.id,
+              ...rest,
+              minConfidence: minConfidence ?? undefined,
+              clearMinConfidence: clearMinConfidence || undefined,
+            },
           },
         });
         toast.success("Sensor updated");
       } else {
         await create.mutateAsync({
-          request: { createSigintSensorForm: draft },
+          request: {
+            createSigintSensorForm: {
+              ...rest,
+              minConfidence: minConfidence ?? undefined,
+            },
+          },
         });
         toast.success("Sensor created");
       }

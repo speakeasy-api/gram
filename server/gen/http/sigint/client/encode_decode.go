@@ -2463,6 +2463,7 @@ func unmarshalSigintSensorResponseBodyToTypesSigintSensor(v *SigintSensorRespons
 	res := &types.SigintSensor{
 		InputStrategy:   types.SigintInputStrategy(*v.InputStrategy),
 		WindowSize:      *v.WindowSize,
+		MinConfidence:   v.MinConfidence,
 		Enabled:         *v.Enabled,
 		MatchExpression: *v.MatchExpression,
 		Slug:            types.Slug(*v.Slug),

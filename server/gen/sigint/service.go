@@ -94,6 +94,9 @@ type CreateSensorPayload struct {
 	InputStrategy *types.SigintInputStrategy
 	// Total sliding window messages including the target; omission defaults to 5
 	WindowSize *int
+	// Classifier confidence, from 0 to 1, below which answers count as uncertain;
+	// omission leaves it off
+	MinConfidence *float64
 	// Whether to enable evaluation; omission defaults to true
 	Enabled *bool
 	// Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to
@@ -221,6 +224,13 @@ type UpdateSensorPayload struct {
 	// Replacement total sliding window messages, including the target; omission
 	// preserves it
 	WindowSize *int
+	// Replacement classifier confidence, from 0 to 1, below which answers count as
+	// uncertain; omission preserves it. Applies to past readings too, without
+	// re-evaluation.
+	MinConfidence *float64
+	// Turn the minimum confidence off so every answer counts. Must not be true
+	// when min_confidence is set.
+	ClearMinConfidence *bool
 	// Enable or disable evaluation; omission preserves the current state.
 	// Evaluations already in progress may finish.
 	Enabled *bool

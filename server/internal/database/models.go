@@ -5616,6 +5616,9 @@ type SigintSensor struct {
 	// Total messages including the target; absent means five for sliding windows.
 	// @access: confidential
 	WindowSize pgtype.Int4
+	// Classifier confidence (0 to 1) below which answers count as uncertain when readings are queried; absent means every answer counts.
+	// @access: confidential
+	MinConfidence pgtype.Float8
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

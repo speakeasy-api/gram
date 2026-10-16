@@ -289,6 +289,70 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.Equal(t, 2, summaries.Sensors[0].SignalCount)
 }
 
+func TestSignalToolMinConfidencePreviewBindsAndClears(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSignalAuthoringFixture(t)
+
+	sensor, err := f.management.CreateSensor(ctx, &gensigint.CreateSensorPayload{Name: "Intent", Mode: "multi_label", Instructions: new("Classify the message")})
+	require.NoError(t, err)
+
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
+	registerSignalTools(reg, f.service)
+	mutation := descriptorByName(t, reg, "update_sensor")
+
+	confirm := func(proposal sigint.AuthoringInput, key string) signalAuthoringOutput {
+		t.Helper()
+		input := signalAuthoringInput{ProjectID: f.project.ID.String(), Proposal: proposal}
+		data, err := json.Marshal(input)
+		require.NoError(t, err)
+		value, err := mutation.Invoke(ctx, data)
+		require.NoError(t, err)
+		preview, ok := value.(signalAuthoringOutput)
+		require.True(t, ok)
+
+		input.Confirmed, input.ExpectedVersion, input.PreviewToken, input.IdempotencyKey = true, preview.Version, preview.PreviewToken, key
+		if proposal.MinConfidence != nil {
+			changed := input
+			changed.Proposal.MinConfidence = new(*proposal.MinConfidence / 2)
+			changedData, err := json.Marshal(changed)
+			require.NoError(t, err)
+			_, err = mutation.Invoke(ctx, changedData)
+			require.Error(t, err, "confirmation must bind the exact minimum confidence")
+		}
+
+		data, err = json.Marshal(input)
+		require.NoError(t, err)
+		value, err = mutation.Invoke(ctx, data)
+		require.NoError(t, err)
+		committed, ok := value.(signalAuthoringOutput)
+		require.True(t, ok)
+		return committed
+	}
+
+	committed := confirm(sigint.AuthoringInput{Operation: "update_sensor", ID: sensor.ID, MinConfidence: new(0.7)}, "set-min-confidence")
+	require.InDelta(t, 0.7, *committed.Sensor.MinConfidence, 1e-9)
+
+	data, err := json.Marshal(findSignalsInput{ProjectID: f.project.ID.String(), Query: "Intent"})
+	require.NoError(t, err)
+	value, err := descriptorByName(t, reg, "find_sensors").Invoke(ctx, data)
+	require.NoError(t, err)
+	summaries, ok := value.(findSensorsOutput)
+	require.True(t, ok)
+	require.InDelta(t, 0.7, *summaries.Sensors[0].MinConfidence, 1e-9)
+
+	committed = confirm(sigint.AuthoringInput{Operation: "update_sensor", ID: sensor.ID, ClearMinConfidence: new(true)}, "clear-min-confidence")
+	require.Nil(t, committed.Sensor.MinConfidence)
+
+	encoded, err := json.Marshal(committed.Sensor)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"min_confidence":null`, "an unset value is explicit for agents")
+
+	data, err = json.Marshal(signalAuthoringInput{ProjectID: f.project.ID.String(), Proposal: sigint.AuthoringInput{Operation: "create_sensor", Name: new("Cleared on create"), Mode: new("multi_label"), ClearMinConfidence: new(true)}})
+	require.NoError(t, err)
+	_, err = descriptorByName(t, reg, "create_sensor").Invoke(ctx, data)
+	require.Error(t, err, "clearing applies only to updates")
+}
+
 func TestSignalToolsUnavailableRefusals(t *testing.T) {
 	t.Parallel()
 	server := mcp.NewServer(&mcp.Implementation{Name: "signals-unavailable", Version: "1"}, nil)

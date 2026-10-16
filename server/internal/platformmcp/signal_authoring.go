@@ -66,7 +66,9 @@ type sensorConfiguration struct {
 	// InputStrategy selects the context supplied for each target message.
 	InputStrategy string `json:"input_strategy"`
 	// WindowSize includes the target and is bounded from two to ten.
-	WindowSize      int                   `json:"window_size"`
+	WindowSize int `json:"window_size"`
+	// MinConfidence is null when every answer counts as confident.
+	MinConfidence   *float64              `json:"min_confidence"`
 	Enabled         bool                  `json:"enabled"`
 	ID              string                `json:"id"`
 	Name            string                `json:"name"`
@@ -327,7 +329,7 @@ func signalProjections(state sigint.AuthoringState) map[string]signalConfigurati
 }
 
 func projectSensor(sensor *types.SigintSensor, signals map[string]signalConfiguration) sensorConfiguration {
-	result := sensorConfiguration{ID: sensor.ID, Name: sensor.Name, Slug: string(sensor.Slug), Description: sensor.Description, Instructions: sensor.Instructions, Mode: string(sensor.Mode), MatchExpression: sensor.MatchExpression, Enabled: sensor.Enabled, InputStrategy: string(sensor.InputStrategy), WindowSize: sensor.WindowSize, Signals: []signalConfiguration{}, Ready: true, Issues: []string{}}
+	result := sensorConfiguration{ID: sensor.ID, Name: sensor.Name, Slug: string(sensor.Slug), Description: sensor.Description, Instructions: sensor.Instructions, Mode: string(sensor.Mode), MatchExpression: sensor.MatchExpression, Enabled: sensor.Enabled, InputStrategy: string(sensor.InputStrategy), WindowSize: sensor.WindowSize, MinConfidence: sensor.MinConfidence, Signals: []signalConfiguration{}, Ready: true, Issues: []string{}}
 	for _, id := range sensor.SignalIds {
 		if signal, ok := signals[id]; ok {
 			result.Signals = append(result.Signals, signal)
