@@ -668,6 +668,12 @@ WHERE billing_metadata.organization_id = organization_metadata.id
   AND billing_metadata.stripe_customer_id = sqlc.arg('stripe_customer_id')::text
   AND billing_metadata.stripe_subscription_id IS NULL
   AND organization_metadata.gram_account_type = 'payg'
+  -- A redeemed partner's retained anchor is immutable accounting provenance.
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_promotion_applications application
+    WHERE application.organization_id = billing_metadata.organization_id
+      AND application.redeemed_at IS NOT NULL
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM billing_metadata AS other
@@ -1165,3 +1171,16 @@ FROM organizations
 WHERE (account_type = 'enterprise' AND trial_state NOT IN ('running', 'ending_soon'))
    OR (account_type IN ('pro', 'payg') AND trial_state = 'none')
 ORDER BY lower(name) ASC, id ASC;
+
+-- name: ListSignupOffers :many
+SELECT * FROM signup_offers ORDER BY created_at DESC, id DESC;
+
+-- name: CreateSignupOffer :one
+INSERT INTO signup_offers (name, stripe_promotion_code_id, signup_flow)
+VALUES (@name, @stripe_promotion_code_id, @signup_flow)
+RETURNING *;
+
+-- name: UpdateSignupOffer :one
+UPDATE signup_offers SET name = @name, stripe_promotion_code_id = @stripe_promotion_code_id,
+ signup_flow = @signup_flow, enabled = @enabled, updated_at = clock_timestamp()
+WHERE id = @id RETURNING *;

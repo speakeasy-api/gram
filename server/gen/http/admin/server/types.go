@@ -507,6 +507,24 @@ type AssignOrganizationOnboardingPlaybookRequestBody struct {
 	PlaybookID *string `form:"playbook_id,omitempty" json:"playbook_id,omitempty" xml:"playbook_id,omitempty"`
 }
 
+// CreateSignupOfferRequestBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP request body.
+type CreateSignupOfferRequestBody struct {
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+}
+
+// UpdateSignupOfferRequestBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP request body.
+type UpdateSignupOfferRequestBody struct {
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+	ID                    *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
 // SetStripeSubscriptionRequestBody is the type of the "admin" service
 // "setStripeSubscription" endpoint HTTP request body.
 type SetStripeSubscriptionRequestBody struct {
@@ -2104,6 +2122,36 @@ type AssignOrganizationOnboardingPlaybookResponseBody struct {
 	Playbook *AdminOnboardingPlaybookResponseBody `form:"playbook,omitempty" json:"playbook,omitempty" xml:"playbook,omitempty"`
 	// Each step of the assigned playbook against the recorded stack.
 	Applicability []*AdminOnboardingStepApplicabilityResponseBody `form:"applicability" json:"applicability" xml:"applicability"`
+}
+
+// ListSignupOffersResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body.
+type ListSignupOffersResponseBody struct {
+	Offers []*AdminSignupOfferResponseBody `form:"offers" json:"offers" xml:"offers"`
+}
+
+// CreateSignupOfferResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body.
+type CreateSignupOfferResponseBody struct {
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateSignupOfferResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body.
+type UpdateSignupOfferResponseBody struct {
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetStripeSubscriptionCandidateResponseBody is the type of the "admin"
@@ -17852,6 +17900,554 @@ type AssignOrganizationOnboardingPlaybookGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListSignupOffersUnauthorizedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unauthorized" error.
+type ListSignupOffersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersForbiddenResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "forbidden" error.
+type ListSignupOffersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersBadRequestResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "bad_request" error.
+type ListSignupOffersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersNotFoundResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "not_found" error.
+type ListSignupOffersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersConflictResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "conflict" error.
+type ListSignupOffersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersUnsupportedMediaResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSignupOffersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersInvalidResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "invalid" error.
+type ListSignupOffersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersInvariantViolationResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSignupOffersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersUnexpectedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unexpected" error.
+type ListSignupOffersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersGatewayErrorResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "gateway_error" error.
+type ListSignupOffersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type CreateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type CreateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type CreateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "not_found" error.
+type CreateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferConflictResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "conflict" error.
+type CreateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "invalid" error.
+type CreateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type CreateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type CreateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type UpdateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type UpdateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type UpdateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "not_found" error.
+type UpdateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferConflictResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "conflict" error.
+type UpdateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "invalid" error.
+type UpdateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type UpdateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type UpdateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetStripeSubscriptionCandidateUnavailableResponseBody is the type of the
 // "admin" service "getStripeSubscriptionCandidate" endpoint HTTP response body
 // for the "unavailable" error.
@@ -19384,6 +19980,17 @@ type AdminOnboardingStepApplicabilityResponseBody struct {
 	Applies bool `form:"applies" json:"applies" xml:"applies"`
 	// Why not, when it does not.
 	Reason string `form:"reason" json:"reason" xml:"reason"`
+}
+
+// AdminSignupOfferResponseBody is used to define fields on response body types.
+type AdminSignupOfferResponseBody struct {
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AdminCustomerUsageResponseBody is used to define fields on response body
@@ -21396,6 +22003,55 @@ func NewAssignOrganizationOnboardingPlaybookResponseBody(res *admin.AdminOrganiz
 		}
 	} else {
 		body.Applicability = []*AdminOnboardingStepApplicabilityResponseBody{}
+	}
+	return body
+}
+
+// NewListSignupOffersResponseBody builds the HTTP response body from the
+// result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersResponseBody(res *admin.ListSignupOffersResult) *ListSignupOffersResponseBody {
+	body := &ListSignupOffersResponseBody{}
+	if res.Offers != nil {
+		body.Offers = make([]*AdminSignupOfferResponseBody, len(res.Offers))
+		for i, val := range res.Offers {
+			if val == nil {
+				body.Offers[i] = nil
+				continue
+			}
+			body.Offers[i] = marshalAdminAdminSignupOfferToAdminSignupOfferResponseBody(val)
+		}
+	} else {
+		body.Offers = []*AdminSignupOfferResponseBody{}
+	}
+	return body
+}
+
+// NewCreateSignupOfferResponseBody builds the HTTP response body from the
+// result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferResponseBody(res *admin.AdminSignupOffer) *CreateSignupOfferResponseBody {
+	body := &CreateSignupOfferResponseBody{
+		ID:                    res.ID,
+		Name:                  res.Name,
+		StripePromotionCodeID: res.StripePromotionCodeID,
+		SignupFlow:            res.SignupFlow,
+		Enabled:               res.Enabled,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferResponseBody builds the HTTP response body from the
+// result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferResponseBody(res *admin.AdminSignupOffer) *UpdateSignupOfferResponseBody {
+	body := &UpdateSignupOfferResponseBody{
+		ID:                    res.ID,
+		Name:                  res.Name,
+		StripePromotionCodeID: res.StripePromotionCodeID,
+		SignupFlow:            res.SignupFlow,
+		Enabled:               res.Enabled,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
 	}
 	return body
 }
@@ -33747,6 +34403,432 @@ func NewAssignOrganizationOnboardingPlaybookGatewayErrorResponseBody(res *goa.Se
 	return body
 }
 
+// NewListSignupOffersUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersUnauthorizedResponseBody(res *goa.ServiceError) *ListSignupOffersUnauthorizedResponseBody {
+	body := &ListSignupOffersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersForbiddenResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersForbiddenResponseBody(res *goa.ServiceError) *ListSignupOffersForbiddenResponseBody {
+	body := &ListSignupOffersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersBadRequestResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersBadRequestResponseBody(res *goa.ServiceError) *ListSignupOffersBadRequestResponseBody {
+	body := &ListSignupOffersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersNotFoundResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersNotFoundResponseBody(res *goa.ServiceError) *ListSignupOffersNotFoundResponseBody {
+	body := &ListSignupOffersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersConflictResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersConflictResponseBody(res *goa.ServiceError) *ListSignupOffersConflictResponseBody {
+	body := &ListSignupOffersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listSignupOffers" endpoint of the "admin"
+// service.
+func NewListSignupOffersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSignupOffersUnsupportedMediaResponseBody {
+	body := &ListSignupOffersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersInvalidResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersInvalidResponseBody(res *goa.ServiceError) *ListSignupOffersInvalidResponseBody {
+	body := &ListSignupOffersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listSignupOffers" endpoint of the "admin"
+// service.
+func NewListSignupOffersInvariantViolationResponseBody(res *goa.ServiceError) *ListSignupOffersInvariantViolationResponseBody {
+	body := &ListSignupOffersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersUnexpectedResponseBody(res *goa.ServiceError) *ListSignupOffersUnexpectedResponseBody {
+	body := &ListSignupOffersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersGatewayErrorResponseBody(res *goa.ServiceError) *ListSignupOffersGatewayErrorResponseBody {
+	body := &ListSignupOffersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferUnauthorizedResponseBody(res *goa.ServiceError) *CreateSignupOfferUnauthorizedResponseBody {
+	body := &CreateSignupOfferUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferForbiddenResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferForbiddenResponseBody(res *goa.ServiceError) *CreateSignupOfferForbiddenResponseBody {
+	body := &CreateSignupOfferForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferBadRequestResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferBadRequestResponseBody(res *goa.ServiceError) *CreateSignupOfferBadRequestResponseBody {
+	body := &CreateSignupOfferBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferNotFoundResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferNotFoundResponseBody(res *goa.ServiceError) *CreateSignupOfferNotFoundResponseBody {
+	body := &CreateSignupOfferNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferConflictResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferConflictResponseBody(res *goa.ServiceError) *CreateSignupOfferConflictResponseBody {
+	body := &CreateSignupOfferConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createSignupOffer" endpoint of the "admin"
+// service.
+func NewCreateSignupOfferUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateSignupOfferUnsupportedMediaResponseBody {
+	body := &CreateSignupOfferUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferInvalidResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferInvalidResponseBody(res *goa.ServiceError) *CreateSignupOfferInvalidResponseBody {
+	body := &CreateSignupOfferInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createSignupOffer" endpoint of the "admin"
+// service.
+func NewCreateSignupOfferInvariantViolationResponseBody(res *goa.ServiceError) *CreateSignupOfferInvariantViolationResponseBody {
+	body := &CreateSignupOfferInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferUnexpectedResponseBody(res *goa.ServiceError) *CreateSignupOfferUnexpectedResponseBody {
+	body := &CreateSignupOfferUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferGatewayErrorResponseBody(res *goa.ServiceError) *CreateSignupOfferGatewayErrorResponseBody {
+	body := &CreateSignupOfferGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferUnauthorizedResponseBody(res *goa.ServiceError) *UpdateSignupOfferUnauthorizedResponseBody {
+	body := &UpdateSignupOfferUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferForbiddenResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferForbiddenResponseBody(res *goa.ServiceError) *UpdateSignupOfferForbiddenResponseBody {
+	body := &UpdateSignupOfferForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferBadRequestResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferBadRequestResponseBody(res *goa.ServiceError) *UpdateSignupOfferBadRequestResponseBody {
+	body := &UpdateSignupOfferBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferNotFoundResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferNotFoundResponseBody(res *goa.ServiceError) *UpdateSignupOfferNotFoundResponseBody {
+	body := &UpdateSignupOfferNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferConflictResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferConflictResponseBody(res *goa.ServiceError) *UpdateSignupOfferConflictResponseBody {
+	body := &UpdateSignupOfferConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateSignupOffer" endpoint of the "admin"
+// service.
+func NewUpdateSignupOfferUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateSignupOfferUnsupportedMediaResponseBody {
+	body := &UpdateSignupOfferUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferInvalidResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferInvalidResponseBody(res *goa.ServiceError) *UpdateSignupOfferInvalidResponseBody {
+	body := &UpdateSignupOfferInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updateSignupOffer" endpoint of the "admin"
+// service.
+func NewUpdateSignupOfferInvariantViolationResponseBody(res *goa.ServiceError) *UpdateSignupOfferInvariantViolationResponseBody {
+	body := &UpdateSignupOfferInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferUnexpectedResponseBody(res *goa.ServiceError) *UpdateSignupOfferUnexpectedResponseBody {
+	body := &UpdateSignupOfferUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSignupOfferGatewayErrorResponseBody {
+	body := &UpdateSignupOfferGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetStripeSubscriptionCandidateUnavailableResponseBody builds the HTTP
 // response body from the result of the "getStripeSubscriptionCandidate"
 // endpoint of the "admin" service.
@@ -35342,6 +36424,43 @@ func NewAssignOrganizationOnboardingPlaybookPayload(body *AssignOrganizationOnbo
 	return v
 }
 
+// NewListSignupOffersPayload builds a admin service listSignupOffers endpoint
+// payload.
+func NewListSignupOffersPayload(adminSessionToken *string) *admin.ListSignupOffersPayload {
+	v := &admin.ListSignupOffersPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewCreateSignupOfferPayload builds a admin service createSignupOffer
+// endpoint payload.
+func NewCreateSignupOfferPayload(body *CreateSignupOfferRequestBody, adminSessionToken *string) *admin.CreateSignupOfferPayload {
+	v := &admin.CreateSignupOfferPayload{
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewUpdateSignupOfferPayload builds a admin service updateSignupOffer
+// endpoint payload.
+func NewUpdateSignupOfferPayload(body *UpdateSignupOfferRequestBody, adminSessionToken *string) *admin.UpdateSignupOfferPayload {
+	v := &admin.UpdateSignupOfferPayload{
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+		ID:                    *body.ID,
+		Enabled:               *body.Enabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetStripeSubscriptionCandidatePayload builds a admin service
 // getStripeSubscriptionCandidate endpoint payload.
 func NewGetStripeSubscriptionCandidatePayload(organizationID string, stripeSubscriptionID string, adminSessionToken *string) *admin.GetStripeSubscriptionCandidatePayload {
@@ -36008,6 +37127,91 @@ func ValidateCloneOnboardingPlaybookRequestBody(body *CloneOnboardingPlaybookReq
 func ValidateAssignOrganizationOnboardingPlaybookRequestBody(body *AssignOrganizationOnboardingPlaybookRequestBody) (err error) {
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferRequestBody runs the validations defined on
+// CreateSignupOfferRequestBody
+func ValidateCreateSignupOfferRequestBody(body *CreateSignupOfferRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 200, false))
+		}
+	}
+	if body.StripePromotionCodeID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_promotion_code_id", *body.StripePromotionCodeID, "^promo_[A-Za-z0-9_]+$"))
+	}
+	if body.StripePromotionCodeID != nil {
+		if utf8.RuneCountInString(*body.StripePromotionCodeID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_promotion_code_id", *body.StripePromotionCodeID, utf8.RuneCountInString(*body.StripePromotionCodeID), 255, false))
+		}
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferRequestBody runs the validations defined on
+// UpdateSignupOfferRequestBody
+func ValidateUpdateSignupOfferRequestBody(body *UpdateSignupOfferRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 200, false))
+		}
+	}
+	if body.StripePromotionCodeID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_promotion_code_id", *body.StripePromotionCodeID, "^promo_[A-Za-z0-9_]+$"))
+	}
+	if body.StripePromotionCodeID != nil {
+		if utf8.RuneCountInString(*body.StripePromotionCodeID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_promotion_code_id", *body.StripePromotionCodeID, utf8.RuneCountInString(*body.StripePromotionCodeID), 255, false))
+		}
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

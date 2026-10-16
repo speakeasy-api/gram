@@ -557,11 +557,11 @@ that URL.
 
 ## On failure
 
-Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
+Fix the seed (see rules in `PAGES.md`), then re-run the target that owns
 the failed check: `mise run seed` for the local-only Killswitch, managed-agent,
 and exact remote-session attachment checks, or
 `mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
-and commit the SQL change once green.
+and commit the seed change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
 

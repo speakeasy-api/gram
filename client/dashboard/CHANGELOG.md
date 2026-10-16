@@ -1,5 +1,20 @@
 # dashboard
 
+## 0.139.0
+
+### Minor Changes
+
+- 1874a78: Adds the project-scoped `log:read` RBAC scope, which now gates a project's individual tool calls and raw log records: Tool Logs, the Playground logs panel, a session's Tool calls view, the underlying telemetry endpoints, and the matching Platform MCP and assistant tools. Like `chat:read`, no system role holds it and neither `project:*` nor `org:admin` implies it, so organization admins grant it per project through a custom role, including to themselves to keep using Tool Logs.
+- 92f2e71: Configure sensor message context in the dashboard with a sliding window of two to ten messages, and see each sensor's context setting in the sensor list.
+- 7eb804c: Add a Speakeasy authorization servers page to organization settings, behind the `gram-user-session-issuer-dashboard` rollout flag. It lists the organization-wide and project authorization servers MCP servers sign clients in with, shows each one's mode, issuer URL, token endpoint, MCP servers, and settings, and lets organization admins make a project's authorization server organization-wide or consolidate one into another after reviewing what changes.
+- 7eb804c: Warn before changing the user session issuer of an MCP server that already has one. Its connected clients must sign in again, and the new `userSessionIssuers.getAttachImpact` preview also says when the authorization server clients are sent to changes, so anything configured with it must be updated. MCP server settings now show the issuer URL, token endpoint, and resource of a shared authorization server, and the issuer picker marks issuers that share one.
+- 2310e62: Organization admins can move a Speakeasy authorization server onto or off the deployment's authentication host from its page, after previewing where clients will sign in. A shared authorization server with a pinned issuer URL is re-pinned to the new host, so its issuer URL and token endpoint follow. The new `organizationUserSessionIssuers.getAuthenticationHostImpact` and `setAuthenticationHost` methods back this, and issuers now report whether the deployment has an authentication host.
+
+### Patch Changes
+
+- 9f15f07: The service account panel no longer shows a disabled "Speakeasy-created" client ID choice marked "Coming soon". Identity providers that support client ID metadata documents, such as Okta, do not accept them for service account (client credentials) clients, so service account clients always use a client ID the provider issues.
+- 5253cf1: The consent page's approve button now updates in the same render as the tool access panel, so it is never briefly enabled while the panel already shows a blocking error.
+
 ## 0.138.0
 
 ### Minor Changes

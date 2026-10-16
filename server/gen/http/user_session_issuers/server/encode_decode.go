@@ -1479,6 +1479,7 @@ func marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(v *types.UserS
 		TokenEndpoint:                        v.TokenEndpoint,
 		AuthorizationServerUnavailableReason: v.AuthorizationServerUnavailableReason,
 		ProjectName:                          v.ProjectName,
+		AuthenticationHostAvailable:          v.AuthenticationHostAvailable,
 		CreatedAt:                            v.CreatedAt,
 		UpdatedAt:                            v.UpdatedAt,
 	}
