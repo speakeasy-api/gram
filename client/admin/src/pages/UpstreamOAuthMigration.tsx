@@ -115,7 +115,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     );
     if (pending.length === 0) return;
     const ok = await confirm({
-      title: `Migrate ${pending.length} organizations?`,
+      title: `Migrate ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}?`,
       description:
         "Runs the migration for every organization not yet migrated, one at a time. Keep this tab open until it finishes; an interrupted run is safe to start again.",
       confirmLabel: "Migrate all",
@@ -136,7 +136,9 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     }
     setBulk(null);
     if (failed === 0) {
-      toast.success(`Migrated ${pending.length} organizations`);
+      toast.success(
+        `Migrated ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}`,
+      );
     }
   }
 
@@ -273,7 +275,7 @@ function MigrationStatus({
   const s = status.data;
   const reconnect =
     s.reconnectCredentials > 0
-      ? `${s.reconnectCredentials} credentials will be asked to reconnect`
+      ? `${s.reconnectCredentials} ${s.reconnectCredentials === 1 ? "credential" : "credentials"} will be asked to reconnect`
       : null;
   if (s.migrated) {
     return (
@@ -297,17 +299,22 @@ function MigrationStatus({
       <div className="flex flex-wrap gap-1.5">
         {s.pendingAssociations > 0 ? (
           <Badge variant="secondary">
-            {s.pendingAssociations} associations to record
+            {s.pendingAssociations}{" "}
+            {s.pendingAssociations === 1 ? "association" : "associations"} to
+            record
           </Badge>
         ) : null}
         {s.pendingSelections > 0 ? (
           <Badge variant="secondary">
-            {s.pendingSelections} credential choices to record
+            {s.pendingSelections} credential{" "}
+            {s.pendingSelections === 1 ? "choice" : "choices"} to record
           </Badge>
         ) : null}
         {s.unresolvedServers.length > 0 ? (
           <Badge variant="destructive">
-            {s.unresolvedServers.length} servers need a client configured
+            {s.unresolvedServers.length}{" "}
+            {s.unresolvedServers.length === 1 ? "server needs" : "servers need"}{" "}
+            a client configured
           </Badge>
         ) : null}
       </div>
