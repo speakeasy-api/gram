@@ -36,7 +36,7 @@ func newOrganizationWhitelistWriter(t *testing.T, f proposalFixture) (*organizat
 	runtime := NewRuntime(nil, "")
 	oauth := &StaffOAuth{Approval: &StaffProposalApproval{store: f.store}}
 	config := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationWhitelist: true}} //nolint:exhaustive // Only whitelisting is enabled.
-	require.NoError(t, AttachWrites(runtime, oauth, &productfeatures.Client{}, mcpregistry.New(nil, nil), config))
+	require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
 	writer, ok := runtime.writes.writers[OperationSetOrganizationWhitelist].(*organizationWhitelistWriter)
 	require.True(t, ok)
 	return writer, runtime.writes
