@@ -477,12 +477,29 @@ const BaseButton = React.forwardRef<HTMLButtonElement, BaseButtonProps>(
         return props.children;
       }
 
-      return React.Children.map(props.children, (child) => {
+      // Adjacent text runs ("Choose ({n})") form one label, not one flex
+      // item per run.
+      const result: React.ReactNode[] = [];
+      let text: Array<string | number> = [];
+      const flushText = () => {
+        if (text.length === 0) return;
+        result.push(
+          <ButtonText key={`button-text-${result.length}`}>
+            {text.join("")}
+          </ButtonText>,
+        );
+        text = [];
+      };
+      for (const child of React.Children.toArray(props.children)) {
         if (typeof child === "string" || typeof child === "number") {
-          return <ButtonText>{child}</ButtonText>;
+          text.push(child);
+        } else {
+          flushText();
+          result.push(child);
         }
-        return child;
-      });
+      }
+      flushText();
+      return result;
     }, [props.children, asChild]);
 
     return (
