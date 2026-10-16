@@ -427,6 +427,17 @@ func (q *Queries) OrgDeleteRemoteSessionEMABindings(ctx context.Context, orgID s
 	return err
 }
 
+const orgDeleteRemoteSessionEMACredentials = `-- name: OrgDeleteRemoteSessionEMACredentials :exec
+DELETE FROM remote_session_ema_credentials WHERE organization_id = $1::text
+`
+
+// Cached EMA credentials and the trusted issuer sessions they cite SET NULL
+// on their parents, so clear them by tenant first.
+func (q *Queries) OrgDeleteRemoteSessionEMACredentials(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteRemoteSessionEMACredentials, orgID)
+	return err
+}
+
 const orgDeleteRemoteSessionEMAProviders = `-- name: OrgDeleteRemoteSessionEMAProviders :exec
 DELETE FROM remote_session_ema_providers WHERE organization_id = $1::text
 `
@@ -545,6 +556,15 @@ type OrgDeleteTriggerWorkloadBindingsParams struct {
 
 func (q *Queries) OrgDeleteTriggerWorkloadBindings(ctx context.Context, arg OrgDeleteTriggerWorkloadBindingsParams) error {
 	_, err := q.db.Exec(ctx, orgDeleteTriggerWorkloadBindings, arg.OrgID, arg.ProjectID)
+	return err
+}
+
+const orgDeleteTrustedIssuerSessions = `-- name: OrgDeleteTrustedIssuerSessions :exec
+DELETE FROM trusted_issuer_sessions WHERE organization_id = $1::text
+`
+
+func (q *Queries) OrgDeleteTrustedIssuerSessions(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteTrustedIssuerSessions, orgID)
 	return err
 }
 

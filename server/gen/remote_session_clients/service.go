@@ -263,10 +263,16 @@ type IdentityChainingPreparation struct {
 	Scopes     []string
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string
-	// The vendor's EMA provider order resolved for this endpoint. Identity
-	// chaining tries the providers that can serve, in order; entries with
-	// unavailable_reason are skipped. Returned by readEMA only.
+	// The EMA providers the vendor accepts, resolved for this endpoint. A provider
+	// vouches only where the endpoint's sign-in goes through it, so at most one is
+	// usable here; entries with unavailable_reason cannot serve. Returned by
+	// readEMA only.
 	EmaProviders *types.EMAProviderOrder
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
+	LastAcceptedAt *string
 }
 
 // ListRemoteSessionClientsPayload is the payload type of the

@@ -84,7 +84,7 @@ func (g *Governor) readyProviderOrder(ctx context.Context, req Request, sel sele
 // speakeasyReadiness is the status-view readiness of the organization's
 // Speakeasy issuer, using the same checks as minting.
 func (g *Governor) speakeasyReadiness(ctx context.Context, organizationID string, issuerID uuid.UUID) (remotesessions.EMAProviderUnavailableReason, error) {
-	source, ok := g.source(remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: issuerID, Unavailable: ""}).(speakeasySource)
+	source, ok := g.source(remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: issuerID, Unavailable: "", LastAcceptedAt: nil}).(speakeasySource)
 	if !ok || !source.available() {
 		return remotesessions.EMAProviderSigningUnavailable, nil
 	}
@@ -148,7 +148,7 @@ func (g *Governor) source(p remotesessions.EMAProvider) tokenSource {
 
 // sourceAvailable reports whether kind's source can serve on this deployment.
 func (g *Governor) sourceAvailable(kind remotesessions.EMAProviderKind) bool {
-	return g.source(remotesessions.EMAProvider{Kind: kind, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}).available()
+	return g.source(remotesessions.EMAProvider{Kind: kind, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil}).available()
 }
 
 // externalSource exchanges the human's retained ID token for an ID-JAG at

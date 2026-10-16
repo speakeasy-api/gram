@@ -242,6 +242,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo gateway endpoints: %w", err)
 	}
+	if err := s.seedServersEMA(ctx); err != nil {
+		return err
+	}
 
 	if err := s.q.ServersInsertUserSessionClients(ctx, repo.ServersInsertUserSessionClientsParams{
 		LinearClientID:  s.det("usc-linear"),
@@ -437,5 +440,104 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	return nil
+}
+
+// seedServersEMA: Enterprise Managed Authorization. Acme Identity is a
+// fictional identity provider for two fictional services behind workforce
+// servers; the workforce sign-in deliberately does not trust it, so demo
+// sign-in is unaffected. Neither service has accepted a provider yet: a
+// seeded acceptance needs a trusted issuer session, which the hourly
+// delegation cleanup erases unless an organization sign-in trusts the
+// issuer. Runs after role distribution, so plugins skip these servers.
+func (s *seeder) seedServersEMA(ctx context.Context) error {
+	org := s.orgID()
+	proj := s.projectID()
+	workforce := s.det("issuer-workforce")
+
+	if err := s.q.ServersInsertEMAIdentityProvider(ctx, repo.ServersInsertEMAIdentityProviderParams{
+		ID:    s.det("ema-idp"),
+		OrgID: org,
+	}); err != nil {
+		return fmt.Errorf("insert demo ema identity provider: %w", err)
+	}
+	if err := s.q.ServersInsertEMAIdentityProviderClient(ctx, repo.ServersInsertEMAIdentityProviderClientParams{
+		ID:                    s.det("ema-idp-client"),
+		OrgID:                 org,
+		RemoteSessionIssuerID: s.det("ema-idp"),
+	}); err != nil {
+		return fmt.Errorf("insert demo ema identity provider client: %w", err)
+	}
+	if err := s.q.ServersInsertEMARemoteMCPServers(ctx, repo.ServersInsertEMARemoteMCPServersParams{
+		TrackerID: s.det("remotemcp-ema-tracker"),
+		ProjectID: proj,
+		WikiID:    s.det("remotemcp-ema-wiki"),
+	}); err != nil {
+		return fmt.Errorf("insert demo ema remote mcp servers: %w", err)
+	}
+	if err := s.q.ServersInsertEMAMCPServers(ctx, repo.ServersInsertEMAMCPServersParams{
+		TrackerID:         s.det("mcpserver-ema-tracker"),
+		ProjectID:         proj,
+		RemoteTrackerID:   s.det("remotemcp-ema-tracker"),
+		IssuerWorkforceID: workforce,
+		WikiID:            s.det("mcpserver-ema-wiki"),
+		RemoteWikiID:      s.det("remotemcp-ema-wiki"),
+	}); err != nil {
+		return fmt.Errorf("insert demo ema mcp servers: %w", err)
+	}
+	if err := s.q.ServersInsertEMAVendorIssuers(ctx, repo.ServersInsertEMAVendorIssuersParams{
+		TrackerID: s.det("ema-vendor-tracker"),
+		ProjectID: proj,
+		OrgID:     org,
+		WikiID:    s.det("ema-vendor-wiki"),
+	}); err != nil {
+		return fmt.Errorf("insert demo ema vendor issuers: %w", err)
+	}
+	if err := s.q.ServersInsertEMAVendorClients(ctx, repo.ServersInsertEMAVendorClientsParams{
+		TrackerID:       s.det("ema-client-tracker"),
+		ProjectID:       proj,
+		OrgID:           org,
+		TrackerIssuerID: s.det("ema-vendor-tracker"),
+		WikiID:          s.det("ema-client-wiki"),
+		WikiIssuerID:    s.det("ema-vendor-wiki"),
+	}); err != nil {
+		return fmt.Errorf("insert demo ema vendor clients: %w", err)
+	}
+	for _, client := range []string{"ema-client-tracker", "ema-client-wiki"} {
+		if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
+			RemoteSessionClientID: s.det(client),
+			UserSessionIssuerID:   workforce,
+		}); err != nil {
+			return fmt.Errorf("bind demo %s: %w", client, err)
+		}
+	}
+	if err := s.q.ServersInsertEMAProtectedResources(ctx, repo.ServersInsertEMAProtectedResourcesParams{
+		TrackerID: s.det("protected-resource-ema-tracker"),
+		ProjectID: proj,
+		OrgID:     org,
+		WikiID:    s.det("protected-resource-ema-wiki"),
+	}); err != nil {
+		return fmt.Errorf("insert demo ema protected resources: %w", err)
+	}
+	if err := s.q.ServersInsertEMABindings(ctx, repo.ServersInsertEMABindingsParams{
+		TrackerID:         s.det("ema-binding-tracker"),
+		ProjectID:         proj,
+		OrgID:             org,
+		IssuerWorkforceID: workforce,
+		TrackerIssuerID:   s.det("ema-vendor-tracker"),
+		TrackerClientID:   s.det("ema-client-tracker"),
+		WikiID:            s.det("ema-binding-wiki"),
+		WikiIssuerID:      s.det("ema-vendor-wiki"),
+		WikiClientID:      s.det("ema-client-wiki"),
+	}); err != nil {
+		return fmt.Errorf("insert demo ema bindings: %w", err)
+	}
+	if err := s.q.ServersInsertEMAProviderOrder(ctx, repo.ServersInsertEMAProviderOrderParams{
+		ID:                    s.det("ema-order-wiki"),
+		OrgID:                 org,
+		RemoteSessionIssuerID: s.det("ema-idp"),
+	}); err != nil {
+		return fmt.Errorf("insert demo ema provider order: %w", err)
+	}
 	return nil
 }

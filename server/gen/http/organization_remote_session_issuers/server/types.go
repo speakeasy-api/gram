@@ -245,9 +245,17 @@ type SetEMAProvidersRequestBody struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// Providers in the order they are tried, at most 10; each at most once. An
-	// empty list restores the external default.
+	// The accepted providers, at most 10; each at most once. Stored in the given
+	// order, though each endpoint uses only the one its sign-in goes through. An
+	// empty list restores the derived default.
 	Providers []*EMAProviderInputRequestBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
+	// The saved list the caller started from, in its stored order, empty for the
+	// default. When given and the saved list no longer matches it, nothing is
+	// written and the request fails with conflict, so a stale editor never
+	// overwrites another administrator's change. Send the list you last read when
+	// updating; on conflict, re-read and reconcile the list before retrying. Omit
+	// only to replace the list unconditionally.
+	ExpectedProviders []*EMAProviderInputRequestBody `form:"expected_providers,omitempty" json:"expected_providers,omitempty" xml:"expected_providers,omitempty"`
 }
 
 // FetchIssuerMetadataRequestBody is the type of the
@@ -787,10 +795,20 @@ type MigrateIssuerResponseBody struct {
 type SetEMAProvidersResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved, so the endpoint uses its configured external issuer.
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The saved providers in order, or the external default.
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+}
+
+// ListEMAServicesResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body.
+type ListEMAServicesResponseBody struct {
+	Items []*EMAServiceResponseBody `form:"items" json:"items" xml:"items"`
 }
 
 // FetchIssuerMetadataResponseBody is the type of the
@@ -2970,6 +2988,196 @@ type SetEMAProvidersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListEMAServicesUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListEMAServicesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEMAServicesForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "forbidden" error.
+type ListEMAServicesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEMAServicesBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "bad_request" error.
+type ListEMAServicesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEMAServicesNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "not_found" error.
+type ListEMAServicesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEMAServicesConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "conflict" error.
+type ListEMAServicesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEMAServicesUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListEMAServicesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEMAServicesInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "invalid" error.
+type ListEMAServicesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEMAServicesInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListEMAServicesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEMAServicesUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "unexpected" error.
+type ListEMAServicesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEMAServicesGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListEMAServicesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // FetchIssuerMetadataUnauthorizedResponseBody is the type of the
 // "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
 // HTTP response body for the "unauthorized" error.
@@ -3354,9 +3562,12 @@ type RefreshIssuerMetadataGatewayErrorResponseBody struct {
 type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved, so the endpoint uses its configured external issuer.
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The saved providers in order, or the external default.
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
@@ -3364,17 +3575,28 @@ type EMAProviderOrderResponseBody struct {
 type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind string `form:"kind" json:"kind" xml:"kind"`
-	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default order with none.
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
 	// Why the provider cannot serve now; omitted when it can. Identity chaining
 	// skips it and tries the next provider. not_trusted_by_endpoint means the
-	// endpoint's authorization server does not accept this issuer.
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
 	// readiness_unknown means the Speakeasy issuer's state could not be read just
 	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // OrganizationRemoteSessionIssuerResponseBody is used to define fields on
@@ -3547,6 +3769,65 @@ type IssuerFieldMismatchResponseBody struct {
 	// The target issuer's entries for a list-valued field. Absent for a scalar
 	// field, and absent when the target's list is empty.
 	TargetValues []string `form:"target_values,omitempty" json:"target_values,omitempty" xml:"target_values,omitempty"`
+}
+
+// EMAServiceResponseBody is used to define fields on response body types.
+type EMAServiceResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// The vendor's display name, from an issuer record that names it. Empty when
+	// none has one.
+	Name string `form:"name" json:"name" xml:"name"`
+	// An issuer record the organization can name for this vendor,
+	// organization-level first, to pass to setEMAProviders. Omitted only when no
+	// issuer record names the vendor any more.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization-wide provider order. Each provider's last_accepted_at is
+	// the newest acceptance across every binding in the organization.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers" json:"ema_providers" xml:"ema_providers"`
+	// Distinct live MCP servers whose identity chaining binding for this vendor
+	// has been turned on, in any state after setup, including servers the caller
+	// cannot read.
+	ServerCount int `form:"server_count" json:"server_count" xml:"server_count"`
+	// Of those, how many have a ready binding, including servers the caller cannot
+	// read.
+	ReadyServerCount int `form:"ready_server_count" json:"ready_server_count" xml:"ready_server_count"`
+	// The counted servers the caller can read (mcp:read), ordered by project and
+	// name.
+	Servers []*EMAServiceServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// Counted servers the caller cannot read; they are not named.
+	HiddenServerCount int `form:"hidden_server_count" json:"hidden_server_count" xml:"hidden_server_count"`
+}
+
+// EMAServiceServerResponseBody is used to define fields on response body types.
+type EMAServiceServerResponseBody struct {
+	// The MCP server id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The MCP server name. Empty when it has none.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The MCP server slug. Empty when it has none.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The owning project.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning project's slug.
+	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
+	// The owning project's name.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// working: on, and the vendor accepted an assertion for this server from a
+	// provider that can vouch now. not_proven: on, with no such acceptance yet.
+	// needs_attention: on but blocked, or no provider can vouch for it right now.
+	Status string `form:"status" json:"status" xml:"status"`
+	// When the vendor last accepted an assertion for this server from a provider
+	// that can vouch now. Omitted when never.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
+	// The remote session issuer the server's sign-in trusts, such as an Okta
+	// authorization server: only that issuer can vouch for people on the server.
+	// Omitted when the server uses Speakeasy's own sign-in, where only Speakeasy
+	// can vouch.
+	SignInIssuerID *string `form:"sign_in_issuer_id,omitempty" json:"sign_in_issuer_id,omitempty" xml:"sign_in_issuer_id,omitempty"`
+	// The display name of sign_in_issuer_id. Omitted with it, or when the issuer
+	// has no name.
+	SignInIssuerName *string `form:"sign_in_issuer_name,omitempty" json:"sign_in_issuer_name,omitempty" xml:"sign_in_issuer_name,omitempty"`
 }
 
 // EMAProviderInputRequestBody is used to define fields on request body types.
@@ -4135,6 +4416,26 @@ func NewSetEMAProvidersResponseBody(res *types.EMAProviderOrder) *SetEMAProvider
 		}
 	} else {
 		body.Providers = []*EMAProviderResponseBody{}
+	}
+	return body
+}
+
+// NewListEMAServicesResponseBody builds the HTTP response body from the result
+// of the "listEMAServices" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewListEMAServicesResponseBody(res *organizationremotesessionissuers.ListEMAServicesResult) *ListEMAServicesResponseBody {
+	body := &ListEMAServicesResponseBody{}
+	if res.Items != nil {
+		body.Items = make([]*EMAServiceResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalOrganizationremotesessionissuersEMAServiceToEMAServiceResponseBody(val)
+		}
+	} else {
+		body.Items = []*EMAServiceResponseBody{}
 	}
 	return body
 }
@@ -5902,6 +6203,156 @@ func NewSetEMAProvidersGatewayErrorResponseBody(res *goa.ServiceError) *SetEMAPr
 	return body
 }
 
+// NewListEMAServicesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesUnauthorizedResponseBody(res *goa.ServiceError) *ListEMAServicesUnauthorizedResponseBody {
+	body := &ListEMAServicesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesForbiddenResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesForbiddenResponseBody(res *goa.ServiceError) *ListEMAServicesForbiddenResponseBody {
+	body := &ListEMAServicesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesBadRequestResponseBody(res *goa.ServiceError) *ListEMAServicesBadRequestResponseBody {
+	body := &ListEMAServicesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesNotFoundResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesNotFoundResponseBody(res *goa.ServiceError) *ListEMAServicesNotFoundResponseBody {
+	body := &ListEMAServicesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesConflictResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesConflictResponseBody(res *goa.ServiceError) *ListEMAServicesConflictResponseBody {
+	body := &ListEMAServicesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListEMAServicesUnsupportedMediaResponseBody {
+	body := &ListEMAServicesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesInvalidResponseBody builds the HTTP response body from the
+// result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesInvalidResponseBody(res *goa.ServiceError) *ListEMAServicesInvalidResponseBody {
+	body := &ListEMAServicesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesInvariantViolationResponseBody(res *goa.ServiceError) *ListEMAServicesInvariantViolationResponseBody {
+	body := &ListEMAServicesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesUnexpectedResponseBody(res *goa.ServiceError) *ListEMAServicesUnexpectedResponseBody {
+	body := &ListEMAServicesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesGatewayErrorResponseBody(res *goa.ServiceError) *ListEMAServicesGatewayErrorResponseBody {
+	body := &ListEMAServicesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewFetchIssuerMetadataUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "fetchIssuerMetadata" endpoint of the
 // "organizationRemoteSessionIssuers" service.
@@ -6503,6 +6954,25 @@ func NewSetEMAProvidersPayload(body *SetEMAProvidersRequestBody, sessionToken *s
 		}
 		v.Providers[i] = unmarshalEMAProviderInputRequestBodyToTypesEMAProviderInput(val)
 	}
+	if body.ExpectedProviders != nil {
+		v.ExpectedProviders = make([]*types.EMAProviderInput, len(body.ExpectedProviders))
+		for i, val := range body.ExpectedProviders {
+			if val == nil {
+				v.ExpectedProviders[i] = nil
+				continue
+			}
+			v.ExpectedProviders[i] = unmarshalEMAProviderInputRequestBodyToTypesEMAProviderInput(val)
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListEMAServicesPayload builds a organizationRemoteSessionIssuers service
+// listEMAServices endpoint payload.
+func NewListEMAServicesPayload(sessionToken *string) *organizationremotesessionissuers.ListEMAServicesPayload {
+	v := &organizationremotesessionissuers.ListEMAServicesPayload{}
 	v.SessionToken = sessionToken
 
 	return v
@@ -6611,6 +7081,13 @@ func ValidateSetEMAProvidersRequestBody(body *SetEMAProvidersRequestBody) (err e
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
 	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateEMAProviderInputRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ExpectedProviders {
 		if e != nil {
 			if err2 := ValidateEMAProviderInputRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
