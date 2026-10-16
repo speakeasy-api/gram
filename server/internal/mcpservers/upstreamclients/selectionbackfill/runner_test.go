@@ -273,6 +273,42 @@ func TestRecordUpstreamClientSelections(t *testing.T) {
 		require.Equal(t, map[uuid.UUID]uuid.UUID{member: memberClient}, f.selections(credential))
 	})
 
+	t.Run("a gateway member its gateway's clients make ambiguous is never no-auth", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		gatewayIssuer := f.projectIssuer()
+		// The member's own issuer binds nothing, but two of the gateway's
+		// clients hold grants for its upstream, so neither is decided and the
+		// member is not a server that needs no authentication.
+		member := f.server(f.projectIssuer())
+		first, second := f.client(gatewayIssuer), f.client(gatewayIssuer)
+		for _, client := range []uuid.UUID{first, second} {
+			require.NoError(t, f.q.SeedGrantFixture(t.Context(), SeedGrantFixtureParams{
+				SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
+				UserSessionIssuerID:   gatewayIssuer,
+				RemoteSessionClientID: client,
+				Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
+			}))
+		}
+		gatewayID := uuid.New()
+		require.NoError(t, f.q.SeedMetaMCPServerFixture(t.Context(), SeedMetaMCPServerFixtureParams{
+			ID:                  gatewayID,
+			OrganizationID:      f.orgID,
+			ProjectID:           f.projectID,
+			Name:                "gateway",
+			UserSessionIssuerID: uuid.NullUUID{UUID: gatewayIssuer, Valid: true},
+		}))
+		require.NoError(t, f.q.SeedMetaMCPServerMemberFixture(t.Context(), SeedMetaMCPServerMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: member}))
+		credential := f.session(gatewayIssuer)
+
+		require.Zero(t, f.record(gatewayIssuer, credential))
+		require.Empty(t, f.selections(credential))
+
+		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+		require.NoError(t, err)
+		require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: member, Outcome: OutcomeUnassociated}}, report.Gaps)
+	})
+
 	t.Run("a choice is kept, never replaced", func(t *testing.T) {
 		t.Parallel()
 		f := newFixture(t)
@@ -361,6 +397,7 @@ func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeAmbiguous},
 		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 1, IssuerBoundClients: 1}, OutcomeUnreachableClient},
 		{"unassociated with bound clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 1}, OutcomeUnassociated},
+		{"unassociated with a gateway client tied to it", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 0, EvidenceClients: 2}, OutcomeUnassociated},
 		{"nothing configured", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 0}, OutcomeNoAuth},
 	}
 	for _, tt := range tests {

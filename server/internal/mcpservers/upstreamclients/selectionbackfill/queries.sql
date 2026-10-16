@@ -35,13 +35,21 @@ WITH session_issuer AS (
       AND usi.deleted IS FALSE
 ),
 reachable AS (
-    SELECT s.id, s.user_session_issuer_id
+    SELECT s.id, s.user_session_issuer_id,
+           s.remote_session_issuer_id AS derived_issuer_id,
+           COALESCE(rms.url, tms.resource_identifier, '') AS upstream
     FROM mcp_servers AS s
     JOIN projects AS p
       ON p.id = s.project_id
      AND p.deleted IS FALSE
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
+    LEFT JOIN remote_mcp_servers AS rms
+      ON rms.id = s.remote_mcp_server_id
+     AND rms.deleted IS FALSE
+    LEFT JOIN tunneled_mcp_servers AS tms
+      ON tms.id = s.tunneled_mcp_server_id
+     AND tms.deleted IS FALSE
     WHERE s.deleted IS FALSE
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
@@ -93,7 +101,27 @@ SELECT r.id AS mcp_server_id,
            ON c.id = link.remote_session_client_id
           AND c.deleted IS FALSE
          WHERE link.user_session_issuer_id = r.user_session_issuer_id
-       )::bigint AS issuer_bound_clients
+       )::bigint AS issuer_bound_clients,
+       (
+         SELECT count(*)
+         FROM remote_session_client_user_session_issuers AS gateway_link
+         JOIN remote_session_clients AS gateway_client
+           ON gateway_client.id = gateway_link.remote_session_client_id
+          AND gateway_client.deleted IS FALSE
+         WHERE gateway_link.user_session_issuer_id = @user_session_issuer_id
+           AND (
+             (r.derived_issuer_id IS NOT NULL AND gateway_client.remote_session_issuer_id = r.derived_issuer_id)
+             OR EXISTS (
+               SELECT 1
+               FROM remote_sessions AS rs
+               WHERE rs.user_session_issuer_id = gateway_link.user_session_issuer_id
+                 AND rs.remote_session_client_id = gateway_client.id
+                 AND rs.deleted IS FALSE
+                 AND r.upstream <> ''
+                 AND rtrim(rs.resource, '/') = rtrim(r.upstream, '/')
+             )
+           )
+       )::bigint AS evidence_clients
 FROM reachable AS r
 ORDER BY r.id;
 
@@ -166,3 +194,7 @@ INSERT INTO unproxied_mcp_servers (id, project_id, url) VALUES (@id, @project_id
 -- name: SeedUnproxiedMCPServerRowFixture :exec
 INSERT INTO mcp_servers (id, project_id, slug, unproxied_mcp_server_id, user_session_issuer_id, visibility)
 VALUES (@id, @project_id, @slug, @unproxied_mcp_server_id, @user_session_issuer_id, 'private');
+
+-- name: SeedGrantFixture :exec
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, resource)
+VALUES (@subject_urn, @user_session_issuer_id, @remote_session_client_id, 'encrypted', @resource);

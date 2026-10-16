@@ -2380,7 +2380,10 @@ FOR SHARE OF si;
 -- A client is chosen only when it is the server's single associated client
 -- that the credential's issuer also binds, which is the client the issuer
 -- path serves today. No-auth is chosen only when the server has no associated
--- client and its own issuer binds none. Anything else is left without a row,
+-- client, its own issuer binds none, and the credential's issuer binds no
+-- client that a grant or the server's derived authorization server ties to
+-- it, so a gateway member whose client is ambiguous is never called
+-- anonymously. Anything else is left without a row,
 -- a gap that coverage reports and that a reconnection or explicit
 -- configuration resolves; nothing is guessed.
 WITH session_issuer AS (
@@ -2393,13 +2396,21 @@ WITH session_issuer AS (
       AND usi.deleted IS FALSE
 ),
 reachable AS (
-    SELECT s.id, s.project_id, s.user_session_issuer_id
+    SELECT s.id, s.project_id, s.user_session_issuer_id,
+           s.remote_session_issuer_id AS derived_issuer_id,
+           COALESCE(rms.url, tms.resource_identifier, '') AS upstream
     FROM mcp_servers AS s
     JOIN projects AS p
       ON p.id = s.project_id
      AND p.deleted IS FALSE
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
+    LEFT JOIN remote_mcp_servers AS rms
+      ON rms.id = s.remote_mcp_server_id
+     AND rms.deleted IS FALSE
+    LEFT JOIN tunneled_mcp_servers AS tms
+      ON tms.id = s.tunneled_mcp_server_id
+     AND tms.deleted IS FALSE
     WHERE s.deleted IS FALSE
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
@@ -2447,6 +2458,26 @@ decided AS (
                 AND c.deleted IS FALSE
                WHERE link.user_session_issuer_id = r.user_session_issuer_id
              )
+             AND (
+             SELECT count(*)
+             FROM remote_session_client_user_session_issuers AS gateway_link
+             JOIN remote_session_clients AS gateway_client
+               ON gateway_client.id = gateway_link.remote_session_client_id
+              AND gateway_client.deleted IS FALSE
+             WHERE gateway_link.user_session_issuer_id = @user_session_issuer_id
+               AND (
+                 (r.derived_issuer_id IS NOT NULL AND gateway_client.remote_session_issuer_id = r.derived_issuer_id)
+                 OR EXISTS (
+                   SELECT 1
+                   FROM remote_sessions AS rs
+                   WHERE rs.user_session_issuer_id = gateway_link.user_session_issuer_id
+                     AND rs.remote_session_client_id = gateway_client.id
+                     AND rs.deleted IS FALSE
+                     AND r.upstream <> ''
+                     AND rtrim(rs.resource, '/') = rtrim(r.upstream, '/')
+                 )
+               )
+           ) = 0
            ) AS no_auth
     FROM reachable AS r
 )
