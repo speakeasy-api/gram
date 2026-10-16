@@ -102,7 +102,7 @@ func TestLocalFixturesReseed(t *testing.T) {
 		require.NoError(t, err)
 		for _, server := range servers {
 			if server.MetaMcpServer.Name == "Python Code Gateway" {
-				return server.MetaMcpServer.DiscoveryMode.String
+				return server.MetaMcpServer.DiscoveryMode
 			}
 		}
 		require.FailNow(t, "Python Code Gateway not seeded")

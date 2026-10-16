@@ -319,7 +319,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
 	}
-	preflightDiscovery := gatewaymcp.ResolveDiscoveryMode(unlocked.DiscoveryMode.String)
+	preflightDiscovery := gatewaymcp.ResolveDiscoveryMode(unlocked.DiscoveryMode)
 	// Evaluate external gates before taking project/row locks or a transaction connection.
 	if payload.DiscoveryMode != nil && *payload.DiscoveryMode != string(preflightDiscovery) &&
 		*payload.DiscoveryMode == string(gatewaymcp.DiscoveryModeCode) && !s.codeModeSelection.Allows(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID) {
@@ -364,7 +364,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 
 	// Reject a changed baseline instead of using a gate evaluated for another mode.
-	if payload.DiscoveryMode != nil && gatewaymcp.ResolveDiscoveryMode(existing.DiscoveryMode.String) != preflightDiscovery {
+	if payload.DiscoveryMode != nil && gatewaymcp.ResolveDiscoveryMode(existing.DiscoveryMode) != preflightDiscovery {
 		return nil, oops.E(oops.CodeConflict, nil, "gateway discovery mode changed concurrently; retry the update")
 	}
 

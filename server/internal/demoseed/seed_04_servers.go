@@ -220,6 +220,32 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo meta mcp server members: %w", err)
 	}
+	if err := s.q.ServersInsertCodeGateway(ctx, repo.ServersInsertCodeGatewayParams{
+		ID:                  s.det("metamcp-code"),
+		OrgID:               org,
+		ProjectID:           proj,
+		UserSessionIssuerID: s.det("issuer-gateway"),
+	}); err != nil {
+		return fmt.Errorf("insert demo code gateway: %w", err)
+	}
+	if err := s.q.ServersInsertCodeGatewayMembers(ctx, repo.ServersInsertCodeGatewayMembersParams{
+		SupportMemberID: s.det("metamember-code-support"),
+		ProjectID:       proj,
+		MetaID:          s.det("metamcp-code"),
+		SupportServerID: s.det("mcpserver-support"),
+		OpsMemberID:     s.det("metamember-code-ops"),
+		OpsServerID:     s.det("mcpserver-ops"),
+	}); err != nil {
+		return fmt.Errorf("insert demo code gateway members: %w", err)
+	}
+	if err := s.q.ServersInsertCodeGatewayEndpoint(ctx, repo.ServersInsertCodeGatewayEndpointParams{
+		ID:        s.det("endpoint-code"),
+		ProjectID: proj,
+		MetaID:    s.det("metamcp-code"),
+		Slug:      s.spec.OrgSlug + "-code-gateway",
+	}); err != nil {
+		return fmt.Errorf("insert demo code gateway endpoint: %w", err)
+	}
 	if err := s.q.ServersInsertRemovedGitHubMember(ctx, repo.ServersInsertRemovedGitHubMemberParams{
 		ID:             s.det("metamember-github"),
 		ProjectID:      proj,

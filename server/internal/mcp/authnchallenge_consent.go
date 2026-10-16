@@ -744,7 +744,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		if readErr != nil {
 			return oops.E(oops.CodeUnexpected, readErr, "read gateway discovery mode").LogError(ctx, logger)
 		}
-		switch metaServer.DiscoveryMode.String {
+		switch metaServer.DiscoveryMode {
 		case "code_mode":
 			gatewayDefaultMode = "Code Mode"
 			// admitMetaGate serves Code Mode gateways as Progressive while the runtime is off.
@@ -753,7 +753,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		case "direct":
 			gatewayDefaultMode = "Direct"
-		case "", "progressive":
+		case "progressive":
 			gatewayDefaultMode = "Progressive"
 		default:
 			gatewayDefaultMode = "Unavailable"
