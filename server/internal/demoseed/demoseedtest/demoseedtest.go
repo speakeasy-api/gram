@@ -17,35 +17,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ExecPostgresScript applies a multi-statement SQL script using the simple
-// query protocol, mirroring how demoseed.Run applies the real seed.
-func ExecPostgresScript(ctx context.Context, db *pgxpool.Pool, script string) error {
-	conn, err := db.Acquire(ctx)
-	if err != nil {
-		return fmt.Errorf("acquire postgres connection: %w", err)
-	}
-	defer conn.Release()
-
-	if err := conn.Conn().PgConn().Exec(ctx, script).Close(); err != nil {
-		return fmt.Errorf("exec postgres script: %w", err)
-	}
-	return nil
-}
-
-// ExecClickHouseStatements runs pre-split statements one by one, skipping SET
-// lines, mirroring how demoseed.Run applies the ClickHouse seed.
-func ExecClickHouseStatements(ctx context.Context, ch driver.Conn, stmts []string) error {
-	for _, stmt := range stmts {
-		if strings.HasPrefix(strings.ToUpper(stmt), "SET ") {
-			continue
-		}
-		if err := ch.Exec(ctx, stmt); err != nil {
-			return fmt.Errorf("exec clickhouse statement: %w: %.120s", err, stmt)
-		}
-	}
-	return nil
-}
-
 // PostgresSnapshot is a per-table multiset of full row fingerprints:
 // table name -> row JSON -> occurrence count. Full row text (not a digest) is
 // kept so tests can inspect rows that appear between snapshots.

@@ -2088,6 +2088,12 @@ WHERE billing_metadata.organization_id = organization_metadata.id
   AND billing_metadata.stripe_customer_id = $5::text
   AND billing_metadata.stripe_subscription_id IS NULL
   AND organization_metadata.gram_account_type = 'payg'
+  -- A redeemed partner's retained anchor is immutable accounting provenance.
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_promotion_applications application
+    WHERE application.organization_id = billing_metadata.organization_id
+      AND application.redeemed_at IS NOT NULL
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM billing_metadata AS other
@@ -2179,6 +2185,33 @@ func (q *Queries) AdminUserSessionStats(ctx context.Context, arg AdminUserSessio
 	return i, err
 }
 
+const createSignupOffer = `-- name: CreateSignupOffer :one
+INSERT INTO signup_offers (name, stripe_promotion_code_id, signup_flow)
+VALUES ($1, $2, $3)
+RETURNING created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled
+`
+
+type CreateSignupOfferParams struct {
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+}
+
+func (q *Queries) CreateSignupOffer(ctx context.Context, arg CreateSignupOfferParams) (SignupOffer, error) {
+	row := q.db.QueryRow(ctx, createSignupOffer, arg.Name, arg.StripePromotionCodeID, arg.SignupFlow)
+	var i SignupOffer
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.StripePromotionCodeID,
+		&i.SignupFlow,
+		&i.ID,
+		&i.Enabled,
+	)
+	return i, err
+}
+
 const getProjectByID = `-- name: GetProjectByID :one
 SELECT id, slug
 FROM projects
@@ -2215,6 +2248,38 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (GetProject
 	var i GetProjectBySlugRow
 	err := row.Scan(&i.ID, &i.Slug)
 	return i, err
+}
+
+const listSignupOffers = `-- name: ListSignupOffers :many
+SELECT created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled FROM signup_offers ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListSignupOffers(ctx context.Context) ([]SignupOffer, error) {
+	rows, err := q.db.Query(ctx, listSignupOffers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SignupOffer
+	for rows.Next() {
+		var i SignupOffer
+		if err := rows.Scan(
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Name,
+			&i.StripePromotionCodeID,
+			&i.SignupFlow,
+			&i.ID,
+			&i.Enabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockEnterpriseTrialInOrganizations = `-- name: LockEnterpriseTrialInOrganizations :one
@@ -2529,6 +2594,41 @@ func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizat
 	var whitelisted bool
 	err := row.Scan(&whitelisted)
 	return whitelisted, err
+}
+
+const updateSignupOffer = `-- name: UpdateSignupOffer :one
+UPDATE signup_offers SET name = $1, stripe_promotion_code_id = $2,
+ signup_flow = $3, enabled = $4, updated_at = clock_timestamp()
+WHERE id = $5 RETURNING created_at, updated_at, name, stripe_promotion_code_id, signup_flow, id, enabled
+`
+
+type UpdateSignupOfferParams struct {
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+	Enabled               bool
+	ID                    uuid.UUID
+}
+
+func (q *Queries) UpdateSignupOffer(ctx context.Context, arg UpdateSignupOfferParams) (SignupOffer, error) {
+	row := q.db.QueryRow(ctx, updateSignupOffer,
+		arg.Name,
+		arg.StripePromotionCodeID,
+		arg.SignupFlow,
+		arg.Enabled,
+		arg.ID,
+	)
+	var i SignupOffer
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.StripePromotionCodeID,
+		&i.SignupFlow,
+		&i.ID,
+		&i.Enabled,
+	)
+	return i, err
 }
 
 const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec

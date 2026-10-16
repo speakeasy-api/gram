@@ -45,6 +45,23 @@ type BillingMetadatum struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type OrganizationPromotionApplication struct {
+	// @access: confidential
+	RedeemedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: restricted
+	StripePromotionCodeID string
+	// @access: restricted
+	StripeSubscriptionID pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+}
+
 type StripeInvoice struct {
 	// @access: restricted
 	StripeInvoiceID string

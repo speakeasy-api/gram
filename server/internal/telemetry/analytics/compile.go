@@ -198,7 +198,7 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 	}
 
 	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, Lookups: lookups}
-	builder := sq.Select().FromSelect(ds.Source(qc), "src")
+	builder := sq.Select().FromSelect(ds.Source.Rows(qc), "src")
 
 	// Filters apply to the collapsed rows, after the source query, so a
 	// filter on a dimension whose value settled on the last observation sees

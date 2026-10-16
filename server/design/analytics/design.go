@@ -17,10 +17,10 @@ var Measure = Type("AnalyticsMeasure", func() {
 		Example("sum")
 	})
 	Attribute("field", String, "Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.", func() {
-		Example("tool_call_count")
+		Example("duration_ms")
 	})
 	Attribute("alias", String, "Result column name. Defaults to the op, or op_field.", func() {
-		Example("tool_calls")
+		Example("total_ms")
 	})
 	Required("op")
 })
@@ -39,7 +39,7 @@ var Filter = Type("AnalyticsFilter", func() {
 
 var OrderBy = Type("AnalyticsOrderBy", func() {
 	Description("Sort a grouped result by one of its measures.")
-	Attribute("measure", String, "Alias of a requested measure", func() { Example("tool_calls") })
+	Attribute("measure", String, "Alias of a requested measure", func() { Example("total_ms") })
 	Attribute("direction", String, func() {
 		Enum("asc", "desc")
 		Default("desc")
@@ -49,7 +49,7 @@ var OrderBy = Type("AnalyticsOrderBy", func() {
 
 var QueryPayload = Type("AnalyticsQueryPayload", func() {
 	Description("A query against one dataset, in catalog vocabulary. Organization comes from the session and project from the project header; neither is a field.")
-	Attribute("dataset", String, "Dataset to query, per describe", func() { Example("sessions") })
+	Attribute("dataset", String, "Dataset to query, per describe", func() { Example("tool_calls") })
 	Attribute("from", String, "Start of the half-open window [from, to), ISO 8601", func() {
 		Format(FormatDateTime)
 		Example("2026-09-01T00:00:00Z")
@@ -90,7 +90,7 @@ var FieldType = Type("AnalyticsField", func() {
 	Attribute("type", String, func() { Enum("string", "int64", "float64") })
 	Attribute("role", String, func() { Enum("dimension", "measure") })
 	Attribute("default", Boolean, "Part of the query the dataset opens on: a default dimension is in the opening group-by", func() { Example(true) })
-	Attribute("unit", String, "Unit of a measure, when it has one", func() { Example("s") })
+	Attribute("unit", String, "Unit of a measure, when it has one", func() { Example("ms") })
 	Attribute("operators", ArrayOf(String), "Filter operators a dimension admits")
 	Attribute("aggregations", ArrayOf(String), "Ops a field admits: aggregations on a measure, count_distinct on a dimension")
 	Attribute("description", String, "What the field is and which producers fill it, when the catalog has something to say beyond the name")
@@ -107,9 +107,9 @@ var LookupType = Type("AnalyticsLookup", func() {
 
 var DatasetType = Type("AnalyticsDataset", func() {
 	Description("A dataset and the fields it exposes. The builder is generated from this.")
-	Attribute("name", String, func() { Example("sessions") })
+	Attribute("name", String, func() { Example("tool_calls") })
 	Attribute("kind", String, func() { Enum("event", "metric") })
-	Attribute("grain", String, "What one row represents, as a noun", func() { Example("session") })
+	Attribute("grain", String, "What one row represents, as a noun", func() { Example("tool call") })
 	Attribute("description", String)
 	Attribute("fields", ArrayOf(FieldType))
 	Required("name", "kind", "grain", "description", "fields")
@@ -188,8 +188,8 @@ var _ = Service("analytics", func() {
 		Description("List the values a dimension holds inside a window, most frequent first, for filter pickers. Values are resolved after the dataset collapses its observations, so every value returned is one a query would match.")
 
 		Payload(func() {
-			Attribute("dataset", String, "Dataset to look in", func() { Example("sessions") })
-			Attribute("dimension", String, "Dimension to list values of", func() { Example("model") })
+			Attribute("dataset", String, "Dataset to look in", func() { Example("tool_calls") })
+			Attribute("dimension", String, "Dimension to list values of", func() { Example("tool_name") })
 			Attribute("from", String, "Start of the half-open window [from, to), ISO 8601", func() {
 				Format(FormatDateTime)
 			})

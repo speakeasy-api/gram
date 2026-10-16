@@ -46,6 +46,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -223,6 +224,14 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	resource string,
 ) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
+	// Workload credentials require a tenant-scoped owner lookup, just as
+	// agent attachments require scoped resolution rather than this primitive.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		return zero, nil
+	}
+	if subject.Kind == urn.SessionSubjectKindWorkload {
+		return zero, nil
+	}
 
 	if _, ok := principalcredential.FromContext(ctx); ok {
 		// Principal credentials resolve only through the tenant-scoped path.
@@ -708,6 +717,16 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 	if err != nil {
 		return false, err
 	}
+	var workloadOwner string
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		admission, err := m.workloadCredentialOwner(ctx, projectID, organizationID, subject)
+		if err != nil {
+			return false, err
+		}
+		workloadOwner = admission.OwnerUserID
+	} else if subject.Kind == urn.SessionSubjectKindWorkload {
+		return false, ErrInvalidAuthorizationRequest
+	}
 	q := remotesessions_repo.New(m.db)
 	now := time.Now()
 	for _, c := range clients {
@@ -715,7 +734,9 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 			continue
 		}
 		var sess remotesessions_repo.RemoteSession
-		if attached {
+		if workloadOwner != "" {
+			sess, err = q.GetTenantUserRemoteSession(ctx, remotesessions_repo.GetTenantUserRemoteSessionParams{SubjectUrn: urn.NewUserSubject(workloadOwner), RemoteSessionClientID: c.ClientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID})
+		} else if attached {
 			sess, err = q.GetPrincipalRemoteSessionBinding(ctx, remotesessions_repo.GetPrincipalRemoteSessionBindingParams{
 				ProjectID:             projectID,
 				OrganizationID:        organizationID,

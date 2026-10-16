@@ -64,7 +64,7 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	c, requests := newRecordingClassifier(t)
 	var pub capturePublisher
 
-	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, &pub, c)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, &pub, &pub.outcomes, c)
 	require.NoError(t, err)
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
@@ -135,10 +135,12 @@ func TestEvaluatorDefersContentUntilEligible(t *testing.T) {
 				deps.On("Load", mock.Anything, in.event.OrganizationID, project, "custom.event").Return(tc.definitions, nil).Once()
 			}
 
-			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
+			var outcomes outcomeCapture
+			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, &outcomes, nil)
 			require.NoError(t, err)
 			require.NoError(t, evaluator.Evaluate(t.Context(), in))
 			require.Zero(t, in.resolved)
+			require.Len(t, outcomes.messages, len(tc.definitions))
 		})
 	}
 }
@@ -190,7 +192,7 @@ func TestEvaluatorRejectsInvalidEventMetadata(t *testing.T) {
 			in := &eventInput{event: (&conversationInput{message: message()}).Event()}
 			tc.mutate(&in.event)
 
-			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, nil, nil)
+			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil)
 			require.NoError(t, err)
 			require.NoError(t, evaluator.Evaluate(t.Context(), in))
 			require.Zero(t, in.resolved)
