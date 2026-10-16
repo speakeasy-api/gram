@@ -1274,6 +1274,155 @@ func (q *Queries) ServersInsertSupportDeskGrants(ctx context.Context, arg Server
 	return err
 }
 
+const serversInsertSupportDeskJamfToolGrant = `-- name: ServersInsertSupportDeskJamfToolGrant :exec
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT $1::uuid, $2::text, 'role:organization:' || r.id, 'mcp:connect',
+       jsonb_build_object('resource_kind', 'mcp',
+         'resource_id', ($3::uuid)::text,
+         'tool', 'list_devices')
+FROM organization_roles r
+WHERE r.organization_id = $2::text AND r.workos_slug = 'support-desk'
+`
+
+type ServersInsertSupportDeskJamfToolGrantParams struct {
+	ID          uuid.UUID
+	OrgID       string
+	McpServerID uuid.UUID
+}
+
+// Support Desk may only list devices on JAMF: one tool, not the server.
+func (q *Queries) ServersInsertSupportDeskJamfToolGrant(ctx context.Context, arg ServersInsertSupportDeskJamfToolGrantParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSupportDeskJamfToolGrant, arg.ID, arg.OrgID, arg.McpServerID)
+	return err
+}
+
+const serversInsertTunneledJamfEndpoint = `-- name: ServersInsertTunneledJamfEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text)
+`
+
+type ServersInsertTunneledJamfEndpointParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+func (q *Queries) ServersInsertTunneledJamfEndpoint(ctx context.Context, arg ServersInsertTunneledJamfEndpointParams) error {
+	_, err := q.db.Exec(ctx, serversInsertTunneledJamfEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.Slug,
+	)
+	return err
+}
+
+const serversInsertTunneledJamfIssuer = `-- name: ServersInsertTunneledJamfIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration)
+VALUES ($1::uuid, $2::uuid, $3::text, 'jamf',
+        'interactive', make_interval(secs => 14 * 24 * 60 * 60))
+`
+
+type ServersInsertTunneledJamfIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+func (q *Queries) ServersInsertTunneledJamfIssuer(ctx context.Context, arg ServersInsertTunneledJamfIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertTunneledJamfIssuer, arg.ID, arg.ProjectID, arg.OrgID)
+	return err
+}
+
+const serversInsertTunneledJamfServer = `-- name: ServersInsertTunneledJamfServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         user_session_issuer_id, visibility)
+VALUES ($1::uuid, $2::uuid, 'JAMF', 'jamf', $3::uuid,
+        $4::uuid, 'private')
+`
+
+type ServersInsertTunneledJamfServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	SourceID  uuid.UUID
+	IssuerID  uuid.UUID
+}
+
+func (q *Queries) ServersInsertTunneledJamfServer(ctx context.Context, arg ServersInsertTunneledJamfServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertTunneledJamfServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.SourceID,
+		arg.IssuerID,
+	)
+	return err
+}
+
+const serversInsertTunneledJamfSource = `-- name: ServersInsertTunneledJamfSource :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
+VALUES ($1::uuid, $2::uuid, 'JAMF on-prem',
+        'unusable-key-hash-' || ($1::uuid)::text, 'gram_tunnel_demo')
+`
+
+type ServersInsertTunneledJamfSourceParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// A tunneled MCP source with a private server in front of it. Its tool
+// inventory and per-tool grants are stored, but the tunnel has never
+// connected an agent, so the Inspect tab shows it offline over the recorded
+// tools and the role editor can still limit it by tool. The key hash is not
+// the hash of any key: no agent can ever authenticate to this tunnel. It is
+// inserted after role distribution, so it is not part of any plugin.
+func (q *Queries) ServersInsertTunneledJamfSource(ctx context.Context, arg ServersInsertTunneledJamfSourceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertTunneledJamfSource, arg.ID, arg.ProjectID)
+	return err
+}
+
+const serversInsertTunneledJamfToolMetadata = `-- name: ServersInsertTunneledJamfToolMetadata :exec
+INSERT INTO mcp_server_tool_metadata (id, project_id, mcp_server_id, tool_name,
+                                      title, read_only_hint, destructive_hint,
+                                      idempotent_hint) VALUES
+  ($1::uuid, $2::uuid, $3::uuid,
+   'list_devices', 'List devices', TRUE, FALSE, NULL),
+  ($4::uuid, $2::uuid, $3::uuid,
+   'get_device', 'Get device', TRUE, FALSE, NULL),
+  ($5::uuid, $2::uuid, $3::uuid,
+   'lock_device', 'Lock device', FALSE, FALSE, TRUE),
+  ($6::uuid, $2::uuid, $3::uuid,
+   'wipe_device', 'Wipe device', FALSE, TRUE, NULL),
+  ($7::uuid, $2::uuid, $3::uuid,
+   'device_status', 'Device status', NULL, NULL, NULL)
+`
+
+type ServersInsertTunneledJamfToolMetadataParams struct {
+	ListDevicesID  uuid.UUID
+	ProjectID      uuid.UUID
+	McpServerID    uuid.UUID
+	GetDeviceID    uuid.UUID
+	LockDeviceID   uuid.UUID
+	WipeDeviceID   uuid.UUID
+	DeviceStatusID uuid.UUID
+}
+
+// device_status carries only a title, so it has no disposition: annotation
+// rules such as the Read-only Tools role's do not reach it.
+func (q *Queries) ServersInsertTunneledJamfToolMetadata(ctx context.Context, arg ServersInsertTunneledJamfToolMetadataParams) error {
+	_, err := q.db.Exec(ctx, serversInsertTunneledJamfToolMetadata,
+		arg.ListDevicesID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.GetDeviceID,
+		arg.LockDeviceID,
+		arg.WipeDeviceID,
+		arg.DeviceStatusID,
+	)
+	return err
+}
+
 const serversInsertUserSession = `-- name: ServersInsertUserSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,

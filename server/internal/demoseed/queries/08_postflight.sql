@@ -428,6 +428,19 @@ SELECT count(*) FROM mcp_server_tool_metadata
 WHERE project_id = @project_id::uuid AND deleted IS FALSE
   AND mcp_server_id = @mcp_server_id::uuid;
 
+-- name: PostflightCountTunneledSource :one
+SELECT count(*) FROM tunneled_mcp_servers
+WHERE project_id = @project_id::uuid AND deleted IS FALSE AND id = @id::uuid;
+
+-- name: PostflightCountProjectIssuer :one
+SELECT count(*) FROM user_session_issuers
+WHERE project_id = @project_id::uuid AND deleted IS FALSE AND id = @id::uuid;
+
+-- name: PostflightCountServerConnectGrants :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = @org_id::text AND scope = 'mcp:connect'
+  AND selectors ->> 'resource_id' = (@mcp_server_id::uuid)::text;
+
 -- name: PostflightCountActiveQuarantines :one
 SELECT count(*) FROM session_quarantines
 WHERE organization_id = @org_id::text AND project_id = @project_id::uuid AND released_at IS NULL;
