@@ -269,6 +269,7 @@ func TestDecide(t *testing.T) {
 			UserSessionIssuerID:   uuid.Nil,
 			RemoteBacked:          true,
 			Hosted:                false,
+			Proxied:               true,
 			IssuerServerCount:     issuerServers,
 			IssuerHasGateway:      gateway,
 			LiveAssociations:      liveAssociations,
@@ -277,6 +278,11 @@ func TestDecide(t *testing.T) {
 			PairLive:              live,
 			PairRecorded:          recorded,
 		}
+	}
+
+	unproxied := func(r ListUpstreamClientBackfillCandidatesRow) ListUpstreamClientBackfillCandidatesRow {
+		r.RemoteBacked, r.Hosted, r.Proxied = false, true, false
+		return r
 	}
 
 	tests := []struct {
@@ -294,6 +300,7 @@ func TestDecide(t *testing.T) {
 		{"two metadata matches are ambiguous", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, true, false, false, 0), row(clientB, 2, false, true, false, false, 0)}, OutcomeAmbiguous, nil},
 		{"shared without evidence but configured", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, false, true, true, 1)}, OutcomeConfigured, nil},
 		{"shared without evidence", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, false, false, false, 0)}, OutcomeAmbiguous, nil},
+		{"shared without evidence but unproxied", []ListUpstreamClientBackfillCandidatesRow{unproxied(row(clientA, 2, false, false, false, false, 0))}, OutcomeUnproxied, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
