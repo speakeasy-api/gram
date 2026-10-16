@@ -22,6 +22,7 @@ For each server the credential can reach (servers on its issuer, members of a ga
 
 | Outcome              | Evidence                                                                            | Recorded                   |
 | -------------------- | ----------------------------------------------------------------------------------- | -------------------------- |
+| `selected`           | The pair already has a choice, from issuance or an earlier run.                     | Nothing; already decided   |
 | `client`             | Exactly one of the server's associated clients is bound to the credential's issuer. | That client                |
 | `no_auth`            | The server has no associated client and its own issuer binds none.                  | Explicit no-auth           |
 | `ambiguous`          | Several associated clients are bound to the credential's issuer.                    | Nothing; reported as a gap |
@@ -40,7 +41,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations credential-upstream-selectio
   -report=/tmp/upstream-selections-preview.json
 ```
 
-Stdout carries counts by credential class. The `-report` file lists each gap's credential and server ids. Add `-organization=<id>` to scope a run.
+Stdout carries the credential class covered, the credential and fully covered counts, and pair counts by outcome. The `-report` file lists each gap's credential and server ids. Add `-organization=<id>` to scope a run.
 
 ## Apply
 
@@ -54,7 +55,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations credential-upstream-selectio
   -report=/tmp/upstream-selections-apply.json
 ```
 
-Writes go through the same statement issuance uses, so an issuance racing the backfill records the same choice and the loser is a no-op. The run is idempotent; rerun the same command after an error.
+Writes go through the same statement issuance uses, so an issuance racing the backfill records the same choice and the loser is a no-op. The run is idempotent; rerun the same command after an error, with a new `-report` path since `-apply` refuses an existing one.
 
 ## Coverage gate and repair
 

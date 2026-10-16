@@ -17,12 +17,16 @@ const listLiveUserSessionCredentials = `-- name: ListLiveUserSessionCredentials 
 SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
        COALESCE(s.credential_id, s.id)::uuid AS credential_id,
        s.user_session_issuer_id,
-       COALESCE(s.organization_id, '')::text AS organization_id
+       COALESCE(usi.organization_id, p.organization_id, '')::text AS organization_id
 FROM user_sessions AS s
+JOIN user_session_issuers AS usi
+  ON usi.id = s.user_session_issuer_id
+LEFT JOIN projects AS p
+  ON p.id = usi.project_id
 WHERE s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
   AND COALESCE(s.credential_id, s.id) > $1::uuid
-  AND ($2::text = '' OR s.organization_id = $2::text)
+  AND ($2::text = '' OR COALESCE(usi.organization_id, p.organization_id) = $2::text)
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
 LIMIT $3::int
 `
@@ -42,6 +46,8 @@ type ListLiveUserSessionCredentialsRow struct {
 // One row per live user session credential after the cursor: the lineage of
 // rows refresh rotation continues, named by COALESCE(credential_id, id). A
 // credential is live while a row of it is not deleted and can still refresh.
+// Its organization is its issuer's, which a project issuer takes from its
+// project.
 func (q *Queries) ListLiveUserSessionCredentials(ctx context.Context, arg ListLiveUserSessionCredentialsParams) ([]ListLiveUserSessionCredentialsRow, error) {
 	rows, err := q.db.Query(ctx, listLiveUserSessionCredentials, arg.Cursor, arg.OrganizationID, arg.PageSize)
 	if err != nil {
@@ -239,8 +245,10 @@ func (q *Queries) RemoveAssociationFixture(ctx context.Context, arg RemoveAssoci
 }
 
 const seedAssociationFixture = `-- name: SeedAssociationFixture :exec
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id)
-VALUES ($1, $2, $3, $4)
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT $1, $2, $3, c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = $4
 `
 
 type SeedAssociationFixtureParams struct {
@@ -473,5 +481,20 @@ func (q *Queries) SeedUserSessionIssuerFixture(ctx context.Context, arg SeedUser
 		arg.OrganizationID,
 		arg.Slug,
 	)
+	return err
+}
+
+const unbindClientFixture = `-- name: UnbindClientFixture :exec
+DELETE FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
+`
+
+type UnbindClientFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) UnbindClientFixture(ctx context.Context, arg UnbindClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, unbindClientFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	return err
 }

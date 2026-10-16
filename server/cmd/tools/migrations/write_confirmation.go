@@ -54,6 +54,14 @@ func (c *writeConfirmation) check(dbURL string) (bool, error) {
 	if *c.confirmEnvironment != *c.environment {
 		return false, errors.New("writes require -confirm-environment to exactly match -environment")
 	}
+	// A multi-host URL lets the pool connect to a host other than the one
+	// confirmed below. pgx also lists the same host again for each TLS mode
+	// it may try, which is no different target.
+	for _, fallback := range dbConfig.Fallbacks {
+		if fallback.Host != dbConfig.Host || fallback.Port != dbConfig.Port {
+			return false, errors.New("writes require $GRAM_DATABASE_URL to name a single host")
+		}
+	}
 	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
 	if *c.confirmTarget != target {
 		return false, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)

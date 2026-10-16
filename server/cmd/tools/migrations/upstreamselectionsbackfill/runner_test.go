@@ -129,8 +129,16 @@ func (f *fixture) associate(serverID, clientID uuid.UUID) {
 	}))
 }
 
-// session creates a live session on userIssuerID and returns its credential.
+// session creates a live session for a new person on userIssuerID and
+// returns its credential.
 func (f *fixture) session(userIssuerID uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	return f.sessionFor(userIssuerID, urn.NewUserSubject("user-"+uuid.NewString()[:8]))
+}
+
+// sessionFor creates a live session for subject on userIssuerID and returns
+// its credential.
+func (f *fixture) sessionFor(userIssuerID uuid.UUID, subject urn.SessionSubject) uuid.UUID {
 	f.t.Helper()
 	id := uuid.New()
 	require.NoError(f.t, f.q.SeedUserSessionFixture(f.t.Context(), SeedUserSessionFixtureParams{
@@ -138,7 +146,7 @@ func (f *fixture) session(userIssuerID uuid.UUID) uuid.UUID {
 		ProjectID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:      pgtype.Text{String: f.orgID, Valid: true},
 		UserSessionIssuerID: userIssuerID,
-		SubjectUrn:          urn.NewUserSubject("user-" + id.String()[:8]),
+		SubjectUrn:          subject,
 		Jti:                 id.String(),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 		CredentialID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -174,13 +182,14 @@ func (f *fixture) selections(credentialID uuid.UUID) map[uuid.UUID]uuid.UUID {
 	return chosen
 }
 
-func (f *fixture) selection(credentialID, serverID uuid.UUID) usersessionsrepo.GetUpstreamClientSelectionRow {
+func (f *fixture) selection(userIssuerID, credentialID, serverID uuid.UUID) usersessionsrepo.GetUpstreamClientSelectionRow {
 	f.t.Helper()
 	row, err := usersessionsrepo.New(f.pool).GetUpstreamClientSelection(f.t.Context(), usersessionsrepo.GetUpstreamClientSelectionParams{
-		CredentialKind: upstreamclients.CredentialKindUserSession,
-		CredentialID:   credentialID,
-		McpServerID:    serverID,
-		OrganizationID: f.orgID,
+		UserSessionIssuerID: userIssuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        credentialID,
+		McpServerID:         serverID,
+		OrganizationID:      f.orgID,
 	})
 	require.NoError(f.t, err)
 	return row
@@ -225,17 +234,18 @@ func TestRecordUpstreamClientSelections(t *testing.T) {
 
 		require.Equal(t, map[uuid.UUID]uuid.UUID{anonymous: uuid.Nil}, f.selections(credential),
 			"the organization issuer reaches every server in the organization")
-		got := f.selection(credential, anonymous)
+		got := f.selection(issuer, credential, anonymous)
 		require.True(t, got.NoAuth)
 		require.True(t, got.Usable)
 
 		// No row is a different answer from no-auth.
 		missing := f.server(bareIssuer, f.client(bareIssuer))
 		_, err := usersessionsrepo.New(f.pool).GetUpstreamClientSelection(t.Context(), usersessionsrepo.GetUpstreamClientSelectionParams{
-			CredentialKind: upstreamclients.CredentialKindUserSession,
-			CredentialID:   credential,
-			McpServerID:    missing,
-			OrganizationID: f.orgID,
+			UserSessionIssuerID: issuer,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        credential,
+			McpServerID:         missing,
+			OrganizationID:      f.orgID,
 		})
 		require.Error(t, err)
 	})
@@ -269,23 +279,29 @@ func TestRecordUpstreamClientSelections(t *testing.T) {
 		issuer := f.projectIssuer()
 		first := f.client(issuer)
 		server := f.server(issuer, first)
-		earlier := f.session(issuer)
+		person := urn.NewUserSubject("same-person")
+		earlier := f.sessionFor(issuer, person)
 		f.record(issuer, earlier)
 
 		// The administrator moves the server to another client.
 		second := f.client(issuer)
 		require.NoError(t, f.q.RemoveAssociationFixture(t.Context(), RemoveAssociationFixtureParams{McpServerID: server, RemoteSessionClientID: first}))
 		f.associate(server, second)
-		later := f.session(issuer)
+		later := f.sessionFor(issuer, person)
 		f.record(issuer, later)
 		require.Zero(t, f.record(issuer, earlier), "recording again is idempotent")
 
 		require.Equal(t, first, f.selections(earlier)[server], "an earlier credential keeps its own choice")
 		require.Equal(t, second, f.selections(later)[server], "credentials of the same principal hold distinct choices")
 
-		stale := f.selection(earlier, server)
+		stale := f.selection(issuer, earlier, server)
 		require.False(t, stale.Usable, "a detached client makes the choice unusable rather than switching clients")
-		require.True(t, f.selection(later, server).Usable)
+		require.True(t, f.selection(issuer, later, server).Usable)
+
+		// Unbinding the client from the credential's issuer makes it unusable
+		// too, though it stays associated with the server.
+		require.NoError(t, f.q.UnbindClientFixture(t.Context(), UnbindClientFixtureParams{RemoteSessionClientID: second, UserSessionIssuerID: issuer}))
+		require.False(t, f.selection(issuer, later, server).Usable)
 	})
 
 	t.Run("another organization's servers are not reached", func(t *testing.T) {

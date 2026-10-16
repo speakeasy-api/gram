@@ -1769,6 +1769,9 @@ SELECT sel.remote_session_client_id,
              JOIN remote_session_clients AS c
                ON c.id = a.remote_session_client_id
               AND c.deleted IS FALSE
+             JOIN remote_session_client_user_session_issuers AS link
+               ON link.remote_session_client_id = a.remote_session_client_id
+              AND link.user_session_issuer_id = $1::uuid
              WHERE a.mcp_server_id = sel.mcp_server_id
                AND a.remote_session_client_id = sel.remote_session_client_id
                AND a.deleted IS FALSE
@@ -1776,18 +1779,19 @@ SELECT sel.remote_session_client_id,
          END
        )::boolean AS usable
 FROM upstream_client_selections AS sel
-WHERE sel.credential_kind = $1::text
-  AND sel.credential_id = $2::uuid
-  AND sel.mcp_server_id = $3::uuid
-  AND sel.organization_id = $4::text
+WHERE sel.credential_kind = $2::text
+  AND sel.credential_id = $3::uuid
+  AND sel.mcp_server_id = $4::uuid
+  AND sel.organization_id = $5::text
   AND sel.deleted IS FALSE
 `
 
 type GetUpstreamClientSelectionParams struct {
-	CredentialKind string
-	CredentialID   uuid.UUID
-	McpServerID    uuid.UUID
-	OrganizationID string
+	UserSessionIssuerID uuid.UUID
+	CredentialKind      string
+	CredentialID        uuid.UUID
+	McpServerID         uuid.UUID
+	OrganizationID      string
 }
 
 type GetUpstreamClientSelectionRow struct {
@@ -1798,12 +1802,14 @@ type GetUpstreamClientSelectionRow struct {
 }
 
 // One credential's choice for one MCP server, with whether it can still be
-// used: a chosen client must be live and still associated with the server,
-// and a no-auth choice holds only while the server has no associated client.
+// used: a chosen client must be live, still associated with the server, and
+// still bound to the credential's user session issuer, and a no-auth choice
+// holds only while the server has no associated client.
 // An unusable choice is reported as such rather than replaced, so the caller
 // fails closed instead of switching clients.
 func (q *Queries) GetUpstreamClientSelection(ctx context.Context, arg GetUpstreamClientSelectionParams) (GetUpstreamClientSelectionRow, error) {
 	row := q.db.QueryRow(ctx, getUpstreamClientSelection,
+		arg.UserSessionIssuerID,
 		arg.CredentialKind,
 		arg.CredentialID,
 		arg.McpServerID,
@@ -4261,6 +4267,7 @@ INSERT INTO upstream_client_selections (
     credential_id,
     mcp_server_id,
     remote_session_client_id,
+    client_attachment_scope,
     no_auth,
     source
 )
@@ -4270,10 +4277,13 @@ SELECT d.project_id,
        $2::uuid,
        d.mcp_server_id,
        d.remote_session_client_id,
+       chosen.attachment_scope,
        d.remote_session_client_id IS NULL,
        $3::text
 FROM decided AS d
 CROSS JOIN session_issuer AS si
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = d.remote_session_client_id
 WHERE d.remote_session_client_id IS NOT NULL OR d.no_auth
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING
 `
