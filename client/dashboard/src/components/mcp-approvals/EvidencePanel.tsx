@@ -4,15 +4,18 @@ import {
 } from "@/components/mcp-approvals/evidence";
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Info } from "lucide-react";
-import { useId } from "react";
+import { useDeferredValue, useId, useMemo, useState } from "react";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
   MoreToggle,
   useCollapsedPreview,
 } from "@/components/ui/collapsible-preview";
 import { cn } from "@/lib/utils";
+import { evidenceSectionAnchor, type EvidenceSectionId } from "./signals";
 import type {
   EvidenceAdvisories,
   EvidenceAdvisoryItem,
@@ -26,16 +29,23 @@ import type {
   EvidenceProvenance,
   EvidenceRepository,
 } from "./evidence";
-import { gapLabel } from "./evidence";
 
 /**
  * The evidence panel, grouped by the question the admin is asking rather than
  * by where the data came from.
  *
- * The one rule that shapes everything here: unknown must read as unknown.
- * A group with no gathered data renders a conspicuously empty block, never a
- * clean or reassuring state — an absence of evidence is not evidence of
- * safety, and a failed lookup is listed as a gap rather than silently omitted.
+ * Two rules shape everything here. Unknown must read as unknown: a group with
+ * no gathered data renders a conspicuously empty block, never a clean or
+ * reassuring state. And every finding worth acting on is raised once, by the
+ * signals panel above — these groups show the facts behind it rather than
+ * repeating the alarm beside them, which is what turned the page into a grid
+ * of small bordered asides nobody could rank.
+ *
+ * The row order is fixed rather than derived from what was gathered. Identity
+ * and authority are short paired lists, so they share the first row; the tool
+ * declarations and the traffic table are both long and both need the width,
+ * so they each take one. Maturity pairs with advisories only when there is a
+ * package to have advisories about.
  */
 export function EvidencePanel({
   document,
@@ -60,21 +70,14 @@ export function EvidencePanel({
     );
   }
 
-  // A gap whose own group already renders an unknown block is being reported
-  // twice: the banner said "the tool listing could not be read" directly above
-  // a box saying "No tool declarations gathered". The banner is for sources
-  // whose failure has nowhere else to surface — exposure, the code host, the
-  // domain registry — which leave no visible hole of their own.
-  const unshownGaps = document.gaps.filter(
-    (gap) => !GAPS_SHOWN_BY_THEIR_OWN_GROUP.has(gap),
-  );
+  // Advisory databases index published packages. For anything else the group
+  // could only ever say "nothing here can answer this", which it did on every
+  // remote server's page — so the question moves to the signals list as an
+  // unknown and stops taking half a row.
+  const answerableAdvisories = document.identity.kind === "package";
 
   return (
     <div className="space-y-3">
-      {unshownGaps.length > 0 && <GapsNotice gaps={unshownGaps} />}
-      {/* Two columns on a wide screen. Each question is short enough that
-          stacking them all made the page scroll for no reason; the reading
-          order still runs left to right, identity first. */}
       <div className="grid gap-x-6 gap-y-3 lg:grid-cols-2">
         <TrustSection
           identity={document.identity}
@@ -82,53 +85,15 @@ export function EvidencePanel({
           domain={document.domain}
         />
         <AuthoritySection authority={document.authority} />
-        {usage ? (
-          <>
-            <DeclaredCapabilitySection
-              capabilities={document.capabilities}
-              source={document.capabilitiesSource}
-              fill
-            />
-            {/* The traffic table answers "are we already exposed?" on its own —
-                names, counts and recency — so that question no longer has a
-                group of its own. What the table cannot say is what a denial
-                would cost, so that judgment rides here as the note. */}
-            <EvidenceGroup
-              question={USAGE_QUESTION}
-              note={
-                document.exposure?.inUse && (
-                  <span className="border-warning border px-2.5 py-1 text-xs">
-                    Already in use — a denial changes existing workflows.
-                  </span>
-                )
-              }
-            >
-              {usage}
-            </EvidenceGroup>
-          </>
-        ) : (
-          <>
-            <DeclaredCapabilitySection
-              capabilities={document.capabilities}
-              source={document.capabilitiesSource}
-            />
-            {/* Without a traffic table the exposure figures have nowhere else
-                to appear: the review sheet has no summary strip, and a frozen
-                decision snapshot is evidence as it stood, not traffic as it is
-                now. The detail page drops this group because its strip and
-                table already answer it. */}
-            <ExposureSection
-              exposure={document.exposure}
-              identity={document.identity}
-            />
-          </>
+      </div>
+      <div
+        className={cn(
+          "grid gap-x-6 gap-y-3",
+          // Paired only when there is an advisory answer to pair with.
+          // Otherwise the row held one box and an empty column beside it.
+          answerableAdvisories && "lg:grid-cols-2",
         )}
-        {/* Maturity and advisories share the last row. Maturity used to span
-            the full width so its fact list could run two columns, but with
-            the exposure group gone an odd number of groups left a hole beside
-            whichever one ran last — and three even rows read better than two
-            rows and two banners. Its list falls back to one column here via
-            its own container query. */}
+      >
         <MaturitySection
           pkg={document.package}
           notPublished={document.packageNotPublished}
@@ -138,33 +103,33 @@ export function EvidencePanel({
           repository={document.repository}
           repositoryNotFound={document.repositoryNotFound}
         />
-        <AdvisoriesSection
-          advisories={document.advisories}
-          identityKind={document.identity.kind}
-        />
+        {answerableAdvisories && (
+          <AdvisoriesSection advisories={document.advisories} />
+        )}
       </div>
+      <DeclaredCapabilitySection
+        capabilities={document.capabilities}
+        source={document.capabilitiesSource}
+      />
+      {usage ? (
+        // The traffic table answers "are we already exposed?" on its own —
+        // names, counts and recency — so that question has no group of its own
+        // wherever the table is rendered.
+        <EvidenceGroup question={USAGE_QUESTION} section="usage">
+          {usage}
+        </EvidenceGroup>
+      ) : (
+        // Without a traffic table the exposure figures have nowhere else to
+        // appear: the review sheet has no summary strip, and a frozen decision
+        // snapshot is evidence as it stood, not traffic as it is now.
+        <ExposureSection
+          exposure={document.exposure}
+          identity={document.identity}
+        />
+      )}
     </div>
   );
 }
-
-/**
- * Failed lookups whose group answers for them, so the banner does not repeat
- * what the reader is already looking at. Each one maps to a group that renders
- * its own unknown block when the data is missing: authority and capabilities
- * to their questions, package and catalog to "is it real and maintained?",
- * advisories to the vulnerability question.
- *
- * Deliberately not here: exposure, repository and domain failures. Those leave
- * facts quietly absent from a list rather than an empty box, so the banner is
- * the only place they are ever stated.
- */
-const GAPS_SHOWN_BY_THEIR_OWN_GROUP = new Set([
-  "authority_probe_failed",
-  "tool_declarations_probe_failed",
-  "package_lookup_failed",
-  "catalog_lookup_failed",
-  "advisory_lookup_failed",
-]);
 
 /**
  * What this project's own traffic says, for the surfaces that do not render a
@@ -179,7 +144,7 @@ function ExposureSection({
 }): JSX.Element {
   if (!exposure) {
     return (
-      <EvidenceGroup question="Are we already exposed?">
+      <EvidenceGroup question={USAGE_QUESTION} section="usage">
         <UnknownBlock>
           {identity.kind === "remote"
             ? "Usage records could not be gathered."
@@ -191,10 +156,9 @@ function ExposureSection({
 
   if (exposure.status === "unseen") {
     return (
-      <EvidenceGroup question="Are we already exposed?">
+      <EvidenceGroup question={USAGE_QUESTION} section="usage">
         <AnswerBlock>
-          No one in this project has recorded traffic to this server. Denying it
-          costs nobody an existing workflow.
+          No one in this project has recorded traffic to this server.
         </AnswerBlock>
       </EvidenceGroup>
     );
@@ -229,16 +193,7 @@ function ExposureSection({
   }
 
   return (
-    <EvidenceGroup
-      question="Are we already exposed?"
-      note={
-        exposure.inUse && (
-          <span className="border-warning border px-2.5 py-1 text-xs">
-            Already in use — a denial changes existing workflows.
-          </span>
-        )
-      }
-    >
+    <EvidenceGroup question={USAGE_QUESTION} section="usage">
       <FactList facts={facts} />
     </EvidenceGroup>
   );
@@ -248,6 +203,7 @@ export function EvidenceGroup({
   question,
   note,
   hint,
+  section,
   children,
 }: {
   question: string;
@@ -265,6 +221,11 @@ export function EvidenceGroup({
    * everything else belongs in the body.
    */
   note?: React.ReactNode;
+  /**
+   * Which question this is, so the signals above can link straight to it.
+   * Omitted by groups nothing links to, such as a frozen snapshot's.
+   */
+  section?: EvidenceSectionId;
   children: React.ReactNode;
 }): JSX.Element {
   // A container, so the fact lists inside decide their own column count from
@@ -275,7 +236,12 @@ export function EvidenceGroup({
   // section to its row, so anything less left a short answer's box floating
   // against a tall table beside it.
   return (
-    <section className="@container flex h-full flex-col gap-1.5">
+    <section
+      id={section ? evidenceSectionAnchor(section) : undefined}
+      // Jumping from a signal must not land the heading under the sticky page
+      // header, which is what an unqualified anchor does.
+      className="@container flex h-full scroll-mt-20 flex-col gap-1.5"
+    >
       {/* The questions are the page's real structure, so they keep the serif
           treatment content subsections use — sized down so a full gather fits
           on one screen without zooming. */}
@@ -348,16 +314,6 @@ function UnknownBlock({
   return <AnswerBlock unknown>{children}</AnswerBlock>;
 }
 
-function GapsNotice({ gaps }: { gaps: string[] }): JSX.Element {
-  return (
-    <div className="border-warning border px-2.5 py-1.5 text-xs">
-      {gaps.map((gap) => (
-        <p key={gap}>{gapLabel(gap)} — treat as unknown, not clean.</p>
-      ))}
-    </div>
-  );
-}
-
 function FactList({
   facts,
   bare = false,
@@ -426,7 +382,7 @@ function TrustSection({
 }): JSX.Element {
   if (identity.kind === "unresolved") {
     return (
-      <EvidenceGroup question="Who am I trusting?">
+      <EvidenceGroup question="Who am I trusting?" section="trust">
         <UnknownBlock>
           Could not be resolved to any identifiable server. Who publishes or
           operates it is unknown.
@@ -449,6 +405,8 @@ function TrustSection({
       label: "Owning domain",
       value: identity.registrableDomain,
     });
+  } else if (identity.kind === "remote") {
+    facts.push({ label: "Owning domain", value: <Absent>none</Absent> });
   }
   if (identity.packageName) {
     facts.push({ label: "Package", value: identity.packageName });
@@ -469,29 +427,33 @@ function TrustSection({
         />
       ),
     });
+  } else if (domain?.unregistered) {
+    // Stated as the registry's answer to the same question the age would have
+    // answered, rather than as a banner under the list. The signal above ranks
+    // it; here it belongs in the row a reader is already looking for.
+    facts.push({
+      label: "Domain registered",
+      value: <Absent>no registration on file</Absent>,
+    });
   }
   if (domain?.registrar) {
     facts.push({ label: "Registrar", value: domain.registrar });
   }
 
   return (
-    <EvidenceGroup question="Who am I trusting?">
+    <EvidenceGroup question="Who am I trusting?" section="trust">
       <FactList facts={facts} />
-      {domain?.unregistered && (
-        <div className="border-warning border px-2.5 py-1.5 text-xs">
-          The domain registry reports no registration for{" "}
-          <span className="font-mono">{domain.domain}</span> — unusual for a
-          host that answers traffic.
-        </div>
-      )}
-      {identity.kind === "remote" && !identity.registrableDomain && (
-        <UnknownBlock>
-          No registrable public domain — nothing links this host to a known
-          publisher.
-        </UnknownBlock>
-      )}
     </EvidenceGroup>
   );
+}
+
+/**
+ * A fact whose answer is an absence: the lookup ran and came back with
+ * nothing. Set apart from a gathered value so it cannot be skimmed as one,
+ * and never colored — which of these matters is the signals panel's call.
+ */
+function Absent({ children }: { children: React.ReactNode }): JSX.Element {
+  return <span className="text-muted-foreground italic">{children}</span>;
 }
 
 function AuthoritySection({
@@ -501,7 +463,10 @@ function AuthoritySection({
 }): JSX.Element {
   if (!authority || authority.undeclared) {
     return (
-      <EvidenceGroup question="What is it asking me to hand over?">
+      <EvidenceGroup
+        question="What is it asking me to hand over?"
+        section="handover"
+      >
         <UnknownBlock>
           Not exposed by the server. Unknown — not "requires nothing".
         </UnknownBlock>
@@ -520,50 +485,68 @@ function AuthoritySection({
   }
 
   return (
-    <EvidenceGroup question="What is it asking me to hand over?">
-      {authority.demandedSecrets.map((secret) => (
-        <div
-          key={secret.name}
-          className="border-warning border px-2.5 py-1.5 text-xs"
-        >
-          Requires you to hand over a secret named{" "}
-          <span className="font-mono">{secret.name}</span>
-          {secret.description && (
-            <span className="text-muted-foreground">
-              {" "}
-              — "{secret.description}"
-            </span>
-          )}
-        </div>
-      ))}
-      {authority.optionalSecrets.length > 0 && (
-        <div className="border-border text-muted-foreground border px-2.5 py-1.5 text-xs">
-          Accepts optional secrets:{" "}
-          <span className="text-foreground font-mono">
-            {authority.optionalSecrets.map((secret) => secret.name).join(", ")}
-          </span>
-        </div>
-      )}
+    <EvidenceGroup
+      question="What is it asking me to hand over?"
+      section="handover"
+      hint="Read off the server's own authorization metadata. Scopes are the only item here the authorization server enforces; everything else is a declaration."
+    >
       <div className="border-border border">
         <FactList facts={facts} bare />
         {authority.scopes.length > 0 && (
           <div className="border-border border-t px-3 py-2">
-            <p className="text-muted-foreground mb-1.5 text-xs">
-              Scopes it will ask to be granted — the one item here the
-              authorization server actually enforces:
-            </p>
+            <p className="text-eyebrow mb-1.5">Scopes it will request</p>
             <ScopeChips scopes={authority.scopes} />
           </div>
         )}
+        {authority.demandedSecrets.length > 0 && (
+          <SecretList
+            label="Secrets it requires"
+            secrets={authority.demandedSecrets}
+          />
+        )}
+        {authority.optionalSecrets.length > 0 && (
+          <SecretList
+            label="Secrets it accepts"
+            secrets={authority.optionalSecrets}
+          />
+        )}
       </div>
-      {authority.unauthenticatedTools.length > 0 && (
-        <div className="border-warning border px-2.5 py-1.5 text-xs">
-          Listed {authority.unauthenticatedTools.length}{" "}
-          {authority.unauthenticatedTools.length === 1 ? "tool" : "tools"} to an
-          unauthenticated caller — the protocol answered without any credential.
-        </div>
-      )}
     </EvidenceGroup>
+  );
+}
+
+/**
+ * Credentials the server names, with whatever it says each one is for. Inside
+ * the authority frame beside the scopes rather than as banners above it: what
+ * a reviewer compares is the whole ask, and the signals panel is what says
+ * which part of it is alarming.
+ */
+function SecretList({
+  label,
+  secrets,
+}: {
+  label: string;
+  secrets: Array<{ name: string; description?: string }>;
+}): JSX.Element {
+  return (
+    <div className="border-border border-t px-3 py-2">
+      <p className="text-eyebrow mb-1.5">{label}</p>
+      <ul className="space-y-1">
+        {secrets.map((secret) => (
+          <li key={secret.name} className="text-xs">
+            <span className="border-border border px-1.5 py-px font-mono">
+              {secret.name}
+            </span>
+            {secret.description && (
+              <span className="text-muted-foreground">
+                {" "}
+                {secret.description}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -635,19 +618,19 @@ function capabilitySourceNote(
 function DeclaredCapabilitySection({
   capabilities,
   source,
-  fill = false,
 }: {
   capabilities: EvidenceCapability[];
   source: "server" | "registry" | undefined;
-  /** Share a row with another group, and size the tool list to it. */
-  fill?: boolean;
 }): JSX.Element {
   if (capabilities.length === 0) {
     // A source that answered with zero tools is a real declaration —
     // rendered as such, never as a failed gather.
     if (source) {
       return (
-        <EvidenceGroup question="What does it say it can do?">
+        <EvidenceGroup
+          question="What does it say it can do?"
+          section="capabilities"
+        >
           <AnswerBlock>
             {source === "registry"
               ? "The registry catalog's copy declares no tools."
@@ -659,7 +642,10 @@ function DeclaredCapabilitySection({
       );
     }
     return (
-      <EvidenceGroup question="What does it say it can do?">
+      <EvidenceGroup
+        question="What does it say it can do?"
+        section="capabilities"
+      >
         <UnknownBlock>
           No tool declarations gathered. Silence is not harmlessness.
         </UnknownBlock>
@@ -667,28 +653,13 @@ function DeclaredCapabilitySection({
     );
   }
 
-  const actingTools = capabilities.filter((tool) => tool.actsOnBehalf);
-
   return (
     <EvidenceGroup
       question="What does it say it can do?"
-      hint={`${capabilitySourceNote(source)} ${
-        capabilities.length === 1
-          ? "1 tool declared."
-          : `${capabilities.length} tools declared.`
-      }`}
-      note={
-        actingTools.length > 0 && (
-          <span className="border-warning border px-2.5 py-1 text-xs">
-            {actingTools.length === 1
-              ? "One tool declares"
-              : `${actingTools.length} of ${capabilities.length} tools declare`}{" "}
-            acting on your behalf.
-          </span>
-        )
-      }
+      section="capabilities"
+      hint={capabilitySourceNote(source)}
     >
-      <ToolList capabilities={capabilities} fill={fill} />
+      <ToolDeclarations capabilities={capabilities} />
     </EvidenceGroup>
   );
 }
@@ -779,45 +750,173 @@ function ToolRow({ tool }: { tool: EvidenceCapability }): JSX.Element {
   );
 }
 
+/** The ways a reviewer narrows a long tool listing. */
+type ToolFilter = "all" | "acts" | "destructive" | "unannotated";
+
+/** Capability values the panel treats as "this tool reaches outside itself". */
+const REACHING_CAPABILITIES = [
+  "arbitrary_command",
+  "arbitrary_url",
+  "filesystem_path",
+  "credential_input",
+  "open_world",
+];
+
+function toolCapabilities(tool: EvidenceCapability): string[] {
+  return [...tool.declared, ...tool.schemaImplied];
+}
+
+function matchesFilter(tool: EvidenceCapability, filter: ToolFilter): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "acts":
+      return tool.actsOnBehalf;
+    case "destructive":
+      return toolCapabilities(tool).includes("destructive");
+    case "unannotated":
+      return tool.unannotated;
+  }
+}
+
 /**
- * Every declared tool. Sharing a row with another group, the list takes
- * whatever height that group settled on and scrolls past it — a fixed preview
- * count would be a guess about the neighbour, right for one server's traffic
- * and wrong for the next. The scroller is absolutely positioned because a
- * grid row is sized by its content: left in flow, the list would set the
- * height it is supposed to be reading.
+ * How alarming a tool's declarations are, for the default ordering. A review
+ * reads top-down and a server can declare sixty tools, so the ones that
+ * declare the most authority have to be the ones on screen first.
  */
-function ToolList({
+function toolWeight(tool: EvidenceCapability): number {
+  const capabilities = toolCapabilities(tool);
+  let weight = 0;
+  if (capabilities.includes("destructive")) weight += 8;
+  if (tool.actsOnBehalf) weight += 4;
+  weight += capabilities.filter((value) =>
+    REACHING_CAPABILITIES.includes(value),
+  ).length;
+  return weight;
+}
+
+/**
+ * Every declared tool, ordered by how much authority it declares and
+ * narrowable by name or by kind.
+ *
+ * The list was previously a flat alphabetical run of every tool the server
+ * answered with, in a box sized to whatever group shared its row — so a
+ * sixty-tool server showed six of them, in an order that put the file-deleting
+ * one wherever the alphabet left it. A review has to be able to find those.
+ *
+ * Nothing is ever hidden without saying so: the filter row carries the counts,
+ * and a filter that matches nothing says the tools exist and this view
+ * excluded them.
+ */
+function ToolDeclarations({
   capabilities,
-  fill,
 }: {
   capabilities: EvidenceCapability[];
-  fill: boolean;
 }): JSX.Element {
-  if (!fill) {
-    return (
-      <CollapsibleList
-        items={capabilities}
-        itemKey={(tool) => tool.tool}
-        itemClassName={TOOL_ROW_CLASS}
-        noun="tools"
-        renderItem={(tool) => <ToolRow tool={tool} />}
-      />
-    );
-  }
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<ToolFilter>("all");
+  const deferredQuery = useDeferredValue(query);
+
+  const counts = useMemo(
+    () => ({
+      all: capabilities.length,
+      acts: capabilities.filter((tool) => matchesFilter(tool, "acts")).length,
+      destructive: capabilities.filter((tool) =>
+        matchesFilter(tool, "destructive"),
+      ).length,
+      unannotated: capabilities.filter((tool) =>
+        matchesFilter(tool, "unannotated"),
+      ).length,
+    }),
+    [capabilities],
+  );
+
+  const ordered = useMemo(() => {
+    const needle = deferredQuery.trim().toLowerCase();
+    return capabilities
+      .filter(
+        (tool) =>
+          matchesFilter(tool, filter) &&
+          (needle === "" || tool.tool.toLowerCase().includes(needle)),
+      )
+      .sort((left, right) => {
+        const byWeight = toolWeight(right) - toolWeight(left);
+        if (byWeight !== 0) return byWeight;
+        return left.tool.localeCompare(right.tool);
+      });
+  }, [capabilities, deferredQuery, filter]);
+
+  // Only offer a filter that would select something. A row of segments where
+  // three of the four are empty is a worse read than a single "All".
+  const options = (
+    [
+      { value: "all", label: `All ${counts.all}` },
+      {
+        value: "acts",
+        label: `Acts for you ${counts.acts}`,
+        tooltip: "Tools that declare they do more than read.",
+      },
+      {
+        value: "destructive",
+        label: `Destructive ${counts.destructive}`,
+        tooltip: "Tools the server annotates as not reversible by it.",
+      },
+      {
+        value: "unannotated",
+        label: `Undeclared ${counts.unannotated}`,
+        tooltip: "Tools that declare nothing — authority unknown, not absent.",
+      },
+    ] as const
+  ).filter((option) => option.value === "all" || counts[option.value] > 0);
 
   return (
-    <div className="border-border relative min-h-40 flex-1 border">
-      <ul className="divide-border absolute inset-0 divide-y overflow-y-auto">
-        {capabilities.map((tool) => (
-          <li key={tool.tool} className={TOOL_ROW_CLASS}>
-            <ToolRow tool={tool} />
-          </li>
-        ))}
-      </ul>
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {capabilities.length > TOOL_SEARCH_THRESHOLD && (
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl
+            value={filter}
+            onChange={setFilter}
+            options={options.map((option) => ({
+              value: option.value as ToolFilter,
+              label: option.label,
+              ...("tooltip" in option ? { tooltip: option.tooltip } : {}),
+            }))}
+          />
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            placeholder="Find a tool"
+            className="h-10 w-56"
+          />
+        </div>
+      )}
+      <div className="border-border max-h-96 min-h-0 flex-1 overflow-y-auto border">
+        {ordered.length === 0 ? (
+          <p className="text-muted-foreground px-3 py-6 text-center text-xs">
+            No tool matches this filter. The server declares{" "}
+            {capabilities.length}.
+          </p>
+        ) : (
+          <ul className="divide-border divide-y">
+            {ordered.map((tool) => (
+              <li key={tool.tool} className={TOOL_ROW_CLASS}>
+                <ToolRow tool={tool} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {ordered.length !== capabilities.length && (
+        <p className="text-muted-foreground text-xs">
+          Showing {ordered.length} of {capabilities.length} declared tools.
+        </p>
+      )}
     </div>
   );
 }
+
+/** Below this many tools the list is short enough to read whole. */
+const TOOL_SEARCH_THRESHOLD = 8;
 
 function ProvenanceFacts({
   provenance,
@@ -897,7 +996,7 @@ function MaturitySection({
   if (identityKind === "remote" && provenance) {
     if (!provenance.catalogued) {
       return (
-        <EvidenceGroup question="Is it real and maintained?">
+        <EvidenceGroup question="Is it real and maintained?" section="maturity">
           <AnswerBlock>
             No configured MCP registry catalogs this URL. The lookup ran cleanly
             — this is absence from the catalog, not a failed check.
@@ -908,6 +1007,7 @@ function MaturitySection({
     return (
       <EvidenceGroup
         question="Is it real and maintained?"
+        section="maturity"
         hint={PROVENANCE_HINT}
       >
         <ProvenanceFacts provenance={provenance} />
@@ -917,7 +1017,7 @@ function MaturitySection({
 
   if (notPublished) {
     return (
-      <EvidenceGroup question="Is it real and maintained?">
+      <EvidenceGroup question="Is it real and maintained?" section="maturity">
         <AnswerBlock>
           The registry has no package named{" "}
           <code className="text-xs">{packageName ?? "this"}</code>. The lookup
@@ -930,7 +1030,7 @@ function MaturitySection({
 
   if (!pkg) {
     return (
-      <EvidenceGroup question="Is it real and maintained?">
+      <EvidenceGroup question="Is it real and maintained?" section="maturity">
         <UnknownBlock>
           No registry metadata gathered — age, maintenance, and publishing
           history unknown.
@@ -969,29 +1069,27 @@ function MaturitySection({
     facts.push({ label: "Latest version", value: pkg.latestVersion });
   }
 
+  if (pkg.deprecated) {
+    facts.unshift({
+      label: "Current version",
+      value: (
+        <Absent>
+          deprecated{pkg.deprecationReason ? ` — ${pkg.deprecationReason}` : ""}
+        </Absent>
+      ),
+    });
+  }
+  if (repositoryNotFound) {
+    facts.push({
+      label: "Declared repository",
+      value: <Absent>not found on the code host</Absent>,
+    });
+  }
+
   return (
-    <EvidenceGroup question="Is it real and maintained?">
-      {pkg.deprecated && (
-        <div className="border-destructive text-foreground border px-2.5 py-1.5 text-xs">
-          <span className="font-medium">
-            The registry marks the current version deprecated
-          </span>
-          {pkg.deprecationReason && (
-            <span className="text-muted-foreground">
-              {" "}
-              — "{pkg.deprecationReason}"
-            </span>
-          )}
-        </div>
-      )}
+    <EvidenceGroup question="Is it real and maintained?" section="maturity">
       <FactList facts={facts} />
       {repository && <RepositoryFacts repository={repository} />}
-      {repositoryNotFound && (
-        <div className="border-warning border px-2.5 py-1.5 text-xs">
-          The publisher declares a source repository that does not exist on the
-          code host — the package's provenance cannot be traced to any source.
-        </div>
-      )}
     </EvidenceGroup>
   );
 }
@@ -1051,14 +1149,12 @@ function RepositoryFacts({
     });
   }
 
+  if (repository.archived) {
+    facts.push({ label: "Repository state", value: <Absent>archived</Absent> });
+  }
+
   return (
     <>
-      {repository.archived && (
-        <div className="border-warning border px-2.5 py-1.5 text-xs">
-          The declared repository is archived — its owner froze it against
-          further commits and issues.
-        </div>
-      )}
       <FactList facts={facts} />
       <p className="text-muted-foreground text-xs">
         The repository is the publisher's claim; nothing verifies it builds the
@@ -1071,33 +1167,24 @@ function RepositoryFacts({
 /**
  * OSV's answer gets its own group: checked-and-clean, advisories-found, and
  * could-not-check are three different answers, and collapsing any two of them
- * is exactly what this panel exists to prevent. Advisory databases index
- * published packages, so a non-package reference renders the group with an
- * explanation rather than an answer — the question still exists for a remote
- * endpoint; a database just cannot answer it.
+ * is exactly what this panel exists to prevent.
+ *
+ * Only rendered for a package. Advisory databases index published packages, so
+ * for a hosted endpoint this group could only ever say the database has
+ * nothing to look up — which the signals panel records as an unknown instead of
+ * spending half a row on it for every remote server ever reviewed.
  */
 function AdvisoriesSection({
   advisories,
-  identityKind,
 }: {
   advisories: EvidenceAdvisories | undefined;
-  identityKind: EvidenceIdentity["kind"];
 }): JSX.Element {
-  if (identityKind !== "package") {
-    return (
-      <EvidenceGroup question="Does anything published say it's vulnerable?">
-        <UnknownBlock>
-          Advisory databases index published packages, and this server is not
-          one — there is nothing to look up. The vendor's security history is a
-          research question, not a database check.
-        </UnknownBlock>
-      </EvidenceGroup>
-    );
-  }
-
   if (!advisories) {
     return (
-      <EvidenceGroup question="Does anything published say it's vulnerable?">
+      <EvidenceGroup
+        question="Does anything published say it's vulnerable?"
+        section="advisories"
+      >
         <UnknownBlock>
           No advisory database was consulted — published vulnerabilities are
           unknown.
@@ -1108,7 +1195,10 @@ function AdvisoriesSection({
 
   if (advisories.knownCount === 0) {
     return (
-      <EvidenceGroup question="Does anything published say it's vulnerable?">
+      <EvidenceGroup
+        question="Does anything published say it's vulnerable?"
+        section="advisories"
+      >
         <AnswerBlock>
           OSV lists no published advisories for this package. Checked today and
           clean — not a guarantee, and it says nothing about unreported issues.
@@ -1119,20 +1209,17 @@ function AdvisoriesSection({
 
   const sampled = advisories.advisories.length;
   return (
-    <EvidenceGroup question="Does anything published say it's vulnerable?">
-      <div className="border-destructive border px-2.5 py-1.5 text-xs">
-        <span className="font-medium">
-          {advisories.knownCount === 1
-            ? "1 published advisory names this package"
-            : `${advisories.knownCount} published advisories name this package`}
-        </span>
-        {sampled < advisories.knownCount && (
-          <span className="text-muted-foreground">
-            {" "}
-            — most recent {sampled} shown
+    <EvidenceGroup
+      question="Does anything published say it's vulnerable?"
+      section="advisories"
+      note={
+        sampled < advisories.knownCount && (
+          <span className="text-muted-foreground text-xs">
+            most recent {sampled} of {advisories.knownCount} shown
           </span>
-        )}
-      </div>
+        )
+      }
+    >
       <AdvisoryList advisories={advisories.advisories} />
     </EvidenceGroup>
   );

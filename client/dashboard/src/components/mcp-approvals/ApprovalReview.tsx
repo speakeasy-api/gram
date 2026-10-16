@@ -9,6 +9,8 @@ import {
   parseEvidenceDocument,
   USAGE_QUESTION,
 } from "@/components/mcp-approvals/evidence";
+import { SignalsPanel } from "@/components/mcp-approvals/SignalsPanel";
+import { evidenceSignals } from "@/components/mcp-approvals/signals";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
@@ -96,6 +98,7 @@ export function ApprovalReview({
     () => parseEvidenceDocument(detail?.evidence, detail?.evidenceVersion),
     [detail],
   );
+  const signals = useMemo(() => evidenceSignals(document), [document]);
 
   // A failed fetch must not read as "still loading" forever: name the
   // failure and offer a retry.
@@ -169,7 +172,13 @@ export function ApprovalReview({
       collectedAt={detail.evidenceCollectedAt}
       status={detail.request.status}
       createdAt={unreviewed ? undefined : detail.request.createdAt}
-      versionPinned={detail.request.versionPinned}
+      // Only a package reference can pin a version, so only one can fail to.
+      // A hosted endpoint serves whatever it serves; telling every remote
+      // reviewer that "no version is pinned" was a caveat about a property the
+      // target does not have.
+      versionUnpinned={
+        document?.identity.kind === "package" && !detail.request.versionPinned
+      }
       notice={
         untouched
           ? "No one has asked for it — this is its first review."
@@ -201,6 +210,9 @@ export function ApprovalReview({
         />
       )}
       {reviewBody}
+      {/* Findings first, in order of consequence; the questions below show the
+          working behind each one. */}
+      <SignalsPanel signals={signals} />
       <EvidencePanel document={document} usage={usage} />
       <ResearchReports reports={detail.researchReports} requestId={requestId} />
     </div>
@@ -268,7 +280,7 @@ function ReviewHeader({
   collectedAt,
   status,
   createdAt,
-  versionPinned,
+  versionUnpinned,
   notice,
 }: {
   title: string | undefined;
@@ -283,7 +295,12 @@ function ReviewHeader({
   status: string;
   /** Absent for an unreviewed dossier: nobody raised it. */
   createdAt: Date | undefined;
-  versionPinned: boolean;
+  /**
+   * The request names a package and pins no version, so what installs may not
+   * be what was gathered. False for a hosted endpoint, which has no version to
+   * pin and for which the caveat says nothing.
+   */
+  versionUnpinned: boolean;
   /** The review's state, when it is short enough to ride this row. */
   notice?: string;
 }): JSX.Element {
@@ -322,7 +339,7 @@ function ReviewHeader({
           would be claiming a source for something that does not exist. The
           unpinned-version caveat is about the request, not the evidence, so
           it stands on its own. */}
-      {(collectedAt || !versionPinned) && (
+      {(collectedAt || versionUnpinned) && (
         <Text muted small>
           {collectedAt && (
             <>
@@ -331,7 +348,7 @@ function ReviewHeader({
               nothing is verified behavior.{" "}
             </>
           )}
-          {!versionPinned && "No version is pinned, so what runs may differ."}
+          {versionUnpinned && "No version is pinned, so what runs may differ."}
         </Text>
       )}
     </div>
@@ -492,7 +509,7 @@ function ResearchReports({
 }: {
   reports: ResearchReport[];
   requestId: string;
-}): JSX.Element {
+}): JSX.Element | null {
   const researchFlag = useFeatureFlag(FEATURE_FLAGS.mcpResearch);
   const project = useProject();
   const queryClient = useQueryClient();
@@ -541,7 +558,9 @@ function ResearchReports({
               <Loader2 className="animate-spin" />
             </Button.LeftIcon>
           )}
-          <Button.Text>{running ? "Researching…" : "Run Research"}</Button.Text>
+          <Button.Text>
+            {running ? "Researching…" : latest ? "Run again" : "Run research"}
+          </Button.Text>
         </Button>
       </RequireScope>
     );
@@ -553,28 +572,39 @@ function ResearchReports({
     );
   }
 
+  // Nothing to run and nothing run: the section is an advertisement for a
+  // feature this org does not have, above six questions that do have answers.
+  if (researchFlag.status !== "enabled" && !latest) return null;
+
   // The same group shell as the evidence questions above it, so its heading,
   // its hint icon and the top edge of its body line up with theirs instead of
   // being a hand-rolled section that happens to look similar.
   return (
     <EvidenceGroup
-      question="Web research"
+      question="What does the web say?"
       hint={RESEARCH_HINT}
       note={headerNote}
     >
-      {researchFlag.status === "enabled" && (
-        <p className="border-warning border px-2.5 py-1.5 text-xs">
-          <span className="font-medium">
-            A research run spends real AI credits.
-          </span>{" "}
-          The agent makes dozens of model calls, web searches, and page reads —
-          typically several hundred thousand tokens, several minutes per run.
-        </p>
-      )}
-      {!latest && researchFlag.status === "enabled" && (
-        <p className="border-border text-muted-foreground border border-dashed px-2.5 py-1.5 text-xs">
-          No research has been run for this server.
-        </p>
+      {!latest && (
+        // One block, not a warning banner stacked on an empty state. What the
+        // run does and what it costs belong to the same sentence as the reason
+        // to start one; the old layout shouted the price above a box whose only
+        // content was "nothing has been run".
+        <div className="border-border border border-dashed px-3 py-3 text-xs">
+          <p className="font-medium">
+            No research has been run for this server
+          </p>
+          <p className="text-muted-foreground mt-1 max-w-prose">
+            Everything above is the server describing itself. A research run
+            asks the public web instead — who operates it, what has been written
+            about it, whether anyone independent has looked — and reports each
+            claim with the source it rests on.
+          </p>
+          <p className="text-muted-foreground mt-1.5">
+            A few minutes per run, and it spends AI credits on the searches and
+            page reads.
+          </p>
+        </div>
       )}
       {latest && <ResearchReportCard report={latest} />}
       {previous.length > 0 && (
