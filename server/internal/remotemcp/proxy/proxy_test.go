@@ -428,7 +428,7 @@ func TestProxy_Post_RetriesUpstreamResponseBeforeRelay(t *testing.T) {
 		if resp.Header.Get("X-Gram-Tunnel-Error") != "no-live-session" {
 			return nil, nil
 		}
-		return &proxy.UpstreamResponseRetry{RemoteURL: second.URL, Headers: nil}, nil
+		return &proxy.UpstreamResponseRetry{RemoteURL: second.URL, RoutingHeaders: nil}, nil
 	}
 
 	rr := httptest.NewRecorder()

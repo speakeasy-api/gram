@@ -38,11 +38,13 @@ const (
 	//     dropped, an invalid required row fails the request with 400).
 	HeaderPolicyRemote HeaderPolicy = ""
 
-	// HeaderPolicyTunneled keeps the pre-existing behaviour for tunneled MCP
-	// servers. The tunnel's own routing fields (tunnel id, forward token,
-	// client affinity) are passed to the proxy as configured headers, so the
-	// remote filtering would reject them; tunnel-specific filtering is defined
-	// by the tunnel header work.
+	// HeaderPolicyTunneled is the strict policy for tunneled MCP servers.
+	// Speakeasy credentials, tunnel transport fields, the rest of the internal
+	// X-Gram-* family, Authorization and caller assertions never reach the
+	// upstream as a copied client header or as the source of a configured
+	// header ([IsProtectedTunneledInboundHeader]), and configured headers may
+	// not claim transport, framing or MCP protocol names. The tunnel's own
+	// routing fields travel as [Proxy.RoutingHeaders], outside this policy.
 	HeaderPolicyTunneled HeaderPolicy = "tunneled"
 )
 
@@ -142,6 +144,29 @@ func IsProtectedInboundHeader(name string) bool {
 		return true
 	}
 	return false
+}
+
+// internalHeaderPrefix covers Speakeasy's internal X-Gram-* family: the
+// tunnel transport fields exchanged with the gateway and agent, the agent
+// version, and internal request controls such as scope overrides.
+const internalHeaderPrefix = "x-gram-"
+
+// IsProtectedTunneledInboundHeader reports whether a header on the inbound
+// request is protected under [HeaderPolicyTunneled]: everything
+// [IsProtectedInboundHeader] protects, plus the rest of Speakeasy's internal
+// X-Gram-* family and Authorization. Such a header is never copied to a
+// tunneled upstream and never used as the source of one of its configured
+// headers. Authorization may still be configured as a destination.
+//
+// The remote set stays narrower on purpose: remote servers may forward the
+// caller's own upstream credential from Authorization and may read
+// non-transport X-Gram-* headers such as X-Gram-Owner.
+func IsProtectedTunneledInboundHeader(name string) bool {
+	if IsProtectedInboundHeader(name) {
+		return true
+	}
+	key := headerKey(name)
+	return key == "authorization" || strings.HasPrefix(key, internalHeaderPrefix)
 }
 
 // isSkippedRequestHeader returns true for headers that should never be
@@ -297,6 +322,11 @@ func (p *Proxy) stripConfiguredCredentials(header http.Header) {
 	header.Del("Cookie")
 	mcpauthz.Strip(header)
 
+	for _, h := range p.RoutingHeaders {
+		if h.Name != "" {
+			header.Del(h.Name)
+		}
+	}
 	for _, h := range p.Headers {
 		if h.Name != "" {
 			header.Del(h.Name)
@@ -320,12 +350,18 @@ func (p *Proxy) stripConfiguredCredentials(header http.Header) {
 // upstream after configured headers are resolved so per-user identity wins a
 // legacy conflict with a static Authorization credential.
 //
-// Under [HeaderPolicyRemote], [IsProtectedInboundHeader] headers are dropped
-// from the copy as well.
+// Protected client headers are dropped from the copy under both policies:
+// [IsProtectedInboundHeader] for [HeaderPolicyRemote] and
+// [IsProtectedTunneledInboundHeader] for [HeaderPolicyTunneled]. Speakeasy's
+// routing headers are applied after configured rows so nothing configured can
+// displace them.
 func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
 	tunneled := p.HeaderPolicy == HeaderPolicyTunneled
 	for name, values := range userReq.Header {
 		if isSkippedRequestHeader(name) {
+			continue
+		}
+		if tunneled && IsProtectedTunneledInboundHeader(name) {
 			continue
 		}
 		if !tunneled && IsProtectedInboundHeader(name) {
@@ -342,6 +378,23 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 		}
 	} else if err := p.applyRemoteConfiguredHeaders(ctx, userReq, remoteReq); err != nil {
 		return err
+	}
+
+	// Routing headers are Speakeasy's own transport state. They are applied
+	// after configured headers so no configuration can displace them, and
+	// they own every spelling of their name an upstream might fold together,
+	// so a caller's Mcp_Session_Id cannot sit beside the pinned backend
+	// Mcp-Session-Id.
+	for _, h := range p.RoutingHeaders {
+		value, err := h.Resolve(userReq)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").LogError(ctx, p.Logger)
+		}
+		deleteFoldedHeader(remoteReq.Header, h.Name)
+		if value == "" {
+			continue
+		}
+		remoteReq.Header.Set(h.Name, value)
 	}
 
 	if p.AuthorizationOverride != "" {
@@ -373,24 +426,50 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 }
 
 // applyTunneledConfiguredHeaders overlays configured headers under
-// [HeaderPolicyTunneled].
+// [HeaderPolicyTunneled]. Every stored row is re-validated here, so a row that
+// predates the policy or came from another writer cannot claim a reserved
+// name or read a protected inbound header.
+//
+// An optional row that fails is suppressed: its destination is cleared, so a
+// value the client sent under that name does not stand in for it, unless the
+// destination itself is protected, which leaves the client's protocol field or
+// Speakeasy's routing field alone. A required row that fails rejects the
+// request. Errors and logs name the header, never its value.
 func (p *Proxy) applyTunneledConfiguredHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
 	for _, h := range p.Headers {
-		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
+		// A resolved upstream token owns Authorization. The configured row it
+		// shadows is not sent, so it cannot impose a requirement of its own.
+		if p.AuthorizationOverride != "" && headerKey(h.Name) == "authorization" {
 			continue
 		}
-		// A configured header must not set or delete a standard MCP request
-		// header: the client's value is forwarded untouched, as the
-		// specification requires of an intermediary.
-		if httpheaders.IsStandardMCPRequestHeader(h.Name) {
+
+		if err := checkStoredTunneledHeader(h); err != nil {
+			if h.IsRequired {
+				return oops.E(oops.CodeBadRequest, err, "invalid required header for tunneled mcp server").LogWarn(ctx, p.Logger)
+			}
+			p.Logger.WarnContext(ctx, "skip invalid configured header for tunneled mcp server", attr.SlogError(err))
+			if name, nerr := NormalizeHeaderName(h.Name); nerr == nil && !isReservedTunneledDestination(name) {
+				deleteFoldedHeader(remoteReq.Header, name)
+			}
 			continue
 		}
+
 		value, err := h.Resolve(userReq)
-		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").LogError(ctx, p.Logger)
+		if err == nil && value != "" {
+			if verr := ValidateHeaderValue(value); verr != nil {
+				if h.IsRequired {
+					err = fmt.Errorf("header %q: %w", h.Name, verr)
+				}
+				value = ""
+			}
 		}
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "missing required header for tunneled mcp server").LogWarn(ctx, p.Logger)
+		}
+		// A configured header owns its name in every spelling an upstream
+		// might fold together, so the caller's alias cannot stand beside it.
+		deleteFoldedHeader(remoteReq.Header, h.Name)
 		if value == "" {
-			remoteReq.Header.Del(h.Name)
 			continue
 		}
 		remoteReq.Header.Set(h.Name, value)
@@ -542,5 +621,91 @@ func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
 		return fmt.Sprintf("required header %q for remote mcp server is not a valid HTTP header: change or remove it in the server's settings", h.Name)
 	default:
 		return "missing required header for remote mcp server"
+	}
+}
+
+// isReservedTunneledDestination reports whether a configured header may not
+// be sent under name to a tunneled upstream. Authorization is allowed: a
+// static service credential is a legitimate configuration, and a resolved
+// upstream token still takes precedence over it.
+func isReservedTunneledDestination(name string) bool {
+	if httpheaders.IsStandardMCPRequestHeader(strings.ReplaceAll(name, "_", "-")) {
+		return true
+	}
+	key := headerKey(name)
+	if key == "authorization" {
+		return false
+	}
+	if IsProtectedTunneledInboundHeader(name) {
+		return true
+	}
+	switch key {
+	case
+		// Hop-by-hop and framing fields belong to the HTTP transport.
+		"connection",
+		"keep-alive",
+		"proxy-authenticate",
+		"te",
+		"trailer",
+		"transfer-encoding",
+		"upgrade",
+		"content-length",
+		"host",
+		"accept-encoding",
+		// MCP Streamable HTTP session and resumption fields.
+		"mcp-session-id",
+		"last-event-id":
+		return true
+	}
+	return false
+}
+
+// CheckTunneledHeader validates a configured header against
+// [HeaderPolicyTunneled]. h.Name and h.ValueFromRequestHeader must already be
+// normalized with [NormalizeHeaderName]; a static value is checked with
+// [ValidateHeaderValue].
+func CheckTunneledHeader(h ConfiguredHeader) error {
+	if isReservedTunneledDestination(h.Name) {
+		return fmt.Errorf("%w: %q cannot be configured on a tunneled MCP server", ErrReservedHeader, h.Name)
+	}
+	if h.ValueFromRequestHeader != "" && IsProtectedTunneledInboundHeader(h.ValueFromRequestHeader) {
+		return fmt.Errorf("%w: %w: %q cannot be forwarded to a tunneled MCP server", ErrReservedHeader, ErrProtectedSource, h.ValueFromRequestHeader)
+	}
+	if h.StaticValue != "" {
+		if err := ValidateHeaderValue(h.StaticValue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkStoredTunneledHeader re-validates a stored configured header at request
+// time, including its name and source syntax, so a row written before the
+// policy existed, or by another writer, cannot bypass it.
+func checkStoredTunneledHeader(h ConfiguredHeader) error {
+	name, err := NormalizeHeaderName(h.Name)
+	if err != nil {
+		return err
+	}
+	if name != h.Name {
+		return fmt.Errorf("%w: %q is not in canonical form", ErrInvalidHeaderName, h.Name)
+	}
+	if h.ValueFromRequestHeader != "" {
+		if _, err := NormalizeHeaderName(h.ValueFromRequestHeader); err != nil {
+			return err
+		}
+	}
+	return CheckTunneledHeader(h)
+}
+
+// deleteFoldedHeader removes every field in header whose name folds to the
+// same key as name, so an inbound X_Tenant cannot sit beside a configured
+// X-Tenant at an upstream that reads the two as one.
+func deleteFoldedHeader(header http.Header, name string) {
+	key := headerKey(name)
+	for existing := range header {
+		if headerKey(existing) == key {
+			delete(header, existing)
+		}
 	}
 }

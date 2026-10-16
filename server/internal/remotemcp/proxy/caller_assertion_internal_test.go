@@ -48,7 +48,7 @@ func TestCallerAssertionStripsSpoofingWithAndWithoutSigning(t *testing.T) {
 	t.Parallel()
 	p, ctx, key := assertionProxy(t, "http://upstream.example")
 	p.AuthorizationOverride = "upstream-oauth"
-	p.Headers = []ConfiguredHeader{{Name: "X-Speakeasy-Identity", StaticValue: "configured-forgery"}, {Name: "x-speakeasy-identity", StaticValue: "configured-forgery"}, {Name: "X-Leaked-Assertion", ValueFromRequestHeader: "X_speakeasy_identity", IsRequired: true}}
+	p.Headers = []ConfiguredHeader{{Name: "X-Speakeasy-Identity", StaticValue: "configured-forgery"}, {Name: "x-speakeasy-identity", StaticValue: "configured-forgery"}, {Name: "X-Leaked-Assertion", ValueFromRequestHeader: "X_speakeasy_identity", IsRequired: false}}
 	inbound := httptest.NewRequest(http.MethodPost, "http://gram.example/mcp", nil)
 	inbound.Header = http.Header{"X-Speakeasy-Identity": {"forged"}, "X_speakeasy_identity": {"forged"}, "X-Speakeasy_Identity": {"forged"}, "x-speakeasy-identity": {"forged"}, "Authorization": {"Bearer gram-secret"}}
 	inboundHeaders := inbound.Header.Clone()
@@ -88,7 +88,7 @@ func TestCallerAssertionRetryMintsFreshTokenAndPreservesOAuth(t *testing.T) {
 	p, ctx, key := assertionProxy(t, upstream.URL)
 	p.AuthorizationOverride = "upstream-oauth"
 	p.UpstreamResponseRetryer = func(context.Context, *http.Response) (*UpstreamResponseRetry, error) {
-		return &UpstreamResponseRetry{RemoteURL: upstream.URL, Headers: []ConfiguredHeader{{Name: "X-Retry", StaticValue: "yes"}}}, nil
+		return &UpstreamResponseRetry{RemoteURL: upstream.URL, RoutingHeaders: []ConfiguredHeader{{Name: "X-Retry", StaticValue: "yes"}}}, nil
 	}
 	req := httptest.NewRequest(http.MethodPost, "https://gram.example/mcp", nil)
 	_, resp, err := p.forwardRequestWithRetry(ctx, req, func() io.Reader { return nil }, nil)
