@@ -391,7 +391,8 @@ func newProductionRearmService(t *testing.T) (context.Context, *Service, *pgxpoo
 		require.NoError(t, upstream.getHandlerError())
 	})
 
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	// A failing upstream still sees every retry, just without the 1+2+4+8 second waits.
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, guardian.WithRetryWaits(time.Millisecond, 10*time.Millisecond))
 	require.NoError(t, err)
 	option, err := openrouter.WithTestBaseURL(server.URL)
 	require.NoError(t, err)

@@ -267,6 +267,12 @@ type Policy struct {
 	breaker           Breaker
 	tlsRootCAs        *x509.CertPool
 	internalCatalog   *net.IPNet
+	retryWaits        *retryWaits
+}
+
+type retryWaits struct {
+	min time.Duration
+	max time.Duration
 }
 
 // WithResolver is a functional option that sets the Policy's resolver.
@@ -285,6 +291,16 @@ func WithResolver(resolver dns.Resolver) func(*Policy) {
 func WithTLSRootCAs(pool *x509.CertPool) func(*Policy) {
 	return func(p *Policy) {
 		p.tlsRootCAs = pool
+	}
+}
+
+// WithRetryWaits overrides the wait bounds of every retrying client built from
+// this Policy, keeping each client's attempt count and retry policy. This is
+// intended for tests that drive real retries against a failing fake upstream;
+// production code should keep each client's own [RetryConfig] waits.
+func WithRetryWaits(minWait, maxWait time.Duration) func(*Policy) {
+	return func(p *Policy) {
+		p.retryWaits = &retryWaits{min: minWait, max: maxWait}
 	}
 }
 
@@ -332,6 +348,7 @@ func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPN
 		breaker:           nil,
 		tlsRootCAs:        nil,
 		internalCatalog:   nil,
+		retryWaits:        nil,
 	}
 
 	for _, option := range options {
@@ -473,6 +490,10 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 
 	retryClient.RetryWaitMin = opts.retryConfig.WaitMin
 	retryClient.RetryWaitMax = opts.retryConfig.WaitMax
+	if p.retryWaits != nil {
+		retryClient.RetryWaitMin = p.retryWaits.min
+		retryClient.RetryWaitMax = p.retryWaits.max
+	}
 	retryClient.RetryMax = opts.retryConfig.MaxAttempts
 	retryClient.ErrorHandler = opts.retryConfig.ErrorHandler
 	retryClient.PrepareRetry = opts.retryConfig.PrepareRetry

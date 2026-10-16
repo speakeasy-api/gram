@@ -218,7 +218,8 @@ func (p *ToolExtractor) Do(
 
 	var manifest Manifest
 	if err := manifest.UnmarshalJSON(manifestBs); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s: error parsing manifest file", slug).LogError(ctx, logger, attrError)
+		// The manifest bytes are already in hand, so a retry would parse the same malformed JSON.
+		return nil, oops.E(oops.CodeBadRequest, oops.Permanent(err), "%s: error parsing manifest file", slug).LogError(ctx, logger, attrError)
 	}
 
 	dbtx, err := p.db.Begin(ctx)

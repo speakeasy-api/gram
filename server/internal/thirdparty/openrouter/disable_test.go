@@ -118,7 +118,8 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	}))
 	t.Cleanup(upstream.server.Close)
 
-	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	// Upstream failures still run every retry, just without the 1+2+4+8 second waits.
+	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, guardian.WithRetryWaits(time.Millisecond, 10*time.Millisecond))
 	require.NoError(t, err)
 
 	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t))

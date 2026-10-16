@@ -232,6 +232,9 @@ func TestHandleToken_RefreshSerializationConflictWithoutReplayIsRetryable(t *tes
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
+	// Shortened from five seconds; the assertions below are relative to it.
+	const replayWait = 500 * time.Millisecond
+	ti.service.SetRefreshTokenReplayWait(replayWait)
 	toolset, issuer, client, refreshToken := seedRefreshReplaySession(t, ctx, ti)
 	holder := testenv.BeginTx(t, ctx, ti.conn)
 	hash := sha256.Sum256([]byte(refreshToken))
@@ -244,9 +247,9 @@ func TestHandleToken_RefreshSerializationConflictWithoutReplayIsRetryable(t *tes
 		results <- performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	}()
 	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), "%RevokeUserSessionByRefreshTokenHash%")
-	// Exhaust the handler's initial five-second timer while the database
-	// claim is blocked. The conflict must still get a fresh publication wait.
-	initialBudget := time.NewTimer(6 * time.Second)
+	// Exhaust the handler's initial replay timer while the database claim is
+	// blocked. The conflict must still get a fresh publication wait.
+	initialBudget := time.NewTimer(2 * replayWait)
 	defer initialBudget.Stop()
 	select {
 	case <-initialBudget.C:
@@ -260,7 +263,7 @@ func TestHandleToken_RefreshSerializationConflictWithoutReplayIsRetryable(t *tes
 		require.NoError(t, result.err)
 		require.Equal(t, http.StatusServiceUnavailable, result.code, result.body)
 		require.JSONEq(t, `{"error":"temporarily_unavailable","error_description":"refresh token rotation is still in progress"}`, result.body)
-		require.GreaterOrEqual(t, time.Since(conflictStarted), 5*time.Second, "database contention must not consume the replay wait budget")
+		require.GreaterOrEqual(t, time.Since(conflictStarted), replayWait, "database contention must not consume the replay wait budget")
 	case <-time.After(10 * time.Second):
 		t.Fatal("refresh conflict exceeded its bounded replay wait")
 	}
@@ -460,6 +463,8 @@ func TestHandleToken_RefreshReplayWaitTimeoutIsRetryable(t *testing.T) {
 	ctx, ti := newTestMCPServiceWithCacheWrapper(t, func(delegate cache.Cache) cache.Cache {
 		return contendedLeaseCache{Cache: delegate}
 	})
+	// The lease never frees, so the request ends on its replay wait, shortened from five seconds.
+	ti.service.SetRefreshTokenReplayWait(200 * time.Millisecond)
 	toolset, _, client, refreshToken := seedRefreshReplaySession(t, ctx, ti)
 
 	result := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)

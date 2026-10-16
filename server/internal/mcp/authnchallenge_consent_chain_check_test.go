@@ -138,11 +138,16 @@ func TestConsentChainCheck_TimeoutIsUnknown(t *testing.T) {
 		<-ctx.Done()
 		return identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceUnknown, Retryable: true, Cached: false, Provider: ""}
 	}
+	// The check's own deadline ends the hung exchange; it is shortened from five seconds.
+	const timeout = 200 * time.Millisecond
+	fx.ti.service.SetConsentChainCheckTimeout(timeout)
 
 	started := time.Now()
 	w, err := postChainCheck(t, fx, nil)
 	require.NoError(t, err)
-	require.Less(t, time.Since(started), 10*time.Second)
+	elapsed := time.Since(started)
+	require.GreaterOrEqual(t, elapsed, timeout)
+	require.Less(t, elapsed, 5*time.Second)
 	require.Equal(t, "unknown", chainCheckResult(t, w)["status"])
 }
 

@@ -88,6 +88,18 @@ func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32
 	}
 }
 
+// SetRefreshTokenReplayWait shortens the bounded wait for a concurrent
+// refresh rotation's outcome, so a test can let it expire.
+func (s *Service) SetRefreshTokenReplayWait(wait time.Duration) {
+	s.refreshReplayWaitOverride = wait
+}
+
+// SetConsentChainCheckTimeout shortens the consent page's identity chaining
+// check deadline, so a test can let it expire.
+func (s *Service) SetConsentChainCheckTimeout(timeout time.Duration) {
+	s.chainCheckTimeoutOverride = timeout
+}
+
 // SetRiskScanEvaluator replaces observation only in the test binary.
 func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 	s.scanEvaluator = evaluator

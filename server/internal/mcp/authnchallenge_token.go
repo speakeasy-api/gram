@@ -74,6 +74,15 @@ const (
 	refreshTokenReplayMaxPollWait     = 1 * time.Second
 )
 
+// refreshReplayWait bounds how long a refresh waits for a concurrent
+// rotation's outcome before answering temporarily_unavailable.
+func (s *Service) refreshReplayWait() time.Duration {
+	if s.refreshReplayWaitOverride > 0 {
+		return s.refreshReplayWaitOverride
+	}
+	return refreshTokenReplayWait
+}
+
 // errRefreshTokenClaimConflict means the transaction lost a concurrent update
 // before minting a successor. Its caller must wait for the winner's replay,
 // never publish a terminal failure over a potentially unpublished outcome.
@@ -920,7 +929,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate refresh replay lock owner").LogError(ctx, logger)
 	}
-	timeout := time.NewTimer(refreshTokenReplayWait)
+	timeout := time.NewTimer(s.refreshReplayWait())
 	defer timeout.Stop()
 	pollWait := refreshTokenReplayInitialPollWait
 	poll := time.NewTimer(pollWait)
@@ -986,7 +995,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 			// with a fresh bounded wait rather than claiming again. Time spent
 			// blocked in the database must not consume the publication budget.
 			waitForWinner = true
-			timeout.Reset(refreshTokenReplayWait)
+			timeout.Reset(s.refreshReplayWait())
 		}
 
 		replay, replayErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey)
