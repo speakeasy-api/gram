@@ -148,11 +148,17 @@ type testInstance struct {
 type migratedService struct {
 	*mcp.Service
 	conn *pgxpool.Pool
+	// manual leaves associations and choices to the test, for tests of how
+	// serving treats a missing or particular choice.
+	manual bool
 }
 
 // migrate is best effort: a test that breaks the database on purpose to
 // exercise a failure path sees the service meet the same broken database.
 func (s *migratedService) migrate(ctx context.Context) {
+	if s.manual {
+		return
+	}
 	ctx = context.WithoutCancel(ctx)
 	if _, err := associationbackfill.Run(ctx, s.conn, associationbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0}); err != nil {
 		return
@@ -702,7 +708,7 @@ func buildTestMCPService(
 
 	return ctx, &testInstance{
 		principalCredentials: principalCredentials,
-		service:              &migratedService{Service: svc, conn: conn},
+		service:              &migratedService{Service: svc, conn: conn, manual: false},
 		conn:                 conn,
 		sessionManager:       sessionManager,
 		serverURL:            serverURL,

@@ -136,19 +136,13 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return output, nil
 	}
 	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
-	if target.associatedClients != nil && len(target.associatedClients) == 0 {
-		// A proxied server with no associated client either needs no
-		// upstream sign-in or signs in through a client nobody configured for
+	if target.associatedClients != nil && len(target.associatedClients) == 0 && target.remoteSessionIssuerID != uuid.Nil {
+		// A proxied server with no associated client that still derives an
+		// authorization server signs in through a client nobody configured for
 		// it, which the runtime refuses until an administrator does.
-		if target.remoteSessionIssuerID != uuid.Nil {
-			output.State = MCPConnectionStateSetupRequired
-			output.Reason = "upstream_authorization_not_configured"
-			output.NextAction = "ask_administrator"
-			return output, nil
-		}
-		output.State = MCPConnectionStateNotApplicable
-		output.Reason = "authorization_not_required"
-		output.NextAction = "use_mcp"
+		output.State = MCPConnectionStateSetupRequired
+		output.Reason = "upstream_authorization_not_configured"
+		output.NextAction = "ask_administrator"
 		return output, nil
 	}
 	if !target.signInRequired() {

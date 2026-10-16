@@ -31,6 +31,7 @@ type selectionFixture struct {
 func newSelectionFixture(t *testing.T) (context.Context, selectionFixture) {
 	t.Helper()
 	ctx, ti := newTestMCPService(t)
+	ti.service.manual = true
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -267,6 +268,7 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 		serverID = server.ID
 		return server.ID
 	})
+	fx.ti.service.manual = true
 	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-own", "", []uuid.UUID{fx.shared})
 	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "", []uuid.UUID{fx.shared})
 
