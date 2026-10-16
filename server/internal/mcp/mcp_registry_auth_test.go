@@ -14,13 +14,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
-const testMCPRegistryAuthRecord = "v=MCPv1; k=ed25519; p=dGVzdC1wdWJsaWMta2V5"
+const testMCPRegistryAuthRecord = "v=MCPv1; k=ed25519; p=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 
 func TestHandleMCPRegistryAuthServesRecordOnPlatformHost(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	ti.service.SetMCPRegistryAuth(testMCPRegistryAuthRecord)
+	require.NoError(t, ti.service.SetMCPRegistryAuth(testMCPRegistryAuthRecord))
 	recorder := httptest.NewRecorder()
 
 	require.NoError(t, ti.service.HandleMCPRegistryAuth(recorder, newPlatformHostRegistryAuthRequest(ctx)))
@@ -42,7 +42,7 @@ func TestHandleMCPRegistryAuthReturnsNotFoundWithoutRequestOrigin(t *testing.T) 
 	t.Parallel()
 
 	_, ti := newTestMCPService(t)
-	ti.service.SetMCPRegistryAuth(testMCPRegistryAuthRecord)
+	require.NoError(t, ti.service.SetMCPRegistryAuth(testMCPRegistryAuthRecord))
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/mcp-registry-auth", nil)
 	err := ti.service.HandleMCPRegistryAuth(httptest.NewRecorder(), req)
 
@@ -53,7 +53,7 @@ func TestHandleMCPRegistryAuthReturnsNotFoundOnCustomDomain(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	ti.service.SetMCPRegistryAuth(testMCPRegistryAuthRecord)
+	require.NoError(t, ti.service.SetMCPRegistryAuth(testMCPRegistryAuthRecord))
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/mcp-registry-auth", nil)
 	req = req.WithContext(customdomains.WithContext(ctx, &customdomains.Context{
 		OrganizationID: "registry-auth-organization",
@@ -63,6 +63,22 @@ func TestHandleMCPRegistryAuthReturnsNotFoundOnCustomDomain(t *testing.T) {
 	err := ti.service.HandleMCPRegistryAuth(httptest.NewRecorder(), req)
 
 	requireMCPRegistryAuthNotFound(t, err)
+}
+
+func TestSetMCPRegistryAuthRejectsMalformedRecords(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	for name, record := range map[string]string{
+		"hex private key":   "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+		"wrong version":     "v=MCPv2; k=ed25519; p=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+		"unknown key type":  "v=MCPv1; k=rsa; p=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+		"short key":         "v=MCPv1; k=ed25519; p=dGVzdA==",
+		"not base64":        "v=MCPv1; k=ed25519; p=not-base64!",
+		"missing key field": "v=MCPv1; k=ed25519",
+	} {
+		require.Error(t, ti.service.SetMCPRegistryAuth(record), name)
+	}
 }
 
 func newPlatformHostRegistryAuthRequest(ctx context.Context) *http.Request {
