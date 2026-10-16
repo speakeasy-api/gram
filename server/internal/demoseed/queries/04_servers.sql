@@ -271,6 +271,26 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
   (@slack_member_id::uuid, @project_id::uuid,
    @meta_id::uuid, @slack_server_id::uuid, 3);
 
+-- Stored as Progressive (the column default) because the shared demo org has
+-- no code runtime; local fixtures switch it to code_mode (RunLocalFixtures).
+-- name: ServersInsertCodeGateway :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                              user_session_issuer_id) VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, 'Python Code Gateway',
+   @user_session_issuer_id::uuid);
+
+-- name: ServersInsertCodeGatewayMembers :exec
+INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                     mcp_server_id, sort_order) VALUES
+  (@support_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @support_server_id::uuid, 0),
+  (@ops_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @ops_server_id::uuid, 1);
+
+-- name: ServersInsertCodeGatewayEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, @meta_id::uuid, NULL, @slug::text);
+
 -- GitHub was a member until three days ago. Its dispatches are still in
 -- ClickHouse (gwgone rows), so the Activity section can show that a removed
 -- member drops out of Calls by member while the gateway totals keep them.
