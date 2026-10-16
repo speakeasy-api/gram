@@ -531,7 +531,11 @@ func (s *Service) callMetaServerTool(
 		err     error
 	)
 	if gate.agentID != uuid.Nil || gate.organizationGateway {
-		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID)
+		issuer := uuid.Nil
+		if gate.organizationGateway {
+			issuer = gate.userSessionIssuerID
+		}
+		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
 	} else {
 		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
 	}

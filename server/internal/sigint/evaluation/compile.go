@@ -3,12 +3,14 @@ package evaluation
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
 
@@ -22,6 +24,7 @@ type compiledSensor struct {
 	mode        string
 	hash        string
 	questions   []classifier.Question
+	strategy    string
 	windowSize  int
 }
 
@@ -44,7 +47,7 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	if ValidateInputConfiguration(strategy, size) != nil {
 		return compiled, false
 	}
-	compiled.windowSize = 1
+	compiled.strategy, compiled.windowSize = strategy, 1
 	if sensor.Instructions == nil || len(sensor.Signals) == 0 || sensor.Slug == "" {
 		return compiled, false
 	}
@@ -99,6 +102,16 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	return compiled, true
 }
 
+// readingInput records the classifier input actually supplied for one sensor.
+func readingInput(sensor compiledSensor, in ResolvedInput) *sigintv1.Reading_Input {
+	input := &sigintv1.Reading_Input{}
+	input.SetStrategy(sensor.strategy)
+	input.SetRequestedMessageCount(conv.SafeInt32(sensor.windowSize))
+	input.SetMessageCount(conv.SafeInt32(in.MessageCount))
+	input.SetTruncated(in.Truncated)
+	return input
+}
+
 func reading(event Event, sensor compiledSensor, answers map[classifier.QuestionKey]classifier.QuestionOutcome, attempt, at string, result classifier.Result) (*sigintv1.Reading, error) {
 	if sensor.slug == "" {
 		return nil, fmt.Errorf("missing sensor slug")
@@ -123,6 +136,7 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 	r.SetProvider(result.Metadata.Provider)
 	r.SetModels(result.Models)
 	r.SetCompilerVersion("sigint-v1/" + result.Metadata.CompilerVersion)
+	r.SetAttributes(maps.Clone(event.Attributes))
 	if event.Actor != nil {
 		r.SetActor(proto.CloneOf(event.Actor))
 	}

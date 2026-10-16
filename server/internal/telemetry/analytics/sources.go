@@ -1,8 +1,6 @@
 package analytics
 
 import (
-	"strings"
-
 	"github.com/Masterminds/squirrel"
 )
 
@@ -39,21 +37,6 @@ type QueryContext struct {
 // and it is still a call, so every predicate over tool calls admits all
 // three.
 var toolCallEventTypes = []string{"tool_call", "tool_call_result", "tool_decision"}
-
-// toolCallEventTypesSQL is the same set as a SQL predicate, for the one place
-// squirrel cannot bind it: a condition inside an aggregate in a select list.
-// Derived from the slice above so the two datasets cannot disagree; the
-// values are those declared constants, never input.
-var toolCallEventTypesSQL = "event_type IN (" + quotedList(toolCallEventTypes) + ")"
-
-// quotedList renders declared string constants as a SQL list.
-func quotedList(values []string) string {
-	quoted := make([]string, len(values))
-	for i, value := range values {
-		quoted[i] = "'" + value + "'"
-	}
-	return strings.Join(quoted, ", ")
-}
 
 // Source declares one row per Key of a dataset: the table it reads, the
 // predicates, and the Columns that fold or merge into that row. Observations
@@ -143,31 +126,6 @@ func where(builder squirrel.SelectBuilder, conditions []squirrel.Sqlizer) squirr
 		builder = builder.Where(condition)
 	}
 	return builder
-}
-
-// sessionsSource is one row per session. Dimensions resolve to the latest
-// observed value that stated one: a session usually ends on a hook or MCP
-// event that carries no model, and that must not blank the model an API
-// request stated.
-var sessionsSource = Source{
-	Table: agentEvents,
-	Where: []squirrel.Sqlizer{squirrel.NotEq{"session_id": ""}},
-	Key:   "session_id",
-	Columns: []string{
-		"organization_id",
-		"project_id",
-		"session_id",
-		"min(occurred_at_unix_nano) AS started_at",
-		"max(occurred_at_unix_nano) AS ended_at",
-		"argMaxIf(user_email, observed_at_unix_nano, user_email != '') AS user_email",
-		"argMaxIf(model, observed_at_unix_nano, model != '') AS model",
-		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",
-		"argMaxIf(provider, observed_at_unix_nano, provider != '') AS provider",
-		// uniqExact yields UInt64; the catalog declares these Int64.
-		"toInt64(uniqExactIf(turn_id, turn_id != '')) AS turn_count",
-		"toInt64(uniqExactIf(event_id, " + toolCallEventTypesSQL + ")) AS tool_call_count",
-	},
-	Having: "",
 }
 
 // toolCallsSource is one row per tool call (decision, call, result), Skill

@@ -485,8 +485,8 @@ that URL.
     in destructive red under the field and **Allow machine** stays disabled.
 
 26. **Explore widgets** — open `/<org>/projects/default/explore` and click
-    the **Widgets** tab, which shows a count of 5. Five widgets, most
-    recently updated first, starting with Amara Okafor's "Sessions by
+    the **Widgets** tab, which shows a count of 6. Six widgets, most
+    recently updated first, starting with Amara Okafor's "Tool calls by
     surface" with its description beneath; Hana Sato's widget of the same
     name sits further down with her name beside it. Each row shows its
     dataset and chart type, and none carries the broken-widget warning.
