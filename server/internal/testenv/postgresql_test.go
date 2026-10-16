@@ -18,8 +18,8 @@ func TestPostgresCloneWithCleanupConnection(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, container.Terminate(context.Background())) })
 
-	// Hold the same connection used by cleanup open while cloning. Cleanup
-	// runs outside the clone mutex and must not occupy the template database.
+	// Hold a connection like the maintenance pool's open while cloning. It
+	// must not occupy the template database.
 	uri, err := postgresURI(t.Context(), container)
 	require.NoError(t, err)
 	conn, err := pgx.Connect(t.Context(), uri)
@@ -52,7 +52,7 @@ func TestPostgresConcurrentClonesAreDropped(t *testing.T) {
 	})
 
 	// Every clone and drop shares the maintenance pool, and clones of the
-	// template must still serialize with each other.
+	// same template run concurrently.
 	for i := range 8 {
 		t.Run(fmt.Sprintf("clone_%d", i), func(t *testing.T) {
 			t.Parallel()
