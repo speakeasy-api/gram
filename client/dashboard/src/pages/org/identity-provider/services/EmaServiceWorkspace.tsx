@@ -36,7 +36,7 @@ import {
   type ProviderView,
 } from "./emaServiceView";
 import { EmaServiceServers } from "./EmaServiceServers";
-import { useEmaServices } from "./useEmaServices";
+import { useEmaServices, useOktaIssuerId } from "./useEmaServices";
 
 /** Who may change which identity providers a service accepts, and why not when they can't. */
 function useAcceptedProviderPermissions(): {
@@ -93,6 +93,10 @@ export function EmaServiceWorkspace({
   useScrollToSection(Boolean(row));
   const permissions = useAcceptedProviderPermissions();
   const candidates = useProviderCandidates(permissions.canEdit);
+  const oktaFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
+  const connectedOktaId = useOktaIssuerId(oktaFlag.status === "enabled");
+  const oktaIssuerId =
+    oktaFlag.status === "enabled" ? connectedOktaId : undefined;
   const name = row?.name ?? "Service";
 
   return (
@@ -162,6 +166,7 @@ export function EmaServiceWorkspace({
                       provider={provider}
                       isDefault={row.isDefault}
                       service={name}
+                      oktaIssuerId={oktaIssuerId}
                     />
                   ))}
                 </ul>
@@ -193,10 +198,13 @@ function TrustRow({
   provider,
   isDefault,
   service,
+  oktaIssuerId,
 }: {
   provider: ProviderView;
   isDefault: boolean;
   service: string;
+  /** The Okta connection's issuer, when its Cross App Access view is available. */
+  oktaIssuerId: string | undefined;
 }): JSX.Element {
   const fix = provider.fix ? providerFixLink(provider.fix) : undefined;
   return (
@@ -211,14 +219,20 @@ function TrustRow({
           {PLACEHOLDER_SCOPE}
         </Text>
       )}
-      {!provider.placeholder && provider.kind !== "speakeasy" && (
-        <Link
-          className="text-muted-foreground block text-sm underline underline-offset-4"
-          to={oktaViewHref("cross-app-access")}
-        >
-          {crossAppAccessStep(service, provider.name)}
-        </Link>
-      )}
+      {!provider.placeholder &&
+        provider.kind !== "speakeasy" &&
+        (oktaIssuerId && provider.remoteSessionIssuerId === oktaIssuerId ? (
+          <Link
+            className="text-muted-foreground block text-sm underline underline-offset-4"
+            to={oktaViewHref("cross-app-access")}
+          >
+            {crossAppAccessStep(service, provider.name)}
+          </Link>
+        ) : (
+          <Text muted small className="block">
+            {crossAppAccessStep(service, provider.name)}
+          </Text>
+        ))}
       {provider.kind === "speakeasy" &&
         provider.usable &&
         provider.issuerUrl &&
@@ -290,15 +304,23 @@ function useProviderCandidates(enabled: boolean): {
   if (speakeasy.data?.issuer) {
     items.push({ key: "speakeasy", kind: "speakeasy", name: "Speakeasy" });
   }
+  const failed = signIns.isError || speakeasy.isError || issuers.isError;
   const ready =
     enabled &&
+    !failed &&
     signIns.isSuccess &&
     !signIns.hasNextPage &&
     !speakeasy.isPending &&
     !issuers.isLoading;
   const error =
-    enabled && signIns.isError
-      ? { retry: () => void signIns.refetch() }
+    enabled && failed
+      ? {
+          retry: () => {
+            if (signIns.isError) void signIns.refetch();
+            if (speakeasy.isError) void speakeasy.refetch();
+            if (issuers.isError) issuers.refetch();
+          },
+        }
       : undefined;
   return { items, ready, error };
 }

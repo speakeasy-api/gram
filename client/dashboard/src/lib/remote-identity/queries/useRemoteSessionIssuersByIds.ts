@@ -7,6 +7,8 @@ type IssuersByIds = {
   items: RemoteSessionIssuer[];
   isLoading: boolean;
   isError: boolean;
+  /** Refetch the lookups that failed. */
+  refetch: () => void;
 };
 
 // Module scope so the reference is stable: useQueries re-runs an inline
@@ -18,6 +20,11 @@ function combineIssuers(
     items: results.flatMap((result) => (result.data ? [result.data] : [])),
     isLoading: results.some((result) => result.isLoading),
     isError: results.some((result) => result.isError),
+    refetch: () => {
+      for (const result of results) {
+        if (result.isError) void result.refetch();
+      }
+    },
   };
 }
 

@@ -35,18 +35,27 @@ type ChainingRollouts = {
   /** Speakeasy vouches only where the sign-in has no identity provider. */
   speakeasyRollout: boolean;
   speakeasyIssuer: InternalSessionIssuer | undefined;
+  /** Speakeasy's issuer couldn't be read, so it might vouch. */
+  speakeasyUnknown?: boolean;
 };
 
 /** Who would vouch for this sign-in if it belonged to the organization. */
 export function chainingVouchers(
   issuer: UserSessionIssuer,
-  { externalRollout, speakeasyRollout, speakeasyIssuer }: ChainingRollouts,
+  {
+    externalRollout,
+    speakeasyRollout,
+    speakeasyIssuer,
+    speakeasyUnknown = false,
+  }: ChainingRollouts,
 ): ChainingProviders | undefined {
   const external =
     externalRollout &&
     !!issuer.trustedRemoteSessionIssuerId &&
     !!issuer.trustedRemoteSessionClientId;
-  const speakeasy = speakeasyRollout && speakeasyIssuerOn(speakeasyIssuer);
+  const speakeasy =
+    speakeasyRollout &&
+    (speakeasyUnknown || speakeasyIssuerOn(speakeasyIssuer));
   return external || speakeasy ? { external } : undefined;
 }
 

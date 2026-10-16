@@ -101,18 +101,28 @@ export function EmaAllowedProvidersEditor({
     ...candidates,
     ...saved.filter((entry) => !candidates.some((c) => c.key === entry.key)),
   ];
+  // A saved Speakeasy whose issuer was deleted and set up again; saving
+  // points it at the current issuer.
+  const speakeasyRecreated =
+    candidates.some((c) => c.kind === "speakeasy") &&
+    current.some(
+      (p) => p.kind === "speakeasy" && p.unavailableReason === "deleted",
+    );
   // Judged on every render, so a draft started before the candidates loaded
   // is checked against them once they have. An entry that is only paused or
   // disabled stays valid and gets a readiness note instead.
   const available = (entry: ProviderCandidate): boolean =>
     !candidatesReady ||
     (candidates.some((c) => c.key === entry.key) &&
-      current.find((p) => p.key === entry.key)?.unavailableReason !==
-        "deleted");
+      (entry.kind === "speakeasy" ||
+        current.find((p) => p.key === entry.key)?.unavailableReason !==
+          "deleted"));
   const readiness = (key: string): string | undefined => {
+    if (key === "speakeasy" && speakeasyRecreated)
+      return "Speakeasy was set up again. Save this list again to use it.";
     const provider = current.find((p) => p.key === key);
     return provider && !provider.usable && !provider.placeholder
-      ? provider.unavailable
+      ? `${provider.unavailable}. It’s skipped until it can vouch again.`
       : undefined;
   };
   const startEditing = (keys: string[]) => {
@@ -129,11 +139,13 @@ export function EmaAllowedProvidersEditor({
   const custom = editing || !isDefault;
   const checkedKeys = draft ?? saved.map((entry) => entry.key);
   const checked = rows.filter((row) => checkedKeys.includes(row.key));
+  // A refused Use default reports the conflict outside the editor too.
   const changedUnderneath =
-    editing && (conflict || (base !== null && !sameOrder(base, saved)));
+    conflict || (editing && base !== null && !sameOrder(base, saved));
   const dirty =
     editing &&
     (isDefault ||
+      (speakeasyRecreated && checkedKeys.includes("speakeasy")) ||
       !sameSet(
         checked.map((entry) => entry.key),
         saved.map((entry) => entry.key),
@@ -246,8 +258,9 @@ export function EmaAllowedProvidersEditor({
                 <Alert variant="warning" alignTop>
                   <div className="flex flex-col items-start gap-2">
                     <Text small className="block">
-                      What {serviceName} accepts changed since you started
-                      editing.{" "}
+                      {editing
+                        ? `What ${serviceName} accepts changed since you started editing.`
+                        : `Another admin changed what ${serviceName} accepts, so it wasn’t reset to the default.`}{" "}
                       {refreshing
                         ? "Loading the current choice…"
                         : saved.length > 0
@@ -255,24 +268,26 @@ export function EmaAllowedProvidersEditor({
                           : "It accepts every identity provider now."}
                     </Text>
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={stopEditing}
-                      >
-                        Discard my changes
-                      </Button>
+                      {editing && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={stopEditing}
+                        >
+                          Discard my changes
+                        </Button>
+                      )}
                       <Button
                         variant="tertiary"
                         size="sm"
                         disabled={refreshing}
                         onClick={() => {
-                          setBase(saved);
+                          if (editing) setBase(saved);
                           setConflict(false);
                           save.reset();
                         }}
                       >
-                        Review and keep editing
+                        {editing ? "Review and keep editing" : "Review"}
                       </Button>
                     </div>
                   </div>
@@ -399,7 +414,7 @@ export function EmaAllowedProvidersEditor({
             {(editing || custom) && (
               <SettingsSection.FooterHint>
                 {editing
-                  ? "Takes effect for the next person who connects."
+                  ? "Applies to each person’s next request. People already connected through a provider you remove lose access."
                   : "Go back to the default to accept every identity provider."}
               </SettingsSection.FooterHint>
             )}
@@ -508,7 +523,7 @@ function EntryNote({
   if (!readiness) return null;
   return (
     <Text as="span" muted small>
-      {readiness}. It’s skipped until it can vouch again.
+      {readiness}
     </Text>
   );
 }

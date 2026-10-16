@@ -90,14 +90,7 @@ export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
       render: (server) => {
         const status = serverStatus(server, stranded.has(server.id), row.name);
         return (
-          <span
-            className="flex min-w-0 flex-col"
-            title={
-              server.lastAcceptedAt
-                ? `${row.name} last accepted a sign-in here ${formatRelativeTime(server.lastAcceptedAt)}`
-                : undefined
-            }
-          >
+          <span className="flex min-w-0 flex-col">
             <span className="flex min-w-0 items-center gap-2">
               <StatusDot tone={status.tone} />
               <Text as="span" small className="truncate">
@@ -113,6 +106,12 @@ export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
                 title={status.reason}
               >
                 {status.reason}
+              </Text>
+            )}
+            {server.lastAcceptedAt && (
+              <Text as="span" muted small className="truncate pl-4">
+                Last accepted a sign-in{" "}
+                {formatRelativeTime(server.lastAcceptedAt)}
               </Text>
             )}
           </span>

@@ -33,6 +33,9 @@ const mocks = vi.hoisted(() => ({
   signInsState: "success" as "success" | "pending" | "error",
   signInsRefetch: vi.fn(),
   issuers: [] as { id: string; name: string; issuer: string }[],
+  speakeasyError: false,
+  speakeasyRefetch: vi.fn(),
+  oktaIssuerId: undefined as string | undefined,
 }));
 vi.mock("./EmaServiceServers", () => ({
   EmaServiceServers: () => <h3>Affected servers</h3>,
@@ -40,6 +43,7 @@ vi.mock("./EmaServiceServers", () => ({
 vi.mock("./useEmaServices", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./useEmaServices")>()),
   useEmaServices: () => mocks,
+  useOktaIssuerId: () => mocks.oktaIssuerId,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org", slug: "example" }),
@@ -52,12 +56,17 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: mocks.flag }),
 }));
 vi.mock("@/lib/featureFlags", () => ({
-  FEATURE_FLAGS: { emaProviders: "ema-providers" },
+  FEATURE_FLAGS: {
+    emaProviders: "ema-providers",
+    oktaConnections: "okta-connections",
+  },
 }));
 vi.mock("../useEnterpriseIssuer", () => ({
   useEnterpriseIssuer: () => ({
-    data: { issuer: mocks.speakeasyIssuer },
+    data: mocks.speakeasyError ? undefined : { issuer: mocks.speakeasyIssuer },
     isPending: false,
+    isError: mocks.speakeasyError,
+    refetch: mocks.speakeasyRefetch,
   }),
 }));
 vi.mock("@gram/client/react-query/organizationUserSessionIssuers.js", () => ({
@@ -240,6 +249,9 @@ beforeEach(() => {
   mocks.issuers = [
     { id: "okta", name: "Okta", issuer: "https://okta.example.com" },
   ];
+  mocks.speakeasyError = false;
+  mocks.speakeasyRefetch.mockReset();
+  mocks.oktaIssuerId = "okta";
 });
 afterEach(cleanup);
 
@@ -715,5 +727,135 @@ describe("one service", () => {
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mocks.signInsRefetch).toHaveBeenCalled();
+  });
+
+  it("waits for Speakeasy instead of dropping it when it fails to load", () => {
+    mocks.speakeasyError = true;
+    mocks.rows = [
+      { ...linear, isDefault: false, providers: [okta, speakeasy] },
+    ];
+    show();
+    expect(
+      screen.queryByText("No longer available. Uncheck it to save."),
+    ).toBeNull();
+    expect(editButton().disabled).toBe(true);
+    expect(
+      screen.getByText(
+        /Couldn’t load the identity providers you can choose from/,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.speakeasyRefetch).toHaveBeenCalled();
+  });
+
+  it("links the Cross App Access step to Okta only for the Okta connection", () => {
+    const entra = view({
+      key: "external-entra",
+      kind: "external",
+      name: "Entra",
+      remoteSessionIssuerId: "entra",
+      issuerUrl: "https://entra.example.com",
+    });
+    mocks.rows = [
+      {
+        ...linear,
+        isDefault: false,
+        providers: [okta, entra, speakeasy, placeholder],
+      },
+    ];
+    show();
+    const [oktaRow, entraRow, speakeasyRow, placeholderRow] = trustRows();
+    expect(
+      within(oktaRow!)
+        .getByRole("link", {
+          name: "Set up Linear in Okta’s Cross App Access",
+        })
+        .getAttribute("href"),
+    ).toBe("/?tab=identity-providers&provider=okta&view=cross-app-access");
+    expect(within(entraRow!).queryByRole("link")).toBeNull();
+    expect(
+      within(entraRow!).getByText("Set up Linear in Entra’s Cross App Access"),
+    ).toBeTruthy();
+    expect(within(speakeasyRow!).queryByText(/Cross App Access/)).toBeNull();
+    expect(within(placeholderRow!).queryByText(/Cross App Access/)).toBeNull();
+  });
+
+  it("doesn't link to Okta when its view isn't available", () => {
+    mocks.flag = "disabled";
+    mocks.rows = [
+      { ...linear, isDefault: false, providers: [okta, speakeasy] },
+    ];
+    show();
+    expect(within(trustRows()[0]!).queryByRole("link")).toBeNull();
+  });
+
+  it("says another admin changed the list when Use default is refused", async () => {
+    mocks.rows = [
+      { ...linear, isDefault: false, providers: [okta, speakeasy] },
+    ];
+    show();
+    mocks.saveError = conflict();
+    fireEvent.click(screen.getByRole("button", { name: "Use default" }));
+    expect(mocks.invalidate).toHaveBeenCalledWith("services");
+    expect(
+      screen.getByText(
+        /Another admin changed what Linear accepts, so it wasn’t reset to the default\./,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Discard my changes" }),
+    ).toBeNull();
+    const review = () =>
+      screen.getByRole<HTMLButtonElement>("button", { name: "Review" });
+    await waitFor(() => expect(review().disabled).toBe(false));
+    fireEvent.click(review());
+    expect(screen.queryByText(/Another admin changed/)).toBeNull();
+  });
+
+  it("says a removed provider cuts off people already connected", () => {
+    show();
+    fireEvent.click(editButton());
+    expect(
+      screen.getByText(
+        "Applies to each person’s next request. People already connected through a provider you remove lose access.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("keeps a saved Speakeasy whose issuer was set up again, and saves it onto the new one", () => {
+    const old = view({
+      usable: false,
+      unavailable: "Not set up",
+      unavailableReason: "deleted",
+    });
+    mocks.rows = [{ ...linear, isDefault: false, providers: [okta, old] }];
+    show();
+    expect(
+      screen.queryByText("No longer available. Uncheck it to save."),
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        "Speakeasy was set up again. Save this list again to use it.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(editButton());
+    expect(checkboxes()).toEqual([
+      { name: "Okta", checked: true },
+      { name: "Speakeasy", checked: true },
+    ]);
+    expect(saveButton().disabled).toBe(false);
+    fireEvent.click(saveButton());
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          setEMAProvidersRequestBody: expect.objectContaining({
+            providers: [
+              { kind: "external", remoteSessionIssuerId: "okta" },
+              { kind: "speakeasy" },
+            ],
+          }),
+        }),
+      }),
+    );
   });
 });

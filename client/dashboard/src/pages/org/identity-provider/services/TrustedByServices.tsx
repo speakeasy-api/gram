@@ -66,16 +66,8 @@ export function TrustedByServices(): JSX.Element {
             </Text>
           ) : (
             <div className="space-y-5">
-              <EntryList
-                label="Accepted Speakeasy"
-                entries={accepted}
-                tone="success"
-              />
-              <EntryList
-                label="Not accepted yet"
-                entries={waiting}
-                tone="neutral"
-              />
+              <EntryList label="Accepted Speakeasy" entries={accepted} />
+              <EntryList label="Not accepted yet" entries={waiting} />
             </div>
           )}
         </SettingsSection.Body>
@@ -87,11 +79,9 @@ export function TrustedByServices(): JSX.Element {
 function EntryList({
   label,
   entries,
-  tone,
 }: {
   label: string;
   entries: Entry[];
-  tone: "success" | "neutral";
 }): JSX.Element | null {
   if (entries.length === 0) return null;
   return (
@@ -102,7 +92,16 @@ function EntryList({
       <ul aria-label={label} className="space-y-2">
         {entries.map(({ row, provider }) => (
           <li key={row.key} className="flex items-baseline gap-2">
-            <StatusDot tone={tone} className="translate-y-[-1px]" />
+            <StatusDot
+              tone={
+                !provider.usable
+                  ? "warning"
+                  : provider.lastAcceptedAt
+                    ? "success"
+                    : "neutral"
+              }
+              className="translate-y-[-1px]"
+            />
             <Link
               to={emaServiceHref(row.vendorIssuer)}
               className="text-sm font-medium underline underline-offset-4"

@@ -30,7 +30,9 @@ import { StatusDot, type StatusDotTone } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { mapWithConcurrency } from "@/lib/bounded-concurrency";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
 import { formatRelativeTime } from "@/lib/dates";
@@ -242,6 +244,8 @@ export function IdentityChainingField({
   linkedClients,
   resource,
   remoteMcpServerId,
+  onlyWhenOn = false,
+  frame = (content) => <>{content}</>,
 }: {
   userSessionIssuer: UserSessionIssuer;
   providers: ChainingProviders;
@@ -252,7 +256,11 @@ export function IdentityChainingField({
   resource: string;
   /** Reuses the server's protected resource metadata probe for advertised scopes. */
   remoteMcpServerId?: string;
-}): JSX.Element {
+  /** Render nothing unless a binding is on, for when who can vouch is unknown. */
+  onlyWhenOn?: boolean;
+  /** Wraps whatever renders, so the caller's section shows only with it. */
+  frame?: (content: ReactNode) => JSX.Element;
+}): JSX.Element | null {
   const core = useGramContext();
   const gramProject = useProjectSlugForRequests();
   // The identity provider's own sign-in client is never a chaining target.
@@ -482,6 +490,10 @@ export function IdentityChainingField({
   ]);
   const issuerById = (id: string | undefined) =>
     issuers.items.find((issuer) => issuer.id === id);
+  const orgAdmin = hasScope("org:admin", organization.id);
+  // Organization-wide acceptance is withheld from people who can't read the organization.
+  const acceptanceKnown = orgAdmin || hasScope("org:read", organization.id);
+  const oktaView = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const vendor = serviceName(vendorIssuer.data?.name, resource);
   const signIn = {
     name: trustedIssuerId
@@ -489,9 +501,15 @@ export function IdentityChainingField({
       : "Speakeasy’s own sign-in",
     slug: userSessionIssuer.slug,
   };
-  const oktaIssuerId = useOktaIssuerId(
-    listed.some((provider) => !!provider.unavailableReason),
-  );
+  const oktaLookup =
+    orgAdmin &&
+    oktaView.status === "enabled" &&
+    listed.some(
+      (provider) =>
+        provider.kind === "external" && !!provider.remoteSessionIssuerId,
+    );
+  const connectedOktaId = useOktaIssuerId(oktaLookup);
+  const oktaIssuerId = oktaLookup ? connectedOktaId : undefined;
   const allVouchers = listed.map((provider) =>
     providerView(provider, {
       issuer: issuerById(provider.remoteSessionIssuerId),
@@ -518,7 +536,6 @@ export function IdentityChainingField({
     (row): row is ProviderView & { issuerUrl: string } => !!row.issuerUrl,
   );
   const noneUsable = !!emaProviders && usable.length === 0;
-  const orgAdmin = hasScope("org:admin", organization.id);
   // The vendor already trusts one of these, somewhere in the organization.
   const trusted = trusts.find((row) => row.lastAcceptedAt);
 
@@ -616,17 +633,20 @@ export function IdentityChainingField({
     )),
   );
 
+  if (onlyWhenOn && (resolvingClients || (!canUnlink && !staleBindings.length)))
+    return null;
+
   if (resolvingClients) {
-    return (
+    return frame(
       <SettingsSection.Body>
         <Skeleton className="h-5 w-48" />
         <Skeleton className="h-4 w-full max-w-md" />
-      </SettingsSection.Body>
+      </SettingsSection.Body>,
     );
   }
 
   if (candidates.length === 0) {
-    return (
+    return frame(
       <SettingsSection.Body>
         {staleNotices}
         <Text muted small>
@@ -634,7 +654,7 @@ export function IdentityChainingField({
             ? "Link a client for this server’s identity provider in Identity above first."
             : "Link a client registered with this server’s authorization server in Identity above first."}
         </Text>
-      </SettingsSection.Body>
+      </SettingsSection.Body>,
     );
   }
 
@@ -645,7 +665,7 @@ export function IdentityChainingField({
         ? "information"
         : "success";
 
-  return (
+  return frame(
     <>
       <SettingsSection.Body>
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -739,14 +759,20 @@ export function IdentityChainingField({
           ) : vouchers.length === 0 ? (
             <Text small>
               Nobody yet.{" "}
-              <Link
-                className="underline underline-offset-4"
-                to={identityHref(identityProvidersHref())}
-              >
-                Set up Speakeasy as an identity provider
-              </Link>
-              , or have people sign in through an identity provider you’ve
-              connected.
+              {orgAdmin ? (
+                <>
+                  <Link
+                    className="underline underline-offset-4"
+                    to={identityHref(identityProvidersHref())}
+                  >
+                    Set up Speakeasy as an identity provider
+                  </Link>
+                  , or have people sign in through an identity provider you’ve
+                  connected.
+                </>
+              ) : (
+                "An organization admin can set up Speakeasy as an identity provider, or connect one people sign in through."
+              )}
             </Text>
           ) : (
             <ul aria-label="Identity providers" className="space-y-1">
@@ -771,13 +797,18 @@ export function IdentityChainingField({
                         : `for people who signed in with ${row.name}`
                       : row.unavailable}
                   </Text>
-                  {row.fix && (
-                    <SettingsLink
-                      to={identityHref(providerFixLink(row.fix).href)}
-                    >
-                      {providerFixLink(row.fix).label}
-                    </SettingsLink>
-                  )}
+                  {row.fix &&
+                    (orgAdmin ? (
+                      <SettingsLink
+                        to={identityHref(providerFixLink(row.fix).href)}
+                      >
+                        {providerFixLink(row.fix).label}
+                      </SettingsLink>
+                    ) : (
+                      <Text muted small>
+                        An organization admin can fix this.
+                      </Text>
+                    ))}
                 </li>
               ))}
             </ul>
@@ -851,7 +882,7 @@ export function IdentityChainingField({
               ? "neutral"
               : trusts.some((row) => row.lastAcceptedAt)
                 ? "success"
-                : ready
+                : ready && acceptanceKnown
                   ? "warning"
                   : "neutral"
           }
@@ -880,17 +911,26 @@ export function IdentityChainingField({
                     <Text small className="font-medium">
                       {row.name}
                     </Text>
-                    <Text muted small>
-                      {acceptanceLabel(row.lastAcceptedAt)}
-                    </Text>
+                    {(acceptanceKnown || row.lastAcceptedAt) && (
+                      <Text muted small>
+                        {acceptanceLabel(row.lastAcceptedAt)}
+                      </Text>
+                    )}
                   </div>
                   {row.kind !== "speakeasy" ? (
                     orgAdmin ? (
-                      <SettingsLink
-                        to={identityHref(oktaViewHref("cross-app-access"))}
-                      >
-                        {crossAppAccessStep(vendor, row.name)}
-                      </SettingsLink>
+                      oktaIssuerId &&
+                      row.remoteSessionIssuerId === oktaIssuerId ? (
+                        <SettingsLink
+                          to={identityHref(oktaViewHref("cross-app-access"))}
+                        >
+                          {crossAppAccessStep(vendor, row.name)}
+                        </SettingsLink>
+                      ) : (
+                        <Text muted small className="block">
+                          {crossAppAccessStep(vendor, row.name)}
+                        </Text>
+                      )
                     ) : (
                       <Text muted small className="block">
                         An organization admin sets up {vendor} in {row.name}’s
@@ -1045,7 +1085,7 @@ export function IdentityChainingField({
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-    </>
+    </>,
   );
 }
 

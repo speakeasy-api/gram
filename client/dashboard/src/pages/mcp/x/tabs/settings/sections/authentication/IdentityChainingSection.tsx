@@ -6,7 +6,9 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { identityProvidersHref } from "@/pages/org/identity-provider/tabs";
@@ -119,13 +121,29 @@ export function IdentityChainingSection({
   const emaProvidersFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
   const speakeasyIssuer = useSpeakeasyIssuerStatus();
   const orgRoutes = useOrgRoutes();
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const orgAdmin = hasScope("org:admin", organization.id);
   const speakeasyRollout = emaProvidersFlag.status === "enabled";
+  // Without org:read the issuer query never runs; a binding may still be on.
+  const speakeasyUnreadable =
+    speakeasyIssuer.isPending && speakeasyIssuer.fetchStatus === "idle";
   const rollouts = {
     externalRollout: externalFlag.status === "enabled",
     speakeasyRollout,
     speakeasyIssuer: speakeasyIssuer.data,
   };
-  const providers = identityChainingProviders(userSessionIssuer, rollouts);
+  const known = identityChainingProviders(userSessionIssuer, rollouts);
+  const providers =
+    known ??
+    (speakeasyUnreadable
+      ? identityChainingProviders(userSessionIssuer, {
+          ...rollouts,
+          speakeasyUnknown: true,
+        })
+      : undefined);
+  // Who can vouch is unknown, so show only a binding that's already on.
+  const onlyWhenOn = !known && !!providers;
   const resource = sourceQuery.data?.url;
   const speakeasySetup =
     userSessionIssuer?.projectId === "" &&
@@ -142,7 +160,11 @@ export function IdentityChainingSection({
 
   const applies = !!userSessionIssuerId && remoteMcpServerId !== "";
   const failed =
-    issuerQuery.isError || sourceQuery.isError || clientsQuery.isError;
+    issuerQuery.isError ||
+    sourceQuery.isError ||
+    clientsQuery.isError ||
+    // Only when Speakeasy's issuer decides whether anyone can vouch.
+    (speakeasyRollout && speakeasyIssuer.isError && !known);
   const loading =
     !failed &&
     (issuerQuery.isLoading ||
@@ -161,6 +183,19 @@ export function IdentityChainingSection({
   useScrollWhenReady(shown && !loading);
 
   if (!shown) return null;
+  if (onlyWhenOn && !loading && !failed && userSessionIssuer && resource) {
+    return (
+      <IdentityChainingField
+        userSessionIssuer={userSessionIssuer}
+        providers={providers}
+        linkedClients={clients}
+        resource={resource}
+        remoteMcpServerId={remoteMcpServerId}
+        onlyWhenOn
+        frame={(content) => <Shell>{content}</Shell>}
+      />
+    );
+  }
   if (loading) {
     return (
       <Shell>
@@ -183,6 +218,7 @@ export function IdentityChainingSection({
                 void issuerQuery.refetch();
                 void sourceQuery.refetch();
                 clientsQuery.refetch();
+                if (speakeasyIssuer.isError) void speakeasyIssuer.refetch();
               }}
             >
               Retry
@@ -221,13 +257,19 @@ export function IdentityChainingSection({
         <SettingsSection.Body>
           <Text muted small>
             No identity provider can vouch for people on this server yet.{" "}
-            <Link
-              className="underline underline-offset-4"
-              to={`${orgRoutes.identity.href()}${identityProvidersHref()}`}
-            >
-              Set up Speakeasy as an identity provider
-            </Link>{" "}
-            to turn this on.
+            {orgAdmin ? (
+              <>
+                <Link
+                  className="underline underline-offset-4"
+                  to={`${orgRoutes.identity.href()}${identityProvidersHref()}`}
+                >
+                  Set up Speakeasy as an identity provider
+                </Link>{" "}
+                to turn this on.
+              </>
+            ) : (
+              "An organization admin can set up Speakeasy as an identity provider to turn this on."
+            )}
           </Text>
         </SettingsSection.Body>
       )}

@@ -89,6 +89,28 @@ describe("Services that use Speakeasy as their identity provider", () => {
     ).toBe("/?tab=identity-providers&service=https%3A%2F%2FLinear.example.com");
   });
 
+  it("warns, not succeeds, when an accepting service's Speakeasy can't sign", () => {
+    const row = service("Linear", new Date(Date.now() - 2 * 60 * 60 * 1000));
+    mocks.rows = [
+      {
+        ...row,
+        providers: row.providers.map((provider) => ({
+          ...provider,
+          usable: false,
+          unavailable: "Can’t sign right now",
+        })),
+      },
+    ];
+    show();
+    const [item] = within(
+      screen.getByRole("list", { name: "Accepted Speakeasy" }),
+    ).getAllByRole("listitem");
+    expect(item?.textContent).toBe("LinearCan’t sign right now");
+    expect(item?.querySelector("[data-tone]")?.getAttribute("data-tone")).toBe(
+      "warning",
+    );
+  });
+
   it("leaves out services that can't use Speakeasy", () => {
     mocks.rows = [{ ...service("Linear", undefined), providers: [] }];
     show();

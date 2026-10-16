@@ -27,6 +27,8 @@ const issuerNames = vi.hoisted(() => ({
 }));
 const state = vi.hoisted(() => ({
   orgAdmin: true,
+  orgRead: true,
+  oktaView: true,
   calls: [] as string[],
   prepare: vi.fn(),
   unlink: vi.fn(),
@@ -74,8 +76,21 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: string) => scope !== "org:admin" || state.orgAdmin,
+    hasScope: (scope: string) =>
+      scope === "org:admin"
+        ? state.orgAdmin
+        : scope === "org:read"
+          ? state.orgRead
+          : true,
   }),
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({
+    status: state.oktaView ? "enabled" : "disabled",
+  }),
+}));
+vi.mock("@/lib/featureFlags", () => ({
+  FEATURE_FLAGS: { oktaConnections: "okta-connections" },
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
@@ -196,6 +211,8 @@ beforeEach(() => {
   issuerNames.isLoading = false;
   issuerNames.isError = false;
   state.orgAdmin = true;
+  state.orgRead = true;
+  state.oktaView = true;
   state.calls.length = 0;
   state.prepare.mockReset();
   state.unlink.mockReset();
@@ -604,6 +621,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("walks the chain: sign-in, who vouches, what the vendor trusts, client", () => {
+    state.oktaIssuerId = "okta";
     read.data = {
       ...bound("first"),
       emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
@@ -1024,5 +1042,101 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField());
     expect(screen.queryByText("Requested scopes")).toBeNull();
     expect(screen.queryByText("Save scopes")).toBeNull();
+  });
+
+  it("links Cross App Access to Okta only for the Okta connection", () => {
+    state.oktaIssuerId = "another-okta";
+    read.data = {
+      ...bound("first"),
+      emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
+    };
+    render(speakeasyField({ userSessionIssuer: trusting }));
+    expect(
+      screen.queryByRole("link", {
+        name: "Set up example.com in Okta’s Cross App Access",
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByText("Set up example.com in Okta’s Cross App Access"),
+    ).toBeTruthy();
+  });
+
+  it("doesn't link Cross App Access when the Okta view isn't available", () => {
+    state.oktaIssuerId = "okta";
+    state.oktaView = false;
+    read.data = {
+      ...bound("first"),
+      emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
+    };
+    render(speakeasyField({ userSessionIssuer: trusting }));
+    expect(screen.queryByRole("link", { name: /Cross App Access/ })).toBeNull();
+  });
+
+  it("says nothing about acceptance when it's withheld", () => {
+    state.orgAdmin = false;
+    state.orgRead = false;
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
+    render(speakeasyField());
+    expect(trusts()).toEqual([
+      {
+        name: "Speakeasy",
+        accepted: undefined,
+        url: "https://speakeasy.example.com/issuer",
+      },
+    ]);
+  });
+
+  it("names an admin instead of linking fixes for people who can't open them", () => {
+    state.orgAdmin = false;
+    read.data = {
+      ...unlinked,
+      generation: 0,
+      emaProviders: providersOf({ ...speakeasy, unavailableReason: "keyless" }),
+    };
+    render(speakeasyField());
+    expect(screen.queryByRole("link", { name: "Fix in Speakeasy" })).toBeNull();
+    expect(
+      screen.getByText("An organization admin can fix this."),
+    ).toBeTruthy();
+  });
+
+  it("names an admin instead of linking setup when nobody is listed", () => {
+    state.orgAdmin = false;
+    read.data = { ...unlinked, generation: 0, emaProviders: providersOf() };
+    render(speakeasyField());
+    expect(
+      screen.queryByRole("link", {
+        name: "Set up Speakeasy as an identity provider",
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        /An organization admin can set up Speakeasy as an identity provider/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("renders nothing while off when only an on binding should show", () => {
+    read.data = { ...unlinked, generation: 0 };
+    const { container } = render(
+      speakeasyField({
+        onlyWhenOn: true,
+        frame: (content) => <section>{content}</section>,
+      }),
+    );
+    expect(container.querySelector("section")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+  });
+
+  it("keeps Turn off for an on binding when only an on binding should show", () => {
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
+    const { container } = render(
+      speakeasyField({
+        onlyWhenOn: true,
+        frame: (content) => <section>{content}</section>,
+      }),
+    );
+    expect(container.querySelector("section")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
   });
 });

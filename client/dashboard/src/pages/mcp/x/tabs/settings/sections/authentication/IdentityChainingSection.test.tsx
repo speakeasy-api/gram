@@ -18,6 +18,9 @@ const state = vi.hoisted(() => ({
   sourceError: false,
   hash: "",
   refetch: vi.fn(),
+  speakeasyStatus: "success" as "success" | "loading" | "error" | "disabled",
+  speakeasyRefetch: vi.fn(),
+  orgAdmin: true,
 }));
 
 vi.mock("./authTarget", () => ({
@@ -84,22 +87,46 @@ vi.mock("@/lib/featureFlags", () => ({
   },
 }));
 vi.mock("./useSpeakeasyIssuerStatus", () => ({
-  useSpeakeasyIssuerStatus: () => ({ data: state.speakeasy, isLoading: false }),
+  useSpeakeasyIssuerStatus: () => ({
+    data: state.speakeasyStatus === "success" ? state.speakeasy : undefined,
+    isLoading: state.speakeasyStatus === "loading",
+    isPending: state.speakeasyStatus !== "success",
+    isError: state.speakeasyStatus === "error",
+    fetchStatus: state.speakeasyStatus === "loading" ? "fetching" : "idle",
+    refetch: state.speakeasyRefetch,
+  }),
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org" }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope !== "org:admin" || state.orgAdmin,
+  }),
 }));
 vi.mock("./IdentityChainingField", () => ({
   IdentityChainingField: (props: {
     providers: { external: boolean };
     speakeasyIssuerUrl?: string;
     resource: string;
-  }) => (
-    <div data-testid="identity-chaining">
-      {JSON.stringify({
-        providers: props.providers,
-        speakeasyIssuerUrl: props.speakeasyIssuerUrl,
-        resource: props.resource,
-      })}
-    </div>
-  ),
+    onlyWhenOn?: boolean;
+    frame?: (content: ReactNode) => ReactNode;
+  }) => {
+    const content = (
+      <>
+        <div data-testid="identity-chaining">
+          {JSON.stringify({
+            providers: props.providers,
+            speakeasyIssuerUrl: props.speakeasyIssuerUrl,
+            resource: props.resource,
+            ...(props.onlyWhenOn ? { onlyWhenOn: true } : {}),
+          })}
+        </div>
+        <button type="button">Turn off</button>
+      </>
+    );
+    return props.frame ? props.frame(content) : content;
+  },
 }));
 
 const server = {
@@ -122,6 +149,9 @@ beforeEach(() => {
   state.sourceError = false;
   state.hash = "";
   state.refetch.mockReset();
+  state.speakeasyStatus = "success";
+  state.speakeasyRefetch.mockReset();
+  state.orgAdmin = true;
 });
 
 afterEach(cleanup);
@@ -171,6 +201,59 @@ describe("IdentityChainingSection", () => {
         .getByRole("link", { name: "Set up Speakeasy as an identity provider" })
         .getAttribute("href"),
     ).toBe("/org/identity?tab=identity-providers");
+  });
+
+  it("asks someone who isn't an org admin to have Speakeasy set up", () => {
+    state.orgAdmin = false;
+    state.speakeasy = { state: "setup_required" };
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.queryByRole("link", {
+        name: "Set up Speakeasy as an identity provider",
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        /An organization admin can set up Speakeasy as an identity provider/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("holds its place while Speakeasy's issuer loads", () => {
+    state.speakeasyStatus = "loading";
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Loading Enterprise Managed Authorization…",
+    );
+  });
+
+  it("says when Speakeasy's issuer couldn't load, with a retry", () => {
+    state.speakeasyStatus = "error";
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.getByText(
+        "Couldn’t load Enterprise Managed Authorization for this server.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.speakeasyRefetch).toHaveBeenCalled();
+  });
+
+  it("keeps an on binding manageable for someone who can't read Speakeasy's issuer", () => {
+    state.speakeasyStatus = "disabled";
+    state.orgAdmin = false;
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
+    ).toBeTruthy();
+    expect(
+      JSON.parse(screen.getByTestId("identity-chaining").textContent!),
+    ).toEqual({
+      providers: { external: false },
+      resource: "https://mcp.vendor.example.com/mcp",
+      onlyWhenOn: true,
+    });
+    expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
   });
 
   it.each([

@@ -97,6 +97,18 @@ describe("Servers on a service page", () => {
     expect(screen.queryByText(/don’t have access/)).toBeNull();
   });
 
+  it("shows when the service last accepted a sign-in on each server", () => {
+    show(
+      row({
+        serverCount: 1,
+        servers: [
+          server({ lastAcceptedAt: new Date(Date.now() - 2 * 60 * 60 * 1000) }),
+        ],
+      }),
+    );
+    expect(screen.getByText("Last accepted a sign-in 2h ago")).toBeTruthy();
+  });
+
   it("counts servers the viewer can't see without naming them", () => {
     show(row({ serverCount: 3, servers: [server({})], hiddenServerCount: 2 }));
     expect(
