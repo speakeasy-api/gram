@@ -1,4 +1,4 @@
-package mcpendpoints_test
+package endpointaddr_test
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 )
 
@@ -31,17 +31,17 @@ func TestPrimaryEndpoint_Ordering(t *testing.T) {
 	olderCustom := endpointFixture("older-custom", domain, false, base.Add(time.Hour))
 	newerRoot := endpointFixture("newer-root", domain, true, base.Add(2*time.Hour))
 
-	require.Nil(t, mcpendpoints.PrimaryEndpoint(nil))
+	require.Nil(t, endpointaddr.PrimaryEndpoint(nil))
 
-	got := mcpendpoints.PrimaryEndpoint([]repo.McpEndpoint{platform, olderCustom})
+	got := endpointaddr.PrimaryEndpoint([]repo.McpEndpoint{platform, olderCustom})
 	require.Equal(t, "older-custom", got.Slug, "custom domain outranks platform")
 
-	got = mcpendpoints.PrimaryEndpoint([]repo.McpEndpoint{platform, olderCustom, newerRoot})
+	got = endpointaddr.PrimaryEndpoint([]repo.McpEndpoint{platform, olderCustom, newerRoot})
 	require.Equal(t, "newer-root", got.Slug, "domain root outranks older non-root")
 
 	oldPlatform := endpointFixture("old-platform", uuid.NullUUID{}, false, base)
 	newPlatform := endpointFixture("new-platform", uuid.NullUUID{}, false, base.Add(time.Minute))
-	got = mcpendpoints.PrimaryEndpoint([]repo.McpEndpoint{newPlatform, oldPlatform})
+	got = endpointaddr.PrimaryEndpoint([]repo.McpEndpoint{newPlatform, oldPlatform})
 	require.Equal(t, "old-platform", got.Slug, "earlier creation wins within a rank")
 
 	tieA := endpointFixture("tie-a", uuid.NullUUID{}, false, base)
@@ -50,9 +50,9 @@ func TestPrimaryEndpoint_Ordering(t *testing.T) {
 	if tieB.ID.String() < tieA.ID.String() {
 		want = tieB
 	}
-	got = mcpendpoints.PrimaryEndpoint([]repo.McpEndpoint{tieA, tieB})
+	got = endpointaddr.PrimaryEndpoint([]repo.McpEndpoint{tieA, tieB})
 	require.Equal(t, want.ID, got.ID, "equal created_at breaks ties by id")
-	got = mcpendpoints.PrimaryEndpoint([]repo.McpEndpoint{tieB, tieA})
+	got = endpointaddr.PrimaryEndpoint([]repo.McpEndpoint{tieB, tieA})
 	require.Equal(t, want.ID, got.ID, "tie-break is order-independent")
 }
 
@@ -64,15 +64,15 @@ func TestEndpointURL(t *testing.T) {
 	custom := endpointFixture("custom", domain, false, time.Now())
 	platform := endpointFixture("platform", uuid.NullUUID{}, false, time.Now())
 
-	u, err := mcpendpoints.EndpointURL(&root, "mcp.example.com", "http://0.0.0.0")
+	u, err := endpointaddr.EndpointURL(&root, "mcp.example.com", "http://0.0.0.0")
 	require.NoError(t, err)
 	require.Equal(t, "https://mcp.example.com", u)
 
-	u, err = mcpendpoints.EndpointURL(&custom, "mcp.example.com", "http://0.0.0.0")
+	u, err = endpointaddr.EndpointURL(&custom, "mcp.example.com", "http://0.0.0.0")
 	require.NoError(t, err)
 	require.Equal(t, "https://mcp.example.com/mcp/custom", u)
 
-	u, err = mcpendpoints.EndpointURL(&platform, "", "http://0.0.0.0/")
+	u, err = endpointaddr.EndpointURL(&platform, "", "http://0.0.0.0/")
 	require.NoError(t, err)
 	require.Equal(t, "http://0.0.0.0/mcp/platform", u, "trailing slash on serverURL does not double the separator")
 }

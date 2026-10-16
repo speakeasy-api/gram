@@ -52,6 +52,7 @@ type RoleProvider interface {
 	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
 	ListDirectories(ctx context.Context, organizationID string) ([]workos.Directory, error)
 	ListDirectoryGroups(ctx context.Context, directoryID string) ([]workos.DirectoryGroup, error)
+	ListDirectoryGroupUsers(ctx context.Context, groupID string) ([]workos.DirectoryUser, error)
 }
 
 // RoleManager owns role reads and writes against local records, then syncs successful writes to WorkOS.
