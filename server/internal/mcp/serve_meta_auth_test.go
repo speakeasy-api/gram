@@ -14,6 +14,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) {
@@ -72,6 +73,45 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 			// Independent wrappers do not inherit legacy endpoint enablement.
 			_, err = toolsetsrepo.New(ti.conn).UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{Name: toolset.Name, Description: toolset.Description, DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug, McpSlug: toolset.McpSlug, McpIsPublic: !tt.private, McpEnabled: false, Slug: toolset.Slug, ProjectID: toolset.ProjectID})
 			require.NoError(t, err)
+			w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			if tt.listed {
+				require.Contains(t, w.Body.String(), slug)
+			} else {
+				require.NotContains(t, w.Body.String(), slug)
+			}
+		})
+	}
+}
+
+// Toolsets with Platform tools are never distributed automatically, so the
+// organization gateway leaves them out just as automatic plugin delivery does.
+func TestServeOrganizationGateway_ExcludesPlatformToolsets(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name   string
+		tools  []urn.Tool
+		listed bool
+	}{
+		{name: "without tools", tools: []urn.Tool{}, listed: true},
+		{name: "with a platform tool", tools: []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "add_reaction")}, listed: false},
+		// Only the kind segment marks a Platform tool.
+		{name: "with a platform-named source", tools: []urn.Tool{urn.NewTool(urn.ToolKindHTTP, "platform", "add_reaction")}, listed: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			fx := seedOrganizationGateway(t, ctx, ti)
+			auth, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			slug := "platform-member-" + uuid.NewString()[:8]
+			toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), auth, slug)
+			_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{ID: uuid.New(), ProjectID: *auth.ProjectID, Name: conv.ToPGText(tt.name), Slug: conv.ToPGText(slug), ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPublic})
+			require.NoError(t, err)
+			_, err = toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{ToolsetID: toolset.ID, Version: 1, ToolUrns: tt.tools, ResourceUrns: []urn.Resource{}, PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+			require.NoError(t, err)
+
 			w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, w.Code, w.Body.String())

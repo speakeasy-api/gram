@@ -1,4 +1,4 @@
-h1:sOBr/5kiCBfuq8Qg8ZZ0lyUcrlyleYVP0CZHUFmlWxY=
+h1:phvvRoBuGVfnDn4EDjElAgYkFbK26FVkUjjkWTVgw64=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -472,5 +472,7 @@ h1:sOBr/5kiCBfuq8Qg8ZZ0lyUcrlyleYVP0CZHUFmlWxY=
 20261013232309_sign-in-method-evidence.sql h1:0/kWcgfZg6dafD/LopCWUgKrlysf6jq2TFh1sIyfNrg=
 20261015093918_sigint_sliding_windows.sql h1:QNosxelv6yIY4WGy6yiWmCb5wJkOv/0h/MVFItmtXT8=
 20261015185547_promotion_ledger_signup_offers.sql h1:vYR6/rG62LpP+MvSq6oR5Nc69PRGJ4VH4ZvOnCJnzxs=
-20261016155206_mcp-server-remote-session-clients.sql h1:blqGm2IoJD++dzgJtxzROW/W8l3FDqpH/YRtHxnlA6o=
-20261016161046_credential-upstream-client-selections.sql h1:nAmX0p96c74cTC8aU0qpOdySE6Mep4fK/IItfTQIbek=
+20261016170611_user-session-consent-resources.sql h1:BdRdLxrrRfX+3MlF4VeXNRzyNvNBK2GpOiVIug0Ovok=
+20261016182740_consent-resources-consent-id-index.sql h1:+YR3EnqZjHBoKgvSfuZpfgtRSfYekGBb72qwcSnJlzE=
+20261016214552_mcp-server-remote-session-clients.sql h1:sWS4uNArAJ0UDAIrXX3+hoKq3qR8CfYk5rTaKS435L8=
+20261016220025_credential-upstream-client-selections.sql h1:/IM4+zHpHbxthuX0cC2yw1AI/HnnhcR35LGAmMrYzYY=

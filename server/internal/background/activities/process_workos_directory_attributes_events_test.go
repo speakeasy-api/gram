@@ -231,6 +231,62 @@ func TestProcessWorkOSOrganizationEvents_OpensAndClosesDirectoryMembership(t *te
 	require.Equal(t, 0, countCurrentMemberships(t, ctx, conn, groupID, directoryUserID))
 }
 
+func TestProcessWorkOSOrganizationEvents_MembershipForUnknownGroupCreatesGroupAndOpensMembership(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_directory_attrs_unknown_group")
+	logger := testenv.NewLogger(t)
+
+	const (
+		gramOrgID       = "gram_directory_unknown_group_org"
+		workosOrgID     = "org_directory_unknown_group"
+		groupID         = "directory_group_unknown"
+		directoryUserID = "directory_user_unknown_group"
+		email           = "directory.unknown.group@example.com"
+	)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, gramOrgID, workosOrgID)
+	_, err := directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+		OrganizationID:        gramOrgID,
+		UserID:                conv.ToPGTextEmpty(""),
+		WorkosDirectoryUserID: directoryUserID,
+		Email:                 conv.ToPGText(email),
+		Attributes:            []byte(`{}`),
+		RestoreDeleted:        true,
+		WorkosCreatedAt:       conv.ToPGTimestamptz(directorySyncTime()),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(directorySyncTime()),
+		WorkosLastEventID:     conv.ToPGText("event_seed_user"),
+	})
+	require.NoError(t, err)
+
+	// The cursor already sits past the group's history: its
+	// dsync.group.created event and earlier membership events were never
+	// fetched, so this later membership event is the first time the group is
+	// seen.
+	_, err = workosrepo.New(conn).SetOrganizationSyncLastEventID(ctx, workosrepo.SetOrganizationSyncLastEventIDParams{
+		WorkosOrganizationID: workosOrgID,
+		LastEventID:          "event_cursor_past_group_history",
+	})
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_unknown_group_user_added", Event: "dsync.group.user_added", CreatedAt: time.Now(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, email)},
+	}})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_cursor_past_group_history", workosClient.EventCalls()[0].After, "only events after the cursor are fetched")
+	require.Equal(t, "event_unknown_group_user_added", res.LastEventID)
+	require.Equal(t, 1, countCurrentMemberships(t, ctx, conn, groupID, directoryUserID))
+
+	organizationID, name, _, deleted := getDirectoryGroupRow(t, ctx, conn, groupID)
+	require.Equal(t, gramOrgID, organizationID)
+	require.Equal(t, "Platform", name)
+	require.False(t, deleted)
+}
+
 func TestProcessWorkOSOrganizationEvents_RemoveMissingDirectoryMembershipNoops(t *testing.T) {
 	t.Parallel()
 

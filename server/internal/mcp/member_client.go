@@ -17,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -36,7 +37,7 @@ var errMemberUnroutable = errors.New("member is not reachable")
 // apply, and records any authentication rejection the member answered with.
 type memberRoundTripper struct {
 	build memberProxyBuilder
-	// deadline bounds the operation; a legacy DELETE after it still gets closeFloor.
+	// deadline bounds the operation; a legacy DELETE or a cancellation notice after it still gets closeFloor.
 	deadline   time.Time
 	closeFloor time.Duration
 
@@ -53,8 +54,9 @@ type memberRoundTripper struct {
 	deleteAttempted bool
 }
 
-// closeBudget bounds a session DELETE: the usual close timeout while the probe
-// has that much left, never less than the floor once it has not.
+// closeBudget bounds a session DELETE or a cancellation notice: the usual close
+// timeout while the probe has that much left, never less than the floor once it
+// has not.
 func (rt *memberRoundTripper) closeBudget() time.Duration {
 	return min(memberSessionCloseTimeout, max(time.Until(rt.deadline), 0)+rt.closeFloor)
 }
@@ -85,6 +87,13 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		Method string `json:"method"`
 	}
 	_ = json.Unmarshal(requestBody, &rpc)
+	if rpc.Method == mcpversions.MethodNotificationsCancelled {
+		// The SDK notifies on its own detached context after the operation's
+		// deadline, so a member that never answers would hold it past the budget.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, rt.closeBudget())
+		defer cancel()
+	}
 	// The SDK falls back to initialize after any server/discover failure, and
 	// cleanup must not overwrite the outcome of the call, so neither is recorded.
 	record := req.Method != http.MethodDelete && rpc.Method != "server/discover"

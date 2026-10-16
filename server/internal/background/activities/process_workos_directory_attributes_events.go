@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/workos/workos-go/v6/pkg/directorysync"
@@ -383,6 +385,22 @@ func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx databas
 }
 
 func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupMembershipEventPayload) error {
+	// Lock the group before reading its memberships, so this event runs
+	// strictly before or after a member reconcile of the same group.
+	groupID, err := directoryrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.Group.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		groupID, err = createDirectoryGroupFromMembership(ctx, dbtx, event, payload.Group)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		logger.WarnContext(ctx, "skipping directory group membership for unknown group",
+			attr.SlogWorkOSDirectoryGroupID(payload.Group.ID),
+		)
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get directory group ID by WorkOS ID")
+	}
+
 	latest, err := directoryrepo.New(dbtx).GetLatestDirectoryUserGroupMembershipByWorkOSIDs(ctx, directoryrepo.GetLatestDirectoryUserGroupMembershipByWorkOSIDsParams{
 		WorkosDirectoryUserID:  payload.User.ID,
 		WorkosDirectoryGroupID: payload.Group.ID,
@@ -405,17 +423,6 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 		return oops.E(oops.CodeUnexpected, err, "get directory user ID by WorkOS ID")
 	}
 
-	groupID, err := directoryrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.Group.ID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		logger.WarnContext(ctx, "skipping directory group membership for unknown group",
-			attr.SlogWorkOSDirectoryGroupID(payload.Group.ID),
-		)
-		return nil
-	}
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get directory group ID by WorkOS ID")
-	}
-
 	if _, err := directoryrepo.New(dbtx).OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
 		DirectoryUserID:        userID,
 		DirectoryGroupID:       groupID,
@@ -428,7 +435,43 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 	return nil
 }
 
+// createDirectoryGroupFromMembership saves the group embedded in a membership
+// event when no row for it exists at all. A group whose dsync.group.created
+// event predates the organization's event cursor is otherwise never saved,
+// and every membership event for it would be dropped. A group row that exists
+// but is deleted is left alone, so a deletion is never undone here. It
+// returns pgx.ErrNoRows when the group cannot be created.
+func createDirectoryGroupFromMembership(ctx context.Context, dbtx database.DBTX, event events.Event, group workosDirectoryGroupEventPayload) (uuid.UUID, error) {
+	_, err := directoryrepo.New(dbtx).GetDirectoryGroupSyncStateByWorkOSID(ctx, group.ID)
+	switch {
+	case err == nil:
+		return uuid.Nil, pgx.ErrNoRows
+	case !errors.Is(err, pgx.ErrNoRows):
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "get directory group sync state")
+	}
+	if group.OrganizationID == "" {
+		return uuid.Nil, pgx.ErrNoRows
+	}
+
+	if err := upsertDirectoryGroup(ctx, dbtx, event, group); err != nil {
+		return uuid.Nil, err
+	}
+
+	groupID, err := directoryrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, group.ID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("get created directory group ID: %w", err)
+	}
+	return groupID, nil
+}
+
 func closeDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryGroupMembershipEventPayload) error {
+	// Lock the group before reading its memberships, so a member reconcile
+	// cannot open this membership between the read and the close. A group
+	// with no live row has nothing to lock and nothing a reconcile could open.
+	if _, err := directoryrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.Group.ID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "lock directory group")
+	}
+
 	latest, err := directoryrepo.New(dbtx).GetLatestDirectoryUserGroupMembershipByWorkOSIDs(ctx, directoryrepo.GetLatestDirectoryUserGroupMembershipByWorkOSIDsParams{
 		WorkosDirectoryUserID:  payload.User.ID,
 		WorkosDirectoryGroupID: payload.Group.ID,
