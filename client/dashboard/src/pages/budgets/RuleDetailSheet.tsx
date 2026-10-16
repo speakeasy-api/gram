@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { EventTypeBadge, RuleActionBadge, UsageBar } from "./budget-shared";
 import {
   WINDOW_LABELS,
+  isRuleTargetOperator,
   formatUsd,
   parseRuleUrn,
   sortEventsByRecency,
@@ -189,9 +190,10 @@ function RuleDetail({
         </section>
 
         {/* Who is driving the spend */}
-        {!knownWindow ? (
+        {!knownWindow || !isRuleTargetOperator(rule.target.operator) ? (
           <p className="text-muted-foreground text-xs">
-            Usage preview is unavailable for this window. Refresh the page for
+            Usage preview is unavailable for this{" "}
+            {!knownWindow ? "window" : "target condition"}. Refresh the page for
             updated support.
           </p>
         ) : (

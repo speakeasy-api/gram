@@ -1,4 +1,4 @@
-import { supportsAudienceEditing } from "./manageAccessState";
+import { supportsAudienceReading } from "./manageAccessState";
 import { enumPresentation } from "@/lib/enum";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
@@ -246,7 +246,7 @@ export function effectiveReach(
   principalUrn?: string,
 ): EffectiveReach | null {
   // An unknown level might grant or deny access; do not infer either.
-  if (!supportsAudienceEditing(allReaching)) {
+  if (!supportsAudienceReading(allReaching)) {
     return {
       toolsLabel: "Access unknown",
       capabilities: [],
@@ -425,9 +425,13 @@ export function narrowingLabel(entry: {
   tools?: string[];
   dispositions?: string[];
 }): string {
-  const dispositions = (entry.dispositions ?? []).map((disposition) =>
-    enumPresentation(DISPOSITION_LABEL, disposition, "unknown annotation"),
-  );
+  const dispositions = [
+    ...new Set(
+      (entry.dispositions ?? []).map((disposition) =>
+        enumPresentation(DISPOSITION_LABEL, disposition, "unknown annotation"),
+      ),
+    ),
+  ];
   const tools = entry.tools ?? [];
 
   // A rule stores one or the other, but a summary can hold both — from two

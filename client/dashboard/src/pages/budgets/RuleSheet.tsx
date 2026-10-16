@@ -30,6 +30,7 @@ import { Archive, Check, Loader2, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import {
   WINDOW_LABELS,
+  isRuleTargetOperator,
   defaultRuleDraft,
   formatUsd,
   toDraft,
@@ -155,6 +156,7 @@ function useRulePreview(
   useEffect(() => {
     if (
       !isKnownEnumValue(WindowKind, draft.windowKind) ||
+      !isRuleTargetOperator(draft.target.operator) ||
       draft.limitUsd <= 0 ||
       draft.target.value.trim() === ""
     ) {
@@ -208,8 +210,10 @@ function RuleForm({
   const { preview, loading: previewLoading } = useRulePreview(draft);
 
   const knownWindow = isKnownEnumValue(WindowKind, draft.windowKind);
+  const knownTarget = isRuleTargetOperator(draft.target.operator);
+  const canPreview = knownWindow && knownTarget;
   const supportedSettings =
-    knownWindow &&
+    canPreview &&
     isKnownEnumValue(CreateSpendRuleRequestBodyAction, draft.action);
   const canSubmit =
     supportedSettings &&
@@ -287,10 +291,12 @@ function RuleForm({
             onChange={(target) => patch({ target })}
             attributes={attributes}
           />
-          <MatchedActors
-            preview={draft.target.value.trim() === "" ? null : preview}
-            loading={previewLoading}
-          />
+          {knownTarget && (
+            <MatchedActors
+              preview={draft.target.value.trim() === "" ? null : preview}
+              loading={previewLoading}
+            />
+          )}
         </div>
 
         {/* Limit + window + warn threshold */}
@@ -405,7 +411,7 @@ function RuleForm({
         <div className="bg-muted/30 space-y-2 border p-4">
           <div className="flex items-center justify-between">
             <Text variant="small" className="font-medium">
-              {knownWindow
+              {canPreview
                 ? `Current usage this ${draft.windowKind} window`
                 : "Usage preview unavailable"}
             </Text>
@@ -415,9 +421,9 @@ function RuleForm({
           </div>
           {!preview ? (
             <p className="text-muted-foreground text-xs">
-              {knownWindow
+              {canPreview
                 ? "Choose a target condition to preview usage."
-                : "Refresh the page for updated support for this window."}
+                : "Refresh the page for updated support for this rule."}
             </p>
           ) : (
             <>
@@ -683,6 +689,15 @@ function TargetConditionField({
 
   const attribute = actorAttribute(attributes, condition.attribute);
   const operators = operatorsForAttribute(attribute);
+
+  if (!isRuleTargetOperator(condition.operator)) {
+    return (
+      <Text muted small>
+        This target condition is not supported by this dashboard yet. Refresh
+        the page before editing it.
+      </Text>
+    );
+  }
 
   return (
     <div className="space-y-2 border p-3">

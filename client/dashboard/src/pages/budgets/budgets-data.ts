@@ -25,7 +25,8 @@ export type RuleTargetOperator =
 
 export interface RuleTargetCondition {
   attribute: string;
-  operator: RuleTargetOperator;
+  // Preserve future operators from the API; only known operators can be edited.
+  operator: string;
   value: string;
 }
 
@@ -38,12 +39,6 @@ export interface ActorAttribute {
   /** Value kind: a scalar string, or a list of strings (uses `includes`). */
   type: "string" | "list";
   description: string;
-}
-
-interface RuleTargetLike {
-  attribute: string;
-  operator: string;
-  value: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -218,7 +213,7 @@ export function toDraft(rule: SpendRule): RuleDraft {
   return {
     name: rule.name,
     description: rule.description,
-    target: normalizeTargetCondition(rule.target),
+    target: { ...rule.target },
     limitUsd: rule.limitUsd,
     windowKind: rule.windowKind,
     warnAtPct: rule.warnAtPct,
@@ -325,7 +320,9 @@ export function formatUsd(amount: number): string {
   }).format(amount);
 }
 
-export function targetSummary(target: RuleTargetLike): string {
+export function targetSummary(target: RuleTargetCondition): string {
+  if (!isRuleTargetOperator(target.operator))
+    return "Unsupported target condition";
   return `${targetAttributeLabel(target.attribute)} ${operatorSummary(target.operator)} ${target.value}`;
 }
 
@@ -338,19 +335,7 @@ function targetAttributeLabel(name: string): string {
     .join(" ");
 }
 
-export function normalizeTargetCondition(
-  target: RuleTargetLike,
-): RuleTargetCondition {
-  return {
-    attribute: target.attribute,
-    operator: isRuleTargetOperator(target.operator)
-      ? target.operator
-      : "contains",
-    value: target.value,
-  };
-}
-
-function isRuleTargetOperator(
+export function isRuleTargetOperator(
   operator: string,
 ): operator is RuleTargetOperator {
   return (
@@ -364,7 +349,7 @@ function isRuleTargetOperator(
   );
 }
 
-function operatorSummary(operator: string): string {
+function operatorSummary(operator: RuleTargetOperator): string {
   switch (operator) {
     case "equals":
       return "is";
@@ -378,7 +363,7 @@ function operatorSummary(operator: string): string {
       return "matches";
     case "includes":
       return "includes";
-    default:
+    case "contains":
       return "contains";
   }
 }

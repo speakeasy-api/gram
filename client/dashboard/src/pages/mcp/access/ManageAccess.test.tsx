@@ -608,3 +608,39 @@ it("closes an open mutation dialog when a refreshed rule becomes unsupported", (
   expect(screen.getByText(/Some access rules are not supported/)).toBeDefined();
   expect(mutate).not.toHaveBeenCalled();
 });
+
+it("disables all editing for an unknown audience applicability", () => {
+  renderList([entry({ appliesTo: unrecognized("future_applicability") })]);
+  expandFirstRow();
+  for (const button of screen.getAllByRole("button", {
+    name: "Access unknown",
+  })) {
+    expect(button.hasAttribute("disabled")).toBe(true);
+  }
+  expect(
+    screen
+      .getByRole("button", { name: "Access cannot be changed here." })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen
+      .getByRole("button", { name: /Grant access/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mutate).not.toHaveBeenCalled();
+});
+
+it("explains the required admin permission on disabled remove controls", () => {
+  permission.admin = false;
+  renderList([entry({})]);
+  expect(
+    screen
+      .getByRole("button", {
+        name: "Only organization admins can change access.",
+      })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen.queryByRole("button", { name: "Access cannot be changed here." }),
+  ).toBeNull();
+});

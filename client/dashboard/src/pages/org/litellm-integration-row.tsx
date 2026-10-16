@@ -910,5 +910,7 @@ function errorKindLabel(
       return "Payload limit exceeded";
     case undefined:
       return undefined;
+    default:
+      return "Unknown";
   }
 }

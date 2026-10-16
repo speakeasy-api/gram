@@ -442,18 +442,20 @@ function ModifyRemoteIdentityProviderSheetBody({
     clientFieldsInitializedRef.current = true;
   }, [primaryClient]);
 
+  const supportsAuthMethod =
+    primaryClient?.tokenEndpointAuthMethod === undefined ||
+    narrowTokenEndpointAuthMethod(
+      primaryClient.tokenEndpointAuthMethod,
+      true,
+    ) !== undefined;
   const supportsClientEditing =
+    supportsAuthMethod &&
     (!isPrivateKeyJwtAuthMethod(tokenEndpointAuthMethod) ||
       primaryClient?.tokenEndpointAuthAudienceFormat === undefined ||
       isKnownEnumValue(
         UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
         primaryClient.tokenEndpointAuthAudienceFormat,
-      )) &&
-    (primaryClient?.tokenEndpointAuthMethod === undefined ||
-      narrowTokenEndpointAuthMethod(
-        primaryClient.tokenEndpointAuthMethod,
-        true,
-      ) !== undefined);
+      ));
   const submittable =
     !!primaryClient && issuerUrl.trim().length > 0 && supportsClientEditing;
 
@@ -594,6 +596,7 @@ function ModifyRemoteIdentityProviderSheetBody({
             clientSecret={clientSecret}
             tokenEndpointAuthMethod={tokenEndpointAuthMethod}
             allowPrivateKeyJwt={primaryClient?.jsonWebKeySetId != null}
+            unsupportedAuthMethod={!supportsAuthMethod}
             clientIdEditable={false}
             callbackURL={
               primaryClient ? (primaryClient.callbackUrl ?? null) : undefined

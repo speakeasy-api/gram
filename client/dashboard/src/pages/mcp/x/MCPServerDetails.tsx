@@ -335,6 +335,11 @@ const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
   hoverDotClass: "group-hover:bg-green-400",
 };
 
+const ALL_VISIBILITY_OPTIONS = [
+  ...VISIBILITY_OPTIONS,
+  PUBLIC_VISIBILITY_OPTION,
+];
+
 export function MCPServerStatusDropdown({
   server,
 }: {
@@ -349,13 +354,11 @@ export function MCPServerStatusDropdown({
     { enabled: isTunneled },
   );
   const sourceAllowsPublic = tunneledSource?.allowPublic ?? false;
-  const options = isTunneled
-    ? [...VISIBILITY_OPTIONS, PUBLIC_VISIBILITY_OPTION]
-    : VISIBILITY_OPTIONS;
+  const options = isTunneled ? ALL_VISIBILITY_OPTIONS : VISIBILITY_OPTIONS;
   const currentLabel = visibilityLabel(server.visibility);
   const currentDotClass =
-    options.find((option) => option.value === server.visibility)?.dotClass ??
-    "bg-muted-foreground";
+    ALL_VISIBILITY_OPTIONS.find((option) => option.value === server.visibility)
+      ?.dotClass ?? "bg-muted-foreground";
   // Public is gated on the source's consent; the option stays visible but
   // disabled, and this footer takes the owner to where consent is given.
   const publicBlocked = isTunneled && !sourceAllowsPublic;

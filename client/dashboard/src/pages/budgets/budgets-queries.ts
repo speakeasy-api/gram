@@ -31,7 +31,7 @@ import type { SpendRuleUsage as SdkSpendRuleUsage } from "@gram/client/models/co
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
-  normalizeTargetCondition,
+  isRuleTargetOperator,
   type ActorAttribute,
   type PreviewSpendRuleResult,
   type RuleDraft,
@@ -55,7 +55,7 @@ function mapRule(r: SdkSpendRule): SpendRule {
     version: r.version,
     name: r.name,
     description: r.description,
-    target: normalizeTargetCondition(r.target),
+    target: { ...r.target },
     targetExpr: r.targetExpr,
     ruleExpr: r.ruleExpr,
     limitUsd: r.limitUsd,
@@ -254,6 +254,7 @@ export function useCreateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   create: (draft: RuleDraft) => void;
   isPending: boolean;
 } {
+  const { onError } = cb;
   const mutation = useSpendRulesCreateRuleMutation({
     onSuccess: () => cb.onSuccess?.(),
     onError: (error) => cb.onError?.(error.message),
@@ -261,6 +262,12 @@ export function useCreateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   const { mutate } = mutation;
   const create = useCallback(
     (draft: RuleDraft) => {
+      if (!isRuleTargetOperator(draft.target.operator)) {
+        onError?.(
+          "Refresh the page before editing this unsupported target condition.",
+        );
+        return;
+      }
       mutate({
         request: {
           createSpendRuleRequestBody: {
@@ -274,7 +281,7 @@ export function useCreateBudgetRule(cb: BudgetMutationCallbacks = {}): {
         },
       });
     },
-    [mutate],
+    [mutate, onError],
   );
   return { create, isPending: mutation.isPending };
 }
@@ -283,6 +290,7 @@ export function useUpdateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   update: (input: UpdateBudgetRuleInput) => void;
   isPending: boolean;
 } {
+  const { onError } = cb;
   const mutation = useSpendRulesUpdateRuleMutation({
     onSuccess: () => cb.onSuccess?.(),
     onError: (error) => cb.onError?.(error.message),
@@ -290,6 +298,12 @@ export function useUpdateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   const { mutate } = mutation;
   const update = useCallback(
     (input: UpdateBudgetRuleInput) => {
+      if (input.target && !isRuleTargetOperator(input.target.operator)) {
+        onError?.(
+          "Refresh the page before editing this unsupported target condition.",
+        );
+        return;
+      }
       mutate({
         request: {
           updateSpendRuleRequestBody: {
@@ -309,7 +323,7 @@ export function useUpdateBudgetRule(cb: BudgetMutationCallbacks = {}): {
         },
       });
     },
-    [mutate],
+    [mutate, onError],
   );
   return { update, isPending: mutation.isPending };
 }
@@ -353,8 +367,12 @@ export function usePreviewBudgetRule(): {
       input: PreviewRuleInput,
       opts?: { onSuccess?: (result: PreviewSpendRuleResult) => void },
     ) => {
-      // Stored rules may use windows this dashboard cannot preview yet.
-      if (!isKnownEnumValue(WindowKind, input.windowKind)) return;
+      // Stored rules may use windows or target operators this dashboard cannot preview yet.
+      if (
+        !isKnownEnumValue(WindowKind, input.windowKind) ||
+        !isRuleTargetOperator(input.target.operator)
+      )
+        return;
       mutate(
         {
           request: {

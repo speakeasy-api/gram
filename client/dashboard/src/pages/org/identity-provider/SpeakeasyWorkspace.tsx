@@ -1,9 +1,12 @@
-import { enumPresentation } from "@/lib/enum";
+import { enumPresentation, isKnownEnumValue } from "@/lib/enum";
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
+import {
+  InternalSessionIssuerState,
+  type InternalSessionIssuer,
+} from "@gram/client/models/components/internalsessionissuer.js";
 import { invalidateAllInternalSessionIssuer } from "@gram/client/react-query/internalSessionIssuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuerEMAServices } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js";
 import { useRotateInternalSessionIssuerMutation } from "@gram/client/react-query/rotateInternalSessionIssuer.js";
@@ -74,11 +77,18 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
   });
   const issuer = query.data;
   const pending = enable.isPending || rotate.isPending;
-  const canEnable = canManage && issuer?.canEnable;
+  const supportsEditing = isKnownEnumValue(
+    InternalSessionIssuerState,
+    issuer?.state,
+  );
+  const canEnable = canManage && supportsEditing && issuer?.canEnable;
   const canDisable =
-    canManage && !!issuer?.issuer && issuer.state !== "disabled";
+    canManage &&
+    supportsEditing &&
+    !!issuer?.issuer &&
+    issuer.state !== "disabled";
   const activeKid = issuer?.keys.find((key) => key.state === "active")?.kid;
-  const canReplace = canManage && !!activeKid;
+  const canReplace = canManage && supportsEditing && !!activeKid;
   const canFinish = canManage && issuer?.state === "keyless";
   const canRotate = canManage && issuer?.state === "enabled" && !!activeKid;
   const hasPendingKey = !!issuer?.keys.some((key) => key.state === "pending");
@@ -93,23 +103,29 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
   };
   // A compromised rotation withdraws every current key, then sets up a new
   // one. With no active key left it only finishes the setup.
-  const replaceKey = (kid: string | undefined) =>
+  const replaceKey = (kid: string | undefined) => {
+    if (pending || (kid === undefined ? !canFinish : !canReplace)) return;
     rotate.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { rotateRequestBody: { activeKid: kid, compromised: true } },
     });
+  };
   // A routine rotation publishes a pending key; once verifiers have had time
   // to fetch it, the same call activates it. An early repeat changes nothing.
-  const rotateKey = () =>
+  const rotateKey = () => {
+    if (!canRotate || pending || rotationWaiting) return;
     rotate.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { rotateRequestBody: { activeKid, compromised: false } },
     });
-  const setEnabled = (enabled: boolean) =>
+  };
+  const setEnabled = (enabled: boolean) => {
+    if (pending || (enabled ? !canEnable : !canDisable)) return;
     enable.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { setEnabledRequestBody: { enabled } },
     });
+  };
 
   return (
     <section className="flex min-w-0 flex-col gap-6" aria-label="Speakeasy">
@@ -419,7 +435,7 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
         </div>
       )}
       <ConfirmDialog
-        open={action === "replace"}
+        open={action === "replace" && canReplace}
         onOpenChange={(open) => {
           if (!open) chooseAction(null);
         }}
@@ -445,7 +461,7 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
         onConfirm={() => replaceKey(activeKid)}
       />
       <ConfirmDialog
-        open={action === "rotate"}
+        open={action === "rotate" && canRotate}
         onOpenChange={(open) => {
           if (!open) chooseAction(null);
         }}
@@ -469,7 +485,7 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
         onConfirm={rotateKey}
       />
       <ConfirmDialog
-        open={action === "disable"}
+        open={action === "disable" && canDisable}
         onOpenChange={(open) => {
           if (!open) chooseAction(null);
         }}

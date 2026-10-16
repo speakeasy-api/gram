@@ -88,3 +88,24 @@ it("shows unsupported assertion audiences instead of an empty select", () => {
   );
   expect(screen.getByRole("combobox")).toHaveProperty("disabled", true);
 });
+
+it("shows an unsupported method instead of the default in credential fields", () => {
+  render(
+    <TooltipProvider>
+      <ClientCredentialsFields
+        clientId="synthetic-client"
+        clientSecret=""
+        tokenEndpointAuthMethod=""
+        unsupportedAuthMethod
+        onClientIdChange={vi.fn<(value: string) => void>()}
+        onClientSecretChange={vi.fn<(value: string) => void>()}
+        onTokenEndpointAuthMethodChange={vi.fn<
+          (method: AuthMethod | "") => void
+        >()}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.getByText("Unsupported authentication method")).toBeTruthy();
+  expect(screen.queryByText("client_secret_basic (default)")).toBeNull();
+  expect(screen.queryByRole("combobox")).toBeNull();
+});

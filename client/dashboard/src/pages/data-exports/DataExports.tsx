@@ -376,6 +376,18 @@ function DataExportsInner(): JSX.Element {
     ]);
 
   const handleSaveExport = async (values: ConfigureExportValues) => {
+    if (
+      !isKnownEnumValue(
+        KnownUpdateRouteRequestBodyDataSource,
+        values.dataSource,
+      ) ||
+      (configureRoute &&
+        !isKnownEnumValue(
+          KnownUpdateRouteRequestBodyDataSource,
+          configureRoute.dataSource,
+        ))
+    )
+      return;
     const state = projectExports.find(
       ({ project }) => project.slug === values.projectSlug,
     );
@@ -831,6 +843,10 @@ function ExportSourceNode({
 }): JSX.Element {
   const { project, route } = exportRow;
   const source = visualSource(exportRow, descriptionLinks);
+  const supportsEditing = isKnownEnumValue(
+    KnownUpdateRouteRequestBodyDataSource,
+    route.dataSource,
+  );
 
   return (
     <div
@@ -841,7 +857,12 @@ function ExportSourceNode({
         <button
           type="button"
           onClick={() => onConfigure(project, route)}
-          disabled={mutating}
+          disabled={mutating || !supportsEditing}
+          title={
+            !supportsEditing
+              ? "Refresh the page before changing this unsupported export."
+              : undefined
+          }
           aria-label={`Configure ${source.name} export`}
           className="absolute inset-0 z-10 cursor-pointer transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:hover:bg-transparent"
         />
@@ -865,6 +886,10 @@ function ExportSourceNode({
               {
                 label: "Configure export",
                 icon: "pencil",
+                disabled: mutating || !supportsEditing,
+                description: !supportsEditing
+                  ? "Refresh the page before changing this unsupported export."
+                  : undefined,
                 onClick: () => onConfigure(project, route),
               },
               {
@@ -893,10 +918,7 @@ function ExportSourceNode({
           <div
             className="pointer-events-auto"
             title={
-              !isKnownEnumValue(
-                KnownUpdateRouteRequestBodyDataSource,
-                route.dataSource,
-              )
+              !supportsEditing
                 ? "Refresh the page before changing this unsupported export."
                 : undefined
             }
@@ -904,13 +926,7 @@ function ExportSourceNode({
             <Switch
               checked={route.enabled}
               onCheckedChange={(enabled) => onToggle(project, route, enabled)}
-              disabled={
-                mutating ||
-                !isKnownEnumValue(
-                  KnownUpdateRouteRequestBodyDataSource,
-                  route.dataSource,
-                )
-              }
+              disabled={mutating || !supportsEditing}
               aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${source.name}`}
             />
           </div>

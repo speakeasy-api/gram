@@ -160,7 +160,9 @@ export function isInferenceCapReached(
 export function sortInferenceCaps(
   caps: readonly InferenceSpendCap[],
 ): InferenceSpendCap[] {
-  return [...caps].sort(
-    (a, b) => CAP_ORDER.indexOf(a.keyType) - CAP_ORDER.indexOf(b.keyType),
-  );
+  const rank = (keyType: InferenceSpendCapKeyType) => {
+    const index = CAP_ORDER.indexOf(keyType);
+    return index < 0 ? CAP_ORDER.length : index;
+  };
+  return [...caps].sort((a, b) => rank(a.keyType) - rank(b.keyType));
 }

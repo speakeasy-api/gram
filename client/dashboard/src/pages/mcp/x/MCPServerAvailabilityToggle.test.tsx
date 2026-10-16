@@ -268,3 +268,12 @@ describe("hosted MCP server visibility", () => {
     );
   });
 });
+
+it("keeps public non-tunneled servers green without offering Public as an editable option", () => {
+  renderInApp(
+    <MCPServerStatusDropdown server={{ ...server, visibility: "public" }} />,
+  );
+  const current = screen.getByRole("button", { name: "Public" });
+  expect(current.querySelector(".bg-green-400")).not.toBeNull();
+  expect(screen.queryByRole("menuitem", { name: /^Public/ })).toBeNull();
+});

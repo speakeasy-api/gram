@@ -1,4 +1,5 @@
 import type { LiteLLMInstance } from "@gram/client/models/components/litellminstance.js";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { LitellmInstanceKeyResult } from "@gram/client/models/components/litellminstancekeyresult.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -98,6 +99,21 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("LiteLLM integration dialogs", () => {
+  it("keeps an unfamiliar last error visible as Unknown", () => {
+    render(
+      <DiagnosticsPanel
+        instance={{
+          ...instance,
+          diagnostics: {
+            ...instance.diagnostics,
+            lastErrorKind: unrecognized("future_error"),
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText("Unknown")).toBeDefined();
+    expect(screen.queryByText("future_error")).toBeNull();
+  });
   it("shows connection health in diagnostics", () => {
     render(<DiagnosticsPanel instance={instance} />);
 

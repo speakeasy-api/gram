@@ -2,7 +2,12 @@ import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { describe, expect, it } from "vitest";
-import { audienceIcon, blockingRules, effectiveReach } from "./serverAudience";
+import {
+  audienceIcon,
+  blockingRules,
+  effectiveReach,
+  narrowingLabel,
+} from "./serverAudience";
 
 function entry(
   overrides: Partial<ResourceAudienceEntry> & { principalUrn: string },
@@ -249,4 +254,29 @@ describe("unknown audience values", () => {
       expect(audienceIcon(kind)).toBe(audienceIcon("unknown"));
     },
   );
+});
+
+it("does not infer access from an unknown applicability", () => {
+  expect(
+    effectiveReach([
+      entry({
+        principalUrn: "user:example",
+        appliesTo: unrecognized("future_applicability"),
+      }),
+    ])?.toolsLabel,
+  ).toBe("Access unknown");
+});
+
+it("deduplicates generic unknown annotation labels", () => {
+  expect(
+    narrowingLabel({
+      dispositions: [
+        "future_one",
+        "read_only",
+        "future_two",
+        "constructor",
+        "read_only",
+      ],
+    }),
+  ).toBe("unknown annotation, read-only tools");
 });
