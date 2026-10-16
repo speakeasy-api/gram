@@ -27,7 +27,10 @@ var IdentityChainingPreparation = Type("IdentityChainingPreparation", func() {
 	Attribute("connection_scopes", ArrayOf(String), "Scopes turning identity chaining on again would record now, sorted: what an interactive sign-in through the selected client requests for this server, or the recorded scopes when the binding has no server connection to follow or the connection names only OpenID Connect scopes while the recorded ones name others. Returned by readEMA and prepareEMA when a client is selected.")
 	Attribute("scopes_out_of_date", Boolean, "True when connection_scopes differs from scopes; turning identity chaining on again applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.")
 	Attribute("grant_source", String, "Provenance of recorded grants, not provider trust.")
-	Attribute("ema_providers", shared.EMAProviderOrder, "The vendor's EMA provider order resolved for this endpoint. Identity chaining tries the providers that can serve, in order; entries with unavailable_reason are skipped. Returned by readEMA only.")
+	Attribute("ema_providers", shared.EMAProviderOrder, "The EMA providers the vendor accepts, resolved for this endpoint. A provider vouches only where the endpoint's sign-in goes through it, so at most one is usable here; entries with unavailable_reason cannot serve. Returned by readEMA only.")
+	Attribute("last_accepted_at", String, "When the vendor last accepted an assertion for this binding, from a provider that can serve it now, so chaining has worked for it. Omitted when it never has. Returned by readEMA only.", func() {
+		Format(FormatDateTime)
+	})
 	Required("state", "stage", "remediation", "retryable", "generation", "resource", "scopes", "grant_source")
 })
 

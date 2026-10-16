@@ -427,6 +427,7 @@ trackedFiles:
   src/funcs/organizationRemoteSessionIssuersGetDuplicatePreflight.ts: {}
   src/funcs/organizationRemoteSessionIssuersGetMigratePreflight.ts: {}
   src/funcs/organizationRemoteSessionIssuersList.ts: {}
+  src/funcs/organizationRemoteSessionIssuersListEMAServices.ts: {}
   src/funcs/organizationRemoteSessionIssuersMigrate.ts: {}
   src/funcs/organizationRemoteSessionIssuersMove.ts: {}
   src/funcs/organizationRemoteSessionIssuersRefreshMetadata.ts: {}
@@ -1092,6 +1093,8 @@ trackedFiles:
   src/models/components/emaprovider.ts: {}
   src/models/components/emaproviderinput.ts: {}
   src/models/components/emaproviderorder.ts: {}
+  src/models/components/emaservice.ts: {}
+  src/models/components/emaserviceserver.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
   src/models/components/enableopenrouterkeyrequestbody.ts: {}
@@ -1324,6 +1327,7 @@ trackedFiles:
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
   src/models/components/listdirectoryrolemappingsresult.ts: {}
   src/models/components/listdistributionpluginsresult.ts: {}
+  src/models/components/listemaservicesresult.ts: {}
   src/models/components/listenvironmentsresult.ts: {}
   src/models/components/listeventlogpayload.ts: {}
   src/models/components/listeventlogresult.ts: {}
@@ -2506,6 +2510,7 @@ trackedFiles:
   src/models/operations/listorganizationremotesessionclientmcpservers.ts: {}
   src/models/operations/listorganizationremotesessionclients.ts: {}
   src/models/operations/listorganizationremotesessionclientsessions.ts: {}
+  src/models/operations/listorganizationremotesessionissueremaservices.ts: {}
   src/models/operations/listorganizationremotesessionissuers.ts: {}
   src/models/operations/listorganizationusers.ts: {}
   src/models/operations/listorganizationusersessionissuercimdclients.ts: {}
@@ -3482,6 +3487,8 @@ trackedFiles:
   src/react-query/organizationRemoteSessionIssuerDeletePreflight.ts: {}
   src/react-query/organizationRemoteSessionIssuerDuplicatePreflight.core.ts: {}
   src/react-query/organizationRemoteSessionIssuerDuplicatePreflight.ts: {}
+  src/react-query/organizationRemoteSessionIssuerEMAServices.core.ts: {}
+  src/react-query/organizationRemoteSessionIssuerEMAServices.ts: {}
   src/react-query/organizationRemoteSessionIssuerMigratePreflight.core.ts: {}
   src/react-query/organizationRemoteSessionIssuerMigratePreflight.ts: {}
   src/react-query/organizationRemoteSessionIssuers.core.ts: {}
@@ -9652,6 +9659,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listOrganizationRemoteSessionIssuerEMAServices:
+    speakeasy-default-list-organization-remote-session-issuer-EMA-services:
+      responses:
+        "200":
+          application/json: {"items": [{"ema_providers": {"is_default": true, "providers": [], "vendor_issuer": "<value>"}, "hidden_server_count": 607303, "name": "<value>", "ready_server_count": 963537, "server_count": 791091, "servers": [], "vendor_issuer": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listOrganizationRemoteSessionIssuers:
     speakeasy-default-list-organization-remote-session-issuers:
       responses:

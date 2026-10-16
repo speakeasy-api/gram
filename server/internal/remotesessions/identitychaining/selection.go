@@ -150,7 +150,7 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		configuredScopes:      result.Scopes,
 		trustedIssuerID:       uuid.Nil,
 		trustedClientID:       uuid.Nil,
-		provider:              remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
+		provider:              remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil},
 		audience:              "",
 		internalIssuerVersion: time.Time{}, internalKeyID: uuid.Nil, internalKeyPublishedAt: time.Time{}, userSessionID: uuid.Nil, signInID: uuid.Nil, email: "",
 	}, success
