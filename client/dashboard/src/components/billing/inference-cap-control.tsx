@@ -97,7 +97,14 @@ export function InferenceCapControl({
     // the anchor sits on the whole control: whichever variant this organization
     // gets, the link lands on the cap it named. `scroll-mt` clears the sticky
     // page header.
-    <div id={inferenceCapAnchor(cap.keyType)} className="scroll-mt-24">
+    <div
+      id={
+        isKnownEnumValue(KnownSetSpendCapRequestBodyKeyType, cap.keyType)
+          ? inferenceCapAnchor(cap.keyType)
+          : undefined
+      }
+      className="scroll-mt-24"
+    >
       {controlFor(cap, locked, refetching, announcesLock)}
     </div>
   );

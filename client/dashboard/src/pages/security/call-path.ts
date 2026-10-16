@@ -1,10 +1,11 @@
-import type {
+import { isKnownEnumValue } from "@/lib/enum";
+import {
   EnforcementOutcome,
-  RiskResult,
+  type RiskResult,
 } from "@gram/client/models/components/riskresult.js";
 import { isBlockingOutcome } from "./risk-outcome";
 
-export type CallPathLink = { blocked: boolean; label: string };
+export type CallPathLink = { blocked: boolean | null; label: string };
 
 export type CallPath = {
   /** Client ↔ gateway. */
@@ -12,7 +13,7 @@ export type CallPath = {
   /** Gateway ↔ MCP server. */
   right: CallPathLink;
   /** False when the gateway stopped the request before it reached the server. */
-  serverReached: boolean;
+  serverReached: boolean | null;
   caption: string;
 };
 
@@ -70,13 +71,22 @@ export function callOutcome(
   result: RiskResult,
   siblings: readonly RiskResult[],
 ): EnforcementOutcome | undefined {
-  const blocking = siblings.find(
-    (s) =>
-      s.executionId === result.executionId &&
-      s.phase === result.phase &&
-      isBlockingOutcome(s.enforcementOutcome),
+  const matching = siblings.filter(
+    (s) => s.executionId === result.executionId && s.phase === result.phase,
   );
-  return blocking?.enforcementOutcome ?? result.enforcementOutcome;
+  const blocking = matching.find((s) =>
+    isBlockingOutcome(s.enforcementOutcome),
+  );
+  const unknown = matching.find(
+    (s) =>
+      s.enforcementOutcome !== undefined &&
+      !isKnownEnumValue(EnforcementOutcome, s.enforcementOutcome),
+  );
+  return (
+    blocking?.enforcementOutcome ??
+    unknown?.enforcementOutcome ??
+    result.enforcementOutcome
+  );
 }
 
 // Maps phase × enforcement outcome to the call path strip: the blocked link is
@@ -86,6 +96,24 @@ export function callPathFor(
   outcome: EnforcementOutcome | undefined,
   server: string,
 ): CallPath {
+  if (
+    (outcome !== undefined && !isKnownEnumValue(EnforcementOutcome, outcome)) ||
+    (phase !== undefined && phase !== "request" && phase !== "response")
+  ) {
+    const response = phase === "response";
+    return {
+      left: response
+        ? { blocked: null, label: "Delivery unknown" }
+        : { blocked: false, label: "request →" },
+      right: response
+        ? { blocked: false, label: "← response" }
+        : { blocked: null, label: "Forwarding unknown" },
+      serverReached: response ? true : null,
+      caption: response
+        ? "The response outcome is unknown."
+        : "The request outcome is unknown.",
+    };
+  }
   const holdLabel = outcome ? HOLD_LABEL[outcome] : undefined;
   if (phase === "response") {
     return {

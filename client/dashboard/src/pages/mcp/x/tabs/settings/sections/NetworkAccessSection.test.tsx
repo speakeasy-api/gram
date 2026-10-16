@@ -393,9 +393,35 @@ describe("NetworkAccessSection", () => {
       expect(
         screen.getByText(/unsupported network configuration/),
       ).toBeTruthy();
-      expect(testState.mutate).not.toHaveBeenCalled();
     },
   );
+
+  it("blocks a dirty save when visibility becomes unsupported", () => {
+    const { rerender } = render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+      "disabled",
+      false,
+    );
+    rerender(
+      <NetworkAccessSection
+        mcpServer={{
+          ...baseServer,
+          visibility: unrecognized("future_visibility"),
+        }}
+        endpoints={endpoints}
+      />,
+    );
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toHaveProperty("disabled", true);
+    fireEvent.click(save);
+    expect(testState.mutate).not.toHaveBeenCalled();
+  });
 
   it("updates a hosted toolset and invalidates all affected caches on success", async () => {
     render(<NetworkAccessSection toolset={hostedToolset} />);

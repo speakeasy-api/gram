@@ -218,3 +218,24 @@ describe("ExportMap", () => {
     expect(screen.getByText("Collector B")).toBeTruthy();
   });
 });
+
+it("disables toggling an export with an unknown data source", () => {
+  render(
+    <MemoryRouter>
+      <ExportMap
+        exports={[
+          exportRow({
+            routeID: "future-route",
+            dataSource: "future_source",
+            destinationID: "destination-1",
+            destinationName: "Example destination",
+          }),
+        ]}
+        {...callbacks}
+      />
+    </MemoryRouter>,
+  );
+  expect((screen.getByRole("checkbox") as HTMLInputElement).disabled).toBe(
+    true,
+  );
+});

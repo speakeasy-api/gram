@@ -70,7 +70,7 @@ function tierLabel(match: RemoteSessionIssuerDuplicateMatch): string {
         ? `Project ${match.projectName}`
         : "This project";
   }
-  return "Unknown scope";
+  return "Unknown tier";
 }
 
 // matchDisplayName mirrors how issuers are named everywhere else: the display

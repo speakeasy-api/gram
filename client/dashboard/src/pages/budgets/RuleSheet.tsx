@@ -207,9 +207,12 @@ function RuleForm({
   const { attributes } = useActorAttributes();
   const { preview, loading: previewLoading } = useRulePreview(draft);
 
+  const knownWindow = isKnownEnumValue(WindowKind, draft.windowKind);
+  const supportedSettings =
+    knownWindow &&
+    isKnownEnumValue(CreateSpendRuleRequestBodyAction, draft.action);
   const canSubmit =
-    isKnownEnumValue(WindowKind, draft.windowKind) &&
-    isKnownEnumValue(CreateSpendRuleRequestBodyAction, draft.action) &&
+    supportedSettings &&
     draft.name.trim() !== "" &&
     draft.target.value.trim() !== "" &&
     draft.limitUsd > 0 &&
@@ -229,6 +232,7 @@ function RuleForm({
     blockingEditConfirmationDescription(overLimitCount);
 
   const handleSubmit = () => {
+    if (!canSubmit) return;
     if (requiresConfirmation) {
       setConfirmOpen(true);
       return;
@@ -237,6 +241,7 @@ function RuleForm({
   };
 
   const handleConfirmSubmit = () => {
+    if (!canSubmit) return;
     setConfirmOpen(false);
     onSubmit(draft);
   };
@@ -313,7 +318,9 @@ function RuleForm({
               onValueChange={(v) => patch({ windowKind: v as BudgetWindow })}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {knownWindow ? undefined : "Unknown window"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {WINDOWS.map((w) => (
@@ -353,7 +360,11 @@ function RuleForm({
           </Field>
         </div>
         <p className="text-muted-foreground -mt-4 text-xs">
-          {enumPresentation(WINDOW_RESET_HINTS, draft.windowKind, "Unknown")}{" "}
+          {enumPresentation(
+            WINDOW_RESET_HINTS,
+            draft.windowKind,
+            "Reset schedule unavailable.",
+          )}{" "}
           Each matched person gets {formatUsd(draft.limitUsd)} per window; a
           warning event fires at {draft.warnAtPct}% of it.
         </p>
@@ -394,7 +405,9 @@ function RuleForm({
         <div className="bg-muted/30 space-y-2 border p-4">
           <div className="flex items-center justify-between">
             <Text variant="small" className="font-medium">
-              Current usage this {draft.windowKind} window
+              {knownWindow
+                ? `Current usage this ${draft.windowKind} window`
+                : "Usage preview unavailable"}
             </Text>
             {previewLoading && (
               <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
@@ -402,7 +415,9 @@ function RuleForm({
           </div>
           {!preview ? (
             <p className="text-muted-foreground text-xs">
-              Choose a target condition to preview usage.
+              {knownWindow
+                ? "Choose a target condition to preview usage."
+                : "Refresh the page for updated support for this window."}
             </p>
           ) : (
             <>
@@ -425,6 +440,12 @@ function RuleForm({
         </div>
       </div>
 
+      {!supportedSettings && (
+        <Text muted small className="px-6">
+          Refresh the page before editing this rule. Some settings are not
+          supported by this dashboard yet.
+        </Text>
+      )}
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         {onArchive ? (
           <Button

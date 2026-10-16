@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { InferenceSpendCap } from "@gram/client/models/components/inferencespendcap.js";
 import { describe, expect, it } from "vitest";
 
@@ -170,4 +171,13 @@ describe("sortInferenceCaps", () => {
 
     expect(list.map((c) => c.keyType)).toEqual(["internal", "chat"]);
   });
+});
+
+it("links unsupported caps to the section without exposing API identifiers", () => {
+  for (const key of ["future_inference", "another_future_cap", "constructor"]) {
+    const unknown = unrecognized(key);
+    expect(inferenceCapAnchor(unknown)).toBe(INFERENCE_CAPS_ANCHOR);
+    expect(isInferenceCapAnchor(inferenceCapAnchor(unknown))).toBe(true);
+    expect(inferenceCapRaiseLabel(unknown)).toBe("View inference caps");
+  }
 });

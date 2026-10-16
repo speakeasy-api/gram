@@ -62,7 +62,9 @@ export function ClientCard({
     client.tokenEndpointAuthMethod === undefined ||
     narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) !==
       undefined;
-  const supportsEditing = supportsAudience && supportsAuthMethod;
+  const supportsEditing =
+    supportsAuthMethod &&
+    (client.tokenEndpointAuthMethod !== "private_key_jwt" || supportsAudience);
   const canEdit = hasAnyScope(["org:admin"]) && supportsEditing;
   const persistedAuthMethod =
     narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) ?? "";
@@ -106,6 +108,15 @@ export function ClientCard({
   const serviceAccount = client.credentialOwner === "self";
   const { entitled: customerManagedKeys } = useCustomerManagedKeys();
   const issuerName = issuer?.name ?? "the authorization server";
+  let privateKeyJwtUnavailable: string | undefined;
+  if (!supportsAudience) {
+    privateKeyJwtUnavailable =
+      "Refresh the page to use this authentication method";
+  } else if (serviceAccount) {
+    privateKeyJwtUnavailable = customerManagedKeys
+      ? "attach a key set first"
+      : "Requires KMS";
+  }
   const privateKeyJwtMissingKeySet =
     privateKeyJwtSelected && client.jsonWebKeySetId == null;
 
@@ -131,6 +142,7 @@ export function ClientCard({
   const handleAuthMethodChange = (
     method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => {
+    if (isPrivateKeyJwtAuthMethod(method) && !supportsAudience) return;
     setAuthMethod(method);
     if (isPrivateKeyJwtAuthMethod(method)) setClientSecret("");
   };
@@ -160,7 +172,7 @@ export function ClientCard({
     scope.some((s, i) => s !== savedScope[i]);
 
   const handleSave = () => {
-    if (!canEdit) return;
+    if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
     update.mutate({
       request: {
         updateRemoteSessionClientForm: {
@@ -239,15 +251,11 @@ export function ClientCard({
             <TokenEndpointAuthMethodField
               value={shownAuthMethod}
               onChange={handleAuthMethodChange}
-              allowPrivateKeyJwt={client.jsonWebKeySetId != null}
-              hideNone={serviceAccount}
-              privateKeyJwtUnavailable={
-                serviceAccount
-                  ? customerManagedKeys
-                    ? "attach a key set first"
-                    : "Requires KMS"
-                  : undefined
+              allowPrivateKeyJwt={
+                client.jsonWebKeySetId != null && supportsAudience
               }
+              hideNone={serviceAccount}
+              privateKeyJwtUnavailable={privateKeyJwtUnavailable}
               disabled={!canEdit}
             />
             {privateKeyJwtSelected && (

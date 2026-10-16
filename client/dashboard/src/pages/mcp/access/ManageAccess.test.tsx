@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -542,6 +543,38 @@ describe("role plugin distribution", () => {
     expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
   });
 
+  it("keeps plugin links visible while unsupported rules disable all editing", () => {
+    render(
+      ui(
+        [plugin],
+        [
+          role,
+          {
+            ...role,
+            level: "blocked",
+            dispositions: [unrecognized("future_disposition")],
+          },
+        ],
+      ),
+    );
+    expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
+    expect(screen.getByText("Distributed via")).toBeDefined();
+    expect(
+      screen
+        .getByRole("button", { name: /Grant access/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expandFirstRow();
+    for (const control of screen.getAllByRole("button", {
+      name: "Access unknown",
+    })) {
+      expect(control.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(control);
+    }
+    expect(screen.queryByRole("menuitem", { name: "All tools" })).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
   it("hides cached plugin data immediately after permission downgrade", () => {
     const { rerender } = render(ui([plugin]));
     expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
@@ -551,4 +584,27 @@ describe("role plugin distribution", () => {
     expect(screen.queryByText("Distributed via")).toBeNull();
     expect(screen.getByRole("link", { name: "Engineering" })).toBeDefined();
   });
+});
+
+it("closes an open mutation dialog when a refreshed rule becomes unsupported", () => {
+  const props = { resourceId: "server-1", version: "v1", isLoading: false };
+  const known = entry({ appliesTo: "all_resources" });
+  const { rerender } = render(
+    <TooltipProvider>
+      <ManageAccess {...props} entries={[known]} />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByLabelText("Remove Hana Sato from this server"));
+  expect(screen.getByRole("button", { name: "Remove" })).toBeDefined();
+  rerender(
+    <TooltipProvider>
+      <ManageAccess
+        {...props}
+        entries={[known, entry({ level: unrecognized("future_level") })]}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+  expect(screen.getByText(/Some access rules are not supported/)).toBeDefined();
+  expect(mutate).not.toHaveBeenCalled();
 });

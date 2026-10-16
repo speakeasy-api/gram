@@ -1,4 +1,4 @@
-import { requireKnownEnumValue } from "@/lib/enum";
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
 import { UpdateRouteRequestBodyDataSource as KnownUpdateRouteRequestBodyDataSource } from "@gram/client/models/components/updaterouterequestbody.js";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { SettingsPage } from "@/components/page-templates";
@@ -481,6 +481,10 @@ function DataExportsInner(): JSX.Element {
     route: DataExportRoute,
     enabled: boolean,
   ) => {
+    if (
+      !isKnownEnumValue(KnownUpdateRouteRequestBodyDataSource, route.dataSource)
+    )
+      return;
     const queryKey = aggregateQueryKey;
     await queryClient.cancelQueries({ queryKey });
     const previous =
@@ -886,11 +890,27 @@ function ExportSourceNode({
           {route.enabled ? "Enabled" : "Paused"}
         </span>
         <RequireScope scope="org:admin" level="component">
-          <div className="pointer-events-auto">
+          <div
+            className="pointer-events-auto"
+            title={
+              !isKnownEnumValue(
+                KnownUpdateRouteRequestBodyDataSource,
+                route.dataSource,
+              )
+                ? "Refresh the page before changing this unsupported export."
+                : undefined
+            }
+          >
             <Switch
               checked={route.enabled}
               onCheckedChange={(enabled) => onToggle(project, route, enabled)}
-              disabled={mutating}
+              disabled={
+                mutating ||
+                !isKnownEnumValue(
+                  KnownUpdateRouteRequestBodyDataSource,
+                  route.dataSource,
+                )
+              }
               aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${source.name}`}
             />
           </div>

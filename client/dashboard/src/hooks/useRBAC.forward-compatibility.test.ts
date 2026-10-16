@@ -25,6 +25,24 @@ function loadGrants(grants: unknown[]) {
 }
 
 describe("forward-compatible grants", () => {
+  it("matches connection checks without a disposition constraint, as the server does", () => {
+    const result = loadGrants([
+      {
+        scope: "mcp:connect",
+        selectors: [
+          {
+            resource_kind: "mcp",
+            resource_id: "server_a",
+            disposition: "future_disposition",
+          },
+        ],
+      },
+    ]);
+    expect(result.current.hasScope("mcp:connect", "server_a")).toBe(true);
+    expect(result.current.hasScope("mcp:connect", "server_b")).toBe(false);
+    expect(result.current.hasScope("mcp:write", "server_a")).toBe(false);
+  });
+
   it("keeps known grants usable alongside unknown scopes, sub-scopes, and selectors", () => {
     const result = loadGrants([
       {

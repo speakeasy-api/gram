@@ -11,24 +11,39 @@ import type {
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
 export type LiveConnection = OktaIdentityProviderConnection & {
-  status: Exclude<OktaIdentityProviderConnectionStatus, "revoked">;
+  status: "pending" | "verified" | "degraded";
 };
 
 export function isConnected(
   connection: OktaIdentityProviderConnection | null | undefined,
 ): connection is LiveConnection {
-  return connection != null && connection.status !== "revoked";
+  return (
+    connection != null &&
+    (connection.status === "pending" ||
+      connection.status === "verified" ||
+      connection.status === "degraded")
+  );
 }
 
 export type ConnectionStep =
   | "submit_client_id"
   | "verify"
   | "repair"
-  | "connected";
+  | "connected"
+  | "unknown";
 
 export function connectionStep(
-  connection: Pick<LiveConnection, "status" | "clientIdSubmitted">,
+  connection: Pick<
+    OktaIdentityProviderConnection,
+    "status" | "clientIdSubmitted"
+  >,
 ): ConnectionStep {
+  if (
+    connection.status !== "pending" &&
+    connection.status !== "verified" &&
+    connection.status !== "degraded"
+  )
+    return "unknown";
   if (!connection.clientIdSubmitted) return "submit_client_id";
   if (connection.status === "pending") return "verify";
   if (connection.status === "degraded") return "repair";

@@ -92,6 +92,7 @@ function VerificationOutcome({
 }
 
 const FOOTER_HINTS: Record<ConnectionStep, string> = {
+  unknown: "Refresh the page to check the connection status.",
   connected: "Re-verify after changing the app’s permissions in Okta.",
   repair: "Re-verify after changing the app’s permissions in Okta.",
   verify: "Verify once the app is set up to use the public key URL (JWKS).",

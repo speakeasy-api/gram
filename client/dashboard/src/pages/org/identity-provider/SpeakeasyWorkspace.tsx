@@ -565,6 +565,10 @@ function IssuerStatus({
       message =
         "Enterprise Managed Authorization is not available for this organization. Contact your Speakeasy administrator.";
       break;
+    default:
+      message =
+        "Issuer status is unknown. Refresh the page to check its current status.";
+      break;
   }
   return (
     <Text small muted role="status">

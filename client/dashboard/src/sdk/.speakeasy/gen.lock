@@ -23,6 +23,7 @@ features:
     methodSecurity: 2.82.8
     nameOverrides: 2.81.4
     nullables: 0.1.1
+    openEnums: 0.1.3
     pagination: 2.83.2
     reactQueryHooks: 0.3.0
     responseFormat: 0.3.0

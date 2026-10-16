@@ -18,6 +18,7 @@ import {
 } from "./accessRows";
 import {
   ruleId,
+  supportsAudienceEditing,
   withAdded,
   withRule,
   withoutPrincipal,
@@ -218,6 +219,9 @@ export function narrowWrite(
   toolCatalog: ToolSelectionTool[] | undefined,
   resourceName?: string,
 ): AudienceWrite {
+  if (!supportsAudienceEditing(direct)) {
+    throw new Error("These access rules are not supported by this version.");
+  }
   const base = narrowingBase(direct, row, next);
   const server = serverLabel(resourceName);
   const label = narrowingLabel(next).toLowerCase();

@@ -115,6 +115,13 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
           });
           break;
         }
+        default:
+          setResult({
+            verified: false,
+            message:
+              "Verification returned an unknown result. Refresh the page and try again.",
+          });
+          break;
       }
       resultUrlRef.current = trimmed;
     } catch (error) {

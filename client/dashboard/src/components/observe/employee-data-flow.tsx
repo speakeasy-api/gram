@@ -7,6 +7,7 @@ import { type IconName } from "@/components/ui/Icon/names";
 import {
   ArrowRight,
   Boxes,
+  CircleHelp,
   Globe,
   type LucideIcon,
   Laptop,
@@ -417,7 +418,7 @@ function DataFlowNodeVisual({
 const SERVER_CLASS_BADGE_META: Record<
   NonNullable<EmployeeDataFlowNode["serverClass"]>,
   {
-    variant: "information" | "warning" | "success";
+    variant: "information" | "warning" | "success" | "neutral";
     icon: LucideIcon;
     tooltip: string;
   }
@@ -447,8 +448,8 @@ function ServerClassBadge({
   count?: number;
 }) {
   const meta = enumPresentation(SERVER_CLASS_BADGE_META, serverClass, {
-    variant: "information",
-    icon: Globe,
+    variant: "neutral",
+    icon: CircleHelp,
     tooltip: "Unknown server type",
   });
   const ClassIcon = meta.icon;

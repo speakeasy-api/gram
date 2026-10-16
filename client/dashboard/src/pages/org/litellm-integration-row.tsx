@@ -813,11 +813,14 @@ function FailurePostureBadge({
 }: {
   posture: FailurePosture;
 }): JSX.Element {
-  return posture === "fail_closed" ? (
-    <Badge variant="neutral">Fail closed</Badge>
-  ) : (
-    <Badge variant="warning">Fail open</Badge>
-  );
+  switch (posture) {
+    case "fail_closed":
+      return <Badge variant="neutral">Fail closed</Badge>;
+    case "fail_open":
+      return <Badge variant="warning">Fail open</Badge>;
+    default:
+      return <Badge variant="neutral">Unknown</Badge>;
+  }
 }
 
 export function DiagnosticsPanel({

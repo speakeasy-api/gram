@@ -158,7 +158,9 @@ describe("ManageToolsDialog tool editing", () => {
   });
 
   it("reports a rejected update and keeps the editor open", async () => {
-    const onToolUpdate = vi.fn().mockRejectedValue(new Error("request failed"));
+    const onToolUpdate = vi
+      .fn()
+      .mockRejectedValue(new Error("Refresh the page before editing."));
 
     renderDialog({ onToolUpdate });
     fireEvent.click(screen.getByText("weather_lookup"));
@@ -168,7 +170,9 @@ describe("ManageToolsDialog tool editing", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Save/ }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("Failed to update tool");
+      expect(toast.error).toHaveBeenCalledWith(
+        "Refresh the page before editing.",
+      );
     });
     expect(screen.getByLabelText("Description")).toBeTruthy();
     expect(toast.success).not.toHaveBeenCalled();

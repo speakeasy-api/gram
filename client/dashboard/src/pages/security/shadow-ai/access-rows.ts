@@ -55,6 +55,7 @@ export function effectiveDecision(
   row: AccessRow,
   draft: ReadonlyMap<string, AccessDecision>,
 ): StoredDecision {
+  if (row.stored === "unknown") return "unknown";
   return draft.get(row.target.id) ?? row.stored;
 }
 

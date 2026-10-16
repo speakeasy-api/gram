@@ -26,6 +26,7 @@ import {
 import { useMemo, useState, type JSX, type ReactNode } from "react";
 
 import {
+  DISPOSITIONS,
   dispositionCopy,
   fuzzyMatch,
   indexServers,
@@ -418,7 +419,11 @@ function toolLimitText(limit: ToolLimit): string {
         ? "1 tool"
         : `${limit.tools.length} tools`;
     case "annotations": {
-      const labels = limit.dispositions.map((d) => dispositionCopy(d).label);
+      const selected = new Set(limit.dispositions);
+      const ordered = DISPOSITIONS.filter((value) => selected.delete(value));
+      const labels = [...ordered, ...selected].map(
+        (d) => dispositionCopy(d).label,
+      );
       if (labels.length === 0) return "No tools";
       return `${labels.join(", ")} tools`;
     }

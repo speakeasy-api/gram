@@ -640,7 +640,9 @@ function ToolsetPanel({
             await handleToolUpdate(editingTool, updates);
             toast.success("Tool updated");
           } catch (err) {
-            toast.error("Failed to update tool");
+            toast.error(
+              err instanceof Error ? err.message : "Failed to update tool",
+            );
             throw err;
           }
         }}

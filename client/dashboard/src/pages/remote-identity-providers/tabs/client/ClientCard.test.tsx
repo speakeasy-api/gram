@@ -10,9 +10,10 @@ import { ClientCard } from "./ClientCard";
 // Unlike OverviewTab.test, this renders the real Radix select fields, which a
 // disabled fieldset does not stop from opening.
 
-const testState = vi.hoisted(() => ({ admin: false }));
+const testState = vi.hoisted(() => ({ admin: false, mutate: vi.fn() }));
 beforeEach(() => {
   testState.admin = false;
+  testState.mutate.mockClear();
 });
 
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
@@ -38,7 +39,7 @@ vi.mock(
   "@gram/client/react-query/updateOrganizationRemoteSessionClient.js",
   () => ({
     useUpdateOrganizationRemoteSessionClientMutation: () => ({
-      mutate: vi.fn(),
+      mutate: testState.mutate,
       isPending: false,
     }),
   }),
@@ -119,4 +120,40 @@ describe("client card with unsupported configuration", () => {
       "true",
     );
   });
+});
+
+it("preserves unknown audience configuration for unrelated non-JWT edits and blocks switching to JWT", () => {
+  testState.admin = true;
+  render(
+    <ClientCard
+      client={{
+        ...client,
+        tokenEndpointAuthMethod: AuthMethod.ClientSecretPost,
+        tokenEndpointAuthAudienceFormat: unrecognized("future_audience"),
+      }}
+      issuer={issuer}
+      issuerId="issuer-1"
+    />,
+  );
+  const audience = screen.getByLabelText("Audience");
+  expect(audience).toHaveProperty("disabled", false);
+  fireEvent.change(audience, { target: { value: "new-audience" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(testState.mutate).toHaveBeenCalledWith({
+    request: {
+      updateRemoteSessionClientForm: expect.objectContaining({
+        audience: "new-audience",
+        tokenEndpointAuthAudienceFormat: undefined,
+      }),
+    },
+  });
+  const auth = screen
+    .getAllByRole("combobox")
+    .find((el) => el.id !== "client-scopes")!;
+  fireEvent.click(auth);
+  expect(
+    screen
+      .getByRole("option", { name: /private_key_jwt/ })
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
 });

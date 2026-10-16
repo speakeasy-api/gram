@@ -1,7 +1,9 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
+  accessSummary,
   buildAccessRows,
   complementTools,
   inheritedGrants,
@@ -516,4 +518,24 @@ describe("keptIndividually", () => {
       "Outside Staff",
     ]);
   });
+});
+
+it.each(["future_level", "constructor", "__proto__"])(
+  "keeps an unknown own level %s readable without claiming access",
+  (level) => {
+    const rows = buildAccessRows([
+      entry({}),
+      entry({ level: unrecognized(level) }),
+    ]);
+    expect(accessSummary(rows[0]!)).toBe("Access unknown");
+    expect(scopeState(rows[0]!, "use").value).toBe("Access unknown");
+  },
+);
+
+it("does not claim known access survives an unknown inherited block", () => {
+  const row = personIn([
+    entry({}),
+    role("Engineering", { level: unrecognized("future_block") }),
+  ]);
+  expect(accessSummary(row)).toBe("Access unknown");
 });

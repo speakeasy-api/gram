@@ -98048,6 +98048,7 @@ components:
           description: 'no_idjag: the server''s authorization server metadata does not advertise the identity assertion grant.'
           enum:
             - no_idjag
+          x-speakeasy-unknown-values: allow
         observed_at:
           type: string
           description: When the exchange behind observed_result started.

@@ -101,7 +101,7 @@ export function getPolicyDeleteRuleActionLabel(policy: RiskPolicy): string {
     block: "block",
     quarantine: "quarantine",
   };
-  return enumPresentation(labels, policy.action, "apply an unknown action to");
+  return enumPresentation(labels, policy.action, "unknown");
 }
 
 export function getPolicyDeleteImpactText(

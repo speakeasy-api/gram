@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -47,7 +47,7 @@ export const NotApplicableReason = {
 /**
  * no_idjag: the server's authorization server metadata does not advertise the identity assertion grant.
  */
-export type NotApplicableReason = ClosedEnum<typeof NotApplicableReason>;
+export type NotApplicableReason = OpenEnum<typeof NotApplicableReason>;
 
 /**
  * What the latest identity chaining exchange since confirmation showed. connection_missing is inferred from the identity provider's invalid_target error.
@@ -181,9 +181,10 @@ export const ClientBinding$inboundSchema: z.ZodMiniType<
 > = openEnums.inboundSchema(ClientBinding);
 
 /** @internal */
-export const NotApplicableReason$inboundSchema: z.ZodMiniEnum<
-  typeof NotApplicableReason
-> = z.enum(NotApplicableReason);
+export const NotApplicableReason$inboundSchema: z.ZodMiniType<
+  NotApplicableReason,
+  unknown
+> = openEnums.inboundSchema(NotApplicableReason);
 
 /** @internal */
 export const ObservedResult$inboundSchema: z.ZodMiniType<
