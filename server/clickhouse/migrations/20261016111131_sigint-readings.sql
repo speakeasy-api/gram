@@ -1,4 +1,4 @@
--- create "sigint_readings" table
+-- Create "sigint_readings" table
 CREATE TABLE `gram`.`sigint_readings` (
   `id` UUID COMMENT 'Producer-assigned logical reading UUID, preserved across attempts.
 @access: confidential',
@@ -93,7 +93,7 @@ CREATE TABLE `gram`.`sigint_readings` (
   `probabilities_valid` Bool MATERIALIZED notEmpty(probabilities) AND arrayAll(p -> (isFinite(p.3) AND ((p.3) >= 0) AND ((p.3) <= 1)), probabilities) COMMENT 'Derived probability-domain guard for answered readings.
 @access: confidential',
   CONSTRAINT `sigint_reading_identity` CHECK (notEmpty(organization_id) AND (id != toUUID('00000000-0000-0000-0000-000000000000')) AND (project_id != toUUID('00000000-0000-0000-0000-000000000000')) AND (sensor_id != toUUID('00000000-0000-0000-0000-000000000000')) AND (evaluation_attempt_id != toUUID('00000000-0000-0000-0000-000000000000'))),
-  CONSTRAINT `sigint_reading_status` CHECK ((status IN ('answered', 'not_applicable', 'draft', 'failed')) AND ((status = 'failed') = notEmpty(failure_reason))),
+  CONSTRAINT `sigint_reading_failure_reason` CHECK ((status = 'failed') = notEmpty(failure_reason)),
   CONSTRAINT `sigint_reading_result` CHECK (((status = 'answered') = notEmpty(result_type)) AND ((status = 'answered') OR (empty(probabilities) AND (selected_signal_id IS NULL) AND (selected_signal_slug = '') AND (expected_index IS NULL) AND (confidence IS NULL)))),
   CONSTRAINT `sigint_reading_probabilities` CHECK ((status != 'answered') OR probabilities_valid),
   CONSTRAINT `sigint_reading_confidence` CHECK ((confidence IS NULL) OR (isFinite(confidence) AND (confidence >= 0) AND (confidence <= 1))),
