@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -178,5 +179,7 @@ func TestUpstreamOAuthMigration_RunRequiresStaff(t *testing.T) {
 	org := newMigrationOrg(t, ctx, db, "migrate-unauthorized")
 
 	_, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
-	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
 }

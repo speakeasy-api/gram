@@ -91,9 +91,21 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 	}
 
 	unresolved := make([]*gen.AdminUpstreamOAuthMigrationServer, 0, associations.Gaps)
+	listed := map[uuid.UUID]bool{}
+	addUnresolved := func(serverID, projectID uuid.UUID) {
+		if !listed[serverID] {
+			listed[serverID] = true
+			unresolved = append(unresolved, &gen.AdminUpstreamOAuthMigrationServer{McpServerID: serverID.String(), ProjectID: projectID.String()})
+		}
+	}
 	for _, result := range associations.Results {
 		if !result.Outcome.Covered() {
-			unresolved = append(unresolved, &gen.AdminUpstreamOAuthMigrationServer{McpServerID: result.MCPServerID.String(), ProjectID: result.ProjectID.String()})
+			addUnresolved(result.MCPServerID, result.ProjectID)
+		}
+	}
+	for _, result := range associations.GatewayResults {
+		if !result.Outcome.Covered() {
+			addUnresolved(result.MCPServerID, result.ProjectID)
 		}
 	}
 	reconnect := map[uuid.UUID]bool{}
@@ -106,7 +118,7 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 
 	return &gen.AdminUpstreamOAuthMigrationStatus{
 		OrganizationID:       organizationID,
-		Migrated:             associations.Decided == 0 && len(unresolved) == 0 && pendingSelections == 0,
+		Migrated:             associations.Decided == 0 && len(unresolved) == 0 && pendingSelections == 0 && selections.Pairs[selectionbackfill.OutcomeUnassociated] == 0,
 		Servers:              int64(associations.Servers),
 		PendingAssociations:  int64(associations.Decided),
 		UnresolvedServers:    unresolved,
