@@ -16,16 +16,16 @@ out="${usage_out:-ci/cmd/shard/timings.txt}"
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 
-# Artifacts expire, and runs from before the upload step existed have none, so
-# look further back than --runs and stop once enough runs have reports.
-candidates=$(gh run list \
-  --workflow pr.yaml \
-  --branch "$branch" \
-  --event push \
-  --status success \
-  --limit $((runs * 3)) \
-  --json databaseId \
-  --jq '.[].databaseId')
+# Only runs inside the artifact retention window (retention-days on the upload
+# step in pr.yaml) can still have reports, so that bounds how far back to look.
+retention_days=30
+since=$(date -u -d "${retention_days} days ago" +%F 2>/dev/null || date -u -v-"${retention_days}"d +%F)
+
+# Newest first. Runs from before the upload step existed have no reports and
+# are skipped below.
+candidates=$(gh api --paginate \
+  "repos/{owner}/{repo}/actions/workflows/pr.yaml/runs?branch=${branch}&event=push&status=success&created=%3E%3D${since}&per_page=100" \
+  --jq '.workflow_runs[].id')
 
 found=0
 for run_id in $candidates; do
@@ -33,17 +33,28 @@ for run_id in $candidates; do
     break
   fi
 
-  if gh run download "$run_id" --pattern 'server-test-timings-*' --dir "$workdir/$run_id" >/dev/null 2>&1; then
-    found=$((found + 1))
-    echo "Downloaded server-test timings from run $run_id"
-  else
+  # Listing first separates "this run has no reports" from a failed download,
+  # which aborts the refresh rather than silently shrinking the sample.
+  available=$(gh api --paginate "repos/{owner}/{repo}/actions/runs/${run_id}/artifacts?per_page=100" \
+    --jq '[.artifacts[] | select(.name | startswith("server-test-timings-")) | select(.expired | not)] | length' |
+    awk '{ total += $1 } END { print total + 0 }')
+  if [ "$available" -eq 0 ]; then
     echo "Run $run_id has no server-test timing artifacts; skipping"
+    continue
   fi
+
+  gh run download "$run_id" --pattern 'server-test-timings-*' --dir "$workdir/$run_id"
+  found=$((found + 1))
+  echo "Downloaded $available server-test timing artifacts from run $run_id"
 done
 
 if [ "$found" -eq 0 ]; then
-  echo "No runs with server-test-timings-* artifacts found on $branch." >&2
+  echo "No runs on $branch since $since have server-test-timings-* artifacts." >&2
   exit 1
+fi
+
+if [ "$found" -lt "$runs" ]; then
+  echo "Warning: only $found of the requested $runs runs since $since have server-test timing artifacts." >&2
 fi
 
 go run github.com/speakeasy-api/gram/ci/cmd/shard timings -o "$out" "$workdir"
