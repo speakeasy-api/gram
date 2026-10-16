@@ -381,7 +381,7 @@ func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Lo
 // legacy toolset-URN audience. Semantics on
 // [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
 func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, logger *slog.Logger, hit LegacyAudienceAccepted) {
-	if m == nil || m.legacyFallback == nil {
+	if m == nil {
 		return
 	}
 	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, logger, hit)
