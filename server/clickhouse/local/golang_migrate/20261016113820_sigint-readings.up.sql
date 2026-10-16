@@ -1,4 +1,4 @@
--- Create "sigint_readings" table
+-- create "sigint_readings" table
 CREATE TABLE `gram`.`sigint_readings` (
   `id` UUID COMMENT 'Producer-assigned logical reading UUID, preserved across attempts.
 @access: confidential',
@@ -89,14 +89,6 @@ CREATE TABLE `gram`.`sigint_readings` (
   `expected_index` Nullable(Float64) COMMENT 'Probability-weighted ordered-score index.
 @access: confidential',
   `confidence` Nullable(Float64) COMMENT 'Optional classifier confidence.
-@access: confidential',
-  `probabilities_valid` Bool MATERIALIZED notEmpty(probabilities) AND arrayAll(p -> (isFinite(p.3) AND ((p.3) >= 0) AND ((p.3) <= 1)), probabilities) COMMENT 'Derived probability-domain guard for answered readings.
-@access: confidential',
-  CONSTRAINT `sigint_reading_identity` CHECK (notEmpty(organization_id) AND (id != toUUID('00000000-0000-0000-0000-000000000000')) AND (project_id != toUUID('00000000-0000-0000-0000-000000000000')) AND (sensor_id != toUUID('00000000-0000-0000-0000-000000000000')) AND (evaluation_attempt_id != toUUID('00000000-0000-0000-0000-000000000000'))),
-  CONSTRAINT `sigint_reading_failure_reason` CHECK ((status = 'failed') = notEmpty(failure_reason)),
-  CONSTRAINT `sigint_reading_result` CHECK (((status = 'answered') = notEmpty(result_type)) AND ((status = 'answered') OR (empty(probabilities) AND (selected_signal_id IS NULL) AND (selected_signal_slug = '') AND (expected_index IS NULL) AND (confidence IS NULL)))),
-  CONSTRAINT `sigint_reading_probabilities` CHECK ((status != 'answered') OR probabilities_valid),
-  CONSTRAINT `sigint_reading_confidence` CHECK ((confidence IS NULL) OR (isFinite(confidence) AND (confidence >= 0) AND (confidence <= 1))),
-  CONSTRAINT `sigint_reading_input` CHECK (input_message_count <= input_requested_message_count)
+@access: confidential'
 ) ENGINE = ReplacingMergeTree(evaluated_at)
 PRIMARY KEY (`organization_id`, `project_id`, `sensor_id`, `event_occurred_at`) ORDER BY (`organization_id`, `project_id`, `sensor_id`, `event_occurred_at`, `id`) PARTITION BY (toYYYYMM(event_occurred_at)) TTL toDateTime(event_occurred_at, 'UTC') + toIntervalYear(2) SETTINGS index_granularity = 8192 COMMENT 'Sensor evaluation outcomes with monthly, source-time-stable replacement and two-year retention';

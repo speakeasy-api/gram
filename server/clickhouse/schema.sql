@@ -1524,7 +1524,8 @@ GROUP BY
 -- replace the complete row within its monthly partition and the latest
 -- evaluation wins. Readers deduplicate by id before counting. Only answered rows
 -- carry a result. Other statuses record why an evaluated message has no answer,
--- so coverage can account for them instead of dropping them.
+-- so coverage can account for them instead of dropping them. The Pub/Sub
+-- writers validate every row, so rules can change without a migration.
 CREATE TABLE IF NOT EXISTS sigint_readings (
     id UUID COMMENT 'Producer-assigned logical reading UUID, preserved across attempts.\n@access: confidential',
     evaluation_attempt_id UUID COMMENT 'Evaluation attempt UUID, not the replacement key.\n@access: confidential',
@@ -1570,14 +1571,7 @@ CREATE TABLE IF NOT EXISTS sigint_readings (
     selected_signal_id Nullable(UUID) COMMENT 'Selected signal identity for choice results.\n@access: confidential',
     selected_signal_slug String DEFAULT '' COMMENT 'Customer-defined slug of the selected signal.\n@access: opaque-confidential',
     expected_index Nullable(Float64) COMMENT 'Probability-weighted ordered-score index.\n@access: confidential',
-    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential',
-    probabilities_valid Bool MATERIALIZED notEmpty(probabilities) AND arrayAll(p -> isFinite(p.3) AND p.3 >= 0 AND p.3 <= 1, probabilities) COMMENT 'Derived probability-domain guard for answered readings.\n@access: confidential',
-    CONSTRAINT sigint_reading_identity CHECK notEmpty(organization_id) AND id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND sensor_id != toUUID('00000000-0000-0000-0000-000000000000') AND evaluation_attempt_id != toUUID('00000000-0000-0000-0000-000000000000'),
-    CONSTRAINT sigint_reading_failure_reason CHECK (status = 'failed') = notEmpty(failure_reason),
-    CONSTRAINT sigint_reading_result CHECK (status = 'answered') = notEmpty(result_type) AND (status = 'answered' OR (empty(probabilities) AND selected_signal_id IS NULL AND selected_signal_slug = '' AND expected_index IS NULL AND confidence IS NULL)),
-    CONSTRAINT sigint_reading_probabilities CHECK status != 'answered' OR probabilities_valid,
-    CONSTRAINT sigint_reading_confidence CHECK confidence IS NULL OR (isFinite(confidence) AND confidence >= 0 AND confidence <= 1),
-    CONSTRAINT sigint_reading_input CHECK input_message_count <= input_requested_message_count
+    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential'
 ) ENGINE = ReplacingMergeTree(evaluated_at)
 PARTITION BY toYYYYMM(event_occurred_at)
 PRIMARY KEY (organization_id, project_id, sensor_id, event_occurred_at)
