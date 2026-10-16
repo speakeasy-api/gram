@@ -269,6 +269,41 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Equal(t, base+8, got[1].endedAt)
 	})
 
+	t.Run("the tool_calls table folds each call as the read-time fold does", func(t *testing.T) {
+		t.Parallel()
+		type call struct {
+			id, tool, mcpServer, mcpTool, skill, session, user, surface, status string
+			durationNano, startedAt, endedAt                                    int64
+		}
+		read := func(query string, args ...any) []call {
+			result, err := conn.Query(t.Context(), query, args...)
+			require.NoError(t, err)
+			defer func() { require.NoError(t, result.Close()) }()
+			var got []call
+			for result.Next() {
+				var c call
+				require.NoError(t, result.Scan(&c.id, &c.tool, &c.mcpServer, &c.mcpTool, &c.skill, &c.session, &c.user, &c.surface, &c.status, &c.durationNano, &c.startedAt, &c.endedAt))
+				got = append(got, c)
+			}
+			require.NoError(t, result.Err())
+			return got
+		}
+
+		folded, args, err := toolCallsSource.Rows(qc).ToSql()
+		require.NoError(t, err)
+		want := read("SELECT tool_call_id, tool_name, mcp_server_name, mcp_tool_name, skill_name, session_id, user_email, surface, status, duration_nano, started_at, ended_at FROM ("+folded+") ORDER BY tool_call_id", args...)
+
+		got := read(`SELECT event_id,
+			argMaxIfMerge(tool_name), argMaxIfMerge(mcp_server_name), argMaxIfMerge(mcp_tool_name), argMaxIfMerge(skill_name),
+			argMaxIfMerge(session_id), argMaxIfMerge(user_email), argMaxIfMerge(surface), argMaxIfMerge(outcome),
+			argMaxIfMerge(duration_nano), min(started_at_unix_nano), max(ended_at_unix_nano)
+			FROM tool_calls WHERE organization_id = ? AND project_id = ?
+			GROUP BY organization_id, project_id, event_id ORDER BY event_id`, orgID, "project-1")
+
+		require.Len(t, want, 4)
+		require.Equal(t, want, got)
+	})
+
 	t.Run("deduped keeps one copy of a re-emitted record, the latest observed", func(t *testing.T) {
 		t.Parallel()
 		// Every measure above is idempotent under duplicates by design, so the
