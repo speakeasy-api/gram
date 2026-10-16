@@ -1,0 +1,84 @@
+examples/authz-spike/README.md
+  h_2620cc60cfd1e9 1-1988
+examples/authz-spike/RFC.md
+  h_2620cc60cfd1e9 1-517
+examples/authz-spike/authz/admission.go
+  h_2620cc60cfd1e9 1-31
+examples/authz-spike/authz/agent.go
+  h_2620cc60cfd1e9 1-43
+examples/authz-spike/authz/alternatives.go
+  h_2620cc60cfd1e9 1-101
+examples/authz-spike/authz/assistant.go
+  h_2620cc60cfd1e9 1-43
+examples/authz-spike/authz/chat.go
+  h_2620cc60cfd1e9 1-27
+examples/authz-spike/authz/client.go
+  h_2620cc60cfd1e9 1-321
+examples/authz-spike/authz/credential.go
+  h_2620cc60cfd1e9 1-49
+examples/authz-spike/authz/definitions.go
+  h_2620cc60cfd1e9 1-15
+examples/authz-spike/authz/delegation.go
+  h_2620cc60cfd1e9 1-66
+examples/authz-spike/authz/environment.go
+  h_2620cc60cfd1e9 1-42
+examples/authz-spike/authz/evaluate.go
+  h_2620cc60cfd1e9 1-77
+examples/authz-spike/authz/filter.go
+  h_2620cc60cfd1e9 1-48
+examples/authz-spike/authz/groups.go
+  h_2620cc60cfd1e9 1-65
+examples/authz-spike/authz/mcp.go
+  h_2620cc60cfd1e9 1-82
+examples/authz-spike/authz/memory.go
+  h_2620cc60cfd1e9 1-201
+examples/authz-spike/authz/memory_policy.go
+  h_2620cc60cfd1e9 1-79
+examples/authz-spike/authz/organization.go
+  h_2620cc60cfd1e9 1-42
+examples/authz-spike/authz/permission.go
+  h_2620cc60cfd1e9 1-69
+examples/authz-spike/authz/plugin.go
+  h_2620cc60cfd1e9 1-28
+examples/authz-spike/authz/policy.go
+  h_2620cc60cfd1e9 1-175
+examples/authz-spike/authz/project.go
+  h_2620cc60cfd1e9 1-42
+examples/authz-spike/authz/request.go
+  h_2620cc60cfd1e9 1-31
+examples/authz-spike/authz/resource.go
+  h_2620cc60cfd1e9 1-129
+examples/authz-spike/authz/skill.go
+  h_2620cc60cfd1e9 1-43
+examples/authz-spike/authz/subject.go
+  h_2620cc60cfd1e9 1-95
+examples/authz-spike/authz/tool.go
+  h_2620cc60cfd1e9 1-30
+examples/authz-spike/main.go
+  h_2620cc60cfd1e9 1-1507
+examples/authz-spike/usecases/README.md
+  h_2620cc60cfd1e9 1-181
+examples/authz-spike/usecases/mcps/invoke.go
+  h_2620cc60cfd1e9 1-103
+examples/authz-spike/usecases/mcps/toolaccess/main.go
+  h_2620cc60cfd1e9 1-170
+examples/authz-spike/usecases/projects/list.go
+  h_2620cc60cfd1e9 1-99
+examples/authz-spike/usecases/projects/visibility/main.go
+  h_2620cc60cfd1e9 1-136
+examples/authz-spike/usecases/skills/blocking/main.go
+  h_2620cc60cfd1e9 1-157
+examples/authz-spike/usecases/skills/get.go
+  h_2620cc60cfd1e9 1-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e5a8ab0777df35bec0c5346895fb53a308a526be",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
