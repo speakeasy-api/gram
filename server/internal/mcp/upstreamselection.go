@@ -52,8 +52,9 @@ var (
 	errUpstreamSelectionMissing = errors.New("credential has no upstream client choice for this server")
 
 	// errUpstreamSelectionUnusable is a choice whose client is no longer
-	// associated with the server or no longer exists, or a no-auth choice for
-	// a server that has since been given a client.
+	// associated with the server, no longer bound to the credential's issuer
+	// or no longer exists, or a no-auth choice for a server that has since
+	// been given a client.
 	errUpstreamSelectionUnusable = errors.New("credential's upstream client choice for this server is no longer usable")
 )
 
@@ -74,9 +75,10 @@ func (c upstreamChoice) noAuth() bool {
 
 // upstreamSelector reads one authenticated credential's choices.
 type upstreamSelector struct {
-	service        *Service
-	organizationID string
-	credentialID   uuid.UUID
+	service             *Service
+	organizationID      string
+	userSessionIssuerID uuid.UUID
+	credentialID        uuid.UUID
 }
 
 // upstreamSelectorFor returns the selector for the credential in ctx, or nil
@@ -103,7 +105,7 @@ func (s *Service) upstreamSelectorFor(ctx context.Context, endpoint *ResolvedMcp
 	if err != nil {
 		return nil, fmt.Errorf("load session credential: %w", err)
 	}
-	return &upstreamSelector{service: s, organizationID: endpoint.OrganizationID, credentialID: policy.credentialID}, nil
+	return &upstreamSelector{service: s, organizationID: endpoint.OrganizationID, userSessionIssuerID: endpoint.UserSessionIssuerID, credentialID: policy.credentialID}, nil
 }
 
 // forServer returns the credential's usable choice for serverID, or
@@ -111,10 +113,11 @@ func (s *Service) upstreamSelectorFor(ctx context.Context, endpoint *ResolvedMcp
 func (u *upstreamSelector) forServer(ctx context.Context, serverID uuid.UUID) (upstreamChoice, error) {
 	var none upstreamChoice
 	row, err := usersessions_repo.New(u.service.db).GetUpstreamClientSelection(ctx, usersessions_repo.GetUpstreamClientSelectionParams{
-		CredentialKind: upstreamclients.CredentialKindUserSession,
-		CredentialID:   u.credentialID,
-		McpServerID:    serverID,
-		OrganizationID: u.organizationID,
+		UserSessionIssuerID: u.userSessionIssuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        u.credentialID,
+		McpServerID:         serverID,
+		OrganizationID:      u.organizationID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

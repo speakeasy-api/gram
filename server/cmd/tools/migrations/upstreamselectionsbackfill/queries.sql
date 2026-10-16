@@ -2,15 +2,21 @@
 -- One row per live user session credential after the cursor: the lineage of
 -- rows refresh rotation continues, named by COALESCE(credential_id, id). A
 -- credential is live while a row of it is not deleted and can still refresh.
+-- Its organization is its issuer's, which a project issuer takes from its
+-- project.
 SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
        COALESCE(s.credential_id, s.id)::uuid AS credential_id,
        s.user_session_issuer_id,
-       COALESCE(s.organization_id, '')::text AS organization_id
+       COALESCE(usi.organization_id, p.organization_id, '')::text AS organization_id
 FROM user_sessions AS s
+JOIN user_session_issuers AS usi
+  ON usi.id = s.user_session_issuer_id
+LEFT JOIN projects AS p
+  ON p.id = usi.project_id
 WHERE s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
   AND COALESCE(s.credential_id, s.id) > @cursor::uuid
-  AND (@organization_id::text = '' OR s.organization_id = @organization_id::text)
+  AND (@organization_id::text = '' OR COALESCE(usi.organization_id, p.organization_id) = @organization_id::text)
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
 LIMIT @page_size::int;
 
@@ -129,8 +135,10 @@ VALUES (@id, @organization_id, @project_id, @name, @user_session_issuer_id);
 INSERT INTO meta_mcp_server_members (project_id, meta_mcp_server_id, mcp_server_id) VALUES (@project_id, @meta_mcp_server_id, @mcp_server_id);
 
 -- name: SeedAssociationFixture :exec
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id)
-VALUES (@project_id, @organization_id, @mcp_server_id, @remote_session_client_id);
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT @project_id, @organization_id, @mcp_server_id, c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = @remote_session_client_id;
 
 -- name: RemoveAssociationFixture :exec
 UPDATE mcp_server_remote_session_clients SET deleted_at = clock_timestamp()
@@ -145,3 +153,7 @@ SELECT mcp_server_id, remote_session_client_id, no_auth, source
 FROM upstream_client_selections
 WHERE credential_kind = @credential_kind AND credential_id = @credential_id AND deleted IS FALSE
 ORDER BY mcp_server_id;
+
+-- name: UnbindClientFixture :exec
+DELETE FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id AND user_session_issuer_id = @user_session_issuer_id;

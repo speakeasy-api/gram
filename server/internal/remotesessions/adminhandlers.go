@@ -1313,7 +1313,7 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
 	}
 
-	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, deleted.ID); err != nil {
+	if _, err := upstreamclientsrepo.New(dbtx).RemoveGlobalClientAssociations(ctx, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
 	}
 

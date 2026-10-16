@@ -13,8 +13,8 @@ import (
 )
 
 const associateMCPServerRemoteSessionClient = `-- name: AssociateMCPServerRemoteSessionClient :execrows
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id)
-SELECT s.project_id, p.organization_id, s.id, c.id
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
 FROM mcp_servers AS s
 JOIN projects AS p
   ON p.id = s.project_id
@@ -29,7 +29,8 @@ JOIN remote_session_clients AS c
 WHERE s.id = $3::uuid
   AND s.project_id = $4::uuid
   AND s.deleted IS FALSE
-ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE
+DO UPDATE SET updated_at = clock_timestamp()
 `
 
 type AssociateMCPServerRemoteSessionClientParams struct {
@@ -39,8 +40,9 @@ type AssociateMCPServerRemoteSessionClientParams struct {
 	ProjectID             uuid.UUID
 }
 
-// Records that one MCP server uses one upstream OAuth client. Idempotent: a
-// live association is left as it is. Both ids are re-checked against the
+// Records that one MCP server uses one upstream OAuth client, returning one
+// row whether the association is new or already live, and none when the
+// server or client no longer qualifies. Both ids are re-checked against the
 // caller's tenant here because the client id may come from an untenanted join
 // table: the server must be live in the project, and the client live and owned
 // by that project, its organization, or the platform.
@@ -58,8 +60,8 @@ func (q *Queries) AssociateMCPServerRemoteSessionClient(ctx context.Context, arg
 }
 
 const captureSoleConsumerAssociations = `-- name: CaptureSoleConsumerAssociations :execrows
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id)
-SELECT s.project_id, p.organization_id, s.id, c.id
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
 FROM mcp_servers AS s
 JOIN projects AS p
   ON p.id = s.project_id
@@ -84,6 +86,9 @@ WHERE s.project_id = $2::uuid
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS other
+    JOIN projects AS other_project
+      ON other_project.id = other.project_id
+     AND other_project.organization_id = p.organization_id
     WHERE other.user_session_issuer_id = s.user_session_issuer_id
       AND other.id <> s.id
       AND other.deleted IS FALSE
@@ -92,6 +97,7 @@ WHERE s.project_id = $2::uuid
     SELECT 1
     FROM meta_mcp_servers AS gateway
     WHERE gateway.user_session_issuer_id = s.user_session_issuer_id
+      AND gateway.organization_id = p.organization_id
       AND gateway.deleted IS FALSE
   )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
@@ -104,14 +110,16 @@ type CaptureSoleConsumerAssociationsParams struct {
 }
 
 // Associates every client bound to a user session issuer with the issuer's
-// MCP server when that server is the issuer's only consumer. With one consumer
-// the binding can only be meant for that server, so the association is proven
-// rather than guessed. Issuers shared by several servers, or also fronting a
-// gateway, prove nothing and are left for explicit configuration.
+// MCP server when that server is the issuer's only consumer in the
+// organization. With one consumer the binding can only be meant for that
+// server, so the association is proven rather than guessed. Issuers shared by
+// several servers, or also fronting a gateway, prove nothing and are left for
+// explicit configuration.
 //
 // Tenancy: the ids arrive from callers that already hold the issuer, but are
 // re-pinned to the caller's project and organization so a foreign id writes
-// nothing.
+// nothing, and only the organization's own servers and gateways count as
+// other consumers.
 func (q *Queries) CaptureSoleConsumerAssociations(ctx context.Context, arg CaptureSoleConsumerAssociationsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, captureSoleConsumerAssociations, arg.OrganizationID, arg.ProjectID, arg.UserSessionIssuerIds)
 	if err != nil {
@@ -150,6 +158,8 @@ const isSoleConsumerBinding = `-- name: IsSoleConsumerBinding :one
 SELECT EXISTS (
   SELECT 1
   FROM mcp_servers AS s
+  JOIN projects AS p
+    ON p.id = s.project_id
   JOIN remote_session_client_user_session_issuers AS link
     ON link.user_session_issuer_id = s.user_session_issuer_id
    AND link.remote_session_client_id = $1::uuid
@@ -159,6 +169,9 @@ SELECT EXISTS (
     AND NOT EXISTS (
       SELECT 1
       FROM mcp_servers AS other
+      JOIN projects AS other_project
+        ON other_project.id = other.project_id
+       AND other_project.organization_id = p.organization_id
       WHERE other.user_session_issuer_id = s.user_session_issuer_id
         AND other.id <> s.id
         AND other.deleted IS FALSE
@@ -167,6 +180,7 @@ SELECT EXISTS (
       SELECT 1
       FROM meta_mcp_servers AS gateway
       WHERE gateway.user_session_issuer_id = s.user_session_issuer_id
+        AND gateway.organization_id = p.organization_id
         AND gateway.deleted IS FALSE
     )
 ) AS sole_consumer
@@ -179,8 +193,9 @@ type IsSoleConsumerBindingParams struct {
 }
 
 // Whether the client is bound to the server's user session issuer and the
-// server is that issuer's only consumer, in which case an association is
-// re-derived from the binding and cannot be detached on its own.
+// server is that issuer's only consumer in its organization, in which case an
+// association is re-derived from the binding and cannot be detached on its
+// own.
 func (q *Queries) IsSoleConsumerBinding(ctx context.Context, arg IsSoleConsumerBindingParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isSoleConsumerBinding, arg.RemoteSessionClientID, arg.McpServerID, arg.ProjectID)
 	var sole_consumer bool
@@ -206,6 +221,7 @@ SELECT
         ON shared_server.id = shared.mcp_server_id
        AND shared_server.deleted IS FALSE
       WHERE shared.remote_session_client_id = a.remote_session_client_id
+        AND shared.organization_id = a.organization_id
         AND shared.deleted IS FALSE
     )::bigint                              AS server_count
 FROM mcp_server_remote_session_clients AS a
@@ -239,8 +255,9 @@ type ListMCPServerRemoteSessionClientsRow struct {
 }
 
 // The upstream OAuth clients one MCP server is associated with, and how many
-// live servers share each one, so a caller can warn that editing a shared
-// client changes every server using it.
+// of the organization's live servers share each one, so a caller can warn
+// that editing a shared client changes every server using it. A platform
+// client's use by other organizations is never counted.
 func (q *Queries) ListMCPServerRemoteSessionClients(ctx context.Context, arg ListMCPServerRemoteSessionClientsParams) ([]ListMCPServerRemoteSessionClientsRow, error) {
 	rows, err := q.db.Query(ctx, listMCPServerRemoteSessionClients, arg.McpServerID, arg.ProjectID)
 	if err != nil {
@@ -322,6 +339,7 @@ SET deleted_at = clock_timestamp(),
 FROM mcp_servers AS s
 WHERE a.mcp_server_id = s.id
   AND a.remote_session_client_id = $1::uuid
+  AND a.organization_id = $2::text
   AND a.deleted IS FALSE
   AND (
     s.deleted IS TRUE
@@ -338,13 +356,17 @@ WHERE a.mcp_server_id = s.id
   )
 `
 
+type PruneRemoteSessionClientAssociationsParams struct {
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
 // The client-keyed form of PruneUnservableAssociations, for a change to one
-// client's bindings that reaches servers in several projects: an organization
-// issuer losing the client, or the client being deleted. It only removes rows
-// about this client that no binding would serve, so it is safe for a caller
-// that has already established its ownership of the client.
-func (q *Queries) PruneRemoteSessionClientAssociations(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, pruneRemoteSessionClientAssociations, remoteSessionClientID)
+// client's bindings that reaches servers in several of the organization's
+// projects: an organization issuer losing the client, or the client being
+// deleted.
+func (q *Queries) PruneRemoteSessionClientAssociations(ctx context.Context, arg PruneRemoteSessionClientAssociationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneRemoteSessionClientAssociations, arg.RemoteSessionClientID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}
@@ -387,6 +409,30 @@ type PruneUnservableAssociationsParams struct {
 // would also serve it.
 func (q *Queries) PruneUnservableAssociations(ctx context.Context, arg PruneUnservableAssociationsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, pruneUnservableAssociations, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const removeGlobalClientAssociations = `-- name: RemoveGlobalClientAssociations :execrows
+UPDATE mcp_server_remote_session_clients AS a
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM remote_session_clients AS c
+WHERE c.id = a.remote_session_client_id
+  AND c.project_id IS NULL
+  AND c.organization_id IS NULL
+  AND c.deleted IS TRUE
+  AND a.remote_session_client_id = $1::uuid
+  AND a.deleted IS FALSE
+`
+
+// Removes every association of a deleted platform-global client, in every
+// organization. Only the platform-administered global client deletion calls
+// it, and it touches nothing but that one client's rows.
+func (q *Queries) RemoveGlobalClientAssociations(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, removeGlobalClientAssociations, remoteSessionClientID)
 	if err != nil {
 		return 0, err
 	}

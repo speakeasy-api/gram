@@ -20,32 +20,35 @@ import (
 )
 
 // Reconcile brings the project's associations in line with its issuer
-// bindings after a binding or server change: it drops associations whose
-// client is no longer bound to the server's user session issuer, then
-// associates each client bound to one of userIssuerIDs with that issuer's
-// server when the server is the issuer's only consumer. Associations on an
-// issuer shared by several servers are only ever added by explicit
-// configuration or the offline backfill.
+// bindings after a binding or server change: it associates each client bound
+// to one of userIssuerIDs with that issuer's server when the server is the
+// issuer's only consumer, then drops associations whose client is no longer
+// bound to the server's user session issuer. Associations on an issuer shared
+// by several servers are only ever added by explicit configuration or the
+// offline backfill.
+//
+// Each statement decides from the bindings as they are when it runs, and the
+// prune runs last, so a reconcile that races a binding change and captures a
+// binding removed meanwhile prunes it again before it returns.
 func Reconcile(ctx context.Context, dbtx repo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
 	if organizationID == "" || projectID == uuid.Nil {
 		return errors.New("reconcile mcp server upstream clients: no tenant scope")
 	}
 	q := repo.New(dbtx)
+	if len(userIssuerIDs) > 0 {
+		if _, err := q.CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
+			OrganizationID:       organizationID,
+			ProjectID:            projectID,
+			UserSessionIssuerIds: userIssuerIDs,
+		}); err != nil {
+			return fmt.Errorf("capture mcp server upstream clients: %w", err)
+		}
+	}
 	if _, err := q.PruneUnservableAssociations(ctx, repo.PruneUnservableAssociationsParams{
 		ProjectID:      projectID,
 		OrganizationID: organizationID,
 	}); err != nil {
 		return fmt.Errorf("prune mcp server upstream clients: %w", err)
-	}
-	if len(userIssuerIDs) == 0 {
-		return nil
-	}
-	if _, err := q.CaptureSoleConsumerAssociations(ctx, repo.CaptureSoleConsumerAssociationsParams{
-		OrganizationID:       organizationID,
-		ProjectID:            projectID,
-		UserSessionIssuerIds: userIssuerIDs,
-	}); err != nil {
-		return fmt.Errorf("capture mcp server upstream clients: %w", err)
 	}
 	return nil
 }

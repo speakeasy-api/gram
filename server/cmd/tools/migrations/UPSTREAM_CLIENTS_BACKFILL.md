@@ -51,7 +51,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations mcp-server-upstream-clients 
 
 `-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL`. `-apply` refuses an existing `-report` file.
 
-Each write is conditional on the evidence the run read: the server is still live on the same issuer, the client is still bound to it and in the server's tenant, and, on a shared issuer, no association row for the pair was recorded meanwhile. A configuration change between the read and the write wins, and the write is counted as `skipped`. The run is idempotent; rerun the same command after an error or to pick up skipped rows.
+Each write is conditional on the evidence the run read: the server is still live on the same issuer, the client is still bound to it and in the server's tenant, and, on a shared issuer, no association row for the pair was recorded meanwhile. A configuration change between the read and the write wins, and the write is counted as `skipped`. The run is idempotent; rerun the same command after an error or to pick up skipped rows, with a new `-report` path since `-apply` refuses an existing one.
 
 ## Activation gate
 

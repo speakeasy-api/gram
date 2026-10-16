@@ -823,6 +823,16 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return oops.E(oops.CodeUnexpected, err, "select session issuance policy").LogError(ctx, logger)
 	}
 
+	// The session row and its upstream client choices commit together, so a
+	// failed choice write never leaves a live credential without them.
+	if admissionTx == nil {
+		admissionTx, err = s.db.Begin(ctx)
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "begin session issuance")
+		}
+		admissionQueries = usersessions_repo.New(admissionTx)
+	}
+
 	// Consume only after retryable preflight work. Exactly one exchange wins,
 	// and the consumed value must be the immutable grant we just validated.
 	if err := consumeGrant(); err != nil {
@@ -860,10 +870,8 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		return err
 	}
-	if admissionTx != nil {
-		if err := admissionTx.Commit(ctx); err != nil {
-			return oops.E(oops.CodeUnavailable, err, "commit session admission")
-		}
+	if err := admissionTx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnavailable, err, "commit session issuance")
 	}
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)

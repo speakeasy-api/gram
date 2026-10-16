@@ -3,8 +3,9 @@
 -- bound to that issuer (client columns NULL when none is bound), for servers
 -- after the cursor. Read-only: the runner decides from this evidence alone.
 --
--- issuer_server_count counts live servers on the issuer across every project;
--- issuer_has_gateway reports a gateway fronting it. Either makes the binding
+-- issuer_server_count counts the organization's live servers on the issuer
+-- across its projects; issuer_has_gateway reports one of its gateways
+-- fronting it. Either makes the binding
 -- shared, so it no longer proves which server it was meant for.
 --
 -- metadata_match reports that the server's own upstream URL names a protected
@@ -27,12 +28,19 @@ WITH page AS (
     JOIN projects AS p
       ON p.id = s.project_id
      AND p.deleted IS FALSE
+    -- A server's issuer reference is not tenant-checked by its foreign key,
+    -- so only a live issuer of the server's own project or organization
+    -- counts.
+    JOIN user_session_issuers AS usi
+      ON usi.id = s.user_session_issuer_id
+     AND usi.deleted IS FALSE
+     AND (usi.project_id = p.id
+          OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
     LEFT JOIN remote_mcp_servers AS rms
       ON rms.id = s.remote_mcp_server_id
      AND rms.project_id = s.project_id
      AND rms.deleted IS FALSE
     WHERE s.deleted IS FALSE
-      AND s.user_session_issuer_id IS NOT NULL
       AND s.id > @cursor::uuid
       AND (@organization_id::text = '' OR p.organization_id = @organization_id::text)
     ORDER BY s.id
@@ -47,6 +55,9 @@ SELECT page.id AS mcp_server_id,
        (
          SELECT count(*)
          FROM mcp_servers AS other
+         JOIN projects AS other_project
+           ON other_project.id = other.project_id
+          AND other_project.organization_id = page.organization_id
          WHERE other.user_session_issuer_id = page.user_session_issuer_id
            AND other.deleted IS FALSE
        )::bigint AS issuer_server_count,
@@ -54,6 +65,7 @@ SELECT page.id AS mcp_server_id,
          SELECT 1
          FROM meta_mcp_servers AS gateway
          WHERE gateway.user_session_issuer_id = page.user_session_issuer_id
+           AND gateway.organization_id = page.organization_id
            AND gateway.deleted IS FALSE
        )::boolean AS issuer_has_gateway,
        (
@@ -100,18 +112,24 @@ ORDER BY page.id, c.id;
 
 -- name: BackfillUpstreamClientAssociation :execrows
 -- Writes one decided association, conditional on the evidence still holding:
--- the server is live on the same issuer, the client is still bound to it and
--- in the server's tenant, and, with respect_removed, no row was recorded for
--- the pair meanwhile. A concurrent configuration change therefore wins and
--- the write is skipped.
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id)
-SELECT s.project_id, p.organization_id, s.id, c.id
+-- the server is live on the same tenant issuer, the client is still bound to
+-- it and in the server's tenant, with require_sole_consumer the server is
+-- still the issuer's only consumer and no gateway fronts it, and with
+-- respect_removed no row was recorded for the pair meanwhile. A concurrent
+-- configuration change therefore wins and the write is skipped.
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
 FROM mcp_servers AS s
 JOIN projects AS p
   ON p.id = s.project_id
  AND p.deleted IS FALSE
+JOIN user_session_issuers AS usi
+  ON usi.id = s.user_session_issuer_id
+ AND usi.deleted IS FALSE
+ AND (usi.project_id = p.id
+      OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
 JOIN remote_session_client_user_session_issuers AS link
-  ON link.user_session_issuer_id = s.user_session_issuer_id
+  ON link.user_session_issuer_id = usi.id
  AND link.remote_session_client_id = @remote_session_client_id::uuid
 JOIN remote_session_clients AS c
   ON c.id = link.remote_session_client_id
@@ -122,6 +140,25 @@ JOIN remote_session_clients AS c
 WHERE s.id = @mcp_server_id::uuid
   AND s.user_session_issuer_id = @user_session_issuer_id::uuid
   AND s.deleted IS FALSE
+  AND (NOT @require_sole_consumer::boolean OR (
+    NOT EXISTS (
+      SELECT 1
+      FROM mcp_servers AS other
+      JOIN projects AS other_project
+        ON other_project.id = other.project_id
+       AND other_project.organization_id = p.organization_id
+      WHERE other.user_session_issuer_id = s.user_session_issuer_id
+        AND other.id <> s.id
+        AND other.deleted IS FALSE
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.user_session_issuer_id = s.user_session_issuer_id
+        AND gateway.organization_id = p.organization_id
+        AND gateway.deleted IS FALSE
+    )
+  ))
   AND (NOT @respect_removed::boolean OR NOT EXISTS (
     SELECT 1
     FROM mcp_server_remote_session_clients AS recorded
@@ -168,8 +205,10 @@ INSERT INTO remote_protected_resources (project_id, organization_id, resource_id
 VALUES (@project_id, @organization_id, @resource_identifier, @authorization_servers::text[]);
 
 -- name: SeedAssociationFixture :exec
-INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, deleted_at)
-VALUES (@project_id, @organization_id, @mcp_server_id, @remote_session_client_id, CASE WHEN @removed::boolean THEN clock_timestamp() END);
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope, deleted_at)
+SELECT @project_id, @organization_id, @mcp_server_id, c.id, c.attachment_scope, CASE WHEN @removed::boolean THEN clock_timestamp() END
+FROM remote_session_clients AS c
+WHERE c.id = @remote_session_client_id;
 
 -- name: ListLiveAssociationsFixture :many
 SELECT remote_session_client_id
