@@ -663,9 +663,11 @@ WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
 -- and dispatch columns that path needs, plus each member's project, since
 -- members no longer share one, and each member's network access mode, which
 -- the caller matches against the request's ingress surface so a private_only
--- server stays invisible on the public one. Ordered by project then slug: a derived
--- gateway has no operator-authored order, and slugs are unique only within a
--- project, so the pair is what makes the listing stable.
+-- server stays invisible on the public one. Also carries the backing toolset's
+-- latest live tool URNs, so the organization gateway can drop Platform-tool
+-- toolsets the same way automatic plugin delivery does. Ordered by project then
+-- slug: a derived gateway has no operator-authored order, and slugs are unique
+-- only within a project, so the pair is what makes the listing stable.
 SELECT
     s.id AS mcp_server_id,
     s.project_id AS mcp_server_project_id,
@@ -681,7 +683,8 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
-    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier,
+    latest.tool_urns
 FROM mcp_servers s
 JOIN projects p
   ON p.id = s.project_id
@@ -690,6 +693,15 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = s.project_id
  AND t.deleted IS FALSE
+LEFT JOIN toolsets backing
+  ON backing.id = s.toolset_id
+ AND backing.project_id = s.project_id
+ AND backing.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = backing.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = @organization_id
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
