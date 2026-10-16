@@ -464,6 +464,17 @@ document cannot be attributed and is reported as skipped rather than imported.
 Only the first conversation addressing a given endpoint pair claims the reusable
 pair key, because the document never deduplicated them.
 
+**Conversion does not make a demo reseed safe.** The demo seed refuses to run
+against an organization whose `channels_state` document still holds content,
+and the obvious reading of that refusal — convert, then reseed — loses data.
+Conversion never empties the document, so the refusal stands; its output lands
+in the `channels_*` tables the reseed clears first, so a reseed deletes exactly
+what was imported; and once a seed has populated those tables the conversion
+refuses the organization as already in use. The two operations are alternatives
+for one organization, not steps in a sequence. To keep proof-of-concept data,
+copy it out of the organization before emptying the document, which the seed
+leaves to the operator.
+
 ## Platform MCP assessment
 
 Recorded per the maintaining-platform-mcp rules. A silent omission is not a

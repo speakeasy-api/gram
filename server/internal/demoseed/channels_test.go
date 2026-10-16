@@ -50,6 +50,13 @@ func TestSeedRefusesToDestroyLegacyChannelsContent(t *testing.T) {
 	require.Error(t, err, "the seed deleted a legacy document that still held content")
 	require.ErrorContains(t, err, "channels-convert")
 
+	// The refusal must not read as "convert, then reseed". Conversion leaves
+	// the document in place, writes into the tables the purge clears, and
+	// refuses an organization a seed has already populated, so that sequence
+	// loses the data it appears to save.
+	require.NotContains(t, err.Error(), "then reseed")
+	require.ErrorContains(t, err, "Copy anything worth keeping out of this organization")
+
 	// The document survived the refusal.
 	var messages int
 	require.NoError(t, db.QueryRow(ctx, //nolint:glint // notestingrawsql: drives the superseded channels_state document, which has no production query by design — nothing writes it any more.
