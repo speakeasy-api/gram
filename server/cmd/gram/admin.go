@@ -524,6 +524,7 @@ func newAdminCommand() *cli.Command {
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
+			adminService.SetStripeDashboardMode(c.String("stripe-api-key"))
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err

@@ -1199,7 +1199,11 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
-    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier,
+    EXISTS (
+      SELECT 1 FROM unnest(latest.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:platform:%'
+    )::boolean AS has_platform_tool
 FROM mcp_servers s
 JOIN projects p
   ON p.id = s.project_id
@@ -1208,6 +1212,15 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = s.project_id
  AND t.deleted IS FALSE
+LEFT JOIN toolsets backing
+  ON backing.id = s.toolset_id
+ AND backing.project_id = s.project_id
+ AND backing.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = backing.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = $1
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
@@ -1231,6 +1244,7 @@ type ListServableMCPServersByOrganizationIDRow struct {
 	McpServerToolVariationsGroupID uuid.NullUUID
 	McpServerRemoteSessionIssuerID uuid.NullUUID
 	TunneledResourceIdentifier     string
+	HasPlatformTool                bool
 }
 
 // Candidate members for a gateway whose membership is derived rather than
@@ -1249,9 +1263,14 @@ type ListServableMCPServersByOrganizationIDRow struct {
 // and dispatch columns that path needs, plus each member's project, since
 // members no longer share one, and each member's network access mode, which
 // the caller matches against the request's ingress surface so a private_only
-// server stays invisible on the public one. Ordered by project then slug: a derived
-// gateway has no operator-authored order, and slugs are unique only within a
-// project, so the pair is what makes the listing stable.
+// server stays invisible on the public one. Also reports whether the backing
+// toolset's latest live version contains a Platform tool, so the organization
+// gateway can drop those toolsets the same way automatic plugin delivery does
+// (roledelivery.HasPlatformTool). The check runs here rather than in Go because
+// this query serves every gateway request, and returning every tool URN only to
+// reduce it to one flag would scale with toolset size. Ordered by project then
+// slug: a derived gateway has no operator-authored order, and slugs are unique
+// only within a project, so the pair is what makes the listing stable.
 func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, organizationID string) ([]ListServableMCPServersByOrganizationIDRow, error) {
 	rows, err := q.db.Query(ctx, listServableMCPServersByOrganizationID, organizationID)
 	if err != nil {
@@ -1277,6 +1296,7 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
 			&i.TunneledResourceIdentifier,
+			&i.HasPlatformTool,
 		); err != nil {
 			return nil, err
 		}

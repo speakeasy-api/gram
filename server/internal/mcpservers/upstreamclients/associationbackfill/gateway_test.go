@@ -226,3 +226,70 @@ func TestReconcileDoesNotCaptureAGatewayMemberAGrantRoutesElsewhere(t *testing.T
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
 	require.Empty(t, f.associations(member), "the grant names another client, so the derived match proves nothing")
 }
+
+// project adds another project to the fixture's organization.
+func (f *fixture) project() uuid.UUID {
+	f.t.Helper()
+	id := uuid.New()
+	require.NoError(f.t, f.q.SeedProjectFixture(f.t.Context(), SeedProjectFixtureParams{ID: id, Slug: "p-" + id.String()[:8], OrganizationID: f.orgID}))
+	return id
+}
+
+// serverIn creates a remote-backed server in projectID on userIssuerID.
+func (f *fixture) serverIn(projectID, userIssuerID uuid.UUID, upstreamURL string) uuid.UUID {
+	f.t.Helper()
+	ctx := f.t.Context()
+	remoteID, serverID := uuid.New(), uuid.New()
+	require.NoError(f.t, f.q.SeedRemoteMCPServerFixture(ctx, SeedRemoteMCPServerFixtureParams{ID: remoteID, ProjectID: projectID, Url: upstreamURL}))
+	require.NoError(f.t, f.q.SeedMCPServerFixture(ctx, SeedMCPServerFixtureParams{
+		ID:                  serverID,
+		ProjectID:           projectID,
+		Slug:                pgtype.Text{String: "s-" + serverID.String()[:8], Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: true},
+	}))
+	return serverID
+}
+
+func TestRunIgnoresServersAndGatewaysInDeletedProjects(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.organizationIssuer()
+	server := f.server(issuer, "https://kept.example.com/mcp")
+	client := f.client(issuer, "https://kept-as.example.com")
+
+	deleted := f.project()
+	f.serverIn(deleted, issuer, "https://gone.example.com/mcp")
+	require.NoError(t, f.q.SeedGatewayFixture(t.Context(), SeedGatewayFixtureParams{
+		ID:                  uuid.New(),
+		OrganizationID:      f.orgID,
+		ProjectID:           deleted,
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true},
+	}))
+	require.NoError(t, f.q.SoftDeleteProjectFixture(t.Context(), deleted))
+
+	report := f.run(true)
+	require.Equal(t, OutcomeSoleConsumer, resultFor(t, report, server).Outcome, "a server or gateway in a deleted project consumes nothing")
+	require.Zero(t, report.Gaps)
+	require.Contains(t, f.associations(server), client)
+}
+
+func TestRunIgnoresAGatewayIssuerOfAnotherProject(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	other := f.project()
+	foreignIssuer := uuid.New()
+	require.NoError(t, f.q.SeedUserSessionIssuerFixture(t.Context(), SeedUserSessionIssuerFixtureParams{
+		ID:        foreignIssuer,
+		ProjectID: uuid.NullUUID{UUID: other, Valid: true},
+		Slug:      "usi-" + foreignIssuer.String()[:8],
+	}))
+	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
+	client, _ := f.gatewayClient(foreignIssuer)
+	f.grant(foreignIssuer, client, "https://member.example.com/mcp")
+	f.gateway(foreignIssuer, member)
+
+	report := f.run(true)
+	require.Empty(t, report.GatewayResults, "a gateway issuer scoped to another project fronts nothing here")
+	require.Empty(t, f.associations(member))
+}

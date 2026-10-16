@@ -25,9 +25,11 @@ import (
 // server when the server is the issuer's only consumer, associates each
 // gateway-fronted server with the one client its gateway issuer binds for
 // the server's derived authorization server, then drops associations no
-// issuer reaching the server still binds. Associations on an issuer shared
-// by several servers are only ever added by explicit configuration or the
-// backfill.
+// issuer reaching the server still binds. Otherwise associations on an issuer
+// shared by several servers are only added by explicit configuration or the
+// backfill: the gateway capture is the one path that writes them, and only
+// for the single client a gateway issuer binds for a server's derived
+// authorization server.
 //
 // Each statement decides from the bindings as they are when it runs, and the
 // prune runs last, so a reconcile that races a binding change and captures a
