@@ -131,7 +131,7 @@ func TestCompileSkills(t *testing.T) {
 	}, plan.Columns)
 	require.Contains(t, plan.SQL, "skill_name AS skill")
 	require.Contains(t, plan.SQL, "uniqExact(nullIf(skill_name, '')) AS count_distinct_skill", "skills used counts the invocations that named one")
-	require.Contains(t, plan.SQL, "HAVING skill_name != ''", "the source keeps only the collapsed calls that named a skill")
+	require.Contains(t, plan.SQL, "AND skill_name != '') AS src", "the source keeps only the collapsed calls that named a skill")
 	require.Contains(t, plan.SQL, "WHERE skill_name IN (?,?)")
 	require.Contains(t, plan.SQL, "GROUP BY skill")
 	require.Equal(t, []any{"deploy", "review"}, plan.Args[len(plan.Args)-2:], "the filter values are bound last")

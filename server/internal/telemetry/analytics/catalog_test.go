@@ -183,31 +183,22 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 
 	qc := QueryContext{Tenant: Tenant{OrganizationID: "org", ProjectID: "proj"}, Window: Window{FromUnixNano: 1, ToUnixNano: 2}}
 
-	// What each dataset binds after the tenant and window: the whole list, so
-	// a dropped or reordered predicate fails here rather than passing unseen,
-	// and a new dataset has to declare its binds before it passes at all.
-	toolCallBinds := make([]any, 0, len(toolCallEventTypes)+1)
-	for _, eventType := range toolCallEventTypes {
-		toolCallBinds = append(toolCallBinds, eventType)
-	}
-	toolCallBinds = append(toolCallBinds, "") // event_type IN (...), event_id != ''
-	trailing := map[string][]any{
-		Sessions.Name:  {""}, // session_id != ''
-		ToolCalls.Name: toolCallBinds,
-		// The same collapse; the skill predicate is a literal on the collapsed row.
-		Skills.Name: toolCallBinds,
-	}
+	sessions, args, err := Sessions.Source.Rows(qc).ToSql()
+	require.NoError(t, err)
+	require.Contains(t, sessions, "LIMIT 1 BY organization_id, project_id, record_id")
+	require.Contains(t, sessions, "GROUP BY organization_id, project_id, session_id")
+	require.Equal(t, []any{"org", "proj", int64(1), int64(2), ""}, args)
 
-	for _, ds := range Default.Datasets() {
+	// Tool calls read a table that is already one row per call, so nothing
+	// sorts the window. The scan widens by an hour each side, and the call's
+	// own start decides the window.
+	for _, ds := range []*Dataset{ToolCalls, Skills} {
 		query, args, err := ds.Source.Rows(qc).ToSql()
 		require.NoError(t, err, ds.Name)
-		require.Contains(t, query, "LIMIT 1 BY organization_id, project_id, record_id", ds.Name)
-		require.Contains(t, query, "GROUP BY organization_id, project_id", ds.Name)
-
-		tail, declared := trailing[ds.Name]
-		require.True(t, declared, "dataset %q declares no expected binds", ds.Name)
-		want := append([]any{"org", "proj", int64(1), int64(2)}, tail...)
-		require.Equal(t, want, args, ds.Name)
+		require.NotContains(t, query, "LIMIT 1 BY", ds.Name)
+		require.Contains(t, query, "FROM tool_calls WHERE", ds.Name)
+		require.Contains(t, query, "GROUP BY organization_id, project_id, event_id HAVING started_at >= ? AND started_at < ?", ds.Name)
+		require.Equal(t, []any{"org", "proj", int64(-3600), int64(3600), int64(1), int64(2)}, args, ds.Name)
 	}
 }
 
@@ -224,7 +215,7 @@ func TestToolCallPredicatesShareOneVocabulary(t *testing.T) {
 	require.Contains(t, sessions, toolCallEventTypesSQL)
 	require.Equal(t, "event_type IN ('tool_call', 'tool_call_result', 'tool_decision')", toolCallEventTypesSQL)
 
-	_, args, err := toolCallsSource.Rows(qc).ToSql()
+	_, args, err := toolCallsSource.Observations(qc).ToSql()
 	require.NoError(t, err)
 	for _, eventType := range toolCallEventTypes {
 		require.Contains(t, args, eventType)

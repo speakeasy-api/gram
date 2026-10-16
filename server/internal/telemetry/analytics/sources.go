@@ -59,6 +59,10 @@ func quotedList(values []string) string {
 // then one row per Key folded from Columns. Rows is that fold, for queries.
 // Observations is the predicates alone, for listing a dimension's values.
 type Source struct {
+	// Table, when set, already holds one row of aggregate states per Key,
+	// filled from agent_events as records arrive, and Columns merge those
+	// states. Rows then reads it instead of collapsing and folding the window.
+	Table   string
 	Where   []squirrel.Sqlizer
 	Key     string
 	Columns []string
@@ -71,9 +75,33 @@ type Source struct {
 // The predicates run after the collapse: a correction can move a record out
 // of the dataset, and filtering first would leave its stale copy to win.
 func (s Source) Rows(qc QueryContext) squirrel.SelectBuilder {
+	if s.Table != "" {
+		return s.merged(qc)
+	}
 	builder := sq.Select(s.Columns...).
 		FromSelect(where(collapsedAgentEvents(qc), s.Where), "observed").
 		GroupBy("organization_id", "project_id", s.Key)
+	if s.Having != "" {
+		builder = builder.Having(s.Having)
+	}
+	return builder
+}
+
+// merged reads one row per Key from the source's table. A row is filed under
+// the hour of each observation, so a call can span two hours: the scan widens
+// the window by an hour each side, and the call's own start decides whether
+// it falls inside.
+func (s Source) merged(qc QueryContext) squirrel.SelectBuilder {
+	const hour = int64(3600)
+	builder := sq.Select(s.Columns...).
+		From(s.Table).
+		Where(squirrel.Eq{"organization_id": qc.Tenant.OrganizationID}).
+		Where(squirrel.Eq{"project_id": qc.Tenant.ProjectID}).
+		Where("call_hour >= toDateTime(?, 'UTC')", qc.Window.FromUnixNano/1e9/hour*hour-hour).
+		Where("call_hour < toDateTime(?, 'UTC')", qc.Window.ToUnixNano/1e9+hour).
+		GroupBy("organization_id", "project_id", s.Key).
+		Having("started_at >= ?", qc.Window.FromUnixNano).
+		Having("started_at < ?", qc.Window.ToUnixNano)
 	if s.Having != "" {
 		builder = builder.Having(s.Having)
 	}
@@ -123,6 +151,7 @@ func where(builder squirrel.SelectBuilder, conditions []squirrel.Sqlizer) squirr
 // event that carries no model, and that must not blank the model an API
 // request stated.
 var sessionsSource = Source{
+	Table: "",
 	Where: []squirrel.Sqlizer{squirrel.NotEq{"session_id": ""}},
 	Key:   "session_id",
 	Columns: []string{
@@ -143,29 +172,31 @@ var sessionsSource = Source{
 }
 
 // toolCallsSource is one row per tool call (decision, call, result), Skill
-// invocations included. A blocked call has only its decision, so that row is
-// the call and its status is rejected.
+// invocations included, read from the tool_calls table that tool_calls_mv
+// fills. A blocked call has only its decision, so that row is the call and
+// its status is rejected.
 var toolCallsSource = Source{
 	Where: []squirrel.Sqlizer{
 		squirrel.Eq{"event_type": toolCallEventTypes},
 		squirrel.NotEq{"event_id": ""},
 	},
-	Key: "event_id",
+	Key:   "event_id",
+	Table: "tool_calls",
 	Columns: []string{
 		"organization_id",
 		"project_id",
 		"event_id AS tool_call_id",
-		"argMaxIf(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name",
-		"argMaxIf(mcp_server_name, observed_at_unix_nano, mcp_server_name != '') AS mcp_server_name",
-		"argMaxIf(mcp_tool_name, observed_at_unix_nano, mcp_tool_name != '') AS mcp_tool_name",
-		"argMaxIf(skill_name, observed_at_unix_nano, skill_name != '') AS skill_name",
-		"argMaxIf(session_id, observed_at_unix_nano, session_id != '') AS session_id",
-		"argMaxIf(user_email, observed_at_unix_nano, user_email != '') AS user_email",
-		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",
-		"argMaxIf(outcome, observed_at_unix_nano, outcome != '') AS status",
-		"argMaxIf(duration_nano, observed_at_unix_nano, duration_nano != 0) AS duration_nano",
-		"min(occurred_at_unix_nano) AS started_at",
-		"max(occurred_at_unix_nano) AS ended_at",
+		"argMaxIfMerge(tool_name) AS tool_name",
+		"argMaxIfMerge(mcp_server_name) AS mcp_server_name",
+		"argMaxIfMerge(mcp_tool_name) AS mcp_tool_name",
+		"argMaxIfMerge(skill_name) AS skill_name",
+		"argMaxIfMerge(session_id) AS session_id",
+		"argMaxIfMerge(user_email) AS user_email",
+		"argMaxIfMerge(surface) AS surface",
+		"argMaxIfMerge(outcome) AS status",
+		"argMaxIfMerge(duration_nano) AS duration_nano",
+		"min(started_at_unix_nano) AS started_at",
+		"max(ended_at_unix_nano) AS ended_at",
 	},
 	Having: "",
 }
@@ -174,6 +205,7 @@ var toolCallsSource = Source{
 // the fold because not every observation of a call carries the name: a
 // blocked invocation's decision does not, its result does.
 var skillsSource = Source{
+	Table:   toolCallsSource.Table,
 	Where:   toolCallsSource.Where,
 	Key:     toolCallsSource.Key,
 	Columns: toolCallsSource.Columns,
