@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -149,9 +150,23 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock identity-provider issuer attachment: %w", err)
 	}
 
-	if attached, err := s.matchingAttachment(ctx, principal.OrganizationID, project, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
+	if attachedClient, err := s.matchingAttachment(ctx, principal.OrganizationID, project, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
-	} else if attached {
+	} else if attachedClient.Valid {
+		// An attachment made before associations were recorded, or a retry
+		// after a partial one, still records the server's own client.
+		associated, err := upstreamclientsrepo.New(s.db).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+			OrganizationID:        principal.OrganizationID,
+			RemoteSessionClientID: attachedClient.UUID,
+			McpServerID:           registration.McpServerID.UUID,
+			ProjectID:             project.ID,
+		})
+		if err != nil {
+			return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("associate registered mcp server with its client: %w", err)
+		}
+		if associated == 0 {
+			return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
+		}
 		return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
 	}
 
@@ -190,14 +205,20 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	defer func() { _ = tx.Rollback(ctx) }()
 	// The server row is locked ahead of the issuer, the order MCP server
 	// updates take, because the commit associates the server with its client.
-	if _, err := mcpserversrepo.New(tx.DB()).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+	locked, err := mcpserversrepo.New(tx.DB()).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
 		ID:        registration.McpServerID.UUID,
 		ProjectID: project.ID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
-		}
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
+	}
+	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock registered mcp server: %w", err)
+	}
+	// Discovery and registration ran unlocked, so the server must still
+	// front the same source through the same issuer they were decided for.
+	if locked.RemoteMcpServerID != registration.RemoteMcpServerID || locked.UserSessionIssuerID != registration.UserSessionIssuerID {
+		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentConflict
 	}
 	if err := commit.Lock(ctx, tx); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("lock identity-provider attachment", err)
@@ -230,7 +251,11 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 	return remotesessions.DiscoveredIssuerMetadata{}, ErrIdentityProviderAttachmentUnsupported
 }
 
-func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, organizationID string, project ResolvedProject, userSessionIssuerID uuid.UUID, issuerURL string) (bool, error) {
+// matchingAttachment returns the client the user session issuer already binds
+// for issuerURL, or an invalid id when it binds none. Any other binding is a
+// conflict this flow does not resolve.
+func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, organizationID string, project ResolvedProject, userSessionIssuerID uuid.UUID, issuerURL string) (uuid.NullUUID, error) {
+	var none uuid.NullUUID
 	clients, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(project.ID),
@@ -238,15 +263,15 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 		OrganizationWide:    false,
 	})
 	if err != nil {
-		return false, fmt.Errorf("list registered identity providers: %w", err)
+		return none, fmt.Errorf("list registered identity providers: %w", err)
 	}
 	if len(clients) == 0 {
-		return false, nil
+		return none, nil
 	}
 	if len(clients) != 1 || !sameIssuerURL(clients[0].IssuerUrl, issuerURL) {
-		return false, ErrIdentityProviderAttachmentConflict
+		return none, ErrIdentityProviderAttachmentConflict
 	}
-	return true, nil
+	return uuid.NullUUID{UUID: clients[0].ClientID, Valid: true}, nil
 }
 
 // reusableIssuer resolves the project-owned issuer this attachment should reuse

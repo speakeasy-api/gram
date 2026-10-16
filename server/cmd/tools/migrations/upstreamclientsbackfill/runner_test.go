@@ -41,6 +41,12 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	pool, err := testInfra.CloneTestDatabase(t, "upstreamclientsbackfill")
 	require.NoError(t, err)
+	return newFixtureIn(t, pool)
+}
+
+// newFixtureIn adds another organization and project to pool.
+func newFixtureIn(t *testing.T, pool *pgxpool.Pool) *fixture {
+	t.Helper()
 	f := &fixture{t: t, pool: pool, q: New(pool), orgID: "org_" + uuid.NewString(), projectID: uuid.New()}
 	require.NoError(t, f.q.SeedOrganizationFixture(t.Context(), f.orgID))
 	require.NoError(t, f.q.SeedProjectFixture(t.Context(), SeedProjectFixtureParams{ID: f.projectID, Slug: "p-" + f.projectID.String()[:8], OrganizationID: f.orgID}))
@@ -297,4 +303,63 @@ func TestDecide(t *testing.T) {
 			require.Equal(t, tt.associate, result.Associate)
 		})
 	}
+}
+
+func TestRunLeavesOtherOrganizationsAlone(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	other := newFixtureIn(t, f.pool)
+
+	mine := f.server(f.userIssuer(), "https://mine.example.com/mcp")
+	theirIssuer := other.userIssuer()
+	theirs := other.server(theirIssuer, "https://theirs.example.com/mcp")
+	theirClient := other.client(theirIssuer, "https://as-theirs.example.com")
+
+	report := f.run(true)
+	for _, result := range report.Results {
+		require.NotEqual(t, theirs, result.MCPServerID, "a scoped run decides only its organization's servers")
+	}
+	require.Equal(t, OutcomeUnbound, resultFor(t, report, mine).Outcome)
+	require.Empty(t, other.associations(theirs), "another organization's server is untouched")
+
+	// A server pointing at another organization's issuer proves nothing.
+	foreign := f.server(theirIssuer, "https://foreign.example.com/mcp")
+	report = f.run(true)
+	for _, result := range report.Results {
+		require.NotEqual(t, foreign, result.MCPServerID, "a server on a foreign issuer is not a candidate")
+	}
+	require.Empty(t, f.associations(foreign))
+	require.NotContains(t, f.associations(foreign), theirClient)
+}
+
+func TestRunSkipsASoleConsumerWriteOnceTheIssuerIsShared(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	issuer := f.userIssuer()
+	server := f.server(issuer, "https://sole.example.com/mcp")
+	clientID := f.client(issuer, "https://as.example.com")
+
+	rows, err := New(f.pool).ListUpstreamClientBackfillCandidates(t.Context(), ListUpstreamClientBackfillCandidatesParams{
+		Cursor:         uuid.Nil,
+		OrganizationID: f.orgID,
+		PageSize:       10,
+	})
+	require.NoError(t, err)
+	decided := Decide(rows)
+	require.Equal(t, OutcomeSoleConsumer, decided.Outcome)
+
+	// A second server joins the issuer between the read and the write.
+	f.server(issuer, "https://sibling.example.com/mcp")
+
+	n, err := New(f.pool).BackfillUpstreamClientAssociation(t.Context(), BackfillUpstreamClientAssociationParams{
+		RemoteSessionClientID: clientID,
+		McpServerID:           server,
+		UserSessionIssuerID:   issuer,
+		RequireSoleConsumer:   true,
+		RespectRemoved:        decided.RespectRemoved,
+	})
+	require.NoError(t, err)
+	require.Zero(t, n, "a binding that is no longer the server's alone proves nothing")
+	require.Empty(t, f.associations(server))
 }

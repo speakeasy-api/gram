@@ -252,11 +252,14 @@ export function RemoteMcpIdentitySectionBody({
     configured: actualMode === "user",
     enabled: identityResolved && selectedMode === "user",
   });
+  // mcp:write satisfies mcp:read, but a read block applies independently.
+  const canRead =
+    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
   const associationsQuery = useServerClientAssociations(
     { mcpServerId: target.permissionResourceId },
     undefined,
     {
-      enabled: identityResolved && selectedMode === "user",
+      enabled: canRead && identityResolved && selectedMode === "user",
       throwOnError: false,
     },
   );
@@ -309,9 +312,6 @@ export function RemoteMcpIdentitySectionBody({
   const showScopePin = scopePinSlot && !!scopePin.data && !scopePinUnusable;
   const scopePinDirty = showScopePin && scopePin.dirty;
   // Writers get the same answer in the pin's status line when the pin shows.
-  // mcp:write satisfies mcp:read, but a read block applies independently.
-  const canRead =
-    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
   const showScopesSummary =
     canRead &&
     (!scopePinSlot || scopePinUnusable) &&

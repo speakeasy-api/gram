@@ -2,18 +2,6 @@
 ALTER TABLE "user_sessions" ADD COLUMN "credential_id" uuid NULL;
 -- Set comment to column: "credential_id" on table: "user_sessions"
 COMMENT ON COLUMN "user_sessions"."credential_id" IS '@access: confidential';
--- Create "set_upstream_client_selection_scope" function
-CREATE FUNCTION "set_upstream_client_selection_scope" () RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF NEW.remote_session_client_id IS NULL THEN
-    NEW.client_attachment_scope := NULL;
-  ELSE
-    SELECT attachment_scope INTO NEW.client_attachment_scope
-    FROM remote_session_clients WHERE id = NEW.remote_session_client_id;
-  END IF;
-  RETURN NEW;
-END;
-$$;
 -- Create "upstream_client_selections" table
 CREATE TABLE "upstream_client_selections" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -34,17 +22,17 @@ CREATE TABLE "upstream_client_selections" (
   CONSTRAINT "upstream_client_selections_client_scope_fkey" FOREIGN KEY ("remote_session_client_id", "client_attachment_scope") REFERENCES "remote_session_clients" ("id", "attachment_scope") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "upstream_client_selections_mcp_server_fkey" FOREIGN KEY ("project_id", "mcp_server_id") REFERENCES "mcp_servers" ("project_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "upstream_client_selections_project_tenant_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "upstream_client_selections_client_scope_check" CHECK (((remote_session_client_id IS NULL) AND (client_attachment_scope IS NULL)) OR (((client_attachment_scope = ('project:'::text || (project_id)::text)) OR (client_attachment_scope = ('organization:'::text || organization_id))) OR (client_attachment_scope = 'global'::text))),
+  CONSTRAINT "upstream_client_selections_client_scope_check" CHECK (((remote_session_client_id IS NULL) AND (client_attachment_scope IS NULL)) OR ((remote_session_client_id IS NOT NULL) AND (client_attachment_scope IS NOT NULL) AND (((client_attachment_scope = ('project:'::text || (project_id)::text)) OR (client_attachment_scope = ('organization:'::text || organization_id))) OR (client_attachment_scope = 'global'::text)))),
   CONSTRAINT "upstream_client_selections_credential_kind_check" CHECK (credential_kind <> ''::text),
   CONSTRAINT "upstream_client_selections_no_auth_check" CHECK (no_auth = (remote_session_client_id IS NULL)),
   CONSTRAINT "upstream_client_selections_source_check" CHECK (source <> ''::text)
 );
 -- Create index "upstream_client_selections_client_idx" to table: "upstream_client_selections"
-CREATE INDEX "upstream_client_selections_client_idx" ON "upstream_client_selections" ("remote_session_client_id") WHERE ((deleted IS FALSE) AND (remote_session_client_id IS NOT NULL));
+CREATE INDEX "upstream_client_selections_client_idx" ON "upstream_client_selections" ("remote_session_client_id");
 -- Create index "upstream_client_selections_credential_server_key" to table: "upstream_client_selections"
 CREATE UNIQUE INDEX "upstream_client_selections_credential_server_key" ON "upstream_client_selections" ("credential_kind", "credential_id", "mcp_server_id") WHERE (deleted IS FALSE);
 -- Create index "upstream_client_selections_mcp_server_idx" to table: "upstream_client_selections"
-CREATE INDEX "upstream_client_selections_mcp_server_idx" ON "upstream_client_selections" ("mcp_server_id") WHERE (deleted IS FALSE);
+CREATE INDEX "upstream_client_selections_mcp_server_idx" ON "upstream_client_selections" ("mcp_server_id");
 -- Create index "upstream_client_selections_project_id_idx" to table: "upstream_client_selections"
 CREATE INDEX "upstream_client_selections_project_id_idx" ON "upstream_client_selections" ("project_id");
 -- Set comment to column: "id" on table: "upstream_client_selections"
@@ -75,5 +63,3 @@ COMMENT ON COLUMN "upstream_client_selections"."updated_at" IS '@access: confide
 COMMENT ON COLUMN "upstream_client_selections"."deleted_at" IS '@access: confidential';
 -- Set comment to column: "deleted" on table: "upstream_client_selections"
 COMMENT ON COLUMN "upstream_client_selections"."deleted" IS '@access: confidential';
--- Create trigger "upstream_client_selections_scope"
-CREATE TRIGGER "upstream_client_selections_scope" BEFORE INSERT OR UPDATE OF "remote_session_client_id" ON "upstream_client_selections" FOR EACH ROW EXECUTE FUNCTION "set_upstream_client_selection_scope"();
