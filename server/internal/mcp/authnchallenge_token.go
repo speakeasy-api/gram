@@ -1344,8 +1344,10 @@ func (s *Service) rotateRefreshToken(
 // consults sibling clients on the user session issuer; the consent page
 // likewise lets a chained card stand in for a connection. So once chaining
 // serves the grant, sibling sessions need no reconnect either. The reconnect
-// stands only when chaining does not serve the upstream or stored state
-// confirms the human must sign in again. Anything chaining cannot confirm,
+// stands only when chaining does not serve the upstream, stored state
+// confirms the human must sign in again, or a provider just refused chaining
+// for good, which only the consent page's separate sign-in works around.
+// Anything chaining cannot confirm,
 // a failed read included, fails open, because no reconnect would change it.
 func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
 	if endpoint.MetaMcpServerID.Valid {
@@ -1378,7 +1380,7 @@ func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger 
 	switch verdict.Decision {
 	case identitychaining.RefreshServed, identitychaining.RefreshUnconfirmed:
 		return false
-	case identitychaining.RefreshNotChained, identitychaining.RefreshReauthenticate:
+	case identitychaining.RefreshNotChained, identitychaining.RefreshReauthenticate, identitychaining.RefreshRefused:
 		return true
 	}
 	return true

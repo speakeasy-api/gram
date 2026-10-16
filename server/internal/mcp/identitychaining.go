@@ -143,6 +143,15 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		// Reauthorizing signs the human in again, which retains a fresh
 		// delegation, so the challenge matches a missing upstream session.
 		return none, writeRemoteSessionReconnectChallenge(w, authentication)
+	case unusable && !outcome.Retryable:
+		// The provider refused for good. Reauthorizing reaches the consent
+		// page, whose separate sign-in reconnects the linked upstream.
+		endpoint.LogWith(logger).WarnContext(ctx, "identity chaining refused; challenging the linked upstream session",
+			attr.SlogOutcome(string(outcome.Reason)),
+			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
+			attr.SlogMcpURL(authentication.mcpURL),
+		)
+		return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 	}
 	return none, identityChainingError(outcome)
 }

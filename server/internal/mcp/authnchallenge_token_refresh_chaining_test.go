@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"testing"
@@ -43,6 +44,7 @@ type chainedRefreshFixture struct {
 	slug         string
 	clientID     string
 	refreshToken string
+	resourceKey  string
 }
 
 func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixture) {
@@ -110,6 +112,7 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 		ProjectID: project, CustomDomainID: uuid.NullUUID{}, McpServerID: conv.ToNullUUID(serverID), MetaMcpServerID: uuid.NullUUID{}, Slug: slug,
 	})
 	require.NoError(t, err)
+	resourceKey := cacheEMAEndpointResource(t, ctx, ti, org, project, upstream, protectedresource.EndpointResource{Resource: upstream, AuthorizationServers: []string{chainedRefreshResourceIssuer}, Discovered: true})
 
 	client, err := us.CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
 		UserSessionIssuerID: userIssuer.ID, ClientID: "chained-refresh-client-" + uuid.NewString()[:8], ClientName: "chained refresh client",
@@ -132,8 +135,23 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 	return ctx, chainedRefreshFixture{
 		ti: ti, org: org, human: human, idpIssuer: idpIssuer, idpClient: idpClient,
 		configHash: remotesessions.FederatedDelegationConfigurationHash(org, trusted.RemoteSessionIssuer, trusted.RemoteSessionClient),
-		slug:       slug, clientID: client.ClientID, refreshToken: refreshToken,
+		slug:       slug, clientID: client.ClientID, refreshToken: refreshToken, resourceKey: resourceKey,
 	}
+}
+
+// cacheEMAEndpointResource stores discovery's answer for endpoint as
+// ChallengeManager.ResolveEMAResource caches it, and returns the cache key.
+func cacheEMAEndpointResource(t *testing.T, ctx context.Context, ti *testInstance, org string, project uuid.UUID, endpoint string, resource protectedresource.EndpointResource) string {
+	t.Helper()
+	digest := sha256.Sum256([]byte(org + "\n" + project.String() + "\n" + endpoint))
+	key := "emaEndpointResource:v1:" + hex.EncodeToString(digest[:])
+	entry := struct {
+		Resource protectedresource.EndpointResource `json:"resource"`
+		Invalid  bool                               `json:"invalid"`
+		Failed   bool                               `json:"failed"`
+	}{Resource: resource, Invalid: false, Failed: false}
+	require.NoError(t, ti.cacheAdapter.Set(ctx, key, entry, time.Hour))
+	return key
 }
 
 // retainDelegation records the human's retained delegation in status, its
@@ -169,8 +187,9 @@ func requireRefreshReconnect(t *testing.T, res refreshResult) {
 	require.Contains(t, res.body, reconnectDescription)
 }
 
-// The default test service runs the production chainer, so these refreshes
-// are judged by a real Governor over real bindings and delegations.
+// The default test service runs the production chainer and resource
+// resolvers, so these refreshes are judged by a real Governor over real
+// bindings, delegations and the shared discovery cache.
 func TestHandleToken_ChainedRefreshServedByRetainedDelegation(t *testing.T) {
 	t.Parallel()
 	ctx, f := newChainedRefreshFixture(t)
@@ -241,4 +260,15 @@ func TestHandleToken_ChainedRefreshProceedsThroughTransientDiscoveryFailure(t *t
 	f.ti.service.SetIdentityChainer(chainer)
 	res := f.refresh(t, ctx)
 	require.Equal(t, http.StatusOK, res.code, "a transient fault never costs the client its session: %s", res.body)
+}
+
+func TestHandleToken_ChainedRefreshWithColdDiscoveryCacheProceeds(t *testing.T) {
+	t.Parallel()
+	ctx, f := newChainedRefreshFixture(t)
+	f.retainDelegation(t, ctx, "reauthentication_required")
+	requireRefreshReconnect(t, f.refresh(t, ctx))
+
+	require.NoError(t, f.ti.cacheAdapter.Delete(ctx, f.resourceKey))
+	res := f.refresh(t, ctx)
+	require.Equal(t, http.StatusOK, res.code, "without cached discovery the refresh cannot name the runtime's binding, so it proceeds: %s", res.body)
 }

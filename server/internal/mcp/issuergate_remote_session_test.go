@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -193,6 +194,7 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 		{name: "chaining unconfirmed", decision: identitychaining.RefreshUnconfirmed},
 		{name: "chaining needs a fresh sign-in", decision: identitychaining.RefreshReauthenticate, wantReconnect: true},
 		{name: "chaining does not serve the upstream", decision: identitychaining.RefreshNotChained, wantReconnect: true},
+		{name: "a provider just refused chaining", decision: identitychaining.RefreshRefused, wantReconnect: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -350,6 +352,69 @@ func TestHandleToken_RefreshChecksStoredUpstreamCredentials(t *testing.T) {
 				require.Equal(t, http.StatusOK, refreshed.code, refreshed.body)
 			}
 			require.Zero(t, upstreamRefreshes.Load(), "stored credential checks must not contact the upstream")
+		})
+	}
+}
+
+// A provider's definitive refusal must not strand a human whose linked
+// upstream session needs reconnecting: the gate challenges as without
+// chaining, so reauthorizing reaches the consent page's separate sign-in.
+// Without a linked session there is nothing to reconnect and the refusal
+// stands.
+func TestServePublic_IssuerGate_ChainingRefusalChallengesTheLinkedSession(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		linked bool
+	}{
+		{name: "stale linked session", linked: true},
+		{name: "no linked session", linked: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			authCtx := requireProjectAuthContext(t, ctx)
+			issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+			slug := "chain-refused-" + uuid.NewString()[:8]
+			mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://chain-refused.example.test/mcp", slug, "private", issuerID)
+			seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, mcpServer.ID.String())
+			subject := urn.NewUserSubject(mockidp.MockUserID)
+			if tc.linked {
+				remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuerID)
+				upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuerID, remoteClient.ID, subject)
+				pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, remoteClient.ID, func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+				})
+			}
+			token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+				Subject:  subject,
+				Audience: urn.NewUserSessionIssuer(issuerID).String(),
+				Issuer:   ti.serverURL.String() + "/mcp/" + slug,
+				Lifetime: time.Hour,
+			})
+			require.NoError(t, err)
+			persistTestUserSession(t, ti, issuerID, subject, jti)
+
+			refused := identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonAccessDenied, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+			g := &consentGovernor{t: t, issuer: uuid.Nil, served: map[string]bool{}, governs: true, configured: true, usable: false, refresh: identitychaining.RefreshRefused, acquire: func(context.Context, identitychaining.Request) identitychaining.Outcome { return refused }, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+			ti.service.SetIdentityChainer(g)
+
+			w, err := servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), token, nil)
+			g.mu.Lock()
+			acquired := len(g.acquired)
+			g.mu.Unlock()
+			require.Equal(t, 1, acquired, "the gate tries chaining before answering")
+			if tc.linked {
+				require.Equal(t, reconnectDescription, requireOopsCode(t, err, oops.CodeUnauthorized))
+				require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
+				return
+			}
+			require.Contains(t, requireOopsCode(t, err, oops.CodeForbidden), "contact your administrator")
+			require.Empty(t, w.Header().Get("WWW-Authenticate"))
 		})
 	}
 }

@@ -39,6 +39,10 @@ type Governor struct {
 	// cachedResource is resolveResource answered from its shared cache alone,
 	// reporting false on a miss; nil reads every lookup as a miss.
 	cachedResource func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error)
+
+	// recentRefusal reports a provider's recent definitive refusal of sel, as
+	// the runtime shares it; nil on a Governor, which never exchanges.
+	recentRefusal func(context.Context, Request, selection) (Outcome, bool)
 }
 
 // NewGovernor builds a configuration governor; enc verifies stored credentials
@@ -49,6 +53,7 @@ func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, 
 		logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, delegation: delegation, now: time.Now,
 		resolveResource: nil,
 		cachedResource:  nil,
+		recentRefusal:   nil,
 		sources:         nil,
 	}
 	g.sources = map[remotesessions.EMAProviderKind]sourceFactory{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -40,6 +41,12 @@ const (
 	// can serve needs the human to sign in again, and that the sign-in
 	// repairs it.
 	RefreshReauthenticate RefreshDecision = "reauthenticate"
+
+	// RefreshRefused: a provider recently refused chaining for good and no
+	// stored credential serves, so the runtime answers with the reconnect
+	// challenge and only the consent page's separate sign-in serves the
+	// upstream.
+	RefreshRefused RefreshDecision = "refused"
 )
 
 // RefreshVerdict is RefreshDecision with what produced it, for logs.
@@ -131,15 +138,44 @@ func (g *Governor) RefreshDecision(ctx context.Context, req Request) RefreshVerd
 	outcome = exhausted(failures)
 	verdict.Provider = outcome.Provider
 	verdict.Reason = outcome.Reason
+	verdict.Decision = refreshDecisionFor(outcome, failures)
+	return verdict
+}
+
+// refreshDecisionFor judges the refresh once every provider in the order
+// failed; outcome is exhausted(failures). A provider that is unavailable only
+// for now will serve again without a reconnect, so it keeps the refresh
+// unconfirmed unless a fresh sign-in repairs another provider.
+func refreshDecisionFor(outcome Outcome, failures []Outcome) RefreshDecision {
 	switch {
 	case outcome.Reason == ReasonReauthenticationRequired:
-		verdict.Decision = RefreshReauthenticate
+		return RefreshReauthenticate
+	case slices.ContainsFunc(failures, func(f Outcome) bool { return f.Reason == ReasonProviderUnavailable && unavailableForNow(f.Unavailable) }):
+		return RefreshUnconfirmed
+	case slices.ContainsFunc(failures, func(f Outcome) bool { return f.Cached }):
+		return RefreshRefused
 	case !outcome.Applicable():
-		verdict.Decision = RefreshNotChained
-	default:
-		verdict.Decision = RefreshUnconfirmed
+		return RefreshNotChained
 	}
-	return verdict
+	return RefreshUnconfirmed
+}
+
+// unavailableForNow reports an unavailability that clears without anyone
+// acting: a signing pause (startup, an indeterminate or stale kill switch
+// read), a keyless issuer awaiting its replacement key, a readiness or
+// sign-in enforcement read that failed. Every other reason is configuration
+// an administrator set, and leaves the upstream on the interactive path.
+func unavailableForNow(reason remotesessions.EMAProviderUnavailableReason) bool {
+	switch reason {
+	case remotesessions.EMAProviderSigningPaused, remotesessions.EMAProviderKeyless,
+		remotesessions.EMAProviderReadinessUnknown, remotesessions.EMAProviderSignInEnforcement:
+		return true
+	case remotesessions.EMAProviderDeleted, remotesessions.EMAProviderDisabled, remotesessions.EMAProviderNotTrustedByEndpoint,
+		remotesessions.EMAProviderSigningUnavailable, remotesessions.EMAProviderNotRolledOut,
+		remotesessions.EMAProviderVerifiedDomain, remotesessions.EMAProviderSetupRequired:
+		return false
+	}
+	return false
 }
 
 // refreshFrom runs, from stored state, the checks Acquire runs on p before it
@@ -163,8 +199,8 @@ func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Req
 	if outcome := src.authorize(ctx, logger, req, &current); !outcome.Succeeded() {
 		return outcome
 	}
-	if _, local := src.(speakeasySource); local {
-		return success
+	if src.kind() == remotesessions.EMAProviderSpeakeasy {
+		return g.refusedWithoutCredential(ctx, logger, req, current)
 	}
 	if g.delegation == nil {
 		return delegationUnchecked
@@ -186,7 +222,32 @@ func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Req
 	if errors.Is(err, remotesessions.ErrDelegationStaleRegistration) {
 		return newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
 	}
-	return delegationOutcome(err)
+	if outcome := delegationOutcome(err); !outcome.Succeeded() {
+		return outcome
+	}
+	return g.refusedWithoutCredential(ctx, logger, req, current)
+}
+
+// refusedWithoutCredential is the provider's recent definitive refusal of sel
+// when no stored credential would serve instead, as acquisition answers it;
+// success otherwise.
+func (g *Governor) refusedWithoutCredential(ctx context.Context, logger *slog.Logger, req Request, sel selection) Outcome {
+	if g.recentRefusal == nil {
+		return success
+	}
+	refused, ok := g.recentRefusal(ctx, req, sel)
+	if !ok {
+		return success
+	}
+	usable, err := g.storedCredentialUsable(ctx, req, sel)
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "read identity chaining credential for refresh", attr.SlogError(err))
+		return newOutcome(StagePersistence, ReasonTransientFailure, ConfidenceUnknown, true)
+	case usable:
+		return success
+	}
+	return refused
 }
 
 // storedCredentialUsable reports whether sel's stored credential is usable now

@@ -1388,6 +1388,30 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.nonce = "not-a-ciphertext" })
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
 	})
+	t.Run("assertion inside the safety window without a refresh grant", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", 10*time.Minute+30*time.Second, nil)
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication, "Resolve does not release an assertion with 30 seconds left")
+	})
+	t.Run("refresh grant without a subject", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.subject = "" })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("refresh grant whose subject seals an empty value", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, nil)
+		sealed, err := s.enc.Encrypt([]byte(""))
+		require.NoError(t, err)
+		store, ok := s.store.(*delegationMemoryStore)
+		require.True(t, ok)
+		store.mu.Lock()
+		c := store.rows[b]
+		c.subject = sealed
+		store.rows[b] = c
+		store.mu.Unlock()
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+	})
 	t.Run("configuration failure under the current registration", func(t *testing.T) {
 		t.Parallel()
 		s, b, allow := retained(t, "refresh", time.Hour, func(c *delegationCredential) { c.status = "configuration_failure" })
