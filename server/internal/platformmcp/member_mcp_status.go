@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -78,6 +79,19 @@ type memberMCPStatusTarget struct {
 	remoteSessionIssuerID uuid.UUID
 	remoteMCPServerID     uuid.NullUUID
 	tunneledMCPServerID   uuid.NullUUID
+	// associatedClients is a proxied server's associated upstream clients;
+	// nil, for a hosted server, matches clients by the server's derived
+	// authorization server instead.
+	associatedClients map[uuid.UUID]bool
+}
+
+// signInRequired reports whether the server authenticates upstream through a
+// client the member connects.
+func (t memberMCPStatusTarget) signInRequired() bool {
+	if t.associatedClients != nil {
+		return len(t.associatedClients) > 0
+	}
+	return t.remoteSessionIssuerID != uuid.Nil
 }
 
 func (s *PluginsService) GetMyMCPAccess(ctx context.Context, principal Principal, input GetMyMCPStatusInput) (GetMyMCPAccessOutput, error) {
@@ -122,7 +136,16 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return output, nil
 	}
 	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
-	if target.remoteSessionIssuerID == uuid.Nil {
+	if target.associatedClients != nil && len(target.associatedClients) == 0 && target.remoteSessionIssuerID != uuid.Nil {
+		// A proxied server with no associated client that still derives an
+		// authorization server signs in through a client nobody configured for
+		// it, which the runtime refuses until an administrator does.
+		output.State = MCPConnectionStateSetupRequired
+		output.Reason = "upstream_authorization_not_configured"
+		output.NextAction = "ask_administrator"
+		return output, nil
+	}
+	if !target.signInRequired() {
 		// Direct upstreams select chaining bindings by resource, even without an interactive issuer.
 		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
 		if err != nil {
@@ -150,7 +173,7 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("list MCP authorization clients: %w", err)
 	}
-	clients = memberMCPConnectionClients(clients, target.remoteSessionIssuerID)
+	clients = memberMCPConnectionClients(clients, target)
 	if len(clients) > 1 {
 		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
 		if err != nil {
@@ -283,6 +306,10 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("load member MCP authorization target: %w", err)
 	}
+	associated, err := s.serverAssociatedClients(ctx, principal.OrganizationID, server)
+	if err != nil {
+		return memberMCPStatusTarget{}, err
+	}
 	name := row.Name.String
 	if name == "" {
 		name = row.Slug.String
@@ -297,6 +324,7 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 		remoteSessionIssuerID: server.RemoteSessionIssuerID.UUID,
 		remoteMCPServerID:     server.RemoteMcpServerID,
 		tunneledMCPServerID:   server.TunneledMcpServerID,
+		associatedClients:     associated,
 	}, nil
 }
 
@@ -333,7 +361,22 @@ func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principa
 	default:
 		return false, false, nil
 	}
-	req, ok := identitychaining.NewRequest(principal.OrganizationID, target.projectID, target.userSessionIssuerID, principal.UserID, upstream, tunneled, uuid.NullUUID{UUID: target.remoteSessionIssuerID, Valid: target.remoteSessionIssuerID != uuid.Nil})
+	tunnelIssuer := uuid.NullUUID{UUID: target.remoteSessionIssuerID, Valid: target.remoteSessionIssuerID != uuid.Nil}
+	if tunneled {
+		// A tunneled upstream routes, and chains, by the issuer of the one
+		// client the caller's sign-in would choose for it.
+		tunnelIssuer = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		if s.remoteSessions != nil && target.userSessionIssuerID != uuid.Nil {
+			clients, err := s.remoteSessions.ListClients(ctx, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+			if err != nil {
+				return false, false, fmt.Errorf("list MCP authorization clients: %w", err)
+			}
+			if chosen := memberMCPConnectionClients(clients, target); len(chosen) == 1 {
+				tunnelIssuer = uuid.NullUUID{UUID: chosen[0].RemoteSessionIssuerID, Valid: true}
+			}
+		}
+	}
+	req, ok := identitychaining.NewRequest(principal.OrganizationID, target.projectID, target.userSessionIssuerID, principal.UserID, upstream, tunneled, tunnelIssuer)
 	if !ok {
 		return false, false, nil
 	}
@@ -350,14 +393,36 @@ func memberMCPAccessNextAction(requestAccessURL string) string {
 	return "request_access"
 }
 
-func memberMCPConnectionClients(clients []remotesessions.Client, issuerID uuid.UUID) []remotesessions.Client {
+func memberMCPConnectionClients(clients []remotesessions.Client, target memberMCPStatusTarget) []remotesessions.Client {
 	matched := make([]remotesessions.Client, 0, 1)
 	for _, client := range clients {
-		if client.RemoteSessionIssuerID == issuerID {
+		if target.associatedClients != nil && target.associatedClients[client.ID] ||
+			target.associatedClients == nil && client.RemoteSessionIssuerID == target.remoteSessionIssuerID {
 			matched = append(matched, client)
 		}
 	}
 	return matched
+}
+
+// serverAssociatedClients returns the live clients associated with a proxied
+// server; nil for a hosted server, which keeps the derived match as the
+// runtime does.
+func (s *PluginsService) serverAssociatedClients(ctx context.Context, organizationID string, server mcpserversrepo.McpServer) (map[uuid.UUID]bool, error) {
+	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
+		return nil, nil
+	}
+	rows, err := upstreamclientsrepo.New(s.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
+		McpServerIds:   []uuid.UUID{server.ID},
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list server associated clients: %w", err)
+	}
+	associated := make(map[uuid.UUID]bool, len(rows))
+	for _, row := range rows {
+		associated[row.RemoteSessionClientID] = true
+	}
+	return associated, nil
 }
 
 func memberMCPReauthorizationReason(status remotesessions.RemoteSessionState, now time.Time) string {

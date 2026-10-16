@@ -525,7 +525,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_AmbiguousCredentialMakesNoCall(t *
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member--ping")
 	text, isError := metaToolResultText(t, rpc)
 	require.True(t, isError, "an ambiguous credential map must fail the member call")
-	require.Contains(t, text, "recorded for the same upstream", "the message must name the duplication, not just report misconfiguration")
+	require.Contains(t, text, "signed in to again", "no client is decided for the member, so it is not served")
 	require.Zero(t, upstream.requestCount(), "no call may be made when the credential is ambiguous")
 }
 
@@ -694,11 +694,19 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *
 	require.True(t, isError)
 	require.Contains(t, text, "holds no credential that routes to it")
 
-	// A grant qualified to the member is forwarded, and the member refuses it.
+	// A grant qualified to the member ties the client to it, so the earlier
+	// credential's no-auth choice no longer holds and it must sign in again.
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
 	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	require.Contains(t, text, "rejected the stored credential")
+	require.Contains(t, text, "signed in to again")
+
+	// A fresh sign-in chooses the client, forwards its grant, and the member
+	// refuses it.
+	bearer = mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "rejected the user's credential")
 }
 
 // A member that signs in through a service the caller has not connected

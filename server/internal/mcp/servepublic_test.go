@@ -385,7 +385,7 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	require.NoError(t, err)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
@@ -430,7 +430,7 @@ func TestServePublic_AttachedNotFoundReturnsMCPErrorWithNullID(t *testing.T) {
 	_, ti := newTestMCPService(t)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/bad-slug", bytes.NewReader(makeInitializeBody()))
 	req.Header.Set("Accept", "application/json")
@@ -1053,7 +1053,7 @@ func TestServePublic_UnsupportedVersionPrecedesPrivateAuthentication(t *testing.
 	toolset := createPrivateMCPToolset(t, ctx, ti, "unsupported-before-auth-"+uuid.NewString()[:8])
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(toolsListBody()))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")

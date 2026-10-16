@@ -304,7 +304,13 @@ func (s *Service) buildRemoteConnectURL(
 		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
 	}
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
-	// decided, and falling back would qualify the credential anyway.
+	// decided, and falling back would qualify the credential anyway. A
+	// gateway client no member is associated with serves nothing through the
+	// gateway, so it is refused rather than qualified by the issuer's
+	// inventory.
+	if rerr == nil && !claimedByMember && endpoint.MetaMcpServerID.Valid {
+		return "", false, oops.E(oops.CodeBadRequest, nil, "this connection is not configured for any server this gateway serves").LogWarn(ctx, logger)
+	}
 	if rerr == nil && !claimedByMember {
 		boundIDs := make([]uuid.UUID, 0, len(bound))
 		for i := range bound {

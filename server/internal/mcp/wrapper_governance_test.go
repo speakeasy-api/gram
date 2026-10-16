@@ -514,7 +514,7 @@ func TestOrganizationGatewayRoutes_ShadowProbeFallbackCountedSeparately(t *testi
 	authCtx := requireProjectAuthContext(t, ctx)
 	createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, "gateway")
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	w := postRegistration(t, router, "/mcp/gateway/register")
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())

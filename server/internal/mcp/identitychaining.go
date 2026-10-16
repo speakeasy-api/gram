@@ -83,14 +83,24 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	endpoint := authentication.endpoint
+	// A credential's own choice for the server replaces the issuer derived
+	// for it: the chosen client's issuer is the one it routes and chains by.
+	choice, selected, err := s.directUpstreamChoice(ctx, w, authentication)
+	switch {
+	case err != nil:
+		return none, err
+	case selected && choice.noAuth():
+		return none, nil
+	case selected:
+		backendIssuerID = choice.remoteSessionIssuerID
+	}
 	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID)
 	if !chainable {
 		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
 	}
 
-	tokens, strictErr := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	tokens, strictErr := s.resolveAccessTokens(ctx, authentication, false)
 	unusable := errors.Is(strictErr, remotesessions.ErrNoValidToken)
-	var err error
 	switch {
 	case unusable:
 		// A linked upstream is unusable. Only an upstream chaining governs is
@@ -99,7 +109,12 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		if !s.identityChainer.Governs(ctx, req) {
 			return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 		}
-		tokens, err = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+		tokens, err = s.resolveAccessTokens(ctx, authentication, true)
+		if errors.Is(err, remotesessions.ErrChosenClientUnbound) {
+			// The credential's chosen client is gone from the issuer; only
+			// reconnecting records a usable choice.
+			return none, s.rejectRemoteSession(ctx, w, authentication, err)
+		}
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
 		}
@@ -269,39 +284,57 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	if endpoint.MetaMcpServerID.Valid {
 		return s.consentChainedMetaClients(ctx, endpoint, challengeState, clients, routing)
 	}
-	tunneled, tunnelIssuer, ok := s.consentDirectBackend(ctx, endpoint, routing)
+	tunneled, ok := s.consentDirectBackend(ctx, endpoint, routing)
 	if !ok {
-		return nil
-	}
-	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
-	if !ok {
-		return nil
-	}
-	issuer, served := s.identityChainer.Serves(ctx, req)
-	if !served {
 		return nil
 	}
 	requests := make(map[uuid.UUID][]identitychaining.Request, len(clients))
+	if !tunneled {
+		// A remote backend's request names no issuer, so one answer judges
+		// every card.
+		req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, false, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+		if !ok {
+			return nil
+		}
+		issuer, served := s.identityChainer.Serves(ctx, req)
+		if !served {
+			return nil
+		}
+		for _, c := range clients {
+			if c.RemoteSessionIssuerID == issuer {
+				requests[c.ID] = []identitychaining.Request{req}
+			}
+		}
+		return requests
+	}
+	// A tunneled backend routes, and chains, by the chosen client's own
+	// issuer, so each card is judged with the request its client builds.
 	for _, c := range clients {
-		if c.RemoteSessionIssuerID == issuer {
+		req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, true, uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true})
+		if !ok {
+			continue
+		}
+		if issuer, served := s.identityChainer.Serves(ctx, req); served && issuer == c.RemoteSessionIssuerID {
 			requests[c.ID] = []identitychaining.Request{req}
 		}
+	}
+	if len(requests) == 0 {
+		return nil
 	}
 	return requests
 }
 
 // consentDirectBackend reports whether a direct endpoint's backend is
-// tunneled and its derived issuer, reusing resolved routing when present.
-func (s *Service) consentDirectBackend(ctx context.Context, endpoint *ResolvedMcpEndpoint, routing consentRouting) (bool, uuid.NullUUID, bool) {
-	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+// tunneled, reusing resolved routing when present.
+func (s *Service) consentDirectBackend(ctx context.Context, endpoint *ResolvedMcpEndpoint, routing consentRouting) (bool, bool) {
 	if !endpoint.McpServerID.Valid || strings.TrimRight(endpoint.UpstreamResource, "/") == "" {
-		return false, none, false
+		return false, false
 	}
 	switch routing.backend {
 	case consentBackendRemote:
-		return false, none, true
+		return false, true
 	case consentBackendTunneled:
-		return true, routing.issuer, true
+		return true, true
 	case consentBackendNone, consentBackendMeta:
 	}
 	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
@@ -310,15 +343,15 @@ func (s *Service) consentDirectBackend(ctx context.Context, endpoint *ResolvedMc
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "load mcp server for consent identity chaining", attr.SlogError(err))
-		return false, none, false
+		return false, false
 	}
 	switch {
 	case server.RemoteMcpServerID.Valid:
-		return false, none, true
+		return false, true
 	case server.TunneledMcpServerID.Valid:
-		return true, tunneledBackendIssuer(&server), true
+		return true, true
 	}
-	return false, none, false
+	return false, false
 }
 
 // consentChainedMetaClients marks a gateway card chained only when chaining

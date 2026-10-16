@@ -1,7 +1,6 @@
 package mcp_test
 
 import (
-	"context"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -18,29 +17,32 @@ import (
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
-func TestConsentValidationRejectsDuplicateCredentials(t *testing.T) {
+// On a gateway, two clients holding grants for one member leave the member
+// without a decided client, so neither is offered for verification.
+func TestConsentValidationRefusesAGatewayMemberWithAmbiguousClients(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name string
-		seed func(*testing.T, string) (context.Context, validationFixture)
-	}{
-		{name: "meta", seed: seedMetaValidationFixture},
-		{name: "standalone", seed: seedStandaloneValidationFixture},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctx, fx := tc.seed(t, "validate-duplicate-"+tc.name)
-			projectID, orgID := consentTestTenant(t, ctx)
-			duplicate := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-duplicate-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
-			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate, fx.subject, "token-duplicate-other", fx.member.url)
-			_, err := postValidate(t, fx, fx.clientID)
-			var shareable *oops.ShareableError
-			require.ErrorAs(t, err, &shareable)
-			require.Equal(t, oops.CodeBadRequest, shareable.Code)
-			require.ErrorContains(t, err, "cannot be verified")
-			require.Empty(t, fx.member.drain(), "ambiguous credentials must not reach the backend")
-		})
-	}
+	ctx, fx := seedMetaValidationFixture(t, "validate-duplicate-meta")
+	projectID, orgID := consentTestTenant(t, ctx)
+	duplicate := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-duplicate-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate, fx.subject, "token-duplicate-other", fx.member.url)
+	_, err := postValidate(t, fx, fx.clientID)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.Empty(t, fx.member.drain(), "ambiguous credentials must not reach the backend")
+}
+
+// A standalone server verifies the card's own client with that client's
+// credential alone; another client's grant for the same upstream is never a
+// competing candidate.
+func TestConsentValidationProbesWithTheCardsOwnCredentialBesideAnotherClients(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedStandaloneValidationFixture(t, "validate-duplicate-standalone")
+	projectID, orgID := consentTestTenant(t, ctx)
+	other := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-duplicate-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, other, fx.subject, "token-duplicate-other", fx.member.url)
+	requireValidated(t, fx)
+	requireProbe(t, fx.member.drain(), "token-validate-duplicate-standalone", true, true)
 }
 
 func TestConsentValidationStandaloneTunnelWillNotProbeWithAnotherCardsCredential(t *testing.T) {
@@ -74,13 +76,12 @@ func TestConsentValidationStandaloneTunnelWillNotProbeWithAnotherCardsCredential
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, clientID: foreign, name: "validate-selected-tunnel"}
 
 	_, err = postValidate(t, fx, foreign)
-	require.Error(t, err)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeBadRequest, shareable.Code)
-	require.ErrorContains(t, err, "cannot be verified")
+	require.NoError(t, err)
 	headers, _ := tunnelForwards(gateway)
-	require.Empty(t, headers, "a foreign tunnel issuer must not probe with the owning card")
+	require.NotEmpty(t, headers, "the card's own credential is probed")
+	for _, header := range headers {
+		require.NotContains(t, header.Get("Authorization"), "token-owner", "a card never probes with another card's credential")
+	}
 }
 
 func TestConsentValidationTimeoutStillDeletesMintedSession(t *testing.T) {

@@ -294,15 +294,12 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: ListMetaMCPMembersForRemoteSessionIssuer :many
--- The meta MCP's proxied (remote or tunneled) members that authenticate
--- against a given authorization server, filtered exactly as
--- ListServableMetaMCPMembers so a member invisible to the serving path cannot
--- claim a credential either.
---
--- A client names exactly one remote_session_issuer, so matching it against the
--- member's own is the whole lookup; the caller still fails closed on none or
--- several, since a grant records one resource.
+-- name: ListMetaMCPMembersForRemoteSessionClient :many
+-- The meta MCP's proxied (remote or tunneled) members associated with a given
+-- upstream OAuth client, filtered exactly as ListServableMetaMCPMembers so a
+-- member invisible to the serving path cannot claim a credential either. The
+-- caller still fails closed on none or several, since a grant records one
+-- resource.
 --
 -- upstream_url is the member's RFC 8707 resource: the remote server URL or
 -- the tunneled server's recorded resource identifier (empty when a tunneled
@@ -334,13 +331,19 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND s.remote_session_issuer_id = @remote_session_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS a
+    WHERE a.mcp_server_id = s.id
+      AND a.remote_session_client_id = @remote_session_client_id
+      AND a.deleted IS FALSE
+  )
 ORDER BY m.sort_order, m.created_at, m.id;
 
--- name: ListOrganizationMCPServersForRemoteSessionIssuer :many
+-- name: ListOrganizationMCPServersForRemoteSessionClient :many
 -- The organization gateway's counterpart to
--- ListMetaMCPMembersForRemoteSessionIssuer: the organization's proxied servers
--- that authenticate against a given authorization server, filtered as
+-- ListMetaMCPMembersForRemoteSessionClient: the organization's proxied servers
+-- associated with a given upstream OAuth client, filtered as
 -- ListServableMCPServersByOrganizationID so a server the gateway cannot serve
 -- cannot claim a credential either. Returns the same columns, so callers
 -- treat both alike.
@@ -375,12 +378,18 @@ WHERE p.organization_id = @organization_id
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND s.remote_session_issuer_id = @remote_session_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS a
+    WHERE a.mcp_server_id = s.id
+      AND a.remote_session_client_id = @remote_session_client_id
+      AND a.deleted IS FALSE
+  )
 ORDER BY s.project_id, s.slug;
 
 -- name: ListOrganizationProxiedMCPServerResources :many
 -- The organization gateway's counterpart to ListMetaMCPProxiedMemberResources,
--- over the servers ListOrganizationMCPServersForRemoteSessionIssuer considers.
+-- over the servers ListOrganizationMCPServersForRemoteSessionClient considers.
 -- Each row carries its server's project and network access mode, which the
 -- caller matches against a card's client and the request's surface.
 SELECT
@@ -410,10 +419,9 @@ WHERE p.organization_id = @organization_id
 ORDER BY s.project_id, s.slug;
 
 -- name: ListMetaMCPProxiedMemberResources :many
--- Every proxied member's authorization server and RFC 8707 resource, filtered
--- as ListMetaMCPMembersForRemoteSessionIssuer but across all issuers, so a
--- consent render resolves resource display ownership for every card from one
--- read.
+-- Every proxied member's authorization server and RFC 8707 resource, with the
+-- member filters of ListMetaMCPMembersForRemoteSessionClient, so a consent
+-- render resolves resource display ownership for every card from one read.
 SELECT
     s.remote_session_issuer_id,
     s.id AS mcp_server_id,
