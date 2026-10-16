@@ -797,37 +797,6 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  "risk-overview": [
-    {
-      title: "Top firing rules?",
-      label: "which rule_ids fired most",
-      icon: "shield",
-      prompt:
-        "What are the top 5 rules by finding count over the last 7 days? Report by source family and rule only, and never quote any redacted match content.",
-    },
-    {
-      title: "Any shadow MCPs?",
-      label: "unapproved MCPs in use",
-      icon: "server",
-      prompt:
-        "List all shadow_mcp findings across the project. For each, name the MCP server identifier (match), the chat_id, and when it was first observed. These match values are server URLs/commands and are safe to name.",
-    },
-    {
-      title: "How many leaked secrets?",
-      label: "dedupe by fingerprint",
-      icon: "key",
-      prompt:
-        "How many distinct leaked secrets are there? Identical secrets share a redacted fingerprint, so dedupe by that. Group the counts by rule, and do not print any redacted match content back to me.",
-    },
-    {
-      title: "Any analysis backlog?",
-      label: "pending messages per policy",
-      icon: "history",
-      prompt:
-        "Is there an analysis backlog? For each active policy, report pending vs analyzed message counts and workflow state, and flag any policy whose pending count is non-zero.",
-    },
-  ],
-
   /** Watchdog page: exclusion setup leads (the page's primary remediation),
    * followed by the risk questions an operator triaging signals asks next. */
   watchdog: [

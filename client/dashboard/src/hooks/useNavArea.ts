@@ -28,7 +28,6 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "remote-identity-providers": "Identity",
   // Security and Policy
   watchdog: "Security and Policy",
-  "risk-overview": "Security and Policy",
   "risk-policies": "Security and Policy",
   "risk-events": "Security and Policy",
   "shadow-mcp": "Security and Policy",
