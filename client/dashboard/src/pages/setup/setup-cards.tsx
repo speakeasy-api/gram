@@ -12,6 +12,7 @@ import { IdentityProviderStep } from "./components/steps/identity-provider-step"
 import { InstrumentAgentsStep } from "./components/steps/instrument-agents-step";
 import { LiteLLMSetupStep } from "./components/steps/litellm-setup-step";
 import { PlatformMCPSetupStep } from "./components/steps/platform-mcp-setup-step";
+import { PrivateNetworkSetupStep } from "./components/steps/private-network-setup-step";
 
 export interface SetupCardProps {
   projectSlug?: string;
@@ -39,6 +40,11 @@ export interface SetupCard {
  * Adding a card is a catalog entry there and an entry here.
  */
 export const SETUP_CARDS: Record<string, SetupCard> = {
+  "private-network": {
+    Step: ({ onComplete }) => (
+      <PrivateNetworkSetupStep onComplete={onComplete} />
+    ),
+  },
   "create-marketplace": {
     Step: ({ onComplete, onClose }) => (
       <CreateMarketplaceStep onComplete={onComplete} onBack={onClose} />

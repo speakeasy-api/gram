@@ -101,6 +101,19 @@ func TestWindowGroupsSensorsAndKeepsReadingIdentityOnRedelivery(t *testing.T) {
 	for _, r := range pub.readings {
 		require.Equal(t, m.GetMessageId(), r.GetEvent().GetId())
 	}
+	// Readings record the context actually supplied: one short history serves
+	// every window, so the five-message sensor still receives two messages.
+	var inputs [][4]any
+	for _, r := range pub.readings {
+		in := r.GetInput()
+		inputs = append(inputs, [4]any{in.GetStrategy(), in.GetRequestedMessageCount(), in.GetMessageCount(), in.GetTruncated()})
+	}
+	require.Equal(t, [][4]any{
+		{InputStrategySingleMessage, int32(1), int32(1), false},
+		{InputStrategySlidingWindow, int32(2), int32(2), false},
+		{InputStrategySlidingWindow, int32(2), int32(2), false},
+		{InputStrategySlidingWindow, int32(5), int32(2), false},
+	}, inputs)
 	source.history[0].Content = "Corrected context"
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Len(t, pub.readings, 8)
@@ -163,7 +176,7 @@ func TestWindowBudgetFallbackAndObservability(t *testing.T) {
 			c, requests := newRecordingClassifier(t)
 			h, pub := handler(t, m, definitions, c, meters)
 			var logs bytes.Buffer
-			evaluator, err := NewEvaluator(slog.New(slog.NewJSONHandler(&logs, nil)), meters, h.evaluator.source, h.evaluator.features, pub, c)
+			evaluator, err := NewEvaluator(slog.New(slog.NewJSONHandler(&logs, nil)), meters, h.evaluator.source, h.evaluator.features, pub, &pub.outcomes, c)
 			require.NoError(t, err)
 			h.evaluator = evaluator
 			target := storedMessage(m)
@@ -191,6 +204,13 @@ func TestWindowBudgetFallbackAndObservability(t *testing.T) {
 			h.blobs = blobs
 			require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 			require.Len(t, pub.readings, 4)
+			for i, r := range pub.readings {
+				in := r.GetInput()
+				require.Equal(t, InputStrategySlidingWindow, in.GetStrategy())
+				require.Equal(t, int32(definitions[i].WindowSize), in.GetRequestedMessageCount())
+				require.Equal(t, int32(2), in.GetMessageCount(), "the budget and short history both leave two messages")
+				require.Equal(t, name != "short history" && definitions[i].WindowSize > 2, in.GetTruncated())
+			}
 			if name == "oversized attachment" {
 				require.Equal(t, 1, blobs.reads, "larger windows reuse the truncation boundary")
 			}

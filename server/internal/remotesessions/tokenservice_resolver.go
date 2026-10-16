@@ -7,7 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -46,6 +48,13 @@ func remoteSessionCallerPrincipal(ctx context.Context, subject urn.SessionSubjec
 // attachment never falls back to the agent's, owner's, or authorizer's grant.
 func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		return m.resolveWorkloadUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, caller, resource)
+	}
+	// A subject alone is not authority to select a workload owner's grant.
+	if caller.Kind == urn.SessionSubjectKindWorkload {
+		return zero, ErrInvalidAuthorizationRequest
+	}
 	if credential, ok := principalcredential.FromContext(ctx); ok {
 		return m.resolveAuthorizerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, resource, credential.Credential.AuthorizerUserID)
 	}
@@ -100,9 +109,8 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 // resolveAuthorizerUpstreamToken serves a request made with a principal
 // credential from the upstream session of the user the credential acts for,
 // on the fly: the session is the user's own, never bound to the credential's
-// principal. A credential with no authorizing user, such as a workload, has
-// no session to use. Neither case falls back to another user's or the
-// principal's own sessions.
+// principal. A credential with no authorizing user has no session to use.
+// This path never falls back to an owner or the principal's own sessions.
 func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource, authorizerUserID string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	if authorizerUserID == "" {
@@ -118,6 +126,75 @@ func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, p
 	resolved, err := m.resolveCredentialToken(ctx, selected, resource)
 	if err != nil || resolved.Token == "" {
 		return resolved, err
+	}
+	m.touchResolvedCredential(ctx, selected)
+	return resolved, nil
+}
+
+// workloadCredentialOwner resolves live assignment and owner eligibility using
+// the same admission snapshot as workload authorization. Provenance cached on
+// the context is not sufficient after a blocking upstream refresh.
+func (m *ChallengeManager) workloadCredentialOwner(ctx context.Context, projectID uuid.UUID, organizationID string, caller urn.SessionSubject) (authz.WorkloadSessionAdmission, error) {
+	var zero authz.WorkloadSessionAdmission
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	actor, authenticated := contextvalues.AuthenticatedActor(ctx)
+	if !ok || auth == nil || !authenticated || actor.Type != urn.PrincipalTypeWorkload ||
+		caller.Kind != urn.SessionSubjectKindWorkload || caller.ID != actor.ID ||
+		organizationID == "" || projectID == uuid.Nil || auth.ActiveOrganizationID != organizationID ||
+		(auth.ProjectID != nil && *auth.ProjectID != projectID) {
+		return zero, ErrInvalidAuthorizationRequest
+	}
+	admission, err := runtimepolicy.AdmitWorkloadSession(ctx, m.db)
+	if err != nil {
+		return zero, fmt.Errorf("admit workload credential owner: %w", err)
+	}
+	allowed, err := authz.GrantsAuthorize(admission.Owner, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: projectID.String(), ResourceKind: "", Dimensions: nil})
+	if err != nil {
+		return zero, fmt.Errorf("authorize workload owner project access: %w", err)
+	}
+	if !allowed {
+		return zero, ErrNoValidToken
+	}
+	return admission, nil
+}
+
+func (m *ChallengeManager) resolveWorkloadUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
+	var zero resolvedUpstreamToken
+	admission, err := m.workloadCredentialOwner(ctx, projectID, organizationID, caller)
+	if err != nil {
+		return zero, err
+	}
+	q := remotesessions_repo.New(m.db)
+	params := remotesessions_repo.GetTenantUserRemoteSessionParams{SubjectUrn: urn.NewUserSubject(admission.OwnerUserID), RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID}
+	selected, err := q.GetTenantUserRemoteSession(ctx, params)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, nil
+	}
+	if err != nil {
+		return zero, fmt.Errorf("select workload owner credential: %w", err)
+	}
+	resolved, err := m.resolveCredentialToken(ctx, selected, resource)
+	if err != nil || resolved.Token == "" {
+		return resolved, err
+	}
+	current, err := m.workloadCredentialOwner(ctx, projectID, organizationID, caller)
+	if err != nil {
+		return zero, err
+	}
+	if current.AgentPrincipal != admission.AgentPrincipal || current.OwnerUserID != admission.OwnerUserID {
+		return zero, nil
+	}
+	// Recheck the tenant binding, membership and grant after refresh, without
+	// adopting a replacement session or a reconnected grant.
+	session, err := q.GetTenantUserRemoteSession(ctx, params)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, nil
+	}
+	if err != nil {
+		return zero, fmt.Errorf("recheck workload owner credential: %w", err)
+	}
+	if session.ID != selected.ID || session.GrantGeneration != selected.GrantGeneration {
+		return zero, nil
 	}
 	m.touchResolvedCredential(ctx, selected)
 	return resolved, nil

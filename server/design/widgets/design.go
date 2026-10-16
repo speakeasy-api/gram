@@ -21,7 +21,7 @@ var Widget = Type("Widget", func() {
 	Attribute("created_by_user_id", String, "Who saved it, when known")
 	Attribute("name", String, "Display name. Not unique: two people saving the same name is normal.")
 	Attribute("description", String, "What the widget is for, when its creator said")
-	Attribute("dataset", String, "The catalog dataset the widget asks", func() { Example("sessions") })
+	Attribute("dataset", String, "The catalog dataset the widget asks", func() { Example("tool_calls") })
 	Attribute("query", MapOf(String, Any), "The question: window, grain, dimensions, measures, filters, order and limit. Planned against the catalog on save and on read.")
 	Attribute("visualization", MapOf(String, Any), "How the question is drawn: a chart type and its options. The client owns the chart vocabulary; the server checks only that the chart can draw the question.")
 	Attribute("invalid_reason", String, "Present when the widget no longer works, naming what is wrong: a field the catalog dropped, or a chart that cannot draw the question. A catalog change fails visibly rather than returning wrong numbers.")

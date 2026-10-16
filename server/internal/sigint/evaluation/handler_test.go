@@ -45,7 +45,19 @@ func (d *dependencies) IsFeatureEnabled(ctx context.Context, org string, feature
 type capturePublisher struct {
 	readings []*sigintv1.Reading
 	err      error
+	outcomes outcomeCapture
 }
+
+type outcomeCapture struct {
+	messages []*sigintv1.Outcome
+	err      error
+}
+
+func (p *outcomeCapture) Publish(_ context.Context, outcome *sigintv1.Outcome, _ ...gcp.PublishOption) gcp.PublishResult {
+	p.messages = append(p.messages, outcome)
+	return gcp.NewErrPublishResult(p.err)
+}
+func (p *outcomeCapture) Stop(context.Context) error { return nil }
 
 func (p *capturePublisher) Publish(_ context.Context, reading *sigintv1.Reading, _ ...gcp.PublishOption) gcp.PublishResult {
 	p.readings = append(p.readings, reading)
@@ -126,7 +138,7 @@ func handler(t *testing.T, m *conversationv1.MessageEvent, definitions []Sensor,
 	deps.On("Load", mock.Anything, m.GetOrganizationId(), uuid.MustParse(m.GetProjectId()), ConversationMessageKind).Return(definitions, nil)
 	var pub capturePublisher
 
-	evaluator, err := NewEvaluator(testenv.NewLogger(t), meters, &deps, &deps, &pub, c)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), meters, &deps, &deps, &pub, &pub.outcomes, c)
 	require.NoError(t, err)
 
 	row := storedMessage(m)
@@ -339,6 +351,9 @@ func TestHandlerOversizedReadingIsPermanentAndPreservesOtherReadings(t *testing.
 	require.NoError(t, h.Handle(t.Context(), m, meta))
 	require.Len(t, pub.readings, 1)
 	require.Equal(t, "other", pub.readings[0].GetSensorId())
+	require.Len(t, pub.outcomes.messages, 1)
+	require.Equal(t, "multi", pub.outcomes.messages[0].GetSensorId())
+	require.Equal(t, "reading_too_large", pub.outcomes.messages[0].GetFailureReason())
 	var data metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &data))
 	found := false
@@ -379,7 +394,7 @@ func TestHandlerSkipsDisabledAndOtherRoles(t *testing.T) {
 	m := message()
 	deps.On("IsFeatureEnabled", mock.Anything, m.GetOrganizationId(), productfeatures.FeatureSignalsIntelligence).Return(false, nil).Once()
 
-	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil, nil)
 	require.NoError(t, err)
 
 	row := storedMessage(m)
@@ -400,7 +415,7 @@ func TestHandlerEntitlementFailureNacks(t *testing.T) {
 	t.Cleanup(func() { deps.AssertExpectations(t) })
 	deps.On("IsFeatureEnabled", mock.Anything, mock.Anything, mock.Anything).Return(false, fmt.Errorf("lookup unavailable")).Once()
 
-	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil, nil)
 	require.NoError(t, err)
 
 	row := storedMessage(m)

@@ -60,9 +60,6 @@ type ProductFeaturesView struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled *bool
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -102,7 +99,6 @@ var (
 			"customer_managed_encryption_keys_enabled",
 			"remote_session_auto_refresh_enabled",
 			"remote_session_auto_refresh_enforced_enabled",
-			"consent_tool_filtering_enabled",
 			"session_portability_enabled",
 			"network_ingress_enabled",
 			"signals_intelligence_enabled",
@@ -174,9 +170,6 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.RemoteSessionAutoRefreshEnforcedEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enforced_enabled", "result"))
-	}
-	if result.ConsentToolFilteringEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("consent_tool_filtering_enabled", "result"))
 	}
 	if result.SessionPortabilityEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_portability_enabled", "result"))

@@ -110,6 +110,8 @@ const (
 )
 
 type AuthConfigurations struct {
+	PartnerPromotionCodeResolver PartnerPromotionCodeResolver
+
 	IDPBaseURL        string
 	GramServerURL     string
 	SignInRedirectURL string
@@ -131,6 +133,8 @@ type AssistantsSubscriptionCancelScheduler interface {
 }
 
 type Service struct {
+	partnerPromotionCodeResolver PartnerPromotionCodeResolver
+
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -192,6 +196,8 @@ func NewService(
 	supportHandoffs := supporthandoff.NewStore(nonceStore)
 
 	return &Service{
+		partnerPromotionCodeResolver: cfg.PartnerPromotionCodeResolver,
+
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
 		logger:               logger,
 		db:                   db,
@@ -320,8 +326,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
 	logger := s.logger
+	var intent *signupIntent
 
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
+		if intent != nil && intent.PartnerCode != "" {
+			return s.redirectPartnerSignupError(ctx, payload, err, intent)
+		}
 		logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
 			Location:      s.platformHostURL(ctx, s.cfg.SignInRedirectURL) + "?" + url.Values{"signin_error": {string(code)}}.Encode(),
@@ -346,7 +356,6 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	// Consume the signup intent on every path, not only the zero-org one, so a
 	// returning user who happens to carry one does not leave a key behind for
 	// its full TTL. Absence is normal — an ordinary login has none.
-	var intent *signupIntent
 	if state := decodeStateParam(payload); state != nil && state.Nonce != "" {
 		var stored signupIntent
 		err := s.nonceStore.GetAndDelete(ctx, signupIntentKey(state.Nonce), &stored)
@@ -356,10 +365,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		case errors.Is(err, redisCache.ErrCacheMiss):
 			// Ordinary login. Nothing to do.
 		default:
-			// Swallow so a cache blip cannot fail an otherwise valid login, but
-			// say so: without this line a signup silently degrades into landing
-			// on the register page with nothing explaining why.
-			logger.WarnContext(ctx, "failed to read signup intent", attr.SlogError(err))
+			// Fail closed: losing a partner intent must not silently start a
+			// normal enterprise trial instead.
+			return redirectWithError(authErrInit, errors.New("signup intent is unavailable"))
 		}
 	}
 
@@ -493,34 +501,41 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		// assistants disposition below.
 		if intent != nil && intent.OrgName != "" {
 			org, err := s.provisionOrgForUser(ctx, userID, intent.OrgName, orgProvisionOptions{
-				Whitelisted:    true,
-				ProvisionTrial: true,
-				ActorEmail:     userInfo.Email,
-				CreationSource: orgprovision.SourceSignup,
+				StripePromotionCodeID: "",
+				Whitelisted:           true,
+				ProvisionTrial:        intent.PartnerCode == "",
+				PartnerCode:           intent.PartnerCode,
+				ActorEmail:            userInfo.Email,
+				CreationSource:        orgprovision.SourceSignup,
 			})
 			if err != nil {
-				return s.redirectSignupError(ctx, payload, err)
+				return s.redirectPartnerSignupError(ctx, payload, err, intent)
+			}
+
+			partnerSignup, err := s.hasPartnerSignup(ctx, org.ID)
+			if err != nil {
+				return s.redirectPartnerSignupError(ctx, payload, err, intent)
 			}
 
 			session.ActiveOrganizationID = org.ID
 			if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
-				return s.redirectSignupError(ctx, payload, err)
+				return s.redirectPartnerSignupError(ctx, payload, err, intent)
 			}
 
-			if err := s.trialNotifier.TrialStarted(ctx, org.ID); err != nil {
+			if err := s.notifySignupTrialStarted(ctx, org.ID, partnerSignup); err != nil {
 				logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(org.ID), attr.SlogUserID(userID))
 			}
 
 			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org)
 
 			return &gen.CallbackResult{
-				Location:      s.callbackRedirectURL(ctx, payload),
+				Location:      s.signupDestination(ctx, payload, org, partnerSignup),
 				SessionToken:  session.SessionID,
 				SessionCookie: session.SessionID,
 			}, nil
 		}
 
-		if s.dispositionFromState(payload) == dispositionAssistants {
+		if s.dispositionFromState(payload) == dispositionAssistants && (intent == nil || intent.PartnerCode == "") {
 			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session, authenticatedAt)
 			if err != nil {
 				return redirectWithError(authErrInit, err)
@@ -537,7 +552,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 
 		return &gen.CallbackResult{
-			Location:      s.callbackRedirectURL(ctx, payload),
+			Location:      s.signupRegisterDestination(ctx, payload, intent),
 			SessionToken:  session.SessionID,
 			SessionCookie: session.SessionID,
 		}, nil
@@ -571,7 +586,15 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if login.Reactivated && intent != nil && intent.OrgName != "" {
 		activeOrgID, orgMetadata, err = s.applySignupWhitelist(ctx, userInfo.Organizations, activeOrgID, orgMetadata)
 		if err != nil {
-			return s.redirectSignupError(ctx, payload, err)
+			return s.redirectPartnerSignupError(ctx, payload, err, intent)
+		}
+	}
+
+	partnerBilling := false
+	if intent != nil && intent.PartnerCode != "" {
+		partnerBilling, err = s.hasPartnerSignup(ctx, activeOrgID)
+		if err != nil {
+			return s.redirectPartnerSignupError(ctx, payload, err, intent)
 		}
 	}
 
@@ -622,6 +645,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
+	location := s.callbackRedirectURL(ctx, payload)
+	if partnerBilling {
+		location = s.signupDestination(ctx, payload, orgMetadata, partnerBilling)
+	}
+
 	// An organization that lives on another platform host gets this session
 	// handed over there, landing on the same destination. The session is
 	// stored above and its cookie is set on this same response, so
@@ -629,6 +657,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	// host that started them.
 	if idpUser.ImpersonatorEmail() == "" {
 		destination, movable := s.organizationDestination(payload, orgMetadata.Slug)
+		if partnerBilling {
+			destination, movable = "/"+url.PathEscape(orgMetadata.Slug)+"/billing", true
+		}
 		if move, ok := s.organizationHostMove(ctx, orgMetadata.DefaultHost); ok && movable {
 			return &gen.CallbackResult{
 				Location:      move.transferURL(destination),
@@ -639,7 +670,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	return &gen.CallbackResult{
-		Location:      s.callbackRedirectURL(ctx, payload),
+		Location:      location,
 		SessionToken:  session.SessionID,
 		SessionCookie: session.SessionID,
 	}, nil
@@ -780,6 +811,14 @@ func (s *Service) StartSupportSession(ctx context.Context, organizationSlug stri
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
+	// Preserve signup intent through identity verification. Only new organization
+	// provisioning validates the offer; committed memberships must remain usable
+	// when the offer changes or its billing provider is unavailable.
+	partnerCode := strings.ToLower(strings.TrimSpace(conv.PtrValOr(payload.PartnerCode, "")))
+	if len(partnerCode) > 80 {
+		return nil, partnerSignupUnavailable()
+	}
+
 	// A company name means this login started from the sign-up page. Validate
 	// before anything is minted or stored, so a rejected name leaves no orphan
 	// nonce behind — and so a bad name fails before the identity-provider hop
@@ -840,8 +879,8 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	// inline. It arrives as a query param on this request and goes no further:
 	// it is not encoded into the state param, so it does not travel through the
 	// identity provider or come back on the redirect.
-	if orgName != "" {
-		if err := s.nonceStore.Set(ctx, signupIntentKey(nonce), signupIntent{OrgName: orgName}, nonceTTL); err != nil {
+	if orgName != "" || partnerCode != "" {
+		if err := s.nonceStore.Set(ctx, signupIntentKey(nonce), signupIntent{OrgName: orgName, PartnerCode: partnerCode}, nonceTTL); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error storing signup intent").LogError(ctx, s.logger)
 		}
 	}
@@ -1241,6 +1280,15 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 	}
 
+	// Offer metadata is optional presentation context, never billing authorization.
+	// Missing or edited offers must not prevent accepted promotions being used.
+	var acceptedSignupOfferFlow *string
+	if flow, err := s.orgRepo.GetAcceptedSignupOfferFlow(ctx, authCtx.ActiveOrganizationID); err == nil {
+		acceptedSignupOfferFlow = &flow
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		s.logger.WarnContext(ctx, "error loading signup offer display context", attr.SlogError(err))
+	}
+
 	return &gen.InfoResult{
 		SessionToken:                   *authCtx.SessionID,
 		SessionCookie:                  *authCtx.SessionID,
@@ -1248,6 +1296,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		ActiveOrganizationDashboardURL: dashboardURL,
 		GramAccountType:                authCtx.AccountType,
 		HasActiveSubscription:          authCtx.HasActiveSubscription,
+		AcceptedSignupOfferFlow:        acceptedSignupOfferFlow,
 		Whitelisted:                    authCtx.Whitelisted,
 		Trial:                          trial,
 		UserID:                         userInfo.UserID,
@@ -1351,6 +1400,8 @@ func (s *Service) applySignupWhitelist(ctx context.Context, organizations []auth
 // site then names what it asks for, and exhaustruct forces a new field to be
 // answered everywhere instead of defaulting to false.
 type orgProvisionOptions struct {
+	PartnerCode           string
+	StripePromotionCodeID string
 	// Whitelisted clears the dashboard's book-a-demo gate for the organization.
 	Whitelisted bool
 
@@ -1380,6 +1431,14 @@ type orgProvisionOptions struct {
 // ActiveOrganizationID on an in-memory session before storing it once.
 func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, opts orgProvisionOptions) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
+	promotionCodeID, err := s.resolvePartnerSignup(ctx, opts.PartnerCode)
+	if err != nil {
+		return empty, err
+	}
+	opts.StripePromotionCodeID = promotionCodeID
+	if promotionCodeID != "" {
+		opts.ProvisionTrial = false
+	}
 
 	base, err := orgslug.Base(orgName)
 	if err != nil {
@@ -1427,12 +1486,17 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	}
 
 	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, orgName, orgProvisionOptions{
-		Whitelisted:    true,
-		ProvisionTrial: true,
-		ActorEmail:     conv.PtrValOr(authCtx.Email, ""),
-		CreationSource: orgprovision.SourceSignup,
+		StripePromotionCodeID: "",
+		Whitelisted:           true,
+		ProvisionTrial:        strings.TrimSpace(conv.PtrValOr(payload.PartnerCode, "")) == "",
+		PartnerCode:           conv.PtrValOr(payload.PartnerCode, ""),
+		ActorEmail:            conv.PtrValOr(authCtx.Email, ""),
+		CreationSource:        orgprovision.SourceSignup,
 	})
 	if err != nil {
+		if oops.IsClientFault(err) {
+			return err
+		}
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
 	}
 
@@ -1455,10 +1519,12 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *auth
 	// Assistants is a live product for users who never asked for a trial, so a
 	// trial armed here would strip their entitlements two weeks later.
 	org, err := s.provisionOrgForUser(ctx, userInfo.UserID, orgName, orgProvisionOptions{
-		Whitelisted:    true,
-		ProvisionTrial: false,
-		ActorEmail:     userInfo.Email,
-		CreationSource: orgprovision.SourceAssistants,
+		StripePromotionCodeID: "",
+		Whitelisted:           true,
+		ProvisionTrial:        false,
+		ActorEmail:            userInfo.Email,
+		CreationSource:        orgprovision.SourceAssistants,
+		PartnerCode:           "",
 	})
 	if err != nil {
 		return "", err
@@ -1524,6 +1590,16 @@ func (s *Service) persistProvisionedOrganization(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	queries := orgRepo.New(tx)
+	if opts.StripePromotionCodeID != "" {
+		// The existing create-only primitive rejects a row already inserted by
+		// identity sync (or a concurrent signup). Attribution never adopts an org.
+		if err := queries.CreateOrganizationMetadata(ctx, orgRepo.CreateOrganizationMetadataParams{
+			ID: provisionedOrg.GramOrganizationID, Name: orgName, Slug: slug, DefaultHost: s.cfg.NewOrganizationDefaultHost,
+		}); err != nil {
+			return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create partner signup organization: %w", err)
+		}
+	}
+
 	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          provisionedOrg.GramOrganizationID,
 		Name:        orgName,
@@ -1561,7 +1637,12 @@ func (s *Service) persistProvisionedOrganization(
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("seed organization default entitlements: %w", err)
 	}
 
-	if opts.ProvisionTrial {
+	if opts.StripePromotionCodeID != "" {
+		if err := s.persistPartnerSignupTx(ctx, tx, org.ID, userID, opts.ActorEmail, opts.StripePromotionCodeID); err != nil {
+			return orgRepo.OrganizationMetadatum{}, err
+		}
+	}
+	if opts.ProvisionTrial && opts.StripePromotionCodeID == "" {
 		if err := s.armEnterpriseTrialTx(ctx, tx, org, userID, opts.ActorEmail); err != nil {
 			return orgRepo.OrganizationMetadatum{}, fmt.Errorf("arm enterprise trial: %w", err)
 		}
@@ -1807,7 +1888,8 @@ func nonceKey(nonce string) string {
 // format: the stored key is "OrgName". Producer and consumer both use this
 // struct, so the round trip is symmetric either way.
 type signupIntent struct {
-	OrgName string
+	PartnerCode string
+	OrgName     string
 }
 
 // signupIntentKey namespaces the intent separately from the nonce binding.

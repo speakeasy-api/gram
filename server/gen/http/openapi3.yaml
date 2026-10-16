@@ -6346,6 +6346,228 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/signupOffers:
+        get:
+            tags:
+                - admin
+            summary: listSignupOffers admin
+            description: List staff-managed signup offers. Stripe owns all promotion terms.
+            operationId: adminListSignupOffers
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSignupOffersResponseBody'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/signupOffers.create:
+        post:
+            tags:
+                - admin
+            summary: createSignupOffer admin
+            description: Create a disabled signup offer mapped to an exact Stripe promotion code ID.
+            operationId: adminCreateSignupOffer
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSignupOfferRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSignupOffer'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/signupOffers.update:
+        post:
+            tags:
+                - admin
+            summary: updateSignupOffer admin
+            description: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.
+            operationId: adminUpdateSignupOffer
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSignupOfferRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSignupOffer'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/supportCoverage.get:
         get:
             description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.'
@@ -20305,6 +20527,14 @@ paths:
                   name: org_name
                   schema:
                     description: Optional organization name. When set, the organization is created for a new user during the auth callback.
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional partner signup code.
+                  in: query
+                  name: partner_code
+                  schema:
+                    description: Optional partner signup code.
+                    maxLength: 80
                     type: string
                 - allowEmptyValue: true
                   description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
@@ -61983,129 +62213,6 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskGetPolicyChallenge
                 type: mutation
-    /rpc/risk.getRuleBreakdown:
-        get:
-            description: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
-            operationId: getRiskRuleBreakdown
-            parameters:
-                - allowEmptyValue: true
-                  description: Required category key to break down by rule_id (e.g. secrets, pii).
-                  in: query
-                  name: category
-                  required: true
-                  schema:
-                    description: Required category key to break down by rule_id (e.g. secrets, pii).
-                    type: string
-                - allowEmptyValue: true
-                  description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
-                  in: query
-                  name: from
-                  schema:
-                    description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
-                    format: date-time
-                    type: string
-                - allowEmptyValue: true
-                  description: Exclusive end of the window. Defaults to now.
-                  in: query
-                  name: to
-                  schema:
-                    description: Exclusive end of the window. Defaults to now.
-                    format: date-time
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RiskRuleBreakdownResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: getRiskRuleBreakdown risk
-            tags:
-                - risk
-            x-speakeasy-group: risk.overview
-            x-speakeasy-name-override: rules
-            x-speakeasy-react-hook:
-                name: RiskRuleBreakdown
     /rpc/risk.getSignals:
         get:
             description: Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.
@@ -62231,7 +62338,7 @@ paths:
                 name: RiskSignals
     /rpc/risk.getUserBreakdown:
         get:
-            description: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
+            description: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the risk panels on identity pages.
             operationId: getRiskUserBreakdown
             parameters:
                 - allowEmptyValue: true
@@ -88719,9 +88826,17 @@ components:
                 slug:
                     type: string
                     description: The slug of the organization
+                stripe_customer_dashboard_url:
+                    type: string
+                    description: Link to the Stripe customer in the Stripe dashboard. Absent when the organization has no Stripe customer or the deployment has no Stripe API key configured.
+                    format: uri
                 stripe_customer_id:
                     type: string
                     description: Stripe customer ID, if billing metadata has a customer.
+                stripe_subscription_dashboard_url:
+                    type: string
+                    description: Link to the Stripe subscription in the Stripe dashboard. Absent when the organization has no Stripe subscription or the deployment has no Stripe API key configured.
+                    format: uri
                 stripe_subscription_id:
                     type: string
                     description: Current Stripe subscription ID, if subscribed.
@@ -89150,6 +89265,36 @@ components:
                     type: string
             required:
                 - email
+        AdminSignupOffer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                enabled:
+                    type: boolean
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                signup_flow:
+                    type: string
+                    enum:
+                        - tailscale_partner_gateway
+                stripe_promotion_code_id:
+                    type: string
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - name
+                - stripe_promotion_code_id
+                - signup_flow
+                - enabled
+                - created_at
+                - updated_at
         AdminSpendBreakdownResponse:
             type: object
             properties:
@@ -89820,7 +89965,7 @@ components:
                 grain:
                     type: string
                     description: What one row represents, as a noun
-                    example: session
+                    example: tool call
                 kind:
                     type: string
                     enum:
@@ -89828,7 +89973,7 @@ components:
                         - metric
                 name:
                     type: string
-                    example: sessions
+                    example: tool_calls
             description: A dataset and the fields it exposes. The builder is generated from this.
             required:
                 - name
@@ -89913,7 +90058,7 @@ components:
                 unit:
                     type: string
                     description: Unit of a measure, when it has one
-                    example: s
+                    example: ms
             description: One queryable field on a dataset.
             required:
                 - name
@@ -89963,11 +90108,11 @@ components:
                 alias:
                     type: string
                     description: Result column name. Defaults to the op, or op_field.
-                    example: tool_calls
+                    example: total_ms
                 field:
                     type: string
                     description: 'Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.'
-                    example: tool_call_count
+                    example: duration_ms
                 op:
                     type: string
                     description: Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.
@@ -89997,7 +90142,7 @@ components:
                 measure:
                     type: string
                     description: Alias of a requested measure
-                    example: tool_calls
+                    example: total_ms
             description: Sort a grouped result by one of its measures.
             required:
                 - measure
@@ -90007,7 +90152,7 @@ components:
                 dataset:
                     type: string
                     description: Dataset to query, per describe
-                    example: sessions
+                    example: tool_calls
                 dimensions:
                     type: array
                     items:
@@ -94484,6 +94629,25 @@ components:
             required:
                 - url
                 - expires_at
+        CreateSignupOfferRequestBody:
+            type: object
+            properties:
+                name:
+                    type: string
+                    minLength: 1
+                    maxLength: 200
+                signup_flow:
+                    type: string
+                    enum:
+                        - tailscale_partner_gateway
+                stripe_promotion_code_id:
+                    type: string
+                    pattern: ^promo_[A-Za-z0-9_]+$
+                    maxLength: 255
+            required:
+                - name
+                - stripe_promotion_code_id
+                - signup_flow
         CreateSkillRequestBody:
             type: object
             properties:
@@ -95883,11 +96047,11 @@ components:
                 dataset:
                     type: string
                     description: Dataset to look in
-                    example: sessions
+                    example: tool_calls
                 dimension:
                     type: string
                     description: Dimension to list values of
-                    example: model
+                    example: tool_name
                 from:
                     type: string
                     description: Start of the half-open window [from, to), ISO 8601
@@ -100249,6 +100413,9 @@ components:
         InfoResponseBody:
             type: object
             properties:
+                accepted_signup_offer_flow:
+                    type: string
+                    description: Display-only signup offer variant for an accepted promotion; not billing eligibility
                 active_organization_dashboard_url:
                     type: string
                     description: Dashboard base URL of the platform host the active organization lives on. Set only for an ordinary session whose request arrived on a different platform host; the dashboard moves there.
@@ -103119,6 +103286,15 @@ components:
                     description: Signals in this page
             required:
                 - signals
+        ListSignupOffersResponseBody:
+            type: object
+            properties:
+                offers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminSignupOffer'
+            required:
+                - offers
         ListSkillDistributionsResult:
             type: object
             properties:
@@ -107630,9 +107806,6 @@ components:
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
-                consent_tool_filtering_enabled:
-                    type: boolean
-                    description: Whether MCP consent screens offer the tool filtering picker for the organization
                 custom_model_keys_enabled:
                     type: boolean
                     description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -107707,7 +107880,6 @@ components:
                 - customer_managed_encryption_keys_enabled
                 - remote_session_auto_refresh_enabled
                 - remote_session_auto_refresh_enforced_enabled
-                - consent_tool_filtering_enabled
                 - session_portability_enabled
                 - network_ingress_enabled
                 - signals_intelligence_enabled
@@ -108783,6 +108955,10 @@ components:
                 org_name:
                     type: string
                     description: The name of the org to register
+                partner_code:
+                    type: string
+                    description: Optional partner signup code.
+                    maxLength: 80
             required:
                 - org_name
         RegisterWorkloadIssuerForm:
@@ -110672,10 +110848,6 @@ components:
         RiskOverviewResult:
             type: object
             properties:
-                active_policies:
-                    type: integer
-                    description: Enabled risk policies for the current project.
-                    format: int64
                 findings:
                     type: integer
                     description: Policy findings in the window.
@@ -110688,10 +110860,6 @@ components:
                     type: string
                     description: Inclusive start of the overview window.
                     format: date-time
-                messages_scanned:
-                    type: integer
-                    description: Messages analyzed by risk policies in the window.
-                    format: int64
                 time_series_findings:
                     type: array
                     items:
@@ -110719,10 +110887,8 @@ components:
             required:
                 - from
                 - to
-                - messages_scanned
                 - findings
                 - flagged_sessions
-                - active_policies
                 - top_categories
                 - top_users
                 - top_rules
@@ -111442,35 +111608,6 @@ components:
                 - rule_id
                 - source
                 - findings
-        RiskRuleBreakdownResult:
-            type: object
-            properties:
-                category:
-                    type: string
-                    description: Category the breakdown is scoped to.
-                from:
-                    type: string
-                    description: Inclusive start of the window used.
-                    format: date-time
-                rules:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RiskRuleBreakdownEntry'
-                    description: Rules in this category, ordered by finding count descending.
-                to:
-                    type: string
-                    description: Exclusive end of the window used.
-                    format: date-time
-                total:
-                    type: integer
-                    description: Total findings across all rules in this category and window.
-                    format: int64
-            required:
-                - from
-                - to
-                - category
-                - rules
-                - total
         RiskSegment:
             type: object
             properties:
@@ -113603,7 +113740,6 @@ components:
                         - customer_managed_encryption_keys
                         - remote_session_auto_refresh
                         - remote_session_auto_refresh_enforced
-                        - consent_tool_filtering
                         - session_portability
                         - network_ingress
                         - signals_intelligence
@@ -113718,7 +113854,6 @@ components:
                         - customer_managed_encryption_keys
                         - remote_session_auto_refresh
                         - remote_session_auto_refresh_enforced
-                        - consent_tool_filtering
                         - session_portability
                         - network_ingress
                         - signals_intelligence
@@ -116397,6 +116532,16 @@ components:
                     type: string
                     description: Start of the current Stripe service period
                     format: date-time
+                discount_description:
+                    type: string
+                    description: Verified terms of a currently applied Stripe subscription discount; absent when unsupported or inactive
+                discount_ends_at:
+                    type: string
+                    description: Discount expiration reported by Stripe, when present
+                    format: date-time
+                gateway_promotion_applied:
+                    type: boolean
+                    description: Whether the live discount and gateway price verify the monthly five GiB promotion
                 payment_failed:
                     type: boolean
                     description: Whether a past-due subscription has an open latest invoice with an unpaid balance
@@ -121143,6 +121288,32 @@ components:
                     maxLength: 40
             required:
                 - id
+        UpdateSignupOfferRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                    minLength: 1
+                    maxLength: 200
+                signup_flow:
+                    type: string
+                    enum:
+                        - tailscale_partner_gateway
+                stripe_promotion_code_id:
+                    type: string
+                    pattern: ^promo_[A-Za-z0-9_]+$
+                    maxLength: 255
+            required:
+                - name
+                - stripe_promotion_code_id
+                - signup_flow
+                - id
+                - enabled
         UpdateSkillRequestBody:
             type: object
             properties:
@@ -122912,7 +123083,7 @@ components:
                 dataset:
                     type: string
                     description: The catalog dataset the widget asks
-                    example: sessions
+                    example: tool_calls
                 description:
                     type: string
                     description: What the widget is for, when its creator said

@@ -777,10 +777,10 @@ func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
 
 	// An assistants organization is a live product for a user who never asked for
 	// a trial, so arming one here would strip entitlements two weeks later. The
-	// account type stays whatever the billing provider reports, the stub's "pro".
+	// stub reports no tier, so the account type stays free.
 	org, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, organizationID)
 	require.NoError(t, err)
-	require.NotEqual(t, "enterprise", org.GramAccountType)
+	require.Equal(t, string(billing.TierBase), org.GramAccountType)
 	require.True(t, org.Whitelisted)
 
 	// Not "signup": an operator looking at this organization is looking at a
