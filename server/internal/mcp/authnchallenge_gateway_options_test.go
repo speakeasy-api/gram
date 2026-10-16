@@ -16,10 +16,10 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	service := &Service{}
 	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, OrganizationID: "org_test", ProjectID: uuid.New()}
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", OrganizationSlug: "test-org"})
-	policy, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "", nil)
+	policy, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "", nil, nil)
 	require.NoError(t, err)
 	require.Nil(t, policy)
-	policy, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "direct", nil)
+	policy, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "direct", nil, nil)
 	require.NoError(t, err)
 	require.Nil(t, policy.Selection)
 	require.Equal(t, metamcp.DiscoveryModeDirect, *policy.Gateway.DiscoveryMode)
@@ -27,14 +27,14 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	require.NoError(t, err)
 	_, err = toolfilter.ParseSessionSelection(raw)
 	require.Error(t, err, "old servers must reject gateway policies")
-	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{FirstParty: true}, "", "direct", nil)
+	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{FirstParty: true}, "", "direct", nil, nil)
 	require.Error(t, err)
-	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, uuid.NewString(), "direct", nil)
+	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, uuid.NewString(), "direct", nil, nil)
 	require.Error(t, err)
-	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "unsupported", nil)
+	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "unsupported", nil, nil)
 	require.Error(t, err)
 	organizationGateway := &ResolvedMcpEndpoint{MetaMcpServerID: endpoint.MetaMcpServerID, OrganizationID: "org_test", RouteBase: organizationGatewayRouteBase}
-	_, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{}, "", "direct", nil)
+	_, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{}, "", "direct", nil, nil)
 	require.Error(t, err)
 }
 

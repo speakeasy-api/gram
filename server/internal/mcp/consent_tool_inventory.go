@@ -53,10 +53,12 @@ const (
 var errConsentInventoryUnavailable = errors.New("consent tool inventory store unavailable")
 
 // consentInventoryTool is one captured tool: name plus the known annotation
-// values whose raw hints are explicitly true.
+// values whose raw hints are explicitly true. Source names the member server
+// a gateway tool comes from and is empty for every other endpoint.
 type consentInventoryTool struct {
 	Name        string   `json:"name"`
 	Annotations []string `json:"annotations"`
+	Source      string   `json:"source,omitempty"`
 }
 
 // consentToolInventory is the per-(state, attempt) snapshot. It accumulates
@@ -89,6 +91,11 @@ type consentToolInventory struct {
 	// established; the consent transport's DELETE only terminates an
 	// exactly matching session.
 	McpSessionID string `json:"mcp_session_id"`
+
+	// Members maps each gateway member slug with displayed tools to its
+	// server id, so the approved selection binds to those servers. Empty for
+	// every other endpoint.
+	Members map[string]uuid.UUID `json:"members,omitempty"`
 }
 
 func consentToolInventoryCacheKey(stateID, attempt string) string {
@@ -134,6 +141,7 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 		ExpectedCursor: "",
 		Complete:       false,
 		McpSessionID:   "",
+		Members:        nil,
 	}, nil
 }
 
@@ -295,6 +303,7 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 		tools = append(tools, consentInventoryTool{
 			Name:        base.Name,
 			Annotations: values,
+			Source:      "",
 		})
 	}
 	return tools, roleHidden, nil

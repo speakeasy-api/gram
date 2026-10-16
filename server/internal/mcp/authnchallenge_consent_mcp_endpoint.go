@@ -108,12 +108,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return err
 	}
 
-	// The transport exists only while the organization's admin opt-in is
-	// enabled; an unavailable checker reads as off. 404 matches how the
-	// island's absence hides the surface entirely.
-	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
-		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
-	}
+	// 404 matches how the island's absence hides the surface entirely.
 	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
@@ -193,6 +188,9 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	r.Header.Del(consentAttemptHeader)
 	r.Header.Del("Cookie")
 
+	if endpoint.MetaMcpServerID.Valid {
+		return s.serveConsentGatewayMCP(w, r, endpoint, challengeState, draft)
+	}
 	if endpoint.ToolsetID.Valid {
 		return s.serveConsentToolsetMCP(w, r, endpoint, challengeState, draft)
 	}
@@ -572,6 +570,7 @@ func (i *consentInventoryCaptureInterceptor) InterceptToolsListResponse(ctx cont
 		pageTools = append(pageTools, consentInventoryTool{
 			Name:        tool.Name,
 			Annotations: consentAnnotationsFromSDK(tool.Annotations),
+			Source:      "",
 		})
 	}
 	updated, err := i.service.appendConsentInventoryPage(ctx, *i.draft, requestCursor, pageTools, list.Result.NextCursor)
@@ -699,7 +698,8 @@ func consentRoleHiddenMeta(hidden []string) map[string]any {
 }
 
 // consentWireTools maps captured tools to the standard MCP wire shape:
-// names plus explicitly-true annotation hints. Consent renders nothing
+// names plus explicitly-true annotation hints, and a gateway tool's source
+// server in _meta. Consent renders nothing
 // else, so descriptions and input schemas are deliberately replaced by a
 // permissive placeholder schema.
 func consentWireTools(tools []consentInventoryTool) []map[string]any {
@@ -711,6 +711,9 @@ func consentWireTools(tools []consentInventoryTool) []map[string]any {
 		}
 		if hints := consentHintsFromAnnotations(tool.Annotations); hints != nil {
 			entry["annotations"] = hints
+		}
+		if tool.Source != "" {
+			entry["_meta"] = map[string]any{consentToolSourceMetaKey: tool.Source}
 		}
 		wire = append(wire, entry)
 	}

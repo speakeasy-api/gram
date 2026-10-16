@@ -164,6 +164,44 @@ describe("ConsentToolsApp", () => {
     expect(button.disabled).toBe(true);
   });
 
+  it("falls back to all tools when the inventory cannot be captured", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(422, "too many tools"));
+    const { button } = renderApp();
+    await screen.findByText(/too many tools to choose from here/);
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+  });
+
+  it("asks before widening a stored selection the inventory cannot honor", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(422, "too many tools"));
+    const user = userEvent.setup();
+    const { button } = renderApp({
+      prefill: { annotations: [], tools: ["get_thing"] },
+    });
+    await screen.findByText(/too many tools to choose from here/);
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_filtering")).toEqual([]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Give access to all tools" }),
+    );
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+  });
+
+  it("lets the user give access with all tools after a failed load", async () => {
+    listTools.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    const { button } = renderApp();
+    await user.click(
+      await screen.findByRole("button", { name: "Give access to all tools" }),
+    );
+    expect(button.disabled).toBe(false);
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+  });
+
   it("gives access with all tools when a chained service defers the inventory", async () => {
     connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
     const { button } = renderApp({ inventoryDeferred: true });
@@ -242,6 +280,18 @@ describe("ConsentToolsApp", () => {
     expect(screen.queryByText("get_thing")).toBeNull();
   });
 
+  it("warns, without blocking, when specific tools grants none", async () => {
+    const user = userEvent.setup();
+    const { button } = renderApp();
+    await openPicker(user);
+    const note = /No tools selected/;
+    expect(screen.getByText(note)).toBeTruthy();
+    expect(button.disabled).toBe(false);
+
+    await user.click(screen.getByRole("checkbox", { name: /get_thing/ }));
+    expect(screen.queryByText(note)).toBeNull();
+  });
+
   it("returning to all tools drops the narrowed grant", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -253,6 +303,21 @@ describe("ConsentToolsApp", () => {
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
     expect(formFieldValues("tools")).toEqual([]);
     expect(screen.queryByText("get_thing")).toBeNull();
+  });
+
+  it("a group covered by picks shows checked and clears without a grant", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("checkbox", { name: /get_thing/ }));
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    const selectAll = screen.getByRole("checkbox", { name: /Select all 1/ });
+    expect(selectAll.getAttribute("aria-checked")).toBe("true");
+
+    await user.click(selectAll);
+    expect(formFieldValues("tools")).toEqual([]);
+    expect(formFieldValues("tool_annotations")).toEqual([]);
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
   });
 
   it("navigating groups filters the list without granting anything", async () => {
@@ -360,7 +425,7 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /Other/ }));
+    await user.click(screen.getByRole("button", { name: /Unannotated/ }));
     await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
 
     expect(formFieldValues("tool_filtering")).toEqual(["on"]);
@@ -480,5 +545,180 @@ describe("parsePrefillBootstrap", () => {
       ),
     ).toBeNull();
     expect(parsePrefillBootstrap('{"tools":["a"]}')).toBeNull();
+  });
+  it("groups a gateway's tools by source and selects a source at once", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "github--create_issue",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        {
+          name: "github--list_issues",
+          annotations: { readOnlyHint: true },
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        { name: "docs--search", _meta: { "gram.dev/source": "Docs" } },
+      ],
+      _meta: {
+        "gram.dev/unavailableSources": ["Linear", "Slack"],
+        "gram.dev/managedSources": ["Jira"],
+      },
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({ serverName: "gateway" });
+    await openPicker(user);
+
+    expect(
+      screen.getByText(/Linear and Slack aren't connected yet/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Jira is managed by your identity provider/),
+    ).toBeTruthy();
+    expect(screen.getByRole("group", { name: "GitHub" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Docs" })).toBeTruthy();
+    expect(screen.getByText("create_issue")).toBeTruthy();
+    expect(screen.queryByText("github--create_issue")).toBeNull();
+
+    await user.click(screen.getByRole("checkbox", { name: /GitHub/ }));
+    expect(formFieldValues("tools")).toEqual([
+      "github--create_issue",
+      "github--list_issues",
+    ]);
+
+    await user.type(screen.getByRole("searchbox"), "docs");
+    expect(screen.queryByRole("group", { name: "GitHub" })).toBeNull();
+    await user.click(screen.getByText("search"));
+    expect(formFieldValues("tools")).toEqual([
+      "docs--search",
+      "github--create_issue",
+      "github--list_issues",
+    ]);
+  });
+  it("shows partially selected sources as mixed and counts scope once", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "github--create_issue",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        {
+          name: "github--list_issues",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        { name: "docs--search", _meta: { "gram.dev/source": "Docs" } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({ serverName: "gateway" });
+    await openPicker(user);
+
+    await user.click(screen.getByText("create_issue"));
+    expect(
+      screen
+        .getByRole("checkbox", { name: /GitHub/ })
+        .getAttribute("aria-checked"),
+    ).toBe("mixed");
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Docs/ })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Select all 3/ })
+        .getAttribute("aria-checked"),
+    ).toBe("mixed");
+    const footer = screen.getByText(
+      /of 3 tools in scope on gateway/,
+    ).textContent;
+    expect(footer).toContain("1 of 3 tools in scope on gateway");
+    expect(footer).not.toMatch(/picked/);
+  });
+  it("keeps another source's tools when clearing a source covered by a grant", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "github--list_issues",
+          annotations: { readOnlyHint: true },
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        {
+          name: "docs--search",
+          annotations: { readOnlyHint: true },
+          _meta: { "gram.dev/source": "Docs" },
+        },
+        { name: "docs--write", _meta: { "gram.dev/source": "Docs" } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({ serverName: "gateway" });
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 2/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual(["read_only"]);
+
+    await user.click(screen.getByRole("checkbox", { name: /GitHub/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+    expect(formFieldValues("tools")).toEqual(["docs--search"]);
+  });
+
+  it("clearing one annotation group keeps an overlapping grant", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "get_thing",
+          annotations: { readOnlyHint: true, idempotentHint: true },
+        },
+        { name: "put_thing", annotations: { idempotentHint: true } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({
+      prefill: {
+        annotations: [
+          { name: "idempotent", mode: "live" },
+          { name: "read_only", mode: "live" },
+        ],
+        tools: [],
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: /Read/ }));
+
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual(["idempotent"]);
+  });
+
+  it("keeps members that share a display name in separate sections", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "github-prod--create_issue",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        {
+          name: "github-sandbox--create_issue",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        { name: "docs--search", _meta: { "gram.dev/source": "Docs" } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({ serverName: "gateway" });
+    await openPicker(user);
+
+    expect(
+      screen.getByRole("group", { name: "GitHub (github-prod)" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Docs" })).toBeTruthy();
+    await user.click(
+      screen.getByRole("checkbox", { name: /GitHub \(github-sandbox\)/ }),
+    );
+    expect(formFieldValues("tools")).toEqual(["github-sandbox--create_issue"]);
   });
 });

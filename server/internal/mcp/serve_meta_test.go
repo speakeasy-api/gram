@@ -729,10 +729,8 @@ func TestWellKnown_MetaEndpoint_NoIssuer_NotFound(t *testing.T) {
 // have no per-tool picker (member tool catalogs land with the AGE-3291
 // runtime), so the transport answers NotFound — not the BadRequest a
 // missing-consent-headers request would otherwise get, and never the
-// "neither toolset nor mcp server backend" 500. The test harness enables the
-// consent_tool_filtering feature for the org, so the filtering gate is not
-// what produces the 404 here.
-func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
+// "neither toolset nor mcp server backend" 500.
+func TestHandleConsentMCP_MetaEndpoint_RequiresConsentCredentials(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -755,7 +753,7 @@ func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code, "gateways reach the consent transport, which requires its own credentials")
 }
 
 // TestServePublic_MetaEndpoint_Initialize_Negotiation pins the negotiation

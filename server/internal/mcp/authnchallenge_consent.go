@@ -414,16 +414,6 @@ func (p autoRefreshPolicy) IsEnforced() bool {
 	return p == autoRefreshEnforced
 }
 
-// consentToolFilteringEnabled reports the organization admin's durable opt-in
-// from the consent_tool_filtering product feature managed on MCP Connections.
-// An unavailable checker degrades to off.
-func (s *Service) consentToolFilteringEnabled(ctx context.Context, _ *slog.Logger, organizationID string) bool {
-	if s.platformFeatureChecker == nil {
-		return false
-	}
-	return s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureConsentToolFiltering))
-}
-
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
 // Enforcement wins over the opt-in so an organization that turns on both still
 // gets the stricter behavior, and an unavailable feature checker degrades to
@@ -701,13 +691,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
-	// Only modern endpoints can author per-tool consent: legacy and meta-MCP
-	// endpoints remain unrestricted-only, and toolset-fronting servers qualify
-	// only when every tool is representable in the island. The island owns
+	// Only modern endpoints can author per-tool consent: legacy endpoints
+	// remain unrestricted-only, and toolset-fronting servers qualify only when
+	// every tool is representable in the island. The island owns
 	// approve-button enabling, so unavailable checks must hide it rather than
 	// prevent unrestricted approval.
 	showToolsIsland := false
-	if !challengeState.FirstParty && s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
+	if !challengeState.FirstParty && focusServer == "" {
 		var eligibilityErr error
 		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
 		if eligibilityErr != nil {
@@ -965,7 +955,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 
-	toolPolicy, err := s.consentGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm.Get("discovery_mode"), toolSelection)
+	toolPolicy, err := s.consentGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm.Get("discovery_mode"), toolSelection, boundInventory)
 	if err != nil {
 		return err
 	}
@@ -1070,7 +1060,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		Endpoint:                    &grantEndpoint,
 		AgentAuthorization:          agentAuthorization,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
-		ToolSelection:               toolSelection,
+		ToolSelection:               legacyToolSelection(toolSelection, toolPolicy),
 		SignInID:                    nil,
 		GatewayPolicy:               toolPolicy,
 		CreatedAt:                   time.Now(),

@@ -4,7 +4,7 @@ import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, Check, Minus } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import {
@@ -35,6 +35,71 @@ export interface ConsentToolsAppProps {
 interface ConsentTool {
   name: string;
   annotations: ToolAnnotation[];
+  /** The gateway member server the tool comes from; absent on single servers. */
+  source?: string;
+}
+
+const SOURCE_META_KEY = "gram.dev/source";
+
+/** A gateway qualifies tool names as `<server slug>--<tool>`. */
+const QUALIFIED_NAME_SEPARATOR = "--";
+
+/** The name to show for a tool: a gateway tool drops its server prefix. */
+function displayName(tool: ConsentTool): string {
+  if (!tool.source) return tool.name;
+  const at = tool.name.indexOf(QUALIFIED_NAME_SEPARATOR);
+  return at > 0
+    ? tool.name.slice(at + QUALIFIED_NAME_SEPARATOR.length)
+    : tool.name;
+}
+
+/**
+ * The member server a gateway tool belongs to: its slug prefix, which is
+ * unique per gateway where the display name is not.
+ */
+function sourceKey(tool: ConsentTool): string {
+  if (!tool.source) return "";
+  const at = tool.name.indexOf(QUALIFIED_NAME_SEPARATOR);
+  return at > 0 ? tool.name.slice(0, at) : tool.source;
+}
+
+/**
+ * Section headers per source key: the member's display name, plus its slug
+ * when another member shares that name.
+ */
+function sourceLabels(tools: ConsentTool[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const tool of tools) {
+    if (tool.source) names.set(sourceKey(tool), tool.source);
+  }
+  const uses = new Map<string, number>();
+  for (const name of names.values()) uses.set(name, (uses.get(name) ?? 0) + 1);
+  const labels = new Map<string, string>();
+  for (const [key, name] of names) {
+    labels.set(key, (uses.get(name) ?? 0) > 1 ? `${name} (${key})` : name);
+  }
+  return labels;
+}
+
+/** Joins names as "A", "A and B", or "A, B and C". */
+function listNames(names: string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** Groups tools by source key, keeping each source in first-seen order. */
+function toolsBySource(tools: ConsentTool[]): [string, ConsentTool[]][] {
+  const sections = new Map<string, ConsentTool[]>();
+  for (const tool of tools) {
+    const key = sourceKey(tool);
+    const section = sections.get(key);
+    if (section) section.push(tool);
+    else sections.set(key, [tool]);
+  }
+  for (const section of sections.values()) {
+    section.sort((a, b) => displayName(a).localeCompare(displayName(b)));
+  }
+  return [...sections];
 }
 
 interface RoleHiddenTools {
@@ -47,12 +112,17 @@ interface RoleHiddenTools {
 interface ConsentInventory {
   tools: ConsentTool[];
   roleHiddenTools: RoleHiddenTools;
+  /** Gateway servers whose tools could not be listed, e.g. not yet connected. */
+  unavailableSources: string[];
+  /** Gateway servers reached through the organization's identity provider. */
+  managedSources: string[];
 }
 
 type ConsentPhase =
   | { name: "loading" }
   | { name: "error"; conflict: boolean; message: string }
   | { name: "deferred" }
+  | { name: "unrestricted"; message: string }
   | { name: "ready"; inventory: ConsentInventory };
 
 /**
@@ -69,6 +139,9 @@ type ConsentGroup = "all" | ToolAnnotation | "none";
 type ToolAccessMode = "all" | "specific";
 
 const GENERIC_ERROR_MESSAGE = "Couldn't load this server's tools.";
+
+const UNSUPPORTED_MESSAGE =
+  "This server has too many tools to choose from here.";
 
 /**
  * The consent page script raises this, and sets the matching attribute on
@@ -144,15 +217,19 @@ async function fetchConsentInventory(
     const tools: ConsentTool[] = [];
     const seen = new Set<string>();
     const roleHiddenTools: RoleHiddenTools = { count: 0, names: [] };
+    const unavailableSources: string[] = [];
+    const managedSources: string[] = [];
     let cursor: string | undefined = undefined;
     do {
       const page = await client.listTools(cursor ? { cursor } : undefined);
       for (const tool of page.tools) {
         if (seen.has(tool.name)) throw new Error("duplicate tool name");
         seen.add(tool.name);
+        const source = tool._meta?.[SOURCE_META_KEY];
         tools.push({
           name: tool.name,
           annotations: annotationsFromHints(tool.annotations),
+          ...(typeof source === "string" && source !== "" ? { source } : {}),
         });
       }
       const meta = (page as { _meta?: Record<string, unknown> })._meta;
@@ -169,9 +246,22 @@ async function fetchConsentInventory(
           }
         }
       }
+      for (const [key, into] of [
+        ["gram.dev/unavailableSources", unavailableSources],
+        ["gram.dev/managedSources", managedSources],
+      ] as const) {
+        const sources = meta?.[key];
+        if (Array.isArray(sources)) {
+          for (const source of sources) {
+            if (typeof source === "string" && source !== "") {
+              into.push(source);
+            }
+          }
+        }
+      }
       cursor = page.nextCursor;
     } while (cursor);
-    return { tools, roleHiddenTools };
+    return { tools, roleHiddenTools, unavailableSources, managedSources };
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);
@@ -192,8 +282,20 @@ function annotationsFromHints(value: unknown): ToolAnnotation[] {
   );
 }
 
-function errorPhase(err: unknown, canDefer: boolean): ConsentPhase {
+function errorPhase(
+  err: unknown,
+  canDefer: boolean,
+  hasPrefill: boolean,
+): ConsentPhase {
   const status = err instanceof StreamableHTTPError ? err.code : undefined;
+  // The server could not capture the inventory for selection (too many
+  // tools, an oversized name). Retrying fails the same way, so fall back to
+  // the all-tools grant, unless that would silently widen a stored selection.
+  if (status === 413 || status === 422) {
+    return hasPrefill
+      ? { name: "error", conflict: false, message: UNSUPPORTED_MESSAGE }
+      : { name: "unrestricted", message: UNSUPPORTED_MESSAGE };
+  }
   if (status === 409 && canDefer) {
     return { name: "deferred" };
   }
@@ -291,7 +393,13 @@ export function ConsentToolsApp({
     load().catch((err: unknown) => {
       // A stored narrower selection must never be replaced by all tools.
       if (!cancelled) {
-        setPhase(errorPhase(err, inventoryDeferred && prefill === null));
+        setPhase(
+          errorPhase(
+            err,
+            inventoryDeferred && prefill === null,
+            prefill !== null,
+          ),
+        );
       }
     });
     return () => {
@@ -317,7 +425,10 @@ export function ConsentToolsApp({
   // effect keeps the server-rendered button in step with the commit, so it is
   // never enabled while the island already shows a blocking error.
   const approveReady =
-    (phase.name === "ready" || phase.name === "deferred") && consentEnabled;
+    (phase.name === "ready" ||
+      phase.name === "deferred" ||
+      phase.name === "unrestricted") &&
+    consentEnabled;
   useLayoutEffect(() => {
     const button = document.getElementById(approveButtonId);
     if (button instanceof HTMLButtonElement) {
@@ -394,6 +505,28 @@ export function ConsentToolsApp({
     );
   }
 
+  if (phase.name === "unrestricted") {
+    return (
+      <div
+        role="status"
+        className="border-border text-muted-foreground space-y-1 border px-3 py-3 text-sm"
+      >
+        <p>
+          {phase.message} This connection starts with all tools available to
+          you.
+        </p>
+        <input type="hidden" name="tool_filtering" value="off" form={formId} />
+        <button
+          type="button"
+          onClick={() => setAttemptID(crypto.randomUUID())}
+          className="text-primary hover:underline"
+        >
+          Load tools again
+        </button>
+      </div>
+    );
+  }
+
   if (phase.name === "error") {
     return (
       <div
@@ -409,13 +542,28 @@ export function ConsentToolsApp({
             Connect the service above, then retry.
           </p>
         )}
-        <button
-          type="button"
-          onClick={() => setAttemptID(crypto.randomUUID())}
-          className="text-primary hover:underline"
-        >
-          Retry
-        </button>
+        <div className="flex flex-wrap gap-x-3">
+          <button
+            type="button"
+            onClick={() => setAttemptID(crypto.randomUUID())}
+            className="text-primary hover:underline"
+          >
+            Retry
+          </button>
+          {/* Tool selection is optional: an inventory that will not load
+              must not stop the user from giving access with all tools. */}
+          {!phase.conflict && (
+            <button
+              type="button"
+              onClick={() =>
+                setPhase({ name: "unrestricted", message: phase.message })
+              }
+              className="text-primary hover:underline"
+            >
+              Give access to all tools
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -438,7 +586,7 @@ export function ConsentToolsApp({
           {
             id: "none" as ConsentGroup,
             label: "No annotation",
-            shortLabel: "Other",
+            shortLabel: "Unannotated",
             count: groupTools(tools, "none").length,
           },
         ]
@@ -449,7 +597,13 @@ export function ConsentToolsApp({
   const viewed =
     normalizedQuery === ""
       ? grouped
-      : grouped.filter((t) => t.name.toLowerCase().includes(normalizedQuery));
+      : grouped.filter(
+          (t) =>
+            t.name.toLowerCase().includes(normalizedQuery) ||
+            (t.source ?? "").toLowerCase().includes(normalizedQuery),
+        );
+  const hasSources = tools.some((t) => t.source !== undefined);
+  const labels = sourceLabels(tools);
 
   const groupGranted = (id: ConsentGroup): boolean => {
     if (id === "all") {
@@ -461,12 +615,14 @@ export function ConsentToolsApp({
     }
     return annGrants.has(id);
   };
+  const navGranted =
+    groupGranted(nav) ||
+    (grouped.length > 0 && grouped.every((t) => scope.has(t.name)));
+  const navPartial = !navGranted && grouped.some((t) => scope.has(t.name));
 
-  // Bulk-select the tools in the current nav group by name. Used for the
-  // groups that have no annotation grant to express them: "All tools" and the
-  // unannotated bucket.
-  const toggleGroupPicks = (group: ConsentGroup) => {
-    const members = groupTools(tools, group);
+  // Bulk-select tools by name: the "All tools" and unannotated groups, which
+  // have no annotation grant to express them, and a gateway's source sections.
+  const togglePicks = (members: ConsentTool[]) => {
     // Read "already granted" from the scope, the same union the checkbox
     // renders from. Reading it from picks alone leaves a group that is fully
     // covered by an annotation grant showing as checked but refusing to
@@ -478,30 +634,55 @@ export function ConsentToolsApp({
       if (granted) next.delete(t.name);
       else next.add(t.name);
     });
-    setPicked(next);
-    if (!granted) return;
+    if (!granted) {
+      setPicked(next);
+      return;
+    }
     // Dropping picks cannot revoke coverage that came from an annotation, so
-    // clear every grant that reaches into this group as well.
+    // clear every grant that reaches into this group. A grant spans the whole
+    // inventory, so the tools it covered outside the group become picks and
+    // stay in scope.
+    const memberNames = new Set(members.map((t) => t.name));
     const remaining = new Map(annGrants);
     for (const [annotation] of annGrants) {
       if (members.some((t) => t.annotations.includes(annotation))) {
         remaining.delete(annotation);
       }
     }
+    for (const tool of tools) {
+      if (
+        !memberNames.has(tool.name) &&
+        scope.has(tool.name) &&
+        !tool.annotations.some((a) => remaining.has(a))
+      ) {
+        next.add(tool.name);
+      }
+    }
+    setPicked(next);
     setAnnGrants(remaining);
   };
 
   const toggleGroupGrant = () => {
-    if (nav === "all" || nav === "none") {
-      toggleGroupPicks(nav);
+    if (nav !== "all" && nav !== "none" && annGrants.has(nav)) {
+      const remaining = new Map(annGrants);
+      remaining.delete(nav);
+      setAnnGrants(remaining);
+      const next = new Set(picked);
+      grouped.forEach((t) => {
+        next.delete(t.name);
+      });
+      setPicked(next);
       return;
     }
-    const next = new Map(annGrants);
-    if (next.has(nav)) next.delete(nav);
+    // A fully covered group clears, whether picks or a grant cover it, so
+    // the checked header never adds a grant the user did not ask for.
+    if (nav === "all" || nav === "none" || navGranted) {
+      togglePicks(grouped);
+      return;
+    }
     // New grants default to live: like the all-tools grant, matching tools
     // the server adds later are included until the user freezes the grant.
-    else next.set(nav, "live");
-    setAnnGrants(next);
+    setAnnGrants(new Map(annGrants).set(nav, "live"));
   };
 
   const togglePick = (name: string) => {
@@ -519,6 +700,46 @@ export function ConsentToolsApp({
             (t) => t.name === n && t.annotations.some((a) => annGrants.has(a)),
           ),
       ).length;
+
+  const renderTool = (tool: ConsentTool) => {
+    const viaGrant = allGrant || tool.annotations.some((a) => annGrants.has(a));
+    const inScope = scope.has(tool.name);
+    return (
+      <div
+        key={tool.name}
+        role="checkbox"
+        aria-checked={inScope}
+        aria-disabled={viaGrant}
+        tabIndex={viaGrant ? -1 : 0}
+        onClick={viaGrant ? undefined : () => togglePick(tool.name)}
+        onKeyDown={
+          viaGrant
+            ? undefined
+            : (e) => {
+                if (e.key === " " || e.key === "Enter") {
+                  e.preventDefault();
+                  togglePick(tool.name);
+                }
+              }
+        }
+        className={cn(
+          "flex items-center gap-2.5 px-3 py-2",
+          viaGrant ? "cursor-default" : "hover:bg-accent cursor-pointer",
+        )}
+      >
+        <SelectionBox checked={inScope} />
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-sm"
+          title={tool.name}
+        >
+          {displayName(tool)}
+        </span>
+        {!allGrant && viaGrant && (
+          <span className="text-eyebrow shrink-0">via annotation</span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -581,11 +802,11 @@ export function ConsentToolsApp({
               <button
                 type="button"
                 role="checkbox"
-                aria-checked={groupGranted(nav)}
+                aria-checked={bulkChecked(navGranted, navPartial)}
                 onClick={toggleGroupGrant}
                 className="flex cursor-pointer items-center gap-2 text-sm"
               >
-                <SelectionBox checked={groupGranted(nav)} />
+                <SelectionBox checked={navGranted} indeterminate={navPartial} />
                 Select all {grouped.length}
                 {nav !== "all" && (
                   <span className="text-muted-foreground">
@@ -616,50 +837,46 @@ export function ConsentToolsApp({
             {/* A minimum height so a three-tool server does not render a
                 letterbox, and a cap so a 200-tool one stays scannable. */}
             <div className="max-h-[19rem] min-h-[11rem] overflow-y-auto">
-              {viewed.map((tool) => {
-                const viaGrant =
-                  allGrant || tool.annotations.some((a) => annGrants.has(a));
-                const inScope = scope.has(tool.name);
-                return (
-                  <div
-                    key={tool.name}
-                    role="checkbox"
-                    aria-checked={inScope}
-                    aria-disabled={viaGrant}
-                    tabIndex={viaGrant ? -1 : 0}
-                    onClick={viaGrant ? undefined : () => togglePick(tool.name)}
-                    onKeyDown={
-                      viaGrant
-                        ? undefined
-                        : (e) => {
-                            if (e.key === " " || e.key === "Enter") {
-                              e.preventDefault();
-                              togglePick(tool.name);
-                            }
-                          }
-                    }
-                    className={cn(
-                      "flex items-center gap-2.5 px-3 py-2",
-                      viaGrant
-                        ? "cursor-default"
-                        : "hover:bg-accent cursor-pointer",
-                    )}
-                  >
-                    <SelectionBox checked={inScope} />
-                    <span
-                      className="min-w-0 flex-1 truncate font-mono text-sm"
-                      title={tool.name}
-                    >
-                      {tool.name}
-                    </span>
-                    {!allGrant && viaGrant && (
-                      <span className="text-eyebrow shrink-0">
-                        via annotation
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
+              {hasSources
+                ? toolsBySource(viewed).map(([key, sectionTools]) => {
+                    const source = labels.get(key) ?? key;
+                    const sectionInScope = sectionTools.filter((t) =>
+                      scope.has(t.name),
+                    ).length;
+                    const sectionGranted =
+                      sectionInScope === sectionTools.length;
+                    const sectionPartial = sectionInScope > 0;
+                    return (
+                      <div key={key} role="group" aria-label={source}>
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={bulkChecked(
+                            sectionGranted,
+                            sectionPartial,
+                          )}
+                          onClick={() => togglePicks(sectionTools)}
+                          className="border-border bg-background hover:bg-accent sticky top-0 flex w-full cursor-pointer items-center gap-2.5 border-b px-3 py-2 text-left"
+                        >
+                          <SelectionBox
+                            checked={sectionGranted}
+                            indeterminate={sectionPartial}
+                          />
+                          <span
+                            className="min-w-0 flex-1 truncate text-sm font-medium"
+                            title={source}
+                          >
+                            {source}
+                          </span>
+                          <span className="text-muted-foreground shrink-0 text-xs">
+                            {sectionInScope} of {sectionTools.length}
+                          </span>
+                        </button>
+                        {sectionTools.map(renderTool)}
+                      </div>
+                    );
+                  })
+                : viewed.map(renderTool)}
               {viewed.length === 0 && (
                 <p className="text-muted-foreground px-3 py-3 text-sm">
                   {normalizedQuery === ""
@@ -670,6 +887,26 @@ export function ConsentToolsApp({
             </div>
           </div>
         </div>
+      )}
+      {mode === "specific" && phase.inventory.unavailableSources.length > 0 && (
+        <p className="text-muted-foreground text-xs">
+          {listNames(phase.inventory.unavailableSources)}{" "}
+          {phase.inventory.unavailableSources.length === 1 ? "isn't" : "aren't"}{" "}
+          connected yet, so{" "}
+          {phase.inventory.unavailableSources.length === 1 ? "its" : "their"}{" "}
+          tools can't be chosen here. Choose All tools to include them once
+          connected.
+        </p>
+      )}
+      {mode === "specific" && phase.inventory.managedSources.length > 0 && (
+        <p className="text-muted-foreground text-xs">
+          {listNames(phase.inventory.managedSources)}{" "}
+          {phase.inventory.managedSources.length === 1 ? "is" : "are"} managed
+          by your identity provider, so{" "}
+          {phase.inventory.managedSources.length === 1 ? "its" : "their"} tools
+          can't be chosen here. Choose All tools to include{" "}
+          {phase.inventory.managedSources.length === 1 ? "it" : "them"}.
+        </p>
       )}
       {phase.inventory.roleHiddenTools.count > 0 && (
         <RoleHiddenNote hidden={phase.inventory.roleHiddenTools} />
@@ -698,14 +935,27 @@ export function ConsentToolsApp({
                   .join(", ")}
               </>
             )}
-            {pickedOutsideGrants > 0 && ` · ${pickedOutsideGrants} picked`}
+            {annGrants.size > 0 &&
+              pickedOutsideGrants > 0 &&
+              ` · ${pickedOutsideGrants} picked`}
           </span>
           <span>
             {liveAnnotations.length > 0
-              ? "Live grants include future matching tools"
+              ? hasSources
+                ? "Live grants include future matching tools from the sources shown"
+                : "Live grants include future matching tools"
               : "New tools require approval"}
           </span>
         </div>
+      )}
+      {mode === "specific" && scope.size === 0 && (
+        <p
+          role="status"
+          className="text-muted-foreground flex items-center gap-1.5 text-xs"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          No tools selected — this client won't be able to call any tools.
+        </p>
       )}
       <ApprovalFormFields
         formId={formId}
@@ -840,18 +1090,32 @@ function RoleHiddenNote({ hidden }: { hidden: RoleHiddenTools }): JSX.Element {
   );
 }
 
-function SelectionBox({ checked }: { checked: boolean }): JSX.Element {
+function SelectionBox({
+  checked,
+  indeterminate = false,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+}): JSX.Element {
+  const mixed = indeterminate && !checked;
   return (
     <span
       aria-hidden
       className={cn(
         "border-border flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border",
-        checked && "bg-foreground border-foreground",
+        (checked || mixed) && "bg-foreground border-foreground",
       )}
     >
       {checked && <Check className="text-background h-2.5 w-2.5" />}
+      {mixed && <Minus className="text-background h-2.5 w-2.5" />}
     </span>
   );
+}
+
+/** The aria-checked value for a bulk checkbox over a set of tools. */
+function bulkChecked(checked: boolean, partial: boolean): boolean | "mixed" {
+  if (checked) return true;
+  return partial ? "mixed" : false;
 }
 
 /**

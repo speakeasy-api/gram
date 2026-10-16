@@ -185,9 +185,10 @@ func (s *Service) routeMetaMember(
 		return memberDial{}, "", err
 	}
 
-	// gate.toolSelection is provably nil today: meta endpoints mint no tool
-	// selections. If they ever do, its names are meta-MCP-qualified and would
-	// have to be translated before reaching a member proxy's strict filter.
+	memberSelection, err := gate.memberToolSelection(member)
+	if err != nil {
+		return memberDial{}, "", err
+	}
 	switch {
 	case member.remoteServerID.Valid:
 		remoteServer, rerr := remotemcp_repo.New(s.db).GetServerByID(ctx, remotemcp_repo.GetServerByIDParams{
@@ -218,7 +219,7 @@ func (s *Service) routeMetaMember(
 		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
-			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
+			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", memberSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			// Meta-MCP-synthesized initializes are not client sessions.
 			p.InitializeRequestInterceptors = nil
 			renewal := s.renewClientCredentialOnRejection(p, logger, routed)
@@ -247,7 +248,7 @@ func (s *Service) routeMetaMember(
 				ResourceIdentifier: member.tunneledResourceIdentifier,
 				UpstreamAuth:       upstreamToken,
 				WWWAuthenticate:    "",
-				Selection:          gate.toolSelection,
+				Selection:          memberSelection,
 			}, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
@@ -382,6 +383,15 @@ func (s *Service) executeProxiedMemberTool(
 			Version: clientIdentity.Version,
 		})
 	}
+	memberSelection, err := gate.memberToolSelection(member)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "scope meta MCP member tool selection").LogError(ctx, logger)
+	}
+	// Live grants need the member's listing, so only a call no grant could
+	// allow is refused before chaining or dialing.
+	if memberSelection != nil && !memberSelection.AllowsName(toolName) && len(memberSelection.LiveAnnotations()) == 0 {
+		return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
+	}
 	// Only a tool call may acquire a downstream token by identity chaining.
 	callGate := *gate
 	callGate.chainUpstream = s.metaMemberChainer(gate, member)
@@ -404,6 +414,14 @@ func (s *Service) executeProxiedMemberTool(
 		return marshalMetaToolError(ctx, logger, req.ID, memberClientFailure(ctx, logger, rt, dial, member, err).Error())
 	}
 	defer o11y.LogDefer(ctx, logger, "close member session", session.Close)
+	// Live grants authorize proxied calls by the calling session's own
+	// listing witness, and a stateful member opens a new session per
+	// connection, so list within this session first.
+	if memberSelection != nil && !memberSelection.AllowsName(toolName) && len(memberSelection.LiveAnnotations()) > 0 {
+		if _, err := listMemberSessionTools(ctx, logger, session, rt, dial, member); err != nil {
+			return marshalMetaToolError(ctx, logger, req.ID, err.Error())
+		}
+	}
 	upstreamResult, err := callMemberTool(ctx, session, &mcp.CallToolParams{
 		Name: toolName, Arguments: arguments, Meta: nil, InputResponses: nil, RequestState: "",
 	})
@@ -457,6 +475,13 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 	}
 	defer o11y.LogDefer(ctx, logger, "close member session", session.Close)
 
+	return listMemberSessionTools(ctx, logger, session, rt, dial, member)
+}
+
+// listMemberSessionTools pages tools/list within one member session, so the
+// proxy's interceptors filter each page and record the session's listing
+// witness. Pagination is bounded by maxProxiedListPages.
+func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *mcp.ClientSession, rt *memberRoundTripper, dial memberDial, member metaMember) (*memberCatalog, error) {
 	entries := []*toolListEntry{}
 	byName := map[string]*toolListEntry{}
 	incomplete := false

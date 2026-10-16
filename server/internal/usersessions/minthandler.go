@@ -128,6 +128,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 			Resource:  "meta_mcp_server:" + target.resourceID,
 			Selection: nil,
 			Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+			Members:   nil,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "encode gateway connection options").LogError(ctx, s.logger)
