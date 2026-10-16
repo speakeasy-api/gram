@@ -107,6 +107,37 @@ func TestClient_RetriesExhausted_PreservesFinalStatusAndBody(t *testing.T) {
 	require.Contains(t, err.Error(), "last status 500")
 }
 
+func TestPolicy_WithRetryWaitsKeepsAttemptsAndShortensWaits(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, guardian.WithRetryWaits(time.Millisecond, 5*time.Millisecond))
+	require.NoError(t, err)
+	// The default config waits 1+2+4+8 seconds between its four retries.
+	client := policy.Client(guardian.WithDefaultRetryConfig())
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	started := time.Now()
+	resp, err := client.Do(req)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.Error(t, err)
+	require.Less(t, time.Since(started), time.Second)
+
+	var exhausted *guardian.RetriesExhaustedError
+	require.ErrorAs(t, err, &exhausted)
+	require.Equal(t, 5, exhausted.Attempts)
+	require.EqualValues(t, 5, attempts.Load())
+}
+
 func TestClient_ContextCancellationIsNotWrappedAsExhaustion(t *testing.T) {
 	t.Parallel()
 

@@ -245,6 +245,11 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+	// refreshReplayWaitOverride and chainCheckTimeoutOverride replace the
+	// refresh replay wait and the consent chain check deadline when positive,
+	// so a test can let them expire.
+	refreshReplayWaitOverride time.Duration
+	chainCheckTimeoutOverride time.Duration
 	// replayLiveness overrides the refresh-replay session check in unit tests
 	// that run without a database.
 	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool)
@@ -608,6 +613,9 @@ func NewService(
 		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
+
+		refreshReplayWaitOverride: 0,
+		chainCheckTimeoutOverride: 0,
 	}
 	return service, nil
 }

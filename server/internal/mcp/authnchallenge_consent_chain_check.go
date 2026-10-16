@@ -33,6 +33,13 @@ var (
 // provider reads as unknown and the first tool call retries.
 const consentChainCheckTimeout = 5 * time.Second
 
+func (s *Service) chainCheckTimeout() time.Duration {
+	if s.chainCheckTimeoutOverride > 0 {
+		return s.chainCheckTimeoutOverride
+	}
+	return consentChainCheckTimeout
+}
+
 // consentChainCheckResult is the check's response body. Message is user-safe
 // copy; provider errors and tokens never reach it.
 type consentChainCheckResult struct {
@@ -125,7 +132,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 // until the user authorizes the MCP grant. Neither is claimed connected
 // without a downstream token.
 func (s *Service) checkIdentityChaining(ctx context.Context, requests []identitychaining.Request, service string, signInID uuid.UUID) consentChainCheckResult {
-	ctx, cancel := context.WithTimeout(ctx, consentChainCheckTimeout)
+	ctx, cancel := context.WithTimeout(ctx, s.chainCheckTimeout())
 	defer cancel()
 	result := chainCheckConnectedResult
 	for _, req := range requests {
