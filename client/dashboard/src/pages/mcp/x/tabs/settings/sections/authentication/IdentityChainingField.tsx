@@ -397,8 +397,11 @@ export function IdentityChainingField({
   const scopes = bound
     ? sanitizeChainingScopes(storedScopes)
     : defaultChainingScopes(selected?.scope);
+  // A linked client's binding records the connection's scopes, not these.
   const scopesValid =
-    selected != null && chainingScopesAllowed(scopes, selected.scope);
+    selected != null &&
+    ((bound && read.data?.connectionScopes !== undefined) ||
+      chainingScopesAllowed(scopes, selected.scope));
   const [confirmDisable, setConfirmDisable] = useState(false);
 
   const vendorIssuer = useRemoteSessionIssuer(
@@ -587,6 +590,7 @@ export function IdentityChainingField({
 
   const pending = read.isFetching || prepare.isPending || unlink.isPending;
   const ready = bound && read.data?.state === "ready";
+  const canWrite = hasScope("project:write", project.id);
   const shownState = read.data ? displayedChainingState(read.data) : null;
   const canUnlink = chainingUnlinkable(read.data);
   const enableBlocked =
@@ -733,6 +737,18 @@ export function IdentityChainingField({
             </div>
           </RequireScope>
         </div>
+        {bound && canUnlink && read.data?.scopesOutOfDate && target && (
+          <ScopesOutOfDateNotice
+            gramProject={gramProject}
+            target={target}
+            generation={read.data.generation}
+            recorded={read.data.scopes}
+            connection={read.data.connectionScopes ?? []}
+            canApply={ready && canWrite && !grantsBlocked}
+            canWrite={canWrite}
+            busy={pending}
+          />
+        )}
         <ApiErrorAlert error={read.error ?? prepare.error ?? unlink.error} />
         {staleNotices}
       </SettingsSection.Body>
@@ -1098,6 +1114,109 @@ function defaultVoucherLine(identityProvider: string | undefined): string {
   return identityProvider
     ? `People sign in to this server through ${identityProvider}, so ${identityProvider} vouches for them.`
     : "People sign in to this server with Speakeasy, so Speakeasy vouches for them.";
+}
+
+function scopeList(scopes: string[]): string {
+  return scopes.length ? scopes.join(", ") : "no scopes";
+}
+
+/** The server connection's scopes moved on since chaining recorded them. */
+function ScopesOutOfDateNotice({
+  gramProject,
+  target,
+  generation,
+  recorded,
+  connection,
+  canApply,
+  canWrite,
+  busy,
+}: {
+  gramProject: string;
+  target: {
+    userSessionIssuerId: string;
+    remoteSessionIssuerId: string;
+    resource: string;
+  };
+  generation: number;
+  recorded: string[];
+  connection: string[];
+  canApply: boolean;
+  canWrite: boolean;
+  busy: boolean;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const [conflict, setConflict] = useState(false);
+  const refresh = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ["identityChaining", "readEMA"],
+    });
+    void invalidateAllOrganizationRemoteSessionIssuerEMAServices(queryClient);
+    void invalidateAllRemoteSessionClients(queryClient);
+  };
+  const apply = useRemoteSessionClientsPrepareEMAMutation({
+    onSuccess: (result) => {
+      // A stale generation comes back as configuration_required, not a 409.
+      if (result.state === "configuration_required") {
+        setConflict(true);
+        void queryClient.invalidateQueries({
+          queryKey: ["identityChaining", "readEMA"],
+        });
+        return;
+      }
+      if (!preparationSucceeded(result)) {
+        toast.warning("Couldn’t apply the connection’s scopes. Try again.");
+        refresh();
+        return;
+      }
+      refresh();
+      toast.success("Enterprise Managed Authorization uses the new scopes");
+    },
+    onError: () => undefined,
+  });
+  return (
+    <div className="space-y-2 pt-2">
+      <Text small className="block">
+        The server connection’s scopes changed. Enterprise Managed Authorization
+        still requests {scopeList(recorded)}; the connection now asks for{" "}
+        {scopeList(connection)}.
+      </Text>
+      <Text muted small className="block">
+        {canApply
+          ? "Applying them changes everyone’s next request."
+          : canWrite
+            ? "Turning it on again applies them."
+            : "Someone who can edit this project can apply them."}
+      </Text>
+      {conflict && (
+        <Text small className="text-warning block">
+          Someone else changed this; review and try again.
+        </Text>
+      )}
+      {canApply && (
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={busy || apply.isPending}
+          onClick={() => {
+            setConflict(false);
+            apply.mutate({
+              request: {
+                gramProject,
+                prepareEMARequestBody: {
+                  ...target,
+                  expectedGeneration: generation,
+                  scopes: recorded,
+                },
+              },
+            });
+          }}
+        >
+          {apply.isPending ? "Applying…" : "Apply connection scopes"}
+        </Button>
+      )}
+      <ApiErrorAlert error={apply.error} />
+    </div>
+  );
 }
 
 /**

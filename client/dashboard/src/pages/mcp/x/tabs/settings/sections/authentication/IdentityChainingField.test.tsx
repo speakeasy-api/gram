@@ -28,6 +28,7 @@ const issuerNames = vi.hoisted(() => ({
 const state = vi.hoisted(() => ({
   orgAdmin: true,
   orgRead: true,
+  projectWrite: true,
   oktaView: true,
   calls: [] as string[],
   prepare: vi.fn(),
@@ -81,7 +82,9 @@ vi.mock("@/hooks/useRBAC", () => ({
         ? state.orgAdmin
         : scope === "org:read"
           ? state.orgRead
-          : true,
+          : scope === "project:write"
+            ? state.projectWrite
+            : true,
   }),
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -212,6 +215,7 @@ beforeEach(() => {
   issuerNames.isError = false;
   state.orgAdmin = true;
   state.orgRead = true;
+  state.projectWrite = true;
   state.oktaView = true;
   state.calls.length = 0;
   state.prepare.mockReset();
@@ -1177,5 +1181,110 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(container.querySelector("section")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+  });
+});
+
+describe("identity chaining connection scopes", () => {
+  const outOfDate = {
+    ...bound("first"),
+    generation: 4,
+    scopes: ["read"],
+    connectionScopes: ["read", "write"],
+    scopesOutOfDate: true,
+  };
+  const applyButton = () =>
+    screen.queryByRole("button", { name: "Apply connection scopes" });
+
+  it("says nothing while the recorded scopes match the connection", () => {
+    read.data = { ...outOfDate, scopesOutOfDate: false };
+    render(field());
+    expect(screen.queryByText(/scopes changed/)).toBeNull();
+    expect(applyButton()).toBeNull();
+  });
+
+  it("names what changed and offers one action to apply it", () => {
+    read.data = outOfDate;
+    render(field());
+    expect(
+      screen.getByText(
+        "The server connection’s scopes changed. Enterprise Managed Authorization still requests read; the connection now asks for read, write.",
+      ),
+    ).toBeTruthy();
+    expect(applyButton()).toBeTruthy();
+  });
+
+  it("re-prepares the binding at its generation, without a client, grants or mechanism", () => {
+    read.data = outOfDate;
+    state.prepareResult = {
+      ...outOfDate,
+      generation: 5,
+      scopes: ["read", "write"],
+      scopesOutOfDate: false,
+    };
+    render(field());
+    fireEvent.click(applyButton()!);
+    expect(state.prepare).toHaveBeenCalledWith({
+      request: {
+        gramProject: "project",
+        prepareEMARequestBody: {
+          userSessionIssuerId: "session-issuer",
+          remoteSessionIssuerId: "issuer",
+          resource: "https://example.com/mcp",
+          expectedGeneration: 4,
+          scopes: ["read"],
+        },
+      },
+    });
+    expect(
+      screen.queryByText("Someone else changed this; review and try again."),
+    ).toBeNull();
+  });
+
+  it("asks for a review when someone else changed the binding first", () => {
+    read.data = outOfDate;
+    state.prepareResult = { ...outOfDate, state: "configuration_required" };
+    render(field());
+    fireEvent.click(applyButton()!);
+    expect(
+      screen.getByText("Someone else changed this; review and try again."),
+    ).toBeTruthy();
+  });
+
+  it("tells someone who can't edit the project who can apply it", () => {
+    state.projectWrite = false;
+    read.data = outOfDate;
+    render(field());
+    expect(screen.getByText(/scopes changed/)).toBeTruthy();
+    expect(
+      screen.getByText("Someone who can edit this project can apply them."),
+    ).toBeTruthy();
+    expect(applyButton()).toBeNull();
+  });
+
+  it("lets a bound, not-ready binding turn on when the connection records its scopes", () => {
+    const scoped = [
+      { ...clients[0], scope: ["read"] },
+    ] as RemoteSessionClient[];
+    read.data = {
+      ...bound("first"),
+      state: "transient_failure",
+      scopes: ["write"],
+      connectionScopes: ["read"],
+      scopesOutOfDate: true,
+    };
+    render(
+      <IdentityChainingField
+        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+        providers={{ external: false }}
+        linkedClients={scoped}
+        resource="https://example.com/mcp"
+      />,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Turn on" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    expect(applyButton()).toBeNull();
+    expect(screen.getByText("Turning it on again applies them.")).toBeTruthy();
   });
 });
