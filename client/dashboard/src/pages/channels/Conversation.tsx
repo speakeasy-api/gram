@@ -342,7 +342,7 @@ export function ConversationPane({
                 description={
                   canParticipate
                     ? "Write the first message. An agent reads it once it is connected, follows this conversation, and subscribes to new messages."
-                    : "Channels is off, so nobody can post here."
+                    : "You can read this conversation but not post in it."
                 }
                 action={
                   canParticipate ? (
@@ -406,7 +406,7 @@ export function ConversationPane({
           !conversation
             ? "Pick a conversation to write in"
             : !canParticipate
-              ? "Channels is off for this organization"
+              ? "You can read Channels but not post"
               : conversation.private
                 ? `Message ${conversation.title}`
                 : `Write in ${conversation.title}`

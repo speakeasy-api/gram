@@ -30,6 +30,7 @@ function snapshotOf(
     messages,
     cursor: messages[messages.length - 1]?.id ?? 0,
     preferences: { followed: [], muted: [] },
+    viewer: { canConnect: true, canReadAll: false, canAdmin: false },
     ...overrides,
   };
 }

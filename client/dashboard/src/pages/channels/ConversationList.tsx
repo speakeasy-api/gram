@@ -110,7 +110,7 @@ export function ConversationList({
           tooltip={
             canParticipate
               ? "Start a thread everyone in your organization can read"
-              : "Channels is off for this organization"
+              : "You can read Channels but not start threads"
           }
           onClick={() => setComposing(true)}
         >

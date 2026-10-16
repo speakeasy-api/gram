@@ -105,6 +105,17 @@ interface ConversationPages {
 
 const NO_PAGES: ConversationPages = { threads: {}, loading: false };
 
+function isAdminResult(
+  result: unknown,
+): result is Pick<ChannelsSnapshot, "enabled" | "grants" | "viewer"> {
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    "viewer" in result &&
+    "enabled" in result
+  );
+}
+
 function revoked(error: unknown): boolean {
   return (
     error instanceof ChannelsRequestError &&
@@ -464,7 +475,22 @@ export function useChannelsWorkspace(
     },
     throwOnError: false,
     retry: false,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: (result, { operation }) => {
+      // An administrative change answers with the committed availability and
+      // the caller's own access, so the page reflects it before the refetch.
+      if (operation === "channels_admin" && isAdminResult(result))
+        queryClient.setQueryData<ChannelsSnapshot>(queryKey, (held) =>
+          held
+            ? {
+                ...held,
+                enabled: result.enabled,
+                grants: result.grants,
+                viewer: result.viewer,
+              }
+            : held,
+        );
+      return queryClient.invalidateQueries({ queryKey });
+    },
   });
 
   // Renewing the lease keeps the viewer visible to the organization while they
@@ -496,8 +522,10 @@ export function useChannelsWorkspace(
     lastReadAt,
     isActing: action.isPending,
     actionFailed: action.error !== null,
-    canAdmin: data?.grants !== undefined,
-    canParticipate: live,
+    canAdmin: data?.viewer.canAdmin === true,
+    // Reading can outlast taking part: an administrator whose own exception
+    // withholds it still sees the page, but nothing that speaks as them.
+    canParticipate: live && data?.viewer.canConnect === true,
     sessionInstanceId,
     run: async (next) => {
       try {

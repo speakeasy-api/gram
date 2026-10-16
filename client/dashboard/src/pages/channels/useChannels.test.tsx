@@ -20,6 +20,7 @@ const empty: ChannelsSnapshot = {
   threads: {},
   messages: [],
   preferences: { followed: [], muted: [] },
+  viewer: { canConnect: true, canReadAll: false, canAdmin: false },
   cursor: 0,
 };
 

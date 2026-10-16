@@ -36,6 +36,15 @@ export interface ChannelMessage {
   text: string;
   createdAt: string;
 }
+/**
+ * The viewer's own access. `canConnect` and `canReadAll` already account for
+ * any per-person exception; `canAdmin` comes from the organization role.
+ */
+interface ChannelsViewer {
+  canConnect: boolean;
+  canReadAll: boolean;
+  canAdmin: boolean;
+}
 interface ChannelGrant {
   canConnect: boolean;
   canReadAll: boolean;
@@ -92,6 +101,7 @@ export interface ChannelsSnapshot {
   preferences: { followed: string[] | null; muted: string[] | null };
   /** The highest message included here: where incremental reading starts. */
   cursor: number;
+  viewer: ChannelsViewer;
 }
 
 /** One page of a conversation's past, read backwards from `before`. */

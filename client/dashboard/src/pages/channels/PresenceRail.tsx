@@ -68,14 +68,15 @@ export function PresenceRail({
                     ) : null}
                   </div>
                   {entry.instance.id === sessionInstanceId ||
-                  !entry.isAgent ? null : (
+                  !entry.isAgent ||
+                  !canParticipate ? null : (
                     <Button
                       size="xs"
                       variant="tertiary"
                       icon="at-sign"
                       aria-label={`Message ${entry.name}`}
                       tooltip={`Message ${entry.name} privately`}
-                      disabled={!canParticipate || busy}
+                      disabled={busy}
                       onClick={() => onMessage(entry.instance.id)}
                       className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover/entry:opacity-100 [@media(hover:none)]:opacity-100"
                     />

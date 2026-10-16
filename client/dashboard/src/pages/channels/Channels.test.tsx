@@ -259,6 +259,7 @@ beforeEach(() => {
     ],
     hasMore: false,
     preferences: { followed: [], muted: [] },
+    viewer: { canConnect: true, canReadAll: false, canAdmin: false },
     cursor: 1,
   };
   request.mockReset();
@@ -359,6 +360,81 @@ describe("Channels", () => {
       screen.getByRole("heading", { name: /Implementation/ }),
     ).toBeDefined();
     vi.unstubAllGlobals();
+  });
+
+  it("withholds everything that speaks as a viewer who cannot take part", async () => {
+    vi.useFakeTimers();
+    snapshot.viewer = { canConnect: false, canReadAll: false, canAdmin: true };
+    snapshot.grants = {};
+    mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    // Reading still works: the conversation and its messages are shown.
+    expect(screen.getByRole("heading", { name: /Planning/ })).toBeDefined();
+    expect(composer().disabled).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Follow" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /New thread/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Message claude on laptop" }),
+    ).toBeNull();
+
+    fireEvent.change(composer(), { target: { value: "Hello" } });
+    fireEvent.keyDown(composer(), { key: "Enter" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(operations()).not.toContain("channels_dashboard_session");
+    expect(operations()).not.toContain("channels_post");
+  });
+
+  it("lets an administrator take part as soon as their own exception is removed", async () => {
+    vi.useFakeTimers();
+    snapshot.viewer = { canConnect: false, canReadAll: false, canAdmin: true };
+    snapshot.grants = {
+      "identity-1": { canConnect: false, canReadAll: false },
+    };
+    mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(composer().disabled).toBe(true);
+
+    // Snapshot reads after this point never land, so only the administrative
+    // answer itself can change what the page offers.
+    request.mockImplementation(async (project, operation, args) => {
+      if (operation === undefined) return new Promise(() => {});
+      if (operation === "channels_admin")
+        return {
+          ...snapshot,
+          grants: {},
+          viewer: { canConnect: true, canReadAll: false, canAdmin: true },
+        };
+      return respond(project, operation, args);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Channels settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(request).toHaveBeenCalledWith("test-project", "channels_admin", {
+      subjectId: "identity-1",
+      remove: true,
+    });
+    // The settings panel is open over the page, so the composer is hidden
+    // from the accessibility tree while it stays mounted underneath.
+    const field = screen.getByRole("textbox", {
+      name: "Message",
+      hidden: true,
+    }) as HTMLTextAreaElement;
+    expect(field.disabled).toBe(false);
   });
 
   it("never opens a session for someone who is only reading", async () => {
@@ -677,6 +753,7 @@ describe("Channels", () => {
   it("lets an administrator turn Channels on where its state is shown", async () => {
     snapshot.enabled = false;
     snapshot.grants = {};
+    snapshot.viewer.canAdmin = true;
     mount();
     fireEvent.click(
       await screen.findByRole("button", { name: "Turn on Channels" }),

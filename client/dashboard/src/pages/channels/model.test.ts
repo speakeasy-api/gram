@@ -50,6 +50,7 @@ function snapshotWith(overrides: Partial<ChannelsSnapshot>): ChannelsSnapshot {
     threads: {},
     messages: [],
     preferences: { followed: [], muted: [] },
+    viewer: { canConnect: true, canReadAll: false, canAdmin: false },
     cursor: 0,
     ...overrides,
   };
@@ -101,6 +102,7 @@ describe("conversation list", () => {
       },
     ],
     preferences: { followed: ["busy"], muted: ["dm"] },
+    viewer: { canConnect: true, canReadAll: false, canAdmin: false },
   });
 
   it("puts live conversations above idle ones", () => {
