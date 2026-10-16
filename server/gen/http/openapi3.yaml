@@ -62132,129 +62132,6 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskGetPolicyChallenge
                 type: mutation
-    /rpc/risk.getRuleBreakdown:
-        get:
-            description: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
-            operationId: getRiskRuleBreakdown
-            parameters:
-                - allowEmptyValue: true
-                  description: Required category key to break down by rule_id (e.g. secrets, pii).
-                  in: query
-                  name: category
-                  required: true
-                  schema:
-                    description: Required category key to break down by rule_id (e.g. secrets, pii).
-                    type: string
-                - allowEmptyValue: true
-                  description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
-                  in: query
-                  name: from
-                  schema:
-                    description: Inclusive start of the window. Defaults to the same 7-day window as the overview.
-                    format: date-time
-                    type: string
-                - allowEmptyValue: true
-                  description: Exclusive end of the window. Defaults to now.
-                  in: query
-                  name: to
-                  schema:
-                    description: Exclusive end of the window. Defaults to now.
-                    format: date-time
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RiskRuleBreakdownResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: getRiskRuleBreakdown risk
-            tags:
-                - risk
-            x-speakeasy-group: risk.overview
-            x-speakeasy-name-override: rules
-            x-speakeasy-react-hook:
-                name: RiskRuleBreakdown
     /rpc/risk.getSignals:
         get:
             description: Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.
@@ -62380,7 +62257,7 @@ paths:
                 name: RiskSignals
     /rpc/risk.getUserBreakdown:
         get:
-            description: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
+            description: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the risk panels on identity pages.
             operationId: getRiskUserBreakdown
             parameters:
                 - allowEmptyValue: true
@@ -110773,10 +110650,6 @@ components:
         RiskOverviewResult:
             type: object
             properties:
-                active_policies:
-                    type: integer
-                    description: Enabled risk policies for the current project.
-                    format: int64
                 findings:
                     type: integer
                     description: Policy findings in the window.
@@ -110789,10 +110662,6 @@ components:
                     type: string
                     description: Inclusive start of the overview window.
                     format: date-time
-                messages_scanned:
-                    type: integer
-                    description: Messages analyzed by risk policies in the window.
-                    format: int64
                 time_series_findings:
                     type: array
                     items:
@@ -110820,10 +110689,8 @@ components:
             required:
                 - from
                 - to
-                - messages_scanned
                 - findings
                 - flagged_sessions
-                - active_policies
                 - top_categories
                 - top_users
                 - top_rules
@@ -111543,35 +111410,6 @@ components:
                 - rule_id
                 - source
                 - findings
-        RiskRuleBreakdownResult:
-            type: object
-            properties:
-                category:
-                    type: string
-                    description: Category the breakdown is scoped to.
-                from:
-                    type: string
-                    description: Inclusive start of the window used.
-                    format: date-time
-                rules:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RiskRuleBreakdownEntry'
-                    description: Rules in this category, ordered by finding count descending.
-                to:
-                    type: string
-                    description: Exclusive end of the window used.
-                    format: date-time
-                total:
-                    type: integer
-                    description: Total findings across all rules in this category and window.
-                    format: int64
-            required:
-                - from
-                - to
-                - category
-                - rules
-                - total
         RiskSegment:
             type: object
             properties:
