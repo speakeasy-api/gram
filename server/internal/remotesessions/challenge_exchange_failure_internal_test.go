@@ -35,6 +35,13 @@ func TestExchangeFailure_FixedReasons(t *testing.T) {
 			wantCode: oops.CodeGatewayError,
 		},
 		{
+			name:     "tunnel header from a direct provider",
+			err:      gatewayFailure,
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: HTTP 502",
+			wantCode: oops.CodeGatewayError,
+		},
+		{
 			name:     "bare 502 on a tunneled issuer",
 			err:      newTokenEndpointError(http.StatusBadGateway, "502 Bad Gateway", nil),
 			tunneled: true,

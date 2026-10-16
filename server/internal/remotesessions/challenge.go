@@ -2045,7 +2045,7 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 	}
 
 	attrs := []slog.Attr{attr.SlogHTTPResponseStatusCode(endpointErr.statusCode)}
-	if endpointErr.tunnelError != "" {
+	if tunneled && endpointErr.tunnelError != "" {
 		return oops.E(oops.CodeGatewayError, err, "%s: the MCP tunnel could not reach the identity provider", message).LogError(ctx, logger, attrs...)
 	}
 	code := ""
