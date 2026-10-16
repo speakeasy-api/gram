@@ -21,8 +21,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/signins"
@@ -155,7 +157,13 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "link sign-in").LogError(ctx, s.logger)
 	}
-	if _, err := repo.New(s.db).CreateUserSession(ctx, repo.CreateUserSessionParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txRepo := repo.New(dbtx)
+	session, err := txRepo.CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
 		// No registration row. The refresh-token sentinel is what the session
 		// list reads to label the connection as the dashboard.
@@ -177,7 +185,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		Resource:     pgtype.Text{String: "", Valid: false},
 		SignInID:     signInID,
 		SignInUserID: conv.ToPGText(authCtx.UserID),
-	}); err != nil {
+		CredentialID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			revoked, lookupErr := s.signInRevoked(ctx, authCtx.ActiveOrganizationID, signInID)
 			switch {
@@ -189,6 +199,17 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
+	}
+	if _, err := txRepo.RecordUpstreamClientSelections(ctx, repo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: target.issuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        session.ID,
+		Source:              upstreamclients.SelectionSourceIssuance,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit user session").LogError(ctx, s.logger)
 	}
 
 	// Spread the attrs (incl. the per-target audience attr) so loggercheck

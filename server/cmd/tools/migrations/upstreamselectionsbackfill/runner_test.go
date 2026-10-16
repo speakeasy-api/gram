@@ -1,0 +1,356 @@
+package upstreamselectionsbackfill
+
+import (
+	"context"
+	"log"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+)
+
+var testInfra *testenv.Environment
+
+func TestMain(m *testing.M) {
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
+	if err != nil {
+		log.Fatalf("launch test infrastructure: %v", err)
+	}
+	testInfra = res
+	code := m.Run()
+	if err := cleanup(); err != nil {
+		log.Fatalf("cleanup test infrastructure: %v", err)
+	}
+	os.Exit(code)
+}
+
+type fixture struct {
+	t         *testing.T
+	pool      *pgxpool.Pool
+	q         *Queries
+	orgID     string
+	projectID uuid.UUID
+}
+
+func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	pool, err := testInfra.CloneTestDatabase(t, "upstreamselectionsbackfill")
+	require.NoError(t, err)
+	f := &fixture{t: t, pool: pool, q: New(pool), orgID: "org_" + uuid.NewString(), projectID: uuid.New()}
+	require.NoError(t, f.q.SeedOrganizationFixture(t.Context(), f.orgID))
+	require.NoError(t, f.q.SeedProjectFixture(t.Context(), SeedProjectFixtureParams{ID: f.projectID, Slug: "p-" + f.projectID.String()[:8], OrganizationID: f.orgID}))
+	return f
+}
+
+func (f *fixture) projectIssuer() uuid.UUID {
+	f.t.Helper()
+	id := uuid.New()
+	require.NoError(f.t, f.q.SeedUserSessionIssuerFixture(f.t.Context(), SeedUserSessionIssuerFixtureParams{
+		ID:             id,
+		ProjectID:      uuid.NullUUID{UUID: f.projectID, Valid: true},
+		OrganizationID: pgtype.Text{String: f.orgID, Valid: true},
+		Slug:           "usi-" + id.String()[:8],
+	}))
+	return id
+}
+
+func (f *fixture) organizationIssuer() uuid.UUID {
+	f.t.Helper()
+	id := uuid.New()
+	require.NoError(f.t, f.q.SeedUserSessionIssuerFixture(f.t.Context(), SeedUserSessionIssuerFixtureParams{
+		ID:             id,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID: pgtype.Text{String: f.orgID, Valid: true},
+		Slug:           "usi-" + id.String()[:8],
+	}))
+	return id
+}
+
+// client creates a project client bound to each of userIssuerIDs.
+func (f *fixture) client(userIssuerIDs ...uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	ctx := f.t.Context()
+	issuerID, clientID := uuid.New(), uuid.New()
+	require.NoError(f.t, f.q.SeedRemoteSessionIssuerFixture(ctx, SeedRemoteSessionIssuerFixtureParams{
+		ID:        issuerID,
+		ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true},
+		Slug:      "rsi-" + issuerID.String()[:8],
+		Issuer:    "https://" + issuerID.String()[:8] + ".example.com",
+	}))
+	require.NoError(f.t, f.q.SeedRemoteSessionClientFixture(ctx, SeedRemoteSessionClientFixtureParams{
+		ID:                    clientID,
+		ProjectID:             uuid.NullUUID{UUID: f.projectID, Valid: true},
+		OrganizationID:        pgtype.Text{String: f.orgID, Valid: true},
+		RemoteSessionIssuerID: issuerID,
+		ClientID:              "cid-" + clientID.String()[:8],
+	}))
+	for _, userIssuerID := range userIssuerIDs {
+		require.NoError(f.t, f.q.SeedClientBindingFixture(ctx, SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
+	}
+	return clientID
+}
+
+// server creates a server on userIssuerID (uuid.Nil for none) associated with
+// clientIDs.
+func (f *fixture) server(userIssuerID uuid.UUID, clientIDs ...uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	ctx := f.t.Context()
+	backendID, serverID := uuid.New(), uuid.New()
+	require.NoError(f.t, f.q.SeedUnproxiedMCPServerFixture(ctx, SeedUnproxiedMCPServerFixtureParams{ID: backendID, ProjectID: f.projectID}))
+	require.NoError(f.t, f.q.SeedMCPServerFixture(ctx, SeedMCPServerFixtureParams{
+		ID:                   serverID,
+		ProjectID:            f.projectID,
+		Slug:                 pgtype.Text{String: "s-" + serverID.String()[:8], Valid: true},
+		UnproxiedMcpServerID: uuid.NullUUID{UUID: backendID, Valid: true},
+		UserSessionIssuerID:  uuid.NullUUID{UUID: userIssuerID, Valid: userIssuerID != uuid.Nil},
+	}))
+	for _, clientID := range clientIDs {
+		f.associate(serverID, clientID)
+	}
+	return serverID
+}
+
+func (f *fixture) associate(serverID, clientID uuid.UUID) {
+	f.t.Helper()
+	require.NoError(f.t, f.q.SeedAssociationFixture(f.t.Context(), SeedAssociationFixtureParams{
+		ProjectID:             f.projectID,
+		OrganizationID:        f.orgID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: clientID,
+	}))
+}
+
+// session creates a live session on userIssuerID and returns its credential.
+func (f *fixture) session(userIssuerID uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	id := uuid.New()
+	require.NoError(f.t, f.q.SeedUserSessionFixture(f.t.Context(), SeedUserSessionFixtureParams{
+		ID:                  id,
+		ProjectID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:      pgtype.Text{String: f.orgID, Valid: true},
+		UserSessionIssuerID: userIssuerID,
+		SubjectUrn:          urn.NewUserSubject("user-" + id.String()[:8]),
+		Jti:                 id.String(),
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		CredentialID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}))
+	return id
+}
+
+func (f *fixture) record(userIssuerID, credentialID uuid.UUID) int64 {
+	f.t.Helper()
+	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(f.t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: userIssuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        credentialID,
+		Source:              upstreamclients.SelectionSourceIssuance,
+	})
+	require.NoError(f.t, err)
+	return n
+}
+
+// selections maps each chosen server to its client, uuid.Nil for no-auth.
+func (f *fixture) selections(credentialID uuid.UUID) map[uuid.UUID]uuid.UUID {
+	f.t.Helper()
+	rows, err := f.q.ListSelectionsFixture(f.t.Context(), ListSelectionsFixtureParams{
+		CredentialKind: upstreamclients.CredentialKindUserSession,
+		CredentialID:   credentialID,
+	})
+	require.NoError(f.t, err)
+	chosen := make(map[uuid.UUID]uuid.UUID, len(rows))
+	for _, row := range rows {
+		require.Equal(f.t, row.NoAuth, !row.RemoteSessionClientID.Valid)
+		chosen[row.McpServerID] = row.RemoteSessionClientID.UUID
+	}
+	return chosen
+}
+
+func (f *fixture) selection(credentialID, serverID uuid.UUID) usersessionsrepo.GetUpstreamClientSelectionRow {
+	f.t.Helper()
+	row, err := usersessionsrepo.New(f.pool).GetUpstreamClientSelection(f.t.Context(), usersessionsrepo.GetUpstreamClientSelectionParams{
+		CredentialKind: upstreamclients.CredentialKindUserSession,
+		CredentialID:   credentialID,
+		McpServerID:    serverID,
+		OrganizationID: f.orgID,
+	})
+	require.NoError(f.t, err)
+	return row
+}
+
+func TestRecordUpstreamClientSelections(t *testing.T) {
+	t.Parallel()
+
+	t.Run("chooses only what configuration decides", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		linearClient := f.client(issuer)
+		notionClient := f.client(issuer)
+		otherClient := f.client(issuer)
+
+		linear := f.server(issuer, linearClient)
+		notion := f.server(issuer, notionClient)
+		f.server(issuer, linearClient, otherClient)
+		f.server(issuer)
+		f.server(uuid.Nil)
+		credential := f.session(issuer)
+
+		f.record(issuer, credential)
+
+		require.Equal(t, map[uuid.UUID]uuid.UUID{
+			linear: linearClient,
+			notion: notionClient,
+		}, f.selections(credential),
+			"a server with several eligible clients, or none associated while its issuer binds some, is left as a gap; a server off the issuer is not reached")
+	})
+
+	t.Run("records no-auth only where nothing is configured", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.organizationIssuer()
+		bareIssuer := f.projectIssuer()
+		anonymous := f.server(bareIssuer)
+		credential := f.session(issuer)
+
+		f.record(issuer, credential)
+
+		require.Equal(t, map[uuid.UUID]uuid.UUID{anonymous: uuid.Nil}, f.selections(credential),
+			"the organization issuer reaches every server in the organization")
+		got := f.selection(credential, anonymous)
+		require.True(t, got.NoAuth)
+		require.True(t, got.Usable)
+
+		// No row is a different answer from no-auth.
+		missing := f.server(bareIssuer, f.client(bareIssuer))
+		_, err := usersessionsrepo.New(f.pool).GetUpstreamClientSelection(t.Context(), usersessionsrepo.GetUpstreamClientSelectionParams{
+			CredentialKind: upstreamclients.CredentialKindUserSession,
+			CredentialID:   credential,
+			McpServerID:    missing,
+			OrganizationID: f.orgID,
+		})
+		require.Error(t, err)
+	})
+
+	t.Run("a gateway member is chosen through the gateway's issuer", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		memberIssuer := f.projectIssuer()
+		gatewayIssuer := f.projectIssuer()
+		memberClient := f.client(memberIssuer, gatewayIssuer)
+		member := f.server(memberIssuer, memberClient)
+		gatewayID := uuid.New()
+		require.NoError(t, f.q.SeedMetaMCPServerFixture(t.Context(), SeedMetaMCPServerFixtureParams{
+			ID:                  gatewayID,
+			OrganizationID:      f.orgID,
+			ProjectID:           f.projectID,
+			Name:                "gateway",
+			UserSessionIssuerID: uuid.NullUUID{UUID: gatewayIssuer, Valid: true},
+		}))
+		require.NoError(t, f.q.SeedMetaMCPServerMemberFixture(t.Context(), SeedMetaMCPServerMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: member}))
+		credential := f.session(gatewayIssuer)
+
+		f.record(gatewayIssuer, credential)
+
+		require.Equal(t, map[uuid.UUID]uuid.UUID{member: memberClient}, f.selections(credential))
+	})
+
+	t.Run("a choice is kept, never replaced", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		first := f.client(issuer)
+		server := f.server(issuer, first)
+		earlier := f.session(issuer)
+		f.record(issuer, earlier)
+
+		// The administrator moves the server to another client.
+		second := f.client(issuer)
+		require.NoError(t, f.q.RemoveAssociationFixture(t.Context(), RemoveAssociationFixtureParams{McpServerID: server, RemoteSessionClientID: first}))
+		f.associate(server, second)
+		later := f.session(issuer)
+		f.record(issuer, later)
+		require.Zero(t, f.record(issuer, earlier), "recording again is idempotent")
+
+		require.Equal(t, first, f.selections(earlier)[server], "an earlier credential keeps its own choice")
+		require.Equal(t, second, f.selections(later)[server], "credentials of the same principal hold distinct choices")
+
+		stale := f.selection(earlier, server)
+		require.False(t, stale.Usable, "a detached client makes the choice unusable rather than switching clients")
+		require.True(t, f.selection(later, server).Usable)
+	})
+
+	t.Run("another organization's servers are not reached", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		other := newFixture(t)
+		other.server(uuid.Nil)
+
+		issuer := f.organizationIssuer()
+		mine := f.server(uuid.Nil)
+		credential := f.session(issuer)
+		f.record(issuer, credential)
+
+		require.Equal(t, map[uuid.UUID]uuid.UUID{mine: uuid.Nil}, f.selections(credential))
+	})
+}
+
+func TestRunBackfillsLiveCredentials(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	client := f.client(issuer)
+	server := f.server(issuer, client)
+	gapServer := f.server(issuer, client, f.client(issuer))
+	credential := f.session(issuer)
+
+	preview, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 1})
+	require.NoError(t, err)
+	require.Equal(t, 1, preview.Credentials)
+	require.Equal(t, 1, preview.Pairs[OutcomeClient])
+	require.Equal(t, 1, preview.Pairs[OutcomeAmbiguous])
+	require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: gapServer, Outcome: OutcomeAmbiguous}}, preview.Gaps)
+	require.Empty(t, f.selections(credential), "a dry run writes nothing")
+
+	applied, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 1})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), applied.Written)
+	require.Zero(t, applied.FullyCovered, "the ambiguous server still blocks this credential")
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: client}, f.selections(credential))
+
+	rerun, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 1})
+	require.NoError(t, err)
+	require.Zero(t, rerun.Written, "the backfill is idempotent")
+	require.Equal(t, 1, rerun.Pairs[OutcomeSelected])
+	require.Len(t, rerun.Gaps, 1)
+}
+
+func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		row  ListUpstreamClientSelectionCoverageRow
+		want Outcome
+	}{
+		{"already chosen", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: true, EligibleClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeSelected},
+		{"one eligible client", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 1, AssociatedClients: 2, IssuerBoundClients: 3}, OutcomeClient},
+		{"several eligible clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 2, AssociatedClients: 2, IssuerBoundClients: 2}, OutcomeAmbiguous},
+		{"associated but not through this issuer", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 1, IssuerBoundClients: 1}, OutcomeUnreachableClient},
+		{"unassociated with bound clients", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 1}, OutcomeUnassociated},
+		{"nothing configured", ListUpstreamClientSelectionCoverageRow{McpServerID: uuid.Nil, Selected: false, EligibleClients: 0, AssociatedClients: 0, IssuerBoundClients: 0}, OutcomeNoAuth},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, Classify(tt.row))
+		})
+	}
+}

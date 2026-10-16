@@ -5,16 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"log"
-	"net"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/upstreamclientsbackfill"
@@ -46,43 +42,23 @@ type upstreamClientsSummary struct {
 func parseUpstreamClientsFlags(args []string, getenv func(string) string) (upstreamClientsConfig, error) {
 	fs := flag.NewFlagSet(upstreamClientsConfirm, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	apply := fs.Bool("apply", false, "write the decided associations (default is dry run)")
-	environment := fs.String("environment", "", "target environment name")
+	confirmation := registerWriteConfirmation(fs, upstreamClientsConfirm)
 	organization := fs.String("organization", "", "organization id to scope the run; empty means every organization")
 	reportPath := fs.String("report", "", "per-server JSON report path; -apply refuses an existing file")
-	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match environment for writes")
-	confirmTarget := fs.String("confirm-target", "", "must exactly match the parsed host, port, and database for writes")
-	confirmApply := fs.String("confirm-apply", "", "must equal "+upstreamClientsConfirm+" for writes")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return upstreamClientsConfig{}, errors.New("invalid " + upstreamClientsConfirm + " flags")
 	}
-	if *environment == "" {
-		return upstreamClientsConfig{}, errors.New("environment is required")
-	}
-	if *apply && *confirmEnvironment != *environment {
-		return upstreamClientsConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
-	}
 	dbURL := getenv("GRAM_DATABASE_URL")
-	if dbURL == "" {
-		return upstreamClientsConfig{}, errors.New("missing $GRAM_DATABASE_URL")
-	}
-	dbConfig, err := pgx.ParseConfig(dbURL)
+	apply, err := confirmation.check(dbURL)
 	if err != nil {
-		return upstreamClientsConfig{}, errors.New("invalid $GRAM_DATABASE_URL")
-	}
-	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
-	if *apply && *confirmTarget != target {
-		return upstreamClientsConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
-	}
-	if *apply && *confirmApply != upstreamClientsConfirm {
-		return upstreamClientsConfig{}, errors.New("writes require -confirm-apply=" + upstreamClientsConfirm)
+		return upstreamClientsConfig{}, err
 	}
 	return upstreamClientsConfig{
 		dbURL:      dbURL,
 		reportPath: *reportPath,
 		options: upstreamclientsbackfill.Options{
 			OrganizationID: *organization,
-			Apply:          *apply,
+			Apply:          apply,
 			PageSize:       0,
 		},
 	}, nil

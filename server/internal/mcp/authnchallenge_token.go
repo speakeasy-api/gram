@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -120,7 +121,10 @@ type mintSessionParams struct {
 	Replayable             bool
 	Policy                 sessionIssuancePolicy
 	// SignInID links the session to the sign-in that authorized it.
-	SignInID      uuid.NullUUID
+	SignInID uuid.NullUUID
+	// CredentialID continues an existing credential, as refresh rotation does;
+	// unset starts a new one.
+	CredentialID  uuid.NullUUID
 	Subject       urn.SessionSubject
 	ToolSelection []byte
 }
@@ -562,6 +566,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		Replayable:             false,
 		Policy:                 sessionIssuancePolicyResourceScoped,
 		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                result.Subject,
 		ToolSelection:          nil,
 	}, logger)
@@ -835,6 +840,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		Replayable:             false,
 		Policy:                 policy,
 		SignInID:               grantSignInID(grant),
+		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 	}, logger)
@@ -1291,6 +1297,7 @@ func (s *Service) rotateRefreshToken(
 		Replayable:             true,
 		Policy:                 policy,
 		SignInID:               oldSession.SignInID,
+		CredentialID:           uuid.NullUUID{UUID: sessionCredentialID(oldSession), Valid: true},
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 	}, logger)
@@ -1727,6 +1734,7 @@ func (s *Service) mintSession(
 		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
 		ToolSelection:          params.ToolSelection,
 		SignInID:               params.SignInID,
+		CredentialID:           params.CredentialID,
 		AuthorizationExpiresAt: params.AuthorizationExpiresAt,
 		DesiredSessionDuration: params.DesiredSessionDuration,
 		Replayable:             params.Replayable,
@@ -1783,6 +1791,11 @@ type sessionIssuance struct {
 
 	// SignInID links the session to the sign-in that authorized it.
 	SignInID uuid.NullUUID
+
+	// CredentialID is the credential a rotated session continues. Unset
+	// starts a new credential, identified by the new row's own id, whose
+	// upstream client choices are recorded at issuance.
+	CredentialID uuid.NullUUID
 
 	// AuthorizationExpiresAt carries a rotated authorization's deadline
 	// forward. Nil starts a new authorization.
@@ -1905,6 +1918,7 @@ func (s *Service) issueSession(
 		Resource:               conv.ToPGTextEmpty(issuance.Resource),
 		SignInID:               issuance.SignInID,
 		SignInUserID:           signInUserID(issuance),
+		CredentialID:           issuance.CredentialID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1914,6 +1928,17 @@ func (s *Service) issueSession(
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
+	}
+	// A rotated session keeps the choices its credential already has.
+	if !issuance.CredentialID.Valid {
+		if _, err := queries.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
+			UserSessionIssuerID: issuance.UserSessionIssuerID,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        session.ID,
+			Source:              upstreamclients.SelectionSourceIssuance,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, logger)
+		}
 	}
 
 	response := tokenResponse{
@@ -2011,6 +2036,15 @@ func (s *Service) authorizationCodeIssuancePolicy(endpoint *ResolvedMcpEndpoint)
 		return sessionIssuancePolicyIssuerScoped, "", nil
 	}
 	return sessionIssuancePolicyResourceBound, resource, nil
+}
+
+// sessionCredentialID is the credential a session row belongs to. A row
+// minted before credential identities were recorded is its own credential.
+func sessionCredentialID(session usersessions_repo.UserSession) uuid.UUID {
+	if session.CredentialID.Valid {
+		return session.CredentialID.UUID
+	}
+	return session.ID
 }
 
 // grantSignInID is the sign-in an authorization code links its session to.
