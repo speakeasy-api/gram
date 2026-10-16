@@ -23,9 +23,11 @@ func TestReportableRuleIDsReflectEffectiveScannerConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 
-	// Callers own the slice they receive: changing it leaves the next call intact.
+	// Callers own the slice they receive: changing it leaves the next call
+	// intact. Snapshot first, since an aliased result would change with it.
+	want := slices.Clone(second)
 	first[0] = "mutated"
 	third, err := ReportableRuleIDs()
 	require.NoError(t, err)
-	require.Equal(t, second, third)
+	require.Equal(t, want, third)
 }
