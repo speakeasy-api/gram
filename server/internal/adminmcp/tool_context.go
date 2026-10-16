@@ -80,7 +80,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		operations := []WriteOperation{}
 		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil {
 			for _, op := range runtime.writes.writes.EnabledOperations() {
-				if runtime.writes.writers[op] != nil {
+				if runtime.writes.implements(op) {
 					operations = append(operations, op)
 				}
 			}

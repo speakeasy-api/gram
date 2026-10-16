@@ -6,9 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
-	"log/slog"
-	"net/url"
 	"strings"
 	"time"
 
@@ -17,7 +14,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -60,7 +56,7 @@ type approvableOperation interface {
 	// approval transaction's locks.
 	revalidate(ctx context.Context, tx pgx.Tx, proposal Proposal) error
 	// view turns the stored, digested preview into rows for the approval page.
-	view(ctx context.Context, proposal Proposal) (proposalView, error)
+	view(proposal Proposal) (proposalView, error)
 }
 
 // operationWriter is one implemented write. The shared execute and status
@@ -111,8 +107,6 @@ type proposalView struct {
 	Changes []proposalViewChange
 	// SideEffects describes what else the change triggers.
 	SideEffects string
-	// Image is an optional inline preview of uploaded image bytes.
-	Image template.URL
 }
 
 type proposalViewChange struct {
@@ -127,6 +121,16 @@ type writeTools struct {
 	writes  WriteConfig
 	baseURL string
 	writers map[WriteOperation]operationWriter
+	// uploads backs the direct upload_platform_image write; nil without asset storage.
+	uploads PlatformImageUploader
+}
+
+// implements reports whether op has a shipped implementation on this server.
+func (t *writeTools) implements(op WriteOperation) bool {
+	if op == OperationUploadPlatformImage {
+		return t.uploads != nil
+	}
+	return t.writers[op] != nil
 }
 
 func newWriteTools(store *proposalStore, writes WriteConfig, baseURL string, writers map[WriteOperation]operationWriter) *writeTools {
@@ -227,12 +231,9 @@ func registerWriteTools(server *mcp.Server, tools *writeTools) {
 type WriteDependencies struct {
 	Features *productfeatures.Client
 	Registry *mcpregistry.Service
-	// Images and Cache back publish_platform_image. Images is nil when the
-	// admin server has no asset storage, which leaves that write unimplemented.
-	Images  PlatformImageStore
-	Cache   cache.Cache
-	SiteURL *url.URL
-	Logger  *slog.Logger
+	// ImageUploads is nil when the admin server has no asset storage, which
+	// leaves upload_platform_image unimplemented.
+	ImageUploads PlatformImageUploader
 }
 
 // AttachWrites registers the implemented write operations. Switching on an
@@ -242,7 +243,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 	if runtime == nil || oauth == nil || oauth.Approval == nil || deps.Features == nil || deps.Registry == nil {
 		return errors.New("staff write tools are not configured")
 	}
-	features := deps.Features
+	features, registry := deps.Features, deps.Registry
 	auditLogger := audit.NewLogger()
 	store := oauth.Approval.store
 	tools := newWriteTools(store, writes, oauth.Resource(), map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
@@ -254,15 +255,11 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		OperationEnableOrganization:                   &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationEnableOrganization},
 		OperationDisableOrganization:                  &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationDisableOrganization},
 		OperationUpdateSupportMatrix:                  &supportMatrixWriter{store: store, writes: writes, baseURL: oauth.Resource()},
-		OperationCreateRegistryEntry:                  &registryEntryWriter{store: store, registry: deps.Registry, writes: writes, baseURL: oauth.Resource()},
+		OperationCreateRegistryEntry:                  &registryEntryWriter{store: store, registry: registry, writes: writes, baseURL: oauth.Resource()},
 	})
-	if deps.Images != nil && deps.Cache != nil && deps.SiteURL != nil && deps.Logger != nil {
-		images := &platformImageWriter{store: store, cache: deps.Cache, images: deps.Images, siteURL: deps.SiteURL, writes: writes, baseURL: oauth.Resource(), logger: deps.Logger, now: time.Now}
-		tools.writers[OperationPublishPlatformImage] = images
-		runtime.uploads = images.UploadHandler()
-	}
+	tools.uploads = deps.ImageUploads
 	for _, op := range writes.EnabledOperations() {
-		if tools.writers[op] == nil {
+		if !tools.implements(op) {
 			return fmt.Errorf("admin MCP write operation %q is not implemented", op)
 		}
 	}
@@ -273,5 +270,8 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 	oauth.Approval.operations = approvals
 	runtime.writes = tools
 	registerWriteTools(runtime.server, tools)
+	if tools.uploads != nil && writes.OperationEnabled(OperationUploadPlatformImage) {
+		registerImageUploadTool(runtime.server, tools.uploads, writes)
+	}
 	return nil
 }

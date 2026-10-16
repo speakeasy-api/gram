@@ -169,7 +169,7 @@ func (w *chatAnalysisWriter) prepare(ctx context.Context, input PrepareChatAnaly
 	return proposalOutput(proposal, replay, w.baseURL), nil
 }
 
-func (w *chatAnalysisWriter) view(_ context.Context, proposal Proposal) (proposalView, error) {
+func (w *chatAnalysisWriter) view(proposal Proposal) (proposalView, error) {
 	var preview chatAnalysisPreview
 	if json.Unmarshal(proposal.Preview, &preview) != nil || proposal.PlatformGlobal || preview.OrganizationID == "" || preview.OrganizationID != proposal.Target.OrganizationID || preview.Before.Judge != preview.After.Judge || !validChatAnalysisChange(chatAnalysisChange{Judge: preview.After.Judge, Enabled: preview.After.Enabled, DailyCap: preview.After.DailyCap}) {
 		return proposalView{}, ErrProposalInvalidated

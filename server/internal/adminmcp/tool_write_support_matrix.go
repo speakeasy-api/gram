@@ -345,7 +345,7 @@ func previewSupportMatrixFields(draft *gen.SupportDraft, change SupportMatrixCha
 	return fields
 }
 
-func (s *supportMatrixWriter) view(_ context.Context, proposal Proposal) (proposalView, error) {
+func (s *supportMatrixWriter) view(proposal Proposal) (proposalView, error) {
 	if !proposal.PlatformGlobal || proposal.Target.OrganizationID != "" || proposal.Target.ProjectID.Valid || proposal.Target.ResourceID != "" || proposal.Target.ResourceKind != "" {
 		return proposalView{}, ErrProposalInvalidated
 	}

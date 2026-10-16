@@ -57,7 +57,7 @@ func TestChatAnalysisWriteApprovesExecutesAndReplays(t *testing.T) {
 			id := uuid.MustParse(prepared.ProposalID)
 			p, err := f.store.GetForOwner(t.Context(), id, f.owner)
 			require.NoError(t, err)
-			view, err := writer.view(t.Context(), p)
+			view, err := writer.view(p)
 			require.NoError(t, err)
 			require.Equal(t, f.orgA, view.OrganizationID)
 			require.False(t, view.PlatformGlobal)

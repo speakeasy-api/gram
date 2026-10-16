@@ -100,8 +100,7 @@ var proposalApprovalPage = template.Must(template.New("admin-mcp-proposal").Pars
 {{range .Change.Changes}}<tr><td>{{.Setting}}</td><td>{{.Before}}</td><td>{{.After}}</td></tr>
 {{end}}</tbody>
 </table>
-{{if .Change.Image}}<p><img src="{{.Change.Image}}" alt="Uploaded image" style="max-width:256px;max-height:256px;border:1px solid #ccc"></p>
-{{end}}{{if .Change.SideEffects}}<p>Side effects: {{.Change.SideEffects}}</p>{{end}}
+{{if .Change.SideEffects}}<p>Side effects: {{.Change.SideEffects}}</p>{{end}}
 <details><summary>Exact stored proposal</summary><pre>{{.Preview}}</pre></details>
 <p>Only approve if the environment, target and change are correct. This approval is separate from the admin:write connection consent and does not execute the change.</p>
 <form method="post" action="/admin-mcp/proposals/{{.ID}}">
@@ -203,7 +202,7 @@ func (s *StaffProposalApproval) show(w http.ResponseWriter, r *http.Request, id 
 		http.Error(w, "staff connection unavailable", http.StatusForbidden)
 		return
 	}
-	change, err := operation.view(r.Context(), p)
+	change, err := operation.view(p)
 	if err != nil {
 		http.Error(w, "proposal preview unavailable", http.StatusConflict)
 		return

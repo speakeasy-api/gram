@@ -191,7 +191,7 @@ func (f *featureWriter) prepare(ctx context.Context, input PrepareFeatureInput) 
 
 // view renders the stored preview for the approval page. A preview that does
 // not name the proposal's own organization is never shown.
-func (f *featureWriter) view(_ context.Context, proposal Proposal) (proposalView, error) {
+func (f *featureWriter) view(proposal Proposal) (proposalView, error) {
 	var preview featurePreview
 	if err := json.Unmarshal(proposal.Preview, &preview); err != nil || preview.OrganizationID == "" || preview.OrganizationID != proposal.Target.OrganizationID || preview.Feature == "" {
 		return proposalView{}, ErrProposalInvalidated

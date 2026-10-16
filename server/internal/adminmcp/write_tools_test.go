@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -17,16 +16,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // stubWriter stands in for an operation that has an implementation.
 type stubWriter struct{}
 
-func (stubWriter) revalidate(context.Context, pgx.Tx, Proposal) error   { return nil }
-func (stubWriter) view(context.Context, Proposal) (proposalView, error) { return proposalView{}, nil }
-func (stubWriter) execution(writeAuthority) ProposalExecution           { return ProposalExecution{} }
-func (stubWriter) registerPrepare(*mcp.Server)                          {}
+func (stubWriter) revalidate(context.Context, pgx.Tx, Proposal) error { return nil }
+func (stubWriter) view(Proposal) (proposalView, error)                { return proposalView{}, nil }
+func (stubWriter) execution(writeAuthority) ProposalExecution         { return ProposalExecution{} }
+func (stubWriter) registerPrepare(*mcp.Server)                        {}
 
 func writeContext(t *testing.T, f proposalFixture) context.Context {
 	t.Helper()
@@ -76,17 +74,12 @@ func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 	require.ErrorContains(t, err, "not implemented")
 	require.Nil(t, oauth.Approval.operations, "nothing becomes approvable after a configuration error")
 
-	imagesOnly := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPublishPlatformImage: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	err = AttachWrites(&Runtime{}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, imagesOnly)
-	require.ErrorContains(t, err, "not implemented", "image publishing needs asset storage")
-
-	full := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), Images: &fakePlatformImages{}, Cache: testenv.NewMemoryCache(), SiteURL: &url.URL{Scheme: "https", Host: "app.example.test"}, Logger: testenv.NewLogger(t)}
-	require.NoError(t, AttachWrites(&Runtime{}, oauth, full, WriteConfig{}))
+	require.NoError(t, AttachWrites(&Runtime{}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
 	require.Contains(t, oauth.Approval.operations, OperationSetOrganizationFeature)
 	require.Contains(t, oauth.Approval.operations, OperationAssignOrganizationOnboardingPlaybook)
 	require.Contains(t, oauth.Approval.operations, OperationExtendOrganizationTrial)
 	for _, op := range AllWriteOperations {
-		require.Equal(t, op.implemented(), oauth.Approval.operations[op] != nil, op)
+		require.Equal(t, op.implemented() && !op.direct(), oauth.Approval.operations[op] != nil, op)
 	}
 }
 
@@ -166,10 +159,10 @@ func TestFeatureViewRequiresMatchingTarget(t *testing.T) {
 	preview, err := json.Marshal(featurePreview{OrganizationID: "org_b", Name: "B", Slug: "b", Feature: "logs", Before: false, After: true})
 	require.NoError(t, err)
 
-	_, err = writer.view(t.Context(), Proposal{Target: ProposalTarget{OrganizationID: "org_a"}, Preview: preview})
+	_, err = writer.view(Proposal{Target: ProposalTarget{OrganizationID: "org_a"}, Preview: preview})
 	require.ErrorIs(t, err, ErrProposalInvalidated, "a preview naming another organisation is never shown")
 
-	view, err := writer.view(t.Context(), Proposal{Target: ProposalTarget{OrganizationID: "org_b"}, Preview: preview})
+	view, err := writer.view(Proposal{Target: ProposalTarget{OrganizationID: "org_b"}, Preview: preview})
 	require.NoError(t, err)
 	require.Equal(t, "Turn the logs feature on", view.Summary)
 	require.Equal(t, []proposalViewChange{{Setting: "logs feature", Before: "Off", After: "On"}}, view.Changes)

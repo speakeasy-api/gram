@@ -177,7 +177,7 @@ func (s *registryEntryWriter) prepare(ctx context.Context, input PrepareCreateRe
 	return proposalOutput(proposal, replay, s.baseURL), nil
 }
 
-func (s *registryEntryWriter) view(_ context.Context, proposal Proposal) (proposalView, error) {
+func (s *registryEntryWriter) view(proposal Proposal) (proposalView, error) {
 	if !proposal.PlatformGlobal || proposal.Target.OrganizationID != "" || proposal.Target.ProjectID.Valid || proposal.Target.ResourceID != "" || proposal.Target.ResourceKind != "" {
 		return proposalView{}, ErrProposalInvalidated
 	}
@@ -239,7 +239,7 @@ func (s *registryEntryWriter) execution(_ writeAuthority) ProposalExecution {
 }
 
 func (s *registryEntryWriter) registerPrepare(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_create_registry_entry", Title: "Prepare Registry Entry", Description: "Prepare adding one new MCP server to the platform-global registry from a complete server.json record, as the admin site registry editor does. The record is validated against the registry schema and refused if its server name is already registered; editing or unpublishing existing entries is not supported. The entry is published on creation and appears in every organization's MCP catalog. The full record is stored for separate same-staff approval. To host an icon on Speakeasy, publish it with prepare_upload_platform_image first and use the receipt URL as server.icons[].src. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true)}}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareCreateRegistryEntryInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "prepare_create_registry_entry", Title: "Prepare Registry Entry", Description: "Prepare adding one new MCP server to the platform-global registry from a complete server.json record, as the admin site registry editor does. The record is validated against the registry schema and refused if its server name is already registered; editing or unpublishing existing entries is not supported. The entry is published on creation and appears in every organization's MCP catalog. The full record is stored for separate same-staff approval. To host an icon on Speakeasy, upload it with create_image_upload_url first and use the returned URL as server.icons[].src. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true)}}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareCreateRegistryEntryInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := s.prepare(ctx, input)
 		return nil, out, err
 	})

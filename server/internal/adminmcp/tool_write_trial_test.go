@@ -323,10 +323,10 @@ func TestTrialViewRequiresMatchingTarget(t *testing.T) {
 	preview, err := json.Marshal(trialPreview{OrganizationID: "org_b", Name: "B", Slug: "b", Days: 1, EndsAt: trialTimestamp(endsAt), NewEndsAt: trialTimestamp(endsAt.AddDate(0, 0, 1))})
 	require.NoError(t, err)
 
-	_, err = writer.view(t.Context(), Proposal{Target: ProposalTarget{OrganizationID: "org_a"}, Preview: preview})
+	_, err = writer.view(Proposal{Target: ProposalTarget{OrganizationID: "org_a"}, Preview: preview})
 	require.ErrorIs(t, err, ErrProposalInvalidated, "a preview naming another organisation is never shown")
 
-	view, err := writer.view(t.Context(), Proposal{Target: ProposalTarget{OrganizationID: "org_b"}, Preview: preview})
+	view, err := writer.view(Proposal{Target: ProposalTarget{OrganizationID: "org_b"}, Preview: preview})
 	require.NoError(t, err)
 	require.Equal(t, "Extend the enterprise trial by 1 day", view.Summary)
 	require.Equal(t, []proposalViewChange{{Setting: "Trial end date", Before: "1 Oct 2026 09:30 UTC", After: "2 Oct 2026 09:30 UTC"}}, view.Changes)

@@ -77,7 +77,7 @@ func TestSupportMatrixWriterProposalPreservesUnchangedFieldsAndReplays(t *testin
 	require.NoError(t, err)
 	stored, err := f.store.GetForOwner(t.Context(), proposalID, f.owner)
 	require.NoError(t, err)
-	view, err := writer.view(t.Context(), stored)
+	view, err := writer.view(stored)
 	require.NoError(t, err)
 	require.True(t, view.PlatformGlobal)
 	require.Empty(t, view.OrganizationID, "global proposals must not invent a tenant target")
@@ -147,11 +147,11 @@ func TestSupportMatrixWriterStaleRevisionAndGlobalTargetChecks(t *testing.T) {
 	require.NoError(t, err)
 	badTenant := proposal
 	badTenant.Target.OrganizationID = f.orgA
-	_, err = writer.view(t.Context(), badTenant)
+	_, err = writer.view(badTenant)
 	require.ErrorIs(t, err, ErrProposalInvalidated)
 	badGlobal := proposal
 	badGlobal.PlatformGlobal = false
-	_, err = writer.view(t.Context(), badGlobal)
+	_, err = writer.view(badGlobal)
 	require.ErrorIs(t, err, ErrProposalInvalidated)
 
 	// An unrelated global matrix edit still changes the global revision and invalidates this proposal.

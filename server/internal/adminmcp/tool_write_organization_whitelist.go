@@ -157,7 +157,7 @@ func (w *organizationWhitelistWriter) prepare(ctx context.Context, input Prepare
 	return proposalOutput(proposal, replay, w.baseURL), nil
 }
 
-func (w *organizationWhitelistWriter) view(_ context.Context, proposal Proposal) (proposalView, error) {
+func (w *organizationWhitelistWriter) view(proposal Proposal) (proposalView, error) {
 	if proposal.Operation != OperationSetOrganizationWhitelist || proposal.SchemaVersion != 1 || proposal.PlatformGlobal || proposal.Target.OrganizationID == "" || proposal.Target.ProjectID.Valid || proposal.Target.ResourceKind != "" || proposal.Target.ResourceID != "" {
 		return proposalView{}, ErrProposalInvalidated
 	}
