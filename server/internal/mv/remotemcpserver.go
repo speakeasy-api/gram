@@ -19,8 +19,12 @@ func BuildRemoteMcpServerView(server repo.RemoteMcpServer) *types.RemoteMcpServe
 		Slug:          conv.FromPGText[string](server.Slug),
 		URL:           server.Url,
 		TransportType: server.TransportType,
-		CreatedAt:     server.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:     server.UpdatedAt.Time.Format(time.RFC3339),
+		// Set by getServer, which is the only response that checks the
+		// source's MCP servers for environment links.
+		EnvironmentLinked:         nil,
+		EnvironmentLinkAuthorized: nil,
+		CreatedAt:                 server.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                 server.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
