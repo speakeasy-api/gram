@@ -2038,3 +2038,11 @@ VALUES (
     @project_id, @organization_id, @mcp_server_id, @remote_session_client_id,
     (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
 );
+
+-- name: ListUserSessionCredentialsForSubjectFixture :many
+-- Test-only fixture: every session row of one subject, oldest first, with the
+-- credential it belongs to, so a test can follow refresh rotation.
+SELECT id, COALESCE(credential_id, id)::uuid AS credential_id, deleted
+FROM user_sessions
+WHERE subject_urn = @subject_urn
+ORDER BY created_at, id;

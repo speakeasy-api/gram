@@ -63,3 +63,19 @@ func Reconcile(ctx context.Context, dbtx repo.DBTX, organizationID string, proje
 	}
 	return nil
 }
+
+// CredentialKindUserSession identifies a user session credential: the
+// lineage of user_sessions rows that refresh rotation continues, named by
+// COALESCE(credential_id, id).
+const CredentialKindUserSession = "user_session"
+
+// How an upstream client selection was made.
+const (
+	// SelectionSourceIssuance is a choice recorded when the credential was
+	// issued.
+	SelectionSourceIssuance = "issuance"
+
+	// SelectionSourceBackfill is a choice recorded for an existing credential
+	// by the offline backfill.
+	SelectionSourceBackfill = "backfill"
+)

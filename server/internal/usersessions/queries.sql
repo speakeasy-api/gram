@@ -2027,7 +2027,8 @@ INSERT INTO user_sessions (
     expires_at,
     tool_selection,
     resource,
-    sign_in_id
+    sign_in_id,
+    credential_id
 )
 SELECT
     issuer.project_id,
@@ -2044,7 +2045,8 @@ SELECT
     @expires_at,
     @tool_selection,
     sqlc.narg('resource'),
-    (SELECT sign_in.id FROM sign_in)
+    (SELECT sign_in.id FROM sign_in),
+    sqlc.narg('credential_id')
 FROM issuer
 WHERE NOT EXISTS (
     SELECT 1
@@ -2359,3 +2361,207 @@ FROM sign_ins AS si
 WHERE si.id = @id
   AND si.organization_id = @organization_id
 FOR SHARE OF si;
+
+-- name: RecordUpstreamClientSelections :execrows
+-- Records, for one inbound credential, the upstream OAuth client it uses for
+-- every MCP server it can reach, or an explicit no-auth choice. Existing
+-- choices are never replaced.
+--
+-- Reach is a superset of what the credential is audience-bound to: every
+-- proxied (remote or tunneled) server on the credential's user session
+-- issuer, every proxied member of a gateway signing in through it, and, for an
+-- organization issuer, every proxied server in the organization the
+-- organization gateway serves. Hosted and unproxied servers keep serving from
+-- the issuer's bindings, so they need no choice. A choice for a server the
+-- credential is never presented to grants nothing, since the credential is
+-- admitted on its own path before a choice is read.
+--
+-- A client is chosen only when it is the server's single associated client
+-- that the credential's issuer also binds, which is the client the issuer
+-- path serves today. No-auth is chosen only when the server has no associated
+-- client, its own issuer binds none, and the credential's issuer binds no
+-- client that a grant or the server's derived authorization server ties to
+-- it, so a gateway member whose client is ambiguous is never called
+-- anonymously. Anything else is left without a row,
+-- a gap that coverage reports and that a reconnection or explicit
+-- configuration resolves; nothing is guessed.
+WITH session_issuer AS (
+    SELECT usi.id,
+           usi.project_id,
+           COALESCE(usi.organization_id, p.organization_id) AS organization_id
+    FROM user_session_issuers AS usi
+    LEFT JOIN projects AS p ON p.id = usi.project_id
+    WHERE usi.id = @user_session_issuer_id
+      AND usi.deleted IS FALSE
+),
+reachable AS (
+    SELECT s.id, s.project_id, p.organization_id, s.user_session_issuer_id,
+           s.remote_session_issuer_id AS derived_issuer_id,
+           COALESCE(rms.url, tms.resource_identifier, '') AS upstream
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    JOIN session_issuer AS si
+      ON p.organization_id = si.organization_id
+    LEFT JOIN remote_mcp_servers AS rms
+      ON rms.id = s.remote_mcp_server_id
+     AND rms.deleted IS FALSE
+    LEFT JOIN tunneled_mcp_servers AS tms
+      ON tms.id = s.tunneled_mcp_server_id
+     AND tms.deleted IS FALSE
+    WHERE s.deleted IS FALSE
+      AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+      AND (
+        s.user_session_issuer_id = si.id
+        OR si.project_id IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_server_members AS m
+          JOIN meta_mcp_servers AS g
+            ON g.id = m.meta_mcp_server_id
+           AND g.deleted IS FALSE
+          WHERE m.mcp_server_id = s.id
+            AND m.deleted IS FALSE
+            AND g.user_session_issuer_id = si.id
+        )
+      )
+),
+decided AS (
+    SELECT r.id AS mcp_server_id,
+           r.project_id,
+           (
+             SELECT CASE WHEN count(*) = 1 THEN (array_agg(a.remote_session_client_id))[1] END
+             FROM mcp_server_remote_session_clients AS a
+             JOIN remote_session_clients AS c
+               ON c.id = a.remote_session_client_id
+              AND c.deleted IS FALSE
+             JOIN remote_session_client_user_session_issuers AS link
+               ON link.remote_session_client_id = a.remote_session_client_id
+              AND link.user_session_issuer_id = @user_session_issuer_id
+             WHERE a.mcp_server_id = r.id
+               AND a.deleted IS FALSE
+           ) AS remote_session_client_id,
+           (
+             NOT EXISTS (
+               SELECT 1
+               FROM mcp_server_remote_session_clients AS a
+               WHERE a.mcp_server_id = r.id
+                 AND a.deleted IS FALSE
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM remote_session_client_user_session_issuers AS link
+               JOIN remote_session_clients AS c
+                 ON c.id = link.remote_session_client_id
+                AND c.deleted IS FALSE
+               WHERE link.user_session_issuer_id = r.user_session_issuer_id
+             )
+             AND (
+             SELECT count(*)
+             FROM remote_session_client_user_session_issuers AS gateway_link
+             JOIN remote_session_clients AS gateway_client
+               ON gateway_client.id = gateway_link.remote_session_client_id
+              AND gateway_client.deleted IS FALSE
+              AND (gateway_client.project_id = r.project_id
+                   OR (gateway_client.project_id IS NULL AND gateway_client.organization_id = r.organization_id)
+                   OR (gateway_client.project_id IS NULL AND gateway_client.organization_id IS NULL))
+             WHERE gateway_link.user_session_issuer_id = @user_session_issuer_id
+               AND (
+                 EXISTS (
+                   SELECT 1
+                   FROM remote_session_issuers AS derived
+                   WHERE derived.id = r.derived_issuer_id
+                     AND derived.id = gateway_client.remote_session_issuer_id
+                     AND derived.deleted IS FALSE
+                     AND (derived.project_id = r.project_id
+                          OR (derived.project_id IS NULL AND derived.organization_id = r.organization_id)
+                          OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
+                 )
+                 OR EXISTS (
+                   SELECT 1
+                   FROM remote_sessions AS rs
+                   WHERE rs.user_session_issuer_id = gateway_link.user_session_issuer_id
+                     AND rs.remote_session_client_id = gateway_client.id
+                     AND rs.deleted IS FALSE
+                     AND r.upstream <> ''
+                     AND rtrim(rs.resource, '/') = rtrim(r.upstream, '/')
+                 )
+               )
+           ) = 0
+           ) AS no_auth
+    FROM reachable AS r
+)
+INSERT INTO upstream_client_selections (
+    project_id,
+    organization_id,
+    credential_kind,
+    credential_id,
+    mcp_server_id,
+    remote_session_client_id,
+    client_attachment_scope,
+    no_auth,
+    source
+)
+SELECT d.project_id,
+       si.organization_id,
+       @credential_kind::text,
+       @credential_id::uuid,
+       d.mcp_server_id,
+       d.remote_session_client_id,
+       chosen.attachment_scope,
+       d.remote_session_client_id IS NULL,
+       @source::text
+FROM decided AS d
+CROSS JOIN session_issuer AS si
+JOIN projects AS server_project
+  ON server_project.id = d.project_id
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = d.remote_session_client_id
+ AND chosen.deleted IS FALSE
+ AND (chosen.project_id = server_project.id
+      OR (chosen.project_id IS NULL AND chosen.organization_id = server_project.organization_id)
+      OR (chosen.project_id IS NULL AND chosen.organization_id IS NULL))
+WHERE chosen.id IS NOT NULL
+   OR (d.remote_session_client_id IS NULL AND d.no_auth)
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: GetUpstreamClientSelection :one
+-- One credential's choice for one MCP server, with whether it can still be
+-- used: a chosen client must be live, still associated with the server, and
+-- still bound to the credential's user session issuer, and a no-auth choice
+-- holds only while the server has no associated client.
+-- An unusable choice is reported as such rather than replaced, so the caller
+-- fails closed instead of switching clients.
+SELECT sel.remote_session_client_id,
+       sel.no_auth,
+       sel.source,
+       (
+         CASE
+           WHEN sel.no_auth THEN NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.deleted IS FALSE
+           )
+           ELSE EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             JOIN remote_session_clients AS c
+               ON c.id = a.remote_session_client_id
+              AND c.deleted IS FALSE
+             JOIN remote_session_client_user_session_issuers AS link
+               ON link.remote_session_client_id = a.remote_session_client_id
+              AND link.user_session_issuer_id = @user_session_issuer_id::uuid
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.remote_session_client_id = sel.remote_session_client_id
+               AND a.deleted IS FALSE
+           )
+         END
+       )::boolean AS usable
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = @credential_kind::text
+  AND sel.credential_id = @credential_id::uuid
+  AND sel.mcp_server_id = @mcp_server_id::uuid
+  AND sel.organization_id = @organization_id::text
+  AND sel.deleted IS FALSE;
