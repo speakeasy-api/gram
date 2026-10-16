@@ -30,26 +30,18 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { useProductTier } from "@/hooks/useProductTier";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import tailscaleLogo from "@/assets/tailscale-logo.webp";
 import { useUpdateNetworkIngressMutation } from "@gram/client/react-query/updateNetworkIngress.js";
 
 function TailscaleLogo(): JSX.Element {
   return (
-    <svg
-      aria-hidden="true"
-      className="size-5 shrink-0"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-    >
-      <circle cx="4" cy="4" r="3" />
-      <circle cx="12" cy="4" r="3" />
-      <circle cx="20" cy="4" r="3" />
-      <circle cx="4" cy="12" r="3" />
-      <circle cx="12" cy="12" r="3" />
-      <circle cx="20" cy="12" r="3" />
-      <circle cx="4" cy="20" r="3" />
-      <circle cx="12" cy="20" r="3" />
-      <circle cx="20" cy="20" r="3" />
-    </svg>
+    <img
+      src={tailscaleLogo}
+      alt="Tailscale"
+      width={134}
+      height={24}
+      className="h-6 w-auto shrink-0 dark:invert"
+    />
   );
 }
 
@@ -100,7 +92,6 @@ function PrivateNetworkCleanup({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <TailscaleLogo />
-              <Text variant="subheading">Tailscale</Text>
               {credentialsRejected ? (
                 <Badge variant="destructive" background>
                   Cleanup blocked
@@ -223,7 +214,6 @@ function ConfiguredPrivateNetwork({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <TailscaleLogo />
-              <Text variant="subheading">Tailscale</Text>
               <Badge variant={statusVariant(ingress.status)} background>
                 {statusLabel(ingress.status)}
               </Badge>
