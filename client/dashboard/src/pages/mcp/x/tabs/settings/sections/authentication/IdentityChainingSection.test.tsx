@@ -113,17 +113,14 @@ vi.mock("./IdentityChainingField", () => ({
     frame?: (content: ReactNode) => ReactNode;
   }) => {
     const content = (
-      <>
-        <div data-testid="identity-chaining">
-          {JSON.stringify({
-            providers: props.providers,
-            speakeasyIssuerUrl: props.speakeasyIssuerUrl,
-            resource: props.resource,
-            ...(props.onlyWhenOn ? { onlyWhenOn: true } : {}),
-          })}
-        </div>
-        <button type="button">Turn off</button>
-      </>
+      <div data-testid="identity-chaining">
+        {JSON.stringify({
+          providers: props.providers,
+          speakeasyIssuerUrl: props.speakeasyIssuerUrl,
+          resource: props.resource,
+          ...(props.onlyWhenOn ? { onlyWhenOn: true } : {}),
+        })}
+      </div>
     );
     return props.frame ? props.frame(content) : content;
   },
@@ -253,7 +250,6 @@ describe("IdentityChainingSection", () => {
       resource: "https://mcp.vendor.example.com/mcp",
       onlyWhenOn: true,
     });
-    expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
   });
 
   it.each([

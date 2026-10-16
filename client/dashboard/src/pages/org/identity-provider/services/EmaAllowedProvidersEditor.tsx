@@ -119,7 +119,9 @@ export function EmaAllowedProvidersEditor({
           "deleted"));
   const readiness = (key: string): string | undefined => {
     if (key === "speakeasy" && speakeasyRecreated)
-      return "Speakeasy was set up again. Save this list again to use it.";
+      return canEdit
+        ? "Speakeasy was set up again. Save this list again to use it."
+        : "Speakeasy was set up again. An organization admin needs to save this list again to use it.";
     const provider = current.find((p) => p.key === key);
     return provider && !provider.usable && !provider.placeholder
       ? `${provider.unavailable}. It’s skipped until it can vouch again.`

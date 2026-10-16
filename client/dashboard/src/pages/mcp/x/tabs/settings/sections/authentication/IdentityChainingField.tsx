@@ -645,6 +645,10 @@ export function IdentityChainingField({
     );
   }
 
+  // Who can vouch is unknown, so only turning bindings off is offered.
+  if (onlyWhenOn && !canUnlink)
+    return frame(<SettingsSection.Body>{staleNotices}</SettingsSection.Body>);
+
   if (candidates.length === 0) {
     return frame(
       <SettingsSection.Body>
@@ -707,7 +711,7 @@ export function IdentityChainingField({
             level="component"
           >
             <div className="flex items-center gap-2">
-              {!ready && (
+              {!ready && !onlyWhenOn && (
                 <Button
                   size="sm"
                   disabled={pending || !read.data || enableBlocked}

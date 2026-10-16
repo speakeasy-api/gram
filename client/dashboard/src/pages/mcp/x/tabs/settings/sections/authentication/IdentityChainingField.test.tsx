@@ -1128,6 +1128,44 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
 
+  it("offers only Turn off for a stale binding when only an on binding should show", () => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com"] },
+    };
+    issuerNames.items = [
+      { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
+      { id: "wiki", name: "Wiki", issuer: "https://wiki.example.com" },
+    ];
+    staleRead.byIssuer = { wiki: { ...bound("wiki-client"), generation: 4 } };
+    render(
+      <IdentityChainingField
+        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+        providers={{ external: false }}
+        linkedClients={
+          [
+            {
+              id: "wiki-client",
+              clientId: "wiki-client",
+              remoteSessionIssuerId: "wiki",
+            },
+            {
+              id: "tracker-client",
+              clientId: "tracker-client",
+              remoteSessionIssuerId: "tracker",
+            },
+          ] as RemoteSessionClient[]
+        }
+        resource="https://example.com/mcp"
+        onlyWhenOn
+      />,
+    );
+    expect(
+      screen.getByText(/still on through client wiki-client/),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+  });
+
   it("keeps Turn off for an on binding when only an on binding should show", () => {
     read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
     const { container } = render(
@@ -1138,5 +1176,6 @@ describe("identity chaining vouched for by Speakeasy", () => {
     );
     expect(container.querySelector("section")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
 });

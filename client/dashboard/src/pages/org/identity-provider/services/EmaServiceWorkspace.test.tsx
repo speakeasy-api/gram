@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   admin: true,
   flag: "enabled",
+  flags: {} as Record<string, string>,
   session: {} as Record<string, unknown>,
   save: vi.fn(),
   saveError: null as unknown,
@@ -53,7 +54,7 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.admin }),
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: mocks.flag }),
+  useFeatureFlag: (key: string) => ({ status: mocks.flags[key] ?? mocks.flag }),
 }));
 vi.mock("@/lib/featureFlags", () => ({
   FEATURE_FLAGS: {
@@ -236,6 +237,7 @@ beforeEach(() => {
   mocks.isError = false;
   mocks.admin = true;
   mocks.flag = "enabled";
+  mocks.flags = {};
   mocks.session = {};
   mocks.save.mockReset();
   mocks.saveError = null;
@@ -738,6 +740,7 @@ describe("one service", () => {
     expect(
       screen.queryByText("No longer available. Uncheck it to save."),
     ).toBeNull();
+    expect(accepted()).toContain("SpeakeasyAccepted");
     expect(editButton().disabled).toBe(true);
     expect(
       screen.getByText(
@@ -781,7 +784,7 @@ describe("one service", () => {
   });
 
   it("doesn't link to Okta when its view isn't available", () => {
-    mocks.flag = "disabled";
+    mocks.flags = { "okta-connections": "disabled" };
     mocks.rows = [
       { ...linear, isDefault: false, providers: [okta, speakeasy] },
     ];
@@ -857,5 +860,21 @@ describe("one service", () => {
         }),
       }),
     );
+  });
+
+  it("asks an admin to save a recreated Speakeasy for someone who can't edit", () => {
+    const old = view({
+      usable: false,
+      unavailable: "Not set up",
+      unavailableReason: "deleted",
+    });
+    mocks.admin = false;
+    mocks.rows = [{ ...linear, isDefault: false, providers: [okta, old] }];
+    show();
+    expect(
+      screen.getByText(
+        "Speakeasy was set up again. An organization admin needs to save this list again to use it.",
+      ),
+    ).toBeTruthy();
   });
 });
