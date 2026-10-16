@@ -2207,7 +2207,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     session_id AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent session the call belongs to.\n@access: confidential',
     user_email AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Email of the user the call ran for.\n@access: confidential-pii',
     surface AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent surface that made the call.\n@access: confidential',
-    outcome AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'How the call ended: ok, error, rejected or refused.\n@access: confidential',
+    status AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'How the call ended: ok, error, rejected or refused.\n@access: confidential',
     duration_nano AggregateFunction(argMaxIf, Int64, Int64, UInt8) COMMENT 'How long the call took, in nanoseconds.\n@access: confidential',
     started_at_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest observation of the call.\n@access: confidential',
     ended_at_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest observation of the call.\n@access: confidential'
@@ -2231,7 +2231,7 @@ SELECT
     argMaxIfState(session_id, observed_at_unix_nano, session_id != '') AS session_id,
     argMaxIfState(user_email, observed_at_unix_nano, user_email != '') AS user_email,
     argMaxIfState(toString(surface), observed_at_unix_nano, surface != '') AS surface,
-    argMaxIfState(toString(outcome), observed_at_unix_nano, outcome != '') AS outcome,
+    argMaxIfState(toString(outcome), observed_at_unix_nano, outcome != '') AS status,
     argMaxIfState(duration_nano, observed_at_unix_nano, duration_nano != 0) AS duration_nano,
     min(occurred_at_unix_nano) AS started_at_unix_nano,
     max(occurred_at_unix_nano) AS ended_at_unix_nano
