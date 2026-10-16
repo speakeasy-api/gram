@@ -193,10 +193,12 @@ func (s *Service) provisionFirstOrgForUser(ctx context.Context, userID, orgName,
 	}
 
 	org, err := s.provisionOrgForUser(ctx, userID, orgName, orgProvisionOptions{
-		Whitelisted:    true,
-		ProvisionTrial: true,
-		ActorEmail:     actorEmail,
-		CreationSource: orgprovision.SourcePlatformMCP,
+		StripePromotionCodeID: "",
+		Whitelisted:           true,
+		ProvisionTrial:        true,
+		PartnerCode:           "",
+		ActorEmail:            actorEmail,
+		CreationSource:        orgprovision.SourcePlatformMCP,
 	})
 	if err != nil {
 		return empty, fmt.Errorf("provision workspace: %w", err)
