@@ -21,9 +21,9 @@ import { agentsSuspend } from "../funcs/agentsSuspend.js";
 import { agentsTransfer } from "../funcs/agentsTransfer.js";
 import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import { AgentEligibleOwner } from "../models/components/agenteligibleowner.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
 import { AgentPolicyGrantForm } from "../models/components/agentpolicygrantform.js";
+import { ListEligibleOwnersResponseBody } from "../models/components/listeligibleownersresponsebody.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
   CreateAgentRequest,
@@ -227,7 +227,7 @@ export class Agents extends ClientSDK {
     request?: ListAgentEligibleOwnersRequest | undefined,
     security?: ListAgentEligibleOwnersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<Array<AgentEligibleOwner>> {
+  ): Promise<ListEligibleOwnersResponseBody> {
     return unwrapAsync(agentsListEligibleOwners(
       this,
       request,

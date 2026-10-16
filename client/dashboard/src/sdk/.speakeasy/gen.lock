@@ -1325,6 +1325,7 @@ trackedFiles:
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
   src/models/components/listdirectoryrolemappingsresult.ts: {}
   src/models/components/listdistributionpluginsresult.ts: {}
+  src/models/components/listeligibleownersresponsebody.ts: {}
   src/models/components/listenvironmentsresult.ts: {}
   src/models/components/listeventlogpayload.ts: {}
   src/models/components/listeventlogresult.ts: {}
@@ -8801,9 +8802,12 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAgentEligibleOwners:
     speakeasy-default-list-agent-eligible-owners:
+      parameters:
+        query:
+          limit: 50
       responses:
         "200":
-          application/json: [{"display_name": "Keenan13", "user_id": "<id>"}]
+          application/json: {"owners": [{"display_name": "Darien.Haag91", "user_id": "<id>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

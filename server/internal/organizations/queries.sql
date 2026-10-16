@@ -195,6 +195,20 @@ WHERE our.organization_id = @organization_id
   AND our.deleted_at IS NULL
   AND u.deleted_at IS NULL;
 
+-- name: ListEligibleAgentOwners :many
+-- Apply live creation targets before limiting so sparse grants remain reachable.
+SELECT u.id AS user_id, u.display_name
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+  AND (@all_owners::boolean OR u.id = ANY(@owner_user_ids::text[]))
+  AND (sqlc.narg(cursor)::text IS NULL OR u.id > sqlc.narg(cursor)::text)
+  AND (@search::text = '' OR strpos(lower(u.display_name), lower(@search::text)) > 0)
+ORDER BY u.id ASC
+LIMIT @limit_value;
+
 -- name: FilterOrganizationMemberUserIDs :many
 -- Returns the subset of the given Speakeasy user IDs that are active members of
 -- the organization. Used to mask Speakeasy staff identities in customer-facing

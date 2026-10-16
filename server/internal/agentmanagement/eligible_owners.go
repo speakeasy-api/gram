@@ -4,16 +4,29 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
+const (
+	// defaultEligibleOwnersLimit keeps owner selection bounded without extra input.
+	defaultEligibleOwnersLimit = 50
+	// maxEligibleOwnersLimit caps profile data returned by a single request.
+	maxEligibleOwnersLimit = 100
+	// maxEligibleOwnersCursorLength bounds an opaque user ID supplied as a cursor.
+	maxEligibleOwnersCursorLength = 1024
+	// maxEligibleOwnersSearchLength bounds display-name search input.
+	maxEligibleOwnersSearchLength = 200
+)
+
 // ListEligibleOwners reveals only active members the caller may provision for,
 // without granting access to the organization's general member directory.
-func (s *Service) ListEligibleOwners(ctx context.Context, _ *gen.ListEligibleOwnersPayload) ([]*gen.AgentEligibleOwner, error) {
+func (s *Service) ListEligibleOwners(ctx context.Context, payload *gen.ListEligibleOwnersPayload) (*gen.ListEligibleOwnersResult, error) {
 	human, err := s.authorizer.RequireHuman(ctx, s.db)
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "list eligible agent owners")
@@ -23,22 +36,67 @@ func (s *Service) ListEligibleOwners(ctx context.Context, _ *gen.ListEligibleOwn
 	}) {
 		return nil, oops.C(oops.CodeForbidden)
 	}
-	rows, err := orgrepo.New(s.db).ListOrganizationUsers(ctx, human.Auth.ActiveOrganizationID)
+	limit := payload.Limit
+	if limit == 0 {
+		limit = defaultEligibleOwnersLimit
+	}
+	search := conv.PtrValOr(payload.Search, "")
+	if limit < 1 || limit > maxEligibleOwnersLimit || len(search) > maxEligibleOwnersSearchLength || len(conv.PtrValOr(payload.Cursor, "")) > maxEligibleOwnersCursorLength {
+		return nil, oops.C(oops.CodeBadRequest)
+	}
+	search = strings.TrimSpace(search)
+	allOwners, ownerIDs, err := eligibleOwnerTargets(human.grants, human.Auth.UserID)
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "list eligible agent owners")
 	}
-	owners := make([]*gen.AgentEligibleOwner, 0)
+	rows, err := orgrepo.New(s.db).ListEligibleAgentOwners(ctx, orgrepo.ListEligibleAgentOwnersParams{
+		OrganizationID: human.Auth.ActiveOrganizationID,
+		AllOwners:      allOwners, OwnerUserIds: ownerIDs,
+		Cursor: conv.PtrToPGText(payload.Cursor), Search: search, LimitValue: int32(limit + 1),
+	})
+	if err != nil {
+		return nil, s.serviceError(ctx, err, "list eligible agent owners")
+	}
+	result := &gen.ListEligibleOwnersResult{Owners: make([]*gen.AgentEligibleOwner, 0, len(rows)), NextCursor: nil}
+	if len(rows) > limit {
+		rows = rows[:limit]
+		result.NextCursor = new(rows[len(rows)-1].UserID)
+	}
 	for _, row := range rows {
-		for _, check := range authz.AgentCreationChecks(human.Auth.UserID, row.UserID.String) {
-			allowed, err := authz.GrantsAuthorize(human.grants, check)
+		result.Owners = append(result.Owners, &gen.AgentEligibleOwner{UserID: row.UserID, DisplayName: row.DisplayName})
+	}
+	return result, nil
+}
+
+// eligibleOwnerTargets compiles the creation-only owner namespace into SQL
+// constraints. Agent creation has no exclusion scope; strict containment proves
+// wildcard authority, and concrete targets use the canonical creation checks.
+func eligibleOwnerTargets(grants []authz.Grant, callerID string) (bool, []string, error) {
+	if authz.GrantsContainSelector(grants, authz.ScopeAgentCreate, authz.NewSelector(authz.ScopeAgentCreate, authz.WildcardResource)) {
+		return true, []string{}, nil
+	}
+	owners := make([]string, 0)
+	for _, grant := range grants {
+		if grant.Scope != authz.ScopeAgentCreate && grant.Scope != authz.ScopeRoot {
+			continue
+		}
+		ownerID := grant.Selector[authz.SelectorKeyResourceID]
+		if ownerID == authz.AgentOwnerSelf {
+			ownerID = callerID
+		}
+		if ownerID == "" || ownerID == authz.WildcardResource || slices.Contains(owners, ownerID) {
+			continue
+		}
+		for _, check := range authz.AgentCreationChecks(callerID, ownerID) {
+			allowed, err := authz.GrantsAuthorize(grants, check)
 			if err != nil {
-				return nil, s.serviceError(ctx, fmt.Errorf("evaluate eligible agent owner: %w", err), "list eligible agent owners")
+				return false, nil, fmt.Errorf("evaluate eligible agent owner: %w", err)
 			}
 			if allowed {
-				owners = append(owners, &gen.AgentEligibleOwner{UserID: row.UserID.String, DisplayName: row.UserDisplayName})
+				owners = append(owners, ownerID)
 				break
 			}
 		}
 	}
-	return owners, nil
+	return false, owners, nil
 }

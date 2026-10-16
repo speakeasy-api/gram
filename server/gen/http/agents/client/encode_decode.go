@@ -506,6 +506,15 @@ func EncodeListEligibleOwnersRequest(encoder func(*http.Request) goahttp.Encoder
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -542,24 +551,18 @@ func DecodeListEligibleOwnersResponse(decoder func(*http.Response) goahttp.Decod
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body []*AgentEligibleOwnerResponse
+				body ListEligibleOwnersResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("agents", "listEligibleOwners", err)
 			}
-			for _, e := range body {
-				if e != nil {
-					if err2 := ValidateAgentEligibleOwnerResponse(e); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			}
+			err = ValidateListEligibleOwnersResponseBody(&body)
 			if err != nil {
 				return nil, goahttp.ErrValidationError("agents", "listEligibleOwners", err)
 			}
-			res := NewListEligibleOwnersAgentEligibleOwnerOK(body)
+			res := NewListEligibleOwnersResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -4236,10 +4239,10 @@ func unmarshalAgentSessionResponseBodyToAgentsAgentSession(v *AgentSessionRespon
 	return res
 }
 
-// unmarshalAgentEligibleOwnerResponseToAgentsAgentEligibleOwner builds a value
-// of type *agents.AgentEligibleOwner from a value of type
-// *AgentEligibleOwnerResponse.
-func unmarshalAgentEligibleOwnerResponseToAgentsAgentEligibleOwner(v *AgentEligibleOwnerResponse) *agents.AgentEligibleOwner {
+// unmarshalAgentEligibleOwnerResponseBodyToAgentsAgentEligibleOwner builds a
+// value of type *agents.AgentEligibleOwner from a value of type
+// *AgentEligibleOwnerResponseBody.
+func unmarshalAgentEligibleOwnerResponseBodyToAgentsAgentEligibleOwner(v *AgentEligibleOwnerResponseBody) *agents.AgentEligibleOwner {
 	res := &agents.AgentEligibleOwner{
 		UserID:      *v.UserID,
 		DisplayName: *v.DisplayName,

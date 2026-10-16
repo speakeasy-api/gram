@@ -113,13 +113,13 @@ func (c *Client) RevokeSession(ctx context.Context, p *RevokeSessionPayload) (er
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListEligibleOwners(ctx context.Context, p *ListEligibleOwnersPayload) (res []*AgentEligibleOwner, err error) {
+func (c *Client) ListEligibleOwners(ctx context.Context, p *ListEligibleOwnersPayload) (res *ListEligibleOwnersResult, err error) {
 	var ires any
 	ires, err = c.ListEligibleOwnersEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.([]*AgentEligibleOwner), nil
+	return ires.(*ListEligibleOwnersResult), nil
 }
 
 // List calls the "list" endpoint of the "agents" service.

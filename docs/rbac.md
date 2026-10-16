@@ -80,6 +80,9 @@ second `agent:write` gate. Initial policy containment and atomic auditing still 
 The creation form uses a dedicated eligible-owner list authorized by
 `agent:create`, not the general member directory. It returns only active members
 the caller may create for; neither `org:read` nor `project:read` is required.
+Owner discovery applies these targets in the database before pagination. Pages
+default to 50 owners, with a maximum of 100; the next-page cursor names only an
+eligible owner already returned. Optional search matches display names.
 
 New Admin roles receive organization-wide creation. Existing Admin roles need
 the [one-time creation-grant backfill](../server/cmd/tools/migrations/ADMIN_AGENT_CREATION_BACKFILL.md)

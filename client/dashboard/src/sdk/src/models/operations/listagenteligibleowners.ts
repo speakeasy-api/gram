@@ -11,6 +11,18 @@ export type ListAgentEligibleOwnersSecurity = {
 
 export type ListAgentEligibleOwnersRequest = {
   /**
+   * Maximum owners per page
+   */
+  limit?: number | undefined;
+  /**
+   * Last eligible owner user ID returned by the previous page
+   */
+  cursor?: string | undefined;
+  /**
+   * Case-insensitive display name substring
+   */
+  search?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -48,6 +60,9 @@ export function listAgentEligibleOwnersSecurityToJSON(
 
 /** @internal */
 export type ListAgentEligibleOwnersRequest$Outbound = {
+  limit: number;
+  cursor?: string | undefined;
+  search?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -57,6 +72,9 @@ export const ListAgentEligibleOwnersRequest$outboundSchema: z.ZodMiniType<
   ListAgentEligibleOwnersRequest
 > = z.pipe(
   z.object({
+    limit: z._default(z.int(), 50),
+    cursor: z.optional(z.string()),
+    search: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {

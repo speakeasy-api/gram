@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	agents "github.com/speakeasy-api/gram/server/gen/agents"
 	goahttp "goa.design/goa/v3/http"
@@ -465,7 +466,7 @@ func EncodeRevokeSessionError(encoder func(context.Context, http.ResponseWriter)
 // by the agents listEligibleOwners endpoint.
 func EncodeListEligibleOwnersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.([]*agents.AgentEligibleOwner)
+		res, _ := v.(*agents.ListEligibleOwnersResult)
 		enc := encoder(ctx, w)
 		body := NewListEligibleOwnersResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -479,13 +480,57 @@ func DecodeListEligibleOwnersRequest(mux goahttp.Muxer, decoder func(*http.Reque
 	return func(r *http.Request) (*agents.ListEligibleOwnersPayload, error) {
 		var payload *agents.ListEligibleOwnersPayload
 		var (
+			limit        int
+			cursor       *string
+			search       *string
 			sessionToken *string
+			err          error
 		)
+		qp := r.URL.Query()
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 50
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+		}
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		if cursor != nil {
+			if utf8.RuneCountInString(*cursor) > 1024 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("cursor", *cursor, utf8.RuneCountInString(*cursor), 1024, false))
+			}
+		}
+		searchRaw := qp.Get("search")
+		if searchRaw != "" {
+			search = &searchRaw
+		}
+		if search != nil {
+			if utf8.RuneCountInString(*search) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListEligibleOwnersPayload(sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListEligibleOwnersPayload(limit, cursor, search, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3829,11 +3874,11 @@ func marshalAgentsAgentSessionToAgentSessionResponseBody(v *agents.AgentSession)
 	return res
 }
 
-// marshalAgentsAgentEligibleOwnerToAgentEligibleOwnerResponse builds a value
-// of type *AgentEligibleOwnerResponse from a value of type
+// marshalAgentsAgentEligibleOwnerToAgentEligibleOwnerResponseBody builds a
+// value of type *AgentEligibleOwnerResponseBody from a value of type
 // *agents.AgentEligibleOwner.
-func marshalAgentsAgentEligibleOwnerToAgentEligibleOwnerResponse(v *agents.AgentEligibleOwner) *AgentEligibleOwnerResponse {
-	res := &AgentEligibleOwnerResponse{
+func marshalAgentsAgentEligibleOwnerToAgentEligibleOwnerResponseBody(v *agents.AgentEligibleOwner) *AgentEligibleOwnerResponseBody {
+	res := &AgentEligibleOwnerResponseBody{
 		UserID:      v.UserID,
 		DisplayName: v.DisplayName,
 	}

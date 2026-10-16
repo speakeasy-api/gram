@@ -11,13 +11,13 @@ import { GramCore } from "../core.js";
 import { agentsListEligibleOwners } from "../funcs/agentsListEligibleOwners.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { AgentEligibleOwner } from "../models/components/agenteligibleowner.js";
+import { ListEligibleOwnersResponseBody } from "../models/components/listeligibleownersresponsebody.js";
 import {
   ListAgentEligibleOwnersRequest,
   ListAgentEligibleOwnersSecurity,
 } from "../models/operations/listagenteligibleowners.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AgentEligibleOwnersQueryData = Array<AgentEligibleOwner>;
+export type AgentEligibleOwnersQueryData = ListEligibleOwnersResponseBody;
 
 export function prefetchAgentEligibleOwners(
   queryClient: QueryClient,
@@ -49,6 +49,9 @@ export function buildAgentEligibleOwnersQuery(
 } {
   return {
     queryKey: queryKeyAgentEligibleOwners({
+      limit: request?.limit,
+      cursor: request?.cursor,
+      search: request?.search,
       gramSession: request?.gramSession,
     }),
     queryFn: async function agentEligibleOwnersQueryFn(
@@ -76,7 +79,12 @@ export function buildAgentEligibleOwnersQuery(
 }
 
 export function queryKeyAgentEligibleOwners(
-  parameters: { gramSession?: string | undefined },
+  parameters: {
+    limit?: number | undefined;
+    cursor?: string | undefined;
+    search?: string | undefined;
+    gramSession?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "agents", "listEligibleOwners", parameters];
 }

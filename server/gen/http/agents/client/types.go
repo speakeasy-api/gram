@@ -133,6 +133,14 @@ type ListSessionsResponseBody struct {
 	NextCursor *string                     `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ListEligibleOwnersResponseBody is the type of the "agents" service
+// "listEligibleOwners" endpoint HTTP response body.
+type ListEligibleOwnersResponseBody struct {
+	Owners []*AgentEligibleOwnerResponseBody `form:"owners,omitempty" json:"owners,omitempty" xml:"owners,omitempty"`
+	// Last returned eligible owner user ID; absent on the final page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
 // CreateResponseBody is the type of the "agents" service "create" endpoint
 // HTTP response body.
 type CreateResponseBody struct {
@@ -3612,8 +3620,9 @@ type AgentSessionResponseBody struct {
 	LastUsedAt       *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 }
 
-// AgentEligibleOwnerResponse is used to define fields on response body types.
-type AgentEligibleOwnerResponse struct {
+// AgentEligibleOwnerResponseBody is used to define fields on response body
+// types.
+type AgentEligibleOwnerResponseBody struct {
 	// Active same-organization owner permitted by the caller's live agent creation
 	// grants
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
@@ -4236,16 +4245,19 @@ func NewRevokeSessionGatewayError(body *RevokeSessionGatewayErrorResponseBody) *
 	return v
 }
 
-// NewListEligibleOwnersAgentEligibleOwnerOK builds a "agents" service
-// "listEligibleOwners" endpoint result from a HTTP "OK" response.
-func NewListEligibleOwnersAgentEligibleOwnerOK(body []*AgentEligibleOwnerResponse) []*agents.AgentEligibleOwner {
-	v := make([]*agents.AgentEligibleOwner, len(body))
-	for i, val := range body {
+// NewListEligibleOwnersResultOK builds a "agents" service "listEligibleOwners"
+// endpoint result from a HTTP "OK" response.
+func NewListEligibleOwnersResultOK(body *ListEligibleOwnersResponseBody) *agents.ListEligibleOwnersResult {
+	v := &agents.ListEligibleOwnersResult{
+		NextCursor: body.NextCursor,
+	}
+	v.Owners = make([]*agents.AgentEligibleOwner, len(body.Owners))
+	for i, val := range body.Owners {
 		if val == nil {
-			v[i] = nil
+			v.Owners[i] = nil
 			continue
 		}
-		v[i] = unmarshalAgentEligibleOwnerResponseToAgentsAgentEligibleOwner(val)
+		v.Owners[i] = unmarshalAgentEligibleOwnerResponseBodyToAgentsAgentEligibleOwner(val)
 	}
 
 	return v
@@ -6863,6 +6875,22 @@ func ValidateListSessionsResponseBody(body *ListSessionsResponseBody) (err error
 	for _, e := range body.Items {
 		if e != nil {
 			if err2 := ValidateAgentSessionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListEligibleOwnersResponseBody runs the validations defined on
+// ListEligibleOwnersResponseBody
+func ValidateListEligibleOwnersResponseBody(body *ListEligibleOwnersResponseBody) (err error) {
+	if body.Owners == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("owners", "body"))
+	}
+	for _, e := range body.Owners {
+		if e != nil {
+			if err2 := ValidateAgentEligibleOwnerResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -11772,9 +11800,9 @@ func ValidateAgentSessionResponseBody(body *AgentSessionResponseBody) (err error
 	return
 }
 
-// ValidateAgentEligibleOwnerResponse runs the validations defined on
-// AgentEligibleOwnerResponse
-func ValidateAgentEligibleOwnerResponse(body *AgentEligibleOwnerResponse) (err error) {
+// ValidateAgentEligibleOwnerResponseBody runs the validations defined on
+// AgentEligibleOwnerResponseBody
+func ValidateAgentEligibleOwnerResponseBody(body *AgentEligibleOwnerResponseBody) (err error) {
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}

@@ -1,6 +1,9 @@
 package agentmanagement
 
 import (
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,6 +18,147 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func TestListEligibleOwnersValidatesDirectCalls(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		payload gen.ListEligibleOwnersPayload
+	}{
+		{name: "negative limit", payload: gen.ListEligibleOwnersPayload{Limit: -1}},
+		{name: "excessive limit", payload: gen.ListEligibleOwnersPayload{Limit: 101}},
+		{name: "overlong cursor", payload: gen.ListEligibleOwnersPayload{Cursor: new(strings.Repeat("a", 1025))}},
+		{name: "overlong search", payload: gen.ListEligibleOwnersPayload{Search: new(strings.Repeat("a", 201))}},
+		{name: "overlong whitespace search", payload: gen.ListEligibleOwnersPayload{Search: new(strings.Repeat(" ", 201))}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			db := newTestDB(t)
+			seedOrganization(t, db, "org-validation")
+			seedAgentCreator(t, db, "org-validation", "caller")
+			ctx := validatedHumanContext(t, "org-validation", "caller")
+			result, err := newTestService(db, &fakeAuthorizationEngine{loadedGrantsOnly: true}).ListEligibleOwners(ctx, &tc.payload)
+			requireOopsCode(t, err, oops.CodeBadRequest)
+			require.Nil(t, result)
+		})
+	}
+}
+
+func TestEligibleOwnerTargetsMatchesCreationChecks(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		grants []authz.Grant
+		all    bool
+		owners []string
+	}{
+		{name: "root wildcard", grants: []authz.Grant{authz.NewGrant(authz.ScopeRoot, "*")}, all: true, owners: []string{}},
+		{name: "root concrete", grants: []authz.Grant{authz.NewGrant(authz.ScopeRoot, "employee")}, owners: []string{"employee"}},
+		{name: "concrete and self union", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentCreate, "employee"), authz.NewGrant(authz.ScopeAgentCreate, authz.AgentOwnerSelf)}, owners: []string{"employee", "caller"}},
+		{name: "self is not literal user ID", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentCreate, authz.AgentOwnerSelf)}, owners: []string{"caller"}},
+		{name: "write does not imply create", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentWrite, "*")}, owners: []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			all, owners, err := eligibleOwnerTargets(tc.grants, "caller")
+			require.NoError(t, err)
+			require.Equal(t, tc.all, all)
+			require.ElementsMatch(t, tc.owners, owners)
+			for _, ownerID := range []string{"caller", "employee", "unrelated", "self"} {
+				allowed := false
+				for _, check := range authz.AgentCreationChecks("caller", ownerID) {
+					matches, err := authz.GrantsAuthorize(tc.grants, check)
+					require.NoError(t, err)
+					allowed = allowed || matches
+				}
+				require.Equal(t, allowed, all || slices.Contains(owners, ownerID), ownerID)
+			}
+		})
+	}
+}
+
+func TestListEligibleOwnersPaginatesAfterEligibility(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{authz.AgentOwnerSelf, "z-owner", "*"} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			db := newTestDB(t)
+			seedOrganization(t, db, "org-pages")
+			seedOrganizationUser(t, db, "org-pages", "z-caller")
+			seedOrganizationUser(t, db, "org-pages", "z-owner")
+			// Unrelated active users sort before both permitted concrete owners.
+			for i := range 125 {
+				seedOrganizationUser(t, db, "org-pages", fmt.Sprintf("unrelated-%03d", i))
+			}
+			ctx := validatedHumanContext(t, "org-pages", "z-caller")
+			seedGrant(t, ctx, db, "org-pages", urn.NewPrincipal(urn.PrincipalTypeUser, "z-caller"), authz.ScopeAgentCreate, target)
+			service := newTestService(db, &fakeAuthorizationEngine{loadedGrantsOnly: true})
+			var cursor *string
+			ids := make([]string, 0)
+			pages := 0
+			for {
+				page, err := service.ListEligibleOwners(ctx, &gen.ListEligibleOwnersPayload{Cursor: cursor, Limit: 50})
+				require.NoError(t, err)
+				require.LessOrEqual(t, len(page.Owners), 50)
+				for _, owner := range page.Owners {
+					if len(ids) > 0 {
+						require.Greater(t, owner.UserID, ids[len(ids)-1])
+					}
+					ids = append(ids, owner.UserID)
+				}
+				pages++
+				if page.NextCursor == nil {
+					break
+				}
+				// A cursor never exposes the lookahead row or an unauthorized ID.
+				require.NotEmpty(t, page.Owners)
+				require.Equal(t, page.Owners[len(page.Owners)-1].UserID, *page.NextCursor)
+				cursor = page.NextCursor
+				require.Less(t, pages, 4)
+			}
+			switch target {
+			case authz.AgentOwnerSelf:
+				require.Equal(t, []string{"z-caller"}, ids)
+				require.Equal(t, 1, pages)
+			case "z-owner":
+				require.Equal(t, []string{"z-owner"}, ids)
+				require.Equal(t, 1, pages)
+			default:
+				require.Len(t, ids, 127)
+				require.Equal(t, 3, pages)
+			}
+		})
+	}
+}
+
+func TestListEligibleOwnersSearchAndPageBoundary(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	seedOrganization(t, db, "org-search")
+	for _, id := range []string{"caller", "match-a", "match-b", "match-c", "unrelated"} {
+		seedOrganizationUser(t, db, "org-search", id)
+	}
+	ctx := validatedHumanContext(t, "org-search", "caller")
+	seedGrant(t, ctx, db, "org-search", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentCreate, "*")
+	service := newTestService(db, &fakeAuthorizationEngine{loadedGrantsOnly: true})
+	page, err := service.ListEligibleOwners(ctx, &gen.ListEligibleOwnersPayload{Search: new("MATCH"), Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, page.Owners, 2)
+	require.Equal(t, "match-b", *page.NextCursor)
+	next, err := service.ListEligibleOwners(ctx, &gen.ListEligibleOwnersPayload{Search: new("MATCH"), Limit: 2, Cursor: page.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, next.Owners, 1)
+	require.Equal(t, "match-c", next.Owners[0].UserID)
+	require.Nil(t, next.NextCursor)
+	exact, err := service.ListEligibleOwners(ctx, &gen.ListEligibleOwnersPayload{Search: new("MATCH"), Limit: 3})
+	require.NoError(t, err)
+	require.Len(t, exact.Owners, 3)
+	require.Nil(t, exact.NextCursor)
+	literal, err := service.ListEligibleOwners(ctx, &gen.ListEligibleOwnersPayload{Search: new("%")})
+	require.NoError(t, err)
+	require.Empty(t, literal.Owners)
+	require.Nil(t, literal.NextCursor)
+}
 
 func TestListEligibleOwnersUsesOnlyLiveCreationGrants(t *testing.T) {
 	t.Parallel()
@@ -50,12 +194,13 @@ func TestListEligibleOwnersUsesOnlyLiveCreationGrants(t *testing.T) {
 			ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentCreate, "*")})
 			owners, err := service.ListEligibleOwners(ctx, &gen.ListEligibleOwnersPayload{})
 			require.NoError(t, err)
-			ids := make([]string, 0, len(owners))
-			for _, owner := range owners {
+			ids := make([]string, 0, len(owners.Owners))
+			for _, owner := range owners.Owners {
 				ids = append(ids, owner.UserID)
 				require.Equal(t, owner.UserID, owner.DisplayName)
 			}
 			require.ElementsMatch(t, tc.want, ids)
+			require.Nil(t, owners.NextCursor)
 		})
 	}
 }

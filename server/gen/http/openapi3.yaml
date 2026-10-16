@@ -15072,6 +15072,33 @@ paths:
             operationId: listAgentEligibleOwners
             parameters:
                 - allowEmptyValue: true
+                  description: Maximum owners per page
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Maximum owners per page
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Last eligible owner user ID returned by the previous page
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Last eligible owner user ID returned by the previous page
+                    maxLength: 1024
+                    type: string
+                - allowEmptyValue: true
+                  description: Case-insensitive display name substring
+                  in: query
+                  name: search
+                  schema:
+                    description: Case-insensitive display name substring
+                    maxLength: 200
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -15083,9 +15110,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                items:
-                                    $ref: '#/components/schemas/AgentEligibleOwner'
-                                type: array
+                                $ref: '#/components/schemas/ListEligibleOwnersResponseBody'
                     description: OK response.
                 "400":
                     content:
@@ -101706,6 +101731,18 @@ components:
                         $ref: '#/components/schemas/DistributionPlugin'
             required:
                 - plugins
+        ListEligibleOwnersResponseBody:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Last returned eligible owner user ID; absent on the final page
+                owners:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentEligibleOwner'
+            required:
+                - owners
         ListEnvironmentsResult:
             type: object
             properties:

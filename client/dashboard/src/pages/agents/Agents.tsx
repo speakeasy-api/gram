@@ -12,14 +12,17 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { RequireScope } from "@/components/require-scope";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
+  Command,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/Command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/Popover";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useAgentEligibleOwners } from "@gram/client/react-query/agentEligibleOwners.js";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
@@ -43,8 +46,13 @@ import { useAgentsRevokeMutation } from "@gram/client/react-query/agentsRevoke.j
 import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend.js";
 import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
-import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus } from "lucide-react";
+import {
+  hashKey,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { ArrowLeft, Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -251,6 +259,11 @@ function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
   return <Text>{bound?.name ?? agent.projectId}</Text>;
 }
 
+function ownerPageActionLabel(loading: boolean, failed: boolean): string {
+  if (loading) return "Loading more…";
+  return failed ? "Retry" : "Load more";
+}
+
 function CreateAgent({
   disabled,
   onCreated,
@@ -271,27 +284,58 @@ function CreateAgent({
   const scope: AgentScope =
     chosenScope ?? (project.id ? "project" : "organization");
   const { user, session } = useSession();
-  const { hasScope, canCreateAgentFor, isLoading: grantsLoading } = useRBAC();
+  const {
+    hasScope,
+    canCreateAgentFor,
+    grants,
+    isLoading: grantsLoading,
+  } = useRBAC();
+  const sdk = useSdkClient();
+  const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   // Creation eligibility is independent of permission to browse the directory.
-  const eligibleOwners = useAgentEligibleOwners(
-    { gramSession: session },
-    undefined,
-    {
-      enabled: !disabled && !grantsLoading && hasScope("agent:create"),
-      throwOnError: false,
-    },
-  );
-  const owners = (eligibleOwners.data ?? []).filter(
+  // Keep every loaded page during pagination. A roster refetch starts from the
+  // first page and replaces the snapshot, rather than merging removed members.
+  const eligibleOwners = useInfiniteQuery({
+    queryKey: [
+      "agent-eligible-owners",
+      organization.id,
+      user.id,
+      session,
+      grants,
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      sdk.agents.listEligibleOwners(
+        { gramSession: session, limit: 50, cursor: pageParam },
+        undefined,
+        { signal },
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor,
+    enabled: !disabled && !grantsLoading && hasScope("agent:create"),
+    throwOnError: false,
+  });
+  const owners = (
+    eligibleOwners.data?.pages.flatMap((page) => page.owners) ?? []
+  ).filter(
     (owner) => owner.userId !== user.id && canCreateAgentFor(owner.userId),
   );
   const canCreateForSelf = canCreateAgentFor(user.id);
   const [chosenOwner, setChosenOwner] = useState<string | null>(null);
   const defaultOwner = canCreateForSelf ? user.id : (owners[0]?.userId ?? "");
-  // Recheck a previous selection against live grants as well as filtering the
-  // cached choices: losing permission must also remove its selected label.
+  // A matching grant alone does not mean the owner is still an active member.
+  // Keep a selection only while it remains in the eligible roster (or is self).
   const ownerUserId =
-    chosenOwner && canCreateAgentFor(chosenOwner) ? chosenOwner : defaultOwner;
+    chosenOwner &&
+    ((chosenOwner === user.id && canCreateForSelf) ||
+      owners.some((owner) => owner.userId === chosenOwner))
+      ? chosenOwner
+      : defaultOwner;
   const allowedOwner = canCreateAgentFor(ownerUserId);
+  const selectedOwner = owners.find((owner) => owner.userId === ownerUserId);
+  let ownerLabel = "Select an owner";
+  if (selectedOwner)
+    ownerLabel = selectedOwner.displayName.trim() || selectedOwner.userId;
+  if (ownerUserId === user.id && canCreateForSelf) ownerLabel = "You";
   const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
     onSuccess: (agent) => {
@@ -356,33 +400,93 @@ function CreateAgent({
       <form onSubmit={onSubmit} className="w-full">
         <div className="mb-8 space-y-2">
           <Label htmlFor="agent-owner">Owner</Label>
-          <Select
-            value={ownerUserId}
-            onValueChange={setChosenOwner}
-            disabled={disabled || create.isPending}
-          >
-            <SelectTrigger id="agent-owner" className="max-w-full">
-              <SelectValue placeholder="Select an owner" />
-            </SelectTrigger>
-            <SelectContent>
-              {canCreateForSelf && <SelectItem value={user.id}>You</SelectItem>}
-              {owners.map((owner) => (
-                <SelectItem key={owner.userId} value={owner.userId}>
-                  {owner.displayName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={ownerPickerOpen} onOpenChange={setOwnerPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                id="agent-owner"
+                type="button"
+                variant="secondary"
+                role="combobox"
+                aria-expanded={ownerPickerOpen}
+                aria-controls="agent-owner-options"
+                disabled={disabled || create.isPending}
+                className="max-w-full"
+              >
+                <span className="truncate">{ownerLabel}</span>
+                <ChevronsUpDown className="size-4 shrink-0" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="p-0">
+              <Command shouldFilter={false} label="Owner" tabIndex={0}>
+                <CommandList id="agent-owner-options" aria-label="Owner">
+                  <CommandGroup>
+                    {canCreateForSelf && (
+                      <CommandItem
+                        value={user.id}
+                        onSelect={() => {
+                          setChosenOwner(user.id);
+                          setOwnerPickerOpen(false);
+                        }}
+                      >
+                        You
+                        {ownerUserId === user.id && (
+                          <Check className="ml-auto size-4" />
+                        )}
+                      </CommandItem>
+                    )}
+                    {owners.map((owner) => (
+                      <CommandItem
+                        key={owner.userId}
+                        value={owner.userId}
+                        onSelect={() => {
+                          setChosenOwner(owner.userId);
+                          setOwnerPickerOpen(false);
+                        }}
+                      >
+                        <span className="truncate">
+                          {owner.displayName.trim() || owner.userId}
+                        </span>
+                        {ownerUserId === owner.userId && (
+                          <Check className="ml-auto size-4" />
+                        )}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+              {eligibleOwners.hasNextPage && (
+                <div className="border-t p-2">
+                  {eligibleOwners.isFetchNextPageError && (
+                    <Text role="alert" small>
+                      Unable to load more owners.
+                    </Text>
+                  )}
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    disabled={eligibleOwners.isFetching}
+                    onClick={() => void eligibleOwners.fetchNextPage()}
+                  >
+                    {ownerPageActionLabel(
+                      eligibleOwners.isFetchingNextPage,
+                      eligibleOwners.isFetchNextPageError,
+                    )}
+                  </Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
           {(grantsLoading || eligibleOwners.isFetching) && (
             <Text muted small>
               Loading available owners…
             </Text>
           )}
-          {eligibleOwners.isError && (
+          {eligibleOwners.isError && !eligibleOwners.isFetchNextPageError && (
             <div role="alert">
               <Text small>Unable to load available owners.</Text>
               <Button
                 variant="tertiary"
+                type="button"
                 onClick={() => void eligibleOwners.refetch()}
               >
                 Retry
@@ -392,6 +496,7 @@ function CreateAgent({
           {!allowedOwner &&
             !grantsLoading &&
             !eligibleOwners.isFetching &&
+            !eligibleOwners.hasNextPage &&
             !eligibleOwners.isError && (
               <Text small>
                 Ask an organization admin for permission to create agents for

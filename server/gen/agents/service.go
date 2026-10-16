@@ -23,7 +23,7 @@ type Service interface {
 	// List only active same-organization owners for whom this ordinary human
 	// session may create an agent. Requires live agent:create eligibility, not
 	// directory-read access. Creation revalidates eligibility and membership.
-	ListEligibleOwners(context.Context, *ListEligibleOwnersPayload) (res []*AgentEligibleOwner, err error)
+	ListEligibleOwners(context.Context, *ListEligibleOwnersPayload) (res *ListEligibleOwnersResult, err error)
 	// List implements list.
 	List(context.Context, *ListPayload) (res []*ManagedAgent, err error)
 	// Create implements create.
@@ -228,6 +228,20 @@ type ListDelegableGrantsPayload struct {
 // listEligibleOwners method.
 type ListEligibleOwnersPayload struct {
 	SessionToken *string
+	// Maximum owners per page
+	Limit int
+	// Last eligible owner user ID returned by the previous page
+	Cursor *string
+	// Case-insensitive display name substring
+	Search *string
+}
+
+// ListEligibleOwnersResult is the result type of the agents service
+// listEligibleOwners method.
+type ListEligibleOwnersResult struct {
+	Owners []*AgentEligibleOwner
+	// Last returned eligible owner user ID; absent on the final page
+	NextCursor *string
 }
 
 // ListPayload is the payload type of the agents service list method.

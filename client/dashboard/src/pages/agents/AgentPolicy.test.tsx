@@ -27,13 +27,6 @@ vi.mock("@/hooks/useRBAC", () => ({
     isLoading: false,
   }),
 }));
-vi.mock("@gram/client/react-query/agentEligibleOwners.js", () => ({
-  useAgentEligibleOwners: () => ({
-    data: [],
-    isFetching: false,
-    isError: false,
-  }),
-}));
 
 const mocks = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -180,6 +173,7 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     agents: {
+      listEligibleOwners: async () => ({ owners: [] }),
       list: mocks.list,
       get: mocks.detail,
       listPolicyGrants: mocks.listPolicyGrants,

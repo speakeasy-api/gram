@@ -135,7 +135,11 @@ type ListSessionsResponseBody struct {
 
 // ListEligibleOwnersResponseBody is the type of the "agents" service
 // "listEligibleOwners" endpoint HTTP response body.
-type ListEligibleOwnersResponseBody []*AgentEligibleOwnerResponse
+type ListEligibleOwnersResponseBody struct {
+	Owners []*AgentEligibleOwnerResponseBody `form:"owners" json:"owners" xml:"owners"`
+	// Last returned eligible owner user ID; absent on the final page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
 
 // ListResponseBody is the type of the "agents" service "list" endpoint HTTP
 // response body.
@@ -3628,8 +3632,9 @@ type AgentSessionResponseBody struct {
 	LastUsedAt       *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 }
 
-// AgentEligibleOwnerResponse is used to define fields on response body types.
-type AgentEligibleOwnerResponse struct {
+// AgentEligibleOwnerResponseBody is used to define fields on response body
+// types.
+type AgentEligibleOwnerResponseBody struct {
 	// Active same-organization owner permitted by the caller's live agent creation
 	// grants
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
@@ -3821,14 +3826,21 @@ func NewListSessionsResponseBody(res *agents.ListSessionsResult) *ListSessionsRe
 
 // NewListEligibleOwnersResponseBody builds the HTTP response body from the
 // result of the "listEligibleOwners" endpoint of the "agents" service.
-func NewListEligibleOwnersResponseBody(res []*agents.AgentEligibleOwner) ListEligibleOwnersResponseBody {
-	body := make([]*AgentEligibleOwnerResponse, len(res))
-	for i, val := range res {
-		if val == nil {
-			body[i] = nil
-			continue
+func NewListEligibleOwnersResponseBody(res *agents.ListEligibleOwnersResult) *ListEligibleOwnersResponseBody {
+	body := &ListEligibleOwnersResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Owners != nil {
+		body.Owners = make([]*AgentEligibleOwnerResponseBody, len(res.Owners))
+		for i, val := range res.Owners {
+			if val == nil {
+				body.Owners[i] = nil
+				continue
+			}
+			body.Owners[i] = marshalAgentsAgentEligibleOwnerToAgentEligibleOwnerResponseBody(val)
 		}
-		body[i] = marshalAgentsAgentEligibleOwnerToAgentEligibleOwnerResponse(val)
+	} else {
+		body.Owners = []*AgentEligibleOwnerResponseBody{}
 	}
 	return body
 }
@@ -6655,8 +6667,11 @@ func NewRevokeSessionPayload(body *RevokeSessionRequestBody, sessionToken *strin
 
 // NewListEligibleOwnersPayload builds a agents service listEligibleOwners
 // endpoint payload.
-func NewListEligibleOwnersPayload(sessionToken *string) *agents.ListEligibleOwnersPayload {
+func NewListEligibleOwnersPayload(limit int, cursor *string, search *string, sessionToken *string) *agents.ListEligibleOwnersPayload {
 	v := &agents.ListEligibleOwnersPayload{}
+	v.Limit = limit
+	v.Cursor = cursor
+	v.Search = search
 	v.SessionToken = sessionToken
 
 	return v

@@ -10,7 +10,7 @@ New organization provisioning records the same completion receipt. Once recorded
 
 ## Preview and apply
 
-Run from `server/`, with `GRAM_DATABASE_URL` supplied securely in the environment. Preview is the default; it exercises both grant and audit writes inside a transaction and rolls them back.
+Run from `server/`, with `GRAM_DATABASE_URL` supplied securely in the environment. Preview is the default; it rolls back any writes produced by initialization. An existing creation grant skips the grant write, and a completed initialization skips both grant and audit writes.
 
 ```sh
 mise exec -- go run ./cmd/tools/migrations admin-agent-creation \

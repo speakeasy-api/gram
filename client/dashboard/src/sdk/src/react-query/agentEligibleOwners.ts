@@ -112,7 +112,14 @@ export function useAgentEligibleOwnersSuspense(
 
 export function setAgentEligibleOwnersData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      limit?: number | undefined;
+      cursor?: string | undefined;
+      search?: string | undefined;
+      gramSession?: string | undefined;
+    },
+  ],
   data: AgentEligibleOwnersQueryData,
 ): AgentEligibleOwnersQueryData | undefined {
   const key = queryKeyAgentEligibleOwners(...queryKeyBase);
@@ -123,7 +130,12 @@ export function setAgentEligibleOwnersData(
 export function invalidateAgentEligibleOwners(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: {
+      limit?: number | undefined;
+      cursor?: string | undefined;
+      search?: string | undefined;
+      gramSession?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

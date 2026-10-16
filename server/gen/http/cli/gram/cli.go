@@ -525,6 +525,9 @@ func ParseEndpoint(
 		agentsRevokeSessionSessionTokenFlag = agentsRevokeSessionFlags.String("session-token", "", "")
 
 		agentsListEligibleOwnersFlags            = flag.NewFlagSet("list-eligible-owners", flag.ExitOnError)
+		agentsListEligibleOwnersLimitFlag        = agentsListEligibleOwnersFlags.String("limit", "50", "")
+		agentsListEligibleOwnersCursorFlag       = agentsListEligibleOwnersFlags.String("cursor", "", "")
+		agentsListEligibleOwnersSearchFlag       = agentsListEligibleOwnersFlags.String("search", "", "")
 		agentsListEligibleOwnersSessionTokenFlag = agentsListEligibleOwnersFlags.String("session-token", "", "")
 
 		agentsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
@@ -9572,7 +9575,7 @@ func ParseEndpoint(
 				data, err = agentsc.BuildRevokeSessionPayload(*agentsRevokeSessionBodyFlag, *agentsRevokeSessionSessionTokenFlag)
 			case "list-eligible-owners":
 				endpoint = c.ListEligibleOwners()
-				data, err = agentsc.BuildListEligibleOwnersPayload(*agentsListEligibleOwnersSessionTokenFlag)
+				data, err = agentsc.BuildListEligibleOwnersPayload(*agentsListEligibleOwnersLimitFlag, *agentsListEligibleOwnersCursorFlag, *agentsListEligibleOwnersSearchFlag, *agentsListEligibleOwnersSessionTokenFlag)
 			case "list":
 				endpoint = c.List()
 				data, err = agentsc.BuildListPayload(*agentsListSessionTokenFlag)
@@ -13796,6 +13799,9 @@ func agentsRevokeSessionUsage() {
 func agentsListEligibleOwnersUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] agents list-eligible-owners", os.Args[0])
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -search STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -13804,11 +13810,14 @@ func agentsListEligibleOwnersUsage() {
 	fmt.Fprintln(os.Stderr, `List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-eligible-owners --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-eligible-owners --limit 2 --cursor \"aaa\" --search \"aaa\" --session-token \"abc123\"")
 }
 
 func agentsListUsage() {
