@@ -85660,6 +85660,12 @@ components:
         match_expression:
           type: string
           description: Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to message.role == "user"
+        min_confidence:
+          type: number
+          description: Classifier confidence, from 0 to 1, below which answers count as uncertain; omission leaves it off
+          format: double
+          minimum: 0
+          maximum: 1
         mode:
           type: string
           description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
@@ -104688,6 +104694,12 @@ components:
         match_expression:
           type: string
           description: Boolean CEL predicate over message.role (lowercase user, assistant, system, or tool)
+        min_confidence:
+          type: number
+          description: Classifier confidence, from 0 to 1, below which answers count as uncertain when readings are queried. Absent means every answer counts. Confidence describes how decided the classifier's own distribution is, not measured accuracy.
+          format: double
+          minimum: 0
+          maximum: 1
         mode:
           type: string
           description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
@@ -110740,6 +110752,9 @@ components:
     UpdateSigintSensorForm:
       type: object
       properties:
+        clear_min_confidence:
+          type: boolean
+          description: Turn the minimum confidence off so every answer counts. Must not be true when min_confidence is set.
         description:
           type: string
           description: Replacement description; empty clears it
@@ -110762,6 +110777,12 @@ components:
         match_expression:
           type: string
           description: Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission preserves it
+        min_confidence:
+          type: number
+          description: Replacement classifier confidence, from 0 to 1, below which answers count as uncertain; omission preserves it. Applies to past readings too, without re-evaluation.
+          format: double
+          minimum: 0
+          maximum: 1
         mode:
           type: string
           description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'

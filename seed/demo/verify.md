@@ -31,7 +31,9 @@ verify those as an ordinary human in the local organization, not through imperso
 Open `/signals-intelligence` in the seeded project with the organization's
 `signals_intelligence` product feature enabled. Confirm nine signals and four
 sensors, with nine total memberships. Expand sensors and inspect their modes and
-ordered signal labels, including incomplete drafts. Both tabs should show populated
+ordered signal labels, including incomplete drafts. The **Primary service**
+sensor row shows "Min. confidence 0.6", and its editor shows the minimum
+classifier confidence and the hint to add an "Other" signal. Both tabs should show populated
 configuration without console errors; this page does not execute classifiers.
 Read-only demo access must not permit mutations. In the local writable org, open
 the signal editor and type a name; confirm no input exception. When deleting a

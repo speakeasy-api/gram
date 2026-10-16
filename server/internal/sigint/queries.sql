@@ -92,7 +92,8 @@ INSERT INTO sigint_sensors (
     enabled,
     match_expression,
     input_strategy,
-    window_size
+    window_size,
+    min_confidence
 )
 VALUES (
     @id,
@@ -105,7 +106,8 @@ VALUES (
     @enabled,
     @match_expression,
     sqlc.narg('input_strategy'),
-    sqlc.narg('window_size')
+    sqlc.narg('window_size'),
+    sqlc.narg('min_confidence')
 )
 RETURNING *;
 
@@ -122,6 +124,7 @@ SELECT
     sensor.match_expression,
     COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
     COALESCE(sensor.window_size, 5)::integer AS window_size,
+    sensor.min_confidence,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -150,6 +153,7 @@ SELECT
     sensor.match_expression,
     COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
     COALESCE(sensor.window_size, 5)::integer AS window_size,
+    sensor.min_confidence,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -178,6 +182,7 @@ SET name = @name,
     match_expression = @match_expression,
     input_strategy = sqlc.narg('input_strategy'),
     window_size = sqlc.narg('window_size'),
+    min_confidence = sqlc.narg('min_confidence'),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
@@ -272,6 +277,7 @@ SELECT
     sensor.match_expression,
     COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
     COALESCE(sensor.window_size, 5)::integer AS window_size,
+    sensor.min_confidence,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at
@@ -339,6 +345,7 @@ SELECT
     sensor.match_expression,
     COALESCE(sensor.input_strategy, 'single_message')::text AS input_strategy,
     COALESCE(sensor.window_size, 5)::integer AS window_size,
+    sensor.min_confidence,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
     sensor.updated_at

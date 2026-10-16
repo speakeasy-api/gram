@@ -26,7 +26,10 @@ scores. Sensors perform classification; they do not enforce access policies.
 
 4. Agree the mode: `multi_label` evaluates independent labels; `exclusive` chooses
    one option; `ordered_score` uses two to ten levels ordered from low to high,
-   each with classifier criteria. Agree instructions, display names, optional
+   each with classifier criteria. An exclusive sensor always picks one option,
+   so suggest an `other` or `none of the above` signal for inputs that fit no
+   listed option; otherwise those inputs are forced into the closest option.
+   This is a recommendation, not a requirement. Agree instructions, display names, optional
    slugs, and reusable signal definitions. Agree whether the sensor should be
    enabled. `proposal.enabled` defaults to true on creation; omission on update
    preserves the current state. Disabled sensors remain visible and editable but
@@ -39,6 +42,14 @@ scores. Sensors perform classification; they do not enforce access policies.
    target's conversation generation. Only the target is classified; preceding messages
    provide context. Short histories use available messages. Omitted update fields
    preserve settings, including window size when switching strategies.
+   Agree whether to set `proposal.min_confidence`, from 0 to 1. It is off by
+   default. When set, answers whose classifier confidence falls below it are
+   counted as uncertain in analytics instead of as answers. Explain that
+   confidence is how decided the classifier's own distribution was, not measured
+   accuracy. The setting is applied when readings are queried, so changing it
+   also reinterprets past readings without re-evaluating them. On
+   `update_sensor`, omission preserves it and `clear_min_confidence: true` turns
+   it off; do not send both.
 5. Agree the matching expression. Omission on creation defaults to
    `message.role == "user"`. Only `message.role` is exposed; do not invent actor,
    department, cohort, replay, or tool fields. Conversation ingestion currently
@@ -57,7 +68,8 @@ scores. Sensors perform classification; they do not enforce access policies.
    fields or ordered membership, and `update_signal` to deliberately change a
    shared definition. Set `proposal.operation` to the tool name.
 8. Call with `confirmed:false`. Show the normalized configuration, matching
-   expression, enabled state, message context and window size, complete signal order,
+   expression, enabled state, message context and window size, minimum confidence,
+   complete signal order,
    draft reasons, and every affected sensor
    returned for a shared-signal update. Preview creation IDs are provisional and
    are not committed resources. Omitted update fields are preserved; a supplied

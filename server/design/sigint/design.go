@@ -278,6 +278,7 @@ var SigintSensor = Type("SigintSensor", func() {
 	Attribute("input_strategy", SigintInputStrategy, "Message context strategy; defaults to single_message")
 	Attribute("window_size", Int, "Sliding window size including the target message, between 2 and 10; defaults to 5", func() { Minimum(2); Maximum(10) })
 	Required("input_strategy", "window_size")
+	Attribute("min_confidence", Float64, "Classifier confidence, from 0 to 1, below which answers count as uncertain when readings are queried. Absent means every answer counts. Confidence describes how decided the classifier's own distribution is, not measured accuracy.", func() { Minimum(0); Maximum(1) })
 	Attribute("enabled", Boolean, "Whether the sensor is eligible for evaluation. Disabled sensors remain visible and editable.")
 	Required("enabled")
 	Attribute("match_expression", String, "Boolean CEL predicate over message.role (lowercase user, assistant, system, or tool)")
@@ -317,6 +318,7 @@ var UpdateSignalForm = Type("UpdateSigintSignalForm", func() {
 var CreateSensorForm = Type("CreateSigintSensorForm", func() {
 	Attribute("input_strategy", SigintInputStrategy, "Message context strategy; omission defaults to single_message")
 	Attribute("window_size", Int, "Total sliding window messages including the target; omission defaults to 5", func() { Minimum(2); Maximum(10) })
+	Attribute("min_confidence", Float64, "Classifier confidence, from 0 to 1, below which answers count as uncertain; omission leaves it off", func() { Minimum(0); Maximum(1) })
 	Attribute("enabled", Boolean, "Whether to enable evaluation; omission defaults to true")
 	Attribute("match_expression", String, "Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to message.role == \"user\"")
 	Attribute("slug", shared.Slug, "Optional project-scoped slug; defaults to a slugified display name. Must be unique including deleted sensors.")
@@ -331,6 +333,8 @@ var CreateSensorForm = Type("CreateSigintSensorForm", func() {
 var UpdateSensorForm = Type("UpdateSigintSensorForm", func() {
 	Attribute("input_strategy", SigintInputStrategy, "Replacement message context strategy; omission preserves it")
 	Attribute("window_size", Int, "Replacement total sliding window messages, including the target; omission preserves it", func() { Minimum(2); Maximum(10) })
+	Attribute("min_confidence", Float64, "Replacement classifier confidence, from 0 to 1, below which answers count as uncertain; omission preserves it. Applies to past readings too, without re-evaluation.", func() { Minimum(0); Maximum(1) })
+	Attribute("clear_min_confidence", Boolean, "Turn the minimum confidence off so every answer counts. Must not be true when min_confidence is set.")
 	Attribute("enabled", Boolean, "Enable or disable evaluation; omission preserves the current state. Evaluations already in progress may finish.")
 	Attribute("match_expression", String, "Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission preserves it")
 	Attribute("slug", shared.Slug, "Replacement slug; omission preserves it. Changing it changes the identifier used by future exports.")

@@ -53,6 +53,9 @@ type CreateSensorRequestBody struct {
 	InputStrategy *string `form:"input_strategy,omitempty" json:"input_strategy,omitempty" xml:"input_strategy,omitempty"`
 	// Total sliding window messages including the target; omission defaults to 5
 	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
+	// Classifier confidence, from 0 to 1, below which answers count as uncertain;
+	// omission leaves it off
+	MinConfidence *float64 `form:"min_confidence,omitempty" json:"min_confidence,omitempty" xml:"min_confidence,omitempty"`
 	// Whether to enable evaluation; omission defaults to true
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to
@@ -80,6 +83,13 @@ type UpdateSensorRequestBody struct {
 	// Replacement total sliding window messages, including the target; omission
 	// preserves it
 	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
+	// Replacement classifier confidence, from 0 to 1, below which answers count as
+	// uncertain; omission preserves it. Applies to past readings too, without
+	// re-evaluation.
+	MinConfidence *float64 `form:"min_confidence,omitempty" json:"min_confidence,omitempty" xml:"min_confidence,omitempty"`
+	// Turn the minimum confidence off so every answer counts. Must not be true
+	// when min_confidence is set.
+	ClearMinConfidence *bool `form:"clear_min_confidence,omitempty" json:"clear_min_confidence,omitempty" xml:"clear_min_confidence,omitempty"`
 	// Enable or disable evaluation; omission preserves the current state.
 	// Evaluations already in progress may finish.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -205,6 +215,11 @@ type CreateSensorResponseBody struct {
 	// Sliding window size including the target message, between 2 and 10; defaults
 	// to 5
 	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
+	// Classifier confidence, from 0 to 1, below which answers count as uncertain
+	// when readings are queried. Absent means every answer counts. Confidence
+	// describes how decided the classifier's own distribution is, not measured
+	// accuracy.
+	MinConfidence *float64 `form:"min_confidence,omitempty" json:"min_confidence,omitempty" xml:"min_confidence,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -241,6 +256,11 @@ type GetSensorResponseBody struct {
 	// Sliding window size including the target message, between 2 and 10; defaults
 	// to 5
 	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
+	// Classifier confidence, from 0 to 1, below which answers count as uncertain
+	// when readings are queried. Absent means every answer counts. Confidence
+	// describes how decided the classifier's own distribution is, not measured
+	// accuracy.
+	MinConfidence *float64 `form:"min_confidence,omitempty" json:"min_confidence,omitempty" xml:"min_confidence,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -286,6 +306,11 @@ type UpdateSensorResponseBody struct {
 	// Sliding window size including the target message, between 2 and 10; defaults
 	// to 5
 	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
+	// Classifier confidence, from 0 to 1, below which answers count as uncertain
+	// when readings are queried. Absent means every answer counts. Confidence
+	// describes how decided the classifier's own distribution is, not measured
+	// accuracy.
+	MinConfidence *float64 `form:"min_confidence,omitempty" json:"min_confidence,omitempty" xml:"min_confidence,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -322,6 +347,11 @@ type DeleteSensorResponseBody struct {
 	// Sliding window size including the target message, between 2 and 10; defaults
 	// to 5
 	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
+	// Classifier confidence, from 0 to 1, below which answers count as uncertain
+	// when readings are queried. Absent means every answer counts. Confidence
+	// describes how decided the classifier's own distribution is, not measured
+	// accuracy.
+	MinConfidence *float64 `form:"min_confidence,omitempty" json:"min_confidence,omitempty" xml:"min_confidence,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -2185,6 +2215,11 @@ type SigintSensorResponseBody struct {
 	// Sliding window size including the target message, between 2 and 10; defaults
 	// to 5
 	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
+	// Classifier confidence, from 0 to 1, below which answers count as uncertain
+	// when readings are queried. Absent means every answer counts. Confidence
+	// describes how decided the classifier's own distribution is, not measured
+	// accuracy.
+	MinConfidence *float64 `form:"min_confidence,omitempty" json:"min_confidence,omitempty" xml:"min_confidence,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -2249,6 +2284,7 @@ func NewUpdateSignalRequestBody(p *sigint.UpdateSignalPayload) *UpdateSignalRequ
 func NewCreateSensorRequestBody(p *sigint.CreateSensorPayload) *CreateSensorRequestBody {
 	body := &CreateSensorRequestBody{
 		WindowSize:      p.WindowSize,
+		MinConfidence:   p.MinConfidence,
 		Enabled:         p.Enabled,
 		MatchExpression: p.MatchExpression,
 		Name:            p.Name,
@@ -2277,13 +2313,15 @@ func NewCreateSensorRequestBody(p *sigint.CreateSensorPayload) *CreateSensorRequ
 // the "updateSensor" endpoint of the "sigint" service.
 func NewUpdateSensorRequestBody(p *sigint.UpdateSensorPayload) *UpdateSensorRequestBody {
 	body := &UpdateSensorRequestBody{
-		WindowSize:      p.WindowSize,
-		Enabled:         p.Enabled,
-		MatchExpression: p.MatchExpression,
-		ID:              p.ID,
-		Name:            p.Name,
-		Description:     p.Description,
-		Instructions:    p.Instructions,
+		WindowSize:         p.WindowSize,
+		MinConfidence:      p.MinConfidence,
+		ClearMinConfidence: p.ClearMinConfidence,
+		Enabled:            p.Enabled,
+		MatchExpression:    p.MatchExpression,
+		ID:                 p.ID,
+		Name:               p.Name,
+		Description:        p.Description,
+		Instructions:       p.Instructions,
 	}
 	if p.InputStrategy != nil {
 		inputStrategy := string(*p.InputStrategy)
@@ -3147,6 +3185,7 @@ func NewCreateSensorSigintSensorOK(body *CreateSensorResponseBody) *types.Sigint
 	v := &types.SigintSensor{
 		InputStrategy:   types.SigintInputStrategy(*body.InputStrategy),
 		WindowSize:      *body.WindowSize,
+		MinConfidence:   body.MinConfidence,
 		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
@@ -3323,6 +3362,7 @@ func NewGetSensorSigintSensorOK(body *GetSensorResponseBody) *types.SigintSensor
 	v := &types.SigintSensor{
 		InputStrategy:   types.SigintInputStrategy(*body.InputStrategy),
 		WindowSize:      *body.WindowSize,
+		MinConfidence:   body.MinConfidence,
 		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
@@ -3666,6 +3706,7 @@ func NewUpdateSensorSigintSensorOK(body *UpdateSensorResponseBody) *types.Sigint
 	v := &types.SigintSensor{
 		InputStrategy:   types.SigintInputStrategy(*body.InputStrategy),
 		WindowSize:      *body.WindowSize,
+		MinConfidence:   body.MinConfidence,
 		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
@@ -3842,6 +3883,7 @@ func NewDeleteSensorSigintSensorOK(body *DeleteSensorResponseBody) *types.Sigint
 	v := &types.SigintSensor{
 		InputStrategy:   types.SigintInputStrategy(*body.InputStrategy),
 		WindowSize:      *body.WindowSize,
+		MinConfidence:   body.MinConfidence,
 		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
@@ -4261,6 +4303,16 @@ func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
 		}
 	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 0, true))
+		}
+	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 1, false))
+		}
+	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
@@ -4344,6 +4396,16 @@ func ValidateGetSensorResponseBody(body *GetSensorResponseBody) (err error) {
 	if body.WindowSize != nil {
 		if *body.WindowSize > 10 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
+	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 0, true))
+		}
+	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 1, false))
 		}
 	}
 	if body.Slug != nil {
@@ -4450,6 +4512,16 @@ func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
 		}
 	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 0, true))
+		}
+	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 1, false))
+		}
+	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
@@ -4533,6 +4605,16 @@ func ValidateDeleteSensorResponseBody(body *DeleteSensorResponseBody) (err error
 	if body.WindowSize != nil {
 		if *body.WindowSize > 10 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
+	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 0, true))
+		}
+	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 1, false))
 		}
 	}
 	if body.Slug != nil {
@@ -7062,6 +7144,16 @@ func ValidateSigintSensorResponseBody(body *SigintSensorResponseBody) (err error
 	if body.WindowSize != nil {
 		if *body.WindowSize > 10 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
+	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 0, true))
+		}
+	}
+	if body.MinConfidence != nil {
+		if *body.MinConfidence > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_confidence", *body.MinConfidence, 1, false))
 		}
 	}
 	if body.Slug != nil {

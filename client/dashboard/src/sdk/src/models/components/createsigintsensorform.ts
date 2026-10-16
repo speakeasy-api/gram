@@ -53,6 +53,10 @@ export type CreateSigintSensorForm = {
    */
   matchExpression?: string | undefined;
   /**
+   * Classifier confidence, from 0 to 1, below which answers count as uncertain; omission leaves it off
+   */
+  minConfidence?: number | undefined;
+  /**
    * How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.
    */
   mode: Mode;
@@ -88,6 +92,7 @@ export type CreateSigintSensorForm$Outbound = {
   input_strategy?: string | undefined;
   instructions?: string | undefined;
   match_expression?: string | undefined;
+  min_confidence?: number | undefined;
   mode: string;
   name: string;
   signal_ids?: Array<string> | undefined;
@@ -106,6 +111,7 @@ export const CreateSigintSensorForm$outboundSchema: z.ZodMiniType<
     inputStrategy: z.optional(InputStrategy$outboundSchema),
     instructions: z.optional(z.string()),
     matchExpression: z.optional(z.string()),
+    minConfidence: z.optional(z.number()),
     mode: Mode$outboundSchema,
     name: z.string(),
     signalIds: z.optional(z.array(z.string())),
@@ -116,6 +122,7 @@ export const CreateSigintSensorForm$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       inputStrategy: "input_strategy",
       matchExpression: "match_expression",
+      minConfidence: "min_confidence",
       signalIds: "signal_ids",
       windowSize: "window_size",
     });

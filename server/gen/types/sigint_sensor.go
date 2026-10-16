@@ -14,6 +14,11 @@ type SigintSensor struct {
 	// Sliding window size including the target message, between 2 and 10; defaults
 	// to 5
 	WindowSize int
+	// Classifier confidence, from 0 to 1, below which answers count as uncertain
+	// when readings are queried. Absent means every answer counts. Confidence
+	// describes how decided the classifier's own distribution is, not measured
+	// accuracy.
+	MinConfidence *float64
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled bool

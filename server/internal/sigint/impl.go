@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -496,6 +497,10 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor message context")
 	}
 
+	if err := validateMinConfidence(payload.MinConfidence); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor minimum confidence")
+	}
+
 	expression := matching.DefaultExpression
 	if payload.MatchExpression != nil {
 		expression = *payload.MatchExpression
@@ -542,6 +547,7 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		Enabled:         conv.PtrValOr(payload.Enabled, true),
 		InputStrategy:   conv.ToPGText(strategy),
 		WindowSize:      pgtype.Int4{Int32: conv.SafeInt32(windowSize), Valid: true},
+		MinConfidence:   conv.PtrToPGFloat8(payload.MinConfidence),
 	})
 	if isSlugConflict(err) {
 		return nil, oops.E(oops.CodeConflict, err, "sensor slug already exists")
@@ -690,9 +696,23 @@ func (s *Service) UpdateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		Enabled:         conv.PtrValOr(payload.Enabled, beforeRow.Enabled),
 		InputStrategy:   conv.ToPGText(string(conv.PtrValOr(payload.InputStrategy, types.SigintInputStrategy(beforeRow.InputStrategy)))),
 		WindowSize:      pgtype.Int4{Int32: conv.SafeInt32(conv.PtrValOr(payload.WindowSize, int(beforeRow.WindowSize))), Valid: true},
+		MinConfidence:   beforeRow.MinConfidence,
 	}
 	if err := evaluation.ValidateInputConfiguration(params.InputStrategy.String, int(params.WindowSize.Int32)); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor message context")
+	}
+
+	clearMinConfidence := conv.PtrValOr(payload.ClearMinConfidence, false)
+	switch {
+	case clearMinConfidence && payload.MinConfidence != nil:
+		return nil, oops.E(oops.CodeBadRequest, nil, "min_confidence and clear_min_confidence are mutually exclusive")
+	case clearMinConfidence:
+		params.MinConfidence = pgtype.Float8{Float64: 0, Valid: false}
+	case payload.MinConfidence != nil:
+		if err := validateMinConfidence(payload.MinConfidence); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor minimum confidence")
+		}
+		params.MinConfidence = conv.PtrToPGFloat8(payload.MinConfidence)
 	}
 
 	if payload.Name != nil {
@@ -881,6 +901,17 @@ func parseUniqueSignalIDs(values []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
+// validateMinConfidence accepts an absent value or a finite value from 0 to 1.
+func validateMinConfidence(value *float64) error {
+	if value == nil {
+		return nil
+	}
+	if math.IsNaN(*value) || *value < 0 || *value > 1 {
+		return errors.New("minimum confidence must be between 0 and 1")
+	}
+	return nil
+}
+
 func liveSignalsAvailable(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, ids []uuid.UUID) (bool, error) {
 	if len(ids) == 0 {
 		return true, nil
@@ -920,6 +951,7 @@ func sensorViewFromAffected(sensor repo.ListSensorsForSignalRow) *types.SigintSe
 		MatchExpression: sensor.MatchExpression,
 		InputStrategy:   types.SigintInputStrategy(sensor.InputStrategy),
 		WindowSize:      int(sensor.WindowSize),
+		MinConfidence:   conv.FromPGFloat8(sensor.MinConfidence),
 		Enabled:         sensor.Enabled,
 		CreatedAt:       sensor.CreatedAt.Time.Format(time.RFC3339), UpdatedAt: sensor.UpdatedAt.Time.Format(time.RFC3339),
 	}
