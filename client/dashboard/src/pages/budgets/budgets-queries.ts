@@ -4,12 +4,11 @@ import {
   CreateSpendRuleRequestBodyAction,
   WindowKind,
 } from "@gram/client/models/components/createspendrulerequestbody.js";
-/* The single adapter seam between the budgets UI and the generated spend-rules
- * SDK. Every @gram/client import for this feature lives here: the components
- * consume app-owned types (budgets-data.ts) and the app-owned hooks below, and
- * never touch the SDK directly. SDK responses are mapped to app types once, at
- * the react-query boundary, so a regeneration that reshapes a model breaks in
- * the mappers here rather than silently rippling through the components. */
+/* The adapter between the budgets UI and the generated spend-rules SDK.
+ * Network hooks and response-shape mapping live here. Budget view models share
+ * the SDK's open enum vocabulary, and editors use request-enum validators to
+ * guard writes. This deliberately preserves future enum values; other response
+ * shape changes surface in the mappers rather than throughout the UI. */
 import { invalidateAllSpendRulesListEvents } from "@gram/client/react-query/spendRulesListEvents.js";
 import { invalidateAllSpendRulesListRules } from "@gram/client/react-query/spendRulesListRules.js";
 import { invalidateAllSpendRulesOverview } from "@gram/client/react-query/spendRulesOverview.js";
@@ -261,7 +260,9 @@ export function useCreateBudgetRule(cb: BudgetMutationCallbacks = {}): {
     (draft: RuleDraft) => {
       if (!isReady || !isSupportedRuleTarget(draft.target, attributes)) {
         onError?.(
-          "Refresh the page before editing this unsupported target condition.",
+          isReady
+            ? "Refresh the page before editing this unsupported target condition."
+            : "Target attributes have not been verified. Refresh the page before editing this target condition.",
         );
         return;
       }
@@ -301,7 +302,9 @@ export function useUpdateBudgetRule(cb: BudgetMutationCallbacks = {}): {
         (!isReady || !isSupportedRuleTarget(input.target, attributes))
       ) {
         onError?.(
-          "Refresh the page before editing this unsupported target condition.",
+          isReady
+            ? "Refresh the page before editing this unsupported target condition."
+            : "Target attributes have not been verified. Refresh the page before editing this target condition.",
         );
         return;
       }

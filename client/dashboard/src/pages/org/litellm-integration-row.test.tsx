@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CreateInstanceDialog,
   DiagnosticsPanel,
+  HealthBadge,
+  FailurePostureBadge,
   RevokeInstanceDialog,
   RotateKeyDialog,
   SetupContent,
@@ -237,7 +239,14 @@ describe("LiteLLM setup failure posture", () => {
         }}
       />,
     );
-    expect(screen.getByText(/unsupported failure posture/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Save the integration key securely before refreshing the page/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/Refresh the page before configuring LiteLLM/),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Copy LiteLLM configuration" }),
     ).toBeNull();
@@ -263,4 +272,70 @@ describe("LiteLLM setup failure posture", () => {
       expect(screen.queryByText(/unsupported failure posture/)).toBeNull();
     },
   );
+});
+
+it("can recommend refreshing existing-instance setup without a one-time key", () => {
+  render(
+    <SetupContent
+      instance={{ ...instance, failurePosture: unrecognized("future_posture") }}
+    />,
+  );
+  expect(
+    screen.getByText(/Refresh the page before configuring LiteLLM/),
+  ).toBeTruthy();
+  expect(
+    screen.queryByText(/Save the integration key securely before refreshing/),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Copy integration key" }),
+  ).toBeNull();
+});
+
+describe("LiteLLM status badges", () => {
+  it("does not report an unknown diagnostic status as connected", () => {
+    render(
+      <HealthBadge
+        instance={{
+          ...instance,
+          diagnostics: {
+            ...instance.diagnostics,
+            status: unrecognized("future_status"),
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.queryByText("Connected")).toBeNull();
+    expect(screen.queryByText("Error")).toBeNull();
+  });
+  it.each([
+    ["success", "Connected"],
+    ["failed", "Error"],
+    ["pending", "Waiting for traffic"],
+  ] as const)("preserves the known health state %s", (status, label) => {
+    render(
+      <HealthBadge
+        instance={{
+          ...instance,
+          diagnostics: { ...instance.diagnostics, status },
+        }}
+      />,
+    );
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.queryByText("Unknown")).toBeNull();
+  });
+  it("does not present an unknown failure posture as fail open", () => {
+    render(<FailurePostureBadge posture={unrecognized("future_posture")} />);
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.queryByText("Fail open")).toBeNull();
+    expect(screen.queryByText("Fail closed")).toBeNull();
+  });
+  it.each([
+    ["fail_closed", "Fail closed"],
+    ["fail_open", "Fail open"],
+  ] as const)("preserves the known failure posture %s", (posture, label) => {
+    render(<FailurePostureBadge posture={posture} />);
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.queryByText("Unknown")).toBeNull();
+  });
 });

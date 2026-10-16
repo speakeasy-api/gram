@@ -752,8 +752,10 @@ export function SetupContent({
         </SetupSection>
       ) : (
         <Alert variant="warning">
-          This instance uses an unsupported failure posture. Refresh the page
-          before configuring LiteLLM.
+          This instance uses an unsupported failure posture.{" "}
+          {result
+            ? "Save the integration key securely before refreshing the page."
+            : "Refresh the page before configuring LiteLLM."}
         </Alert>
       )}
       <SetupSection
@@ -815,7 +817,7 @@ export function HealthBadge({
   return <Badge variant="neutral">Unknown</Badge>;
 }
 
-function FailurePostureBadge({
+export function FailurePostureBadge({
   posture,
 }: {
   posture: FailurePosture;

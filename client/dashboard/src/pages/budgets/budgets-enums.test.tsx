@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
   cleanup,
@@ -435,6 +436,105 @@ it.each([
   expect(onSubmit).toHaveBeenCalledWith(
     expect.objectContaining({
       target: { attribute: "department_name", operator, value: "Support" },
+    }),
+  );
+});
+
+it.each([false, true])(
+  "prioritizes an unknown window over an unverified catalog (error=%s)",
+  (isError) => {
+    mocks.catalog = { data: undefined, isError };
+    render(
+      <RuleDetailSheet
+        rule={rule({ windowKind: unrecognized("future_window") })}
+        usage={undefined}
+        onClose={vi.fn<() => void>()}
+        onEdit={vi.fn<() => void>()}
+      />,
+    );
+    expect(
+      screen.getByText(/Usage preview is unavailable for this window/),
+    ).toBeTruthy();
+    expect(screen.queryByText("Loading target attributes…")).toBeNull();
+    expect(screen.queryByText(/Could not load target attributes/)).toBeNull();
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  },
+);
+
+it.each([false, true])(
+  "describes an unverified catalog accurately in mutation callbacks (error=%s)",
+  (isError) => {
+    mocks.catalog = { data: undefined, isError };
+    const onError = vi.fn<(message: string) => void>();
+    const { result } = renderHook(() => ({
+      create: useCreateBudgetRule({ onError }),
+      update: useUpdateBudgetRule({ onError }),
+    }));
+    act(() => {
+      result.current.create.create(toDraft(rule()));
+      result.current.update.update({ id: "rule-id", target: rule().target });
+    });
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(onError).toHaveBeenNthCalledWith(
+      1,
+      "Target attributes have not been verified. Refresh the page before editing this target condition.",
+    );
+    expect(onError).toHaveBeenNthCalledWith(
+      2,
+      "Target attributes have not been verified. Refresh the page before editing this target condition.",
+    );
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  },
+);
+
+it("still identifies an explicitly unsupported target in mutation callbacks", () => {
+  mocks.catalog.data!.attributes[0]!.type = "future_type";
+  const onError = vi.fn<(message: string) => void>();
+  const { result } = renderHook(() => useUpdateBudgetRule({ onError }));
+  act(() => result.current.update({ id: "rule-id", target: rule().target }));
+  expect(onError).toHaveBeenCalledWith(
+    "Refresh the page before editing this unsupported target condition.",
+  );
+  expect(mocks.mutate).not.toHaveBeenCalled();
+});
+
+it("displays and preserves a saved includes operator for an attribute absent from the catalog", async () => {
+  const user = userEvent.setup();
+  const stored = rule({
+    action: "flag",
+    target: {
+      attribute: "custom_groups",
+      operator: "includes",
+      value: "Engineering",
+    },
+  });
+  const onSubmit = vi.fn<() => void>();
+  render(
+    <RuleSheet
+      open
+      onOpenChange={vi.fn<() => void>()}
+      rule={stored}
+      onSubmit={onSubmit}
+    />,
+  );
+  const selects = screen.getAllByRole("combobox");
+  expect(selects[0]!.textContent).toContain("Custom Groups");
+  expect(selects[1]!.textContent).toContain("includes");
+  await user.click(selects[1]!);
+  await user.click(screen.getByRole("option", { name: "includes" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Condition value" }), {
+    target: { value: "Support" },
+  });
+  const save = screen.getByRole("button", { name: "Save changes" });
+  expect(save.hasAttribute("disabled")).toBe(false);
+  fireEvent.click(save);
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      target: {
+        attribute: "custom_groups",
+        operator: "includes",
+        value: "Support",
+      },
     }),
   );
 });

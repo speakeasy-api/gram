@@ -77,11 +77,10 @@ export function isSupportedRuleTarget(
 /*  Models                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/* App-owned budget view types. They mirror the spend-rules API responses but
- * are defined here, not re-exported from the generated SDK, so a regeneration
- * that reshapes an SDK model surfaces as a type error in the mapping layer
- * (budgets-queries.ts) rather than silently rippling through every component.
- * The SDK→app mapping happens once, at the react-query boundary. */
+/* App-owned budget view models share the SDK's open enum vocabulary above,
+ * preserving future values for safe display and guarded editing. Other SDK
+ * response fields are mapped into these models in budgets-queries.ts, keeping
+ * response-shape changes at the query boundary. */
 
 /** A budget rule as the UI consumes it. One immutable version row: editing a
  *  rule archives the current row and creates a successor with a fresh id. */
