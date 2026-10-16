@@ -94,7 +94,7 @@ CREATE TABLE `gram`.`sigint_readings` (
 @access: confidential',
   CONSTRAINT `sigint_reading_identity` CHECK (notEmpty(organization_id) AND (id != toUUID('00000000-0000-0000-0000-000000000000')) AND (project_id != toUUID('00000000-0000-0000-0000-000000000000')) AND (sensor_id != toUUID('00000000-0000-0000-0000-000000000000')) AND (evaluation_attempt_id != toUUID('00000000-0000-0000-0000-000000000000'))),
   CONSTRAINT `sigint_reading_status` CHECK ((status IN ('answered', 'not_applicable', 'draft', 'failed')) AND ((status = 'failed') = notEmpty(failure_reason))),
-  CONSTRAINT `sigint_reading_result` CHECK ((status = 'answered') = notEmpty(result_type)),
+  CONSTRAINT `sigint_reading_result` CHECK (((status = 'answered') = notEmpty(result_type)) AND ((status = 'answered') OR (empty(probabilities) AND (selected_signal_id IS NULL) AND (selected_signal_slug = '') AND (expected_index IS NULL) AND (confidence IS NULL)))),
   CONSTRAINT `sigint_reading_probabilities` CHECK ((status != 'answered') OR probabilities_valid),
   CONSTRAINT `sigint_reading_confidence` CHECK ((confidence IS NULL) OR (isFinite(confidence) AND (confidence >= 0) AND (confidence <= 1))),
   CONSTRAINT `sigint_reading_input` CHECK (input_message_count <= input_requested_message_count)
