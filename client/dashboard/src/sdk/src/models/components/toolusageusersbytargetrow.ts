@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ToolUsageUsersByTargetRowTargetKind = {
 /**
  * Tool usage aggregation target kind
  */
-export type ToolUsageUsersByTargetRowTargetKind = ClosedEnum<
+export type ToolUsageUsersByTargetRowTargetKind = OpenEnum<
   typeof ToolUsageUsersByTargetRowTargetKind
 >;
 
@@ -38,7 +39,7 @@ export const ToolUsageUsersByTargetRowTargetType = {
 /**
  * Tool usage target type
  */
-export type ToolUsageUsersByTargetRowTargetType = ClosedEnum<
+export type ToolUsageUsersByTargetRowTargetType = OpenEnum<
   typeof ToolUsageUsersByTargetRowTargetType
 >;
 
@@ -55,7 +56,7 @@ export const ToolUsageUsersByTargetRowUserKind = {
 /**
  * Tool usage user identity kind
  */
-export type ToolUsageUsersByTargetRowUserKind = ClosedEnum<
+export type ToolUsageUsersByTargetRowUserKind = OpenEnum<
   typeof ToolUsageUsersByTargetRowUserKind
 >;
 
@@ -102,19 +103,22 @@ export type ToolUsageUsersByTargetRow = {
 };
 
 /** @internal */
-export const ToolUsageUsersByTargetRowTargetKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageUsersByTargetRowTargetKind
-> = z.enum(ToolUsageUsersByTargetRowTargetKind);
+export const ToolUsageUsersByTargetRowTargetKind$inboundSchema: z.ZodMiniType<
+  ToolUsageUsersByTargetRowTargetKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageUsersByTargetRowTargetKind);
 
 /** @internal */
-export const ToolUsageUsersByTargetRowTargetType$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageUsersByTargetRowTargetType
-> = z.enum(ToolUsageUsersByTargetRowTargetType);
+export const ToolUsageUsersByTargetRowTargetType$inboundSchema: z.ZodMiniType<
+  ToolUsageUsersByTargetRowTargetType,
+  unknown
+> = openEnums.inboundSchema(ToolUsageUsersByTargetRowTargetType);
 
 /** @internal */
-export const ToolUsageUsersByTargetRowUserKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageUsersByTargetRowUserKind
-> = z.enum(ToolUsageUsersByTargetRowUserKind);
+export const ToolUsageUsersByTargetRowUserKind$inboundSchema: z.ZodMiniType<
+  ToolUsageUsersByTargetRowUserKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageUsersByTargetRowUserKind);
 
 /** @internal */
 export const ToolUsageUsersByTargetRow$inboundSchema: z.ZodMiniType<

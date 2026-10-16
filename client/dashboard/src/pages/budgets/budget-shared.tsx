@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
@@ -114,7 +115,9 @@ export function RuleActionBadge({
   const variant = action === "block" ? "destructive" : "neutral";
   return (
     <Badge variant={variant}>
-      <Badge.Text>{RULE_ACTION_LABELS[action]}</Badge.Text>
+      <Badge.Text>
+        {enumPresentation(RULE_ACTION_LABELS, action, "Unknown")}
+      </Badge.Text>
     </Badge>
   );
 }
@@ -137,13 +140,16 @@ export function RuleStatusBadge({
   if (status === null) {
     return <span className="text-muted-foreground text-sm">—</span>;
   }
-  const color = STATUS_COLOR[status];
+  const color = enumPresentation(STATUS_COLOR, status, {
+    dot: "bg-muted",
+    text: "text-muted-foreground",
+  });
   return (
     <span
       className={cn("inline-flex items-center gap-1.5 text-sm", color.text)}
     >
       <span className={cn("size-2.5 shrink-0 rounded-full", color.dot)} />
-      {RULE_STATUS_LABELS[status]}
+      {enumPresentation(RULE_STATUS_LABELS, status, "Unknown")}
     </span>
   );
 }
@@ -160,7 +166,10 @@ export function EventTypeBadge({
 }: {
   type: SpendEventType;
 }): JSX.Element {
-  const color = EVENT_COLOR[type];
+  const color = enumPresentation(EVENT_COLOR, type, {
+    dot: "bg-muted",
+    text: "text-muted-foreground",
+  });
   return (
     <span
       className={cn(
@@ -169,7 +178,7 @@ export function EventTypeBadge({
       )}
     >
       <span className={cn("size-2.5 shrink-0 rounded-full", color.dot)} />
-      {SPEND_EVENT_TYPE_LABELS[type]}
+      {enumPresentation(SPEND_EVENT_TYPE_LABELS, type, "Unknown")}
     </span>
   );
 }

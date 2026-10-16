@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const MetaMcpServerNetworkAccessMode = {
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
-export type MetaMcpServerNetworkAccessMode = ClosedEnum<
+export type MetaMcpServerNetworkAccessMode = OpenEnum<
   typeof MetaMcpServerNetworkAccessMode
 >;
 
@@ -34,9 +35,7 @@ export const MetaMcpServerVisibility = {
 /**
  * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
  */
-export type MetaMcpServerVisibility = ClosedEnum<
-  typeof MetaMcpServerVisibility
->;
+export type MetaMcpServerVisibility = OpenEnum<typeof MetaMcpServerVisibility>;
 
 /**
  * A meta MCP server: an aggregate server fronting an explicitly managed set of MCP servers. URL addressability lives on its MCP endpoints.
@@ -89,14 +88,16 @@ export type MetaMcpServer = {
 };
 
 /** @internal */
-export const MetaMcpServerNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
-  typeof MetaMcpServerNetworkAccessMode
-> = z.enum(MetaMcpServerNetworkAccessMode);
+export const MetaMcpServerNetworkAccessMode$inboundSchema: z.ZodMiniType<
+  MetaMcpServerNetworkAccessMode,
+  unknown
+> = openEnums.inboundSchema(MetaMcpServerNetworkAccessMode);
 
 /** @internal */
-export const MetaMcpServerVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof MetaMcpServerVisibility
-> = z.enum(MetaMcpServerVisibility);
+export const MetaMcpServerVisibility$inboundSchema: z.ZodMiniType<
+  MetaMcpServerVisibility,
+  unknown
+> = openEnums.inboundSchema(MetaMcpServerVisibility);
 
 /** @internal */
 export const MetaMcpServer$inboundSchema: z.ZodMiniType<

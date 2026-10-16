@@ -1,3 +1,8 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import {
+  InputStrategy,
+  Mode,
+} from "@gram/client/models/components/createsigintsensorform.js";
 import { duplicateNameCounts } from "./signal-names";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -315,13 +320,30 @@ export function SensorsTab(): JSX.Element {
       if (editorSensor) {
         await update.mutateAsync({
           request: {
-            updateSigintSensorForm: { id: editorSensor.id, ...draft },
+            updateSigintSensorForm: {
+              id: editorSensor.id,
+              ...draft,
+              inputStrategy: requireKnownEnumValue(
+                InputStrategy,
+                draft.inputStrategy,
+              ),
+              mode: requireKnownEnumValue(Mode, draft.mode),
+            },
           },
         });
         toast.success("Sensor updated");
       } else {
         await create.mutateAsync({
-          request: { createSigintSensorForm: draft },
+          request: {
+            createSigintSensorForm: {
+              ...draft,
+              inputStrategy: requireKnownEnumValue(
+                InputStrategy,
+                draft.inputStrategy,
+              ),
+              mode: requireKnownEnumValue(Mode, draft.mode),
+            },
+          },
         });
         toast.success("Sensor created");
       }

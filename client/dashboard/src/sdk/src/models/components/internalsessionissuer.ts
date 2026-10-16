@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -28,7 +29,7 @@ export const InternalSessionIssuerState = {
 /**
  * unavailable: not offered to this organization yet. verified_domain_required: needs at least one verified email domain. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
  */
-export type InternalSessionIssuerState = ClosedEnum<
+export type InternalSessionIssuerState = OpenEnum<
   typeof InternalSessionIssuerState
 >;
 
@@ -68,9 +69,10 @@ export type InternalSessionIssuer = {
 };
 
 /** @internal */
-export const InternalSessionIssuerState$inboundSchema: z.ZodMiniEnum<
-  typeof InternalSessionIssuerState
-> = z.enum(InternalSessionIssuerState);
+export const InternalSessionIssuerState$inboundSchema: z.ZodMiniType<
+  InternalSessionIssuerState,
+  unknown
+> = openEnums.inboundSchema(InternalSessionIssuerState);
 
 /** @internal */
 export const InternalSessionIssuer$inboundSchema: z.ZodMiniType<

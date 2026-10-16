@@ -1,7 +1,8 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { describe, expect, it } from "vitest";
-import { blockingRules, effectiveReach } from "./serverAudience";
+import { audienceIcon, blockingRules, effectiveReach } from "./serverAudience";
 
 function entry(
   overrides: Partial<ResourceAudienceEntry> & { principalUrn: string },
@@ -197,4 +198,42 @@ describe("effective tool counts with direct overrides", () => {
     );
     expect(reach?.reachableTools).toEqual(["search"]);
   });
+});
+
+describe("unknown audience values", () => {
+  const known = entry({
+    principalUrn: "user:known",
+    displayName: "Known grant",
+    level: "use",
+    tools: ["Search"],
+  });
+
+  it.each(["future_level", "__proto__", "constructor"])(
+    "does not let %s add tools or grant attribution",
+    (level) => {
+      const unknown = entry({
+        principalUrn: "user:future",
+        displayName: "Future grant",
+        level: unrecognized(level),
+        tools: ["Delete"],
+      });
+      expect(effectiveReach([known, unknown])).toEqual(effectiveReach([known]));
+      expect(effectiveReach([unknown])).toBeNull();
+    },
+  );
+
+  it("does not let an unknown unnarrowed level hide known narrowed access", () => {
+    const unknown = entry({
+      principalUrn: "user:future",
+      level: unrecognized("future_level"),
+    });
+    expect(effectiveReach([known, unknown])).toEqual(effectiveReach([known]));
+  });
+
+  it.each(["future_kind", "__proto__", "constructor"])(
+    "uses the neutral icon for unknown principal kind %s",
+    (kind) => {
+      expect(audienceIcon(kind)).toBe(audienceIcon("unknown"));
+    },
+  );
 });

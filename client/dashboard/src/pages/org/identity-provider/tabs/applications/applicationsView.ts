@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import type { BadgeProps } from "@/components/ui/Badge";
 import { capitalize } from "@/lib/utils";
 import type {
@@ -20,7 +21,11 @@ const RECONCILE_ERRORS: Record<ReconcileRunError, string> = {
 };
 
 export function reconcileErrorLabel(error: ReconcileRunError): string {
-  return RECONCILE_ERRORS[error];
+  return enumPresentation(
+    RECONCILE_ERRORS,
+    error,
+    "Sync failed. Refresh the page for updated details.",
+  );
 }
 
 const RECONCILE_STATUS_VARIANTS: Record<
@@ -44,13 +49,13 @@ const RECONCILE_STATUS_LABELS: Record<
 export function reconcileStatusVariant(
   status: IdentityProviderConnectionReconcileRunStatus,
 ): BadgeVariant {
-  return RECONCILE_STATUS_VARIANTS[status];
+  return enumPresentation(RECONCILE_STATUS_VARIANTS, status, "neutral");
 }
 
 export function reconcileStatusLabel(
   status: IdentityProviderConnectionReconcileRunStatus,
 ): string {
-  return RECONCILE_STATUS_LABELS[status];
+  return enumPresentation(RECONCILE_STATUS_LABELS, status, "Unknown");
 }
 
 const SIGN_ON_MODES: Record<string, string> = {

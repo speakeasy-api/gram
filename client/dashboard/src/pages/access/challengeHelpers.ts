@@ -94,7 +94,7 @@ export function countChallenges(challenges: AuthzChallenge[]): ChallengeCounts {
       c.resolved++;
     } else if (ch.outcome === "deny") {
       c.deny++;
-    } else {
+    } else if (ch.outcome === "allow") {
       c.allow++;
     }
   }

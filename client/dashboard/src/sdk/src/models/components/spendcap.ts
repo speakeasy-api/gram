@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const SpendCapKeyType = {
 /**
  * The platform-managed inference key whose cap is reported
  */
-export type SpendCapKeyType = ClosedEnum<typeof SpendCapKeyType>;
+export type SpendCapKeyType = OpenEnum<typeof SpendCapKeyType>;
 
 export type SpendCap = {
   /**
@@ -33,9 +34,10 @@ export type SpendCap = {
 };
 
 /** @internal */
-export const SpendCapKeyType$inboundSchema: z.ZodMiniEnum<
-  typeof SpendCapKeyType
-> = z.enum(SpendCapKeyType);
+export const SpendCapKeyType$inboundSchema: z.ZodMiniType<
+  SpendCapKeyType,
+  unknown
+> = openEnums.inboundSchema(SpendCapKeyType);
 
 /** @internal */
 export const SpendCap$inboundSchema: z.ZodMiniType<SpendCap, unknown> = z.pipe(

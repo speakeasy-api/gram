@@ -23,7 +23,11 @@ const rbac = vi.hoisted(() => ({
   canWrite: true,
   requested: [] as string[][],
 }));
-const fixture = vi.hoisted(() => ({ legacyCallbackUrl: false }));
+const fixture = vi.hoisted(() => ({
+  legacyCallbackUrl: false,
+  authMethod: "private_key_jwt",
+  audienceFormat: undefined as string | undefined,
+}));
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -80,7 +84,8 @@ vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
         id: "client-1",
         clientId: "oauth-client",
         userSessionIssuerIds: ["user-issuer-1"],
-        tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
+        tokenEndpointAuthMethod: fixture.authMethod,
+        tokenEndpointAuthAudienceFormat: fixture.audienceFormat,
         jsonWebKeySetId: "set-1",
         legacyCallbackUrl: fixture.legacyCallbackUrl,
       },
@@ -169,6 +174,8 @@ afterEach(() => {
   rbac.canWrite = true;
   rbac.requested = [];
   fixture.legacyCallbackUrl = false;
+  fixture.authMethod = "private_key_jwt";
+  fixture.audienceFormat = undefined;
 });
 
 function renderSheet() {
@@ -258,6 +265,21 @@ describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
 });
 
 describe("ModifyRemoteIdentityProviderSheet", () => {
+  it.each(["method", "audience"])(
+    "prevents modifying unsupported client %s",
+    (kind) => {
+      if (kind === "method") fixture.authMethod = "future_method";
+      else fixture.audienceFormat = "future_audience";
+      renderSheet();
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(save);
+      expect(sdk.updateIssuer).not.toHaveBeenCalled();
+      expect(sdk.updateClient).not.toHaveBeenCalled();
+      expect(screen.getByText(/unsupported client configuration/)).toBeTruthy();
+    },
+  );
+
   it("keeps private_key_jwt and its audience control after an issuer URL edit", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {

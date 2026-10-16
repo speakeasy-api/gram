@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPAccessSummary } from "@gram/client/models/components/shadowmcpaccesssummary.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
@@ -15,7 +16,8 @@ export type ShadowMCPInventoryStatus =
   | "blocked"
   | "restricted"
   | "observed"
-  | "pending";
+  | "pending"
+  | "unknown";
 
 /**
  * The slice of a server row the status helpers read: the server-computed
@@ -77,6 +79,13 @@ export function shadowMCPAccessSummaryOf(
         decisionCoverage: "none",
       };
   }
+  return {
+    state: unrecognized(server.access),
+    allowedFor: "none",
+    blockedFor: "none",
+    blockingDefault: "none",
+    decisionCoverage: "none",
+  };
 }
 
 export type ShadowMCPPolicyDisposition = "block_all" | "allow_all";
@@ -164,6 +173,7 @@ export function shadowMCPInventoryStatus(
     case "unenforced":
       return "observed";
   }
+  return "unknown";
 }
 
 export function shadowMCPInventoryStatusLabel(
@@ -180,6 +190,8 @@ export function shadowMCPInventoryStatusLabel(
       return "Observed";
     case "pending":
       return "Pending";
+    case "unknown":
+      return "Unknown";
   }
 }
 
@@ -194,6 +206,7 @@ export function shadowMCPInventoryStatusBadgeVariant(
     case "restricted":
       return "warning";
     case "observed":
+    case "unknown":
       return "neutral";
     case "pending":
       // Blue, not orange: pending means "awaiting a decision", the same
@@ -222,6 +235,8 @@ export function shadowMCPInventoryStatusDescription(
         return "Access varies by user";
       case "unenforced":
         return "Not blocking";
+      default:
+        return "Access status unavailable";
     }
   }
   return describeShadowMCPAccess(server.accessSummary);
@@ -314,4 +329,5 @@ function describeShadowMCPAccess(summary: ShadowMCPAccessSummary): string {
       return "Not blocking";
     }
   }
+  return "Access status unavailable";
 }

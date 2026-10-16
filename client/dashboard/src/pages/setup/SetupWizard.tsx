@@ -1,9 +1,7 @@
+import type { UpdateSetupTaskRequestBodyStatus } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
 import { useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import type {
-  SetupTask,
-  SetupTaskStatus,
-} from "@gram/client/models/components/setuptask.js";
+import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 import type { UpdateSetupTaskRequestBody } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useUpdateSetupTaskMutation } from "@gram/client/react-query/updateSetupTask.js";
@@ -309,7 +307,7 @@ function SetupWizardInner(): JSX.Element {
   };
 
   const setStatus = async (
-    status: SetupTaskStatus,
+    status: UpdateSetupTaskRequestBodyStatus,
     fallback: string,
   ): Promise<boolean> => {
     if (!current) return false;

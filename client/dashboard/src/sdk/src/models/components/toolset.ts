@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -51,7 +52,7 @@ export const ToolsetNetworkAccessMode = {
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
-export type ToolsetNetworkAccessMode = ClosedEnum<
+export type ToolsetNetworkAccessMode = OpenEnum<
   typeof ToolsetNetworkAccessMode
 >;
 
@@ -178,9 +179,10 @@ export type Toolset = {
 };
 
 /** @internal */
-export const ToolsetNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
-  typeof ToolsetNetworkAccessMode
-> = z.enum(ToolsetNetworkAccessMode);
+export const ToolsetNetworkAccessMode$inboundSchema: z.ZodMiniType<
+  ToolsetNetworkAccessMode,
+  unknown
+> = openEnums.inboundSchema(ToolsetNetworkAccessMode);
 
 /** @internal */
 export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(

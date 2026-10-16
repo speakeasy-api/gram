@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const MemoryType = {
 /**
  * Knowledge type.
  */
-export type MemoryType = ClosedEnum<typeof MemoryType>;
+export type MemoryType = OpenEnum<typeof MemoryType>;
 
 /**
  * Knowledge extracted from a completed business session.
@@ -81,8 +82,8 @@ export type BusinessMemory = {
 };
 
 /** @internal */
-export const MemoryType$inboundSchema: z.ZodMiniEnum<typeof MemoryType> = z
-  .enum(MemoryType);
+export const MemoryType$inboundSchema: z.ZodMiniType<MemoryType, unknown> =
+  openEnums.inboundSchema(MemoryType);
 
 /** @internal */
 export const BusinessMemory$inboundSchema: z.ZodMiniType<

@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { Page } from "@/components/page-layout";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
@@ -35,6 +36,7 @@ import {
 } from "./use-shadow-ai-policy-slot";
 import {
   actionBadgeVariant,
+  supportsPolicyDraft,
   draftFromPreset,
   draftFromSuggestion,
   draftKind,
@@ -91,7 +93,9 @@ function presetIcon(presetId: string, policyType: string): IconName {
 
 /** What turns a draft on, in the detect step's own category names. */
 function detectsSummary(
-  draft: Pick<PolicyDraft, "policyType" | "sources" | "presidioEntities">,
+  draft: Pick<PolicyDraft, "sources" | "presidioEntities"> & {
+    policyType: string;
+  },
   mode: DetectorMode,
 ): string {
   if (draft.policyType === "prompt_based") return "Policy model (LLM judge)";
@@ -137,7 +141,9 @@ function IconTile({
 function ActionBadge({ action }: { action: string }): JSX.Element {
   return (
     <Badge variant={actionBadgeVariant(action)}>
-      <Badge.Text>{ACTION_LABEL[action] ?? action}</Badge.Text>
+      <Badge.Text>
+        {enumPresentation(ACTION_LABEL, action, "Unknown")}
+      </Badge.Text>
     </Badge>
   );
 }
@@ -234,6 +240,10 @@ export function PolicyStartChooser(): JSX.Element {
     const override = state.overridePresetId
       ? allPresets.find((preset) => preset.id === state.overridePresetId)
       : undefined;
+    if (!supportsPolicyDraft(override ?? state.suggestion)) {
+      toast.error("Refresh the page to use this policy's newer settings.");
+      return;
+    }
     const base = override
       ? draftFromPreset(override)
       : draftFromSuggestion(state.suggestion);
@@ -409,6 +419,7 @@ function UseCaseTable({
           // The Shadow AI use case follows the project's one slot: it opens
           // the existing policy when there is one, and waits while that is
           // unknown, the same as the from-scratch option below.
+          const supported = supportsPolicyDraft(preset);
           const shadowAI = isShadowAIUseCase(preset);
           const slotMessage = shadowAI
             ? shadowAISlotMessage(shadowAISlot)
@@ -417,7 +428,7 @@ function UseCaseTable({
             <button
               key={preset.id}
               type="button"
-              disabled={slotMessage !== undefined}
+              disabled={!supported || slotMessage !== undefined}
               onClick={() => (shadowAI ? onShadowAI() : onSelect(preset))}
               className="hover:bg-muted/40 group grid w-full grid-cols-[minmax(0,1fr)_16px] items-center gap-4 border-b p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 sm:grid-cols-[minmax(0,1fr)_80px_128px_16px]"
             >
@@ -444,8 +455,10 @@ function UseCaseTable({
                     {preset.description}
                   </span>
                   <span className="text-muted-foreground block font-mono text-[11px] leading-4">
-                    {slotMessage ??
-                      `Detected by ${detectsSummary(preset, mode)}`}
+                    {!supported
+                      ? "Refresh the page to use this policy's newer settings."
+                      : (slotMessage ??
+                        `Detected by ${detectsSummary(preset, mode)}`)}
                   </span>
                   <span className="flex items-center gap-2 pt-1 sm:hidden">
                     <ActionBadge action={preset.action} />
@@ -613,7 +626,7 @@ function DescribePanel({
 
 // ── Review step ──────────────────────────────────────────────────────────────
 
-function DraftReview({
+export function DraftReview({
   description,
   review,
   presets,
@@ -636,6 +649,25 @@ function DraftReview({
   const byId = (id: string) => presets.find((preset) => preset.id === id);
   const override = overridePresetId ? byId(overridePresetId) : undefined;
   const suggested = suggestion.presetId ? byId(suggestion.presetId) : undefined;
+  if (!supportsPolicyDraft(override ?? suggestion)) {
+    return (
+      <Stack gap={4} className="mx-auto w-full max-w-[800px]">
+        <Page.Section.Title>Review the draft</Page.Section.Title>
+        <Text>
+          This draft uses newer policy settings. Refresh the page to continue,
+          or choose another starting point.
+        </Text>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => window.location.reload()}>
+            Refresh page
+          </Button>
+          <Button variant="tertiary" onClick={onBack}>
+            Choose another starting point
+          </Button>
+        </div>
+      </Stack>
+    );
+  }
   const draft = override
     ? draftFromPreset(override)
     : draftFromSuggestion(suggestion);
@@ -651,7 +683,9 @@ function DraftReview({
     draft.policyType === "prompt_based" && !promptPoliciesEnabled;
 
   const enabled = (p: RiskPreset | undefined): p is RiskPreset =>
-    !!p && (promptPoliciesEnabled || p.policyType !== "prompt_based");
+    !!p &&
+    supportsPolicyDraft(p) &&
+    (promptPoliciesEnabled || p.policyType !== "prompt_based");
   // The suggested use case stays on offer after an override, so the swap can
   // be undone from the same list.
   const alsoClose = [

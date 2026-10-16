@@ -1,3 +1,5 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import { FailurePosture as KnownFailurePosture } from "@gram/client/models/components/createinstancerequestbody.js";
 import { CodeBlock } from "@/components/code";
 import { InputField } from "@/components/moon/input-field";
 import { Alert, ErrorAlert } from "@/components/ui/Alert";
@@ -419,7 +421,10 @@ export function CreateInstanceDialog({
         gramProject: projectSlug,
         createInstanceRequestBody: {
           name: name.trim(),
-          failurePosture,
+          failurePosture: requireKnownEnumValue(
+            KnownFailurePosture,
+            failurePosture,
+          ),
         },
       },
     });
@@ -800,6 +805,7 @@ export function HealthBadge({
     case "pending":
       return <Badge variant="neutral">Waiting for traffic</Badge>;
   }
+  return <Badge variant="neutral">Unknown</Badge>;
 }
 
 function FailurePostureBadge({

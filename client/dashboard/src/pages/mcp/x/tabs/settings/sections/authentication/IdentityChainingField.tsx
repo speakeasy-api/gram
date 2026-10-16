@@ -82,6 +82,7 @@ function stateBadge(state: ChainingState): {
     case "provider_rejection":
       return { label: "Provider rejected", variant: "destructive" };
   }
+  return { label: "Unknown", variant: "neutral" };
 }
 
 function ClientPicker({

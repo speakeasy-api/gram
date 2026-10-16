@@ -1,3 +1,4 @@
+import { isKnownResourceType } from "../access/types";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
@@ -109,7 +110,11 @@ export function AgentPolicyEditor({
         onToggleScope={toggleScope}
         subjectLabel="this agent"
         renderScopeRule={(definition: ScopeDefinition) => {
-          if (!(definition.slug in draft)) return null;
+          if (
+            !(definition.slug in draft) ||
+            !isKnownResourceType(definition.resourceType)
+          )
+            return null;
           // Not lists you pick from, so no control rather than an unchangeable
           // "All" chip.
           if (!isAgentPolicyNarrowable(definition.resourceType)) return null;

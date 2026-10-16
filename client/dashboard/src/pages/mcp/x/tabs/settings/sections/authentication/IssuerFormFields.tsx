@@ -372,7 +372,7 @@ export function ClientAssertionAudienceField({
   onChange,
   disabled = false,
 }: {
-  value: AuthAudienceFormat;
+  value: string;
   onChange: (value: AuthAudienceFormat) => void;
   disabled?: boolean;
 }): JSX.Element {

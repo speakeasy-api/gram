@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const AIToolAccessSummaryDecision = {
 /**
  * The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher.
  */
-export type AIToolAccessSummaryDecision = ClosedEnum<
+export type AIToolAccessSummaryDecision = OpenEnum<
   typeof AIToolAccessSummaryDecision
 >;
 
@@ -34,7 +35,7 @@ export const AIToolAccessSummaryState = {
 /**
  * The effective decision as a table renders it: allowed and blocked mean an organization decision is recorded and in force, unreviewed means nothing is enforced — either because nobody has decided or because the tool is not enforceable, in which case a stored decision is projected as unreviewed. Read enforceable to tell the two apart.
  */
-export type AIToolAccessSummaryState = ClosedEnum<
+export type AIToolAccessSummaryState = OpenEnum<
   typeof AIToolAccessSummaryState
 >;
 
@@ -61,14 +62,16 @@ export type AIToolAccessSummary = {
 };
 
 /** @internal */
-export const AIToolAccessSummaryDecision$inboundSchema: z.ZodMiniEnum<
-  typeof AIToolAccessSummaryDecision
-> = z.enum(AIToolAccessSummaryDecision);
+export const AIToolAccessSummaryDecision$inboundSchema: z.ZodMiniType<
+  AIToolAccessSummaryDecision,
+  unknown
+> = openEnums.inboundSchema(AIToolAccessSummaryDecision);
 
 /** @internal */
-export const AIToolAccessSummaryState$inboundSchema: z.ZodMiniEnum<
-  typeof AIToolAccessSummaryState
-> = z.enum(AIToolAccessSummaryState);
+export const AIToolAccessSummaryState$inboundSchema: z.ZodMiniType<
+  AIToolAccessSummaryState,
+  unknown
+> = openEnums.inboundSchema(AIToolAccessSummaryState);
 
 /** @internal */
 export const AIToolAccessSummary$inboundSchema: z.ZodMiniType<

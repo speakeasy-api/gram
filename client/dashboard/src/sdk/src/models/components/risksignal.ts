@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,7 +26,7 @@ export const RiskSignalSeverity = {
 /**
  * Severity rating derived from the risk score.
  */
-export type RiskSignalSeverity = ClosedEnum<typeof RiskSignalSeverity>;
+export type RiskSignalSeverity = OpenEnum<typeof RiskSignalSeverity>;
 
 /**
  * One clustered risk signal: all live findings for a single rule in the window, with a heuristic severity score and trend/spread stats.
@@ -106,9 +107,10 @@ export type RiskSignal = {
 };
 
 /** @internal */
-export const RiskSignalSeverity$inboundSchema: z.ZodMiniEnum<
-  typeof RiskSignalSeverity
-> = z.enum(RiskSignalSeverity);
+export const RiskSignalSeverity$inboundSchema: z.ZodMiniType<
+  RiskSignalSeverity,
+  unknown
+> = openEnums.inboundSchema(RiskSignalSeverity);
 
 /** @internal */
 export const RiskSignal$inboundSchema: z.ZodMiniType<RiskSignal, unknown> = z

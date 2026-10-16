@@ -1,3 +1,5 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { RequireScope } from "@/components/require-scope";
 import { Field, FieldLabel } from "@/components/ui/Field";
 import {
@@ -39,6 +41,10 @@ export function ToolFilteringSection({
   const queryClient = useQueryClient();
   const groupsQuery = useToolVariationGroups();
   const groups = groupsQuery.data?.groups ?? [];
+  const supportsEditing = isKnownEnumValue(
+    KnownUpdateMcpServerFormVisibility,
+    mcpServer.visibility,
+  );
 
   const currentValue = mcpServer.toolVariationsGroupId ?? DISABLED_VALUE;
   const [draft, setDraft] = useState(currentValue);
@@ -69,6 +75,13 @@ export function ToolFilteringSection({
   // mcpServers.update is a full-record replace for the optional UUID
   // references, so every field has to be re-sent or it gets nulled.
   const applyGroup = (groupId: string | null) => {
+    if (
+      !isKnownEnumValue(
+        KnownUpdateMcpServerFormVisibility,
+        mcpServer.visibility,
+      )
+    )
+      return;
     updateMcpServer.mutate({
       request: {
         updateMcpServerForm: {
@@ -126,7 +139,7 @@ export function ToolFilteringSection({
               <RequireScope scope="mcp:write" level="component">
                 <Select
                   value={draft}
-                  disabled={isSaving}
+                  disabled={!supportsEditing || isSaving}
                   onValueChange={(value) => setDraft(value)}
                 >
                   <SelectTrigger
@@ -150,8 +163,12 @@ export function ToolFilteringSection({
                 <Button
                   variant="secondary"
                   size="md"
-                  disabled={isSaving || groupsQuery.isLoading}
-                  onClick={() => createGroup.mutate({})}
+                  disabled={
+                    !supportsEditing || isSaving || groupsQuery.isLoading
+                  }
+                  onClick={() => {
+                    if (supportsEditing) createGroup.mutate({});
+                  }}
                 >
                   {createGroup.isPending && (
                     <Button.LeftIcon>
@@ -168,14 +185,16 @@ export function ToolFilteringSection({
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
-            Filtering applies to every endpoint on this server.
+            {supportsEditing
+              ? "Filtering applies to every endpoint on this server."
+              : "Refresh the page before changing tool filtering for this server."}
           </SettingsSection.FooterHint>
           {hasGroups && (
             <SettingsSection.FooterActions>
               <RequireScope scope="mcp:write" level="component">
                 <FooterSaveButton
                   pending={updateMcpServer.isPending}
-                  disabled={!dirty || isSaving}
+                  disabled={!supportsEditing || !dirty || isSaving}
                   onClick={() =>
                     applyGroup(draft === DISABLED_VALUE ? null : draft)
                   }

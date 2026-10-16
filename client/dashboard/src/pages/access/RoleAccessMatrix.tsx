@@ -26,8 +26,7 @@ import {
 import { useMemo, useState, type JSX, type ReactNode } from "react";
 
 import {
-  DISPOSITION_COPY,
-  DISPOSITIONS,
+  dispositionCopy,
   fuzzyMatch,
   indexServers,
   serverHandle,
@@ -419,9 +418,7 @@ function toolLimitText(limit: ToolLimit): string {
         ? "1 tool"
         : `${limit.tools.length} tools`;
     case "annotations": {
-      const labels = DISPOSITIONS.filter((d) =>
-        limit.dispositions.includes(d),
-      ).map((d) => DISPOSITION_COPY[d].label);
+      const labels = limit.dispositions.map((d) => dispositionCopy(d).label);
       if (labels.length === 0) return "No tools";
       return `${labels.join(", ")} tools`;
     }
@@ -963,7 +960,7 @@ function describeOtherRule(
   const parts = [where];
   if (s.tool) parts.push(`the ${s.tool} tool`);
   if (s.disposition) {
-    parts.push(`${DISPOSITION_COPY[s.disposition].label.toLowerCase()} tools`);
+    parts.push(`${dispositionCopy(s.disposition).label.toLowerCase()} tools`);
   }
   if (s.serverUrl) parts.push(s.serverUrl);
   const verb = rule.blocked ? "Blocks" : "Allows";

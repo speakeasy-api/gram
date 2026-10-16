@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Page } from "@/components/page-layout";
 import { StackedTimeSeriesPanel } from "@/components/stacked-time-series-panel";
@@ -142,7 +143,12 @@ export function MeterUsageSection(): JSX.Element {
   } else if (!data) {
     explorer = <Skeleton className="h-[480px] w-full" />;
   } else {
-    const dataDefinition = METER_FAMILIES[data.family];
+    const dataDefinition = enumPresentation(METER_FAMILIES, data.family, {
+      label: "Unknown usage",
+      description: "Usage details are unavailable.",
+      defaultBreakdown: "",
+      groups: [],
+    });
     const quantity = formatMeterQuantity(data.total, data.unit);
     const now = new Date();
     const dailyRate = formatDailyMeterRate(

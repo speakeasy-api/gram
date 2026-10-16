@@ -114,6 +114,7 @@ function inventoryAccessStatus(
     case "unenforced":
       return "observed";
   }
+  return "unknown";
 }
 
 function serverLabel(server: ShadowMCPInventoryServer): string {

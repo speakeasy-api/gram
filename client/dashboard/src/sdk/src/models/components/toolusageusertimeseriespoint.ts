@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -22,7 +23,7 @@ export const ToolUsageUserTimeSeriesPointUserKind = {
 /**
  * Tool usage user identity kind
  */
-export type ToolUsageUserTimeSeriesPointUserKind = ClosedEnum<
+export type ToolUsageUserTimeSeriesPointUserKind = OpenEnum<
   typeof ToolUsageUserTimeSeriesPointUserKind
 >;
 
@@ -57,9 +58,10 @@ export type ToolUsageUserTimeSeriesPoint = {
 };
 
 /** @internal */
-export const ToolUsageUserTimeSeriesPointUserKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageUserTimeSeriesPointUserKind
-> = z.enum(ToolUsageUserTimeSeriesPointUserKind);
+export const ToolUsageUserTimeSeriesPointUserKind$inboundSchema: z.ZodMiniType<
+  ToolUsageUserTimeSeriesPointUserKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageUserTimeSeriesPointUserKind);
 
 /** @internal */
 export const ToolUsageUserTimeSeriesPoint$inboundSchema: z.ZodMiniType<

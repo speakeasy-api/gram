@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -18,7 +19,7 @@ export const DeviceIntegrationProviderFieldKind = {
 /**
  * Input kind hint.
  */
-export type DeviceIntegrationProviderFieldKind = ClosedEnum<
+export type DeviceIntegrationProviderFieldKind = OpenEnum<
   typeof DeviceIntegrationProviderFieldKind
 >;
 
@@ -49,9 +50,10 @@ export type DeviceIntegrationProviderField = {
 };
 
 /** @internal */
-export const DeviceIntegrationProviderFieldKind$inboundSchema: z.ZodMiniEnum<
-  typeof DeviceIntegrationProviderFieldKind
-> = z.enum(DeviceIntegrationProviderFieldKind);
+export const DeviceIntegrationProviderFieldKind$inboundSchema: z.ZodMiniType<
+  DeviceIntegrationProviderFieldKind,
+  unknown
+> = openEnums.inboundSchema(DeviceIntegrationProviderFieldKind);
 
 /** @internal */
 export const DeviceIntegrationProviderField$inboundSchema: z.ZodMiniType<

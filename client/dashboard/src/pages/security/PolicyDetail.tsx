@@ -1,3 +1,5 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import { RiskPolicyAction } from "@gram/client/models/components/riskpolicy.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ShadowMCPDispositionPicker } from "@/components/shadow-mcp/ShadowMCPDispositionPicker";
@@ -85,6 +87,7 @@ import {
 } from "./PolicyStart";
 import {
   clearPolicyStartSession,
+  supportsPolicyEditing,
   invalidEmailDomains,
   draftMCPScopeValue,
   type PolicyDraft,
@@ -284,6 +287,10 @@ export default function PolicyDetail(): JSX.Element {
 /** The editor a stored policy opens in. Shadow AI is a presentation of the
  *  blocking Shadow MCP policy, so that policy opens the Shadow AI editor. */
 function PolicyEditorFor({ policy }: { policy: RiskPolicy }): JSX.Element {
+  if (!supportsPolicyEditing(policy))
+    return (
+      <Text>Refresh the page before editing this unsupported policy.</Text>
+    );
   if (policy.policyType === "prompt_based") {
     return <PromptPolicyEditor policy={policy} />;
   }
@@ -427,7 +434,10 @@ function PromptPolicyEditor({
     policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [action, setAction] = useState<PolicyAction>(() => {
-    const initial = policy?.action ?? draft?.action ?? "flag";
+    const initial = requireKnownEnumValue(
+      RiskPolicyAction,
+      policy?.action ?? draft?.action ?? "flag",
+    );
     return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
   });
   const updateMCPScope = (next: PolicyMCPScopeValue) => {

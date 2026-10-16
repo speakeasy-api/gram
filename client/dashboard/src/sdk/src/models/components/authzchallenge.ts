@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -14,16 +15,14 @@ export const AuthzChallengeOperation = {
   RequireAny: "require_any",
   Filter: "filter",
 } as const;
-export type AuthzChallengeOperation = ClosedEnum<
-  typeof AuthzChallengeOperation
->;
+export type AuthzChallengeOperation = OpenEnum<typeof AuthzChallengeOperation>;
 
 export const AuthzChallengeOutcome = {
   Allow: "allow",
   Deny: "deny",
   Error: "error",
 } as const;
-export type AuthzChallengeOutcome = ClosedEnum<typeof AuthzChallengeOutcome>;
+export type AuthzChallengeOutcome = OpenEnum<typeof AuthzChallengeOutcome>;
 
 /**
  * Kind of principal.
@@ -38,7 +37,7 @@ export const AuthzChallengePrincipalType = {
 /**
  * Kind of principal.
  */
-export type AuthzChallengePrincipalType = ClosedEnum<
+export type AuthzChallengePrincipalType = OpenEnum<
   typeof AuthzChallengePrincipalType
 >;
 
@@ -51,7 +50,7 @@ export const AuthzChallengeReason = {
   RbacSkippedApikey: "rbac_skipped_apikey",
   DevOverride: "dev_override",
 } as const;
-export type AuthzChallengeReason = ClosedEnum<typeof AuthzChallengeReason>;
+export type AuthzChallengeReason = OpenEnum<typeof AuthzChallengeReason>;
 
 /**
  * How the challenge was resolved.
@@ -63,7 +62,7 @@ export const AuthzChallengeResolutionType = {
 /**
  * How the challenge was resolved.
  */
-export type AuthzChallengeResolutionType = ClosedEnum<
+export type AuthzChallengeResolutionType = OpenEnum<
   typeof AuthzChallengeResolutionType
 >;
 
@@ -150,29 +149,34 @@ export type AuthzChallenge = {
 };
 
 /** @internal */
-export const AuthzChallengeOperation$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengeOperation
-> = z.enum(AuthzChallengeOperation);
+export const AuthzChallengeOperation$inboundSchema: z.ZodMiniType<
+  AuthzChallengeOperation,
+  unknown
+> = openEnums.inboundSchema(AuthzChallengeOperation);
 
 /** @internal */
-export const AuthzChallengeOutcome$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengeOutcome
-> = z.enum(AuthzChallengeOutcome);
+export const AuthzChallengeOutcome$inboundSchema: z.ZodMiniType<
+  AuthzChallengeOutcome,
+  unknown
+> = openEnums.inboundSchema(AuthzChallengeOutcome);
 
 /** @internal */
-export const AuthzChallengePrincipalType$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengePrincipalType
-> = z.enum(AuthzChallengePrincipalType);
+export const AuthzChallengePrincipalType$inboundSchema: z.ZodMiniType<
+  AuthzChallengePrincipalType,
+  unknown
+> = openEnums.inboundSchema(AuthzChallengePrincipalType);
 
 /** @internal */
-export const AuthzChallengeReason$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengeReason
-> = z.enum(AuthzChallengeReason);
+export const AuthzChallengeReason$inboundSchema: z.ZodMiniType<
+  AuthzChallengeReason,
+  unknown
+> = openEnums.inboundSchema(AuthzChallengeReason);
 
 /** @internal */
-export const AuthzChallengeResolutionType$inboundSchema: z.ZodMiniEnum<
-  typeof AuthzChallengeResolutionType
-> = z.enum(AuthzChallengeResolutionType);
+export const AuthzChallengeResolutionType$inboundSchema: z.ZodMiniType<
+  AuthzChallengeResolutionType,
+  unknown
+> = openEnums.inboundSchema(AuthzChallengeResolutionType);
 
 /** @internal */
 export const AuthzChallenge$inboundSchema: z.ZodMiniType<

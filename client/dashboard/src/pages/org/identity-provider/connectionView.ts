@@ -93,10 +93,7 @@ const CHECKLIST_GROUPS: Record<
   },
 };
 
-const CHECKLIST_GROUP_ORDER: ChecklistGroupId[] = [
-  "connect",
-  "cross_app_access",
-];
+const CHECKLIST_GROUP_ORDER = ["connect", "cross_app_access"] as const;
 
 export function groupChecklist(
   items: IdentityProviderConnectionChecklistItem[],

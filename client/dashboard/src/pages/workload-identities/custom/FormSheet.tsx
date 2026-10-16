@@ -67,7 +67,26 @@ export function FormSheet({
   const form = flows?.[flow];
 
   let body: ReactNode;
-  if (form !== undefined) {
+  if (form === null) {
+    body = (
+      <FormStatus title="Form unavailable">
+        <InlineEmptyState
+          icon="triangle-alert"
+          heading="This form needs a newer dashboard"
+          description="Refresh the page before continuing. This version cannot safely display all of the form's controls."
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => window.location.reload()}
+            >
+              <Button.Text>Refresh page</Button.Text>
+            </Button>
+          }
+        />
+      </FormStatus>
+    );
+  } else if (form !== undefined) {
     body = (
       <FormBody
         form={form}

@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import type { CredentialKind } from "@gram/client/models/components/usersessionclient.js";
 
 // What a registered client must present to authenticate. INBOUND: this server
@@ -94,5 +95,16 @@ export function credentialKindTooltip(
   const declared = declaredMethod
     ? `Auth method ${declaredMethod}`
     : "No auth method declared";
-  return `${declared}: ${CREDENTIAL_KIND_PRESENTATION[kind].detail}`;
+  return `${declared}: ${credentialKindPresentation(kind).detail}`;
+}
+
+export function credentialKindPresentation(
+  kind: CredentialKind,
+): (typeof CREDENTIAL_KIND_PRESENTATION)[CredentialKind] {
+  return enumPresentation(CREDENTIAL_KIND_PRESENTATION, kind, {
+    label: "Unknown",
+    detail:
+      "authentication details are unavailable. Refresh the page for updated details.",
+    badgeVariant: "neutral",
+  });
 }

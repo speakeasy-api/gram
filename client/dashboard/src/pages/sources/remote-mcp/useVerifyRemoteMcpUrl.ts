@@ -82,14 +82,14 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
           setResult({
             verified: true,
             message: "MCP server is available",
-            outcome: response.outcome,
+            outcome: "mcp_available",
           });
           break;
         case "authentication_required":
           setResult({
             verified: true,
             message: "MCP server is available and requires authentication",
-            outcome: response.outcome,
+            outcome: "authentication_required",
             protectedResourceMetadataUrl: response.protectedResourceMetadataUrl,
           });
           break;

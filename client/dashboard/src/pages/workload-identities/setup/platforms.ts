@@ -1,3 +1,11 @@
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import { WorkloadPlatformConstantVisibility } from "@gram/client/models/components/workloadplatformconstant.js";
+import { WorkloadPlatformVariableTier } from "@gram/client/models/components/workloadplatformvariable.js";
+import { Phase } from "@gram/client/models/components/workloadplatformstep.js";
+import {
+  Value,
+  WorkloadPlatformBlockType,
+} from "@gram/client/models/components/workloadplatformblock.js";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import type { WorkloadPlatform } from "@gram/client/models/components/workloadplatform.js";
@@ -5,12 +13,7 @@ import type { WorkloadPlatformBlock } from "@gram/client/models/components/workl
 import { useWorkloadPlatforms } from "@gram/client/react-query/workloadPlatforms.js";
 import { useMemo } from "react";
 import type { SubjectRule } from "./template";
-import type {
-  CatalogEntry,
-  ComputedValueKey,
-  SetupBlock,
-  SetupDefinition,
-} from "./definition";
+import type { CatalogEntry, SetupBlock, SetupDefinition } from "./definition";
 
 /**
  * The catalog the server ships, as the renderer's types. The server validates
@@ -25,7 +28,10 @@ export function useCatalogEntries(): {
 } {
   const query = useWorkloadPlatforms({}, undefined, { throwOnError: false });
   const entries = useMemo(
-    () => (query.data?.platforms ?? []).map(toCatalogEntry),
+    () =>
+      (query.data?.platforms ?? [])
+        .filter(supportsPlatform)
+        .map(toCatalogEntry),
     [query.data],
   );
   return {
@@ -43,11 +49,23 @@ export function toCatalogEntry(platform: WorkloadPlatform): CatalogEntry {
     description: platform.description,
     icon: optional(platform.icon),
     enabled: platform.enabled,
-    issuer: platform.issuer,
-    jwksUri: platform.jwksUri,
+    issuer: {
+      ...platform.issuer,
+      visibility: requireKnownEnumValue(
+        WorkloadPlatformConstantVisibility,
+        platform.issuer.visibility,
+      ),
+    },
+    jwksUri: {
+      ...platform.jwksUri,
+      visibility: requireKnownEnumValue(
+        WorkloadPlatformConstantVisibility,
+        platform.jwksUri.visibility,
+      ),
+    },
     variables: platform.variables.map((variable) => ({
       key: variable.key,
-      tier: variable.tier,
+      tier: requireKnownEnumValue(WorkloadPlatformVariableTier, variable.tier),
       label: variable.label,
       help: optional(variable.help),
       placeholder: optional(variable.placeholder),
@@ -69,7 +87,7 @@ function toSetupDefinition(
     steps: platform.steps.map((step) => ({
       id: step.id,
       title: step.title,
-      phase: step.phase,
+      phase: requireKnownEnumValue(Phase, step.phase),
       blocks: step.blocks.flatMap(toSetupBlock),
     })),
   };
@@ -77,6 +95,7 @@ function toSetupDefinition(
 
 /** A block keeps only the fields its type uses. */
 function toSetupBlock(block: WorkloadPlatformBlock): SetupBlock[] {
+  const value = block.value;
   switch (block.type) {
     case "text":
       return [{ type: "text", markdown: block.markdown }];
@@ -102,22 +121,23 @@ function toSetupBlock(block: WorkloadPlatformBlock): SetupBlock[] {
     case "computed_status":
       return [{ type: "computed_status" }];
     case "computed":
-      if (block.value === "") return [];
+      if (!isKnownEnumValue(Value, value) || value === "") return [];
       return [
         {
           type: "computed",
-          value: block.value satisfies ComputedValueKey,
+          value,
           label: block.label,
           help: optional(block.help),
         },
       ];
     case "checklist_item":
-      if (block.value !== "") {
+      if (!isKnownEnumValue(Value, value)) return [];
+      if (value !== "") {
         return [
           {
             type: "checklist_item",
             label: block.label,
-            value: block.value satisfies ComputedValueKey,
+            value,
             help: optional(block.help),
           },
         ];
@@ -131,6 +151,7 @@ function toSetupBlock(block: WorkloadPlatformBlock): SetupBlock[] {
         },
       ];
   }
+  return [];
 }
 
 /** An empty string, which the server sends for an unset field, as absent. */
@@ -183,4 +204,30 @@ export function connectedIssuer(
   issuers: WorkloadIssuer[],
 ): WorkloadIssuer | undefined {
   return issuers.find((issuer) => issuer.issuer === entry.issuer.value);
+}
+
+/** A setup with unfamiliar fields cannot safely create an identity. */
+function supportsPlatform(platform: WorkloadPlatform): boolean {
+  return (
+    isKnownEnumValue(
+      WorkloadPlatformConstantVisibility,
+      platform.issuer.visibility,
+    ) &&
+    isKnownEnumValue(
+      WorkloadPlatformConstantVisibility,
+      platform.jwksUri.visibility,
+    ) &&
+    platform.variables.every((variable) =>
+      isKnownEnumValue(WorkloadPlatformVariableTier, variable.tier),
+    ) &&
+    platform.steps.every(
+      (step) =>
+        isKnownEnumValue(Phase, step.phase) &&
+        step.blocks.every(
+          (block) =>
+            isKnownEnumValue(WorkloadPlatformBlockType, block.type) &&
+            isKnownEnumValue(Value, block.value),
+        ),
+    )
+  );
 }

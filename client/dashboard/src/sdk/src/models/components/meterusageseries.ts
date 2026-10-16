@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const MeterUsageSeriesKind = {
 /**
  * Identity kind for this series
  */
-export type MeterUsageSeriesKind = ClosedEnum<typeof MeterUsageSeriesKind>;
+export type MeterUsageSeriesKind = OpenEnum<typeof MeterUsageSeriesKind>;
 
 export type MeterUsageSeries = {
   /**
@@ -45,9 +46,10 @@ export type MeterUsageSeries = {
 };
 
 /** @internal */
-export const MeterUsageSeriesKind$inboundSchema: z.ZodMiniEnum<
-  typeof MeterUsageSeriesKind
-> = z.enum(MeterUsageSeriesKind);
+export const MeterUsageSeriesKind$inboundSchema: z.ZodMiniType<
+  MeterUsageSeriesKind,
+  unknown
+> = openEnums.inboundSchema(MeterUsageSeriesKind);
 
 /** @internal */
 export const MeterUsageSeries$inboundSchema: z.ZodMiniType<

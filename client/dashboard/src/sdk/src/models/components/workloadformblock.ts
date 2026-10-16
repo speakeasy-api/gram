@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -24,7 +25,7 @@ export const Field = {
 /**
  * The form value an input collects. label is submitted as an admission's name.
  */
-export type Field = ClosedEnum<typeof Field>;
+export type Field = OpenEnum<typeof Field>;
 
 /**
  * The dashboard validator an input's value must pass. The server applies the same rules when the form is submitted.
@@ -41,7 +42,7 @@ export const Format = {
 /**
  * The dashboard validator an input's value must pass. The server applies the same rules when the form is submitted.
  */
-export type Format = ClosedEnum<typeof Format>;
+export type Format = OpenEnum<typeof Format>;
 
 /**
  * The kind of content. wildcard_caution marks where the form warns that a wildcard rule admits more than one identity; the dashboard writes that warning, since it names the rule and the agent.
@@ -57,7 +58,7 @@ export const WorkloadFormBlockType = {
 /**
  * The kind of content. wildcard_caution marks where the form warns that a wildcard rule admits more than one identity; the dashboard writes that warning, since it names the rule and the agent.
  */
-export type WorkloadFormBlockType = ClosedEnum<typeof WorkloadFormBlockType>;
+export type WorkloadFormBlockType = OpenEnum<typeof WorkloadFormBlockType>;
 
 /**
  * One piece of a custom flow's form. Which fields are set depends on type; the rest are empty.
@@ -106,17 +107,18 @@ export type WorkloadFormBlock = {
 };
 
 /** @internal */
-export const Field$inboundSchema: z.ZodMiniEnum<typeof Field> = z.enum(Field);
+export const Field$inboundSchema: z.ZodMiniType<Field, unknown> = openEnums
+  .inboundSchema(Field);
 
 /** @internal */
-export const Format$inboundSchema: z.ZodMiniEnum<typeof Format> = z.enum(
-  Format,
-);
+export const Format$inboundSchema: z.ZodMiniType<Format, unknown> = openEnums
+  .inboundSchema(Format);
 
 /** @internal */
-export const WorkloadFormBlockType$inboundSchema: z.ZodMiniEnum<
-  typeof WorkloadFormBlockType
-> = z.enum(WorkloadFormBlockType);
+export const WorkloadFormBlockType$inboundSchema: z.ZodMiniType<
+  WorkloadFormBlockType,
+  unknown
+> = openEnums.inboundSchema(WorkloadFormBlockType);
 
 /** @internal */
 export const WorkloadFormBlock$inboundSchema: z.ZodMiniType<

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -14,7 +15,7 @@ export const AllowedOriginStatus = {
   Approved: "approved",
   Rejected: "rejected",
 } as const;
-export type AllowedOriginStatus = ClosedEnum<typeof AllowedOriginStatus>;
+export type AllowedOriginStatus = OpenEnum<typeof AllowedOriginStatus>;
 
 export type AllowedOrigin = {
   /**
@@ -41,9 +42,10 @@ export type AllowedOrigin = {
 };
 
 /** @internal */
-export const AllowedOriginStatus$inboundSchema: z.ZodMiniEnum<
-  typeof AllowedOriginStatus
-> = z.enum(AllowedOriginStatus);
+export const AllowedOriginStatus$inboundSchema: z.ZodMiniType<
+  AllowedOriginStatus,
+  unknown
+> = openEnums.inboundSchema(AllowedOriginStatus);
 
 /** @internal */
 export const AllowedOrigin$inboundSchema: z.ZodMiniType<

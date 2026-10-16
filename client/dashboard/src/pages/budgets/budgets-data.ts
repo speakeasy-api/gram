@@ -1,13 +1,19 @@
+import type {
+  SpendRuleWindowKind,
+  SpendRuleAction,
+} from "@gram/client/models/components/spendrule.js";
+import type { SpendRuleUsageStatus } from "@gram/client/models/components/spendruleusage.js";
+import type { EventType } from "@gram/client/models/components/spendruleevent.js";
 /* -------------------------------------------------------------------------- */
 /*  Vocabulary                                                                 */
 /* -------------------------------------------------------------------------- */
 
-export type BudgetWindow = "daily" | "weekly" | "monthly";
+export type BudgetWindow = SpendRuleWindowKind;
 /** Mirrors the security policy actions: flag for review, or block requests. */
-export type RuleAction = "flag" | "block";
+export type RuleAction = SpendRuleAction;
 /** Lifecycle state derived from the worst matched actor, computed server-side. */
-export type RuleStatus = "healthy" | "approaching" | "flagging" | "blocking";
-export type SpendEventType = "warning" | "breach";
+export type RuleStatus = SpendRuleUsageStatus;
+export type SpendEventType = EventType;
 export type RuleTargetOperator =
   | "equals"
   | "not_equals"
@@ -282,6 +288,8 @@ export function timeUntilWindowReset(windowKind: BudgetWindow): string {
     case "monthly":
       next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
       break;
+    default:
+      return "unknown";
   }
   const hours = Math.max(
     1,

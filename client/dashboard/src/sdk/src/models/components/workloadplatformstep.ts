@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +24,7 @@ export const Phase = {
 /**
  * collect steps gather values, the create step writes the rows, connect steps describe the platform's side.
  */
-export type Phase = ClosedEnum<typeof Phase>;
+export type Phase = OpenEnum<typeof Phase>;
 
 /**
  * One screen of a guided setup.
@@ -48,7 +49,8 @@ export type WorkloadPlatformStep = {
 };
 
 /** @internal */
-export const Phase$inboundSchema: z.ZodMiniEnum<typeof Phase> = z.enum(Phase);
+export const Phase$inboundSchema: z.ZodMiniType<Phase, unknown> = openEnums
+  .inboundSchema(Phase);
 
 /** @internal */
 export const WorkloadPlatformStep$inboundSchema: z.ZodMiniType<

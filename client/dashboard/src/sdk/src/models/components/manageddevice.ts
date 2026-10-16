@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -24,7 +25,7 @@ export const CoverageBucket = {
 /**
  * Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
  */
-export type CoverageBucket = ClosedEnum<typeof CoverageBucket>;
+export type CoverageBucket = OpenEnum<typeof CoverageBucket>;
 
 /**
  * One device from a connected MDM's inventory, annotated with its agent-coverage bucket. What that bucket attests depends on the organization's matching mode: under device-level matching a device may be classified by its own hardware serial (this machine ran the agent) or, when no serial heartbeat exists for it, by its assigned-user email (only that user ran the agent somewhere). Under user-level matching only the latter applies.
@@ -87,9 +88,10 @@ export type ManagedDevice = {
 };
 
 /** @internal */
-export const CoverageBucket$inboundSchema: z.ZodMiniEnum<
-  typeof CoverageBucket
-> = z.enum(CoverageBucket);
+export const CoverageBucket$inboundSchema: z.ZodMiniType<
+  CoverageBucket,
+  unknown
+> = openEnums.inboundSchema(CoverageBucket);
 
 /** @internal */
 export const ManagedDevice$inboundSchema: z.ZodMiniType<

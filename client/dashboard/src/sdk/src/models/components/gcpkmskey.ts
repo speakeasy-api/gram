@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const GcpKmsKeyAlgorithm = {
 /**
  * The signing algorithm of the key.
  */
-export type GcpKmsKeyAlgorithm = ClosedEnum<typeof GcpKmsKeyAlgorithm>;
+export type GcpKmsKeyAlgorithm = OpenEnum<typeof GcpKmsKeyAlgorithm>;
 
 /**
  * The cloud KMS provider of the key.
@@ -31,7 +32,7 @@ export const GcpKmsKeyProvider = {
 /**
  * The cloud KMS provider of the key.
  */
-export type GcpKmsKeyProvider = ClosedEnum<typeof GcpKmsKeyProvider>;
+export type GcpKmsKeyProvider = OpenEnum<typeof GcpKmsKeyProvider>;
 
 /**
  * A GCP KMS external key.
@@ -80,14 +81,16 @@ export type GcpKmsKey = {
 };
 
 /** @internal */
-export const GcpKmsKeyAlgorithm$inboundSchema: z.ZodMiniEnum<
-  typeof GcpKmsKeyAlgorithm
-> = z.enum(GcpKmsKeyAlgorithm);
+export const GcpKmsKeyAlgorithm$inboundSchema: z.ZodMiniType<
+  GcpKmsKeyAlgorithm,
+  unknown
+> = openEnums.inboundSchema(GcpKmsKeyAlgorithm);
 
 /** @internal */
-export const GcpKmsKeyProvider$inboundSchema: z.ZodMiniEnum<
-  typeof GcpKmsKeyProvider
-> = z.enum(GcpKmsKeyProvider);
+export const GcpKmsKeyProvider$inboundSchema: z.ZodMiniType<
+  GcpKmsKeyProvider,
+  unknown
+> = openEnums.inboundSchema(GcpKmsKeyProvider);
 
 /** @internal */
 export const GcpKmsKey$inboundSchema: z.ZodMiniType<GcpKmsKey, unknown> = z

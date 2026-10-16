@@ -25,7 +25,9 @@ import { ANY_RESOURCE, delegableGrantKey } from "./agent-api-key-grants";
  * to need no RBAC grant. The server stays authoritative, so a stale mirror
  * fails closed and cannot widen anything.
  */
-export const AGENT_POLICY_SCOPES: ScopeDefinition[] = [
+export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
+  resourceType: ResourceType;
+})[] = [
   {
     slug: "mcp:connect",
     resourceType: "mcp",

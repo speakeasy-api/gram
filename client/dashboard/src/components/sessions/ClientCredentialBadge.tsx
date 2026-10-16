@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/Badge";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   credentialKindTooltip,
-  CREDENTIAL_KIND_PRESENTATION,
+  credentialKindPresentation,
   isBadgedCredentialKind,
   type CredentialKind,
 } from "@/lib/user-session-client-credential";
@@ -25,7 +25,7 @@ export function ClientCredentialBadge({
 }): JSX.Element | null {
   if (!isBadgedCredentialKind(kind)) return null;
 
-  const presentation = CREDENTIAL_KIND_PRESENTATION[kind];
+  const presentation = credentialKindPresentation(kind);
   return (
     <SimpleTooltip tooltip={credentialKindTooltip(kind, declaredMethod)}>
       <Badge

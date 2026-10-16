@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { ClosedEnum, OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,7 +25,7 @@ export const Availability = {
 /**
  * Whether spend estimates are available for the organization's plan
  */
-export type Availability = ClosedEnum<typeof Availability>;
+export type Availability = OpenEnum<typeof Availability>;
 
 export const Currency = {
   Usd: "USD",
@@ -63,8 +64,8 @@ export type SpendBreakdownResponse = {
 };
 
 /** @internal */
-export const Availability$inboundSchema: z.ZodMiniEnum<typeof Availability> = z
-  .enum(Availability);
+export const Availability$inboundSchema: z.ZodMiniType<Availability, unknown> =
+  openEnums.inboundSchema(Availability);
 
 /** @internal */
 export const Currency$inboundSchema: z.ZodMiniEnum<typeof Currency> = z.enum(

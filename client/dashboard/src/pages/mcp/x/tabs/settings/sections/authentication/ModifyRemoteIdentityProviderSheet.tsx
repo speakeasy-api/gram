@@ -1,3 +1,5 @@
+import { narrowTokenEndpointAuthMethod } from "./issuerFormUtils";
+import { isKnownEnumValue } from "@/lib/enum";
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -421,14 +423,38 @@ function ModifyRemoteIdentityProviderSheetBody({
   const clientFieldsInitializedRef = useRef(false);
   useEffect(() => {
     if (!primaryClient || clientFieldsInitializedRef.current) return;
-    setTokenEndpointAuthMethod(primaryClient.tokenEndpointAuthMethod ?? "");
-    setAuthAudienceFormat(primaryClient.tokenEndpointAuthAudienceFormat);
+    setTokenEndpointAuthMethod(
+      narrowTokenEndpointAuthMethod(
+        primaryClient.tokenEndpointAuthMethod,
+        true,
+      ) ?? "",
+    );
+    setAuthAudienceFormat(
+      isKnownEnumValue(
+        UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+        primaryClient.tokenEndpointAuthAudienceFormat,
+      )
+        ? primaryClient.tokenEndpointAuthAudienceFormat
+        : undefined,
+    );
     setScopeOverride((primaryClient.scope ?? []).join(", "));
     setAudienceOverride(primaryClient.audience ?? "");
     clientFieldsInitializedRef.current = true;
   }, [primaryClient]);
 
-  const submittable = !!primaryClient && issuerUrl.trim().length > 0;
+  const supportsClientEditing =
+    (primaryClient?.tokenEndpointAuthAudienceFormat === undefined ||
+      isKnownEnumValue(
+        UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+        primaryClient.tokenEndpointAuthAudienceFormat,
+      )) &&
+    (primaryClient?.tokenEndpointAuthMethod === undefined ||
+      narrowTokenEndpointAuthMethod(
+        primaryClient.tokenEndpointAuthMethod,
+        true,
+      ) !== undefined);
+  const submittable =
+    !!primaryClient && issuerUrl.trim().length > 0 && supportsClientEditing;
 
   const handleSubmit = () => {
     if (!submittable || submitting || logoUploading || !primaryClient) return;
@@ -597,6 +623,13 @@ function ModifyRemoteIdentityProviderSheetBody({
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
         />
+
+        {!supportsClientEditing && (
+          <Text small muted>
+            Refresh the page before editing this unsupported client
+            configuration.
+          </Text>
+        )}
 
         {submitError && (
           <Alert variant="error" dismissible={false}>

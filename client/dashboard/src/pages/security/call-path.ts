@@ -40,6 +40,7 @@ function requestCaption(outcome: EnforcementOutcome, server: string): string {
     case "logged":
       return `Logged only. The call was forwarded to ${server} unchanged.`;
   }
+  return "The request outcome is unknown.";
 }
 
 function responseCaption(outcome: EnforcementOutcome, server: string): string {
@@ -58,6 +59,7 @@ function responseCaption(outcome: EnforcementOutcome, server: string): string {
     case "logged":
       return `Logged only. The result from ${server} reached the client unchanged.`;
   }
+  return "The response outcome is unknown.";
 }
 
 /**

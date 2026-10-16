@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -18,7 +19,7 @@ export const ActorAttributeType = {
 /**
  * Value kind: a scalar string or a list of strings.
  */
-export type ActorAttributeType = ClosedEnum<typeof ActorAttributeType>;
+export type ActorAttributeType = OpenEnum<typeof ActorAttributeType>;
 
 export type ActorAttribute = {
   /**
@@ -36,9 +37,10 @@ export type ActorAttribute = {
 };
 
 /** @internal */
-export const ActorAttributeType$inboundSchema: z.ZodMiniEnum<
-  typeof ActorAttributeType
-> = z.enum(ActorAttributeType);
+export const ActorAttributeType$inboundSchema: z.ZodMiniType<
+  ActorAttributeType,
+  unknown
+> = openEnums.inboundSchema(ActorAttributeType);
 
 /** @internal */
 export const ActorAttribute$inboundSchema: z.ZodMiniType<

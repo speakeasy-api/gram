@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { ClosedEnum, OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const BrokenReason = {
 /**
  * Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
  */
-export type BrokenReason = ClosedEnum<typeof BrokenReason>;
+export type BrokenReason = OpenEnum<typeof BrokenReason>;
 
 /**
  * bound: an explicit identity chaining binding selects the client; single: the one client attached to the authorization server; ambiguous: more than one candidate and no single binding; missing: no client registered yet.
@@ -35,7 +36,7 @@ export const ClientBinding = {
 /**
  * bound: an explicit identity chaining binding selects the client; single: the one client attached to the authorization server; ambiguous: more than one candidate and no single binding; missing: no client registered yet.
  */
-export type ClientBinding = ClosedEnum<typeof ClientBinding>;
+export type ClientBinding = OpenEnum<typeof ClientBinding>;
 
 /**
  * no_idjag: the server's authorization server metadata does not advertise the identity assertion grant.
@@ -61,7 +62,7 @@ export const ObservedResult = {
 /**
  * What the latest identity chaining exchange since confirmation showed. connection_missing is inferred from the identity provider's invalid_target error.
  */
-export type ObservedResult = ClosedEnum<typeof ObservedResult>;
+export type ObservedResult = OpenEnum<typeof ObservedResult>;
 
 /**
  * Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream, or an exchange since confirmation found it missing; broken: confirmed but known not to work, see broken_reason; connected: the administrator confirmed it and no conclusive exchange has run since; verified: an exchange since confirmation succeeded.
@@ -77,7 +78,7 @@ export const OktaResourceConnectionServerState = {
 /**
  * Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream, or an exchange since confirmation found it missing; broken: confirmed but known not to work, see broken_reason; connected: the administrator confirmed it and no conclusive exchange has run since; verified: an exchange since confirmation succeeded.
  */
-export type OktaResourceConnectionServerState = ClosedEnum<
+export type OktaResourceConnectionServerState = OpenEnum<
   typeof OktaResourceConnectionServerState
 >;
 
@@ -170,12 +171,14 @@ export type OktaResourceConnectionServer = {
 };
 
 /** @internal */
-export const BrokenReason$inboundSchema: z.ZodMiniEnum<typeof BrokenReason> = z
-  .enum(BrokenReason);
+export const BrokenReason$inboundSchema: z.ZodMiniType<BrokenReason, unknown> =
+  openEnums.inboundSchema(BrokenReason);
 
 /** @internal */
-export const ClientBinding$inboundSchema: z.ZodMiniEnum<typeof ClientBinding> =
-  z.enum(ClientBinding);
+export const ClientBinding$inboundSchema: z.ZodMiniType<
+  ClientBinding,
+  unknown
+> = openEnums.inboundSchema(ClientBinding);
 
 /** @internal */
 export const NotApplicableReason$inboundSchema: z.ZodMiniEnum<
@@ -183,14 +186,16 @@ export const NotApplicableReason$inboundSchema: z.ZodMiniEnum<
 > = z.enum(NotApplicableReason);
 
 /** @internal */
-export const ObservedResult$inboundSchema: z.ZodMiniEnum<
-  typeof ObservedResult
-> = z.enum(ObservedResult);
+export const ObservedResult$inboundSchema: z.ZodMiniType<
+  ObservedResult,
+  unknown
+> = openEnums.inboundSchema(ObservedResult);
 
 /** @internal */
-export const OktaResourceConnectionServerState$inboundSchema: z.ZodMiniEnum<
-  typeof OktaResourceConnectionServerState
-> = z.enum(OktaResourceConnectionServerState);
+export const OktaResourceConnectionServerState$inboundSchema: z.ZodMiniType<
+  OktaResourceConnectionServerState,
+  unknown
+> = openEnums.inboundSchema(OktaResourceConnectionServerState);
 
 /** @internal */
 export const OktaResourceConnectionServer$inboundSchema: z.ZodMiniType<

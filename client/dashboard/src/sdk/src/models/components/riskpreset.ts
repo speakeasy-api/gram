@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const RiskPresetAction = {
 /**
  * Default enforcement action.
  */
-export type RiskPresetAction = ClosedEnum<typeof RiskPresetAction>;
+export type RiskPresetAction = OpenEnum<typeof RiskPresetAction>;
 
 /**
  * Policy type the preset creates.
@@ -33,7 +34,7 @@ export const RiskPresetPolicyType = {
 /**
  * Policy type the preset creates.
  */
-export type RiskPresetPolicyType = ClosedEnum<typeof RiskPresetPolicyType>;
+export type RiskPresetPolicyType = OpenEnum<typeof RiskPresetPolicyType>;
 
 /**
  * One use-case preset a risk policy can start from.
@@ -86,14 +87,16 @@ export type RiskPreset = {
 };
 
 /** @internal */
-export const RiskPresetAction$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPresetAction
-> = z.enum(RiskPresetAction);
+export const RiskPresetAction$inboundSchema: z.ZodMiniType<
+  RiskPresetAction,
+  unknown
+> = openEnums.inboundSchema(RiskPresetAction);
 
 /** @internal */
-export const RiskPresetPolicyType$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPresetPolicyType
-> = z.enum(RiskPresetPolicyType);
+export const RiskPresetPolicyType$inboundSchema: z.ZodMiniType<
+  RiskPresetPolicyType,
+  unknown
+> = openEnums.inboundSchema(RiskPresetPolicyType);
 
 /** @internal */
 export const RiskPreset$inboundSchema: z.ZodMiniType<RiskPreset, unknown> = z

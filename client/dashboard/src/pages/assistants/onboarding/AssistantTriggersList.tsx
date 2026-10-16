@@ -41,6 +41,7 @@ function eventStatusVariant(status: TriggerEventStatus): BadgeVariant {
     case TriggerEventStatus.Pending:
       return "neutral";
   }
+  return "neutral";
 }
 
 /**

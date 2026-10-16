@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const Attestation = {
 /**
  * The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.
  */
-export type Attestation = ClosedEnum<typeof Attestation>;
+export type Attestation = OpenEnum<typeof Attestation>;
 
 /**
  * Agent-coverage summary across the org's connected MDM inventories. What a bucket attests depends on the org's matching mode: under device-level matching (hardware serial) agent_active means THIS machine reported in, while under user-level matching it means only that the device's assigned user has a fresh heartbeat somewhere.
@@ -80,8 +81,8 @@ export type DeviceIntegrationCoverage = {
 };
 
 /** @internal */
-export const Attestation$inboundSchema: z.ZodMiniEnum<typeof Attestation> = z
-  .enum(Attestation);
+export const Attestation$inboundSchema: z.ZodMiniType<Attestation, unknown> =
+  openEnums.inboundSchema(Attestation);
 
 /** @internal */
 export const DeviceIntegrationCoverage$inboundSchema: z.ZodMiniType<
