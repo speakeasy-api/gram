@@ -1437,4 +1437,5 @@ var _ = Service("admin", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listCustomerUsage")
 	})
 
+	upstreamOAuthMigrationMethods()
 })
