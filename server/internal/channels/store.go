@@ -115,7 +115,9 @@ func dashboardLabel(p Principal) string {
 func (h *Handler) leaseUntil(seconds int) pgtype.Timestamptz {
 	window := h.limits.LeaseDefault
 	if seconds > 0 {
-		window = time.Duration(seconds) * time.Second
+		// Clamp in seconds before converting, so an oversized request cannot
+		// overflow the duration into an already-expired lease.
+		window = time.Duration(min(int64(seconds), int64(h.limits.LeaseMax/time.Second))) * time.Second
 	}
 	window = min(window, h.limits.LeaseMax)
 	return conv.ToPGTimestamptz(time.Now().UTC().Add(window))
@@ -164,14 +166,17 @@ func loadAccess(ctx context.Context, q *repo.Queries, p Principal) (access, erro
 	settings, err := q.GetChannelsSettings(ctx, p.OrganizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// First use in this organization. Storage ownership is resolved here,
-		// once, to the organization's canonical default project.
-		if _, err := q.EnsureChannelsSettings(ctx, p.OrganizationID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return access{}, fmt.Errorf("%w: organization has no project to own channels data", ErrUnavailable)
-			}
+		// once, to the organization's canonical default project. The insert
+		// returns no row both when the organization has no project and when a
+		// concurrent first use won the insert, so the row is read again by a
+		// fresh statement that sees the winner's commit.
+		if _, err := q.EnsureChannelsSettings(ctx, p.OrganizationID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return access{}, fmt.Errorf("create channels settings: %w", err)
 		}
 		settings, err = q.GetChannelsSettings(ctx, p.OrganizationID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return access{}, fmt.Errorf("%w: organization has no project to own channels data", ErrUnavailable)
+		}
 	}
 	if err != nil {
 		return access{}, fmt.Errorf("load channels settings: %w", err)
@@ -375,6 +380,13 @@ func (h *Handler) resume(ctx context.Context, q *repo.Queries, p Principal, a ar
 	if subtle.ConstantTimeCompare([]byte(row.ResumeHash.String), []byte(hashToken(a.ResumeToken))) != 1 {
 		return nil, denied
 	}
+	// An expired instance is outside the live set, so bringing it back adds a
+	// live lease exactly as a new connection does and is held to the same cap.
+	if !row.ExpiresAt.Time.After(time.Now().UTC()) {
+		if err := h.guardInstanceCount(ctx, q, p); err != nil {
+			return nil, err
+		}
+	}
 	// Renewal keeps the announcement sequence, so resuming never repeats an
 	// introduction, and no replacement secret is ever issued.
 	renewed, err := q.RenewInstance(ctx, repo.RenewInstanceParams{
@@ -406,6 +418,13 @@ func (h *Handler) dashboardSession(ctx context.Context, q *repo.Queries, p Princ
 	switch {
 	case err == nil:
 		announce = existing.AnnounceSeq
+		// Reclaiming an expired session adds a live lease, so it is held to
+		// the same cap as opening one.
+		if !existing.ExpiresAt.Time.After(time.Now().UTC()) {
+			if err := h.guardInstanceCount(ctx, q, p); err != nil {
+				return nil, err
+			}
+		}
 	case errors.Is(err, pgx.ErrNoRows):
 		if err := h.guardInstanceCount(ctx, q, p); err != nil {
 			return nil, err
@@ -440,7 +459,14 @@ func (h *Handler) dashboardSession(ctx context.Context, q *repo.Queries, p Princ
 	return newConnectView(row, ""), nil
 }
 
+// guardInstanceCount refuses a new live lease once the organization holds its
+// cap. It locks the organization's settings row first, so concurrent connects
+// count and create one at a time and cannot overshoot the cap together; the
+// lock is held until the calling transaction ends.
 func (h *Handler) guardInstanceCount(ctx context.Context, q *repo.Queries, p Principal) error {
+	if _, err := q.LockChannelsSettings(ctx, p.OrganizationID); err != nil {
+		return fmt.Errorf("lock channels settings: %w", err)
+	}
 	live, err := q.CountLiveInstances(ctx, p.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("count live channels instances: %w", err)
@@ -898,6 +924,19 @@ func (h *Handler) follow(ctx context.Context, q *repo.Queries, p Principal, acc 
 		SetMuted:       len(a.Muted) > 0,
 	}); err != nil {
 		return nil, fmt.Errorf("save channels thread preference: %w", err)
+	}
+	// The same cap channels_preferences enforces, checked after the write so
+	// that changing an existing preference never counts twice. The refusal
+	// rolls the write back with the transaction.
+	active, err := q.CountThreadPreferences(ctx, repo.CountThreadPreferencesParams{
+		OrganizationID: p.OrganizationID,
+		SubjectID:      p.SubjectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count channels thread preferences: %w", err)
+	}
+	if active > int64(h.limits.PreferencePage) {
+		return nil, fmt.Errorf("%w: at most %d thread preferences are supported", ErrInvalid, h.limits.PreferencePage)
 	}
 	return h.preferences(ctx, q, p)
 }

@@ -1,6 +1,8 @@
 package channels
 
 import (
+	"fmt"
+	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -39,15 +41,12 @@ func TestRetentionRemovesHistoryAndReportsStaleCursors(t *testing.T) {
 	})
 
 	// Age the first four messages past the organization's retention window.
-	_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_messages SET created_at = now() - interval '200 days' WHERE organization_id = $1 AND seq <= 4", testOrg)
+	err := repo.New(f.db).FixtureAgeMessages(t.Context(), repo.FixtureAgeMessagesParams{OrganizationID: testOrg, AgeDays: 200, ThroughSeq: 4})
 	require.NoError(t, err)
-	_, err = f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_messages SET created_at = now() - interval '200 days' WHERE organization_id = $1", otherOrg)
+	err = repo.New(f.db).FixtureAgeMessages(t.Context(), repo.FixtureAgeMessagesParams{OrganizationID: otherOrg, AgeDays: 200, ThroughSeq: math.MaxInt64})
 	require.NoError(t, err)
 	// Only this organization keeps a short window; the other keeps everything.
-	_, err = f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_settings SET message_retention_days = 1000 WHERE organization_id = $1", otherOrg)
+	err = repo.New(f.db).FixtureSetMessageRetentionDays(t.Context(), repo.FixtureSetMessageRetentionDaysParams{OrganizationID: otherOrg, MessageRetentionDays: 1000})
 	require.NoError(t, err)
 
 	swept, err := f.handler.RunRetention(t.Context(), time.Now())
@@ -95,8 +94,7 @@ func TestRetentionKeepsAttribution(t *testing.T) {
 		"instanceId": speaker["instanceId"], "threadId": thread["id"],
 		"text": "spoken", "idempotencyKey": "spoken-1",
 	})
-	_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_instances SET expires_at = now() - interval '200 days' WHERE organization_id = $1", testOrg)
+	err := repo.New(f.db).FixtureAgeInstances(t.Context(), repo.FixtureAgeInstancesParams{OrganizationID: testOrg, AgeDays: 200})
 	require.NoError(t, err)
 
 	swept, err := f.handler.RunRetention(t.Context(), time.Now())
@@ -135,8 +133,7 @@ func TestRetentionIsBounded(t *testing.T) {
 			"text": "old", "idempotencyKey": "old-" + strconv.Itoa(index),
 		})
 	}
-	_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_messages SET created_at = now() - interval '200 days' WHERE organization_id = $1", testOrg)
+	err := repo.New(f.db).FixtureAgeMessages(t.Context(), repo.FixtureAgeMessagesParams{OrganizationID: testOrg, AgeDays: 200, ThroughSeq: math.MaxInt64})
 	require.NoError(t, err)
 
 	first, err := f.handler.RunRetention(t.Context(), time.Now())
@@ -181,8 +178,7 @@ func TestRetentionSkipsOrganizationsWithNothingToDo(t *testing.T) {
 	require.False(t, idle.Truncated)
 
 	// Age one organization's data; only that organization is visited.
-	_, err = f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_messages SET created_at = now() - interval '200 days' WHERE organization_id = $1", testOrg)
+	err = repo.New(f.db).FixtureAgeMessages(t.Context(), repo.FixtureAgeMessagesParams{OrganizationID: testOrg, AgeDays: 200, ThroughSeq: math.MaxInt64})
 	require.NoError(t, err)
 	swept, err := f.handler.RunRetention(t.Context(), time.Now())
 	require.NoError(t, err)
@@ -207,25 +203,36 @@ func TestRetentionAnnouncesItselfToSubscribers(t *testing.T) {
 	thread := writer.post(t, "alice", "channels_create_thread", map[string]any{
 		"instanceId": alice["instanceId"], "title": "Aging",
 	})
-	writer.post(t, "alice", "channels_post", map[string]any{
-		"instanceId": alice["instanceId"], "threadId": thread["id"],
-		"text": "aging", "idempotencyKey": "aging-1",
-	})
 
+	// Subscribe first, then write until one of the writes' hints reaches this
+	// subscriber: the reader's listener connects asynchronously, and a hint
+	// published before it listens is gone. Once one arrives the listener is
+	// live, so the next wake-up after the drain below is retention's own.
 	wake, unsubscribe := reader.handler.events.subscribe(testOrg)
 	defer unsubscribe()
-	// Drain the hint from the write above so the next one is retention's.
+	delivered := false
+	for attempt := 0; attempt < 20 && !delivered; attempt++ {
+		writer.post(t, "alice", "channels_post", map[string]any{
+			"instanceId": alice["instanceId"], "threadId": thread["id"],
+			"text": "aging", "idempotencyKey": fmt.Sprintf("aging-%d", attempt),
+		})
+		select {
+		case <-wake:
+			delivered = true
+		case <-time.After(time.Second):
+		}
+	}
+	require.True(t, delivered, "the reader never received a write's delivery hint")
 	select {
 	case <-wake:
-	case <-time.After(10 * time.Second):
+	default:
 	}
 
-	_, err := writer.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_messages SET created_at = now() - interval '200 days' WHERE organization_id = $1", testOrg)
+	err := repo.New(writer.db).FixtureAgeMessages(t.Context(), repo.FixtureAgeMessagesParams{OrganizationID: testOrg, AgeDays: 200, ThroughSeq: math.MaxInt64})
 	require.NoError(t, err)
 	swept, err := writer.handler.RunRetention(t.Context(), time.Now())
 	require.NoError(t, err)
-	require.Equal(t, 1, swept.Messages)
+	require.Positive(t, swept.Messages)
 
 	select {
 	case <-wake:
@@ -252,8 +259,7 @@ func TestSnapshotCursorNeverFallsBelowTheRetentionFloor(t *testing.T) {
 			"text": "aged", "idempotencyKey": "aged-" + strconv.Itoa(index),
 		})
 	}
-	_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_messages SET created_at = now() - interval '200 days' WHERE organization_id = $1", testOrg)
+	err := repo.New(f.db).FixtureAgeMessages(t.Context(), repo.FixtureAgeMessagesParams{OrganizationID: testOrg, AgeDays: 200, ThroughSeq: math.MaxInt64})
 	require.NoError(t, err)
 	swept, err := f.handler.RunRetention(t.Context(), time.Now())
 	require.NoError(t, err)

@@ -6,27 +6,26 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/speakeasy-api/gram/server/internal/channels"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
-const (
-	channelsRetentionInterval           = time.Hour
-	channelsRetentionActivityTimeout    = 10 * time.Minute
-	channelsRetentionMaxAttempts        = 3
-	channelsRetentionRetryInterval      = time.Minute
-	channelsRetentionBackoffCoefficient = 2
-	channelsRetentionSchedulingMargin   = 7 * time.Minute
-	// channelsRetentionMaxPassesPerAttempt bounds how much backlog one attempt
-	// may drain. Each pass visits at most channels.DefaultRetention()
-	// organizations and removes at most its batch per organization.
-	channelsRetentionMaxPassesPerAttempt = 20
-)
+// channelsRetention is the hourly sweep's schedule and retry policy.
+var channelsRetention = hourlyCleanup{
+	name:               "channels-retention",
+	activityTimeout:    10 * time.Minute,
+	maxAttempts:        3,
+	retryInterval:      time.Minute,
+	backoffCoefficient: 2,
+	schedulingMargin:   7 * time.Minute,
+}
+
+// channelsRetentionMaxPassesPerAttempt bounds how much backlog one attempt may
+// drain. Each pass visits at most channels.DefaultRetention() organizations
+// and removes at most its batch per organization.
+const channelsRetentionMaxPassesPerAttempt = 20
 
 // ChannelsRetentionWorkflow retires Channels history and stale instances past
 // their organization's retention window.
@@ -41,14 +40,7 @@ const (
 // by organizations, projects or messages. Each preview task queue registers
 // its own copy of this schedule and adds the same fixed 1,440.
 func ChannelsRetentionWorkflow(ctx workflow.Context) error {
-	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: channelsRetentionActivityTimeout,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    channelsRetentionMaxAttempts,
-			InitialInterval:    channelsRetentionRetryInterval,
-			BackoffCoefficient: channelsRetentionBackoffCoefficient,
-		},
-	})
+	ctx = workflow.WithActivityOptions(ctx, channelsRetention.activityOptions())
 	var a *Activities
 	return workflow.ExecuteActivity(ctx, a.CleanupChannelsHistory).Get(ctx, nil)
 }
@@ -62,84 +54,31 @@ func ChannelsRetentionWorkflow(ctx workflow.Context) error {
 // is left.
 func (a *Activities) CleanupChannelsHistory(ctx context.Context) error {
 	retention := channels.DefaultRetention()
-	return drainChannelsRetention(ctx, func(ctx context.Context) (channels.RetentionResult, error) {
-		return channels.RunRetention(ctx, a.db, a.logger, retention, time.Now())
+	return drainChannelsRetention(ctx, func(ctx context.Context, after string) (channels.RetentionResult, error) {
+		return channels.RunRetention(ctx, a.db, a.logger, retention, time.Now(), after)
 	})
 }
 
 // drainChannelsRetention repeats a bounded pass until the backlog is clear or
-// the attempt's budget runs out.
-func drainChannelsRetention(ctx context.Context, sweep func(context.Context) (channels.RetentionResult, error)) error {
+// the attempt's budget runs out. Each pass resumes after the organization the
+// previous one stopped at, so a deep backlog in the first organizations cannot
+// spend the whole budget while later ones wait.
+func drainChannelsRetention(ctx context.Context, sweep func(ctx context.Context, after string) (channels.RetentionResult, error)) error {
+	after := ""
 	for range channelsRetentionMaxPassesPerAttempt {
-		result, err := sweep(ctx)
+		result, err := sweep(ctx, after)
 		if err != nil {
 			return fmt.Errorf("sweep channels retention: %w", err)
 		}
 		if !result.Truncated {
 			return nil
 		}
+		after = result.Next
 	}
 	return errors.New("channels retention per-attempt pass budget exhausted")
 }
 
-// channelsRetentionRunTimeout covers every attempt, the backoff between them,
-// and queue and workflow-task headroom.
-func channelsRetentionRunTimeout() time.Duration {
-	budget := channelsRetentionMaxAttempts * channelsRetentionActivityTimeout
-	interval := channelsRetentionRetryInterval
-	for attempt := 1; attempt < channelsRetentionMaxAttempts; attempt++ {
-		budget += interval
-		interval *= channelsRetentionBackoffCoefficient
-	}
-	return budget + channelsRetentionSchedulingMargin
-}
-
-// AddChannelsRetentionSchedule installs the hourly sweep. The schedule ID names
-// the task queue, so a preview owns its own copy and never re-points the
-// shared one.
+// AddChannelsRetentionSchedule installs the hourly sweep for this task queue.
 func AddChannelsRetentionSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
-	id := fmt.Sprintf("v1:channels-retention:%s", temporalEnv.Queue())
-	sc := temporalEnv.Client().ScheduleClient()
-	options := client.ScheduleOptions{
-		ID:            id,
-		CatchupWindow: channelsRetentionInterval - time.Second,
-		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:          client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: channelsRetentionInterval}}},
-		Action: &client.ScheduleWorkflowAction{
-			ID:                 id + "/scheduled",
-			Workflow:           ChannelsRetentionWorkflow,
-			TaskQueue:          string(temporalEnv.Queue()),
-			WorkflowRunTimeout: channelsRetentionRunTimeout(),
-		},
-	}
-	_, err := sc.Create(ctx, options)
-	if errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-		err = sc.GetHandle(ctx, id).Update(ctx, client.ScheduleUpdateOptions{
-			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
-				schedule := input.Description.Schedule
-				action, ok := schedule.Action.(*client.ScheduleWorkflowAction)
-				if !ok || action.TaskQueue != string(temporalEnv.Queue()) {
-					return nil, errors.New("channels retention schedule is owned by another task queue")
-				}
-				if action.WorkflowRunTimeout == channelsRetentionRunTimeout() &&
-					schedule.Policy != nil && schedule.Policy.CatchupWindow == options.CatchupWindow {
-					return nil, temporal.ErrSkipScheduleUpdate
-				}
-				// Preserve operator pause state while migrating limits.
-				action.WorkflowRunTimeout = channelsRetentionRunTimeout()
-				if schedule.Policy == nil {
-					var policy client.SchedulePolicies
-					schedule.Policy = &policy
-				}
-				schedule.Policy.CatchupWindow = options.CatchupWindow
-				return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("update channels retention schedule: %w", err)
-		}
-	} else if err != nil {
-		return fmt.Errorf("create channels retention schedule: %w", err)
-	}
-	return nil
+	return channelsRetention.ensureSchedule(ctx, temporalEnv, ChannelsRetentionWorkflow)
 }

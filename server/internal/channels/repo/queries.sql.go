@@ -135,9 +135,22 @@ func (q *Queries) ConversationHasRemovedHistory(ctx context.Context, arg Convers
 	return column_1, err
 }
 
+const countChannelsAccessExceptions = `-- name: CountChannelsAccessExceptions :one
+SELECT COUNT(*)::bigint FROM channels_access_exceptions
+WHERE organization_id = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) CountChannelsAccessExceptions(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countChannelsAccessExceptions, organizationID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countForeignChannelsRows = `-- name: CountForeignChannelsRows :one
 WITH target AS (
-    SELECT $4::text AS organization_id
+    SELECT $5::text AS organization_id
 )
 SELECT (
     (SELECT count(*) FROM channels_messages m, target
@@ -146,18 +159,24 @@ SELECT (
      WHERE c.organization_id = target.organization_id AND c.id <> ALL($2::uuid[]))
   + (SELECT count(*) FROM channels_instances i, target
      WHERE i.organization_id = target.organization_id AND i.id <> ALL($3::uuid[]))
+  + (SELECT count(*) FROM channels_access_exceptions x, target
+     WHERE x.organization_id = target.organization_id AND x.deleted IS FALSE
+       AND x.subject_id <> ALL($4::text[]))
 )::bigint
 `
 
 type CountForeignChannelsRowsParams struct {
-	MessageIds      []uuid.UUID
-	ConversationIds []uuid.UUID
-	InstanceIds     []uuid.UUID
-	OrganizationID  string
+	MessageIds          []uuid.UUID
+	ConversationIds     []uuid.UUID
+	InstanceIds         []uuid.UUID
+	ExceptionSubjectIds []string
+	OrganizationID      string
 }
 
 // Counts normalized Channels rows in an organization that a conversion did
-// NOT write. A conversion is idempotent against its own output (the
+// NOT write: messages, conversations, instances and access exceptions. The
+// relationship and preference tables hang off those conversations, so a
+// foreign one is already counted through its conversation. A conversion is idempotent against its own output (the
 // identifiers are derived from the document) but must never merge into
 // somebody else's data: legacy sequence numbers would collide with sequences
 // the live service has already handed out.
@@ -168,6 +187,7 @@ func (q *Queries) CountForeignChannelsRows(ctx context.Context, arg CountForeign
 		arg.MessageIds,
 		arg.ConversationIds,
 		arg.InstanceIds,
+		arg.ExceptionSubjectIds,
 		arg.OrganizationID,
 	)
 	var column_1 int64
@@ -184,6 +204,25 @@ WHERE organization_id = $1
 
 func (q *Queries) CountLiveInstances(ctx context.Context, organizationID string) (int64, error) {
 	row := q.db.QueryRow(ctx, countLiveInstances, organizationID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countThreadPreferences = `-- name: CountThreadPreferences :one
+SELECT COUNT(*)::bigint FROM channels_thread_preferences
+WHERE organization_id = $1
+  AND subject_id = $2
+  AND (followed IS TRUE OR muted IS TRUE)
+`
+
+type CountThreadPreferencesParams struct {
+	OrganizationID string
+	SubjectID      string
+}
+
+func (q *Queries) CountThreadPreferences(ctx context.Context, arg CountThreadPreferencesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countThreadPreferences, arg.OrganizationID, arg.SubjectID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -398,6 +437,220 @@ func (q *Queries) EnsureChannelsSettings(ctx context.Context, organizationID str
 	return i, err
 }
 
+const fixtureAgeInstances = `-- name: FixtureAgeInstances :exec
+UPDATE channels_instances
+SET expires_at = clock_timestamp() - make_interval(days => $1::int)
+WHERE organization_id = $2
+`
+
+type FixtureAgeInstancesParams struct {
+	AgeDays        int32
+	OrganizationID string
+}
+
+func (q *Queries) FixtureAgeInstances(ctx context.Context, arg FixtureAgeInstancesParams) error {
+	_, err := q.db.Exec(ctx, fixtureAgeInstances, arg.AgeDays, arg.OrganizationID)
+	return err
+}
+
+const fixtureAgeMessages = `-- name: FixtureAgeMessages :exec
+
+UPDATE channels_messages
+SET created_at = clock_timestamp() - make_interval(days => $1::int)
+WHERE organization_id = $2
+  AND seq <= $3::bigint
+`
+
+type FixtureAgeMessagesParams struct {
+	AgeDays        int32
+	OrganizationID string
+	ThroughSeq     int64
+}
+
+// Test fixtures. Nothing in the service calls these: they age rows past a
+// retention window, seed the superseded document, and read storage
+// invariants that have no production read path.
+func (q *Queries) FixtureAgeMessages(ctx context.Context, arg FixtureAgeMessagesParams) error {
+	_, err := q.db.Exec(ctx, fixtureAgeMessages, arg.AgeDays, arg.OrganizationID, arg.ThroughSeq)
+	return err
+}
+
+const fixtureCountDashboardInstances = `-- name: FixtureCountDashboardInstances :one
+SELECT count(*)::bigint FROM channels_instances
+WHERE organization_id = $1
+  AND subject_id = $2
+  AND origin = 'dashboard'
+  AND deleted IS FALSE
+`
+
+type FixtureCountDashboardInstancesParams struct {
+	OrganizationID string
+	SubjectID      string
+}
+
+func (q *Queries) FixtureCountDashboardInstances(ctx context.Context, arg FixtureCountDashboardInstancesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, fixtureCountDashboardInstances, arg.OrganizationID, arg.SubjectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const fixtureCountLegacyStates = `-- name: FixtureCountLegacyStates :one
+SELECT count(*)::bigint FROM channels_state WHERE organization_id = $1
+`
+
+func (q *Queries) FixtureCountLegacyStates(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, fixtureCountLegacyStates, organizationID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const fixtureCountMessagesByIdempotencyKey = `-- name: FixtureCountMessagesByIdempotencyKey :one
+SELECT count(*)::bigint FROM channels_messages
+WHERE organization_id = $1
+  AND idempotency_key = $2
+`
+
+type FixtureCountMessagesByIdempotencyKeyParams struct {
+	OrganizationID string
+	IdempotencyKey string
+}
+
+func (q *Queries) FixtureCountMessagesByIdempotencyKey(ctx context.Context, arg FixtureCountMessagesByIdempotencyKeyParams) (int64, error) {
+	row := q.db.QueryRow(ctx, fixtureCountMessagesByIdempotencyKey, arg.OrganizationID, arg.IdempotencyKey)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const fixtureCountRows = `-- name: FixtureCountRows :one
+WITH target AS (
+    SELECT $1::text AS organization_id
+)
+SELECT
+    (SELECT count(*) FROM channels_instances i, target WHERE i.organization_id = target.organization_id)::bigint AS instances,
+    (SELECT count(*) FROM channels_conversations c, target WHERE c.organization_id = target.organization_id)::bigint AS conversations,
+    (SELECT count(*) FROM channels_messages m, target WHERE m.organization_id = target.organization_id)::bigint AS messages,
+    (SELECT count(*) FROM channels_conversation_participants p, target WHERE p.organization_id = target.organization_id)::bigint AS participants,
+    (SELECT count(*) FROM channels_conversation_endpoints e, target WHERE e.organization_id = target.organization_id)::bigint AS endpoints,
+    (SELECT count(*) FROM channels_thread_preferences t, target WHERE t.organization_id = target.organization_id)::bigint AS preferences,
+    (SELECT count(*) FROM channels_access_exceptions x, target WHERE x.organization_id = target.organization_id)::bigint AS access_exceptions
+`
+
+type FixtureCountRowsRow struct {
+	Instances        int64
+	Conversations    int64
+	Messages         int64
+	Participants     int64
+	Endpoints        int64
+	Preferences      int64
+	AccessExceptions int64
+}
+
+// Every normalized Channels table's row count for one organization.
+func (q *Queries) FixtureCountRows(ctx context.Context, organizationID string) (FixtureCountRowsRow, error) {
+	row := q.db.QueryRow(ctx, fixtureCountRows, organizationID)
+	var i FixtureCountRowsRow
+	err := row.Scan(
+		&i.Instances,
+		&i.Conversations,
+		&i.Messages,
+		&i.Participants,
+		&i.Endpoints,
+		&i.Preferences,
+		&i.AccessExceptions,
+	)
+	return i, err
+}
+
+const fixtureCountRowsOutsideDefaultProject = `-- name: FixtureCountRowsOutsideDefaultProject :one
+WITH target AS (
+    SELECT $1::text AS organization_id
+), foreign_projects AS (
+    SELECT p.id FROM projects p, target
+    WHERE p.organization_id = target.organization_id AND p.slug <> 'default'
+)
+SELECT (
+    (SELECT count(*) FROM channels_settings s WHERE s.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_instances i WHERE i.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_conversations c WHERE c.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_messages m WHERE m.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_conversation_participants pa WHERE pa.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_conversation_endpoints e WHERE e.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_thread_preferences t WHERE t.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_access_exceptions x WHERE x.project_id IN (SELECT id FROM foreign_projects))
+)::bigint
+`
+
+// Rows of every project-owned Channels table that are stored under any project
+// other than the organization's default one.
+func (q *Queries) FixtureCountRowsOutsideDefaultProject(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, fixtureCountRowsOutsideDefaultProject, organizationID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const fixtureInsertLegacyState = `-- name: FixtureInsertLegacyState :exec
+INSERT INTO channels_state (organization_id, state)
+VALUES ($1, $2::jsonb)
+`
+
+type FixtureInsertLegacyStateParams struct {
+	OrganizationID string
+	State          []byte
+}
+
+func (q *Queries) FixtureInsertLegacyState(ctx context.Context, arg FixtureInsertLegacyStateParams) error {
+	_, err := q.db.Exec(ctx, fixtureInsertLegacyState, arg.OrganizationID, arg.State)
+	return err
+}
+
+const fixtureMessageSeqStats = `-- name: FixtureMessageSeqStats :one
+SELECT count(DISTINCT seq)::bigint AS distinct_seqs,
+       count(*)::bigint AS total,
+       COALESCE(min(seq), 0)::bigint AS lowest,
+       COALESCE(max(seq), 0)::bigint AS highest
+FROM channels_messages
+WHERE organization_id = $1
+`
+
+type FixtureMessageSeqStatsRow struct {
+	DistinctSeqs int64
+	Total        int64
+	Lowest       int64
+	Highest      int64
+}
+
+func (q *Queries) FixtureMessageSeqStats(ctx context.Context, organizationID string) (FixtureMessageSeqStatsRow, error) {
+	row := q.db.QueryRow(ctx, fixtureMessageSeqStats, organizationID)
+	var i FixtureMessageSeqStatsRow
+	err := row.Scan(
+		&i.DistinctSeqs,
+		&i.Total,
+		&i.Lowest,
+		&i.Highest,
+	)
+	return i, err
+}
+
+const fixtureSetMessageRetentionDays = `-- name: FixtureSetMessageRetentionDays :exec
+UPDATE channels_settings
+SET message_retention_days = $1
+WHERE organization_id = $2
+`
+
+type FixtureSetMessageRetentionDaysParams struct {
+	MessageRetentionDays int32
+	OrganizationID       string
+}
+
+func (q *Queries) FixtureSetMessageRetentionDays(ctx context.Context, arg FixtureSetMessageRetentionDaysParams) error {
+	_, err := q.db.Exec(ctx, fixtureSetMessageRetentionDays, arg.MessageRetentionDays, arg.OrganizationID)
+	return err
+}
+
 const getChannelsAccessException = `-- name: GetChannelsAccessException :one
 SELECT id, organization_id, project_id, subject_id, can_connect, can_read_all, created_at, updated_at, deleted_at, deleted FROM channels_access_exceptions
 WHERE organization_id = $1
@@ -523,7 +776,8 @@ func (q *Queries) GetConversationByEndpointPair(ctx context.Context, arg GetConv
 
 const getConversationsDigest = `-- name: GetConversationsDigest :one
 SELECT COUNT(*)::bigint AS conversation_count,
-       COALESCE(MAX(c.announce_seq), 0)::bigint AS announce_seq
+       COALESCE(MAX(c.announce_seq), 0)::bigint AS announce_seq,
+       COALESCE(MAX(c.last_message_seq), 0)::bigint AS activity_seq
 FROM channels_conversations c
 WHERE c.organization_id = $1
   AND c.deleted IS FALSE
@@ -548,12 +802,16 @@ type GetConversationsDigestParams struct {
 type GetConversationsDigestRow struct {
 	ConversationCount int64
 	AnnounceSeq       int64
+	ActivitySeq       int64
 }
 
+// activity_seq is the newest message sequence across the visible
+// conversations. Every post raises it, so a threads subscriber learns that a
+// conversation's last message and count changed.
 func (q *Queries) GetConversationsDigest(ctx context.Context, arg GetConversationsDigestParams) (GetConversationsDigestRow, error) {
 	row := q.db.QueryRow(ctx, getConversationsDigest, arg.OrganizationID, arg.ReadAll, arg.SubjectID)
 	var i GetConversationsDigestRow
-	err := row.Scan(&i.ConversationCount, &i.AnnounceSeq)
+	err := row.Scan(&i.ConversationCount, &i.AnnounceSeq, &i.ActivitySeq)
 	return i, err
 }
 
@@ -764,6 +1022,35 @@ func (q *Queries) GetPresenceDigest(ctx context.Context, organizationID string) 
 	var i GetPresenceDigestRow
 	err := row.Scan(&i.LiveCount, &i.AnnounceSeq)
 	return i, err
+}
+
+const importChannelsAccessException = `-- name: ImportChannelsAccessException :exec
+INSERT INTO channels_access_exceptions (organization_id, project_id, subject_id, can_connect, can_read_all)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, subject_id) WHERE deleted IS FALSE
+DO NOTHING
+`
+
+type ImportChannelsAccessExceptionParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SubjectID      string
+	CanConnect     bool
+	CanReadAll     bool
+}
+
+// Conversion-only insert. An exception that already exists was either written
+// by an earlier conversion or changed by an administrator since, and neither
+// is the document's to overwrite.
+func (q *Queries) ImportChannelsAccessException(ctx context.Context, arg ImportChannelsAccessExceptionParams) error {
+	_, err := q.db.Exec(ctx, importChannelsAccessException,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SubjectID,
+		arg.CanConnect,
+		arg.CanReadAll,
+	)
+	return err
 }
 
 const importConversation = `-- name: ImportConversation :exec
@@ -1157,13 +1444,15 @@ const listLegacyChannelsStates = `-- name: ListLegacyChannelsStates :many
 SELECT document.organization_id, document.project_id, document.state
 FROM channels_state document
 WHERE ($1::text = '' OR document.organization_id = $1::text)
+  AND document.organization_id > $2::text
 ORDER BY document.organization_id
-LIMIT $2::int
+LIMIT $3::int
 `
 
 type ListLegacyChannelsStatesParams struct {
-	OrganizationID string
-	ResultLimit    int32
+	OrganizationID      string
+	AfterOrganizationID string
+	ResultLimit         int32
 }
 
 type ListLegacyChannelsStatesRow struct {
@@ -1175,9 +1464,10 @@ type ListLegacyChannelsStatesRow struct {
 // Reads the superseded proof-of-concept document so a development database can
 // be converted into the normalized tables without losing its contents. An
 // empty organization filter means every organization, which is why the command
-// in front of this makes the operator ask for that explicitly.
+// in front of this makes the operator ask for that explicitly. Keyset paged on
+// organization_id.
 func (q *Queries) ListLegacyChannelsStates(ctx context.Context, arg ListLegacyChannelsStatesParams) ([]ListLegacyChannelsStatesRow, error) {
-	rows, err := q.db.Query(ctx, listLegacyChannelsStates, arg.OrganizationID, arg.ResultLimit)
+	rows, err := q.db.Query(ctx, listLegacyChannelsStates, arg.OrganizationID, arg.AfterOrganizationID, arg.ResultLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1664,6 +1954,21 @@ func (q *Queries) ListVisibleConversations(ctx context.Context, arg ListVisibleC
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockChannelsSettings = `-- name: LockChannelsSettings :one
+SELECT organization_id FROM channels_settings
+WHERE organization_id = $1
+FOR UPDATE
+`
+
+// Serializes the organization's live-lease admission: the row lock is held
+// until the calling transaction ends.
+func (q *Queries) LockChannelsSettings(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, lockChannelsSettings, organizationID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }
 
 const publishChannelsEvent = `-- name: PublishChannelsEvent :exec

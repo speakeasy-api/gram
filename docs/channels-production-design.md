@@ -88,7 +88,9 @@ rather than running longer. One organization's failure is logged and does not
 stop the sweep. The sweep's first query returns only organizations that
 actually have something to retire, so an idle deployment costs one indexed
 query per tick. Its cost is fixed at roughly 1,440 Temporal actions per month
-per namespace, independent of organization or message count. Removing history
+per task queue, independent of organization or message count; each preview
+task queue registers its own schedule, so a namespace pays that once per
+queue. Removing history
 raises a retention floor, and a reader whose cursor falls below it is told its
 cursor is stale instead of silently receiving a page with a hole in it; the
 bootstrap snapshot never hands out a cursor below that floor.

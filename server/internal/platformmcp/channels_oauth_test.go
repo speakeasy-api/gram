@@ -10,7 +10,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 )
 
 func TestChannelsOAuthResourceIsolation(t *testing.T) {
@@ -41,6 +43,22 @@ func TestChannelsOAuthResourceIsolation(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &metadata))
 	require.Equal(t, channels, metadata.Resource)
 	require.Equal(t, []string{platformResource(base)}, metadata.Servers)
+}
+
+// The Channels metadata document is served only where the Channels endpoint
+// is: a custom domain or private-network ingress answers 404 for both.
+func TestChannelsOAuthMetadataIsPlatformOriginOnly(t *testing.T) {
+	t.Parallel()
+	base, err := url.Parse("https://api.example.test")
+	require.NoError(t, err)
+	service := &OAuthHTTP{baseURL: base, channelsEnabled: true}
+	for _, surface := range []requestorigin.Surface{requestorigin.SurfaceCustomDomain, requestorigin.SurfacePrivateNetwork} {
+		request := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/channels/mcp", nil)
+		request = request.WithContext(requestorigin.WithContext(request.Context(), requestorigin.Origin{Surface: surface, BaseURL: "https://tools.example.test"}))
+		recorder := httptest.NewRecorder()
+		service.ChannelsProtectedResourceHandler().ServeHTTP(recorder, request)
+		require.Equal(t, http.StatusNotFound, recorder.Code, string(surface))
+	}
 }
 
 func TestChannelsOAuthAdmissionDefersChannelPermissions(t *testing.T) {
@@ -95,7 +113,20 @@ func TestChannelsOAuthGrantResourceComesFromTheCredential(t *testing.T) {
 	t.Parallel()
 	base, err := url.Parse("https://api.example.test")
 	require.NoError(t, err)
-	service := &OAuthHTTP{baseURL: base}
+	// Built through the constructor with the gate left unset, so the
+	// deployment default is what is under test.
+	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		BaseURL:       base,
+		Cache:         &memoryCache{values: map[string]any{}},
+		Store:         platformoauth.NewInMemoryStore(),
+		Identity:      testIdentity{},
+		Gate:          allowGate{},
+		Authorizer:    allowAuthorizer{},
+		Organizations: testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
+		Signer:        sessiontokens.NewSigner("test-key"),
+		Encryption:    testEncryption(t),
+	})
+	require.NoError(t, err)
 	channels := channelsResource(base)
 	platform := platformResource(base)
 
@@ -206,7 +237,20 @@ func TestChannelsOAuthWithholdsTheAudienceWhenTheRolloutGateIsOff(t *testing.T) 
 	t.Parallel()
 	base, err := url.Parse("https://api.example.test")
 	require.NoError(t, err)
-	service := &OAuthHTTP{baseURL: base}
+	// Built through the constructor with the gate left unset, so the
+	// deployment default is what is under test.
+	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		BaseURL:       base,
+		Cache:         &memoryCache{values: map[string]any{}},
+		Store:         platformoauth.NewInMemoryStore(),
+		Identity:      testIdentity{},
+		Gate:          allowGate{},
+		Authorizer:    allowAuthorizer{},
+		Organizations: testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
+		Signer:        sessiontokens.NewSigner("test-key"),
+		Encryption:    testEncryption(t),
+	})
+	require.NoError(t, err)
 	channels := channelsResource(base)
 
 	_, err = service.requestedResource(context.Background(), channels)

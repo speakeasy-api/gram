@@ -118,6 +118,7 @@ func (h *Handler) snapshot(ctx context.Context, q *repo.Queries, p Principal, ac
 		ThreadsNextAfter: page.nextCursor.encode(),
 		Limits:           h.limitsSummary(),
 		Grants:           nil,
+		Viewer:           newViewerView(p, acc),
 	}
 	if p.CanAdmin {
 		grants, err := h.grants(ctx, q, p)
@@ -190,6 +191,7 @@ func (h *Handler) administrativeSnapshot(ctx context.Context, q *repo.Queries, p
 		ThreadsNextAfter: "",
 		Limits:           h.limitsSummary(),
 		Grants:           grants,
+		Viewer:           newViewerView(p, acc),
 	}, nil
 }
 
@@ -231,6 +233,14 @@ func (h *Handler) administer(ctx context.Context, tx pgx.Tx, q *repo.Queries, p 
 		}
 		event.CanConnect, event.CanReadAll, event.Removed = transition.canConnect, transition.canReadAll, a.Remove
 		changed = true
+		// The returned snapshot describes the caller, so a change to the
+		// caller's own exception takes effect in it at once.
+		if a.SubjectID == p.SubjectID {
+			acc.canConnect, acc.canReadAll = transition.canConnect.After, transition.canReadAll.After
+			if a.Remove {
+				acc.canConnect, acc.canReadAll = p.CanConnect, p.CanReadAll
+			}
+		}
 	}
 	if changed && h.adminAudit != nil {
 		if err := h.adminAudit(ctx, tx, event); err != nil {
@@ -294,6 +304,16 @@ func (h *Handler) applyAccessException(ctx context.Context, q *repo.Queries, p P
 		CanReadAll:     after.CanReadAll,
 	}); err != nil {
 		return accessTransition{}, fmt.Errorf("save channels access exception: %w", err)
+	}
+	// The snapshot lists exceptions in one bounded page, so the cap is what
+	// keeps that list complete. It is checked after the write so updating an
+	// existing exception never counts twice; the refusal rolls it back.
+	held, err := q.CountChannelsAccessExceptions(ctx, p.OrganizationID)
+	if err != nil {
+		return accessTransition{}, fmt.Errorf("count channels access exceptions: %w", err)
+	}
+	if held > int64(h.limits.ExceptionPage) {
+		return accessTransition{}, fmt.Errorf("%w: at most %d Channels access exceptions are supported", ErrInvalid, h.limits.ExceptionPage)
 	}
 	return accessTransition{
 		canConnect: &AdminAuditChange{Before: before.CanConnect, After: after.CanConnect},

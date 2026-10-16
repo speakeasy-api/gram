@@ -18,8 +18,12 @@ SELECT count(*) FROM channels_state
 WHERE organization_id = $1::text
   AND (
     jsonb_array_length(COALESCE(state -> 'messages', '[]'::jsonb)) > 0
-    OR jsonb_typeof(state -> 'instances') = 'object'
-       AND EXISTS (SELECT 1 FROM jsonb_object_keys(state -> 'instances'))
+    OR EXISTS (
+      SELECT 1
+      FROM (VALUES ('instances'), ('threads'), ('preferences'), ('grants')) AS maps(key)
+      WHERE jsonb_typeof(state -> maps.key) = 'object'
+        AND state -> maps.key <> '{}'::jsonb
+    )
   )
 `
 

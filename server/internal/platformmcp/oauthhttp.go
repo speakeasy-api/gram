@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -854,7 +855,7 @@ func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request,
 	}
 	accessExpiresAt := minTime(now.Add(platformAccessTokenLifetime), connection.AuthorizationExpiresAt)
 	refreshExpiresAt := minTime(now.Add(platformRefreshTokenLifetime), connection.AuthorizationExpiresAt)
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: resource, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: s.resource(r.Context()), ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -885,7 +886,7 @@ func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Req
 	}
 	accessExpiresAt := minTime(now.Add(platformAccessTokenLifetime), old.Connection.AuthorizationExpiresAt)
 	refreshExpiresAt := minTime(now.Add(platformRefreshTokenLifetime), old.Connection.AuthorizationExpiresAt)
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: resource, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: s.resource(r.Context()), ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -1320,8 +1321,16 @@ func opaqueToken() (string, error) {
 
 // ChannelsProtectedResourceHandler advertises the channels audience while reusing
 // the existing control-plane authorization server and account connection.
+//
+// It answers only on first-party platform hosts, like the Channels endpoint it
+// describes: a custom domain or private-network ingress serves no Channels
+// resource, so advertising one there would name an endpoint that returns 404.
 func (s *OAuthHTTP) ChannelsProtectedResourceHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if origin, ok := requestorigin.FromContext(r.Context()); ok && origin.Surface != requestorigin.SurfacePlatform {
+			http.NotFound(w, r)
+			return
+		}
 		base := platformBaseURL(r.Context(), s.baseURL)
 		writeJSON(w, http.StatusOK, map[string]any{"resource": channelsResource(base), "authorization_servers": []string{platformResource(base)}, "bearer_methods_supported": []string{"header"}})
 	})

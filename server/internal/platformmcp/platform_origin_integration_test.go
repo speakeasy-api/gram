@@ -59,7 +59,10 @@ func TestJWTAuthenticatorBindsTokensToPlatformHost(t *testing.T) {
 		jti, err := codec.Issue(accessJTICredential, organizationID, resource)
 		require.NoError(t, err)
 		expiresAt := now.Add(time.Hour)
-		token, jti, err := signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: userID}, Audience: resource, Issuer: resource, ExpiresAt: &expiresAt, ClientID: client.ID, JTI: jti})
+		// Both audiences are issued by the one authorization server on the
+		// same platform origin.
+		issuer := baseURL + "/platform-mcp"
+		token, jti, err := signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: userID}, Audience: resource, Issuer: issuer, ExpiresAt: &expiresAt, ClientID: client.ID, JTI: jti})
 		require.NoError(t, err)
 		require.NoError(t, store.CreateSession(ctx, platformoauth.Session{ID: uuid.NewString(), ClientID: client.ID, Connection: connection, JTI: jti, RefreshHash: "refresh-" + uuid.NewString(), ExpiresAt: expiresAt, RefreshExpiresAt: expiresAt}))
 		return token

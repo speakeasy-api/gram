@@ -44,7 +44,7 @@ func TestChannelsRetentionWorkflow(t *testing.T) {
 			require.True(t, env.IsWorkflowCompleted())
 			if fail {
 				require.Error(t, env.GetWorkflowError())
-				require.Equal(t, channelsRetentionMaxAttempts, calls, "a failing sweep must use its whole retry budget")
+				require.Equal(t, channelsRetention.maxAttempts, calls, "a failing sweep must use its whole retry budget")
 			} else {
 				require.NoError(t, env.GetWorkflowError())
 				require.Equal(t, 1, calls, "a healthy sweep is one activity per tick")
@@ -53,17 +53,15 @@ func TestChannelsRetentionWorkflow(t *testing.T) {
 	}
 }
 
-// TestChannelsRetentionRunTimeout pins the run timeout against the retry
-// budget, so raising the attempt count or the activity timeout cannot leave a
-// run that times out mid-retry.
+// TestDrainChannelsRetention verifies the bounded pass behavior of one attempt.
 func TestDrainChannelsRetention(t *testing.T) {
 	t.Parallel()
 	t.Run("stops as soon as the backlog is clear", func(t *testing.T) {
 		t.Parallel()
 		passes := 0
-		require.NoError(t, drainChannelsRetention(t.Context(), func(context.Context) (channels.RetentionResult, error) {
+		require.NoError(t, drainChannelsRetention(t.Context(), func(context.Context, string) (channels.RetentionResult, error) {
 			passes++
-			return channels.RetentionResult{Organizations: 1, Messages: 3, Instances: 0, Truncated: false}, nil
+			return channels.RetentionResult{Organizations: 1, Messages: 3, Instances: 0, Truncated: false, Next: ""}, nil
 		}))
 		require.Equal(t, 1, passes)
 	})
@@ -71,19 +69,30 @@ func TestDrainChannelsRetention(t *testing.T) {
 	t.Run("repeats while a pass reports it was truncated", func(t *testing.T) {
 		t.Parallel()
 		passes := 0
-		require.NoError(t, drainChannelsRetention(t.Context(), func(context.Context) (channels.RetentionResult, error) {
+		require.NoError(t, drainChannelsRetention(t.Context(), func(context.Context, string) (channels.RetentionResult, error) {
 			passes++
-			return channels.RetentionResult{Organizations: 1, Messages: 500, Instances: 0, Truncated: passes < 4}, nil
+			return channels.RetentionResult{Organizations: 1, Messages: 500, Instances: 0, Truncated: passes < 4, Next: ""}, nil
 		}))
 		require.Equal(t, 4, passes)
+	})
+
+	t.Run("each pass resumes where the previous one stopped", func(t *testing.T) {
+		t.Parallel()
+		var starts []string
+		require.NoError(t, drainChannelsRetention(t.Context(), func(_ context.Context, after string) (channels.RetentionResult, error) {
+			starts = append(starts, after)
+			next := map[string]string{"": "org_b", "org_b": ""}[after]
+			return channels.RetentionResult{Organizations: 1, Messages: 500, Instances: 0, Truncated: len(starts) < 3, Next: next}, nil
+		}))
+		require.Equal(t, []string{"", "org_b", ""}, starts)
 	})
 
 	t.Run("exhausting the budget is retryable, not silent", func(t *testing.T) {
 		t.Parallel()
 		passes := 0
-		err := drainChannelsRetention(t.Context(), func(context.Context) (channels.RetentionResult, error) {
+		err := drainChannelsRetention(t.Context(), func(context.Context, string) (channels.RetentionResult, error) {
 			passes++
-			return channels.RetentionResult{Organizations: 1, Messages: 500, Instances: 0, Truncated: true}, nil
+			return channels.RetentionResult{Organizations: 1, Messages: 500, Instances: 0, Truncated: true, Next: ""}, nil
 		})
 		require.ErrorContains(t, err, "budget exhausted")
 		require.Equal(t, channelsRetentionMaxPassesPerAttempt, passes, "the budget must bound one attempt")
@@ -93,21 +102,24 @@ func TestDrainChannelsRetention(t *testing.T) {
 		t.Parallel()
 		failure := errors.New("database unavailable")
 		passes := 0
-		err := drainChannelsRetention(t.Context(), func(context.Context) (channels.RetentionResult, error) {
+		err := drainChannelsRetention(t.Context(), func(context.Context, string) (channels.RetentionResult, error) {
 			passes++
-			return channels.RetentionResult{Organizations: 0, Messages: 0, Instances: 0, Truncated: false}, failure
+			return channels.RetentionResult{Organizations: 0, Messages: 0, Instances: 0, Truncated: false, Next: ""}, failure
 		})
 		require.ErrorIs(t, err, failure)
 		require.Equal(t, 1, passes)
 	})
 }
 
+// TestChannelsRetentionRunTimeout pins the run timeout against the retry
+// budget, so raising the attempt count or the activity timeout cannot leave a
+// run that times out mid-retry.
 func TestChannelsRetentionRunTimeout(t *testing.T) {
 	t.Parallel()
 	// 3 attempts x 10m, plus 1m and 2m of backoff, plus 7m of margin.
-	require.Equal(t, 40*time.Minute, channelsRetentionRunTimeout())
-	require.Greater(t, channelsRetentionRunTimeout(), channelsRetentionMaxAttempts*channelsRetentionActivityTimeout)
-	require.Less(t, channelsRetentionRunTimeout(), 2*channelsRetentionInterval,
+	require.Equal(t, 40*time.Minute, channelsRetention.runTimeout())
+	require.Greater(t, channelsRetention.runTimeout(), time.Duration(channelsRetention.maxAttempts)*channelsRetention.activityTimeout)
+	require.Less(t, channelsRetention.runTimeout(), 2*hourlyCleanupInterval,
 		"a run must finish well inside its own interval so SKIP overlap does not starve the sweep")
 }
 
@@ -115,10 +127,10 @@ func TestChannelsRetentionRunTimeout(t *testing.T) {
 // and one activity per hour per namespace, fixed rather than per organization.
 func TestChannelsRetentionCostLine(t *testing.T) {
 	t.Parallel()
-	ticksPerMonth := int((30 * 24 * time.Hour) / channelsRetentionInterval)
+	ticksPerMonth := int((30 * 24 * time.Hour) / hourlyCleanupInterval)
 	require.Equal(t, 720, ticksPerMonth)
 	require.LessOrEqual(t, ticksPerMonth*2, 2000, "the hourly sweep must stay a four-figure monthly cost")
-	require.GreaterOrEqual(t, channelsRetentionInterval, 5*time.Minute,
+	require.GreaterOrEqual(t, hourlyCleanupInterval, 5*time.Minute,
 		"schedules under five minutes are not permitted")
 }
 
@@ -144,11 +156,11 @@ func TestChannelsRetentionSchedule(t *testing.T) {
 			c.On("ScheduleClient").Return(sc).Once()
 			sc.On("Create", mock.Anything, mock.MatchedBy(func(options client.ScheduleOptions) bool {
 				require.Equal(t, id, options.ID, "the schedule ID must name the task queue so a preview owns its own copy")
-				require.Equal(t, channelsRetentionInterval-time.Second, options.CatchupWindow)
-				require.Equal(t, channelsRetentionInterval, options.Spec.Intervals[0].Every)
+				require.Equal(t, hourlyCleanupInterval-time.Second, options.CatchupWindow)
+				require.Equal(t, hourlyCleanupInterval, options.Spec.Intervals[0].Every)
 				action, ok := options.Action.(*client.ScheduleWorkflowAction)
 				require.True(t, ok)
-				require.Equal(t, channelsRetentionRunTimeout(), action.WorkflowRunTimeout)
+				require.Equal(t, channelsRetention.runTimeout(), action.WorkflowRunTimeout)
 				require.Equal(t, "channels-test", action.TaskQueue)
 				return true
 			})).Return(nil, tc.createErr).Once()
@@ -156,7 +168,7 @@ func TestChannelsRetentionSchedule(t *testing.T) {
 				sc.On("GetHandle", mock.Anything, id).Return(handle).Once()
 				handle.On("Update", mock.Anything, mock.MatchedBy(func(options client.ScheduleUpdateOptions) bool {
 					state := &client.ScheduleState{Paused: true, Note: "operator pause", LimitedActions: false, RemainingActions: 0}
-					spec := &client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: channelsRetentionInterval, Offset: 0}}}
+					spec := &client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: hourlyCleanupInterval, Offset: 0}}}
 					update, err := options.DoUpdate(client.ScheduleUpdateInput{Description: client.ScheduleDescription{Schedule: client.Schedule{
 						Action: &client.ScheduleWorkflowAction{TaskQueue: "channels-test", WorkflowRunTimeout: 35 * time.Minute},
 						Policy: &client.SchedulePolicies{CatchupWindow: 24 * time.Hour},
@@ -165,8 +177,8 @@ func TestChannelsRetentionSchedule(t *testing.T) {
 					require.NoError(t, err)
 					action, ok := update.Schedule.Action.(*client.ScheduleWorkflowAction)
 					require.True(t, ok)
-					require.Equal(t, channelsRetentionRunTimeout(), action.WorkflowRunTimeout)
-					require.Equal(t, channelsRetentionInterval-time.Second, update.Schedule.Policy.CatchupWindow)
+					require.Equal(t, channelsRetention.runTimeout(), action.WorkflowRunTimeout)
+					require.Equal(t, hourlyCleanupInterval-time.Second, update.Schedule.Policy.CatchupWindow)
 					require.Equal(t, state, update.Schedule.State, "an operator pause must survive reconciliation")
 					require.Equal(t, spec, update.Schedule.Spec)
 

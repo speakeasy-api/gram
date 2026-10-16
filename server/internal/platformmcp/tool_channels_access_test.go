@@ -102,9 +102,8 @@ func TestChannelsAccessReportsEachPermissionIndependently(t *testing.T) {
 	}
 }
 
-// An exception grant that takes a member off Channels is honoured, the same way
-// the engine honours it for every other scope.
-func TestChannelsAccessHonoursBlockingGrants(t *testing.T) {
+// A wildcard grant covers the caller's organization like a grant naming it.
+func TestChannelsAccessHonoursWildcardGrants(t *testing.T) {
 	t.Parallel()
 	service := newChannelsAccessService(t, "https://api.example.test")
 	output, err := service.Get(channelsAccessContext(t,

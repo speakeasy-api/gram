@@ -60,7 +60,8 @@ func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Prin
 	if a == nil || a.baseURL == nil {
 		return Principal{}, ErrUnavailable
 	}
-	return a.authenticateResource(ctx, token, platformResource(platformBaseURL(ctx, a.baseURL)), SurfacePlatformMCP)
+	base := platformBaseURL(ctx, a.baseURL)
+	return a.authenticateResource(ctx, token, platformResource(base), platformResource(base), SurfacePlatformMCP)
 }
 
 // AuthenticateChannels validates only tokens minted for the dedicated Channels
@@ -72,16 +73,21 @@ func (a *JWTAuthenticator) AuthenticateChannels(ctx context.Context, token strin
 	if a == nil || a.baseURL == nil {
 		return Principal{}, ErrUnavailable
 	}
-	return a.authenticateResource(ctx, token, channelsResource(platformBaseURL(ctx, a.baseURL)), SurfaceChannels)
+	base := platformBaseURL(ctx, a.baseURL)
+	return a.authenticateResource(ctx, token, channelsResource(base), platformResource(base), SurfaceChannels)
 }
 
-func (a *JWTAuthenticator) authenticateResource(ctx context.Context, token, resource string, surface ActingSurface) (Principal, error) {
+// authenticateResource accepts a token whose audience is exactly resource and
+// whose issuer is the authorization server on the same platform origin. Both
+// audiences share that one authorization server, so the issuer is the same for
+// both and only the audience tells them apart.
+func (a *JWTAuthenticator) authenticateResource(ctx context.Context, token, resource, issuer string, surface ActingSurface) (Principal, error) {
 	if a.signer == nil || a.store == nil || a.credentials == nil || a.baseURL == nil {
 		return Principal{}, ErrUnavailable
 	}
 
 	claims, err := a.signer.ValidateExactAudience(token, resource)
-	if err != nil || claims.Issuer != resource {
+	if err != nil || claims.Issuer != issuer {
 		return Principal{}, ErrUnauthorized
 	}
 	subject, err := urn.ParseSessionSubject(claims.Subject)

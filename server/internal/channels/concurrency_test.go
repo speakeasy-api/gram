@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/channels/repo"
 )
 
 // TestConcurrentWritesNeverSkipACursor is the cursor-correctness gate.
@@ -100,11 +102,9 @@ func TestConcurrentWritesNeverSkipACursor(t *testing.T) {
 
 	// Every stored sequence is distinct, which is what makes the cursor a
 	// total order rather than a hint.
-	var distinct, total int64
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT count(DISTINCT seq), count(*) FROM channels_messages WHERE organization_id = $1", testOrg,
-	).Scan(&distinct, &total))
-	require.Equal(t, total, distinct)
+	stats, err := repo.New(f.db).FixtureMessageSeqStats(t.Context(), testOrg)
+	require.NoError(t, err)
+	require.Equal(t, stats.Total, stats.DistinctSeqs)
 }
 
 // TestSimultaneousDashboardSessionsConverge proves the browser session upsert
@@ -131,10 +131,8 @@ func TestSimultaneousDashboardSessionsConverge(t *testing.T) {
 		require.NotEmpty(t, id)
 		require.Equal(t, ids[0], id, "simultaneous requests opened more than one browser session")
 	}
-	var sessions int64
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT count(*) FROM channels_instances WHERE organization_id = $1 AND subject_id = 'alice' AND origin = 'dashboard' AND deleted IS FALSE", testOrg,
-	).Scan(&sessions))
+	sessions, err := repo.New(f.db).FixtureCountDashboardInstances(t.Context(), repo.FixtureCountDashboardInstancesParams{OrganizationID: testOrg, SubjectID: "alice"})
+	require.NoError(t, err)
 	require.Equal(t, int64(1), sessions)
 }
 
@@ -171,10 +169,8 @@ func TestSimultaneousRetriesReturnOneMessage(t *testing.T) {
 		require.NotZero(t, id)
 		require.Equal(t, results[0], id, "a retry storm produced more than one message")
 	}
-	var stored int64
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT count(*) FROM channels_messages WHERE organization_id = $1 AND idempotency_key = 'storm'", testOrg,
-	).Scan(&stored))
+	stored, err := repo.New(f.db).FixtureCountMessagesByIdempotencyKey(t.Context(), repo.FixtureCountMessagesByIdempotencyKeyParams{OrganizationID: testOrg, IdempotencyKey: "storm"})
+	require.NoError(t, err)
 	require.Equal(t, int64(1), stored)
 }
 
@@ -211,12 +207,10 @@ func TestCrossTenantConcurrencyStaysIsolated(t *testing.T) {
 	require.Len(t, messageIDs(t, f.post(t, "stranger", "channels_read", map[string]any{"limit": 200})["messages"]), 12)
 	// Each organization numbers its own messages from one.
 	for _, organization := range []string{testOrg, otherOrg} {
-		var lowest, highest int64
-		require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-			"SELECT min(seq), max(seq) FROM channels_messages WHERE organization_id = $1", organization,
-		).Scan(&lowest, &highest))
-		require.Equal(t, int64(1), lowest, "%s did not start its own cursor space", organization)
-		require.Equal(t, int64(12), highest, "%s shared a cursor space", organization)
+		stats, err := repo.New(f.db).FixtureMessageSeqStats(t.Context(), organization)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), stats.Lowest, "%s did not start its own cursor space", organization)
+		require.Equal(t, int64(12), stats.Highest, "%s shared a cursor space", organization)
 	}
 }
 

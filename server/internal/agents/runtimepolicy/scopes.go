@@ -118,6 +118,11 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeWorkloadWrite:        activeRuntimeScope(),
 	authz.ScopeWorkloadBlockedWrite: activeRuntimeScope(),
 	authz.ScopeOrgDeviceAgentSync:   safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
+	// Channels scopes govern a human member's own messaging session and its
+	// administration, so agent runtime policy cannot request them.
+	authz.ScopeChannelsConnect:      activeRuntimeScope(),
+	authz.ScopeChannelsAdmin:        activeRuntimeScope(),
+	authz.ScopeChannelsReadAll:      activeRuntimeScope(),
 	authz.ScopeOrgHooksIngest:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
 	scopeMCPApprovalReadTombstone:   retiredRuntimeScope(),
 	scopeMCPApprovalDecideTombstone: retiredRuntimeScope(),

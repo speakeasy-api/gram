@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -247,14 +248,21 @@ func attachChannels(ctx context.Context, config platformMCPConfig, tokens channe
 	}
 }
 
-// Version support is isolated to the experimental channels endpoint.
-func channelsProtocolVersionSupported(version string) bool {
-	switch version {
-	case "", mcpversions.Version20241105, mcpversions.Version20250326, mcpversions.Version20250618, mcpversions.Version20251125, mcpversions.Version20260728:
-		return true
-	default:
-		return false
+// newChannelsAccessService serves get_my_channels_access only where Channels is
+// rolled out. Elsewhere the Platform MCP tool stays registered as its
+// unavailable stub, so it never names an endpoint this deployment answers 404
+// for.
+func newChannelsAccessService(config platformMCPConfig) *platformmcp.ChannelsAccessService {
+	if !config.ChannelsEnabled {
+		return nil
 	}
+	return platformmcp.NewChannelsAccessService(config.Authz, config.ServerURL)
+}
+
+// channelsProtocolVersionSupported admits a request that declares no version
+// or one the Channels endpoint serves.
+func channelsProtocolVersionSupported(version string) bool {
+	return version == "" || slices.Contains(channels.SupportedProtocolVersions, version)
 }
 
 // channelsStreamDrainTimeout bounds how long shutdown waits for subscription

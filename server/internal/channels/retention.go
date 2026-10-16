@@ -19,9 +19,16 @@ type RetentionResult struct {
 	Organizations int
 	Messages      int
 	Instances     int
-	// Truncated reports that the sweep hit its own bounds before finishing, so
-	// the caller should run it again rather than assume the backlog is clear.
+	// Truncated reports that the sweep left eligible rows behind, because it
+	// hit its own bounds or an organization failed, so the caller should run it
+	// again rather than assume the backlog is clear.
 	Truncated bool
+
+	// Next is the organization the following pass should resume after. It is
+	// set when this pass stopped at its organization cap and empty when the
+	// pass reached the last eligible organization, so a caller that always
+	// resumes from it visits every organization before revisiting any.
+	Next string
 }
 
 // RunRetention performs one bounded retention pass across the organizations
@@ -32,7 +39,7 @@ type RetentionResult struct {
 // delete another's rows, and one failing organization does not roll back the
 // rest. Both the number of organizations visited and the rows touched per
 // organization are capped, so a sweep costs the same whatever the backlog is;
-// the caller runs it again while Truncated is true.
+// the caller runs it again while Truncated is true, resuming after Next.
 //
 // Removing a message raises the organization's retention floor. A client whose
 // cursor falls below that floor is told its cursor is stale instead of
@@ -41,13 +48,12 @@ type RetentionResult struct {
 // The sweep runs in the worker, not in the process serving subscriptions, so
 // it announces itself with the same transactional delivery hint a write uses.
 // A local wake-up would reach nobody.
-func RunRetention(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, retention Retention, now time.Time) (RetentionResult, error) {
-	result := RetentionResult{Organizations: 0, Messages: 0, Instances: 0, Truncated: false}
+func RunRetention(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, retention Retention, now time.Time, after string) (RetentionResult, error) {
+	result := RetentionResult{Organizations: 0, Messages: 0, Instances: 0, Truncated: false, Next: ""}
 	if db == nil {
 		return result, fmt.Errorf("%w: no database", ErrUnavailable)
 	}
 	queries := repo.New(db)
-	after := ""
 	for result.Organizations < retention.Organizations {
 		page, err := queries.ListChannelsOrganizationsNeedingRetention(ctx, repo.ListChannelsOrganizationsNeedingRetentionParams{
 			AfterOrganizationID: after,
@@ -68,8 +74,10 @@ func RunRetention(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, re
 				// One tenant's failure must not stop the sweep: log it and
 				// carry on, so a single bad organization cannot stall
 				// retention for everyone else.
+				// Its rows are still eligible, so the pass is not complete.
 				logger.ErrorContext(ctx, "channels retention sweep failed for an organization",
 					attr.SlogOrganizationID(organization.OrganizationID), attr.SlogError(err))
+				result.Truncated = true
 				continue
 			}
 			result.Messages += swept.Messages
@@ -78,17 +86,18 @@ func RunRetention(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, re
 		}
 	}
 	result.Truncated = true
+	result.Next = after
 	return result, nil
 }
 
-// RunRetention performs one bounded retention pass using the handler's own
-// database, logger and sweep bounds.
+// RunRetention performs one bounded retention pass from the first eligible
+// organization, using the handler's own database, logger and sweep bounds.
 func (h *Handler) RunRetention(ctx context.Context, now time.Time) (RetentionResult, error) {
-	return RunRetention(ctx, h.db, h.logger, h.retention, now)
+	return RunRetention(ctx, h.db, h.logger, h.retention, now, "")
 }
 
 func sweepOrganization(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, retention Retention, organization repo.ListChannelsOrganizationsNeedingRetentionRow, now time.Time) (RetentionResult, error) {
-	result := RetentionResult{Organizations: 1, Messages: 0, Instances: 0, Truncated: false}
+	result := RetentionResult{Organizations: 1, Messages: 0, Instances: 0, Truncated: false, Next: ""}
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return result, fmt.Errorf("begin channels retention: %w", err)

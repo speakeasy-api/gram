@@ -32,6 +32,13 @@ WHERE existing.organization_id = @organization_id
 -- name: GetChannelsSettings :one
 SELECT * FROM channels_settings WHERE organization_id = @organization_id;
 
+-- name: LockChannelsSettings :one
+-- Serializes the organization's live-lease admission: the row lock is held
+-- until the calling transaction ends.
+SELECT organization_id FROM channels_settings
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
 -- name: SetChannelsEnabled :one
 UPDATE channels_settings
 SET enabled = @enabled, updated_at = clock_timestamp()
@@ -107,6 +114,11 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY subject_id
 LIMIT sqlc.arg('result_limit')::int;
+
+-- name: CountChannelsAccessExceptions :one
+SELECT COUNT(*)::bigint FROM channels_access_exceptions
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE;
 
 -- name: UpsertChannelsAccessException :one
 INSERT INTO channels_access_exceptions (organization_id, project_id, subject_id, can_connect, can_read_all)
@@ -295,8 +307,12 @@ ORDER BY c.last_message_seq DESC, c.id
 LIMIT sqlc.arg('result_limit')::int;
 
 -- name: GetConversationsDigest :one
+-- activity_seq is the newest message sequence across the visible
+-- conversations. Every post raises it, so a threads subscriber learns that a
+-- conversation's last message and count changed.
 SELECT COUNT(*)::bigint AS conversation_count,
-       COALESCE(MAX(c.announce_seq), 0)::bigint AS announce_seq
+       COALESCE(MAX(c.announce_seq), 0)::bigint AS announce_seq,
+       COALESCE(MAX(c.last_message_seq), 0)::bigint AS activity_seq
 FROM channels_conversations c
 WHERE c.organization_id = @organization_id
   AND c.deleted IS FALSE
@@ -497,6 +513,12 @@ WHERE organization_id = @organization_id
 ORDER BY conversation_id
 LIMIT sqlc.arg('result_limit')::int;
 
+-- name: CountThreadPreferences :one
+SELECT COUNT(*)::bigint FROM channels_thread_preferences
+WHERE organization_id = @organization_id
+  AND subject_id = @subject_id
+  AND (followed IS TRUE OR muted IS TRUE);
+
 -- name: ClearThreadPreferences :exec
 UPDATE channels_thread_preferences
 SET followed = FALSE, muted = FALSE, updated_at = clock_timestamp()
@@ -565,16 +587,20 @@ WHERE organization_id = @organization_id
 -- Reads the superseded proof-of-concept document so a development database can
 -- be converted into the normalized tables without losing its contents. An
 -- empty organization filter means every organization, which is why the command
--- in front of this makes the operator ask for that explicitly.
+-- in front of this makes the operator ask for that explicitly. Keyset paged on
+-- organization_id.
 SELECT document.organization_id, document.project_id, document.state
 FROM channels_state document
 WHERE (@organization_id::text = '' OR document.organization_id = @organization_id::text)
+  AND document.organization_id > @after_organization_id::text
 ORDER BY document.organization_id
 LIMIT sqlc.arg('result_limit')::int;
 
 -- name: CountForeignChannelsRows :one
 -- Counts normalized Channels rows in an organization that a conversion did
--- NOT write. A conversion is idempotent against its own output (the
+-- NOT write: messages, conversations, instances and access exceptions. The
+-- relationship and preference tables hang off those conversations, so a
+-- foreign one is already counted through its conversation. A conversion is idempotent against its own output (the
 -- identifiers are derived from the document) but must never merge into
 -- somebody else's data: legacy sequence numbers would collide with sequences
 -- the live service has already handed out.
@@ -590,6 +616,9 @@ SELECT (
      WHERE c.organization_id = target.organization_id AND c.id <> ALL(@conversation_ids::uuid[]))
   + (SELECT count(*) FROM channels_instances i, target
      WHERE i.organization_id = target.organization_id AND i.id <> ALL(@instance_ids::uuid[]))
+  + (SELECT count(*) FROM channels_access_exceptions x, target
+     WHERE x.organization_id = target.organization_id AND x.deleted IS FALSE
+       AND x.subject_id <> ALL(@exception_subject_ids::text[]))
 )::bigint;
 
 -- name: ImportInstance :exec
@@ -609,6 +638,15 @@ INSERT INTO channels_messages (id, organization_id, project_id, conversation_id,
 VALUES (@id, @organization_id, @project_id, @conversation_id, @instance_id, @subject_id, @seq, @body, @idempotency_key, @created_at)
 ON CONFLICT (id) DO NOTHING;
 
+-- name: ImportChannelsAccessException :exec
+-- Conversion-only insert. An exception that already exists was either written
+-- by an earlier conversion or changed by an administrator since, and neither
+-- is the document's to overwrite.
+INSERT INTO channels_access_exceptions (organization_id, project_id, subject_id, can_connect, can_read_all)
+VALUES (@organization_id, @project_id, @subject_id, @can_connect, @can_read_all)
+ON CONFLICT (organization_id, subject_id) WHERE deleted IS FALSE
+DO NOTHING;
+
 -- name: SetChannelsCounters :exec
 -- Lifts the allocators above everything a conversion imported.
 UPDATE channels_settings
@@ -617,3 +655,84 @@ SET enabled = @enabled,
     announce_seq = GREATEST(announce_seq, @announce_seq::bigint),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id;
+
+-- Test fixtures. Nothing in the service calls these: they age rows past a
+-- retention window, seed the superseded document, and read storage
+-- invariants that have no production read path.
+
+-- name: FixtureAgeMessages :exec
+UPDATE channels_messages
+SET created_at = clock_timestamp() - make_interval(days => @age_days::int)
+WHERE organization_id = @organization_id
+  AND seq <= @through_seq::bigint;
+
+-- name: FixtureAgeInstances :exec
+UPDATE channels_instances
+SET expires_at = clock_timestamp() - make_interval(days => @age_days::int)
+WHERE organization_id = @organization_id;
+
+-- name: FixtureSetMessageRetentionDays :exec
+UPDATE channels_settings
+SET message_retention_days = @message_retention_days
+WHERE organization_id = @organization_id;
+
+-- name: FixtureInsertLegacyState :exec
+INSERT INTO channels_state (organization_id, state)
+VALUES (@organization_id, @state::jsonb);
+
+-- name: FixtureCountLegacyStates :one
+SELECT count(*)::bigint FROM channels_state WHERE organization_id = @organization_id;
+
+-- name: FixtureCountRows :one
+-- Every normalized Channels table's row count for one organization.
+WITH target AS (
+    SELECT @organization_id::text AS organization_id
+)
+SELECT
+    (SELECT count(*) FROM channels_instances i, target WHERE i.organization_id = target.organization_id)::bigint AS instances,
+    (SELECT count(*) FROM channels_conversations c, target WHERE c.organization_id = target.organization_id)::bigint AS conversations,
+    (SELECT count(*) FROM channels_messages m, target WHERE m.organization_id = target.organization_id)::bigint AS messages,
+    (SELECT count(*) FROM channels_conversation_participants p, target WHERE p.organization_id = target.organization_id)::bigint AS participants,
+    (SELECT count(*) FROM channels_conversation_endpoints e, target WHERE e.organization_id = target.organization_id)::bigint AS endpoints,
+    (SELECT count(*) FROM channels_thread_preferences t, target WHERE t.organization_id = target.organization_id)::bigint AS preferences,
+    (SELECT count(*) FROM channels_access_exceptions x, target WHERE x.organization_id = target.organization_id)::bigint AS access_exceptions;
+
+-- name: FixtureCountRowsOutsideDefaultProject :one
+-- Rows of every project-owned Channels table that are stored under any project
+-- other than the organization's default one.
+WITH target AS (
+    SELECT @organization_id::text AS organization_id
+), foreign_projects AS (
+    SELECT p.id FROM projects p, target
+    WHERE p.organization_id = target.organization_id AND p.slug <> 'default'
+)
+SELECT (
+    (SELECT count(*) FROM channels_settings s WHERE s.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_instances i WHERE i.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_conversations c WHERE c.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_messages m WHERE m.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_conversation_participants pa WHERE pa.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_conversation_endpoints e WHERE e.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_thread_preferences t WHERE t.project_id IN (SELECT id FROM foreign_projects))
+  + (SELECT count(*) FROM channels_access_exceptions x WHERE x.project_id IN (SELECT id FROM foreign_projects))
+)::bigint;
+
+-- name: FixtureMessageSeqStats :one
+SELECT count(DISTINCT seq)::bigint AS distinct_seqs,
+       count(*)::bigint AS total,
+       COALESCE(min(seq), 0)::bigint AS lowest,
+       COALESCE(max(seq), 0)::bigint AS highest
+FROM channels_messages
+WHERE organization_id = @organization_id;
+
+-- name: FixtureCountMessagesByIdempotencyKey :one
+SELECT count(*)::bigint FROM channels_messages
+WHERE organization_id = @organization_id
+  AND idempotency_key = @idempotency_key;
+
+-- name: FixtureCountDashboardInstances :one
+SELECT count(*)::bigint FROM channels_instances
+WHERE organization_id = @organization_id
+  AND subject_id = @subject_id
+  AND origin = 'dashboard'
+  AND deleted IS FALSE;

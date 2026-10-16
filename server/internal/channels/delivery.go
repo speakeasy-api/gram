@@ -31,9 +31,17 @@ type revision struct {
 	presenceAnnounce int64
 	threadCount      int64
 	threadAnnounce   int64
-	// messageSeq is the highest sequence this subscriber has been told about.
+	// threadActivity is the newest message sequence across the visible
+	// conversations, so a post changes the threads resource too.
+	threadActivity int64
+	// messageSeq is the sequence below which this subscriber has nothing left
+	// to be told about: everything at or below it has been scanned, whether or
+	// not any of it was notifiable.
 	messageSeq     int64
 	messageChanged bool
+	// retentionFloor is the organization's retention floor. Raising it removes
+	// readable history, which is a change to the messages resource.
+	retentionFloor int64
 }
 
 func (r revision) changed(next revision, uri string) bool {
@@ -41,9 +49,9 @@ func (r revision) changed(next revision, uri string) bool {
 	case "channels://presence":
 		return next.presenceLive != r.presenceLive || next.presenceAnnounce != r.presenceAnnounce
 	case "channels://threads":
-		return next.threadCount != r.threadCount || next.threadAnnounce != r.threadAnnounce
+		return next.threadCount != r.threadCount || next.threadAnnounce != r.threadAnnounce || next.threadActivity != r.threadActivity
 	case "channels://messages":
-		return next.messageChanged
+		return next.messageChanged || next.retentionFloor != r.retentionFloor
 	default:
 		return false
 	}
@@ -74,8 +82,10 @@ func (h *Handler) revisions(ctx context.Context, p Principal, wanted map[string]
 		presenceAnnounce: 0,
 		threadCount:      0,
 		threadAnnounce:   0,
+		threadActivity:   0,
 		messageSeq:       lastMessageSeq,
 		messageChanged:   false,
+		retentionFloor:   acc.settings.RetentionFloorSeq,
 	}
 	if wanted["channels://presence"] {
 		digest, err := q.GetPresenceDigest(ctx, p.OrganizationID)
@@ -93,7 +103,7 @@ func (h *Handler) revisions(ctx context.Context, p Principal, wanted map[string]
 		if err != nil {
 			return revision{}, fmt.Errorf("read channels conversation digest: %w", err)
 		}
-		out.threadCount, out.threadAnnounce = digest.ConversationCount, digest.AnnounceSeq
+		out.threadCount, out.threadAnnounce, out.threadActivity = digest.ConversationCount, digest.AnnounceSeq, digest.ActivitySeq
 	}
 	if wanted["channels://messages"] {
 		// A public thread notifies only its followers, a muted conversation
@@ -111,6 +121,12 @@ func (h *Handler) revisions(ctx context.Context, p Principal, wanted map[string]
 		if next > lastMessageSeq {
 			out.messageSeq, out.messageChanged = next, true
 		}
+		// The settings row was read before this scan, and a sequence is
+		// allocated under that row's lock until its message commits, so every
+		// message up to the allocator value read then was visible to the scan.
+		// Advancing past them keeps the next reconciliation from rescanning a
+		// suffix that holds nothing notifiable.
+		out.messageSeq = max(out.messageSeq, acc.settings.MessageSeq)
 	}
 	if err := tx.Rollback(ctx); err != nil {
 		return out, nil //nolint:nilerr // a read-only reconciliation has nothing to commit.

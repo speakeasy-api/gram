@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/channels/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -36,8 +37,7 @@ const legacyDocument = `{
 func TestConvertLegacyState(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, "channels_legacy")
-	_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"INSERT INTO channels_state (organization_id, state) VALUES ($1, $2::jsonb)", testOrg, legacyDocument)
+	err := repo.New(f.db).FixtureInsertLegacyState(t.Context(), repo.FixtureInsertLegacyStateParams{OrganizationID: testOrg, State: []byte(legacyDocument)})
 	require.NoError(t, err)
 
 	logger := testenv.NewLogger(t)
@@ -49,10 +49,9 @@ func TestConvertLegacyState(t *testing.T) {
 	require.Equal(t, 2, preview.Conversations)
 	require.Equal(t, 2, preview.Messages)
 	require.Len(t, preview.Mappings, 5, "the preview reports every rewritten identifier")
-	var written int64
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT count(*) FROM channels_instances WHERE organization_id = $1", testOrg).Scan(&written))
-	require.Zero(t, written, "a dry run wrote rows")
+	written, err := repo.New(f.db).FixtureCountRows(t.Context(), testOrg)
+	require.NoError(t, err)
+	require.Zero(t, written.Instances, "a dry run wrote rows")
 
 	first, err := ConvertLegacyState(t.Context(), f.db, logger, ConversionOptions{DryRun: false})
 	require.NoError(t, err)
@@ -68,38 +67,37 @@ func TestConvertLegacyState(t *testing.T) {
 		require.Equal(t, LegacyIdentifier(mapping.OrganizationID, mapping.Kind, mapping.LegacyID), mapping.ID)
 	}
 	require.Equal(t, preview.Mappings, first.Mappings, "the preview and the apply rewrite identifiers identically")
-	var reviewAgent string
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT label FROM channels_instances WHERE organization_id = $1 AND id = $2",
-		testOrg, LegacyIdentifier(testOrg, LegacyKindInstance, "legacy-review")).Scan(&reviewAgent))
-	require.Equal(t, "Review agent", reviewAgent, "the documented mapping does not locate the converted row")
+	reviewAgent, err := repo.New(f.db).GetInstance(t.Context(), repo.GetInstanceParams{OrganizationID: testOrg, ID: LegacyIdentifier(testOrg, LegacyKindInstance, "legacy-review")})
+	require.NoError(t, err)
+	require.Equal(t, "Review agent", reviewAgent.Label, "the documented mapping does not locate the converted row")
 
 	// A stored secret hash carries over; it is never re-issued as a token.
-	var carried string
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT resume_hash FROM channels_instances WHERE organization_id = $1 AND label = 'Review agent'", testOrg).Scan(&carried))
-	require.Len(t, carried, 64)
-	var browserHash *string
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT resume_hash FROM channels_instances WHERE organization_id = $1 AND origin = 'dashboard'", testOrg).Scan(&browserHash))
-	require.Nil(t, browserHash, "a converted browser session must stay secretless")
+	require.Len(t, reviewAgent.ResumeHash.String, 64)
+	browser, err := repo.New(f.db).GetInstance(t.Context(), repo.GetInstanceParams{OrganizationID: testOrg, ID: LegacyIdentifier(testOrg, LegacyKindInstance, "legacy-browser")})
+	require.NoError(t, err)
+	require.Equal(t, "dashboard", browser.Origin)
+	require.False(t, browser.ResumeHash.Valid, "a converted browser session must stay secretless")
 
 	// The legacy document is left in place so nothing is discarded.
-	var documents int64
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT count(*) FROM channels_state WHERE organization_id = $1", testOrg).Scan(&documents))
+	documents, err := repo.New(f.db).FixtureCountLegacyStates(t.Context(), testOrg)
+	require.NoError(t, err)
 	require.Equal(t, int64(1), documents)
 
 	// Repeating the conversion is a no-op rather than a duplication.
 	second, err := ConvertLegacyState(t.Context(), f.db, logger, ConversionOptions{DryRun: false})
 	require.NoError(t, err)
 	require.Equal(t, 1, second.Organizations)
-	for _, table := range []string{"channels_instances", "channels_conversations", "channels_messages"} {
-		var rows int64
-		require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-			"SELECT count(*) FROM "+table+" WHERE organization_id = $1", testOrg).Scan(&rows))
-		require.LessOrEqual(t, rows, int64(3), "%s duplicated on a repeated conversion", table)
-	}
+	rows, err := repo.New(f.db).FixtureCountRows(t.Context(), testOrg)
+	require.NoError(t, err)
+	require.Equal(t, repo.FixtureCountRowsRow{
+		Instances:        3,
+		Conversations:    2,
+		Messages:         2,
+		Participants:     2,
+		Endpoints:        2,
+		Preferences:      2,
+		AccessExceptions: 1,
+	}, rows, "a repeated conversion duplicated rows")
 
 	// Converted state is live: enablement, visibility, preferences and the
 	// cursor all carried over.
@@ -152,8 +150,7 @@ func TestConversionRefusesANonEmptyTarget(t *testing.T) {
 	})
 	require.Equal(t, int64(1), intOf(t, live["id"]), "the live service already issued sequence 1")
 
-	_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"INSERT INTO channels_state (organization_id, state) VALUES ($1, $2::jsonb)", testOrg, legacyDocument)
+	err := repo.New(f.db).FixtureInsertLegacyState(t.Context(), repo.FixtureInsertLegacyStateParams{OrganizationID: testOrg, State: []byte(legacyDocument)})
 	require.NoError(t, err)
 
 	result, err := ConvertLegacyState(t.Context(), f.db, logger, ConversionOptions{DryRun: false, OrganizationID: testOrg})
@@ -165,10 +162,9 @@ func TestConversionRefusesANonEmptyTarget(t *testing.T) {
 
 	// Nothing was written, and the live message kept its sequence.
 	require.Len(t, messageIDs(t, f.post(t, "alice", "channels_read", map[string]any{})["messages"]), 1)
-	var instances int64
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT count(*) FROM channels_instances WHERE organization_id = $1", testOrg).Scan(&instances))
-	require.Equal(t, int64(1), instances, "a refused conversion wrote instances")
+	rows, err := repo.New(f.db).FixtureCountRows(t.Context(), testOrg)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rows.Instances, "a refused conversion wrote instances")
 }
 
 // TestConversionIsScopedToOneOrganization proves the blast radius of a
@@ -178,8 +174,7 @@ func TestConversionIsScopedToOneOrganization(t *testing.T) {
 	f := newFixture(t, "channels_legacy_scope")
 	logger := testenv.NewLogger(t)
 	for _, organization := range []string{testOrg, otherOrg} {
-		_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-			"INSERT INTO channels_state (organization_id, state) VALUES ($1, $2::jsonb)", organization, legacyDocument)
+		err := repo.New(f.db).FixtureInsertLegacyState(t.Context(), repo.FixtureInsertLegacyStateParams{OrganizationID: organization, State: []byte(legacyDocument)})
 		require.NoError(t, err)
 	}
 
@@ -189,19 +184,18 @@ func TestConversionIsScopedToOneOrganization(t *testing.T) {
 	for _, mapping := range scoped.Mappings {
 		require.Equal(t, testOrg, mapping.OrganizationID)
 	}
-	var elsewhere int64
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT count(*) FROM channels_instances WHERE organization_id = $1", otherOrg).Scan(&elsewhere))
-	require.Zero(t, elsewhere, "a scoped conversion wrote into another tenant")
+	elsewhere, err := repo.New(f.db).FixtureCountRows(t.Context(), otherOrg)
+	require.NoError(t, err)
+	require.Zero(t, elsewhere.Instances, "a scoped conversion wrote into another tenant")
 
 	// Unscoped picks up the rest, and the already-converted tenant stays a
 	// no-op rather than a refusal.
 	everything, err := ConvertLegacyState(t.Context(), f.db, logger, ConversionOptions{DryRun: false, OrganizationID: ""})
 	require.NoError(t, err)
 	require.Equal(t, 2, everything.Organizations)
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT count(*) FROM channels_instances WHERE organization_id = $1", otherOrg).Scan(&elsewhere))
-	require.Equal(t, int64(3), elsewhere)
+	elsewhere, err = repo.New(f.db).FixtureCountRows(t.Context(), otherOrg)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), elsewhere.Instances)
 }
 
 // TestConvertedConversationCountsAreExact proves a conversion lands the
@@ -209,8 +203,7 @@ func TestConversionIsScopedToOneOrganization(t *testing.T) {
 func TestConvertedConversationCountsAreExact(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, "channels_legacy_counts")
-	_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"INSERT INTO channels_state (organization_id, state) VALUES ($1, $2::jsonb)", testOrg, legacyDocument)
+	err := repo.New(f.db).FixtureInsertLegacyState(t.Context(), repo.FixtureInsertLegacyStateParams{OrganizationID: testOrg, State: []byte(legacyDocument)})
 	require.NoError(t, err)
 	_, err = ConvertLegacyState(t.Context(), f.db, testenv.NewLogger(t), ConversionOptions{DryRun: false, OrganizationID: testOrg})
 	require.NoError(t, err)
