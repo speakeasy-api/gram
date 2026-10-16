@@ -123,6 +123,7 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 		}
 		require.Contains(t, names, "tool_calls")
 		require.Contains(t, names, "skills")
+		require.NotContains(t, names, "sessions")
 	})
 
 	t.Run("values lists what the dimension holds, most frequent first", func(t *testing.T) {

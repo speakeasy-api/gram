@@ -165,7 +165,7 @@ func TestListAndGetDashboards(t *testing.T) {
 	require.NoError(t, err)
 	second, err := ti.service.CreateDashboard(ctx, createPayload("second"))
 	require.NoError(t, err)
-	widget := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	widget := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 	_, err = ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: first.ID, WidgetID: widget.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 
@@ -269,7 +269,7 @@ func TestSaveDashboardLayout(t *testing.T) {
 		ctx, ti := newTestService(t)
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 		chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 		tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 		chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
@@ -323,7 +323,7 @@ func TestSaveDashboardLayout(t *testing.T) {
 		ctx, ti := newTestService(t)
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 		chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 		tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 		chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
@@ -401,7 +401,7 @@ func TestSaveDashboardLayout(t *testing.T) {
 		ctx, ti := newTestService(t)
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 		other := insertWidget(t, ti, "Other", numberQuery, numberChart)
 		card := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 
@@ -426,7 +426,7 @@ func TestSaveDashboardLayoutIgnoresCardsThatWent(t *testing.T) {
 	ctx, ti := newTestService(t)
 	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("stale"))
 	require.NoError(t, err)
-	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 	chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 	other := insertWidget(t, ti, "Tool calls by surface", barQuery, barChart)
 	tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
@@ -466,7 +466,7 @@ func TestAddDashboardWidgetNeedsRoom(t *testing.T) {
 	ctx, ti := newTestService(t)
 	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("full"))
 	require.NoError(t, err)
-	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 	card := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 
 	// A card ending on the last row leaves nothing below it to append to.
@@ -539,7 +539,7 @@ func TestAddAndRemoveDashboardWidget(t *testing.T) {
 	ctx, ti := newTestService(t)
 	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("cards"))
 	require.NoError(t, err)
-	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 	chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 
 	withTile, err := ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: dashboard.ID, WidgetID: tile.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
@@ -644,7 +644,7 @@ func TestDuplicateDashboard(t *testing.T) {
 		ctx, ti := newTestService(t)
 		source, err := ti.service.CreateDashboard(ctx, createPayload("Weekly review"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 		chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 		// The tile twice, so one widget copy serves two cards.
 		first := addCard(t, ctx, ti, source.ID, tile.ID)
@@ -831,7 +831,7 @@ func TestDeleteDashboard(t *testing.T) {
 		memberCtx := asMember(t, ctx, ti, "user_owner_"+uuid.NewString())
 		created, err := ti.service.CreateDashboard(memberCtx, createPayload("mine"))
 		require.NoError(t, err)
-		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+		tile := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 		_, err = ti.service.AddDashboardWidget(memberCtx, &gen.AddDashboardWidgetPayload{ID: created.ID, WidgetID: tile.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
 

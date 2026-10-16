@@ -556,7 +556,7 @@ type ActivityInsertWidgetsParams struct {
 
 // Explore widgets: the questions the team keeps, each with the chart that
 // draws it and saved by a demo user, so the Widgets tab shows who made each.
-// Names repeat on purpose: two people saving "Sessions by surface" is normal.
+// Names repeat on purpose: two people saving "Tool calls by surface" is normal.
 // Each row is the shape the dashboard saves (widgetSpec.ts), and the widgets
 // service plans it against the analytics catalog and checks the chart against
 // it, so the list reads them as valid. Rows cascade with the demo project,

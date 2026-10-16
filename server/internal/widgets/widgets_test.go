@@ -344,6 +344,16 @@ func TestListAndGetWidgets(t *testing.T) {
 	require.NotNil(t, gotUnknown.InvalidReason)
 	require.Contains(t, *gotUnknown.InvalidReason, `"from"`)
 
+	removed, err := widgetsrepo.New(ti.conn).CreateWidget(t.Context(), widgetsrepo.CreateWidgetParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
+		Name: "sessions", Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions", Query: []byte(`{"window":"7d","measures":[{"op":"count"}]}`), Visualization: []byte(`{"type":"table"}`),
+	})
+	require.NoError(t, err)
+	gotRemoved, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: removed.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.NotNil(t, gotRemoved.InvalidReason)
+	require.Contains(t, *gotRemoved.InvalidReason, "unknown_dataset")
+
 	_, err = ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: uuid.NewString(), SessionToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeNotFound)
 

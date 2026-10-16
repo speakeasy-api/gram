@@ -130,7 +130,7 @@ func TestEditDashboardLayoutAppliesOperationsAsOne(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	bar := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
-	number := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	number := insertWidget(t, ti, "Tool calls", numberQuery, numberChart)
 	created, err := ti.service.CreateDashboard(ctx, createPayload("Usage"))
 	require.NoError(t, err)
 	read, err := ti.service.ReadDashboard(ctx, created.ID)
