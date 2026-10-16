@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
+	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
@@ -864,9 +865,11 @@ func newPlatformMCPOktaSignIn(config platformMCPConfig) *identityproviderconnect
 }
 
 // platformMCPWorkspaces adapts the auth service, which owns organization
-// signup, to the Platform MCP OAuth flow.
+// signup, and the organizations service, which owns invitations, to the
+// Platform MCP OAuth flow.
 type platformMCPWorkspaces struct {
-	auth *auth.Service
+	auth          *auth.Service
+	organizations *organizations.Service
 }
 
 func (w platformMCPWorkspaces) SuggestedWorkspaceName(ctx context.Context, userID string) (string, error) {
@@ -883,6 +886,26 @@ func (w platformMCPWorkspaces) ProvisionWorkspace(ctx context.Context, userID, n
 		return platformmcp.OrganizationOption{}, fmt.Errorf("provision workspace: %w", err)
 	}
 	return platformmcp.OrganizationOption{ID: id, Name: stored}, nil
+}
+
+func (w platformMCPWorkspaces) PendingInvitations(ctx context.Context, verifiedEmail string) ([]platformmcp.WorkspaceInvitation, error) {
+	pending, err := w.organizations.PendingInvitationsForEmail(ctx, verifiedEmail)
+	if err != nil {
+		return nil, fmt.Errorf("list pending invitations: %w", err)
+	}
+	invitations := make([]platformmcp.WorkspaceInvitation, 0, len(pending))
+	for _, invitation := range pending {
+		invitations = append(invitations, platformmcp.WorkspaceInvitation{ID: invitation.ID, OrganizationName: invitation.OrganizationName})
+	}
+	return invitations, nil
+}
+
+func (w platformMCPWorkspaces) JoinInvitedWorkspace(ctx context.Context, userID, verifiedEmail, invitationID string) (platformmcp.OrganizationOption, error) {
+	joined, err := w.organizations.AcceptPendingInvitationForUser(ctx, userID, verifiedEmail, invitationID)
+	if err != nil {
+		return platformmcp.OrganizationOption{}, fmt.Errorf("join invited workspace: %w", err)
+	}
+	return platformmcp.OrganizationOption{ID: joined.OrganizationID, Name: joined.OrganizationName}, nil
 }
 
 // platformMCPIdentityChaining builds the identity chaining governor

@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 )
 
@@ -22,6 +24,8 @@ type workspaceTestState struct {
 	mu            sync.Mutex
 	organizations []OrganizationOption
 	provisioned   []string
+	invitations   []WorkspaceInvitation
+	joined        []string
 }
 
 func (s *workspaceTestState) EligibleOrganizations(context.Context, string) ([]OrganizationOption, error) {
@@ -41,6 +45,33 @@ func (s *workspaceTestState) ProvisionWorkspace(_ context.Context, userID, name 
 	s.organizations = append(s.organizations, organization)
 	s.provisioned = append(s.provisioned, userID+":"+name)
 	return organization, nil
+}
+
+func (s *workspaceTestState) PendingInvitations(_ context.Context, verifiedEmail string) ([]WorkspaceInvitation, error) {
+	if verifiedEmail != testVerifiedEmail {
+		return nil, errors.New("unexpected verified email")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]WorkspaceInvitation(nil), s.invitations...), nil
+}
+
+func (s *workspaceTestState) JoinInvitedWorkspace(_ context.Context, userID, verifiedEmail, invitationID string) (OrganizationOption, error) {
+	if verifiedEmail != testVerifiedEmail {
+		return OrganizationOption{}, errors.New("unexpected verified email")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, invitation := range s.invitations {
+		if invitation.ID == invitationID {
+			organization := OrganizationOption{ID: "org-invited", Name: invitation.OrganizationName}
+			s.organizations = append(s.organizations, organization)
+			s.invitations = append(s.invitations[:i], s.invitations[i+1:]...)
+			s.joined = append(s.joined, userID+":"+invitationID)
+			return organization, nil
+		}
+	}
+	return OrganizationOption{}, errors.New("invitation is not pending")
 }
 
 func (s *workspaceTestState) provisionedCount() int {
@@ -78,6 +109,14 @@ func postWorkspace(service *OAuthHTTP, form url.Values) *httptest.ResponseRecord
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	service.CreateWorkspaceHandler().ServeHTTP(response, request)
+	return response
+}
+
+func postJoinWorkspace(service *OAuthHTTP, form url.Values) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/join-workspace", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	service.JoinWorkspaceHandler().ServeHTTP(response, request)
 	return response
 }
 
@@ -148,6 +187,104 @@ func TestOAuthHTTPUserWithoutOrganizationCreatesWorkspaceAndContinues(t *testing
 	replayed := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "workspace_name": {"Acme"}})
 	require.Equal(t, http.StatusUnauthorized, replayed.Code)
 	require.Equal(t, 1, workspaces.provisionedCount())
+}
+
+func TestOAuthHTTPInvitedUserJoinsInsteadOfCreatingWorkspace(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	workspaces := &workspaceTestState{invitations: []WorkspaceInvitation{{ID: "invitation-1", OrganizationName: "Team Org"}}}
+	service.organizations = workspaces
+	service.workspaces = workspaces
+	state := startWorkspaceFlow(t, service)
+
+	selection := getSelection(service, state)
+	require.Equal(t, http.StatusOK, selection.Code)
+	body := selection.Body.String()
+	require.Contains(t, body, "Join your team")
+	require.Contains(t, body, "Join Team Org")
+	require.Contains(t, body, `action="join-workspace"`)
+	require.NotContains(t, body, `action="create-workspace"`)
+	require.Equal(t, "invitation-1", formValue(t, body, "invitation_id"))
+	csrf := formValue(t, body, "csrf_token")
+
+	// A crafted create submit is shown the invitation and creates nothing.
+	// The challenge stays usable for the join.
+	created := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "workspace_name": {"Acme Inc"}})
+	require.Equal(t, http.StatusOK, created.Code)
+	require.Contains(t, created.Body.String(), "Join Team Org")
+	require.Zero(t, workspaces.provisionedCount())
+
+	// A forged CSRF token joins nothing.
+	forged := postJoinWorkspace(service, url.Values{"state": {state}, "csrf_token": {"forged"}, "invitation_id": {"invitation-1"}})
+	require.Equal(t, http.StatusUnauthorized, forged.Code)
+	require.Empty(t, workspaces.joined)
+
+	joined := postJoinWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "invitation_id": {"invitation-1"}})
+	require.Equal(t, http.StatusSeeOther, joined.Code)
+	require.Equal(t, []string{"user-1:invitation-1"}, workspaces.joined)
+	connectURL, err := url.Parse(joined.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "/platform-mcp/connect", connectURL.Path)
+	require.NotEqual(t, state, connectURL.Query().Get("state"), "the consent step continues under a fresh state")
+
+	connect := httptest.NewRecorder()
+	service.ConnectHandler().ServeHTTP(connect, httptest.NewRequest(http.MethodGet, connectURL.String(), nil))
+	require.Equal(t, http.StatusOK, connect.Code)
+	require.Contains(t, connect.Body.String(), "Team Org")
+
+	// The challenge is consumed, so a replayed join does nothing.
+	replayed := postJoinWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "invitation_id": {"invitation-1"}})
+	require.Equal(t, http.StatusUnauthorized, replayed.Code)
+	require.Len(t, workspaces.joined, 1)
+}
+
+func TestOAuthHTTPUnverifiedEmailIsNotOfferedInvitations(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	service.identity = unverifiedTestIdentity{}
+	workspaces := &workspaceTestState{invitations: []WorkspaceInvitation{{ID: "invitation-1", OrganizationName: "Team Org"}}}
+	service.organizations = workspaces
+	service.workspaces = workspaces
+	state := startWorkspaceFlow(t, service)
+
+	// Without a verified email the invitation cannot be claimed here, so the
+	// page does not offer it. Creating is refused server-side instead.
+	selection := getSelection(service, state)
+	require.Equal(t, http.StatusOK, selection.Code)
+	require.Contains(t, selection.Body.String(), "Name your workspace")
+	require.NotContains(t, selection.Body.String(), "Join Team Org")
+	csrf := formValue(t, selection.Body.String(), "csrf_token")
+
+	joined := postJoinWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "invitation_id": {"invitation-1"}})
+	require.Equal(t, http.StatusFound, joined.Code)
+	require.Empty(t, workspaces.joined)
+}
+
+type unverifiedTestIdentity struct{ testIdentity }
+
+func (unverifiedTestIdentity) ExchangeCodeForTokens(context.Context, string) (*identity.IDPUserInfo, error) {
+	return &identity.IDPUserInfo{}, nil
+}
+
+func TestOAuthHTTPJoinWorkspaceRefusalReturnsToClient(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	workspaces := &workspaceTestState{invitations: []WorkspaceInvitation{{ID: "invitation-1", OrganizationName: "Team Org"}}}
+	service.organizations = workspaces
+	service.workspaces = workspaces
+	state := startWorkspaceFlow(t, service)
+	csrf := formValue(t, getSelection(service, state).Body.String(), "csrf_token")
+
+	response := postJoinWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "invitation_id": {"someone-elses-invitation"}})
+	require.Equal(t, http.StatusFound, response.Code)
+	redirect, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "access_denied", redirect.Query().Get("error"))
+	require.Equal(t, "client-state", redirect.Query().Get("state"))
+	require.Empty(t, workspaces.joined)
 }
 
 func TestOAuthHTTPCreateWorkspaceRejectsInvalidState(t *testing.T) {

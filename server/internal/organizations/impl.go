@@ -1664,6 +1664,38 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 	return org, acceptedInvite, trialArmed, nil
 }
 
+// acceptInvitation makes the user a member of the invitation's organization
+// and runs everything that follows an acceptance: the trial an eligible
+// invitation arms, the WorkOS membership, and the notifications. Only the
+// acceptance itself can fail.
+func (s *Service) acceptInvitation(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID, inviteeEmail string) error {
+	org, acceptedInvite, trialArmed, err := s.acceptInvitationTx(ctx, inviteID, organizationID, gramUserID, workosUserID)
+	if err != nil {
+		return err
+	}
+
+	if trialArmed {
+		for _, feature := range productfeatures.EnterpriseAccessBundle {
+			s.features.UpdateFeatureCache(ctx, acceptedInvite.OrganizationID, feature, true)
+		}
+	}
+
+	s.reconcileInvitationWorkOSMembership(ctx, acceptedInvite, org, gramUserID, workosUserID)
+
+	if trialArmed {
+		if err := s.trial.TrialStarted(ctx, acceptedInvite.OrganizationID); err != nil {
+			s.logger.ErrorContext(ctx, "invitation acceptance: failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID))
+		}
+		s.capturePlatformAdminInviteTelemetry(ctx, inviteeEmail, org)
+	} else if acceptedInvite.RoleSlug.Valid && acceptedInvite.RoleSlug.String == authz.SystemRoleAdmin {
+		if err := s.trial.AdminAdded(ctx, acceptedInvite.OrganizationID, gramUserID); err != nil {
+			s.logger.ErrorContext(ctx, "invitation acceptance: failed to notify trial admin added", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID), attr.SlogUserID(gramUserID), attr.SlogOrganizationInviteID(acceptedInvite.ID.String()))
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email string, org orgrepo.OrganizationMetadatum) {
 	// Emitted before the PostHog guard below, because the two are configured
 	// independently: a service with an emitter but no PostHog client would
@@ -1852,8 +1884,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	)
 	span.AddEvent("invite.callback.user_provisioned", trace.WithAttributes(attr.UserID(gramUserID)))
 
-	org, acceptedInvite, trialArmed, err := s.acceptInvitationTx(ctx, invite.ID, invite.OrganizationID, gramUserID, idpUser.Sub)
-	if err != nil {
+	if err := s.acceptInvitation(ctx, invite.ID, invite.OrganizationID, gramUserID, idpUser.Sub, inviteeEmail); err != nil {
 		if errors.Is(err, errInvitationAcceptanceRace) {
 			s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
 			span.AddEvent("invite.callback.acceptance_race_lost")
@@ -1867,25 +1898,6 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	span.AddEvent("invite.callback.org_membership_created")
 	span.AddEvent("invite.callback.invitation_accepted")
-
-	if trialArmed {
-		for _, feature := range productfeatures.EnterpriseAccessBundle {
-			s.features.UpdateFeatureCache(ctx, acceptedInvite.OrganizationID, feature, true)
-		}
-	}
-
-	s.reconcileInvitationWorkOSMembership(ctx, acceptedInvite, org, gramUserID, idpUser.Sub)
-
-	if trialArmed {
-		if err := s.trial.TrialStarted(ctx, acceptedInvite.OrganizationID); err != nil {
-			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID))
-		}
-		s.capturePlatformAdminInviteTelemetry(ctx, inviteeEmail, org)
-	} else if acceptedInvite.RoleSlug.Valid && acceptedInvite.RoleSlug.String == authz.SystemRoleAdmin {
-		if err := s.trial.AdminAdded(ctx, acceptedInvite.OrganizationID, gramUserID); err != nil {
-			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial admin added", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID), attr.SlogUserID(gramUserID), attr.SlogOrganizationInviteID(acceptedInvite.ID.String()))
-		}
-	}
 
 	// Record the sign-in like any other login, so grants from this session
 	// link to it and later revocations reach them.

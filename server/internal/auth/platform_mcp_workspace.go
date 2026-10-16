@@ -24,6 +24,11 @@ import (
 // create one from the OAuth flow.
 var ErrUserHasOrganization = errors.New("user already belongs to an organization")
 
+// ErrUserHasPendingInvitation refuses a Platform MCP workspace for a user who
+// has a live invitation to an existing organization. Such a user joins that
+// organization instead, so an invited teammate does not split from their team.
+var ErrUserHasPendingInvitation = errors.New("user has a pending organization invitation")
+
 // ErrWorkspaceCreationInProgress refuses a Platform MCP workspace while
 // another submit for the same user is still creating one.
 var ErrWorkspaceCreationInProgress = errors.New("workspace creation already in progress")
@@ -136,7 +141,7 @@ func (s *Service) ProvisionPlatformMCPWorkspace(ctx context.Context, userID, nam
 }
 
 // provisionFirstOrgForUser provisions an organization only while the user
-// has none. Two OAuth challenges for the same user can submit at once, so a
+// has none and no pending invitation to one. Two OAuth challenges for the same user can submit at once, so a
 // per-user lease makes the check and the provisioning one step: only one of
 // them creates a workspace and a trial. The other is refused at once.
 //
@@ -178,6 +183,13 @@ func (s *Service) provisionFirstOrgForUser(ctx context.Context, userID, orgName,
 	}
 	if len(existing) > 0 {
 		return empty, ErrUserHasOrganization
+	}
+	invitations, err := s.orgRepo.ListPendingInvitationsForEmail(ctx, conv.NormalizeEmail(actorEmail))
+	if err != nil {
+		return empty, fmt.Errorf("list pending invitations: %w", err)
+	}
+	if len(invitations) > 0 {
+		return empty, ErrUserHasPendingInvitation
 	}
 
 	org, err := s.provisionOrgForUser(ctx, userID, orgName, orgProvisionOptions{

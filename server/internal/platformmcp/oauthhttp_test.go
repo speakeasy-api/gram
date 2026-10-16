@@ -90,8 +90,14 @@ func (testIdentity) BuildAuthorizationURL(_ context.Context, params identity.Aut
 	}
 	return parsed, nil
 }
+
+// testVerifiedEmail is the email testIdentity reports as verified.
+const testVerifiedEmail = "user-1@example.test"
+
 func (testIdentity) ExchangeCodeForTokens(_ context.Context, _ string) (*identity.IDPUserInfo, error) {
-	return &identity.IDPUserInfo{}, nil
+	var user identity.IDPUserInfo
+	user.Evidence.VerifiedEmail = testVerifiedEmail
+	return &user, nil
 }
 func (testIdentity) CompleteIDPLogin(_ context.Context, _ *identity.IDPUserInfo, _ identity.IDPLoginOptions) (identity.IDPLoginResult, error) {
 	return identity.IDPLoginResult{UserID: "user-1", Reactivated: false, UserInfo: nil}, nil

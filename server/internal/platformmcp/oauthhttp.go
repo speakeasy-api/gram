@@ -24,6 +24,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -92,6 +93,9 @@ type oauthPageData struct {
 	// why a submitted name was refused.
 	WorkspaceName  string
 	WorkspaceError string
+	// Invitations are the organizations a user with none may join instead
+	// of creating a workspace.
+	Invitations []WorkspaceInvitation
 }
 
 // BrowserIdentity resolves a real Speakeasy user from the product identity provider.
@@ -110,14 +114,23 @@ type OrganizationSelector interface {
 	EligibleOrganizations(ctx context.Context, userID string) ([]OrganizationOption, error)
 }
 
+// WorkspaceInvitation is a live invitation to an existing organization.
+type WorkspaceInvitation struct {
+	ID               string
+	OrganizationName string
+}
+
 // WorkspaceProvisioner creates the first organization for a user who signs in
 // with no organization, so a new user can connect without visiting the
-// dashboard first. ProvisionWorkspace must refuse a user who already belongs
-// to an organization. A nil provisioner in OAuthHTTPConfig refuses a user
-// with no organization instead.
+// dashboard first. A user with a pending invitation to their verified email
+// joins that organization instead. ProvisionWorkspace must refuse a user who
+// already belongs to an organization or has a pending invitation. A nil provisioner in
+// OAuthHTTPConfig refuses a user with no organization instead.
 type WorkspaceProvisioner interface {
 	SuggestedWorkspaceName(ctx context.Context, userID string) (string, error)
 	ProvisionWorkspace(ctx context.Context, userID, name string) (OrganizationOption, error)
+	PendingInvitations(ctx context.Context, verifiedEmail string) ([]WorkspaceInvitation, error)
+	JoinInvitedWorkspace(ctx context.Context, userID, verifiedEmail, invitationID string) (OrganizationOption, error)
 }
 
 type oauthChallenge struct {
@@ -136,6 +149,11 @@ type oauthChallenge struct {
 	// authorization code is bound to that origin's resource. Empty means the
 	// configured base URL.
 	BaseURL string `json:"base_url,omitempty"`
+
+	// VerifiedEmail is the signed-in user's email when the identity provider
+	// reports it verified. Only it may claim an organization invitation, as
+	// following the emailed invite link would.
+	VerifiedEmail string `json:"verified_email,omitempty"`
 }
 
 func (c oauthChallenge) CacheKey() string              { return platformOAuthChallengePrefix + c.ID }
@@ -270,6 +288,7 @@ func (s *OAuthHTTP) Attach(mux interface {
 	mux.Handle("GET", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
 	mux.Handle("POST", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
 	mux.Handle("POST", "/platform-mcp/create-workspace", handlerFunc(s.CreateWorkspaceHandler()))
+	mux.Handle("POST", "/platform-mcp/join-workspace", handlerFunc(s.JoinWorkspaceHandler()))
 	mux.Handle("GET", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
 	mux.Handle("POST", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
 	mux.Handle("GET", "/platform-mcp/provider-setup-complete", handlerFunc(s.ProviderSetupCompleteHandler()))
@@ -443,6 +462,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 		}
 		challenge.ID = uuid.NewString()
 		challenge.Subject = urn.NewUserSubject(login.UserID).String()
+		challenge.VerifiedEmail = idpUser.Evidence.VerifiedEmail
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 			return
@@ -495,6 +515,9 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if len(organizations) == 0 {
+		if s.renderPendingInvitations(w, r, client.Name, challenge) {
+			return
+		}
 		// A suggestion is a convenience. Without one the user types a name.
 		suggestion, err := s.workspaces.SuggestedWorkspaceName(r.Context(), subject.ID)
 		if err != nil {
@@ -567,39 +590,113 @@ func (s *OAuthHTTP) renderWorkspacePage(w http.ResponseWriter, clientName string
 	})
 }
 
+func (s *OAuthHTTP) renderInvitationPage(w http.ResponseWriter, clientName string, challenge oauthChallenge, invitations []WorkspaceInvitation) {
+	s.renderOAuthPage(w, oauthPageData{
+		Title:       "Join your team · Platform MCP",
+		Kind:        "invitation",
+		ClientName:  clientName,
+		RedirectURI: challenge.RedirectURI,
+		State:       challenge.ID,
+		CSRFToken:   challenge.CSRFToken,
+		Invitations: invitations,
+	})
+}
+
+// renderPendingInvitations shows a user with no organization the
+// invitations waiting for their verified email, so an invited user joins
+// their team rather than starting a second organization beside it. It
+// reports whether it wrote a response.
+func (s *OAuthHTTP) renderPendingInvitations(w http.ResponseWriter, r *http.Request, clientName string, challenge oauthChallenge) bool {
+	if challenge.VerifiedEmail == "" {
+		return false
+	}
+	invitations, err := s.workspaces.PendingInvitations(r.Context(), challenge.VerifiedEmail)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "could not load Platform MCP workspace invitations", attr.SlogError(err))
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not load pending invitations")
+		return true
+	}
+	if len(invitations) == 0 {
+		return false
+	}
+	s.renderInvitationPage(w, clientName, challenge, invitations)
+	return true
+}
+
+// workspaceFormChallenge reads the challenge a workspace form posts back. It
+// accepts only the state and CSRF token of a challenge that already carries
+// the user and no organization, so the form cannot be driven from outside the
+// flow. The challenge is not consumed. ok is false once an error is written.
+func (s *OAuthHTTP) workspaceFormChallenge(w http.ResponseWriter, r *http.Request) (challenge oauthChallenge, userID string, ok bool) {
+	if s.workspaces == nil {
+		writeOAuthError(w, http.StatusNotFound, "invalid_request", "workspace creation is not available")
+		return challenge, "", false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	if err := r.ParseForm(); err != nil {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse workspace")
+		return challenge, "", false
+	}
+	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
+	if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		return challenge, "", false
+	}
+	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "workspace request is invalid")
+		return challenge, "", false
+	}
+	subject, err := urn.ParseSessionSubject(challenge.Subject)
+	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
+		writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+		return challenge, "", false
+	}
+	return challenge, subject.ID, true
+}
+
+// consumeWorkspaceChallenge deletes the challenge before anything is created
+// or joined, so a replayed or doubled submit cannot act twice. It checks the
+// challenge again, because another submit can change it between the read and
+// the delete. ok is false once an error is written.
+func (s *OAuthHTTP) consumeWorkspaceChallenge(w http.ResponseWriter, r *http.Request) (oauthChallenge, bool) {
+	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
+	if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		return challenge, false
+	}
+	return challenge, true
+}
+
+// continueWithOrganization moves a consumed challenge on to the consent page
+// for the organization the user just created or joined. A fresh state means a
+// stale submit that still holds the old one cannot consume the challenge this
+// request continues with.
+func (s *OAuthHTTP) continueWithOrganization(w http.ResponseWriter, r *http.Request, challenge oauthChallenge, organization OrganizationOption) {
+	challenge.ID = uuid.NewString()
+	challenge.OrganizationID = organization.ID
+	if err := s.cache.Store(r.Context(), challenge); err != nil {
+		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
+		return
+	}
+	http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
+}
+
 // CreateWorkspaceHandler creates the first organization for a signed-in user
-// who has none, then continues to the consent page for it. It accepts only
-// the state and CSRF token of a challenge that already carries the user, so
-// it cannot be driven from outside the flow.
+// who has none, then continues to the consent page for it. A user with a
+// pending invitation is shown the invitation instead.
 func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.workspaces == nil {
-			writeOAuthError(w, http.StatusNotFound, "invalid_request", "workspace creation is not available")
+		challenge, userID, ok := s.workspaceFormChallenge(w, r)
+		if !ok {
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
-		if err := r.ParseForm(); err != nil {
-			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse workspace")
-			return
-		}
-		stateKey := platformOAuthChallengePrefix + r.PostForm.Get("state")
-		challenge, err := s.cache.Get(r.Context(), stateKey)
-		if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
-			return
-		}
-		if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "workspace request is invalid")
-			return
-		}
-		subject, err := urn.ParseSessionSubject(challenge.Subject)
-		if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-			writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
-			return
-		}
+
 		client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 		if err != nil {
 			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+			return
+		}
+		if s.renderPendingInvitations(w, r, client.Name, challenge) {
 			return
 		}
 
@@ -614,29 +711,49 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 			return
 		}
 
-		// Consume the challenge before creating anything, so a replayed or
-		// doubled submit cannot create a second organization. Check it again,
-		// because another submit can change it between the read and the delete.
-		challenge, err = s.cache.GetAndDelete(r.Context(), stateKey)
-		if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		challenge, ok = s.consumeWorkspaceChallenge(w, r)
+		if !ok {
 			return
 		}
-		organization, err := s.workspaces.ProvisionWorkspace(r.Context(), subject.ID, submitted)
+		organization, err := s.workspaces.ProvisionWorkspace(r.Context(), userID, submitted)
+		switch {
+		case errors.Is(err, auth.ErrUserHasPendingInvitation):
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "You have a pending invitation to a Speakeasy organization. Accept it from the invitation email, then connect again."})
+			return
+		case errors.Is(err, auth.ErrUserHasOrganization), errors.Is(err, auth.ErrWorkspaceCreationInProgress):
+			s.logger.WarnContext(r.Context(), "Platform MCP workspace creation refused", attr.SlogError(err))
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account already has a Speakeasy workspace, or one is being created. Connect again to choose it."})
+			return
+		}
 		if err != nil {
 			s.logger.ErrorContext(r.Context(), "could not create Platform MCP workspace", attr.SlogError(err))
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your workspace could not be created. Sign in to the Speakeasy dashboard to create one, then connect again."})
 			return
 		}
-		// A fresh state means a stale submit that still holds the old one
-		// cannot consume the challenge this request continues with.
-		challenge.ID = uuid.NewString()
-		challenge.OrganizationID = organization.ID
-		if err := s.cache.Store(r.Context(), challenge); err != nil {
-			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
+		s.continueWithOrganization(w, r, challenge, organization)
+	})
+}
+
+// JoinWorkspaceHandler accepts a pending invitation for a signed-in user who
+// has no organization, then continues to the consent page for the
+// organization they joined.
+func (s *OAuthHTTP) JoinWorkspaceHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, userID, ok := s.workspaceFormChallenge(w, r)
+		if !ok {
 			return
 		}
-		http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
+		challenge, ok := s.consumeWorkspaceChallenge(w, r)
+		if !ok {
+			return
+		}
+		organization, err := s.workspaces.JoinInvitedWorkspace(r.Context(), userID, challenge.VerifiedEmail, r.PostForm.Get("invitation_id"))
+		if err != nil {
+			s.logger.ErrorContext(r.Context(), "could not join Platform MCP workspace by invitation", attr.SlogError(err))
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your invitation could not be accepted. Ask your teammate for a new invitation, then connect again."})
+			return
+		}
+		s.continueWithOrganization(w, r, challenge, organization)
 	})
 }
 

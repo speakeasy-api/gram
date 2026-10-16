@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -80,6 +81,36 @@ func TestProvisionPlatformMCPWorkspaceRejectsInvalidName(t *testing.T) {
 	organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
 	require.NoError(t, err)
 	require.Empty(t, organizations)
+}
+
+func TestProvisionPlatformMCPWorkspaceRefusesUserWithPendingInvitation(t *testing.T) {
+	t.Parallel()
+
+	userInfo := platformMCPWorkspaceUser()
+	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+	const teamOrgID = "org-team"
+	_, err := orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID: teamOrgID, Name: "Team Org", Slug: "team-org", WorkosID: conv.ToPGText(teamOrgID), Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = orgRepo.New(instance.conn).CreateInvitation(ctx, orgRepo.CreateInvitationParams{
+		OrganizationID: teamOrgID,
+		Email:          conv.NormalizeEmail(userInfo.Email),
+		TokenHash:      "token-hash-" + uuid.NewString(),
+		InviterUserID:  pgtype.Text{String: "", Valid: false},
+		RoleSlug:       pgtype.Text{String: "", Valid: false},
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	_, _, err = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Acme Workspace")
+	require.ErrorIs(t, err, auth.ErrUserHasPendingInvitation)
+
+	organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+	require.NoError(t, err)
+	require.Empty(t, organizations)
+	require.Empty(t, instance.trialNotifier.trialStarted)
 }
 
 func TestProvisionPlatformMCPWorkspaceConcurrentSubmitsCreateOneOrganization(t *testing.T) {

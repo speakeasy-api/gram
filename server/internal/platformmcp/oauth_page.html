@@ -287,6 +287,25 @@
           {{end}}
           <button class="btn btn-primary" type="submit">Create workspace</button>
         </form>
+        {{else if eq .Kind "invitation"}}
+        <header class="header">
+          <h1 id="page-title">Join your team</h1>
+          <p>
+            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
+            You have an invitation to a Speakeasy organization. Join it to
+            continue.
+          </p>
+        </header>
+        <div class="actions">
+          {{range .Invitations}}
+          <form method="post" action="join-workspace">
+            <input type="hidden" name="state" value="{{$.State}}" />
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
+            <input type="hidden" name="invitation_id" value="{{.ID}}" />
+            <button class="btn btn-primary" type="submit">Join {{.OrganizationName}}</button>
+          </form>
+          {{end}}
+        </div>
         {{else if eq .Kind "connect"}}
         <header class="header">
           <h1 id="page-title">Connect Platform MCP</h1>
