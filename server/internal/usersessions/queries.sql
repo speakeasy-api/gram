@@ -2468,9 +2468,16 @@ SELECT d.project_id,
        @source::text
 FROM decided AS d
 CROSS JOIN session_issuer AS si
+JOIN projects AS server_project
+  ON server_project.id = d.project_id
 LEFT JOIN remote_session_clients AS chosen
   ON chosen.id = d.remote_session_client_id
-WHERE d.remote_session_client_id IS NOT NULL OR d.no_auth
+ AND chosen.deleted IS FALSE
+ AND (chosen.project_id = server_project.id
+      OR (chosen.project_id IS NULL AND chosen.organization_id = server_project.organization_id)
+      OR (chosen.project_id IS NULL AND chosen.organization_id IS NULL))
+WHERE chosen.id IS NOT NULL
+   OR (d.remote_session_client_id IS NULL AND d.no_auth)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: GetUpstreamClientSelection :one

@@ -136,9 +136,10 @@ INSERT INTO meta_mcp_server_members (project_id, meta_mcp_server_id, mcp_server_
 
 -- name: SeedAssociationFixture :exec
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
-SELECT @project_id, @organization_id, @mcp_server_id, c.id, c.attachment_scope
-FROM remote_session_clients AS c
-WHERE c.id = @remote_session_client_id;
+VALUES (
+    @project_id, @organization_id, @mcp_server_id, @remote_session_client_id,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
+);
 
 -- name: RemoveAssociationFixture :exec
 UPDATE mcp_server_remote_session_clients SET deleted_at = clock_timestamp()

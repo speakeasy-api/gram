@@ -65,6 +65,7 @@ WHERE s.project_id = @project_id::uuid
     JOIN projects AS other_project
       ON other_project.id = other.project_id
      AND other_project.organization_id = p.organization_id
+     AND other_project.deleted IS FALSE
     WHERE other.user_session_issuer_id = s.user_session_issuer_id
       AND other.id <> s.id
       AND other.deleted IS FALSE
@@ -217,6 +218,7 @@ SELECT EXISTS (
       JOIN projects AS other_project
         ON other_project.id = other.project_id
        AND other_project.organization_id = p.organization_id
+       AND other_project.deleted IS FALSE
       WHERE other.user_session_issuer_id = s.user_session_issuer_id
         AND other.id <> s.id
         AND other.deleted IS FALSE

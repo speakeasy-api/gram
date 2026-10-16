@@ -43,6 +43,7 @@ WHERE s.id = $2::uuid
       JOIN projects AS other_project
         ON other_project.id = other.project_id
        AND other_project.organization_id = p.organization_id
+       AND other_project.deleted IS FALSE
       WHERE other.user_session_issuer_id = s.user_session_issuer_id
         AND other.id <> s.id
         AND other.deleted IS FALSE
@@ -171,6 +172,7 @@ SELECT page.id AS mcp_server_id,
          JOIN projects AS other_project
            ON other_project.id = other.project_id
           AND other_project.organization_id = page.organization_id
+          AND other_project.deleted IS FALSE
          WHERE other.user_session_issuer_id = page.user_session_issuer_id
            AND other.deleted IS FALSE
        )::bigint AS issuer_server_count,
@@ -299,17 +301,19 @@ func (q *Queries) ListUpstreamClientBackfillCandidates(ctx context.Context, arg 
 
 const seedAssociationFixture = `-- name: SeedAssociationFixture :exec
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope, deleted_at)
-SELECT $1, $2, $3, c.id, c.attachment_scope, CASE WHEN $4::boolean THEN clock_timestamp() END
-FROM remote_session_clients AS c
-WHERE c.id = $5
+VALUES (
+    $1, $2, $3, $4,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = $4),
+    CASE WHEN $5::boolean THEN clock_timestamp() END
+)
 `
 
 type SeedAssociationFixtureParams struct {
 	ProjectID             uuid.UUID
 	OrganizationID        string
 	McpServerID           uuid.UUID
-	Removed               bool
 	RemoteSessionClientID uuid.UUID
+	Removed               bool
 }
 
 func (q *Queries) SeedAssociationFixture(ctx context.Context, arg SeedAssociationFixtureParams) error {
@@ -317,8 +321,8 @@ func (q *Queries) SeedAssociationFixture(ctx context.Context, arg SeedAssociatio
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.McpServerID,
-		arg.Removed,
 		arg.RemoteSessionClientID,
+		arg.Removed,
 	)
 	return err
 }
