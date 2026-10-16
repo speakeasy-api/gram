@@ -278,24 +278,21 @@ func TestDescribeAnalyticsCatalogServesTheCatalog(t *testing.T) {
 	}
 	require.Equal(t, declared, served)
 
-	sessions := byName["sessions"]
-	require.Equal(t, "event", sessions.Kind)
-	require.Equal(t, "session", sessions.Grain)
-	require.Equal(t, analytics.MaxEventTimeRangeDays, sessions.MaxTimeRangeDays)
-	fields := make(map[string]AnalyticsField, len(sessions.Fields))
-	for _, f := range sessions.Fields {
-		fields[f.Name] = f
-	}
-	require.Equal(t, AnalyticsField{Name: "user", Type: "string", Role: "dimension", Default: true, Unit: "", Operators: []string{"equals", "in"}, Aggregations: []string{"count_distinct"}, Description: "", Lookup: nil}, fields["user"])
-	require.Equal(t, "measure", fields["duration_seconds"].Role)
-	require.Equal(t, "s", fields["duration_seconds"].Unit)
-	require.Equal(t, []string{"sum", "avg", "p95"}, fields["duration_seconds"].Aggregations)
-	require.Empty(t, fields["duration_seconds"].Operators)
-
-	toolFields := make(map[string]AnalyticsField, len(byName["tool_calls"].Fields))
-	for _, f := range byName["tool_calls"].Fields {
+	toolCalls := byName["tool_calls"]
+	require.Equal(t, "event", toolCalls.Kind)
+	require.Equal(t, "tool call", toolCalls.Grain)
+	require.Equal(t, analytics.MaxEventTimeRangeDays, toolCalls.MaxTimeRangeDays)
+	toolFields := make(map[string]AnalyticsField, len(toolCalls.Fields))
+	for _, f := range toolCalls.Fields {
 		toolFields[f.Name] = f
 	}
+	require.Equal(t, AnalyticsField{Name: "user", Type: "string", Role: "dimension", Default: false, Unit: "", Operators: []string{"equals", "in"}, Aggregations: []string{"count_distinct"}, Description: "", Lookup: nil}, toolFields["user"])
+	require.True(t, toolFields["tool_name"].Default)
+	require.Equal(t, "measure", toolFields["duration_ms"].Role)
+	require.Equal(t, "ms", toolFields["duration_ms"].Unit)
+	require.Equal(t, []string{"sum", "avg", "p95"}, toolFields["duration_ms"].Aggregations)
+	require.Empty(t, toolFields["duration_ms"].Operators)
+
 	require.NotNil(t, toolFields["mcp_server"].Lookup, "describe says which map mcp_server reads through")
 	require.Equal(t, analytics.MCPServerDisplayNamesLookup, toolFields["mcp_server"].Lookup.Name)
 	require.NotEmpty(t, toolFields["mcp_server"].Description)

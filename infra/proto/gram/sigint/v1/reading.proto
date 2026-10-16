@@ -55,6 +55,8 @@ message Reading {
     // and kind. Opaque: it need not be a UUID. Not a Pub/Sub delivery ID.
     string id = 2;
     // UTC RFC3339Nano event time, independent of evaluation completion time.
+    // Preserve this timestamp across attempts for the same reading identity so
+    // time-partitioned storage can converge redeliveries in the same partition.
     string occurred_at = 3;
     oneof context {
       ConversationMessage conversation_message = 4;
@@ -175,6 +177,28 @@ message Reading {
   // Inference transport used for classification, e.g. "openrouter". Independent
   // of configured_model and models, which identify the model rather than routing.
   string provider = 22;
+
+  // Customer-defined labels captured with this evaluation, not a current
+  // directory lookup. Keys and values are opaque strings. Re-delivering an
+  // attempt preserves its labels; another attempt can carry another snapshot.
+  // These labels do not change the logical reading identity.
+  map<string, string> attributes = 23;
+
+  // Classifier input supplied for this sensor in this attempt. The configured
+  // context is part of definition_hash; this records what was actually supplied.
+  message Input {
+    // Configured message context: "single_message" or "sliding_window".
+    string strategy = 1;
+    // Configured message count including the target; 1 for single_message.
+    int32 requested_message_count = 2;
+    // Messages supplied including the target. Lower than requested when history
+    // is naturally short or the content budget truncated it.
+    int32 message_count = 3;
+    // The content budget excluded available history. Naturally short history is
+    // not truncation.
+    bool truncated = 4;
+  }
+  Input input = 24;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: { seconds: 345600 /* 4 days */ }

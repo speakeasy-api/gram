@@ -2,7 +2,7 @@
 
 Acceptance contract for the demo seed. Every dashboard page a demo user can
 reach must render populated (no empty state, no error boundary) from the data
-in `postgres.sql` + `clickhouse.sql`. A page is DONE when its `verify.md`
+in the demo seed (`server/internal/demoseed/`). A page is DONE when its `verify.md`
 check passes.
 
 Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not seeded.
@@ -43,7 +43,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Budgets / spend controls                                       | PG `spend_rules` ×2 + `spend_rule_events` ×4, calibrated to CH usage (breach+warning per rule); usage MV already fed by existing rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `[~]`  |
 | Toolsets / MCP / Sources / Deployments / Playground            | PG deployment stack: asset + completed deployment + 8 `http_tool_definitions` (urns match telemetry, doc slug `acme`) + 4 toolsets (+versions); each toolset with an `mcp_slug` also owns a canonical `mcp_servers` wrapper (id = toolset id) and one platform `mcp_endpoints` row at its slug                                                                                                                                                                                                                                                                                                                                                                                                 | `[~]`  |
 | Prompts                                                        | PG `prompt_templates` ×2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `[~]`  |
-| Signals Intelligence (`/signals-intelligence`)                 | PG `sigint_custom_signals` ×9 + `sigint_sensors` ×4 + `sigint_sensor_signals` ×9; org `signals_intelligence` feature exposes the configuration page. Sensors demonstrate current-message context, five- and ten-message sliding windows, and a disabled draft.                                                                                                                                                                                                                                                                                                                                                                                                                                 | `[~]`  |
+| Signals Intelligence (`/signals-intelligence`)                 | PG `sigint_custom_signals` ×9 + `sigint_sensors` ×4 + `sigint_sensor_signals` ×9; org `signals_intelligence` feature exposes the configuration page. Sensors demonstrate current-message context, five- and ten-message sliding windows, and a disabled draft. CH `sigint_readings` ×1200 supplies 400 days of answered readings for the three enabled sensors, with string labels, nullable confidence and supplied window sizes, ahead of a readings UI.                                                                                                                                                                                                                                     | `[~]`  |
 | Skills                                                         | PG `skills` ×3 + `skill_versions` + 1 open edit suggestion with diff                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `[~]`  |
 | Shadow MCP                                                     | CH `shadow_mcp_inventory_urls` ×15 + `hooks:` telemetry rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `[~]`  |
 | Directory dimensions                                           | PG `directory_users`/`directory_groups`/memberships mirroring the CH `user.attributes.*` profiles                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `[~]`  |
@@ -56,7 +56,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Network Access                                                 | Deliberately no `network_ingress` entitlement, ingress row, or credential; every reseed removes active and tombstoned private-ingress state before asserting absence, so the temporary PostHog rollout cannot expose retained setup or server-mode controls to the demo organization                                                                                                                                                                                                                                                                                                                                                                                                           | `[~]`  |
 | Assistants                                                     | PG `assistants` ×2, dedicated empty-ceiling agent, canonical dashboard roots, `assistant_agent_bindings`, `trigger_workload_bindings`, ordinary workload issuer/admission/assignment; one dashboard `assistant_threads` session per assistant so Agent Sessions shows the agent-linked and assistant-linked actor, each on behalf of a member                                                                                                                                                                                                                                                                                                                                                  | `[~]`  |
 | Explore (analytics.query over agent_events)                    | CH `agent_events`: 144 sessions over the trailing 12 days for the six users, dealt across claude-code and codex, 2-5 turns each with prompt/api_request/api_response rows and 0-3 tool calls (tool_decision + tool_call_result on Claude, results alone on Codex), a share of the Claude calls being Skill invocations that name one of three skills, which is what the `skills` dataset reads; Codex rows state tokens but no cost                                                                                                                                                                                                                                                            | `[~]`  |
-| Explore widgets (Widgets tab)                                  | PG `widgets` ×5 in the demo project, saved by five demo users across `sessions` and `tool_calls` with bar, table, line, ranked and area charts; two share the name "Sessions by surface" to show names repeat with the creator beside each, two carry descriptions; every widget plans against the catalog and its chart fits its question, so none shows the broken-widget warning                                                                                                                                                                                                                                                                                                            | `[~]`  |
+| Explore widgets (Widgets tab)                                  | PG `widgets` ×6 in the demo project, saved by demo users over `tool_calls` with bar, table, line, ranked, area and stacked bar charts; two share the name "Tool calls by surface" to show names repeat with the creator beside each, three carry descriptions; every widget plans against the catalog and its chart fits its question, so none shows the broken-widget warning                                                                                                                                                                                                                                                                                                                 | `[~]`  |
 | Check access (MCP Team Access tab)                             | PG custom role Contractors (no scopes of its own) with a `mcp:blocked_connect` grant on GitHub, reached by Mateo through the `employee_type = contractor` directory role mapping and assigned to Priya directly; Priya holds a direct `mcp:connect` grant naming GitHub (overrides the block) and Mateo one covering every server (does not)                                                                                                                                                                                                                                                                                                                                                   | `[x]`  |
 | Role editor MCP access tab                                     | PG custom roles: Support Desk (`mcp:connect` naming Acme Support Tools' toolset, and Slack with `disposition: read_only`), Contractors (`mcp:blocked_connect` on GitHub), Engineer (`mcp:read` + `mcp:write` on every server), Read-only Tools (every server, read-only)                                                                                                                                                                                                                                                                                                                                                                                                                       | `[x]`  |
 
@@ -208,18 +208,19 @@ present in a developer's org and deliberately absent from the shared demo org.
 
 1. New page = new row here + seed data + a `verify.md` check, in the same
    commit.
-2. All ids derive from the fixed constants in `postgres.sql` (org
-   `org_gram_demo_workspace`, projects `dec0de00-…0001`/`…0002`); chat ids are
-   `md5('gram-demo-chat-' || n)` in BOTH stores; the owner index formula
-   `1 + (n % 6)` must stay identical in both files.
+2. All ids derive from the tenant's Spec through the seeder helpers (org
+   `org_gram_demo_workspace`, project `dec0de00-…0001`); chat ids, owners,
+   and timestamps come from the `names.go` helpers, which BOTH stores use.
 3. Timestamps are always relative to `now()`, trailing ≤ 12 days, so every
    chat clears the MV date cutoffs, the daily prod rerun keeps data fresh, and
    MVs populate on INSERT — never hand-backfill an MV target. Billing meter
    facts follow the same rule: clear both the tenant's raw ledger and daily
    summary target, wait for delete visibility, then let the fresh raw inserts
-   incrementally repopulate UTC-day summaries.
+   incrementally repopulate UTC-day summaries. The one exception is
+   `sigint_readings`: it feeds no MV, so its readings span 400 trailing days
+   to give trend views a full annual cycle.
 4. Every new CH insert target (or new MV) gets a matching scoped DELETE in
-   `clickhouse.sql`, or re-runs double the numbers.
+   `ch_01_purge_telemetry.go`, or re-runs double the numbers.
 5. Cost/session MVs are provenance-first: usage rows must be Claude OTEL
    api_request (+`prompt.id`), `cursor:usage:*`, codex OTEL, or agent
    PostToolUse hook shapes — generic `chat:completion` rows are ignored.
@@ -298,3 +299,30 @@ The Default project contains its Everyone Default plugin and a role-only plugin 
 ### [~] Assistants: workload identity bindings
 
 AIM-409 assistant fixtures use one ordinary project-pinned trust registration (nonempty illustrative platform issuer/JWKS URLs, no wildcard admission), exact root admission/assignment, and complete generation-1 binding mirror tuples. The fifth managed agent belongs only to the bound assistant and has no grants or upstream credentials. Dashboard roots are durable, not per-wake. The demo trust URLs are inert display fixtures; runtime creation instead uses the deployment's configured Speakeasy issuer and existing JWKS. Browser verification pending.
+
+### Optional private-network onboarding
+
+The `private-network` setup task is catalog-backed and hidden by default, including
+in the demo's existing security selection. No representative ingress or new task
+row is needed: ordinary onboarding must not gain this step. Staff can select
+`platform-mcp` and `private-network` in a gateway-only playbook. The card reads the
+existing product-feature entitlement and links to organization Network Access
+settings; without entitlement it offers support rather than collecting credentials.
+The demo deliberately remains unentitled: no `network_ingress` grant, Tailscale
+credentials, partner identities, or billing configuration are seeded.
+
+### Billing payment setup
+
+The shared Add payment method prompt remains available during active trials,
+including enterprise trials. Outside a trial it is offered only to Free/Base
+organizations with no subscription. The enterprise demo intentionally does not
+seed a partner promotion or change tier to showcase this action: doing so would
+misrepresent billing eligibility and hide enterprise features. Focused billing
+component tests cover generic and code-owned partner copy, verified subscription
+suppression, and reuse of checkout; no billing configuration is seeded.
+
+The post-activation discount box requires an actual active Stripe subscription
+and verified discount/price terms, not seeded signup attribution. The enterprise
+demo intentionally shows no box; component and Stripe transport fixtures cover
+verified gateway terms, safe monetary/percentage fallback, expiration, and absence.
+No Stripe subscription, promotion, or local billing settings are seeded for it.

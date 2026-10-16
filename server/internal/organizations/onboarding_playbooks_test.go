@@ -369,3 +369,30 @@ func TestOnboardingPlaybookSkipsAStepThisBuildDoesNotKnow(t *testing.T) {
 	require.NotNil(t, setupTask(listed.Tasks, "identity-provider"))
 	require.Nil(t, setupTask(listed.Tasks, "future-step"))
 }
+
+func TestOnboardingGatewayPlaybookSelectsOnlyGatewayTasks(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestOrganizationsService(t)
+	seedOnboardingCatalog(t, ti)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	useCase, err := organizations.CreateOnboardingUseCase(ctx, ti.conn, "gateway", "Private gateway", "")
+	require.NoError(t, err)
+	playbook, err := organizations.CreateOnboardingPlaybook(ctx, ti.conn, organizations.OnboardingPlaybookInput{
+		UseCaseID: conv.PtrEmpty(mustUUID(t, useCase.ID)), OrganizationID: nil,
+		Name: "Private gateway", Description: "", IsDefault: false,
+		StepSlugs: []string{"platform-mcp", "private-network"},
+	})
+	require.NoError(t, err)
+	id := mustUUID(t, playbook.ID)
+	_, err = organizations.AssignOrganizationOnboardingPlaybook(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, &id, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
+	require.NoError(t, err)
+	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.Tasks, 2)
+	require.Equal(t, "platform-mcp", listed.Tasks[0].Key)
+	require.Equal(t, "private-network", listed.Tasks[1].Key)
+	require.False(t, listed.Tasks[1].Hidden)
+	require.Empty(t, listed.Tasks[1].BlockedBy)
+	require.False(t, listed.Tasks[1].CompletedByFact)
+}

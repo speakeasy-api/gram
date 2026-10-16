@@ -20,7 +20,7 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 
 	steps, err := organizations.ListOnboardingSteps(ctx, ti.conn)
 	require.NoError(t, err)
-	require.Len(t, steps, 14, "twelve cards and two groups")
+	require.Len(t, steps, 15, "thirteen cards and two groups")
 	position := make(map[string]int, len(steps))
 	bySlug := make(map[string]*admingen.AdminOnboardingStep, len(steps))
 	for index, step := range steps {

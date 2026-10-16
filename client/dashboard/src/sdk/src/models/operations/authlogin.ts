@@ -18,6 +18,10 @@ export type AuthLoginRequest = {
    */
   orgName?: string | undefined;
   /**
+   * Optional partner signup code.
+   */
+  partnerCode?: string | undefined;
+  /**
    * Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
    */
   email?: string | undefined;
@@ -35,6 +39,7 @@ export type AuthLoginResponse = {
 export type AuthLoginRequest$Outbound = {
   redirect?: string | undefined;
   org_name?: string | undefined;
+  partner_code?: string | undefined;
   email?: string | undefined;
   support_handoff?: string | undefined;
 };
@@ -47,12 +52,14 @@ export const AuthLoginRequest$outboundSchema: z.ZodMiniType<
   z.object({
     redirect: z.optional(z.string()),
     orgName: z.optional(z.string()),
+    partnerCode: z.optional(z.string()),
     email: z.optional(z.string()),
     supportHandoff: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       orgName: "org_name",
+      partnerCode: "partner_code",
       supportHandoff: "support_handoff",
     });
   }),
