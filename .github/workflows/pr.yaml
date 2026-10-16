@@ -2723,7 +2723,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: ./.github/workflows/composite/go-mod-cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       # The stdio credential tests are Linux-only and need /dev/shm on tmpfs;
       # they fail rather than skip when it is missing.
