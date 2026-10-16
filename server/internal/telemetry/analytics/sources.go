@@ -88,12 +88,20 @@ func (s Source) Rows(qc QueryContext) squirrel.SelectBuilder {
 }
 
 // merged reads one row per Key from the source's table. The call's start
-// decides whether it falls inside the window.
+// decides whether it falls inside the window. Until merges catch up a call
+// can sit in several partial rows, so the started_at index only picks the
+// keys, and every row of those keys is merged.
 func (s Source) merged(qc QueryContext) squirrel.SelectBuilder {
+	tenant := squirrel.Eq{"organization_id": qc.Tenant.OrganizationID, "project_id": qc.Tenant.ProjectID}
+	keys := sq.Select(s.Key).
+		From(s.Table).
+		Where(tenant).
+		Where("started_at_unix_nano >= ?", qc.Window.FromUnixNano).
+		Where("started_at_unix_nano < ?", qc.Window.ToUnixNano)
 	builder := sq.Select(s.Columns...).
 		From(s.Table).
-		Where(squirrel.Eq{"organization_id": qc.Tenant.OrganizationID}).
-		Where(squirrel.Eq{"project_id": qc.Tenant.ProjectID}).
+		Where(tenant).
+		Where(squirrel.Expr(s.Key+" IN (?)", keys)).
 		GroupBy("organization_id", "project_id", s.Key).
 		Having("started_at >= ?", qc.Window.FromUnixNano).
 		Having("started_at < ?", qc.Window.ToUnixNano)
