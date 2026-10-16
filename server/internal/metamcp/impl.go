@@ -1158,7 +1158,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 					attr.SlogMetaMcpServerID(meta.ID.String()),
 					attr.SlogMcpServerID(server.ID.String()))
 			}
-			}
+		}
 	}
 
 	if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, audit.LogMetaMcpMemberEvent{
