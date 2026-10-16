@@ -23,10 +23,10 @@ import (
 // stubWriter stands in for an operation that has an implementation.
 type stubWriter struct{}
 
-func (stubWriter) revalidate(context.Context, pgx.Tx, Proposal) error { return nil }
+func (stubWriter) revalidate(context.Context, pgx.Tx, Proposal) error   { return nil }
 func (stubWriter) view(context.Context, Proposal) (proposalView, error) { return proposalView{}, nil }
-func (stubWriter) execution(writeAuthority) ProposalExecution         { return ProposalExecution{} }
-func (stubWriter) registerPrepare(*mcp.Server)                        {}
+func (stubWriter) execution(writeAuthority) ProposalExecution           { return ProposalExecution{} }
+func (stubWriter) registerPrepare(*mcp.Server)                          {}
 
 func writeContext(t *testing.T, f proposalFixture) context.Context {
 	t.Helper()
