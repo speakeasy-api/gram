@@ -176,7 +176,7 @@ func TestWindowBudgetFallbackAndObservability(t *testing.T) {
 			c, requests := newRecordingClassifier(t)
 			h, pub := handler(t, m, definitions, c, meters)
 			var logs bytes.Buffer
-			evaluator, err := NewEvaluator(slog.New(slog.NewJSONHandler(&logs, nil)), meters, h.evaluator.source, h.evaluator.features, pub, c)
+			evaluator, err := NewEvaluator(slog.New(slog.NewJSONHandler(&logs, nil)), meters, h.evaluator.source, h.evaluator.features, pub, &pub.outcomes, c)
 			require.NoError(t, err)
 			h.evaluator = evaluator
 			target := storedMessage(m)

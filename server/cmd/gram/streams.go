@@ -482,9 +482,10 @@ func newStreamsCommand() *cli.Command {
 				riskMeterPub  gcp.Publisher[*meteringv1.MeterReading]
 				sessionLogPub gcp.Publisher[*telemetryv1.LogRecord]
 				readingsPub   gcp.Publisher[*sigintv1.Reading]
+				outcomesPub   gcp.Publisher[*sigintv1.Outcome]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub, readingsPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub, readingsPub, outcomesPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -523,13 +524,17 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create sensor readings publisher: %w", err)
 			}
+			outcomesPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &sigintv1.Outcome{}, gcp.WithPubSubPublishSettings(&meterPublishSettings))
+			if err != nil {
+				return fmt.Errorf("create sensor outcomes publisher: %w", err)
+			}
 
 			sensorClassifier, err := jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key"))))
 			if err != nil {
 				return fmt.Errorf("create sensor classifier: %w", err)
 			}
 
-			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, sensorClassifier)
+			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, outcomesPub, sensorClassifier)
 			if err != nil {
 				return fmt.Errorf("create sensor evaluator: %w", err)
 			}
@@ -749,6 +754,7 @@ func newStreamsCommand() *cli.Command {
 					mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
 				}
 				mustReceiveBatch(rg, &sigintv1.Reading{}, &sigintv1.ReadingCHWriter{}, sigint.NewReadingCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatch(rg, &sigintv1.Outcome{}, &sigintv1.OutcomeCHWriter{}, sigint.NewOutcomeCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 				roleDistributionGuard := admission.NewGuard()

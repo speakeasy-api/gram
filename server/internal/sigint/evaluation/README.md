@@ -1,8 +1,8 @@
 # Sensor evaluation
 
 `gram streams` consumes `gram.conversation.v1.MessageEvent` through
-`gram.sigint.v1.Evaluator` and publishes successful `gram.sigint.v1.Reading`
-messages. Configure **`GRAM_SIGINT_OPENROUTER_API_KEY`** with a platform-owned
+`gram.sigint.v1.Evaluator`. It publishes successful `gram.sigint.v1.Reading`
+messages and a `gram.sigint.v1.Outcome` for every other terminal sensor decision. Configure **`GRAM_SIGINT_OPENROUTER_API_KEY`** with a platform-owned
 OpenRouter inference key. The receiver is not registered when this is unset,
 unless temporary ack-only mode is enabled.
 The shared Jev client uses this key for every tenant; evaluation does not resolve
@@ -204,7 +204,9 @@ Based on the [System One request schema](https://openrouter.ai/docs/api/api-refe
 - `exclusive`: one Choice question, 1–255 options; null descriptions are allowed.
 - `ordered_score`: one Score question, 2–10 ordered, non-null level descriptions.
 - Empty sensors and incomplete definitions are skipped, counted as `draft` in
-  `gram.sigint.evaluation.skipped`.
+  `gram.sigint.evaluation.skipped`. Incomplete sensors whose match expression
+  selects the event publish `STATUS_DRAFT` outcomes. Matching runs first, so a
+  nonmatching incomplete sensor publishes `STATUS_NOT_APPLICABLE`.
 
 Every eligible runnable sensor contributes to one logical classifier request per
 event and effective input configuration.
@@ -258,6 +260,33 @@ These fields do not participate in reading identity or the definition hash.
 
 Successful readings are published and their publication results awaited before
 acknowledgment.
+
+### Outcomes
+
+Coverage needs every eligible sensor decision, not only answers. Each loaded
+sensor that does not produce a reading publishes one `gram.sigint.v1.Outcome`,
+awaited before acknowledgment like readings:
+
+| Decision                                       | Status                  | `failure_reason`                                                                                      |
+| ---------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| Match expression excludes the event            | `STATUS_NOT_APPLICABLE` | empty                                                                                                 |
+| Incomplete definition (checked after matching) | `STATUS_DRAFT`          | empty                                                                                                 |
+| Invalid predicate or exhausted matching budget | `STATUS_FAILED`         | `match_compile`, `match_result_type`, `match_expression_size`, `match_evaluation`, `match_cost_limit` |
+| Unusable input shared by a group of sensors    | `STATUS_FAILED`         | `invalid_content`, `content_too_large`, `invalid_reference`, `missing_asset`                          |
+| Non-retryable classifier failure               | `STATUS_FAILED`         | `classifier_rejected`                                                                                 |
+| Answer does not fit the sensor mode            | `STATUS_FAILED`         | `invalid_answer`                                                                                      |
+| Reading over the 9 MiB transport budget        | `STATUS_FAILED`         | `reading_too_large`                                                                                   |
+
+An outcome carries the reading ID the same sensor and event would produce, the
+attempt ID, tenant, event reference, sensor ID/slug, definition hash (empty for a
+draft), decision time and the same attribution as a reading. Failures after input
+resolution also record the supplied input, and failures after inference record
+the classifier model metadata. One attempt ID covers every reading and outcome of
+an event evaluation. Retryable failures publish nothing and nack the delivery, so
+redelivery decides them later. Event-level failures before sensors load (invalid
+identity, timestamp or event) have no sensor to attribute and publish no outcome;
+a message census must account for those. The failure and skip counters are
+unchanged.
 Readings exceeding 9 MiB of serialized protobuf are rejected before publication,
 leaving headroom under Pub/Sub's 10 MiB limit. They are permanent failures with
 reason `reading_too_large`; other successful readings are still published.

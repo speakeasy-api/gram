@@ -1,8 +1,8 @@
 # Sensor reading storage
 
-`ReadingCHWriter` is a Pub/Sub batch consumer of `gram.sigint.v1.Reading`,
-independent of the lake subscription. It synchronously inserts complete attempts
-into `sigint_readings`. Malformed messages are logged without label contents and
+The `ReadingCHWriter` and `OutcomeCHWriter` subscriptions are batch consumers of
+`gram.sigint.v1.Reading` and `gram.sigint.v1.Outcome`, independent of the lake
+subscription. Both synchronously insert complete attempts into `sigint_readings`. Malformed messages are logged without label contents and
 acknowledged. Storage errors nack the batch, so duplicate rows are expected.
 
 ## One row per logical reading
@@ -25,15 +25,22 @@ physical insert, including duplicates, and replacement does not retract them.
 
 ## Outcomes and coverage
 
-`status` is `answered` for every published reading today. The column also admits
-`not_applicable`, `draft` and `failed` (with `failure_reason`), so a later producer
-can record why an eligible message has no answer. Coverage counts these outcomes
-and messages that never produced a row. It does not drop them. Only answered rows
-carry a result type, probabilities, a selected signal, an expected index or a
-confidence. The Pub/Sub writer validates every message with `ParseReading` before
-insert. Demo seed rows bypass it, and `TestSeededSigintReadingsSatisfyWriterRules`
-holds them to the same rules. The table has no CHECK constraints, so rules can
-change without a migration.
+Readings land as `answered`. Outcomes land as `not_applicable`, `draft` or
+`failed` (with a bounded snake_case `failure_reason`). They leave the result type,
+probabilities, selected signal, expected index and confidence empty.
+The Pub/Sub writers validate every message with `ParseReading` or `ParseOutcome`
+before insert. Demo seed rows bypass them, and
+`TestSeededSigintReadingsSatisfyWriterRules` holds them to the same rules. The
+table has no CHECK constraints, so rules can change without a migration. An
+outcome shares its reading's ID and source time, so replacement on `evaluated_at`
+picks the latest attempt across both topics: a later answer replaces an earlier failure and vice versa. Coverage
+counts outcomes and messages that never produced a row. It does not drop them.
+Draft outcomes have no definition hash.
+
+`Outcome` nests self-contained copies of `Reading`'s event, actor, account and
+input messages, because Pub/Sub topic schemas cannot import other types. The
+copies match field for field, so `ParseOutcome` converts them through the wire
+format. `TestOutcomeContextMirrorsReading` fails when they drift.
 
 `input_*` columns record the message context an attempt actually supplied:
 strategy, requested and supplied message counts including the target, and budget
