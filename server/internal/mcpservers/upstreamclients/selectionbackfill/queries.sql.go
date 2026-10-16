@@ -131,6 +131,7 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
         OR si.project_id IS NULL
@@ -285,16 +286,16 @@ func (q *Queries) SeedClientBindingFixture(ctx context.Context, arg SeedClientBi
 }
 
 const seedMCPServerFixture = `-- name: SeedMCPServerFixture :exec
-INSERT INTO mcp_servers (id, project_id, slug, unproxied_mcp_server_id, user_session_issuer_id, visibility)
+INSERT INTO mcp_servers (id, project_id, slug, remote_mcp_server_id, user_session_issuer_id, visibility)
 VALUES ($1, $2, $3, $4, $5, 'private')
 `
 
 type SeedMCPServerFixtureParams struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	Slug                 pgtype.Text
-	UnproxiedMcpServerID uuid.NullUUID
-	UserSessionIssuerID  uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Slug                pgtype.Text
+	RemoteMcpServerID   uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
 }
 
 func (q *Queries) SeedMCPServerFixture(ctx context.Context, arg SeedMCPServerFixtureParams) error {
@@ -302,7 +303,7 @@ func (q *Queries) SeedMCPServerFixture(ctx context.Context, arg SeedMCPServerFix
 		arg.ID,
 		arg.ProjectID,
 		arg.Slug,
-		arg.UnproxiedMcpServerID,
+		arg.RemoteMcpServerID,
 		arg.UserSessionIssuerID,
 	)
 	return err
@@ -373,6 +374,20 @@ func (q *Queries) SeedProjectFixture(ctx context.Context, arg SeedProjectFixture
 	return err
 }
 
+const seedRemoteMCPServerFixture = `-- name: SeedRemoteMCPServerFixture :exec
+INSERT INTO remote_mcp_servers (id, project_id, transport_type, url) VALUES ($1, $2, 'streamable-http', 'https://upstream.example.com/mcp')
+`
+
+type SeedRemoteMCPServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SeedRemoteMCPServerFixture(ctx context.Context, arg SeedRemoteMCPServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRemoteMCPServerFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const seedRemoteSessionClientFixture = `-- name: SeedRemoteSessionClientFixture :exec
 INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id)
 VALUES ($1, $2, $3, $4, $5)
@@ -419,7 +434,7 @@ func (q *Queries) SeedRemoteSessionIssuerFixture(ctx context.Context, arg SeedRe
 }
 
 const seedUnproxiedMCPServerFixture = `-- name: SeedUnproxiedMCPServerFixture :exec
-INSERT INTO unproxied_mcp_servers (id, project_id, url) VALUES ($1, $2, 'https://upstream.example.com/mcp')
+INSERT INTO unproxied_mcp_servers (id, project_id, url) VALUES ($1, $2, 'https://unproxied.example.com/mcp')
 `
 
 type SeedUnproxiedMCPServerFixtureParams struct {
@@ -429,6 +444,30 @@ type SeedUnproxiedMCPServerFixtureParams struct {
 
 func (q *Queries) SeedUnproxiedMCPServerFixture(ctx context.Context, arg SeedUnproxiedMCPServerFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedUnproxiedMCPServerFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
+const seedUnproxiedMCPServerRowFixture = `-- name: SeedUnproxiedMCPServerRowFixture :exec
+INSERT INTO mcp_servers (id, project_id, slug, unproxied_mcp_server_id, user_session_issuer_id, visibility)
+VALUES ($1, $2, $3, $4, $5, 'private')
+`
+
+type SeedUnproxiedMCPServerRowFixtureParams struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	Slug                 pgtype.Text
+	UnproxiedMcpServerID uuid.NullUUID
+	UserSessionIssuerID  uuid.NullUUID
+}
+
+func (q *Queries) SeedUnproxiedMCPServerRowFixture(ctx context.Context, arg SeedUnproxiedMCPServerRowFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedUnproxiedMCPServerRowFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.UnproxiedMcpServerID,
+		arg.UserSessionIssuerID,
+	)
 	return err
 }
 

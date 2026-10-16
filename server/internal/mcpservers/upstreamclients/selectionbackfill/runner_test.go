@@ -105,13 +105,13 @@ func (f *fixture) server(userIssuerID uuid.UUID, clientIDs ...uuid.UUID) uuid.UU
 	f.t.Helper()
 	ctx := f.t.Context()
 	backendID, serverID := uuid.New(), uuid.New()
-	require.NoError(f.t, f.q.SeedUnproxiedMCPServerFixture(ctx, SeedUnproxiedMCPServerFixtureParams{ID: backendID, ProjectID: f.projectID}))
+	require.NoError(f.t, f.q.SeedRemoteMCPServerFixture(ctx, SeedRemoteMCPServerFixtureParams{ID: backendID, ProjectID: f.projectID}))
 	require.NoError(f.t, f.q.SeedMCPServerFixture(ctx, SeedMCPServerFixtureParams{
-		ID:                   serverID,
-		ProjectID:            f.projectID,
-		Slug:                 pgtype.Text{String: "s-" + serverID.String()[:8], Valid: true},
-		UnproxiedMcpServerID: uuid.NullUUID{UUID: backendID, Valid: true},
-		UserSessionIssuerID:  uuid.NullUUID{UUID: userIssuerID, Valid: userIssuerID != uuid.Nil},
+		ID:                  serverID,
+		ProjectID:           f.projectID,
+		Slug:                pgtype.Text{String: "s-" + serverID.String()[:8], Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: backendID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: userIssuerID != uuid.Nil},
 	}))
 	for _, clientID := range clientIDs {
 		f.associate(serverID, clientID)
@@ -369,4 +369,26 @@ func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 			require.Equal(t, tt.want, Classify(tt.row))
 		})
 	}
+}
+
+func TestRecordUpstreamClientSelectionsSkipsUnproxiedServers(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	f.client(issuer)
+	backendID, serverID := uuid.New(), uuid.New()
+	require.NoError(t, f.q.SeedUnproxiedMCPServerFixture(t.Context(), SeedUnproxiedMCPServerFixtureParams{ID: backendID, ProjectID: f.projectID}))
+	require.NoError(t, f.q.SeedUnproxiedMCPServerRowFixture(t.Context(), SeedUnproxiedMCPServerRowFixtureParams{
+		ID:                   serverID,
+		ProjectID:            f.projectID,
+		Slug:                 pgtype.Text{String: "s-" + serverID.String()[:8], Valid: true},
+		UnproxiedMcpServerID: uuid.NullUUID{UUID: backendID, Valid: true},
+		UserSessionIssuerID:  uuid.NullUUID{UUID: issuer, Valid: true},
+	}))
+	credential := f.session(issuer)
+
+	require.Zero(t, f.record(issuer, credential), "an unproxied server keeps the issuer's bindings and needs no choice")
+	report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Empty(t, report.Gaps, "and is never a gap")
 }
