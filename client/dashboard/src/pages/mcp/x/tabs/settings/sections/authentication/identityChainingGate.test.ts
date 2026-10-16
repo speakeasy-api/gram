@@ -120,6 +120,15 @@ describe("identityChainingProviders", () => {
     ).toEqual({ external: false });
   });
 
+  it("lets Speakeasy vouch when its issuer couldn't be read", () => {
+    expect(
+      identityChainingProviders(orgIssuer, {
+        ...rollouts,
+        speakeasyUnknown: true,
+      }),
+    ).toEqual({ external: false });
+  });
+
   it.each(["keyless", "disabled", "signing_paused"] as const)(
     "keeps a %s Speakeasy issuer's bindings manageable",
     (state) => {

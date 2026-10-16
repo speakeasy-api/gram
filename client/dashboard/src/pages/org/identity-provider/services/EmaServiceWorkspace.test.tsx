@@ -244,6 +244,8 @@ beforeEach(() => {
   mocks.rows = [linear, notion];
   mocks.isPending = false;
   mocks.isError = false;
+  mocks.isFetching = false;
+  mocks.refetch.mockReset();
   mocks.admin = true;
   mocks.flag = "enabled";
   mocks.flags = {};
@@ -271,6 +273,23 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("one service", () => {
+  it("offers a retry when the services can't load", () => {
+    mocks.isError = true;
+    mocks.rows = [];
+    const { rerender } = show();
+    expect(
+      screen.getByText("Couldn’t load this service. Try again."),
+    ).toBeTruthy();
+    const retry = () =>
+      screen.getByRole<HTMLButtonElement>("button", { name: "Retry" });
+    expect(retry().disabled).toBe(false);
+    fireEvent.click(retry());
+    expect(mocks.refetch).toHaveBeenCalledTimes(1);
+    mocks.isFetching = true;
+    rerender(tree());
+    expect(retry().disabled).toBe(true);
+  });
+
   it("names the service and the way back, leaving the count to the server list", () => {
     show();
     expect(screen.getByRole("heading", { name: "Linear" })).toBeTruthy();
@@ -868,6 +887,44 @@ describe("one service", () => {
     ];
     show();
     expect(within(trustRows()[0]!).queryByRole("link")).toBeNull();
+  });
+
+  it.each([
+    [
+      "the Okta view",
+      "enabled",
+      "Fix in Okta",
+      "/?tab=identity-providers&provider=okta&view=setup",
+    ],
+    [
+      "identity providers without the Okta view",
+      "disabled",
+      "Identity providers",
+      "/?tab=identity-providers",
+    ],
+  ])("links a broken Okta provider's fix to %s", (_name, flag, label, href) => {
+    mocks.flags = { "okta-connections": flag };
+    mocks.rows = [
+      {
+        ...linear,
+        isDefault: false,
+        providers: [
+          {
+            ...okta,
+            usable: false,
+            unavailable: "No longer available",
+            fix: "okta",
+          },
+          speakeasy,
+        ],
+      },
+    ];
+    show();
+    expect(
+      within(trustRows()[0]!)
+        .getByRole("link", { name: label })
+        .getAttribute("href"),
+    ).toBe(href);
   });
 
   it("says another admin changed the list when Use default is refused", async () => {

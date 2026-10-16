@@ -151,7 +151,10 @@ beforeEach(() => {
   state.orgAdmin = true;
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("IdentityChainingSection", () => {
   it("is its own section on an organization issuer Speakeasy can vouch for", () => {
@@ -377,8 +380,13 @@ describe("IdentityChainingSection", () => {
   it("scrolls to itself once it has loaded on a deep link", () => {
     state.hash = "#identity-chaining";
     state.clientsLoading = true;
-    const scroll = vi.fn<(arg?: boolean | ScrollIntoViewOptions) => void>();
-    Element.prototype.scrollIntoView = scroll;
+    // jsdom has no scrollIntoView to spy on.
+    if (!Object.hasOwn(Element.prototype, "scrollIntoView")) {
+      Element.prototype.scrollIntoView = () => {};
+    }
+    const scroll = vi
+      .spyOn(Element.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
       cb(0);
       return 1;

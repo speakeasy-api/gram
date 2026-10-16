@@ -207,7 +207,12 @@ function TrustRow({
   /** The Okta connection's issuer, when its Cross App Access view is available. */
   oktaIssuerId: string | undefined;
 }): JSX.Element {
-  const fix = provider.fix ? providerFixLink(provider.fix) : undefined;
+  // The Okta fix needs the Okta view, which the rollout can hide.
+  const fixTarget =
+    provider.fix === "okta" && !oktaIssuerId
+      ? "identity-providers"
+      : provider.fix;
+  const fix = fixTarget ? providerFixLink(fixTarget) : undefined;
   return (
     <li className="space-y-2">
       {/* The placeholder's full scope follows below, so its short one would repeat it. */}
