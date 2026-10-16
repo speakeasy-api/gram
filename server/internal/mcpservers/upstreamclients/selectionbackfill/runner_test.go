@@ -309,6 +309,52 @@ func TestRecordUpstreamClientSelections(t *testing.T) {
 		require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: member, Outcome: OutcomeUnassociated}}, report.Gaps)
 	})
 
+	t.Run("another project's gateway client does not keep a member from no-auth", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		gatewayIssuer := f.projectIssuer()
+		member := f.server(f.projectIssuer())
+		// A client owned by another project is never one this member uses,
+		// even bound to the gateway's issuer with a grant naming its upstream.
+		other := uuid.New()
+		require.NoError(t, f.q.SeedProjectFixture(t.Context(), SeedProjectFixtureParams{ID: other, Slug: "p-" + other.String()[:8], OrganizationID: f.orgID}))
+		foreignIssuer, foreign := uuid.New(), uuid.New()
+		require.NoError(t, f.q.SeedRemoteSessionIssuerFixture(t.Context(), SeedRemoteSessionIssuerFixtureParams{
+			ID:        foreignIssuer,
+			ProjectID: uuid.NullUUID{UUID: other, Valid: true},
+			Slug:      "rsi-" + foreignIssuer.String()[:8],
+			Issuer:    "https://" + foreignIssuer.String()[:8] + ".example.com",
+		}))
+		require.NoError(t, f.q.SeedRemoteSessionClientFixture(t.Context(), SeedRemoteSessionClientFixtureParams{
+			ID:                    foreign,
+			ProjectID:             uuid.NullUUID{UUID: other, Valid: true},
+			OrganizationID:        pgtype.Text{String: f.orgID, Valid: true},
+			RemoteSessionIssuerID: foreignIssuer,
+			ClientID:              "cid-" + foreign.String()[:8],
+		}))
+		require.NoError(t, f.q.SeedClientBindingFixture(t.Context(), SeedClientBindingFixtureParams{RemoteSessionClientID: foreign, UserSessionIssuerID: gatewayIssuer}))
+		require.NoError(t, f.q.SeedGrantFixture(t.Context(), SeedGrantFixtureParams{
+			SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
+			UserSessionIssuerID:   gatewayIssuer,
+			RemoteSessionClientID: foreign,
+			Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
+		}))
+		gatewayID := uuid.New()
+		require.NoError(t, f.q.SeedMetaMCPServerFixture(t.Context(), SeedMetaMCPServerFixtureParams{
+			ID:                  gatewayID,
+			OrganizationID:      f.orgID,
+			ProjectID:           f.projectID,
+			Name:                "gateway",
+			UserSessionIssuerID: uuid.NullUUID{UUID: gatewayIssuer, Valid: true},
+		}))
+		require.NoError(t, f.q.SeedMetaMCPServerMemberFixture(t.Context(), SeedMetaMCPServerMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: member}))
+		credential := f.session(gatewayIssuer)
+
+		f.record(gatewayIssuer, credential)
+
+		require.Equal(t, map[uuid.UUID]uuid.UUID{member: uuid.Nil}, f.selections(credential))
+	})
+
 	t.Run("a choice is kept, never replaced", func(t *testing.T) {
 		t.Parallel()
 		f := newFixture(t)

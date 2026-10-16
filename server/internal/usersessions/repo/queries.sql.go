@@ -4311,7 +4311,7 @@ WITH session_issuer AS (
       AND usi.deleted IS FALSE
 ),
 reachable AS (
-    SELECT s.id, s.project_id, s.user_session_issuer_id,
+    SELECT s.id, s.project_id, p.organization_id, s.user_session_issuer_id,
            s.remote_session_issuer_id AS derived_issuer_id,
            COALESCE(rms.url, tms.resource_identifier, '') AS upstream
     FROM mcp_servers AS s
@@ -4379,9 +4379,21 @@ decided AS (
              JOIN remote_session_clients AS gateway_client
                ON gateway_client.id = gateway_link.remote_session_client_id
               AND gateway_client.deleted IS FALSE
+              AND (gateway_client.project_id = r.project_id
+                   OR (gateway_client.project_id IS NULL AND gateway_client.organization_id = r.organization_id)
+                   OR (gateway_client.project_id IS NULL AND gateway_client.organization_id IS NULL))
              WHERE gateway_link.user_session_issuer_id = $4
                AND (
-                 (r.derived_issuer_id IS NOT NULL AND gateway_client.remote_session_issuer_id = r.derived_issuer_id)
+                 EXISTS (
+                   SELECT 1
+                   FROM remote_session_issuers AS derived
+                   WHERE derived.id = r.derived_issuer_id
+                     AND derived.id = gateway_client.remote_session_issuer_id
+                     AND derived.deleted IS FALSE
+                     AND (derived.project_id = r.project_id
+                          OR (derived.project_id IS NULL AND derived.organization_id = r.organization_id)
+                          OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
+                 )
                  OR EXISTS (
                    SELECT 1
                    FROM remote_sessions AS rs
