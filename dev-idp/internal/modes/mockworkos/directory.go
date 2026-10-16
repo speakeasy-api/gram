@@ -128,14 +128,23 @@ func (h *Handler) handleWorkosListDirectoryUsers(w http.ResponseWriter, r *http.
 	switch directoryID := firstQuery(q, "directory"); {
 	case directoryID != "":
 		orgID, err = h.directoryOrgID(ctx, directoryID)
+		if err != nil {
+			writeWorkosError(w, http.StatusBadRequest, "directory is required")
+			return
+		}
 	case groupID.Valid:
-		var group repo.DirectoryGroup
-		group, err = repo.New(h.db).GetDirectoryGroup(ctx, groupID.UUID)
+		group, err := repo.New(h.db).GetDirectoryGroup(ctx, groupID.UUID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			writeWorkosError(w, http.StatusNotFound, "directory group not found")
+			return
+		case err != nil:
+			h.logger.ErrorContext(ctx, "workos list directory users", slog.Any("error", err))
+			writeWorkosError(w, http.StatusInternalServerError, "failed to list directory users")
+			return
+		}
 		orgID = group.OrganizationID
 	default:
-		err = errors.New("directory or group is required")
-	}
-	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "directory or group is required")
 		return
 	}

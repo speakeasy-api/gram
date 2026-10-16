@@ -63,11 +63,18 @@ func TestDirectorySyncThroughSDK(t *testing.T) {
 	require.Equal(t, []string{"alex.rivera@example.com", "jordan.lee@example.com", "sam.taylor@example.com"}, emails)
 
 	// WorkOS also lists a group's members from the group alone.
-	groupOnly, err := client.ListUsers(ctx, directorysync.ListUsersOpts{Directory: "", Group: engineering.ID, Limit: 100, Order: "", Before: "", After: ""})
-	require.NoError(t, err)
-	groupOnlyEmails := make([]string, 0, len(groupOnly.Data))
-	for _, u := range groupOnly.Data {
-		groupOnlyEmails = append(groupOnlyEmails, u.Email)
+	var groupOnlyEmails []string
+	groupAfter := ""
+	for {
+		page, err := client.ListUsers(ctx, directorysync.ListUsersOpts{Directory: "", Group: engineering.ID, Limit: 2, Order: "", Before: "", After: groupAfter})
+		require.NoError(t, err)
+		for _, u := range page.Data {
+			groupOnlyEmails = append(groupOnlyEmails, u.Email)
+		}
+		if page.ListMetadata.After == "" {
+			break
+		}
+		groupAfter = page.ListMetadata.After
 	}
 	slices.Sort(groupOnlyEmails)
 	require.Equal(t, emails, groupOnlyEmails)
