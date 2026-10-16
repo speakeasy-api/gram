@@ -107,6 +107,12 @@ var OwnerProfile = Type("AgentOwnerProfile", func() {
 
 })
 
+var EligibleOwner = Type("AgentEligibleOwner", func() {
+	Required("user_id", "display_name")
+	Attribute("user_id", String, "Active same-organization owner permitted by the caller's live agent creation grants")
+	Attribute("display_name", String, "Owner display name")
+})
+
 var Agent = Type("ManagedAgent", func() {
 	Required("id", "owner_user_id", "name", "lifecycle", "permissions", "created_at", "updated_at")
 	Attribute("id", String, func() { Format(FormatUUID) })
@@ -127,6 +133,33 @@ var _ = Service("agents", func() {
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 	sessionMethods()
+
+	Method("listEligibleOwners", func() {
+		shared.CursorPagination()
+		Description("List only active same-organization owners for whom this ordinary human session may create an agent. Requires live owner-scoped agent:write, not directory-read access. Creation revalidates eligibility and membership.")
+		Meta("openapi:operationId", "listAgentEligibleOwners")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEligibleOwners")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentEligibleOwners"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("limit", Int, "Maximum owners per page", func() { Default(50); Minimum(1); Maximum(100) })
+			Attribute("cursor", String, "Last eligible owner user ID returned by the previous page", func() { MaxLength(1024) })
+			Attribute("search", String, "Case-insensitive display name substring", func() { MaxLength(200) })
+		})
+		Result(func() {
+			Required("owners")
+			Attribute("owners", ArrayOf(EligibleOwner))
+			Attribute("next_cursor", String, "Last returned eligible owner user ID; absent on the final page")
+		})
+		HTTP(func() {
+			GET("/rpc/agents.listEligibleOwners")
+			security.SessionHeader()
+			Param("limit")
+			Param("cursor")
+			Param("search")
+			Response(StatusOK)
+		})
+	})
 
 	Method("list", func() {
 		Meta("openapi:operationId", "listAgents")

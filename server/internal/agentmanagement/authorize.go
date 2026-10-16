@@ -33,6 +33,7 @@ const (
 type HumanContext struct {
 	Auth   *contextvalues.AuthContext
 	grants []authz.Grant
+	access authz.AgentAccess
 }
 
 // LiveGrants returns an isolated copy of the caller grants loaded by the
@@ -58,6 +59,7 @@ type AgentPermissions struct {
 
 type authorizationEngine interface {
 	EvaluateLoadedGrants(context.Context, []authz.Grant, ...authz.Check) error
+	EvaluateLoadedAuthority(context.Context, []authz.Grant, authz.Scope, authz.Selector) error
 }
 
 // Authorizer implements the reusable human-only agent management seam.
@@ -145,26 +147,23 @@ func (a *Authorizer) lockHumanMemberships(ctx context.Context, dbtx repo.DBTX, a
 		return HumanContext{}, fmt.Errorf("load live authorization grants: %w", err)
 	}
 
-	return HumanContext{Auth: authCtx, grants: grants}, nil
+	return HumanContext{Auth: authCtx, grants: grants, access: authz.NewAgentAccess(authCtx.UserID, grants)}, nil
 }
 
-// RequireCreate authorizes a prospective agent ID and locks the eligible owner
-// membership until the insert commits. Self-owned creation is intrinsic; any
-// other owner requires agent:write evaluated against the prospective agent.
-func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, ownerUserID string) (HumanContext, error) {
+// RequireCreate evaluates creation eligibility against the intended owner and
+// locks both active memberships until the insert commits. The recipient need
+// not hold write permission; owners retain intrinsic management access.
+func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, ownerUserID string) (HumanContext, error) {
 	human, err := a.requireHumanWithMemberships(ctx, dbtx, ownerUserID)
 	if err != nil {
 		return HumanContext{}, err
 	}
 
-	if ownerUserID == human.Auth.UserID {
-		return human, nil
-	}
 	if a.authz == nil {
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
-		return HumanContext{}, fmt.Errorf("authorize agent creation for another owner: %w", err)
+	if err := human.access.RequireCreate(ctx, a.authz, ownerUserID); err != nil {
+		return HumanContext{}, fmt.Errorf("require agent creation: %w", err)
 	}
 	return human, nil
 }
@@ -262,7 +261,7 @@ func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, 
 	if a.authz == nil {
 		return HumanContext{}, repo.Agent{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, agentCheck(scope, agent.ID)); err != nil {
+	if err := human.access.Require(ctx, a.authz, scope, agent.ID.String(), agent.OwnerUserID); err != nil {
 		// Selected-agent denials deliberately do not distinguish absent,
 		// cross-tenant, or unauthorized resources.
 		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
@@ -279,10 +278,10 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 	}
 
 	return AgentPermissions{
-		Read:      authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentRead, agent.ID)),
-		Write:     authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentWrite, agent.ID)),
-		Authorize: authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentAuthorize, agent.ID)),
-		Transfer:  authz.GrantsSatisfy(human.grants, agentCheck(authz.ScopeAgentTransfer, agent.ID)),
+		Read:      human.access.Allows(authz.ScopeAgentRead, agent.ID.String(), agent.OwnerUserID),
+		Write:     human.access.Allows(authz.ScopeAgentWrite, agent.ID.String(), agent.OwnerUserID),
+		Authorize: human.access.Allows(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID),
+		Transfer:  human.access.Allows(authz.ScopeAgentTransfer, agent.ID.String(), agent.OwnerUserID),
 	}, nil
 }
 
@@ -302,14 +301,5 @@ func scopeForOwnerPredicate(predicate OwnerPredicate) (authz.Scope, bool) {
 		return authz.ScopeAgentTransfer, true
 	default:
 		return "", false
-	}
-}
-
-func agentCheck(scope authz.Scope, agentID uuid.UUID) authz.Check {
-	return authz.Check{
-		Scope:        scope,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agentID.String(),
-		Dimensions:   nil,
 	}
 }

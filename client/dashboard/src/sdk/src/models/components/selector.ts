@@ -53,6 +53,10 @@ export type Selector = {
    */
   disposition?: Disposition | undefined;
   /**
+   * Agent owner filter (agent scopes only): 'self' for the caller, a user ID for a specified owner, or '*' for any owner. With resource_id='*', agent:write permits creation and management for these owners.
+   */
+  owner?: string | undefined;
+  /**
    * Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
    */
   projectId?: string | undefined;
@@ -92,6 +96,7 @@ export const ResourceKind$outboundSchema: z.ZodMiniEnum<typeof ResourceKind> =
 export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
   z.object({
     disposition: z.optional(Disposition$inboundSchema),
+    owner: z.optional(z.string()),
     project_id: z.optional(z.string()),
     resource_id: z.string(),
     resource_kind: ResourceKind$inboundSchema,
@@ -110,6 +115,7 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
 /** @internal */
 export type Selector$Outbound = {
   disposition?: string | undefined;
+  owner?: string | undefined;
   project_id?: string | undefined;
   resource_id: string;
   resource_kind: string;
@@ -124,6 +130,7 @@ export const Selector$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     disposition: z.optional(Disposition$outboundSchema),
+    owner: z.optional(z.string()),
     projectId: z.optional(z.string()),
     resourceId: z.string(),
     resourceKind: ResourceKind$outboundSchema,

@@ -15,6 +15,20 @@ import type { RoleGrant } from "./types";
 
 // --- Helpers ---
 
+it("detects an owner-only change to an agent write grant", () => {
+  const before = {
+    "agent:write": grant("agent:write", [
+      { resourceKind: "agent", resourceId: "*", owner: "self" },
+    ]),
+  };
+  const after = {
+    "agent:write": grant("agent:write", [
+      { resourceKind: "agent", resourceId: "*", owner: "other" },
+    ]),
+  };
+  expect(grantKeysString(before)).not.toBe(grantKeysString(after));
+});
+
 function grant(scope: Scope, selectors: Selector[] | null = null): RoleGrant {
   return {
     scope,
@@ -360,6 +374,33 @@ function sel(overrides: Partial<Selector> = {}): Selector {
 // --- computeRuleLabel ---
 
 describe("computeRuleLabel", () => {
+  it.each([
+    { owners: null, label: "Anyone in the organization" },
+    { owners: ["*"], label: "Anyone in the organization" },
+    { owners: [], label: "Select people…" },
+    { owners: ["self"], label: "Each role holder" },
+    { owners: ["user-a"], label: "1 selected person" },
+    { owners: ["user-a", "user-b"], label: "2 selected people" },
+    {
+      owners: ["self", "user-a"],
+      label: "Each role holder and 1 selected person",
+    },
+    {
+      owners: ["self", "user-a", "user-b"],
+      label: "Each role holder and 2 selected people",
+    },
+  ])("labels owner selections as $label", ({ owners, label }) => {
+    const selectors =
+      owners?.map((resourceId) =>
+        sel({
+          resourceKind: "agent",
+          resourceId: "*",
+          owner: resourceId,
+        }),
+      ) ?? null;
+    expect(computeRuleLabel(selectors, "agent", projects)).toBe(label);
+  });
+
   it("null selectors (mcp) → All servers", () => {
     expect(computeRuleLabel(null, "mcp", projects)).toBe("All servers");
   });

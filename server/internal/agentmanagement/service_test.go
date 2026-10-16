@@ -19,7 +19,7 @@ func TestServiceLifecycleMutationsAreAuditedAtomically(t *testing.T) {
 
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
-	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedAgentCreator(t, conn, "org-a", "owner")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
 
@@ -77,7 +77,7 @@ func TestAuditFailureRollsBackLifecycleMutation(t *testing.T) {
 
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
-	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedAgentCreator(t, conn, "org-a", "owner")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
 
@@ -102,7 +102,7 @@ func TestFailedLifecycleMutationDoesNotEmitAudit(t *testing.T) {
 
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
-	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedAgentCreator(t, conn, "org-a", "owner")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
 	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Lifecycle agent"})
@@ -119,7 +119,7 @@ func TestNameConflictIsScopedToActiveOrganizationAgents(t *testing.T) {
 
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
-	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedAgentCreator(t, conn, "org-a", "owner")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
 
@@ -136,7 +136,7 @@ func TestAgentViewsUseTransactionConnection(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
-	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedAgentCreator(t, conn, "org-a", "owner")
 	seedOrganizationUser(t, conn, "org-a", "next-owner")
 	config := conn.Config()
 	config.MaxConns = 1

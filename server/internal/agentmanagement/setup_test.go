@@ -18,11 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -77,6 +79,14 @@ func createAgent(t *testing.T, conn *pgxpool.Pool, organizationID, ownerUserID, 
 	})
 	require.NoError(t, err)
 	return agent
+}
+
+// seedAgentCreator explicitly provisions self-creation eligibility for fixtures
+// that exercise creation, independently of ordinary active membership.
+func seedAgentCreator(t *testing.T, conn *pgxpool.Pool, organizationID, userID string) {
+	t.Helper()
+	seedOrganizationUser(t, conn, organizationID, userID)
+	seedGrant(t, t.Context(), conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeAgentWrite, "*", authz.AgentOwnerSelf)
 }
 
 func agentWebhookOutboxActions(t *testing.T, conn *pgxpool.Pool, organizationID string) []string {

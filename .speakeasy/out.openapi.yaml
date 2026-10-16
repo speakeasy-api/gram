@@ -8002,6 +8002,123 @@ paths:
       x-speakeasy-name-override: listDelegableGrants
       x-speakeasy-react-hook:
         name: ListAgentDelegableGrants
+  /rpc/agents.listEligibleOwners:
+    get:
+      description: List only active same-organization owners for whom this ordinary human session may create an agent. Requires live owner-scoped agent:write, not directory-read access. Creation revalidates eligibility and membership.
+      operationId: listAgentEligibleOwners
+      parameters:
+        - allowEmptyValue: true
+          description: Maximum owners per page
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Maximum owners per page
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Last eligible owner user ID returned by the previous page
+          in: query
+          name: cursor
+          schema:
+            description: Last eligible owner user ID returned by the previous page
+            maxLength: 1024
+            type: string
+        - allowEmptyValue: true
+          description: Case-insensitive display name substring
+          in: query
+          name: search
+          schema:
+            description: Case-insensitive display name substring
+            maxLength: 200
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEligibleOwnersResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listEligibleOwners agents
+      tags:
+        - agents
+      x-speakeasy-name-override: listEligibleOwners
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: AgentEligibleOwners
   /rpc/agents.listPolicyGrants:
     get:
       operationId: listAgentPolicyGrants
@@ -80985,6 +81102,18 @@ components:
       required:
         - requested
         - effective
+    AgentEligibleOwner:
+      type: object
+      properties:
+        display_name:
+          type: string
+          description: Owner display name
+        user_id:
+          type: string
+          description: Active same-organization owner permitted by the caller's live agent creation grants
+      required:
+        - user_id
+        - display_name
     AgentIDForm:
       type: object
       properties:
@@ -92764,6 +92893,18 @@ components:
             $ref: '#/components/schemas/DistributionPlugin'
       required:
         - plugins
+    ListEligibleOwnersResponseBody:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: Last returned eligible owner user ID; absent on the final page
+        owners:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentEligibleOwner'
+      required:
+        - owners
     ListEnvironmentsResult:
       type: object
       properties:
@@ -103308,6 +103449,9 @@ components:
             - destructive
             - idempotent
             - open_world
+        owner:
+          type: string
+          description: 'Agent owner filter (agent scopes only): ''self'' for the caller, a user ID for a specified owner, or ''*'' for any owner. With resource_id=''*'', agent:write permits creation and management for these owners.'
         project_id:
           type: string
           description: Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.

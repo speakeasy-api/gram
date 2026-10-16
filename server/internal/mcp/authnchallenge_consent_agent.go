@@ -184,8 +184,9 @@ func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChalleng
 	// policy is already loaded, and each other owner's cap remains independent.
 	ownerIDs := make([]string, 0, len(candidates))
 	eligibleAgents := make(map[uuid.UUID]bool, len(candidates))
+	access := authz.NewAgentAccess(human.userID, human.grants)
 	for _, candidate := range candidates {
-		if !consentAgentCandidateEligible(human, candidate, *target) {
+		if !consentAgentCandidateEligible(human.userID, access, candidate, *target) {
 			continue
 		}
 		allowed, err := consentPolicyConnect(policies[candidate.ID], target.connectCheck())
@@ -257,7 +258,8 @@ func (s *Service) authorizeConsentAgent(ctx context.Context, state AuthnChalleng
 }
 
 func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAuthorization, agent agentsrepo.Agent, target AgentAuthorizationTarget) (bool, error) {
-	if !consentAgentCandidateEligible(human, agent, target) {
+	access := authz.NewAgentAccess(human.userID, human.grants)
+	if !consentAgentCandidateEligible(human.userID, access, agent, target) {
 		return false, nil
 	}
 	ownerActive, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
@@ -298,16 +300,11 @@ func (s *Service) consentAgentOwnerConnect(ctx context.Context, ownerUserID stri
 	return consentPolicyConnect(ownerPolicy, target.connectCheck())
 }
 
-func consentAgentCandidateEligible(human consentHumanAuthorization, agent agentsrepo.Agent, target AgentAuthorizationTarget) bool {
+func consentAgentCandidateEligible(humanUserID string, access authz.AgentAccess, agent agentsrepo.Agent, target AgentAuthorizationTarget) bool {
 	if agent.OrganizationID != target.OrganizationID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
 		return false
 	}
-	return agent.OwnerUserID == human.userID || authz.GrantsSatisfy(human.grants, authz.Check{
-		Scope:        authz.ScopeAgentAuthorize,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agent.ID.String(),
-		Dimensions:   nil,
-	})
+	return agent.OwnerUserID == humanUserID || access.Allows(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID)
 }
 
 // consentPolicyConnect checks effective access, including exclusion scopes, for

@@ -133,6 +133,14 @@ type ListSessionsResponseBody struct {
 	NextCursor *string                     `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ListEligibleOwnersResponseBody is the type of the "agents" service
+// "listEligibleOwners" endpoint HTTP response body.
+type ListEligibleOwnersResponseBody struct {
+	Owners []*AgentEligibleOwnerResponseBody `form:"owners" json:"owners" xml:"owners"`
+	// Last returned eligible owner user ID; absent on the final page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
 // ListResponseBody is the type of the "agents" service "list" endpoint HTTP
 // response body.
 type ListResponseBody []*ManagedAgentResponse
@@ -691,6 +699,190 @@ type RevokeSessionUnexpectedResponseBody struct {
 // RevokeSessionGatewayErrorResponseBody is the type of the "agents" service
 // "revokeSession" endpoint HTTP response body for the "gateway_error" error.
 type RevokeSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersUnauthorizedResponseBody is the type of the "agents"
+// service "listEligibleOwners" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListEligibleOwnersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersForbiddenResponseBody is the type of the "agents" service
+// "listEligibleOwners" endpoint HTTP response body for the "forbidden" error.
+type ListEligibleOwnersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersBadRequestResponseBody is the type of the "agents" service
+// "listEligibleOwners" endpoint HTTP response body for the "bad_request" error.
+type ListEligibleOwnersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersNotFoundResponseBody is the type of the "agents" service
+// "listEligibleOwners" endpoint HTTP response body for the "not_found" error.
+type ListEligibleOwnersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersConflictResponseBody is the type of the "agents" service
+// "listEligibleOwners" endpoint HTTP response body for the "conflict" error.
+type ListEligibleOwnersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersUnsupportedMediaResponseBody is the type of the "agents"
+// service "listEligibleOwners" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListEligibleOwnersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersInvalidResponseBody is the type of the "agents" service
+// "listEligibleOwners" endpoint HTTP response body for the "invalid" error.
+type ListEligibleOwnersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersInvariantViolationResponseBody is the type of the "agents"
+// service "listEligibleOwners" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListEligibleOwnersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersUnexpectedResponseBody is the type of the "agents" service
+// "listEligibleOwners" endpoint HTTP response body for the "unexpected" error.
+type ListEligibleOwnersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListEligibleOwnersGatewayErrorResponseBody is the type of the "agents"
+// service "listEligibleOwners" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListEligibleOwnersGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3440,6 +3632,16 @@ type AgentSessionResponseBody struct {
 	LastUsedAt       *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
 }
 
+// AgentEligibleOwnerResponseBody is used to define fields on response body
+// types.
+type AgentEligibleOwnerResponseBody struct {
+	// Active same-organization owner permitted by the caller's live agent creation
+	// grants
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// Owner display name
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+}
+
 // ManagedAgentResponse is used to define fields on response body types.
 type ManagedAgentResponse struct {
 	ID          string `form:"id" json:"id" xml:"id"`
@@ -3618,6 +3820,27 @@ func NewListSessionsResponseBody(res *agents.ListSessionsResult) *ListSessionsRe
 		}
 	} else {
 		body.Items = []*AgentSessionResponseBody{}
+	}
+	return body
+}
+
+// NewListEligibleOwnersResponseBody builds the HTTP response body from the
+// result of the "listEligibleOwners" endpoint of the "agents" service.
+func NewListEligibleOwnersResponseBody(res *agents.ListEligibleOwnersResult) *ListEligibleOwnersResponseBody {
+	body := &ListEligibleOwnersResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Owners != nil {
+		body.Owners = make([]*AgentEligibleOwnerResponseBody, len(res.Owners))
+		for i, val := range res.Owners {
+			if val == nil {
+				body.Owners[i] = nil
+				continue
+			}
+			body.Owners[i] = marshalAgentsAgentEligibleOwnerToAgentEligibleOwnerResponseBody(val)
+		}
+	} else {
+		body.Owners = []*AgentEligibleOwnerResponseBody{}
 	}
 	return body
 }
@@ -4150,6 +4373,148 @@ func NewRevokeSessionUnexpectedResponseBody(res *goa.ServiceError) *RevokeSessio
 // the result of the "revokeSession" endpoint of the "agents" service.
 func NewRevokeSessionGatewayErrorResponseBody(res *goa.ServiceError) *RevokeSessionGatewayErrorResponseBody {
 	body := &RevokeSessionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listEligibleOwners" endpoint of the "agents" service.
+func NewListEligibleOwnersUnauthorizedResponseBody(res *goa.ServiceError) *ListEligibleOwnersUnauthorizedResponseBody {
+	body := &ListEligibleOwnersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersForbiddenResponseBody builds the HTTP response body
+// from the result of the "listEligibleOwners" endpoint of the "agents" service.
+func NewListEligibleOwnersForbiddenResponseBody(res *goa.ServiceError) *ListEligibleOwnersForbiddenResponseBody {
+	body := &ListEligibleOwnersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersBadRequestResponseBody builds the HTTP response body
+// from the result of the "listEligibleOwners" endpoint of the "agents" service.
+func NewListEligibleOwnersBadRequestResponseBody(res *goa.ServiceError) *ListEligibleOwnersBadRequestResponseBody {
+	body := &ListEligibleOwnersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersNotFoundResponseBody builds the HTTP response body from
+// the result of the "listEligibleOwners" endpoint of the "agents" service.
+func NewListEligibleOwnersNotFoundResponseBody(res *goa.ServiceError) *ListEligibleOwnersNotFoundResponseBody {
+	body := &ListEligibleOwnersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersConflictResponseBody builds the HTTP response body from
+// the result of the "listEligibleOwners" endpoint of the "agents" service.
+func NewListEligibleOwnersConflictResponseBody(res *goa.ServiceError) *ListEligibleOwnersConflictResponseBody {
+	body := &ListEligibleOwnersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listEligibleOwners" endpoint of the "agents"
+// service.
+func NewListEligibleOwnersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListEligibleOwnersUnsupportedMediaResponseBody {
+	body := &ListEligibleOwnersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersInvalidResponseBody builds the HTTP response body from
+// the result of the "listEligibleOwners" endpoint of the "agents" service.
+func NewListEligibleOwnersInvalidResponseBody(res *goa.ServiceError) *ListEligibleOwnersInvalidResponseBody {
+	body := &ListEligibleOwnersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listEligibleOwners" endpoint of the "agents"
+// service.
+func NewListEligibleOwnersInvariantViolationResponseBody(res *goa.ServiceError) *ListEligibleOwnersInvariantViolationResponseBody {
+	body := &ListEligibleOwnersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listEligibleOwners" endpoint of the "agents" service.
+func NewListEligibleOwnersUnexpectedResponseBody(res *goa.ServiceError) *ListEligibleOwnersUnexpectedResponseBody {
+	body := &ListEligibleOwnersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEligibleOwnersGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listEligibleOwners" endpoint of the "agents" service.
+func NewListEligibleOwnersGatewayErrorResponseBody(res *goa.ServiceError) *ListEligibleOwnersGatewayErrorResponseBody {
+	body := &ListEligibleOwnersGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6295,6 +6660,18 @@ func NewRevokeSessionPayload(body *RevokeSessionRequestBody, sessionToken *strin
 		SessionID: *body.SessionID,
 		AgentID:   *body.AgentID,
 	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListEligibleOwnersPayload builds a agents service listEligibleOwners
+// endpoint payload.
+func NewListEligibleOwnersPayload(limit int, cursor *string, search *string, sessionToken *string) *agents.ListEligibleOwnersPayload {
+	v := &agents.ListEligibleOwnersPayload{}
+	v.Limit = limit
+	v.Cursor = cursor
+	v.Search = search
 	v.SessionToken = sessionToken
 
 	return v

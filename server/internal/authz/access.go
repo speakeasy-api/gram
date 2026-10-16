@@ -38,6 +38,27 @@ func (c Check) matchesAllowSelector(selector Selector) bool {
 	return selector.Matches(c.selector())
 }
 
+// BindSelectorValue resolves a symbolic value for one selector dimension into
+// its request-local value. It preserves principal provenance and never mutates
+// the supplied grants or their selectors. Other dimensions are left unchanged.
+// A matching symbol with an empty or wildcard binding rejects the whole set.
+func BindSelectorValue(grants []Grant, key, symbol, value string) []Grant {
+	bound := make([]Grant, 0, len(grants))
+	for _, grant := range grants {
+		if selected, ok := grant.Selector[key]; ok && selected == symbol {
+			// Reject the whole set on an unresolved binding: dropping only a
+			// matching exclusion could otherwise broaden an unrelated allow.
+			if value == "" || value == WildcardResource {
+				return nil
+			}
+			grant.Selector = maps.Clone(grant.Selector)
+			grant.Selector[key] = value
+		}
+		bound = append(bound, grant)
+	}
+	return bound
+}
+
 // selector converts the check into a Selector for matching against grant selectors.
 func (c Check) selector() Selector {
 	kind := c.ResourceKind
@@ -60,12 +81,16 @@ func GrantsContainSelector(grants []Grant, scope Scope, selector Selector) bool 
 	if selector[SelectorKeyResourceID] == "" || ValidateSelector(scope, selector) != nil {
 		return false
 	}
+	check := strictSelectorCheck(scope, selector)
+	grant, _ := matchingGrant(grants, check.expand())
+	return grant != nil
+}
+
+func strictSelectorCheck(scope Scope, selector Selector) Check {
 	dimensions := maps.Clone(selector)
 	delete(dimensions, SelectorKeyResourceKind)
 	delete(dimensions, SelectorKeyResourceID)
-	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict}
-	grant, _ := matchingGrant(grants, check.expand())
-	return grant != nil
+	return Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict}
 }
 
 // expand returns all scope variants that would satisfy this check: the check's

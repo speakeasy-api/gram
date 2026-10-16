@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	ListSessions        goa.Endpoint
 	RevokeSession       goa.Endpoint
+	ListEligibleOwners  goa.Endpoint
 	List                goa.Endpoint
 	Create              goa.Endpoint
 	Get                 goa.Endpoint
@@ -42,6 +43,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		ListSessions:        NewListSessionsEndpoint(s, a.APIKeyAuth),
 		RevokeSession:       NewRevokeSessionEndpoint(s, a.APIKeyAuth),
+		ListEligibleOwners:  NewListEligibleOwnersEndpoint(s, a.APIKeyAuth),
 		List:                NewListEndpoint(s, a.APIKeyAuth),
 		Create:              NewCreateEndpoint(s, a.APIKeyAuth),
 		Get:                 NewGetEndpoint(s, a.APIKeyAuth),
@@ -64,6 +66,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListSessions = m(e.ListSessions)
 	e.RevokeSession = m(e.RevokeSession)
+	e.ListEligibleOwners = m(e.ListEligibleOwners)
 	e.List = m(e.List)
 	e.Create = m(e.Create)
 	e.Get = m(e.Get)
@@ -124,6 +127,29 @@ func NewRevokeSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return nil, s.RevokeSession(ctx, p)
+	}
+}
+
+// NewListEligibleOwnersEndpoint returns an endpoint function that calls the
+// method "listEligibleOwners" of service "agents".
+func NewListEligibleOwnersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListEligibleOwnersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListEligibleOwners(ctx, p)
 	}
 }
 

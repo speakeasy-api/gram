@@ -32,6 +32,19 @@ SELECT @organization_id::text, @principal_urn::text, scope,
          'resource_id', CASE WHEN scope = 'log:read' THEN @project_id::text ELSE '*' END)
 FROM unnest(@scopes::text[]) AS scope;
 
+-- Write targets authorize both creation and management for the selected owners.
+-- name: RolesInsertAgentCreationGrants :exec
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT @organization_id::text, 'role:organization:' || r.id, 'agent:write',
+       jsonb_build_object('resource_kind', 'agent', 'resource_id', '*', 'owner', v.owner_id)
+FROM organization_roles r
+JOIN (VALUES
+  ('engineer', 'self'),
+  ('collaborator', @specified_owner_id::text),
+  ('temporary-escalation', '*')
+) AS v(slug, owner_id) ON r.workos_slug = v.slug
+WHERE r.organization_id = @organization_id::text;
+
 -- name: RolesInsertRoleAssignment :exec
 INSERT INTO organization_role_assignments
   (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)

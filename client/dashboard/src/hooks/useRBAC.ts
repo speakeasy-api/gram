@@ -234,6 +234,49 @@ export function hasScopeInProject(
   return hasScopeInGrants(grants, scope, "*", projectId);
 }
 
+/** Resolve a symbolic selector value without changing the original selector. */
+export function bindSelectorValue(
+  selector: Record<string, string>,
+  key: string,
+  symbol: string,
+  value: string,
+): Record<string, string> | undefined {
+  if (selector[key] !== symbol) return selector;
+  if (!value || value === "*") return undefined;
+  return { ...selector, [key]: value };
+}
+
+/** Write access to all agents of an owner also permits creating for them. */
+export function canCreateAgentForInGrants(
+  grants: EffectiveGrant[],
+  callerUserId: string,
+  ownerUserId: string,
+): boolean {
+  if (
+    !callerUserId ||
+    callerUserId === "*" ||
+    !ownerUserId ||
+    ownerUserId === "*"
+  )
+    return false;
+  return grants.some((grant) => {
+    if ((grant.effect ?? "allow") !== "allow" || grant.scope !== "agent:write")
+      return false;
+    if (!grant.selectors) return true;
+    return grant.selectors.some((selector) => {
+      const bound = bindSelectorValue(selector, "owner", "self", callerUserId);
+      return (
+        bound !== undefined &&
+        selectorMatchesStrict(bound, {
+          resourceKind: "agent",
+          resourceId: "*",
+          owner: ownerUserId,
+        })
+      );
+    });
+  });
+}
+
 /**
  * Core RBAC hook. Fetches the current user's effective grants and provides
  * helpers to check whether the user holds a particular scope.
@@ -300,6 +343,12 @@ function useRBACImpl() {
     [hasScope],
   );
 
+  const canCreateAgentFor = useCallback(
+    (ownerUserId: string) =>
+      canCreateAgentForInGrants(grants ?? [], session.user.id, ownerUserId),
+    [grants, session.user.id],
+  );
+
   /**
    * Check multiple scopes at once. Returns true if the user has ANY of them.
    */
@@ -322,6 +371,7 @@ function useRBACImpl() {
   return useMemo(
     () => ({
       hasScope,
+      canCreateAgentFor,
       hasAllScopes,
       hasAnyScope,
       hasAnyScopeInProject,
@@ -332,6 +382,7 @@ function useRBACImpl() {
     }),
     [
       hasScope,
+      canCreateAgentFor,
       hasAllScopes,
       hasAnyScope,
       hasAnyScopeInProject,

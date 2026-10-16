@@ -156,7 +156,8 @@ func (s *Service) selectAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams)
 		if err != nil {
 			return agentrepo.Agent{}, fmt.Errorf("load actor grants: %w", err)
 		}
-		if !authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeAgentAuthorize, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
+		access := authz.NewAgentAccess(p.ActorUserID, grants)
+		if !access.Allows(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID) {
 			return agentrepo.Agent{}, ErrAgentUnauthorized
 		}
 	}

@@ -1708,6 +1708,62 @@ func (q *Queries) ListActiveRoleAssignmentsByOrganization(ctx context.Context, o
 	return items, nil
 }
 
+const listEligibleAgentOwners = `-- name: ListEligibleAgentOwners :many
+SELECT u.id AS user_id, u.display_name
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+  AND ($2::boolean OR u.id = ANY($3::text[]))
+  AND ($4::text IS NULL OR u.id > $4::text)
+  AND ($5::text = '' OR strpos(lower(u.display_name), lower($5::text)) > 0)
+ORDER BY u.id ASC
+LIMIT $6
+`
+
+type ListEligibleAgentOwnersParams struct {
+	OrganizationID string
+	AllOwners      bool
+	OwnerUserIds   []string
+	Cursor         pgtype.Text
+	Search         string
+	LimitValue     int32
+}
+
+type ListEligibleAgentOwnersRow struct {
+	UserID      string
+	DisplayName string
+}
+
+// Apply live creation targets before limiting so sparse grants remain reachable.
+func (q *Queries) ListEligibleAgentOwners(ctx context.Context, arg ListEligibleAgentOwnersParams) ([]ListEligibleAgentOwnersRow, error) {
+	rows, err := q.db.Query(ctx, listEligibleAgentOwners,
+		arg.OrganizationID,
+		arg.AllOwners,
+		arg.OwnerUserIds,
+		arg.Cursor,
+		arg.Search,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEligibleAgentOwnersRow
+	for rows.Next() {
+		var i ListEligibleAgentOwnersRow
+		if err := rows.Scan(&i.UserID, &i.DisplayName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOnboardingPlaybookSteps = `-- name: ListOnboardingPlaybookSteps :many
 SELECT ps.playbook_id, s.slug, s.title, ps.position
 FROM onboarding_playbook_steps ps

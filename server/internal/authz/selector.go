@@ -20,6 +20,7 @@ const (
 	SelectorKeyTool           = "tool"
 	SelectorKeyDisposition    = "disposition"
 	SelectorKeyProjectID      = "project_id"
+	SelectorKeyOwner          = "owner"
 	SelectorKeyServerURL      = "server_url"
 	SelectorKeyServerIdentity = "server_identity"
 )
@@ -111,6 +112,9 @@ var validDispositions = map[string]bool{
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
+	ResourceKindAgent: {
+		SelectorKeyOwner: true,
+	},
 	ResourceKindMCP: {
 		SelectorKeyTool:        true,
 		SelectorKeyDisposition: true,
@@ -166,6 +170,9 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		}
 		if !allowed[k] {
 			return fmt.Errorf("selector key %q is not allowed for scope %q", k, scope)
+		}
+		if k == SelectorKeyOwner && v == "" {
+			return fmt.Errorf("owner must not be empty")
 		}
 		if k == SelectorKeyDisposition && !validDispositions[v] {
 			return fmt.Errorf("invalid disposition value %q", v)

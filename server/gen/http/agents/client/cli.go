@@ -105,6 +105,69 @@ func BuildRevokeSessionPayload(agentsRevokeSessionBody string, agentsRevokeSessi
 	return v, nil
 }
 
+// BuildListEligibleOwnersPayload builds the payload for the agents
+// listEligibleOwners endpoint from CLI flags.
+func BuildListEligibleOwnersPayload(agentsListEligibleOwnersLimit string, agentsListEligibleOwnersCursor string, agentsListEligibleOwnersSearch string, agentsListEligibleOwnersSessionToken string) (*agents.ListEligibleOwnersPayload, error) {
+	var err error
+	var limit int
+	{
+		if agentsListEligibleOwnersLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(agentsListEligibleOwnersLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if agentsListEligibleOwnersCursor != "" {
+			cursor = &agentsListEligibleOwnersCursor
+			if utf8.RuneCountInString(*cursor) > 1024 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("cursor", *cursor, utf8.RuneCountInString(*cursor), 1024, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var search *string
+	{
+		if agentsListEligibleOwnersSearch != "" {
+			search = &agentsListEligibleOwnersSearch
+			if utf8.RuneCountInString(*search) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsListEligibleOwnersSessionToken != "" {
+			sessionToken = &agentsListEligibleOwnersSessionToken
+		}
+	}
+	v := &agents.ListEligibleOwnersPayload{}
+	v.Limit = limit
+	v.Cursor = cursor
+	v.Search = search
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListPayload builds the payload for the agents list endpoint from CLI
 // flags.
 func BuildListPayload(agentsListSessionToken string) (*agents.ListPayload, error) {

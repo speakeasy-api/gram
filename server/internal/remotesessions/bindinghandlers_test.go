@@ -36,6 +36,10 @@ func (bindingOwnerOnlyEngine) EvaluateLoadedGrants(context.Context, []authz.Gran
 	return oops.C(oops.CodeForbidden)
 }
 
+func (bindingOwnerOnlyEngine) EvaluateLoadedAuthority(context.Context, []authz.Grant, authz.Scope, authz.Selector) error {
+	return oops.C(oops.CodeForbidden)
+}
+
 func TestBindingsRequireOrdinaryHuman(t *testing.T) {
 	t.Parallel()
 	svc := &remotesessions.Service{}

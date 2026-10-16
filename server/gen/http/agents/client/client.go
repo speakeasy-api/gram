@@ -25,6 +25,10 @@ type Client struct {
 	// revokeSession endpoint.
 	RevokeSessionDoer goahttp.Doer
 
+	// ListEligibleOwners Doer is the HTTP client used to make requests to the
+	// listEligibleOwners endpoint.
+	ListEligibleOwnersDoer goahttp.Doer
+
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
 
@@ -100,6 +104,7 @@ func NewClient(
 	return &Client{
 		ListSessionsDoer:        doer,
 		RevokeSessionDoer:       doer,
+		ListEligibleOwnersDoer:  doer,
 		ListDoer:                doer,
 		CreateDoer:              doer,
 		GetDoer:                 doer,
@@ -166,6 +171,30 @@ func (c *Client) RevokeSession() goa.Endpoint {
 		resp, err := c.RevokeSessionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agents", "revokeSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListEligibleOwners returns an endpoint that makes HTTP requests to the
+// agents service listEligibleOwners server.
+func (c *Client) ListEligibleOwners() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListEligibleOwnersRequest(c.encoder)
+		decodeResponse = DecodeListEligibleOwnersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListEligibleOwnersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListEligibleOwnersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "listEligibleOwners", err)
 		}
 		return decodeResponse(resp)
 	}

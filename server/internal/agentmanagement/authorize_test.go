@@ -19,7 +19,16 @@ import (
 type fakeAuthorizationEngine struct {
 	allowed          map[string]bool
 	checks           []authz.Check
+	authorities      []authz.Selector
 	loadedGrantsOnly bool
+}
+
+func (f *fakeAuthorizationEngine) EvaluateLoadedAuthority(_ context.Context, grants []authz.Grant, scope authz.Scope, selector authz.Selector) error {
+	f.authorities = append(f.authorities, selector)
+	if !authz.GrantsContainSelector(grants, scope, selector) {
+		return oops.C(oops.CodeForbidden)
+	}
+	return nil
 }
 
 func (f *fakeAuthorizationEngine) EvaluateLoadedGrants(_ context.Context, grants []authz.Grant, checks ...authz.Check) error {
@@ -219,7 +228,7 @@ func TestRequireAgentRejectsStalePreparedGrants(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestCreateForAnotherOwnerUsesProspectiveAgentSelector(t *testing.T) {
+func TestCreateForAnotherOwnerUsesIntendedOwnerSelector(t *testing.T) {
 	t.Parallel()
 
 	conn := newTestDB(t)
@@ -229,19 +238,17 @@ func TestCreateForAnotherOwnerUsesProspectiveAgentSelector(t *testing.T) {
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
 	authorizer := NewAuthorizer(engine)
 	ctx := validatedHumanContext(t, "org-a", "caller")
-	prospectiveID := uuid.New()
-
-	_, err := authorizer.RequireCreate(ctx, conn, prospectiveID, "owner")
+	_, err := authorizer.RequireCreate(ctx, conn, "owner")
 	requireOopsCode(t, err, oops.CodeForbidden)
-	allow(engine, authz.ScopeAgentWrite, prospectiveID)
-	_, err = authorizer.RequireCreate(ctx, conn, prospectiveID, "owner")
+	seedGrant(t, ctx, conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, "*", "owner")
+	_, err = authorizer.RequireCreate(ctx, conn, "owner")
 	require.NoError(t, err)
-	require.Equal(t, authz.ScopeAgentWrite, engine.checks[len(engine.checks)-1].Scope)
-	require.Equal(t, prospectiveID.String(), engine.checks[len(engine.checks)-1].ResourceID)
+	require.Empty(t, engine.checks, "creation proves containment without a wildcard runtime check")
+	require.Equal(t, authz.AgentOwnerSelector(authz.ScopeAgentWrite, "owner"), engine.authorities[len(engine.authorities)-1])
 
-	_, err = authorizer.RequireCreate(ctx, conn, uuid.New(), "caller")
-	require.NoError(t, err, "self-owned creation is intrinsic")
-	_, err = authorizer.RequireCreate(ctx, conn, uuid.New(), "missing-owner")
+	_, err = authorizer.RequireCreate(ctx, conn, "caller")
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = authorizer.RequireCreate(ctx, conn, "missing-owner")
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 

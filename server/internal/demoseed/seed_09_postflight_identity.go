@@ -61,6 +61,12 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 	}
 
 	identity := []postflightIDCheck{
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDAgentCreationGrants(ctx, repo.PostflightIDAgentCreationGrantsParams{
+				OrgID:            org,
+				SpecifiedOwnerID: s.userID("jonas"),
+			})
+		}, 3, "demo seed postflight: expected 3 owner-scoped agent creation grants, found %d"},
 		// The seed never creates API keys: any row left here was minted by a
 		// demo visitor and would grant programmatic access that survives the
 		// reseed. (SQL: IF stray > 0; a count is never negative, so == 0.)

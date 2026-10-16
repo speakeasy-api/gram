@@ -100,6 +100,57 @@ func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 	require.Contains(t, scopes, string(ScopeRiskPolicyEvaluate))
 }
 
+func TestRemovingSystemRoleCreationEligibilityIsDurable(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org-create-defaults"
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, SeedSystemRoleGrants(ctx, conn, organizationID))
+	q := accessrepo.New(conn)
+	for _, slug := range []string{SystemRoleAdmin, SystemRoleMember} {
+		role, err := q.GetGlobalRoleBySlug(ctx, slug)
+		require.NoError(t, err)
+		principal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String())
+		rows, err := q.ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{OrganizationID: organizationID, PrincipalUrn: principal.String()})
+		require.NoError(t, err)
+		seededCreate := false
+		for _, row := range rows {
+			seededCreate = seededCreate || row.Scope == string(ScopeAgentWrite)
+		}
+		require.Equal(t, slug == SystemRoleAdmin, seededCreate, "persisted seed grants must give creation only to Admin")
+		for _, row := range rows {
+			if row.Scope == string(ScopeAgentWrite) {
+				_, err := q.DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{OrganizationID: organizationID, ID: row.ID})
+				require.NoError(t, err)
+			}
+		}
+		grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{principal})
+		require.NoError(t, err)
+		allowed := GrantsContainSelector(grants, ScopeAgentWrite, AgentOwnerSelector(ScopeAgentWrite, "employee"))
+		require.False(t, allowed, "deleting persisted creation grants must revoke eligibility, including for Admin")
+		listed, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, principal.String())
+		require.NoError(t, err)
+		found := false
+		for _, grant := range listed {
+			found = found || grant.Scope == string(ScopeAgentWrite)
+		}
+		require.Equal(t, allowed, found, "role editor and enforcement agree")
+	}
+}
+
+func TestSystemRoleDefaultsSkipsLookupWithPersistedAssistantGrant(t *testing.T) {
+	t.Parallel()
+	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+uuid.NewString())
+	grant := NewGrant(ScopeAssistantWrite, WildcardResource)
+	grant.PrincipalUrn = principal.String()
+	// A nil database proves that a Member-like grant set with no creation
+	// permission does not need a global-role query.
+	defaults, err := systemRoleDefaults(t.Context(), nil, []urn.Principal{principal}, []Grant{grant})
+	require.NoError(t, err)
+	require.Empty(t, defaults)
+}
+
 func TestSeedSystemRoleGrantsRollsBackOnGrantFailure(t *testing.T) {
 	t.Parallel()
 

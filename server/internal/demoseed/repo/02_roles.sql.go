@@ -206,6 +206,30 @@ func (q *Queries) RolesInsertAIScanTargets(ctx context.Context, organizationID s
 	return err
 }
 
+const rolesInsertAgentCreationGrants = `-- name: RolesInsertAgentCreationGrants :exec
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT $1::text, 'role:organization:' || r.id, 'agent:write',
+       jsonb_build_object('resource_kind', 'agent', 'resource_id', '*', 'owner', v.owner_id)
+FROM organization_roles r
+JOIN (VALUES
+  ('engineer', 'self'),
+  ('collaborator', $2::text),
+  ('temporary-escalation', '*')
+) AS v(slug, owner_id) ON r.workos_slug = v.slug
+WHERE r.organization_id = $1::text
+`
+
+type RolesInsertAgentCreationGrantsParams struct {
+	OrganizationID   string
+	SpecifiedOwnerID string
+}
+
+// Write targets authorize both creation and management for the selected owners.
+func (q *Queries) RolesInsertAgentCreationGrants(ctx context.Context, arg RolesInsertAgentCreationGrantsParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertAgentCreationGrants, arg.OrganizationID, arg.SpecifiedOwnerID)
+	return err
+}
+
 const rolesInsertAgentRoleAssignment = `-- name: RolesInsertAgentRoleAssignment :exec
 INSERT INTO agent_role_assignments (organization_id, agent_id, role_urn)
 VALUES ($1, $2, $3)

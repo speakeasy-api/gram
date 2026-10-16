@@ -536,7 +536,7 @@ const PLATFORM_AREAS: {
   {
     resourceType: "agent",
     label: "Agents",
-    description: "Agents and their settings",
+    description: "Create and manage agents for permitted owners",
   },
   {
     resourceType: "chat",
@@ -640,7 +640,10 @@ export function setPlatformAllow(
     rules.unshift({
       id: crypto.randomUUID(),
       effect: "allow",
-      selectors: null,
+      selectors:
+        scope === "agent:write"
+          ? [{ resourceKind: "agent", resourceId: "*", owner: "self" }]
+          : null,
     });
   }
   return withGrant(

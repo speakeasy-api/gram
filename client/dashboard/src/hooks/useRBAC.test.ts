@@ -1,6 +1,9 @@
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
+import agentCreationCases from "../../../../server/internal/authz/testdata/agent_creation_cases.json";
 import {
+  bindSelectorValue,
+  canCreateAgentForInGrants,
   exclusionScopesForScope,
   hasScopeInGrants,
   hasScopeInProject,
@@ -8,6 +11,159 @@ import {
   selectorMatches,
   selectorMatchesStrict,
 } from "./useRBAC";
+
+describe("shared agent creation policy cases", () => {
+  it.each(agentCreationCases)("$name", (tc) => {
+    expect(
+      canCreateAgentForInGrants(
+        [
+          {
+            scope: "agent:write",
+            selectors: [
+              {
+                resourceKind: "agent",
+                resourceId: tc.resourceId,
+                owner: tc.grantOwner,
+              },
+            ],
+          },
+        ],
+        tc.caller,
+        tc.owner,
+      ),
+    ).toBe(tc.allowed);
+  });
+});
+
+describe("selector value binding", () => {
+  it.each(["owner", "tool", "projectId"])(
+    "binds %s without dimension-specific matching or mutation",
+    (key) => {
+      const selector = { resourceKind: "*", resourceId: "*", [key]: "current" };
+      const bound = bindSelectorValue(selector, key, "current", "caller");
+      expect(bound).toEqual({ ...selector, [key]: "caller" });
+      expect(selector[key]).toBe("current");
+      expect(
+        selectorMatchesStrict(bound!, {
+          resourceKind: "*",
+          resourceId: "*",
+          [key]: "caller",
+        }),
+      ).toBe(true);
+      expect(
+        selectorMatchesStrict(bound!, { resourceKind: "*", resourceId: "*" }),
+      ).toBe(false);
+    },
+  );
+
+  it.each(["", "*"])(
+    "rejects an unresolved or wildcard binding %s",
+    (value) => {
+      expect(
+        bindSelectorValue({ tool: "current" }, "tool", "current", value),
+      ).toBeUndefined();
+    },
+  );
+
+  it("leaves literal values, wildcards, and unrelated dimensions unchanged", () => {
+    const selector = {
+      owner: "*",
+      projectId: "current",
+      tool: "specific-tool",
+    };
+    expect(bindSelectorValue(selector, "owner", "current", "caller")).toEqual(
+      selector,
+    );
+    expect(bindSelectorValue(selector, "tool", "current", "caller")).toEqual(
+      selector,
+    );
+    expect(
+      bindSelectorValue(selector, "projectId", "current", "caller"),
+    ).toEqual({ ...selector, projectId: "caller" });
+  });
+});
+
+describe("owner-scoped agent creation", () => {
+  it("does not confuse a concrete owner ID with the relative self selector", () => {
+    const selfOnly = [
+      {
+        scope: "agent:write",
+        selectors: [{ resourceKind: "agent", resourceId: "*", owner: "self" }],
+      },
+    ];
+    expect(canCreateAgentForInGrants(selfOnly, "user-a", "self")).toBe(false);
+    expect(
+      canCreateAgentForInGrants(
+        [
+          {
+            scope: "agent:write",
+            selectors: [{ resourceKind: "agent", resourceId: "*", owner: "*" }],
+          },
+        ],
+        "user-a",
+        "self",
+      ),
+    ).toBe(true);
+    expect(
+      canCreateAgentForInGrants(
+        [{ scope: "agent:write" }, { ...selfOnly[0], effect: "deny" }],
+        "user-a",
+        "self",
+      ),
+    ).toBe(true);
+  });
+  it("limits self grants to the caller", () => {
+    const grants = [
+      {
+        scope: "agent:write" as const,
+        selectors: [
+          {
+            resourceKind: "agent" as const,
+            resourceId: "*",
+            owner: "self",
+          },
+        ],
+      },
+    ];
+    expect(canCreateAgentForInGrants(grants, "alice", "alice")).toBe(true);
+    expect(canCreateAgentForInGrants(grants, "alice", "bob")).toBe(false);
+    expect(canCreateAgentForInGrants(grants, "bob", "bob")).toBe(true);
+  });
+  it("distinguishes specified owners, everyone, and management rights", () => {
+    const selected = [
+      {
+        scope: "agent:write" as const,
+        selectors: [
+          {
+            resourceKind: "agent" as const,
+            resourceId: "*",
+            owner: "bob",
+          },
+        ],
+      },
+    ];
+    expect(canCreateAgentForInGrants(selected, "alice", "bob")).toBe(true);
+    expect(canCreateAgentForInGrants(selected, "alice", "alice")).toBe(false);
+    expect(
+      canCreateAgentForInGrants([{ scope: "agent:write" }], "alice", "bob"),
+    ).toBe(true);
+    expect(
+      canCreateAgentForInGrants(
+        [
+          {
+            scope: "agent:write",
+            selectors: [
+              { resourceKind: "agent", resourceId: "existing-agent" },
+            ],
+          },
+        ],
+        "alice",
+        "alice",
+      ),
+    ).toBe(false);
+    expect(canCreateAgentForInGrants([], "alice", "alice")).toBe(false);
+  });
+});
 
 describe("grants query key", () => {
   it("isolates effective grants by session", () => {
