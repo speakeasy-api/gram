@@ -443,26 +443,6 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
-    queries: ../cmd/tools/migrations/upstreamclientsbackfill/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "upstreamclientsbackfill"
-        out: "../cmd/tools/migrations/upstreamclientsbackfill"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
-  - schema: schema.sql
-    queries: ../cmd/tools/migrations/upstreamselectionsbackfill/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "upstreamselectionsbackfill"
-        out: "../cmd/tools/migrations/upstreamselectionsbackfill"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
-  - schema: schema.sql
     queries: ../cmd/tools/migrations/hostedmcpbackfill/queries.sql
     engine: postgresql
     gen:
@@ -673,6 +653,26 @@ sql:
       go:
         package: "repo"
         out: "../internal/usersessions/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/mcpservers/upstreamclients/selectionbackfill/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "selectionbackfill"
+        out: "../internal/mcpservers/upstreamclients/selectionbackfill"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/mcpservers/upstreamclients/associationbackfill/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "associationbackfill"
+        out: "../internal/mcpservers/upstreamclients/associationbackfill"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

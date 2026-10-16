@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/jackc/pgx/v5"
@@ -25,16 +27,36 @@ type proEntitlementsConfig struct {
 func parseProEntitlementsFlags(args []string, getenv func(string) string) (proEntitlementsConfig, error) {
 	fs := flag.NewFlagSet("pro-entitlements", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	confirmation := registerWriteConfirmation(fs, "pro-entitlements")
+	apply := fs.Bool("apply", false, "write the backfill (default is dry run)")
+	environment := fs.String("environment", "", "target environment name")
+	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match environment for writes")
+	confirmTarget := fs.String("confirm-target", "", "must exactly match the parsed host, port, and database for writes")
+	confirmApply := fs.String("confirm-apply", "", "must equal pro-entitlements for writes")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return proEntitlementsConfig{}, errors.New("invalid pro-entitlements flags")
 	}
-	dbURL := getenv("GRAM_DATABASE_URL")
-	apply, err := confirmation.check(dbURL)
-	if err != nil {
-		return proEntitlementsConfig{}, err
+	if *environment == "" {
+		return proEntitlementsConfig{}, errors.New("environment is required")
 	}
-	return proEntitlementsConfig{dbURL: dbURL, environment: *confirmation.environment, apply: apply}, nil
+	if *apply && *confirmEnvironment != *environment {
+		return proEntitlementsConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
+	}
+	dbURL := getenv("GRAM_DATABASE_URL")
+	if dbURL == "" {
+		return proEntitlementsConfig{}, errors.New("missing $GRAM_DATABASE_URL")
+	}
+	dbConfig, err := pgx.ParseConfig(dbURL)
+	if err != nil {
+		return proEntitlementsConfig{}, errors.New("invalid $GRAM_DATABASE_URL")
+	}
+	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
+	if *apply && *confirmTarget != target {
+		return proEntitlementsConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
+	}
+	if *apply && *confirmApply != "pro-entitlements" {
+		return proEntitlementsConfig{}, errors.New("writes require -confirm-apply=pro-entitlements")
+	}
+	return proEntitlementsConfig{dbURL: dbURL, environment: *environment, apply: *apply}, nil
 }
 
 type proEntitlementsDB interface {

@@ -1711,6 +1711,58 @@ func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminLis
 	return items, nil
 }
 
+const adminListUpstreamOAuthMigrationOrganizations = `-- name: AdminListUpstreamOAuthMigrationOrganizations :many
+SELECT
+    om.id,
+    om.name,
+    om.slug,
+    count(s.id)::bigint AS servers
+FROM organization_metadata AS om
+JOIN projects AS p
+  ON p.organization_id = om.id
+ AND p.deleted IS FALSE
+JOIN mcp_servers AS s
+  ON s.project_id = p.id
+ AND s.deleted IS FALSE
+ AND s.user_session_issuer_id IS NOT NULL
+GROUP BY om.id, om.name, om.slug
+ORDER BY om.name, om.id
+`
+
+type AdminListUpstreamOAuthMigrationOrganizationsRow struct {
+	ID      string
+	Name    string
+	Slug    string
+	Servers int64
+}
+
+// The organizations with a live MCP server signed in through a user session
+// issuer, which are the only ones the upstream OAuth migration writes for.
+func (q *Queries) AdminListUpstreamOAuthMigrationOrganizations(ctx context.Context) ([]AdminListUpstreamOAuthMigrationOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUpstreamOAuthMigrationOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUpstreamOAuthMigrationOrganizationsRow
+	for rows.Next() {
+		var i AdminListUpstreamOAuthMigrationOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Servers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListUserOrganizations = `-- name: AdminListUserOrganizations :many
 SELECT o.id, o.name, o.slug, o.disabled_at
 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id

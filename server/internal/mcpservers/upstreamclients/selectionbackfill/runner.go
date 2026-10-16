@@ -1,8 +1,10 @@
-// Package upstreamselectionsbackfill records, for every live user session
-// credential, the upstream OAuth client it uses for each MCP server it can
-// reach, and reports the pairs existing configuration does not decide; see
-// UPSTREAM_SELECTIONS_BACKFILL.md.
-package upstreamselectionsbackfill
+// Package selectionbackfill records, for every live user session credential,
+// the upstream OAuth client it uses for each MCP server it can reach, and
+// reports the pairs existing configuration does not decide. It records
+// through the same statement issuance uses, so a run is idempotent and agrees
+// with what a new sign-in would record. It runs after the association
+// backfill, since a choice is only recorded for an associated client.
+package selectionbackfill
 
 import (
 	"context"

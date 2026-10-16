@@ -1,4 +1,4 @@
-package upstreamclientsbackfill
+package associationbackfill
 
 import (
 	"context"
@@ -39,7 +39,7 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	pool, err := testInfra.CloneTestDatabase(t, "upstreamclientsbackfill")
+	pool, err := testInfra.CloneTestDatabase(t, "associationbackfill")
 	require.NoError(t, err)
 	return newFixtureIn(t, pool)
 }
