@@ -30,9 +30,10 @@ type PrincipalCredential struct {
 	DelegatedGrantsVersion int32
 
 	// DerivesPolicyAtAdmission marks a credential that stores no delegated
-	// policy: admission derives it on every request from the live policies of
-	// the agent, its owner, and the authorizing user. Only the signed principal
-	// credential issuer sets it.
+	// policy: admission derives it on every request. Agent credentials derive
+	// it from the live policies of the agent, its owner, and the authorizing
+	// user; workload credentials derive it from the agent's live policy alone.
+	// Only the signed principal credential issuer sets it.
 	DerivesPolicyAtAdmission bool
 }
 
