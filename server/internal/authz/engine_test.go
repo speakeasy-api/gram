@@ -64,6 +64,8 @@ func TestEngineAuthorityRejectsScopesWithExclusions(t *testing.T) {
 	var invalid *oops.ShareableError
 	require.ErrorAs(t, err, &invalid)
 	require.Equal(t, oops.CodeUnexpected, invalid.Code)
+	require.ErrorIs(t, err, ErrInvalidCheck)
+	require.ErrorContains(t, invalid.Unwrap(), "exclusion-aware containment")
 }
 
 func TestEngineRequire_requiresAuthContext(t *testing.T) {

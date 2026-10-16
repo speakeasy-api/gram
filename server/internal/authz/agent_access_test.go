@@ -83,6 +83,26 @@ func TestAgentAccessConcreteAgentCannotCreate(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, denied.Code)
 }
 
+func TestAgentAccessUnrestrictedWritePreservesAllOwnerAuthority(t *testing.T) {
+	t.Parallel()
+	access := NewAgentAccess("caller", []Grant{NewGrant(ScopeAgentWrite, WildcardResource)})
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	allOwners, ownerIDs := access.CreationOwners()
+	require.True(t, allOwners)
+	require.Empty(t, ownerIDs)
+	for _, owner := range []string{"caller", "another-owner"} {
+		t.Run(owner, func(t *testing.T) {
+			t.Parallel()
+			require.True(t, access.Allows(ScopeAgentWrite, "agent", owner))
+			require.True(t, access.CanCreate(owner))
+			require.NoError(t, access.Require(enterpriseSessionCtx(t), engine, ScopeAgentWrite, "agent", owner))
+			require.NoError(t, access.RequireCreate(enterpriseSessionCtx(t), engine, owner))
+			require.False(t, access.Allows(ScopeAgentAuthorize, "agent", owner))
+			require.False(t, access.Allows(ScopeAgentTransfer, "agent", owner))
+		})
+	}
+}
+
 func TestAgentAccessSnapshotDoesNotMutateSource(t *testing.T) {
 	t.Parallel()
 	grant := NewGrantWithSelector(ScopeAgentWrite, AgentOwnerSelector(ScopeAgentWrite, AgentOwnerSelf))

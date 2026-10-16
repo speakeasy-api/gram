@@ -28,10 +28,10 @@ func TestConsentAgentCandidateOwnershipOrAuthorize(t *testing.T) {
 	t.Parallel()
 	agent := agentsrepo.Agent{ID: uuid.New(), OrganizationID: "org-a", OwnerUserID: "owner"}
 	target := AgentAuthorizationTarget{OrganizationID: "org-a"}
-	require.True(t, consentAgentCandidateEligible(consentHumanAuthorization{userID: "owner"}, agent, target))
-	require.False(t, consentAgentCandidateEligible(consentHumanAuthorization{userID: "other"}, agent, target))
-	require.True(t, consentAgentCandidateEligible(consentHumanAuthorization{userID: "other", grants: []authz.Grant{authz.NewGrant(authz.ScopeAgentAuthorize, agent.ID.String())}}, agent, target))
-	require.False(t, consentAgentCandidateEligible(consentHumanAuthorization{userID: "owner"}, agent, AgentAuthorizationTarget{OrganizationID: "org-b"}))
+	require.True(t, consentAgentCandidateEligible("owner", authz.NewAgentAccess("owner", nil), agent, target))
+	require.False(t, consentAgentCandidateEligible("other", authz.NewAgentAccess("other", nil), agent, target))
+	require.True(t, consentAgentCandidateEligible("other", authz.NewAgentAccess("other", []authz.Grant{authz.NewGrant(authz.ScopeAgentAuthorize, agent.ID.String())}), agent, target))
+	require.False(t, consentAgentCandidateEligible("owner", authz.NewAgentAccess("owner", nil), agent, AgentAuthorizationTarget{OrganizationID: "org-b"}))
 }
 
 func TestConsentAgentCandidateHonorsOwnerSelector(t *testing.T) {
@@ -51,7 +51,8 @@ func TestConsentAgentCandidateHonorsOwnerSelector(t *testing.T) {
 			human := consentHumanAuthorization{userID: "caller", grants: []authz.Grant{
 				authz.NewGrantWithSelector(authz.ScopeAgentAuthorize, authz.AgentOwnerSelector(authz.ScopeAgentAuthorize, tc.owner)),
 			}}
-			require.Equal(t, tc.allowed, consentAgentCandidateEligible(human, agent, AgentAuthorizationTarget{OrganizationID: "org-a"}))
+			access := authz.NewAgentAccess(human.userID, human.grants)
+			require.Equal(t, tc.allowed, consentAgentCandidateEligible(human.userID, access, agent, AgentAuthorizationTarget{OrganizationID: "org-a"}))
 		})
 	}
 }
