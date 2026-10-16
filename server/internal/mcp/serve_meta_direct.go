@@ -24,6 +24,11 @@ import (
 // describes at once.
 const maxConcurrentMemberDescribes = 6
 
+// memberDescribeBudget bounds a whole inventory, in member call timeouts, so a
+// large gateway with many slow members cannot hold a request for one timeout
+// per batch. Members not described in time count as unreachable.
+const memberDescribeBudget = 2
+
 type memberDescribeResult struct {
 	catalog *memberCatalog
 	err     error
@@ -31,8 +36,10 @@ type memberDescribeResult struct {
 
 // describeMetaMembers describes members concurrently and returns results in
 // member order. Each describe gets its own deadline from when it starts, so
-// members queued behind slow ones are not starved.
+// members queued behind slow ones are not starved, within an overall budget.
 func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
+	ctx, cancelAll := context.WithTimeout(ctx, memberDescribeBudget*s.metaRuntime.MemberCallTimeout)
+	defer cancelAll()
 	results := make([]memberDescribeResult, len(members))
 	var group errgroup.Group
 	group.SetLimit(maxConcurrentMemberDescribes)
