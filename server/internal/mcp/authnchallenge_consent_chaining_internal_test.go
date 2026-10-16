@@ -214,7 +214,7 @@ func TestConsentChainedCardOffersConnectForEveryDefinitiveRefusal(t *testing.T) 
 		identitychaining.ReasonInvalidGrant, identitychaining.ReasonMalformedAssertion, identitychaining.ReasonMalformedResponse,
 		identitychaining.ReasonInsufficientScope, identitychaining.ReasonUnknownRejection, identitychaining.ReasonIneligibleIdentity,
 	} {
-		for _, stage := range []identitychaining.Stage{identitychaining.StageSelection, identitychaining.StageAuthorization, identitychaining.StageExchange, identitychaining.StageRedemption} {
+		for _, stage := range []identitychaining.Stage{identitychaining.StageSelection, identitychaining.StageAuthorization, identitychaining.StageDelegation, identitychaining.StageExchange, identitychaining.StageValidation, identitychaining.StageRedemption} {
 			outcome := identitychaining.Outcome{Stage: stage, Reason: reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
 			checked := classifyChainCheck(outcome, "Example")
 			require.Contains(t, []string{chainCheckRejected, chainCheckUnknown}, checked.Status, "%s at %s", reason, stage)
