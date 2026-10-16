@@ -5749,12 +5749,13 @@ FROM remote_session_issuers i
 WHERE i.deleted IS FALSE
   AND (i.organization_id = @organization_id::text
     OR (i.organization_id IS NULL AND i.project_id IS NULL)
-    OR i.project_id IN (SELECT p.id FROM projects p WHERE p.organization_id = @organization_id::text AND p.deleted IS FALSE));
+    OR (i.organization_id IS NULL AND i.project_id IN (SELECT p.id FROM projects p WHERE p.organization_id = @organization_id::text AND p.deleted IS FALSE)));
 
 -- name: ListEMAVendorAcceptanceForIssuers :many
 -- ListEMAVendorAcceptance restricted to credentials naming one of the given
--- issuer records, for one vendor's views.
-SELECT c.ema_provider,
+-- issuer records, for one vendor's views. It returns each record's current
+-- issuer so callers can recheck it against the vendor.
+SELECT i.issuer, c.ema_provider,
   rc.remote_session_issuer_id AS external_issuer_id,
   c.internal_session_issuer_id,
   MAX(c.updated_at)::timestamptz AS last_accepted_at
@@ -5772,7 +5773,7 @@ LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc
 WHERE c.organization_id = @organization_id::text
   AND c.remote_session_issuer_id = ANY(@remote_session_issuer_ids::uuid[])
   AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
-GROUP BY c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
+GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
 
 -- name: RetireLegacyEMACredentialSlot :exec
 -- Only while remote_session_ema_credentials_subject_key still exists: it allows

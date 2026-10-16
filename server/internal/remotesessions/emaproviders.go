@@ -338,6 +338,9 @@ func VendorEMAAcceptance(ctx context.Context, q *repo.Queries, organizationID, v
 		return nil, fmt.Errorf("list ema vendor acceptance: %w", err)
 	}
 	for _, row := range rows {
+		if vendor, err := NormalizeVendorIssuer(row.Issuer); err != nil || vendor != vendorIssuer {
+			continue
+		}
 		accepted.record(row.EmaProvider, row.ExternalIssuerID, row.InternalSessionIssuerID, row.LastAcceptedAt)
 	}
 	return accepted, nil
