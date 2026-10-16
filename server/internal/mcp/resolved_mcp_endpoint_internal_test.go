@@ -79,11 +79,11 @@ func TestValidateRef_Matches(t *testing.T) {
 
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:      "my-server",
-		RouteBase: "x/mcp",
+		RouteBase: "mcp",
 	}
 	require.NoError(t, endpoint.ValidateRef(EndpointRef{
 		McpSlug:   "my-server",
-		RouteBase: "x/mcp",
+		RouteBase: "mcp",
 	}))
 }
 
@@ -124,7 +124,7 @@ func TestEndpointRefPinsBridgedToolset(t *testing.T) {
 	toolsetID := uuid.New()
 	endpoint := &ResolvedMcpEndpoint{
 		Slug:        "my-server",
-		RouteBase:   "x/mcp",
+		RouteBase:   "mcp",
 		McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		ToolsetID:   uuid.NullUUID{UUID: toolsetID, Valid: true},
 	}
@@ -153,6 +153,7 @@ func TestValidateRefRejectsBackendSwap(t *testing.T) {
 	require.ErrorIs(t, err, errToolsetEndpointMismatch)
 }
 
+// A challenge cached on the retired /x/mcp surface cannot resume on /mcp.
 func TestValidateRef_RejectsCrossSurfaceResume(t *testing.T) {
 	t.Parallel()
 
@@ -179,14 +180,6 @@ func TestValidateRef_LegacyEmptyRouteBaseMeansMcp(t *testing.T) {
 	require.NoError(t, endpoint.ValidateRef(EndpointRef{
 		McpSlug: "my-server",
 	}))
-
-	xmcpEndpoint := &ResolvedMcpEndpoint{
-		Slug:      "my-server",
-		RouteBase: "x/mcp",
-	}
-	require.ErrorIs(t, xmcpEndpoint.ValidateRef(EndpointRef{
-		McpSlug: "my-server",
-	}), errToolsetEndpointMismatch)
 }
 
 func TestValidateRef_RejectsCustomDomainMismatch(t *testing.T) {

@@ -196,7 +196,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	state.AuthorizerImpersonated = new(false)
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 	seedMetaMemberConnectGrant(t, ctx, ti.conn, sessionIssuer.OrganizationID.String, serverID)
-	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "x/mcp")
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
 	require.NoError(t, err)
 	gateway := &fakeTunnelGateway{t: t, agentSessionID: "test-agent", backendSessionID: "test-backend-session", mu: sync.Mutex{}}
 	var accepted atomic.Int32
@@ -269,7 +269,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	list := serveConsentMCPRequest(t, ctx, ti, endpoint, stateID, csrf, attempt, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`, headers)
 	require.Contains(t, list.Body.String(), "tools")
 	require.EqualValues(t, 2, accepted.Load())
-	req := httptest.NewRequest(http.MethodPost, "/x/mcp/"+slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"forbidden"}}`)).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"forbidden"}}`)).WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Gram-Consent-State", stateID)
 	req.Header.Set("Gram-Consent-Csrf", csrf)

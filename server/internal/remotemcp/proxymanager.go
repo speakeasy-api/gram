@@ -90,7 +90,7 @@ type ProxyManager struct {
 	killswitchCheckpoint *mcptoolexecution.Checkpoint
 
 	// requestOTELCounterInterceptor emits the shared per-request census
-	// counter (mcp.request) for the remote- and tunnel-backed /x/mcp traffic,
+	// counter (mcp.request) for the remote- and tunnel-backed /mcp traffic,
 	// which never reaches the mcp package's dispatch where the hosted and
 	// platform surfaces emit it.
 	requestOTELCounterInterceptor *RequestOTELCounterInterceptor

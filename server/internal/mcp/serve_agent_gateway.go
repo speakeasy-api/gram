@@ -67,7 +67,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 	r = r.WithContext(authedCtx)
 	ctx = authedCtx
 
-	// The same lockdown ServeMCPEndpoint applies, at the only scope this
+	// The same lockdown ServePublic applies, at the only scope this
 	// surface has. enforceCustomDomainLockdown takes a project id purely to
 	// read the owning organization off it, and the policy it then applies is
 	// the organization's; an agent gateway has no single project, but its

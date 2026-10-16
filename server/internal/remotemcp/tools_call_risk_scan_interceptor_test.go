@@ -107,7 +107,7 @@ func TestProxyManagerRiskScanBlocksBeforeUpstream(t *testing.T) {
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(riskScanRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(riskScanRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
@@ -153,7 +153,7 @@ func TestProxyManagerRiskScanFlagPublishesAndAllowsUpstream(t *testing.T) {
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(riskScanRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(riskScanRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
@@ -202,7 +202,7 @@ func TestProxyManagerRiskScanWithholdsRemoteResponse(t *testing.T) {
 		mcpriskscan.DefaultPolicyConfig,
 	)
 	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(riskScanRequest))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(riskScanRequest))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
@@ -373,7 +373,7 @@ func assertRiskScanRelay(t *testing.T, tunnel bool, request string, status int, 
 	t.Cleanup(upstream.Close)
 
 	built := newRiskScanTestProxy(t, upstream.URL, recorded, nil, tunnel)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(request))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(request))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
@@ -433,7 +433,7 @@ func assertRiskScanSelectionRejection(t *testing.T, request string, code int64) 
 	require.NoError(t, err)
 	recorded := &recordingRemoteRiskScan{events: nil, payloads: nil, calls: atomic.Int32{}}
 	built := newRiskScanTestProxy(t, upstream.URL, recorded, selection, false)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(request))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/sample", strings.NewReader(request))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	require.NoError(t, built.Post(rr, req))

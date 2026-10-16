@@ -42,7 +42,7 @@ func (s *Service) HandleConsentAction(w http.ResponseWriter, r *http.Request) er
 	return s.ServeConsentAction(w, r, endpoint)
 }
 
-// ServeConsentAction is the post-resolution handler, shared with /x/mcp.
+// ServeConsentAction is the post-resolution handler.
 func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)

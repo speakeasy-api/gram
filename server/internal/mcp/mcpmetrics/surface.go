@@ -9,7 +9,7 @@ import (
 // Surface identifies which inbound MCP serving surface observed a request.
 // The values match the policy boundaries mcpversions draws: arbitrary
 // third-party clients versus the assistant-token-only platform surface. The
-// /x/mcp backend fan-out (toolset-, remote-, and tunnel-backed) is
+// /mcp backend fan-out (toolset-, remote-, and tunnel-backed) is
 // deliberately not distinguished — all of it faces third-party clients.
 //
 // The go-sdk-served /platform-mcp surface (server/internal/platformmcp) is
@@ -20,7 +20,7 @@ import (
 type Surface string
 
 const (
-	// SurfaceHosting covers /mcp/{slug} and every /x/mcp/{slug} backend.
+	// SurfaceHosting covers every /mcp/{slug} backend.
 	SurfaceHosting Surface = "hosting"
 
 	// SurfacePlatform covers /platform/mcp/{toolsetSlug}, which accepts only

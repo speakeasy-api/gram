@@ -186,8 +186,7 @@ func TestHandleTokenCode_ResourceIndicator(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid_target")
 
-	// Same server, wrong route base: /mcp and /x/mcp mint different audiences,
-	// so they are never interchangeable resource identifiers.
+	// The retired /x/mcp form is not an accepted resource identifier.
 	w = redeem(strings.Replace(advertisedResource, "/mcp/", "/x/mcp/", 1))
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid_target")

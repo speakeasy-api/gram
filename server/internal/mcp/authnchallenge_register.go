@@ -76,8 +76,7 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 
 // ServeRegister implements RFC 7591 Dynamic Client Registration for
 // issuer-gated MCP servers. Post-resolution entry point shared by
-// /mcp's HandleRegister (toolset-keyed) and /x/mcp's mcp_endpoint-keyed
-// route registration. Public endpoint (no caller auth); the issuer's
+// HandleRegister after slug resolution. Public endpoint (no caller auth); the issuer's
 // metadata document advertises this URL via `registration_endpoint`.
 //
 // Generated client_secret is returned plaintext exactly once; only its
