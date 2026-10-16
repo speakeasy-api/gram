@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -47,6 +48,7 @@ type testInstance struct {
 	service        *environments.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	enc            *encryption.Client
 }
 
 func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
@@ -79,5 +81,6 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		enc:            enc,
 	}
 }

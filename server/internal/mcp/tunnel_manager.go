@@ -30,7 +30,10 @@ type tunnelHeaderSource interface {
 type tunnelManager struct {
 	routes route.Store
 	// headers loads a tunnel's configured headers. Nil configures none.
-	headers          tunnelHeaderSource
+	headers tunnelHeaderSource
+	// environments loads the headers mapped from a server's linked
+	// environment. A linked server cannot be served while it is nil.
+	environments     environmentHeaderSource
 	forwardToken     string
 	proxyManager     *remotemcp.ProxyManager
 	callerAssertions *mcpauthz.Issuer
@@ -43,10 +46,11 @@ type tunnelManager struct {
 	gatewayCIDRs []string
 }
 
-func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string, callerAssertions *mcpauthz.Issuer, headers tunnelHeaderSource) *tunnelManager {
+func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string, callerAssertions *mcpauthz.Issuer, headers tunnelHeaderSource, environments environmentHeaderSource) *tunnelManager {
 	return &tunnelManager{
 		routes:           routes,
 		headers:          headers,
+		environments:     environments,
 		forwardToken:     forwardToken,
 		proxyManager:     proxyManager,
 		gatewayCIDRs:     gatewayCIDRs,
@@ -84,6 +88,10 @@ type buildProxyParams struct {
 
 	// Selection restricts the tools exposed through this proxy.
 	Selection *toolfilter.SessionSelection
+
+	// EnvironmentHeaders is the server's environment headers when the caller
+	// already loaded them for this request. Nil loads them here.
+	EnvironmentHeaders *environmentHeaderSnapshot
 }
 
 // buildProxy constructs the tunnel-backed proxy for one request.
@@ -129,7 +137,17 @@ func (m *tunnelManager) buildProxy(
 		return nil, oops.E(oops.CodeUnexpected, err, "load tunneled mcp server headers").LogError(ctx, logger)
 	}
 
+	environment := params.EnvironmentHeaders
+	if environment == nil {
+		loaded, err := loadEnvironmentHeaders(ctx, logger, m.environments, params.ProjectID, mcpServer, "")
+		if err != nil {
+			return nil, err
+		}
+		environment = &loaded
+	}
+
 	options = append(options,
+		remotemcp.WithEnvironmentHeaders(environment.rows),
 		remotemcp.WithRoutingHeaders(tunnelrouting.Headers(tunnelID, m.forwardToken, params.ClientAffinityKey)),
 		remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled),
 	)

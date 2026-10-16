@@ -24,6 +24,7 @@ import {
 import { CallerIdentitySection } from "./sections/CallerIdentitySection";
 import { GeneralSection } from "./sections/GeneralSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
+import { EnvironmentHeadersSection } from "./sections/EnvironmentHeadersSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
 import {
   MCP_PUBLIC_ACCESS_SECTION_ID,
@@ -160,6 +161,9 @@ export function SettingsTab({
             Headers disclosure; they are governed by the identity choice, not
             a peer of it. */}
         <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+        {/* Keyed by this server: the link is per server, and a draft must
+            not carry over to another server on the same source. */}
+        <EnvironmentHeadersSection key={mcpServer.id} mcpServer={mcpServer} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
           endpoints={endpoints}
@@ -205,6 +209,9 @@ export function SettingsTab({
             tunneledMcpServer={tunneledMcpServer}
             mcpServerId={mcpServer.id}
           />
+          {/* Keyed by this server, not the tunnel: servers sharing the
+              tunnel each have their own link and draft. */}
+          <EnvironmentHeadersSection key={mcpServer.id} mcpServer={mcpServer} />
           <CallerIdentitySection />
           <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
           <PublicRateLimitsSection

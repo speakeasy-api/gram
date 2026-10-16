@@ -92,6 +92,10 @@ type validationMemberRequest struct {
 	session     string
 	version     string
 	metaVersion string
+
+	// instanceURL is the X-Instance-Url header as it arrived, empty when
+	// absent.
+	instanceURL string
 	// apiKey and setCookie are configured headers a policy test looks for.
 	apiKey    string
 	setCookie string
@@ -162,6 +166,7 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 		session:     r.Header.Get("Mcp-Session-Id"),
 		version:     r.Header.Get("MCP-Protocol-Version"),
 		metaVersion: metaVersion,
+		instanceURL: r.Header.Get("X-Instance-Url"),
 		apiKey:      r.Header.Get("X-Api-Key"),
 		setCookie:   r.Header.Get("Set-Cookie"),
 	})

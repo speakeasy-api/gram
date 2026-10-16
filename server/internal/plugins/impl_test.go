@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -3172,4 +3173,77 @@ func TestPluginsService_TunneledRequestDerivedHeaderBlocksCompatibility(t *testi
 	fetched, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
 	require.True(t, fetched.AgentPluginsV1Compatible)
+}
+
+// Distribution stays conservative: a request-derived source header still
+// blocks a server even when its linked environment replaces that header.
+func TestPluginsService_EnvironmentReplacingRequestDerivedHeaderStillBlocksCompatibility(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+
+	tunnel, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               "env-headers-tunnel-" + uuid.NewString()[:8],
+		KeyHash:            "hash-" + uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
+		Name:        pgtype.Text{String: tunnel.Name, Valid: true},
+		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
+		ID:          tunnel.ID,
+		ProjectID:   projectID,
+	})
+	require.NoError(t, err)
+
+	envSlug := "env-" + uuid.NewString()[:8]
+	env, err := environmentsrepo.New(ti.conn).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Name: envSlug, Slug: envSlug, Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = environmentsrepo.New(ti.conn).CreateEnvironmentEntries(ctx, environmentsrepo.CreateEnvironmentEntriesParams{
+		EnvironmentID: env.ID, Names: []string{"MCP_HEADER_X-Region"}, Values: []string{"eu-west"}, IsSecrets: []bool{false},
+	})
+	require.NoError(t, err)
+
+	serverID := uuid.New()
+	slug := "env-headers-" + uuid.NewString()[:8]
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           projectID,
+		Name:                pgtype.Text{String: "Environment Headers", Valid: true},
+		Slug:                pgtype.Text{String: slug, Valid: true},
+		EnvironmentID:       uuid.NullUUID{UUID: env.ID, Valid: true},
+		TunneledMcpServerID: uuid.NullUUID{UUID: tunnel.ID, Valid: true},
+		Visibility:          mcpservers.VisibilityPublic,
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:   projectID,
+		McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+		Slug:        slug + "-endpoint",
+	})
+	require.NoError(t, err)
+	_, err = tunneledmcprepo.New(ti.conn).CreateServerHeader(ctx, tunneledmcprepo.CreateServerHeaderParams{
+		Name: "X-Region", Description: pgtype.Text{}, IsRequired: true, IsSecret: false,
+		Value: pgtype.Text{}, ValueFromRequestHeader: pgtype.Text{String: "X-Client-Region", Valid: true},
+		TunneledMcpServerID: tunnel.ID, ProjectID: projectID,
+	})
+	require.NoError(t, err)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Environment Headers"})
+	require.NoError(t, err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(serverID.String()), Policy: "required", SortOrder: 0})
+	require.NoError(t, err)
+
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.False(t, fetched.AgentPluginsV1Compatible)
 }
