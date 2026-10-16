@@ -3,6 +3,8 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"net/url"
 	"strings"
 	"testing"
@@ -130,7 +132,7 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
-	clientID := uuid.New()
+	clientID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuerID)
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
 
 	for _, test := range []struct {
@@ -267,4 +269,26 @@ func TestMemberMCPStatusNotFoundIsSafe(t *testing.T) {
 	require.NotContains(t, string(payload), "permission")
 	require.NotContains(t, string(payload), "organization")
 	require.NotContains(t, string(payload), "grant")
+}
+
+// associateMemberMCPClient creates a client of remoteIssuerID in the project
+// and associates it with the MCP server, as configuring the server's User
+// Identity does.
+func associateMemberMCPClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, mcpID, remoteIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	client, err := remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              "member-client-" + uuid.NewString()[:8],
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		McpServerID:           mcpID,
+		RemoteSessionClientID: client.ID,
+	}))
+	return client.ID
 }

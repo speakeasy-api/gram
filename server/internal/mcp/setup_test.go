@@ -150,14 +150,14 @@ type migratedService struct {
 	conn *pgxpool.Pool
 }
 
+// migrate is best effort: a test that breaks the database on purpose to
+// exercise a failure path sees the service meet the same broken database.
 func (s *migratedService) migrate(ctx context.Context) {
 	ctx = context.WithoutCancel(ctx)
 	if _, err := associationbackfill.Run(ctx, s.conn, associationbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0}); err != nil {
-		panic(fmt.Sprintf("migrate upstream oauth associations: %v", err))
+		return
 	}
-	if _, err := selectionbackfill.Run(ctx, s.conn, selectionbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0}); err != nil {
-		panic(fmt.Sprintf("migrate upstream oauth selections: %v", err))
-	}
+	_, _ = selectionbackfill.Run(ctx, s.conn, selectionbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0})
 }
 
 func (s *migratedService) ServePublic(w http.ResponseWriter, r *http.Request) error {

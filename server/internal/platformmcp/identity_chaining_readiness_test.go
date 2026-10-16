@@ -262,7 +262,8 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
-	clientID := uuid.New()
+	clientID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuer.ID)
+	secondClientID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuer.ID)
 	clients := []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuer.ID}}
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
 	rejected := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, ValidationStatus: remotesessions.ValidationOutcomeInactive}}
@@ -311,12 +312,29 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.EqualValues(t, 1, stamped)
+			// A server with no derived issuer has no client configured for it.
+			require.NoError(t, testrepo.New(conn).ClearMCPServerRemoteSessionClientsFixture(ctx, mcpID))
+			associated := []uuid.UUID{clientID}
+			switch {
+			case test.noIssuer:
+				associated = nil
+			case test.multi:
+				associated = append(associated, secondClientID)
+			}
+			for _, id := range associated {
+				require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+					ProjectID:             project.ID,
+					OrganizationID:        principal.OrganizationID,
+					McpServerID:           mcpID,
+					RemoteSessionClientID: id,
+				}))
+			}
 			readerClients := clients
 			if test.noClient {
 				readerClients = nil
 			}
 			if test.multi {
-				readerClients = append(append([]remotesessions.Client(nil), clients...), remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: remoteIssuer.ID})
+				readerClients = append(append([]remotesessions.Client(nil), clients...), remotesessions.Client{ID: secondClientID, RemoteSessionIssuerID: remoteIssuer.ID})
 			}
 			governor := &recordingGovernor{issuer: remoteIssuer.ID, serves: test.serves, usable: test.usable}
 			service := NewPluginsService(conn, allowBudget(), "member-chained-status-key").
