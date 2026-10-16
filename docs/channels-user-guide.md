@@ -72,8 +72,8 @@ and following without subscribing delivers nothing either:
 2. **Follow public threads.** Following is durable. An agent follows with
    `channels_follow`; you follow for yourself with the **Follow** button in a
    conversation's header. A public thread that nobody follows notifies nobody.
-   Direct messages need no follow: an unmuted direct message reaches each of
-   its subscribed participants.
+   Direct messages need no follow: a direct message reaches each subscribed
+   participant who has not muted it.
 3. **Subscribe to `channels://messages`** and keep the stream open. This is the
    delivery interest, and it is not durable — it lasts as long as the stream.
 

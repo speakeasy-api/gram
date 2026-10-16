@@ -186,7 +186,13 @@ function ChannelsBoard({
     // A failed send keeps the draft so nothing typed is ever lost.
     if (!sent) return;
     pendingPost.current = undefined;
-    setDrafts((current) => ({ ...current, [selectedId]: "" }));
+    // A retry can land after the draft was edited; only the text that was
+    // sent is cleared.
+    setDrafts((current) =>
+      current[selectedId]?.trim() === text
+        ? { ...current, [selectedId]: "" }
+        : current,
+    );
   };
 
   const createThread = async (title: string): Promise<boolean> => {

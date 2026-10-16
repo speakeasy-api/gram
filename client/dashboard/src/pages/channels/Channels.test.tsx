@@ -484,6 +484,36 @@ describe("Channels", () => {
     expect(posts[0]![2]).toEqual(posts[1]![2]);
   });
 
+  it("keeps a draft edited after a failed send when the retry succeeds", async () => {
+    mount();
+    await screen.findByRole("heading", { name: /Planning/ });
+    fireEvent.change(composer(), { target: { value: "First version" } });
+    let posted = false;
+    request.mockImplementation(async (project, operation) => {
+      if (operation === "channels_post" && !posted) {
+        posted = true;
+        throw new Error("Channels is briefly unavailable");
+      }
+      return respond(project, operation);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("alert");
+
+    fireEvent.change(composer(), { target: { value: "Second version" } });
+    fireEvent.click(screen.getByRole("button", { name: "Try again now" }));
+    await waitFor(() =>
+      expect(
+        request.mock.calls.filter((call) => call[1] === "channels_post"),
+      ).toHaveLength(2),
+    );
+    const posts = request.mock.calls.filter(
+      (call) => call[1] === "channels_post",
+    );
+    expect(posts[0]![2]).toEqual(posts[1]![2]);
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(composer().value).toBe("Second version");
+  });
+
   it("follows long incoming messages but preserves intentional scrollback", async () => {
     vi.useFakeTimers();
     mount();
