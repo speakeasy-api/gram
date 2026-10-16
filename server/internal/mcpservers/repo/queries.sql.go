@@ -1308,6 +1308,102 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 	return items, nil
 }
 
+const listToolsetSummariesByIDs = `-- name: ListToolsetSummariesByIDs :many
+SELECT
+    t.id
+  , t.slug
+  , t.name
+  , t.tool_selection_mode
+  , t.external_oauth_server_id
+  , (
+      SELECT COUNT(DISTINCT u.urn)
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy'
+    )::bigint AS tool_count
+  , ARRAY(
+      SELECT DISTINCT split_part(u.urn, ':', 3) AS slug
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:externalmcp:%'
+      ORDER BY slug
+    )::text[] AS external_mcp_slugs
+  , (
+      EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn LIKE 'tools:externalmcp:%:proxy')
+      AND NOT EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy')
+    )::boolean AS external_mcp_proxy_only
+  , COALESCE(origin.origin_registry_specifier, '')::text AS registry_specifier
+FROM toolsets t
+LEFT JOIN LATERAL (
+  SELECT tv.tool_urns
+  FROM toolset_versions tv
+  WHERE tv.toolset_id = t.id
+    AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+) lv ON TRUE
+LEFT JOIN LATERAL (
+  SELECT o.origin_registry_specifier
+  FROM toolset_origins o
+  WHERE o.toolset_id = t.id
+    AND o.organization_id = t.organization_id
+    AND o.deleted IS FALSE
+  ORDER BY o.created_at DESC
+  LIMIT 1
+) origin ON TRUE
+WHERE t.id = ANY($1::uuid[])
+  AND t.organization_id = $2
+  AND t.project_id = ANY($3::uuid[])
+  AND t.deleted IS FALSE
+`
+
+type ListToolsetSummariesByIDsParams struct {
+	ToolsetIds     []uuid.UUID
+	OrganizationID string
+	ProjectIds     []uuid.UUID
+}
+
+type ListToolsetSummariesByIDsRow struct {
+	ID                    uuid.UUID
+	Slug                  string
+	Name                  string
+	ToolSelectionMode     string
+	ExternalOauthServerID uuid.NullUUID
+	ToolCount             int64
+	ExternalMcpSlugs      []string
+	ExternalMcpProxyOnly  bool
+	RegistrySpecifier     string
+}
+
+// Proxy URNs are tools:externalmcp:<slug>:proxy; tool_count skips them.
+func (q *Queries) ListToolsetSummariesByIDs(ctx context.Context, arg ListToolsetSummariesByIDsParams) ([]ListToolsetSummariesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetSummariesByIDs, arg.ToolsetIds, arg.OrganizationID, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetSummariesByIDsRow
+	for rows.Next() {
+		var i ListToolsetSummariesByIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.ToolSelectionMode,
+			&i.ExternalOauthServerID,
+			&i.ToolCount,
+			&i.ExternalMcpSlugs,
+			&i.ExternalMcpProxyOnly,
+			&i.RegistrySpecifier,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockLiveMCPServersInOrganization = `-- name: LockLiveMCPServersInOrganization :many
 SELECT m.id
 FROM mcp_servers AS m

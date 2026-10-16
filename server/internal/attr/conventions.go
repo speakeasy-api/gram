@@ -435,6 +435,7 @@ const (
 	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
+	McpServerIDsKey        = attribute.Key("gram.mcp_server.ids")
 	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
 	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
@@ -3011,6 +3012,9 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
+
+func McpServerIDs(v []string) attribute.KeyValue { return McpServerIDsKey.StringSlice(v) }
+func SlogMcpServerIDs(v []string) slog.Attr      { return slog.Any(string(McpServerIDsKey), v) }
 
 func McpEndpointID(v string) attribute.KeyValue { return McpEndpointIDKey.String(v) }
 func SlogMcpEndpointID(v string) slog.Attr      { return slog.String(string(McpEndpointIDKey), v) }

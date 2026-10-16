@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -317,7 +317,7 @@ func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	issuerURL, err := endpointaddr.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}
@@ -345,7 +345,7 @@ func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrep
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	issuerURL, err := endpointaddr.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}

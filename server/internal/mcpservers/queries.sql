@@ -713,3 +713,50 @@ WHERE p.organization_id = @organization_id
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
 ORDER BY s.project_id, s.slug;
+
+-- name: ListToolsetSummariesByIDs :many
+-- Proxy URNs are tools:externalmcp:<slug>:proxy; tool_count skips them.
+SELECT
+    t.id
+  , t.slug
+  , t.name
+  , t.tool_selection_mode
+  , t.external_oauth_server_id
+  , (
+      SELECT COUNT(DISTINCT u.urn)
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy'
+    )::bigint AS tool_count
+  , ARRAY(
+      SELECT DISTINCT split_part(u.urn, ':', 3) AS slug
+      FROM unnest(lv.tool_urns) AS u(urn)
+      WHERE u.urn LIKE 'tools:externalmcp:%'
+      ORDER BY slug
+    )::text[] AS external_mcp_slugs
+  , (
+      EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn LIKE 'tools:externalmcp:%:proxy')
+      AND NOT EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy')
+    )::boolean AS external_mcp_proxy_only
+  , COALESCE(origin.origin_registry_specifier, '')::text AS registry_specifier
+FROM toolsets t
+LEFT JOIN LATERAL (
+  SELECT tv.tool_urns
+  FROM toolset_versions tv
+  WHERE tv.toolset_id = t.id
+    AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+) lv ON TRUE
+LEFT JOIN LATERAL (
+  SELECT o.origin_registry_specifier
+  FROM toolset_origins o
+  WHERE o.toolset_id = t.id
+    AND o.organization_id = t.organization_id
+    AND o.deleted IS FALSE
+  ORDER BY o.created_at DESC
+  LIMIT 1
+) origin ON TRUE
+WHERE t.id = ANY(@toolset_ids::uuid[])
+  AND t.organization_id = @organization_id
+  AND t.project_id = ANY(@project_ids::uuid[])
+  AND t.deleted IS FALSE;
