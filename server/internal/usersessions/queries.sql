@@ -1666,7 +1666,8 @@ RETURNING *;
 -- Access-only sessions instead store NULL or a colon-delimited source marker.
 -- Only the derived capability leaves SQL.
 SELECT tool_selection, expires_at,
-       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable
+       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable,
+       COALESCE(credential_id, id)::uuid AS credential_id
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
@@ -2476,6 +2477,7 @@ ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FAL
 -- An unusable choice is reported as such rather than replaced, so the caller
 -- fails closed instead of switching clients.
 SELECT sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
        sel.no_auth,
        sel.source,
        (
@@ -2499,6 +2501,8 @@ SELECT sel.remote_session_client_id,
          END
        )::boolean AS usable
 FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
 WHERE sel.credential_kind = @credential_kind::text
   AND sel.credential_id = @credential_id::uuid
   AND sel.mcp_server_id = @mcp_server_id::uuid

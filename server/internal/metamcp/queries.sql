@@ -302,7 +302,9 @@ RETURNING *;
 --
 -- A client names exactly one remote_session_issuer, so matching it against the
 -- member's own is the whole lookup; the caller still fails closed on none or
--- several, since a grant records one resource.
+-- several, since a grant records one resource. With remote_session_client_id
+-- set, members claim the client through their own association with it
+-- instead, independent of the issuer derived for them.
 --
 -- upstream_url is the member's RFC 8707 resource: the remote server URL or
 -- the tunneled server's recorded resource identifier (empty when a tunneled
@@ -334,7 +336,16 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND s.remote_session_issuer_id = @remote_session_issuer_id
+  AND (
+    (sqlc.narg('remote_session_client_id')::uuid IS NULL AND s.remote_session_issuer_id = @remote_session_issuer_id)
+    OR EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid
+        AND a.deleted IS FALSE
+    )
+  )
 ORDER BY m.sort_order, m.created_at, m.id;
 
 -- name: ListOrganizationMCPServersForRemoteSessionIssuer :many
@@ -349,7 +360,8 @@ ORDER BY m.sort_order, m.created_at, m.id;
 -- project owns: that client's grant routes only to its own project's members.
 -- NULL considers every project, for an organization-level client. Callers
 -- apply each server's network access mode for the request's surface, as the
--- member snapshot does.
+-- member snapshot does. remote_session_client_id selects servers associated
+-- with that client, as ListMetaMCPMembersForRemoteSessionIssuer does.
 SELECT
     s.id AS mcp_server_id,
     s.project_id AS project_id,
@@ -375,7 +387,16 @@ WHERE p.organization_id = @organization_id
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND s.remote_session_issuer_id = @remote_session_issuer_id
+  AND (
+    (sqlc.narg('remote_session_client_id')::uuid IS NULL AND s.remote_session_issuer_id = @remote_session_issuer_id)
+    OR EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid
+        AND a.deleted IS FALSE
+    )
+  )
 ORDER BY s.project_id, s.slug;
 
 -- name: ListOrganizationProxiedMCPServerResources :many

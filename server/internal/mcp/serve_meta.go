@@ -66,6 +66,10 @@ type metaGateContext struct {
 	// tokens, for an organization gateway whose members span projects. Read
 	// both through memberTokens.
 	projectTokens *projectTokenCache
+	// memberChoices, when serving reads credential choices, routes each
+	// proxied member through the client the credential chose for it, in
+	// place of tokens and projectTokens.
+	memberChoices *memberChoices
 	// userSessionIssuerID is the gated endpoint's issuer; uuid.Nil when ungated.
 	userSessionIssuerID uuid.UUID
 	// connectRoot is the gateway's root URL, under which each member has a
@@ -181,6 +185,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
+	var gateMemberChoices *memberChoices
 	var gateToolSelection *toolfilter.SessionSelection
 	switch {
 	case !metaServer.UserSessionIssuerID.Valid:
@@ -194,6 +199,10 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
+		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
+		}
 		gateToolSelection = toolSelection
 	default:
 		if resolvedEndpoint == nil {
@@ -203,13 +212,21 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 			}
 			resolvedEndpoint = built
 		}
-		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		if err != nil {
+			return fmt.Errorf("apply issuer gate: %w", err)
+		}
+		tokens, err := s.resolveIssuerGateAccessTokens(newCtx, w, authentication)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		gateTokens = tokens
+		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
+		}
 		gateToolSelection = toolSelection
 	}
 	if prepared.empty() {
@@ -240,6 +257,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		organizationID:      metaServer.OrganizationID,
 		tokens:              gateTokens,
 		projectTokens:       gateProjectTokens,
+		memberChoices:       gateMemberChoices,
 		// Uninitialized when ungated, which disables identity chaining.
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
 		connectRoot:         connectRoot,
@@ -538,6 +556,9 @@ func (s *Service) callMetaServerTool(
 		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
 	} else {
 		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
+	}
+	if err == nil && gate.memberChoices != nil {
+		gate.memberChoices.apply(ctx, logger, members)
 	}
 	if err != nil {
 		if params.Name != metamcp.ToolExecuteTool {

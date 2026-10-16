@@ -106,12 +106,19 @@ func (s *Service) claimingMetaMembers(
 		return nil, false, nil
 	}
 
+	// Serving from associations, a member claims the clients configured for
+	// it rather than every client of its authorization server.
+	byAssociation := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if s.upstreamSelectionServing(ctx, endpoint.OrganizationID) {
+		byAssociation = uuid.NullUUID{UUID: client.ID, Valid: true}
+	}
 	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow
 	if endpoint.IsOrganizationGateway() {
 		organizationRows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionIssuer(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionIssuerParams{
 			OrganizationID:        endpoint.OrganizationID,
 			ProjectID:             client.ProjectID,
 			RemoteSessionIssuerID: uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true},
+			RemoteSessionClientID: byAssociation,
 		})
 		if err != nil {
 			return nil, false, fmt.Errorf("list organization MCP servers for remote session issuer: %w", err)
@@ -129,6 +136,7 @@ func (s *Service) claimingMetaMembers(
 			MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
 			ProjectID:             endpoint.ProjectID,
 			RemoteSessionIssuerID: uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true},
+			RemoteSessionClientID: byAssociation,
 		})
 		if err != nil {
 			return nil, false, fmt.Errorf("list meta MCP members for remote session issuer: %w", err)

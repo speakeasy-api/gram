@@ -21,7 +21,7 @@ import (
 // person has connected yet: an issuer-backed OAuth member stays supported so
 // they can connect it.
 func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (supported bool, needsOAuth bool, err error) {
-	oauth := member.remoteSessionIssuerID.Valid
+	oauth := memberNeedsSignIn(member)
 	if member.backend != metaMemberBackendHosted {
 		if !member.remoteServerID.Valid {
 			return true, oauth, nil

@@ -532,6 +532,39 @@ func (m *ChallengeManager) ResolveAvailableAccessTokens(
 	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, true)
 }
 
+// ResolveClientAccessTokens resolves the caller's credential for one chosen
+// client, with the per-client behavior of ResolveAccessTokens, or of
+// ResolveAvailableAccessTokens when skipUnusable is set. The result holds at
+// most one entry, keyed by the client's remote session issuer.
+//
+// The client must still be bound to the user session issuer and visible to
+// the project: otherwise it returns ErrNoValidToken, or an empty map when
+// skipUnusable is set, and never another client's credential.
+func (m *ChallengeManager) ResolveClientAccessTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	clientID uuid.UUID,
+	skipUnusable bool,
+) (map[uuid.UUID]UpstreamToken, error) {
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	chosen := slices.DeleteFunc(clients, func(c remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+		return c.ClientID != clientID
+	})
+	if len(chosen) == 0 {
+		if skipUnusable {
+			return map[uuid.UUID]UpstreamToken{}, nil
+		}
+		return nil, ErrNoValidToken
+	}
+	return m.resolveClientTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, chosen, skipUnusable)
+}
+
 func (m *ChallengeManager) resolveBoundAccessTokens(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -547,6 +580,20 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 	if len(clients) == 0 {
 		return nil, nil
 	}
+	return m.resolveClientTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
+}
+
+// resolveClientTokens resolves the caller's credential for each of clients,
+// keyed by remote session issuer.
+func (m *ChallengeManager) resolveClientTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
+	skipUnusable bool,
+) (map[uuid.UUID]UpstreamToken, error) {
 
 	// Assert the per-(user_session_issuer, remote_session_issuer) uniqueness
 	// invariant up front, before resolving any tokens. Folding this into the

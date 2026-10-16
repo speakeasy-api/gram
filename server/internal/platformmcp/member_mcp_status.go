@@ -11,7 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -78,6 +81,19 @@ type memberMCPStatusTarget struct {
 	remoteSessionIssuerID uuid.UUID
 	remoteMCPServerID     uuid.NullUUID
 	tunneledMCPServerID   uuid.NullUUID
+	// associatedClients is the server's associated upstream clients when the
+	// organization serves from associations; nil matches clients by the
+	// server's derived authorization server instead.
+	associatedClients map[uuid.UUID]bool
+}
+
+// signInRequired reports whether the server authenticates upstream through a
+// client the member connects.
+func (t memberMCPStatusTarget) signInRequired() bool {
+	if t.associatedClients != nil {
+		return len(t.associatedClients) > 0
+	}
+	return t.remoteSessionIssuerID != uuid.Nil
 }
 
 func (s *PluginsService) GetMyMCPAccess(ctx context.Context, principal Principal, input GetMyMCPStatusInput) (GetMyMCPAccessOutput, error) {
@@ -122,7 +138,7 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return output, nil
 	}
 	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
-	if target.remoteSessionIssuerID == uuid.Nil {
+	if !target.signInRequired() {
 		// Direct upstreams select chaining bindings by resource, even without an interactive issuer.
 		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
 		if err != nil {
@@ -150,7 +166,7 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("list MCP authorization clients: %w", err)
 	}
-	clients = memberMCPConnectionClients(clients, target.remoteSessionIssuerID)
+	clients = memberMCPConnectionClients(clients, target)
 	if len(clients) > 1 {
 		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
 		if err != nil {
@@ -283,6 +299,10 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("load member MCP authorization target: %w", err)
 	}
+	associated, err := s.serverAssociatedClients(ctx, principal.OrganizationID, mcpID)
+	if err != nil {
+		return memberMCPStatusTarget{}, err
+	}
 	name := row.Name.String
 	if name == "" {
 		name = row.Slug.String
@@ -297,6 +317,7 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 		remoteSessionIssuerID: server.RemoteSessionIssuerID.UUID,
 		remoteMCPServerID:     server.RemoteMcpServerID,
 		tunneledMCPServerID:   server.TunneledMcpServerID,
+		associatedClients:     associated,
 	}, nil
 }
 
@@ -350,14 +371,44 @@ func memberMCPAccessNextAction(requestAccessURL string) string {
 	return "request_access"
 }
 
-func memberMCPConnectionClients(clients []remotesessions.Client, issuerID uuid.UUID) []remotesessions.Client {
+func memberMCPConnectionClients(clients []remotesessions.Client, target memberMCPStatusTarget) []remotesessions.Client {
 	matched := make([]remotesessions.Client, 0, 1)
 	for _, client := range clients {
-		if client.RemoteSessionIssuerID == issuerID {
+		if target.associatedClients != nil && target.associatedClients[client.ID] ||
+			target.associatedClients == nil && client.RemoteSessionIssuerID == target.remoteSessionIssuerID {
 			matched = append(matched, client)
 		}
 	}
 	return matched
+}
+
+// serverAssociatedClients returns, when the organization serves proxied MCP
+// servers from associations, the live clients associated with the server; nil
+// otherwise. An unavailable flag keeps the derived match.
+func (s *PluginsService) serverAssociatedClients(ctx context.Context, organizationID string, serverID uuid.UUID) (map[uuid.UUID]bool, error) {
+	if s.mutationFlags == nil {
+		return nil, nil
+	}
+	org, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("load organization: %w", err)
+	}
+	enabled, err := s.mutationFlags.IsFlagEnabled(ctx, feature.FlagUpstreamClientSelectionServing, organizationID, feature.OrgProjectGroups(org.Slug, ""))
+	if err != nil || !enabled {
+		return nil, nil
+	}
+	rows, err := upstreamclientsrepo.New(s.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
+		McpServerIds:   []uuid.UUID{serverID},
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list server associated clients: %w", err)
+	}
+	associated := make(map[uuid.UUID]bool, len(rows))
+	for _, row := range rows {
+		associated[row.RemoteSessionClientID] = true
+	}
+	return associated, nil
 }
 
 func memberMCPReauthorizationReason(status remotesessions.RemoteSessionState, now time.Time) string {

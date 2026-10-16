@@ -828,13 +828,23 @@ WHERE m.meta_mcp_server_id = $1
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND s.remote_session_issuer_id = $3
+  AND (
+    ($3::uuid IS NULL AND s.remote_session_issuer_id = $4)
+    OR EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = $3::uuid
+        AND a.deleted IS FALSE
+    )
+  )
 ORDER BY m.sort_order, m.created_at, m.id
 `
 
 type ListMetaMCPMembersForRemoteSessionIssuerParams struct {
 	MetaMcpServerID       uuid.UUID
 	ProjectID             uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
 	RemoteSessionIssuerID uuid.NullUUID
 }
 
@@ -854,14 +864,21 @@ type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
 //
 // A client names exactly one remote_session_issuer, so matching it against the
 // member's own is the whole lookup; the caller still fails closed on none or
-// several, since a grant records one resource.
+// several, since a grant records one resource. With remote_session_client_id
+// set, members claim the client through their own association with it
+// instead, independent of the issuer derived for them.
 //
 // upstream_url is the member's RFC 8707 resource: the remote server URL or
 // the tunneled server's recorded resource identifier (empty when a tunneled
 // member records none — the claim still lands, minting an unqualified grant).
 // Hosted and unproxied members have no upstream and cannot claim.
 func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, arg ListMetaMCPMembersForRemoteSessionIssuerParams) ([]ListMetaMCPMembersForRemoteSessionIssuerRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionIssuer, arg.MetaMcpServerID, arg.ProjectID, arg.RemoteSessionIssuerID)
+	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionIssuer,
+		arg.MetaMcpServerID,
+		arg.ProjectID,
+		arg.RemoteSessionClientID,
+		arg.RemoteSessionIssuerID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1076,13 +1093,23 @@ WHERE p.organization_id = $1
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND s.remote_session_issuer_id = $3
+  AND (
+    ($3::uuid IS NULL AND s.remote_session_issuer_id = $4)
+    OR EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = $3::uuid
+        AND a.deleted IS FALSE
+    )
+  )
 ORDER BY s.project_id, s.slug
 `
 
 type ListOrganizationMCPServersForRemoteSessionIssuerParams struct {
 	OrganizationID        string
 	ProjectID             uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
 	RemoteSessionIssuerID uuid.NullUUID
 }
 
@@ -1106,9 +1133,15 @@ type ListOrganizationMCPServersForRemoteSessionIssuerRow struct {
 // project owns: that client's grant routes only to its own project's members.
 // NULL considers every project, for an organization-level client. Callers
 // apply each server's network access mode for the request's surface, as the
-// member snapshot does.
+// member snapshot does. remote_session_client_id selects servers associated
+// with that client, as ListMetaMCPMembersForRemoteSessionIssuer does.
 func (q *Queries) ListOrganizationMCPServersForRemoteSessionIssuer(ctx context.Context, arg ListOrganizationMCPServersForRemoteSessionIssuerParams) ([]ListOrganizationMCPServersForRemoteSessionIssuerRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationMCPServersForRemoteSessionIssuer, arg.OrganizationID, arg.ProjectID, arg.RemoteSessionIssuerID)
+	rows, err := q.db.Query(ctx, listOrganizationMCPServersForRemoteSessionIssuer,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RemoteSessionClientID,
+		arg.RemoteSessionIssuerID,
+	)
 	if err != nil {
 		return nil, err
 	}

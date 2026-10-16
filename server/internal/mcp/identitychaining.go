@@ -83,14 +83,24 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	endpoint := authentication.endpoint
+	// A credential's own choice for the server replaces the issuer derived
+	// for it: the chosen client's issuer is the one it routes and chains by.
+	choice, selected, err := s.directUpstreamChoice(ctx, w, authentication)
+	switch {
+	case err != nil:
+		return none, err
+	case selected && choice.noAuth():
+		return none, nil
+	case selected:
+		backendIssuerID = choice.remoteSessionIssuerID
+	}
 	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID)
 	if !chainable {
 		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
 	}
 
-	tokens, strictErr := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	tokens, strictErr := s.resolveAccessTokens(ctx, authentication, false)
 	unusable := errors.Is(strictErr, remotesessions.ErrNoValidToken)
-	var err error
 	switch {
 	case unusable:
 		// A linked upstream is unusable. Only an upstream chaining governs is
@@ -99,7 +109,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		if !s.identityChainer.Governs(ctx, req) {
 			return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 		}
-		tokens, err = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+		tokens, err = s.resolveAccessTokens(ctx, authentication, true)
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
 		}

@@ -65,3 +65,15 @@ New credentials record their choices at issuance from the moment this ships, so 
    - `unassociated`: configure User Identity on the server (association backfill runbook), then rerun.
    - `ambiguous` or `unreachable_client`: the credential must reconnect, and its new credential records its choice at issuance. Before cutover, revoke the listed credentials' sessions to force it; after cutover, serving asks for reconnection itself.
 3. Cutover is blocked while `gaps` is non-zero for credentials expected to keep working.
+
+## Cutover
+
+Serving switches per organization with the PostHog flag `upstream-client-selection-serving`, targeted by organization group. Turn it on for an organization only once both backfills report no gaps for it. While it is on, for that organization:
+
+- A direct remote or tunneled server forwards the caller's credential from the client the caller's credential chose for it, and routes it by that client's own issuer. A missing or unusable choice answers with the reconnect challenge; a no-auth choice calls anonymously.
+- A gateway resolves each proxied member the same way, per member. A member without a usable choice reports that the gateway must be signed in to again; the other members keep serving.
+- Consent offers a server only the clients associated with it, and a gateway only the clients associated with the members the person reaches. Gateway member status, the consent verification probe and the Platform MCP connection status tool match clients by association.
+
+Hosted toolsets and credentials without a session row (principal credentials, agent keys, assistant tokens) keep the issuer-derived path either way.
+
+**Rollback** is turning the flag off for the organization: serving reads the issuer bindings and `mcp_servers.remote_session_issuer_id` again, which the binding writes keep maintaining. Choices keep being recorded at issuance while the flag is off, so turning it back on needs no new backfill. The rollback stops being available once the issuer-derived path is removed. That removal happens only after the flag has been on for every organization and nothing reads the derived column any more, including the excluded paths above.

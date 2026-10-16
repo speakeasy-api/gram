@@ -42,6 +42,20 @@ type consentRouting struct {
 	// projectScoped counts grants per project, for an organization gateway,
 	// whose members each route only their own project's clients.
 	projectScoped bool
+	// chosenClient reports that serving resolves only the client a
+	// credential chose for the server: each listed client is one the server
+	// is associated with, a tunneled server routes it by that client's own
+	// issuer, and another client's grant for the same upstream is never a
+	// competing candidate.
+	chosenClient bool
+}
+
+// tunneledIssuer is the issuer a tunneled server routes client's grant by.
+func (r consentRouting) tunneledIssuer(client remotesessions.Client) uuid.NullUUID {
+	if r.chosenClient {
+		return uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true}
+	}
+	return r.issuer
 }
 
 // consentGrantKey counts active grants per upstream within one project.
@@ -56,10 +70,11 @@ type consentGrantKey struct {
 func (r consentRouting) unroutable(client remotesessions.Client, resource string) bool {
 	switch r.backend {
 	case consentBackendRemote:
-		return !grantRoutesToUpstream(resource, r.upstream, false) || r.duplicated(uuid.Nil, r.upstream)
+		return !grantRoutesToUpstream(resource, r.upstream, false) || (!r.chosenClient && r.duplicated(uuid.Nil, r.upstream))
 	case consentBackendTunneled:
 		// A tunneled backend only reads the entry keyed by its own issuer.
-		return r.issuer.Valid && client.RemoteSessionIssuerID == r.issuer.UUID && !grantRoutesToUpstream(resource, r.upstream, true)
+		issuer := r.tunneledIssuer(client)
+		return issuer.Valid && client.RemoteSessionIssuerID == issuer.UUID && !grantRoutesToUpstream(resource, r.upstream, true)
 	case consentBackendMeta:
 		members := r.members[client.ID]
 		if len(members) == 0 {
@@ -81,7 +96,7 @@ func (r consentRouting) canValidate(client remotesessions.Client, resource strin
 	switch r.backend {
 	case consentBackendRemote:
 	case consentBackendTunneled:
-		if !r.issuer.Valid || r.issuer.UUID != client.RemoteSessionIssuerID {
+		if issuer := r.tunneledIssuer(client); !issuer.Valid || issuer.UUID != client.RemoteSessionIssuerID {
 			return false
 		}
 	case consentBackendMeta:
@@ -119,7 +134,7 @@ func (s *Service) resolveConsentRouting(
 	clients []remotesessions.Client,
 	statuses map[uuid.UUID]remotesessions.RemoteSessionState,
 ) (consentRouting, error) {
-	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: map[consentGrantKey]int{}, projectScoped: endpoint.IsOrganizationGateway()}
+	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: map[consentGrantKey]int{}, projectScoped: endpoint.IsOrganizationGateway(), chosenClient: false}
 	if r.projectScoped {
 		// The organization gateway's statuses span every project; only the
 		// clients listed for this subject, each in its own project, decide
@@ -171,6 +186,7 @@ func (s *Service) resolveConsentRouting(
 			r.backend = consentBackendTunneled
 			r.issuer = tunneledBackendIssuer(&server)
 		}
+		r.chosenClient = s.upstreamSelectionServing(ctx, endpoint.OrganizationID)
 	}
 	return r, nil
 }

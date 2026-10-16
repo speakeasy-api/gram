@@ -197,9 +197,20 @@ func TestMemberMCPConnectionClientsSelectTargetIssuer(t *testing.T) {
 	targetClient := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: targetIssuer}
 	otherClient := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()}
 
-	require.Equal(t, []remotesessions.Client{targetClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, targetIssuer))
-	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, uuid.Nil))
-	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient}, targetIssuer))
+	byIssuer := func(issuer uuid.UUID) memberMCPStatusTarget {
+		return memberMCPStatusTarget{remoteSessionIssuerID: issuer}
+	}
+	require.Equal(t, []remotesessions.Client{targetClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, byIssuer(targetIssuer)))
+	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient}, byIssuer(uuid.Nil)))
+	require.Empty(t, memberMCPConnectionClients([]remotesessions.Client{otherClient}, byIssuer(targetIssuer)))
+
+	// Serving from associations, the server's own clients count whatever
+	// authorization server was derived for it.
+	sameIssuerOther := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: targetIssuer}
+	associated := memberMCPStatusTarget{remoteSessionIssuerID: uuid.Nil, associatedClients: map[uuid.UUID]bool{otherClient.ID: true}}
+	require.Equal(t, []remotesessions.Client{otherClient}, memberMCPConnectionClients([]remotesessions.Client{otherClient, targetClient, sameIssuerOther}, associated))
+	require.True(t, associated.signInRequired())
+	require.False(t, memberMCPStatusTarget{remoteSessionIssuerID: targetIssuer, associatedClients: map[uuid.UUID]bool{}}.signInRequired(), "no associated client means no sign-in, even with a derived issuer")
 }
 
 func TestMemberMCPStatusOutputsContainOnlyBoundedCallerFields(t *testing.T) {

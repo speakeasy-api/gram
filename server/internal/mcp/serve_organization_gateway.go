@@ -337,6 +337,9 @@ func (s *Service) newOrganizationGatewayTokens(authentication *issuerGateAuthent
 // members alone, as any other member failure does; the cache has already
 // logged the cause.
 func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	if g.memberChoices != nil && member.backend == metaMemberBackendProxied {
+		return g.memberChoices.tokens(ctx, member)
+	}
 	if g.projectTokens == nil {
 		return g.tokens, nil
 	}
@@ -380,6 +383,27 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
+	if len(clients) == 0 || !s.upstreamSelectionServing(ctx, endpoint.OrganizationID) {
+		return clients, nil
+	}
+	// The issuer may bind clients for other servers sharing it. Consent offers
+	// a server only the clients configured for it, and a gateway only those of
+	// the members the subject reaches.
+	switch {
+	case endpoint.McpServerID.Valid:
+		associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
+		if err != nil {
+			return nil, err
+		}
+		own := associated[endpoint.McpServerID.UUID]
+		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool { return !own[client.ID] }), nil
+	case endpoint.MetaMcpServerID.Valid:
+		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+		if err != nil {
+			return nil, err
+		}
+		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool { return !clientServesAnyMember(client, members) }), nil
+	}
 	return clients, nil
 }
 
@@ -403,14 +427,10 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 }
 
 // clientServesAnyMember reports whether a client authenticates for at least
-// one member: one whose authorization server is the client's, in the client's
-// own project when a project owns it.
+// one member, by memberUsesClient.
 func clientServesAnyMember(client remotesessions.Client, members []metaMember) bool {
 	for _, member := range members {
-		if !member.remoteSessionIssuerID.Valid || member.remoteSessionIssuerID.UUID != client.RemoteSessionIssuerID {
-			continue
-		}
-		if !client.ProjectID.Valid || client.ProjectID.UUID == member.projectID {
+		if memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
 			return true
 		}
 	}
@@ -460,10 +480,15 @@ func (s *Service) clientTokenProjectIDs(ctx context.Context, endpoint *ResolvedM
 	if client.ProjectID.Valid {
 		return []uuid.UUID{client.ProjectID.UUID}, nil
 	}
+	byAssociation := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if s.upstreamSelectionServing(ctx, endpoint.OrganizationID) {
+		byAssociation = uuid.NullUUID{UUID: client.ID, Valid: true}
+	}
 	rows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionIssuer(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionIssuerParams{
 		OrganizationID:        endpoint.OrganizationID,
 		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true},
+		RemoteSessionClientID: byAssociation,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list organization MCP servers for remote session issuer: %w", err)

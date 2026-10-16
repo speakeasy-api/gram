@@ -565,10 +565,11 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// including anonymous, which early-returns below before AuthContext is
 	// stamped. Load failures fail closed: a policy-store outage must never
 	// widen a restrictive session to all tools.
-	toolSelection, sessionRefreshable, err := s.loadSessionPolicy(ctx, endpoint, session.JTI())
+	policy, err := s.loadSessionPolicy(ctx, endpoint, session.JTI())
 	if err != nil {
 		return ctx, nil, nil, false, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
 	}
+	toolSelection, sessionRefreshable := policy.selection, policy.refreshable
 	if toolSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, toolSelection.Resource) {
 		// Issuer-scoped tokens are portable across endpoints sharing the
 		// issuer; a selection consented on endpoint A must not authorize
@@ -952,6 +953,11 @@ type issuerGateAuthentication struct {
 	// agent API key, or a resource-scoped session. Only such a client can
 	// act on invalid_token by refreshing and then reauthorizing.
 	refreshableUserSession bool
+
+	// chosenClient narrows upstream resolution to the one client the
+	// credential chose for the endpoint's server; invalid resolves every
+	// client the issuer binds.
+	chosenClient uuid.NullUUID
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1083,6 +1089,7 @@ func (s *Service) authenticateIssuerGate(
 		subject:              *subject,
 
 		refreshableUserSession: refreshableUserSession,
+		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}, toolSelection, nil
 }
 
@@ -1104,7 +1111,7 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	// all-or-nothing ErrNoValidToken challenge below stays for direct
 	// endpoints, whose toolset dispatch has no per-upstream routing (AIS-152).
 	if endpoint.MetaMcpServerID.Valid {
-		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+		tokens, err := s.resolveAccessTokens(ctx, authentication, true)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 		}
@@ -1114,7 +1121,7 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	// The Speakeasy credential is valid in every rejection below; only the upstream
 	// remote session behind it is not. The specific broken upstream and the
 	// answer its token endpoint gave are logged by remotesessions.
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	tokens, err := s.resolveAccessTokens(ctx, authentication, false)
 	if err != nil {
 		return nil, s.rejectRemoteSession(ctx, w, authentication, err)
 	}

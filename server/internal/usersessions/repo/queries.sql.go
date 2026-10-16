@@ -1753,6 +1753,7 @@ func (q *Queries) GetSharedUserSessionIssuerByID(ctx context.Context, id uuid.UU
 
 const getUpstreamClientSelection = `-- name: GetUpstreamClientSelection :one
 SELECT sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
        sel.no_auth,
        sel.source,
        (
@@ -1776,6 +1777,8 @@ SELECT sel.remote_session_client_id,
          END
        )::boolean AS usable
 FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
 WHERE sel.credential_kind = $1::text
   AND sel.credential_id = $2::uuid
   AND sel.mcp_server_id = $3::uuid
@@ -1792,6 +1795,7 @@ type GetUpstreamClientSelectionParams struct {
 
 type GetUpstreamClientSelectionRow struct {
 	RemoteSessionClientID uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
 	NoAuth                bool
 	Source                string
 	Usable                bool
@@ -1812,6 +1816,7 @@ func (q *Queries) GetUpstreamClientSelection(ctx context.Context, arg GetUpstrea
 	var i GetUpstreamClientSelectionRow
 	err := row.Scan(
 		&i.RemoteSessionClientID,
+		&i.RemoteSessionIssuerID,
 		&i.NoAuth,
 		&i.Source,
 		&i.Usable,
@@ -2220,7 +2225,8 @@ func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg Ge
 
 const getUserSessionPolicyByJTI = `-- name: GetUserSessionPolicyByJTI :one
 SELECT tool_selection, expires_at,
-       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable
+       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable,
+       COALESCE(credential_id, id)::uuid AS credential_id
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND jti = $2
@@ -2236,6 +2242,7 @@ type GetUserSessionPolicyByJTIRow struct {
 	ToolSelection []byte
 	ExpiresAt     pgtype.Timestamptz
 	Refreshable   bool
+	CredentialID  uuid.UUID
 }
 
 // Serve-path lookup for immutable session policy, keyed the same way
@@ -2249,7 +2256,12 @@ type GetUserSessionPolicyByJTIRow struct {
 func (q *Queries) GetUserSessionPolicyByJTI(ctx context.Context, arg GetUserSessionPolicyByJTIParams) (GetUserSessionPolicyByJTIRow, error) {
 	row := q.db.QueryRow(ctx, getUserSessionPolicyByJTI, arg.UserSessionIssuerID, arg.Jti)
 	var i GetUserSessionPolicyByJTIRow
-	err := row.Scan(&i.ToolSelection, &i.ExpiresAt, &i.Refreshable)
+	err := row.Scan(
+		&i.ToolSelection,
+		&i.ExpiresAt,
+		&i.Refreshable,
+		&i.CredentialID,
+	)
 	return i, err
 }
 

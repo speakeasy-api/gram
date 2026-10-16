@@ -51,6 +51,13 @@ const (
 	// replacing a plugin's complete audience assignment set through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
+	// FlagUpstreamClientSelectionServing switches proxied MCP serving for user
+	// session credentials from deriving upstream OAuth clients per user
+	// session issuer to reading each credential's recorded per-server choice.
+	// Evaluated server-side on every issuer-gated request and consent page,
+	// targeted by PostHog organization group (org slug). Off keeps the
+	// issuer-derived path, which stays the rollback until it is removed.
+	FlagUpstreamClientSelectionServing Flag = "upstream-client-selection-serving"
 	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
 	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
 	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for

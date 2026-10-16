@@ -62,6 +62,25 @@ type metaMember struct {
 	// records none. Routing accepts a grant qualified to this value; it never
 	// selects across issuers, so it is not an address and is never dialed.
 	tunneledResourceIdentifier string
+
+	// chosenClientID is the upstream client the request's credential chose
+	// for a proxied member, when serving reads credential choices. When set,
+	// remoteSessionIssuerID is that client's issuer rather than the derived
+	// one.
+	chosenClientID uuid.NullUUID
+
+	// upstreamNoAuth reports that the credential chose no upstream
+	// authentication for this member.
+	upstreamNoAuth bool
+
+	// upstreamUnavailable is why the credential cannot reach this member
+	// under its choices, nil otherwise.
+	upstreamUnavailable error
+
+	// associatedClients is a proxied member's associated upstream clients
+	// when the organization serves from associations; nil otherwise, which
+	// matches clients by authorization server instead.
+	associatedClients map[uuid.UUID]bool
 }
 
 // memberStatus is the list_servers connection state. Hosted members execute
@@ -161,7 +180,14 @@ func (s *Service) resolveMetaMemberSnapshot(
 		})
 	}
 
-	return s.admitMetaMembers(ctx, logger, candidates)
+	ctx, members, err := s.admitMetaMembers(ctx, logger, candidates)
+	if err != nil {
+		return ctx, nil, err
+	}
+	if err := s.attachAssociatedClients(ctx, members); err != nil {
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
+	}
+	return ctx, members, nil
 }
 
 // resolveEndpointMemberSnapshot resolves the members an OAuth flow for a
@@ -241,6 +267,9 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	ctx, members, err := s.admitMetaMembers(ctx, logger, candidates)
 	if err != nil {
 		return ctx, nil, err
+	}
+	if err := s.attachAssociatedClients(ctx, members); err != nil {
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
 	}
 	var clients []remotesessions.Client
 	if userSessionIssuerID != uuid.Nil {
@@ -371,6 +400,10 @@ func (s *Service) admitMetaMembers(
 			toolVariationsGroupID:      candidate.toolVariationsGroupID,
 			remoteSessionIssuerID:      candidate.remoteSessionIssuerID,
 			tunneledResourceIdentifier: candidate.tunneledResourceIdentifier,
+			chosenClientID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			upstreamNoAuth:             false,
+			upstreamUnavailable:        nil,
+			associatedClients:          nil,
 		})
 	}
 
