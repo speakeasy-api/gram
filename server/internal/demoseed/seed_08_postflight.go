@@ -406,6 +406,36 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			},
 			fail: postflightMustEqual(3, "expected 3 recorded Slack tools, found %d"),
 		},
+		// The JAMF tool-permission example checks only its own rows, so other
+		// seeded tunnels and issuers never change these counts.
+		{
+			what: "jamf tunneled source",
+			count: func() (int64, error) {
+				return s.q.PostflightCountTunneledSource(ctx, repo.PostflightCountTunneledSourceParams{ProjectID: proj, ID: s.det("tunrbac-source")})
+			},
+			fail: postflightMustEqual(1, "expected the JAMF tunneled MCP source, found %d"),
+		},
+		{
+			what: "jamf user session issuer",
+			count: func() (int64, error) {
+				return s.q.PostflightCountProjectIssuer(ctx, repo.PostflightCountProjectIssuerParams{ProjectID: proj, ID: s.det("tunrbac-issuer")})
+			},
+			fail: postflightMustEqual(1, "expected the JAMF user session issuer, found %d"),
+		},
+		{
+			what: "recorded jamf tools",
+			count: func() (int64, error) {
+				return s.q.PostflightCountServerToolMetadata(ctx, repo.PostflightCountServerToolMetadataParams{ProjectID: proj, McpServerID: s.det("tunrbac-mcpserver")})
+			},
+			fail: postflightMustEqual(5, "expected 5 recorded JAMF tools, found %d"),
+		},
+		{
+			what: "jamf tool grants",
+			count: func() (int64, error) {
+				return s.q.PostflightCountServerConnectGrants(ctx, repo.PostflightCountServerConnectGrantsParams{OrgID: org, McpServerID: s.det("tunrbac-mcpserver")})
+			},
+			fail: postflightMustEqual(1, "expected 1 JAMF tool grant, found %d"),
+		},
 		{
 			what: "active session quarantines",
 			count: func() (int64, error) {
