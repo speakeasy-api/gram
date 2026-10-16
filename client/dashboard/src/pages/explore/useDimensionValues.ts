@@ -70,6 +70,9 @@ export function dimensionValuesQuery(
       to.toISOString(),
     ],
     enabled: enabled && dataset !== "" && dimension !== "",
+    // A failed list leaves its picker empty; thrown, one filter's values
+    // would take the whole dashboard down with it.
+    throwOnError: false,
     retry: false,
     staleTime: 60_000,
     queryFn: ({ signal }) =>
