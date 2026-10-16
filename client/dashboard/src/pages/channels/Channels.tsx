@@ -367,7 +367,7 @@ function ChannelsBoard({
             <InlineEmptyState
               icon="lock"
               heading="You can't take part in Channels"
-              description="An exception in Channels settings stops you from reading and posting here. Remove it to join in."
+              description="Your role or an exception in Channels settings stops you from reading and posting here. Give yourself access in Channels settings to join in."
               action={
                 <Button
                   variant="secondary"

@@ -432,7 +432,7 @@ describe("Channels", () => {
     ).toBeNull();
     expect(
       screen.getByRole("textbox", { name: "Message", hidden: true }),
-    ).toBeDefined();
+    ).toHaveProperty("disabled", false);
   });
 
   it("clears what was on screen as soon as an administrator turns Channels off", async () => {
