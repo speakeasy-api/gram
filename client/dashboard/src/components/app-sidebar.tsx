@@ -97,6 +97,7 @@ export function AppSidebar({
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isExploreEnabled = navAccess.has(routes.explore.url);
+  const isChannelsEnabled = navAccess.has(routes.channels.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
   const isAgentManagementEnabled = navAccess.has(routes.agents.url);
@@ -247,7 +248,9 @@ export function AppSidebar({
             Icon={(p) => <Icon {...p} name="hammer" />}
             items={[
               { item: routes.mcp, ...accessFor(routes.mcp) },
-              { item: routes.channels, ...accessFor(routes.channels) },
+              ...(isChannelsEnabled
+                ? [{ item: routes.channels, ...accessFor(routes.channels) }]
+                : []),
               ...(isAssistantsEnabled
                 ? [{ item: routes.assistants, ...accessFor(routes.assistants) }]
                 : []),

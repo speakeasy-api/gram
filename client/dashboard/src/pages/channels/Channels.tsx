@@ -12,6 +12,8 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { useOrganization, useUser } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -33,6 +35,29 @@ import { useChannelsWorkspace, useReadMarks } from "./useChannels";
 export default function Channels(): JSX.Element {
   const organization = useOrganization();
   const user = useUser();
+  // Gate the page as well as its nav entry so a guessed URL does not reach
+  // Channels conversations or settings before the rollout.
+  const rollout = useFeatureFlag(FEATURE_FLAGS.channels);
+  if (rollout.status === "loading") {
+    return (
+      <FullBleedPage>
+        <LoadingBoard />
+      </FullBleedPage>
+    );
+  }
+  if (rollout.status !== "enabled") {
+    return (
+      <FullBleedPage>
+        <div className="flex flex-1 items-center justify-center p-8">
+          <InlineEmptyState
+            icon="messages-square"
+            heading="This page is not available yet"
+            description="It is in preview with a few organizations. Ask your Speakeasy contact to turn it on."
+          />
+        </div>
+      </FullBleedPage>
+    );
+  }
   return (
     <FullBleedPage>
       <ChannelsBoard

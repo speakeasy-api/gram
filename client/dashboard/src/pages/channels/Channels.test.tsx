@@ -20,6 +20,7 @@ import {
   type ChannelMessage,
   type ChannelsSnapshot,
 } from "./api";
+import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
@@ -28,6 +29,12 @@ vi.mock("./api", async (importOriginal) => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "test-org" }),
   useUser: () => ({ id: "identity-1", email: "avery@example.test" }),
+}));
+const rollout = vi.hoisted(() => ({
+  flag: { status: "enabled" } as FeatureFlagResult,
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => rollout.flag,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "test-project",
@@ -234,6 +241,7 @@ function readCursors(): unknown[] {
 
 beforeEach(() => {
   localStorage.clear();
+  rollout.flag = { status: "enabled" };
   archive = [];
   snapshot = {
     enabled: true,
@@ -271,6 +279,20 @@ afterEach(() => {
 });
 
 describe("Channels", () => {
+  it.each(["disabled", "missing", "error", "loading"] as const)(
+    "shows no conversations or settings and makes no requests while the rollout flag is %s",
+    async (status) => {
+      rollout.flag = { status };
+      mount();
+      await act(async () => {});
+      expect(request).not.toHaveBeenCalled();
+      expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /Channels settings/ }),
+      ).toBeNull();
+    },
+  );
+
   it("opens the account's browser session on the first message, then reuses it", async () => {
     vi.useFakeTimers();
     mount();
