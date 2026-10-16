@@ -888,20 +888,23 @@ func (w platformMCPWorkspaces) ProvisionWorkspace(ctx context.Context, userID, n
 	return platformmcp.OrganizationOption{ID: id, Name: stored}, nil
 }
 
-func (w platformMCPWorkspaces) PendingInvitations(ctx context.Context, verifiedEmail string) ([]platformmcp.WorkspaceInvitation, error) {
-	pending, err := w.organizations.PendingInvitationsForEmail(ctx, verifiedEmail)
+func (w platformMCPWorkspaces) PendingInvitations(ctx context.Context, verifiedEmail, ssoOrganizationID string) ([]platformmcp.WorkspaceInvitation, error) {
+	pending, err := w.organizations.PendingInvitationsForEmail(ctx, verifiedEmail, ssoOrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list pending invitations: %w", err)
 	}
 	invitations := make([]platformmcp.WorkspaceInvitation, 0, len(pending))
 	for _, invitation := range pending {
-		invitations = append(invitations, platformmcp.WorkspaceInvitation{ID: invitation.ID, OrganizationName: invitation.OrganizationName})
+		invitations = append(invitations, platformmcp.WorkspaceInvitation{ID: invitation.ID, OrganizationName: invitation.OrganizationName, RequiresSSO: invitation.RequiresSSO})
 	}
 	return invitations, nil
 }
 
-func (w platformMCPWorkspaces) JoinInvitedWorkspace(ctx context.Context, userID, verifiedEmail, invitationID string) (platformmcp.OrganizationOption, error) {
-	joined, err := w.organizations.AcceptPendingInvitationForUser(ctx, userID, verifiedEmail, invitationID)
+func (w platformMCPWorkspaces) JoinInvitedWorkspace(ctx context.Context, userID, verifiedEmail, ssoOrganizationID, invitationID string) (platformmcp.OrganizationOption, error) {
+	joined, err := w.organizations.AcceptPendingInvitationForUser(ctx, userID, verifiedEmail, ssoOrganizationID, invitationID)
+	if errors.Is(err, organizations.ErrInvitationRequiresSSO) {
+		return platformmcp.OrganizationOption{}, fmt.Errorf("join invited workspace: %w", platformmcp.ErrInvitationRequiresSSO)
+	}
 	if err != nil {
 		return platformmcp.OrganizationOption{}, fmt.Errorf("join invited workspace: %w", err)
 	}

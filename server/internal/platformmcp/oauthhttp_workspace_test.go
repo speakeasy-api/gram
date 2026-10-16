@@ -13,8 +13,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 )
 
 // workspaceTestState backs both the organization selector and the workspace
@@ -41,22 +43,37 @@ func (s *workspaceTestState) SuggestedWorkspaceName(context.Context, string) (st
 func (s *workspaceTestState) ProvisionWorkspace(_ context.Context, userID, name string) (OrganizationOption, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Mirrors the auth service, which refuses while an invitation is pending.
+	if len(s.invitations) > 0 {
+		return OrganizationOption{}, auth.ErrUserHasPendingInvitation
+	}
 	organization := OrganizationOption{ID: "org-new", Name: name}
 	s.organizations = append(s.organizations, organization)
 	s.provisioned = append(s.provisioned, userID+":"+name)
 	return organization, nil
 }
 
-func (s *workspaceTestState) PendingInvitations(_ context.Context, verifiedEmail string) ([]WorkspaceInvitation, error) {
+// testSSOOrganizationID is the WorkOS organization whose SSO covers the
+// test invitations marked ssoOrganization.
+const testSSOOrganizationID = "org_sso"
+
+// PendingInvitations reports an invitation in ssoInvitations as requiring SSO
+// unless the sign-in went through testSSOOrganizationID, as the organizations
+// service does.
+func (s *workspaceTestState) PendingInvitations(_ context.Context, verifiedEmail, ssoOrganizationID string) ([]WorkspaceInvitation, error) {
 	if verifiedEmail != testVerifiedEmail {
 		return nil, errors.New("unexpected verified email")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]WorkspaceInvitation(nil), s.invitations...), nil
+	invitations := append([]WorkspaceInvitation(nil), s.invitations...)
+	for i := range invitations {
+		invitations[i].RequiresSSO = invitations[i].RequiresSSO && ssoOrganizationID != testSSOOrganizationID
+	}
+	return invitations, nil
 }
 
-func (s *workspaceTestState) JoinInvitedWorkspace(_ context.Context, userID, verifiedEmail, invitationID string) (OrganizationOption, error) {
+func (s *workspaceTestState) JoinInvitedWorkspace(_ context.Context, userID, verifiedEmail, ssoOrganizationID, invitationID string) (OrganizationOption, error) {
 	if verifiedEmail != testVerifiedEmail {
 		return OrganizationOption{}, errors.New("unexpected verified email")
 	}
@@ -64,6 +81,9 @@ func (s *workspaceTestState) JoinInvitedWorkspace(_ context.Context, userID, ver
 	defer s.mu.Unlock()
 	for i, invitation := range s.invitations {
 		if invitation.ID == invitationID {
+			if invitation.RequiresSSO && ssoOrganizationID != testSSOOrganizationID {
+				return OrganizationOption{}, ErrInvitationRequiresSSO
+			}
 			organization := OrganizationOption{ID: "org-invited", Name: invitation.OrganizationName}
 			s.organizations = append(s.organizations, organization)
 			s.invitations = append(s.invitations[:i], s.invitations[i+1:]...)
@@ -85,9 +105,15 @@ func (s *workspaceTestState) provisionedCount() int {
 func startWorkspaceFlow(t *testing.T, service *OAuthHTTP) string {
 	t.Helper()
 	require.NoError(t, testStore(t, service).RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test client", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
+	return continueWorkspaceFlow(t, service, "client-state")
+}
 
+// continueWorkspaceFlow runs another authorization for the client
+// startWorkspaceFlow registered. Each needs its own client state.
+func continueWorkspaceFlow(t *testing.T, service *OAuthHTTP, clientState string) string {
+	t.Helper()
 	authorize := httptest.NewRecorder()
-	service.AuthorizeHandler().ServeHTTP(authorize, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&code_challenge=challenge&code_challenge_method=S256&state=client-state", nil))
+	service.AuthorizeHandler().ServeHTTP(authorize, httptest.NewRequest(http.MethodGet, "/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&code_challenge=challenge&code_challenge_method=S256&state="+url.QueryEscape(clientState), nil))
 	idpURL, err := url.Parse(authorize.Header().Get("Location"))
 	require.NoError(t, err)
 
@@ -257,15 +283,114 @@ func TestOAuthHTTPUnverifiedEmailIsNotOfferedInvitations(t *testing.T) {
 	require.NotContains(t, selection.Body.String(), "Join Team Org")
 	csrf := formValue(t, selection.Body.String(), "csrf_token")
 
+	created := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "workspace_name": {"Acme Inc"}})
+	require.Equal(t, http.StatusFound, created.Code)
+	redirect, err := url.Parse(created.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "access_denied", redirect.Query().Get("error"))
+	require.Contains(t, redirect.Query().Get("error_description"), "pending invitation")
+	require.Zero(t, workspaces.provisionedCount())
+
+	state = continueWorkspaceFlow(t, service, "client-state-2")
+	csrf = formValue(t, getSelection(service, state).Body.String(), "csrf_token")
 	joined := postJoinWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "invitation_id": {"invitation-1"}})
 	require.Equal(t, http.StatusFound, joined.Code)
 	require.Empty(t, workspaces.joined)
+}
+
+func TestOAuthHTTPSSOInvitationNeedsSSOSignIn(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	workspaces := &workspaceTestState{invitations: []WorkspaceInvitation{{ID: "invitation-1", OrganizationName: "Team Org", RequiresSSO: true}}}
+	service.organizations = workspaces
+	service.workspaces = workspaces
+	state := startWorkspaceFlow(t, service)
+
+	// A user who signed in another way is told to use SSO. Neither the join
+	// nor the create form is offered, so the backstop cannot trap them.
+	selection := getSelection(service, state)
+	require.Equal(t, http.StatusOK, selection.Code)
+	body := selection.Body.String()
+	require.Contains(t, body, "Sign in with SSO")
+	require.Contains(t, body, "Team Org")
+	require.NotContains(t, body, `action="join-workspace"`)
+	require.NotContains(t, body, `action="create-workspace"`)
+
+	challenge, err := service.cache.Get(t.Context(), platformOAuthChallengePrefix+state)
+	require.NoError(t, err)
+	created := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {challenge.CSRFToken}, "workspace_name": {"Acme Inc"}})
+	require.Equal(t, http.StatusOK, created.Code)
+	require.Contains(t, created.Body.String(), "Sign in with SSO")
+	require.Zero(t, workspaces.provisionedCount())
+
+	joined := postJoinWorkspace(service, url.Values{"state": {state}, "csrf_token": {challenge.CSRFToken}, "invitation_id": {"invitation-1"}})
+	require.Equal(t, http.StatusFound, joined.Code)
+	redirect, err := url.Parse(joined.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "access_denied", redirect.Query().Get("error"))
+	require.Equal(t, ssoRequiredDescription, redirect.Query().Get("error_description"))
+	require.Empty(t, workspaces.joined)
+
+	// An SSO sign-in through another organization's connection does not count.
+	service.identity = otherSSOTestIdentity{}
+	state = continueWorkspaceFlow(t, service, "client-state-2")
+	require.Contains(t, getSelection(service, state).Body.String(), "Sign in with SSO")
+
+	// After an SSO sign-in through the inviting organization the same
+	// invitation can be joined.
+	service.identity = ssoTestIdentity{}
+	state = continueWorkspaceFlow(t, service, "client-state-3")
+	body = getSelection(service, state).Body.String()
+	require.Contains(t, body, "Join Team Org")
+	joined = postJoinWorkspace(service, url.Values{"state": {state}, "csrf_token": {formValue(t, body, "csrf_token")}, "invitation_id": {"invitation-1"}})
+	require.Equal(t, http.StatusSeeOther, joined.Code)
+	require.Equal(t, []string{"user-1:invitation-1"}, workspaces.joined)
+}
+
+type ssoTestIdentity struct{ testIdentity }
+
+func (ssoTestIdentity) ExchangeCodeForTokens(context.Context, string) (*identity.IDPUserInfo, error) {
+	var user identity.IDPUserInfo
+	user.Evidence.VerifiedEmail = testVerifiedEmail
+	user.AuthenticationMethod = signins.MethodSSO
+	user.OrganizationID = testSSOOrganizationID
+	return &user, nil
+}
+
+type otherSSOTestIdentity struct{ testIdentity }
+
+func (otherSSOTestIdentity) ExchangeCodeForTokens(context.Context, string) (*identity.IDPUserInfo, error) {
+	var user identity.IDPUserInfo
+	user.Evidence.VerifiedEmail = testVerifiedEmail
+	user.AuthenticationMethod = signins.MethodSSO
+	user.OrganizationID = "org_other"
+	return &user, nil
 }
 
 type unverifiedTestIdentity struct{ testIdentity }
 
 func (unverifiedTestIdentity) ExchangeCodeForTokens(context.Context, string) (*identity.IDPUserInfo, error) {
 	return &identity.IDPUserInfo{}, nil
+}
+
+func TestOAuthHTTPMixedInvitationsNameTheSSOOne(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	workspaces := &workspaceTestState{invitations: []WorkspaceInvitation{
+		{ID: "invitation-1", OrganizationName: "Open Org"},
+		{ID: "invitation-2", OrganizationName: "SSO Org", RequiresSSO: true},
+	}}
+	service.organizations = workspaces
+	service.workspaces = workspaces
+	state := startWorkspaceFlow(t, service)
+
+	body := getSelection(service, state).Body.String()
+	require.Contains(t, body, "Join Open Org")
+	require.NotContains(t, body, "Join SSO Org")
+	require.Contains(t, body, "To join <strong>SSO Org</strong>, sign in with your")
+	require.Equal(t, "invitation-1", formValue(t, body, "invitation_id"))
 }
 
 func TestOAuthHTTPJoinWorkspaceRefusalReturnsToClient(t *testing.T) {

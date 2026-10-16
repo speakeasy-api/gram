@@ -1576,7 +1576,10 @@ func dbInvitationToGen(row *orgrepo.OrganizationInvitation, inviterUserID *strin
 	}
 }
 
-var errInvitationAcceptanceRace = errors.New("invitation is no longer pending")
+var (
+	errInvitationAcceptanceRace       = errors.New("invitation is no longer pending")
+	errInvitationOrganizationDisabled = errors.New("invitation organization is disabled")
+)
 
 func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID string) (orgrepo.OrganizationMetadatum, orgrepo.OrganizationInvitation, bool, error) {
 	tx, err := s.db.Begin(ctx)
@@ -1589,6 +1592,11 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 	org, err := repo.LockOrganizationForInviteAcceptance(ctx, organizationID)
 	if err != nil {
 		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("lock invite organization: %w", err)
+	}
+	// Checked under the lock, so an organization disabled after the
+	// invitation was listed gains no member.
+	if org.DisabledAt.Valid {
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, errInvitationOrganizationDisabled
 	}
 
 	acceptedInvite, err := repo.AcceptInvitation(ctx, inviteID)
@@ -1889,6 +1897,12 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 			s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
 			span.AddEvent("invite.callback.acceptance_race_lost")
 			redirectError("invite already used, revoked, or expired")
+			return
+		}
+		if errors.Is(err, errInvitationOrganizationDisabled) {
+			s.logger.WarnContext(ctx, "invite callback: invitation organization is disabled")
+			span.AddEvent("invite.callback.organization_disabled")
+			redirectError("this organization is disabled, please reach out to support@speakeasy.com for more information")
 			return
 		}
 		s.logger.ErrorContext(ctx, "invite callback: failed to accept invitation", attr.SlogError(err))

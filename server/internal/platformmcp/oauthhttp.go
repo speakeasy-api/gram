@@ -15,6 +15,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
@@ -118,7 +120,16 @@ type OrganizationSelector interface {
 type WorkspaceInvitation struct {
 	ID               string
 	OrganizationName string
+	// RequiresSSO marks an organization whose SSO connection covers the
+	// invitee's email when this sign-in did not go through it. It cannot be
+	// joined until the user signs in with that SSO.
+	RequiresSSO bool
 }
+
+// ErrInvitationRequiresSSO refuses to join an organization whose SSO
+// connection covers the invitee's email when the user did not sign in
+// through it.
+var ErrInvitationRequiresSSO = errors.New("invitation requires signing in with SSO")
 
 // WorkspaceProvisioner creates the first organization for a user who signs in
 // with no organization, so a new user can connect without visiting the
@@ -129,8 +140,8 @@ type WorkspaceInvitation struct {
 type WorkspaceProvisioner interface {
 	SuggestedWorkspaceName(ctx context.Context, userID string) (string, error)
 	ProvisionWorkspace(ctx context.Context, userID, name string) (OrganizationOption, error)
-	PendingInvitations(ctx context.Context, verifiedEmail string) ([]WorkspaceInvitation, error)
-	JoinInvitedWorkspace(ctx context.Context, userID, verifiedEmail, invitationID string) (OrganizationOption, error)
+	PendingInvitations(ctx context.Context, verifiedEmail, ssoOrganizationID string) ([]WorkspaceInvitation, error)
+	JoinInvitedWorkspace(ctx context.Context, userID, verifiedEmail, ssoOrganizationID, invitationID string) (OrganizationOption, error)
 }
 
 type oauthChallenge struct {
@@ -154,6 +165,10 @@ type oauthChallenge struct {
 	// reports it verified. Only it may claim an organization invitation, as
 	// following the emailed invite link would.
 	VerifiedEmail string `json:"verified_email,omitempty"`
+	// SSOOrganizationID is the WorkOS organization whose SSO connection the
+	// user signed in through, empty for any other method. An invitation that
+	// organization's SSO covers can be joined only from such a sign-in.
+	SSOOrganizationID string `json:"sso_organization_id,omitempty"`
 }
 
 func (c oauthChallenge) CacheKey() string              { return platformOAuthChallengePrefix + c.ID }
@@ -463,6 +478,9 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 		challenge.ID = uuid.NewString()
 		challenge.Subject = urn.NewUserSubject(login.UserID).String()
 		challenge.VerifiedEmail = idpUser.Evidence.VerifiedEmail
+		if idpUser.AuthenticationMethod == signins.MethodSSO {
+			challenge.SSOOrganizationID = idpUser.OrganizationID
+		}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 			return
@@ -602,15 +620,19 @@ func (s *OAuthHTTP) renderInvitationPage(w http.ResponseWriter, clientName strin
 	})
 }
 
+const ssoRequiredDescription = "Your invitation requires your company's single sign-on. Sign in with SSO, then connect again."
+
 // renderPendingInvitations shows a user with no organization the
 // invitations waiting for their verified email, so an invited user joins
-// their team rather than starting a second organization beside it. It
-// reports whether it wrote a response.
+// their team rather than starting a second organization beside it. An
+// invitation that requires SSO is offered only after an SSO sign-in; when
+// every invitation needs one, the user is told to sign in with SSO instead.
+// It reports whether it wrote a response.
 func (s *OAuthHTTP) renderPendingInvitations(w http.ResponseWriter, r *http.Request, clientName string, challenge oauthChallenge) bool {
 	if challenge.VerifiedEmail == "" {
 		return false
 	}
-	invitations, err := s.workspaces.PendingInvitations(r.Context(), challenge.VerifiedEmail)
+	invitations, err := s.workspaces.PendingInvitations(r.Context(), challenge.VerifiedEmail, challenge.SSOOrganizationID)
 	if err != nil {
 		s.logger.ErrorContext(r.Context(), "could not load Platform MCP workspace invitations", attr.SlogError(err))
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not load pending invitations")
@@ -618,6 +640,15 @@ func (s *OAuthHTTP) renderPendingInvitations(w http.ResponseWriter, r *http.Requ
 	}
 	if len(invitations) == 0 {
 		return false
+	}
+	if !slices.ContainsFunc(invitations, func(invitation WorkspaceInvitation) bool { return !invitation.RequiresSSO }) {
+		s.renderOAuthPage(w, oauthPageData{
+			Title:       "Sign in with SSO · Platform MCP",
+			Kind:        "sso-required",
+			ClientName:  clientName,
+			Invitations: invitations,
+		})
+		return true
 	}
 	s.renderInvitationPage(w, clientName, challenge, invitations)
 	return true
@@ -747,7 +778,11 @@ func (s *OAuthHTTP) JoinWorkspaceHandler() http.Handler {
 		if !ok {
 			return
 		}
-		organization, err := s.workspaces.JoinInvitedWorkspace(r.Context(), userID, challenge.VerifiedEmail, r.PostForm.Get("invitation_id"))
+		organization, err := s.workspaces.JoinInvitedWorkspace(r.Context(), userID, challenge.VerifiedEmail, challenge.SSOOrganizationID, r.PostForm.Get("invitation_id"))
+		if errors.Is(err, ErrInvitationRequiresSSO) {
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: ssoRequiredDescription})
+			return
+		}
 		if err != nil {
 			s.logger.ErrorContext(r.Context(), "could not join Platform MCP workspace by invitation", attr.SlogError(err))
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your invitation could not be accepted. Ask your teammate for a new invitation, then connect again."})

@@ -177,6 +177,10 @@
         flex: 1;
       }
 
+      .actions-stacked {
+        flex-direction: column;
+      }
+
       .btn {
         width: 100%;
         padding: 0.75rem 1.25rem;
@@ -296,16 +300,33 @@
             continue.
           </p>
         </header>
-        <div class="actions">
-          {{range .Invitations}}
+        <div class="actions actions-stacked">
+          {{range .Invitations}}{{if not .RequiresSSO}}
           <form method="post" action="join-workspace">
             <input type="hidden" name="state" value="{{$.State}}" />
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
             <input type="hidden" name="invitation_id" value="{{.ID}}" />
             <button class="btn btn-primary" type="submit">Join {{.OrganizationName}}</button>
           </form>
-          {{end}}
+          {{end}}{{end}}
         </div>
+        {{range .Invitations}}{{if .RequiresSSO}}
+        <p class="info">
+          To join <strong>{{.OrganizationName}}</strong>, sign in with your
+          company's single sign-on, then connect again.
+        </p>
+        {{end}}{{end}}
+        {{else if eq .Kind "sso-required"}}
+        <header class="header">
+          <h1 id="page-title">Sign in with SSO</h1>
+          <p>
+            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
+            Your invitation to
+            {{range $i, $invitation := .Invitations}}{{if $i}}, {{end}}<strong>{{$invitation.OrganizationName}}</strong>{{end}}
+            requires your company's single sign-on. Sign in with SSO, then
+            connect again.
+          </p>
+        </header>
         {{else if eq .Kind "connect"}}
         <header class="header">
           <h1 id="page-title">Connect Platform MCP</h1>

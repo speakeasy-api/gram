@@ -414,7 +414,10 @@ SELECT EXISTS (
 SELECT
   organization_invitations.id,
   organization_invitations.organization_id,
-  organization_metadata.name AS organization_name
+  organization_metadata.name AS organization_name,
+  organization_metadata.workos_id AS organization_workos_id,
+  COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_enabled,
+  COALESCE(organization_metadata.verified_domains, '{}'::text[])::text[] AS verified_domains
 FROM organization_invitations
 JOIN organization_metadata ON organization_metadata.id = organization_invitations.organization_id
 WHERE organization_invitations.email = @email

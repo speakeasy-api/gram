@@ -14,18 +14,30 @@ import (
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
+// ErrInvitationRequiresSSO refuses an invitation to an organization whose
+// SSO connection covers the invitee's email domain when the user did not sign
+// in through that organization's SSO. WorkOS sends such an address to the
+// organization's SSO at sign-in, so joining any other way would bypass it.
+var ErrInvitationRequiresSSO = errors.New("invitation requires signing in with SSO")
+
 // PendingInvitation is a live invitation addressed to a signed-in user.
 type PendingInvitation struct {
 	ID               string
 	OrganizationID   string
 	OrganizationName string
+	// RequiresSSO is true when the organization has an active SSO connection
+	// covering the invitee's email domain and the sign-in did not go through
+	// it. Such an invitation cannot be joined from this sign-in.
+	RequiresSSO bool
 }
 
 // PendingInvitationsForEmail lists the live invitations addressed to email,
 // newest first. Invitations to a disabled organization are left out, because
 // they cannot be joined. Pass only an email the identity provider verified:
-// holding it is what entitles a user to the invitation.
-func (s *Service) PendingInvitationsForEmail(ctx context.Context, email string) ([]PendingInvitation, error) {
+// holding it is what entitles a user to the invitation. ssoWorkOSOrganizationID
+// is the WorkOS organization whose SSO connection the user signed in through,
+// or empty for any other sign-in method.
+func (s *Service) PendingInvitationsForEmail(ctx context.Context, email, ssoWorkOSOrganizationID string) ([]PendingInvitation, error) {
 	rows, err := orgrepo.New(s.db).ListPendingInvitationsForEmail(ctx, conv.NormalizeEmail(email))
 	if err != nil {
 		return nil, fmt.Errorf("list pending invitations: %w", err)
@@ -36,17 +48,24 @@ func (s *Service) PendingInvitationsForEmail(ctx context.Context, email string) 
 			ID:               row.ID.String(),
 			OrganizationID:   row.OrganizationID,
 			OrganizationName: row.OrganizationName,
+			RequiresSSO:      row.SsoEnabled && emailOnVerifiedDomain(email, row.VerifiedDomains) && (ssoWorkOSOrganizationID == "" || row.OrganizationWorkosID.String != ssoWorkOSOrganizationID),
 		})
 	}
 	return invitations, nil
+}
+
+func emailOnVerifiedDomain(email string, verified []string) bool {
+	domain, ok := inviteEmailDomain(email)
+	return ok && slices.ContainsFunc(verified, func(d string) bool { return normalizeInviteDomain(d) == domain })
 }
 
 // AcceptPendingInvitationForUser accepts an invitation for a user who is
 // already signed in, as the invite link does for one who follows it. The
 // identity provider must have verified verifiedEmail for this sign-in, it
 // must be the user's account email, and the invitation must be one
-// PendingInvitationsForEmail lists for it.
-func (s *Service) AcceptPendingInvitationForUser(ctx context.Context, userID, verifiedEmail, invitationID string) (PendingInvitation, error) {
+// PendingInvitationsForEmail lists for it. An invitation that requires SSO is
+// refused with ErrInvitationRequiresSSO.
+func (s *Service) AcceptPendingInvitationForUser(ctx context.Context, userID, verifiedEmail, ssoWorkOSOrganizationID, invitationID string) (PendingInvitation, error) {
 	var empty PendingInvitation
 
 	email := conv.NormalizeEmail(verifiedEmail)
@@ -64,7 +83,7 @@ func (s *Service) AcceptPendingInvitationForUser(ctx context.Context, userID, ve
 		return empty, errors.New("user has no WorkOS identity")
 	}
 
-	pending, err := s.PendingInvitationsForEmail(ctx, email)
+	pending, err := s.PendingInvitationsForEmail(ctx, email, ssoWorkOSOrganizationID)
 	if err != nil {
 		return empty, err
 	}
@@ -73,6 +92,9 @@ func (s *Service) AcceptPendingInvitationForUser(ctx context.Context, userID, ve
 		return empty, errors.New("invitation is not pending for this user")
 	}
 	invitation := pending[i]
+	if invitation.RequiresSSO {
+		return empty, ErrInvitationRequiresSSO
+	}
 
 	if err := s.acceptInvitation(ctx, uuid.MustParse(invitation.ID), invitation.OrganizationID, userID, user.WorkosID.String, email); err != nil {
 		return empty, fmt.Errorf("accept invitation: %w", err)
