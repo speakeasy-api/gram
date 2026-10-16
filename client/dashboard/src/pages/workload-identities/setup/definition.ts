@@ -63,7 +63,7 @@ export interface CatalogEntry {
 }
 
 /** Display-only metadata for a platform whose setup this client cannot interpret. */
-export type UnsupportedCatalogEntry = Pick<
+type UnsupportedCatalogEntry = Pick<
   CatalogEntry,
   "key" | "displayName" | "description" | "icon" | "enabled"
 > & {
