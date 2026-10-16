@@ -1659,44 +1659,16 @@ jobs:
       - name: Install Go deps
         run: mise run install:go
 
-      - name: Select shard packages
-        id: shard
-        # Packages are weighted by ci/cmd/shard/timings.txt, which is refreshed
-        # from the timing artifacts uploaded below (mise run ci:shard-timings).
+      - name: Install discovery wire-test dependencies on its shard
         shell: bash
-        working-directory: server
         run: |
-          go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" -tags=inv.debug ./... > "${RUNNER_TEMP}/shard-packages.txt"
-          if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' "${RUNNER_TEMP}/shard-packages.txt"; then
-            echo "mcpregistry=true" >> "$GITHUB_OUTPUT"
+          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" -tags=inv.debug ./...)
+          if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
+            aube install --frozen-lockfile --filter . --filter 'dashboard...'
           fi
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
-
-      - name: Install discovery wire-test dependencies on its shard
-        if: steps.shard.outputs.mcpregistry == 'true'
-        run: aube install --frozen-lockfile --filter . --filter 'dashboard...'
-
-      - name: Compile shard packages
-        # Builds the non-test code of this shard's packages and every dependency
-        # with the Test step's flags (mise exec applies the same GOFLAGS), so the
-        # compile and build-cache work is timed here instead of hiding in the gap
-        # before the first test starts. What remains of that gap in the Test step
-        # is compiling test files, vet, and linking test binaries. Test-only
-        # packages and commands are skipped: go build rejects the former and
-        # would link the latter.
-        shell: bash
-        working-directory: server
-        run: |
-          [ -s "${RUNNER_TEMP}/shard-packages.txt" ] || exit 0
-          mapfile -t shard_packages < "${RUNNER_TEMP}/shard-packages.txt"
-          buildable=$(mise exec -- go list -race -tags=inv.debug \
-            -f '{{if and (or .GoFiles .CgoFiles) (ne .Name "main")}}{{.ImportPath}}{{end}}' \
-            "${shard_packages[@]}")
-          [ -n "$buildable" ] || exit 0
-          mapfile -t packages <<< "$buildable"
-          time mise exec -- go build -race -tags=inv.debug "${packages[@]}"
 
       - name: Test
         id: test
