@@ -53,14 +53,17 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		switch row.ResultType {
 		case "choice":
 			require.NotNil(t, row.SelectedSignalID)
+			require.Contains(t, signals, *row.SelectedSignalID, "selected signal missing from distribution")
 			require.Equal(t, signals[*row.SelectedSignalID], row.SelectedSignalSlug)
 		case "score":
 			require.NotNil(t, row.ExpectedIndex)
 			require.GreaterOrEqual(t, *row.ExpectedIndex, 0.0)
 			require.LessOrEqual(t, *row.ExpectedIndex, float64(len(row.Probabilities)-1))
-		default:
+		case "multi_label":
 			require.Nil(t, row.SelectedSignalID)
 			require.Nil(t, row.ExpectedIndex)
+		default:
+			require.Failf(t, "unknown result type", "result type %q", row.ResultType)
 		}
 	}
 	require.Len(t, ids, len(rows), "reading ids must be unique")

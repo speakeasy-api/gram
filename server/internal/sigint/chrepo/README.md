@@ -30,8 +30,10 @@ physical insert, including duplicates, and replacement does not retract them.
 can record why an eligible message has no answer. Coverage counts these outcomes
 and messages that never produced a row. It does not drop them. Only answered rows
 carry a result type, probabilities, a selected signal, an expected index or a
-confidence. `ParseReading` validates every row before insert. The table has no
-CHECK constraints, so rules can change without a migration.
+confidence. The Pub/Sub writer validates every message with `ParseReading` before
+insert. Demo seed rows bypass it, and `TestSeededSigintReadingsSatisfyWriterRules`
+holds them to the same rules. The table has no CHECK constraints, so rules can
+change without a migration.
 
 `input_*` columns record the message context an attempt actually supplied:
 strategy, requested and supplied message counts including the target, and budget
