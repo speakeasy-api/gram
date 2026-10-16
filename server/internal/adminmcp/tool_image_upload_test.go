@@ -23,7 +23,7 @@ func (f *fakeImageUploads) Issue(_ context.Context, operatorEmail string) (asset
 	if f.err != nil {
 		return assets.PlatformImageUpload{}, f.err
 	}
-	return assets.PlatformImageUpload{URL: "https://admin.example.test/admin/assets.uploadImage/token", ExpiresAt: time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)}, nil
+	return assets.PlatformImageUpload{URL: "https://admin.example.test/admin/assets.uploadImage", Token: "upload-token", ExpiresAt: time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)}, nil
 }
 
 func TestCreateImageUploadURLIssuesForTheVerifiedStaffMember(t *testing.T) {
@@ -38,7 +38,10 @@ func TestCreateImageUploadURLIssuesForTheVerifiedStaffMember(t *testing.T) {
 	require.Equal(t, "staff@example.test", uploads.operator)
 	require.Equal(t, "PUT", out.Method)
 	require.Equal(t, "2026-10-15T12:00:00Z", out.ExpiresAt)
-	require.Contains(t, out.ExampleCommand, out.UploadURL)
+	require.Equal(t, "https://admin.example.test/admin/assets.uploadImage", out.UploadURL)
+	require.NotContains(t, out.UploadURL, "upload-token", "the token stays out of the URL")
+	require.Equal(t, map[string]string{"Authorization": "Bearer upload-token"}, out.Headers)
+	require.Equal(t, "curl -fsS -X PUT -H 'Authorization: Bearer upload-token' --data-binary @icon.png 'https://admin.example.test/admin/assets.uploadImage'", out.ExampleCommand)
 	require.NotContains(t, out.AllowedContentTypes, "image/svg+xml")
 
 	_, err = createImageUploadURL(ctx, uploads, WriteConfig{})
@@ -63,4 +66,19 @@ func TestAttachWritesImageUploadNeedsAssetStorage(t *testing.T) {
 	require.NoError(t, AttachWrites(runtime, oauth, deps, enabled))
 	require.True(t, runtime.writes.implements(OperationUploadPlatformImage))
 	require.NotContains(t, oauth.Approval.operations, OperationUploadPlatformImage, "a direct write has no approval page")
+}
+
+func TestWriteWorkflowsSeparateDirectUploadFromProposals(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, writeWorkflows(nil))
+
+	uploadOnly := writeWorkflows([]WriteOperation{OperationUploadPlatformImage})
+	require.Len(t, uploadOnly, 1)
+	require.Contains(t, uploadOnly[0], "without browser approval")
+	require.NotContains(t, uploadOnly[0], "proposal", "a direct upload alone offers no proposal workflow")
+
+	both := writeWorkflows([]WriteOperation{OperationCreateRegistryEntry, OperationUploadPlatformImage})
+	require.Len(t, both, 2)
+	require.Contains(t, both[0], "separate browser approval")
+	require.Equal(t, uploadOnly[0], both[1])
 }

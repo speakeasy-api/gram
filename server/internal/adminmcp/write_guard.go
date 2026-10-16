@@ -108,7 +108,8 @@ func (op WriteOperation) implemented() bool {
 }
 
 // direct reports whether an operation applies immediately instead of through a
-// stored proposal and browser approval. Only inert changes qualify.
+// stored proposal and browser approval. Only changes no customer sees until an
+// approved change references them qualify.
 func (op WriteOperation) direct() bool {
 	return op == OperationUploadPlatformImage
 }

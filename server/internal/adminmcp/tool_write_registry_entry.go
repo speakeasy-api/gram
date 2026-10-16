@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -71,7 +72,9 @@ func (s *registryEntryWriter) normalizeRegistryRecord(raw []byte) (json.RawMessa
 	if err := json.Compact(&compact, raw); err != nil {
 		return nil, registryProjection{}, errors.New("record_json must be one JSON object")
 	}
-	projection, ok := projectRegistryRecord(compact.Bytes())
+	// The input cap already bounds the record, so creation accepts every
+	// schema-valid transport list rather than the read projection's bound.
+	projection, ok := projectRegistryRecord(compact.Bytes(), math.MaxInt)
 	if !ok {
 		return nil, registryProjection{}, errors.New("record_json must include a server name, description and version, and only stdio, streamable-http or sse transports")
 	}
@@ -140,21 +143,6 @@ func (s *registryEntryWriter) prepare(ctx context.Context, input PrepareCreateRe
 	if err != nil {
 		return ProposalOutput{}, err
 	}
-	tx, err := s.store.db.Begin(ctx)
-	if err != nil {
-		return ProposalOutput{}, fmt.Errorf("begin registry proposal preparation: %w", err)
-	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	taken, err := mcpregistry.NameTakenTx(ctx, tx, record)
-	if err != nil {
-		return ProposalOutput{}, fmt.Errorf("check registry entry name: %w", err)
-	}
-	if taken {
-		return ProposalOutput{}, errors.New("a registry entry with this server name already exists; edit it in the admin site instead")
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return ProposalOutput{}, fmt.Errorf("finish registry proposal preparation: %w", err)
-	}
 	arguments, err := json.Marshal(registryCreateArguments{Record: record})
 	if err != nil {
 		return ProposalOutput{}, fmt.Errorf("encode registry arguments: %w", err)
@@ -170,7 +158,19 @@ func (s *registryEntryWriter) prepare(ctx context.Context, input PrepareCreateRe
 	if len(arguments) > maxProposalArgumentBytes || len(preview) > maxProposalPreviewBytes {
 		return ProposalOutput{}, errors.New("registry proposal exceeds the existing storage limit; shorten the record")
 	}
-	proposal, replay, err := s.store.Create(ctx, owner, NewProposal{Operation: OperationCreateRegistryEntry, SchemaVersion: 1, IdempotencyKey: input.RetryKey, Arguments: arguments, ExpectedState: expected, Preview: preview}, time.Now())
+	// The name check runs only for an unused retry key, so retrying a change
+	// that has since executed replays it instead of refusing the taken name.
+	nameFree := func(ctx context.Context, tx pgx.Tx) error {
+		taken, err := mcpregistry.NameTakenTx(ctx, tx, record)
+		if err != nil {
+			return fmt.Errorf("check registry entry name: %w", err)
+		}
+		if taken {
+			return errors.New("a registry entry with this server name already exists; edit it in the admin site instead")
+		}
+		return nil
+	}
+	proposal, replay, err := s.store.CreateChecked(ctx, owner, NewProposal{Operation: OperationCreateRegistryEntry, SchemaVersion: 1, IdempotencyKey: input.RetryKey, Arguments: arguments, ExpectedState: expected, Preview: preview}, time.Now(), nameFree)
 	if err != nil {
 		return ProposalOutput{}, err
 	}
@@ -220,22 +220,32 @@ func (s *registryEntryWriter) execution(_ writeAuthority) ProposalExecution {
 			return "", nil, err
 		}
 		created, err := s.registry.CreateTx(ctx, tx, args.Record)
-		var invalid *mcpregistry.InvalidError
-		switch {
-		case errors.Is(err, mcpregistry.ErrConflict):
-			return "", nil, ErrStaleState
-		case errors.As(err, &invalid):
-			return "", nil, ErrProposalInvalidated
-		case err != nil:
-			return "", nil, fmt.Errorf("create registry entry: %w", err)
+		if err != nil {
+			return "", nil, registryCreateError(err)
 		}
-		projection, _ := projectRegistryRecord(created.Data)
+		projection, _ := projectRegistryRecord(created.Data, math.MaxInt)
 		result, err := json.Marshal(registryCreateReceipt{ID: created.ID.String(), Name: projection.Name, UpdatedAt: mcpregistry.Token(created)})
 		if err != nil {
 			return "", nil, fmt.Errorf("encode registry receipt: %w", err)
 		}
 		return "succeeded", result, nil
 	}}
+}
+
+// registryCreateError maps a creation failure to the proposal outcome. A name
+// taken by a concurrent create after the preflight check is a unique
+// violation, so the proposal goes stale instead of creating a second entry.
+// The record already passed schema validation, so an invalid record here
+// depends on registry state (such as an Okta mapping another entry now holds)
+// and is stale too.
+func registryCreateError(err error) error {
+	var invalid *mcpregistry.InvalidError
+	switch {
+	case errors.Is(err, mcpregistry.ErrConflict), errors.As(err, &invalid):
+		return ErrStaleState
+	default:
+		return fmt.Errorf("create registry entry: %w", err)
+	}
 }
 
 func (s *registryEntryWriter) registerPrepare(server *mcp.Server) {

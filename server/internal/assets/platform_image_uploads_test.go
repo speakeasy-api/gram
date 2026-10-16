@@ -2,19 +2,22 @@ package assets_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	assetsvc "github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -25,22 +28,31 @@ func testPNG(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-func newPlatformImageUploads(t *testing.T, ti *testInstance) (*assetsvc.PlatformImageUploads, *http.ServeMux) {
+func newPlatformImageUploadsWithCache(t *testing.T, ti *testInstance, uploadCache cache.Cache) (*assetsvc.PlatformImageUploads, http.Handler) {
 	t.Helper()
-	uploads := assetsvc.NewPlatformImageUploads(ti.service, testenv.NewMemoryCache(), &url.URL{Scheme: "https", Host: "admin.example.test"}, &url.URL{Scheme: "https", Host: "app.example.test"}, testenv.NewLogger(t))
+	uploads, err := assetsvc.NewPlatformImageUploads(ti.service, uploadCache, &url.URL{Scheme: "https", Host: "admin.example.test"}, &url.URL{Scheme: "https", Host: "app.example.test"}, testenv.NewLogger(t))
+	require.NoError(t, err)
 	mux := http.NewServeMux()
 	mux.Handle("PUT "+assetsvc.PlatformImageUploadPath, uploads.Handler())
-	return uploads, mux
+	// The admin server's Origin check runs first; a shell upload sends neither
+	// Origin nor Referer.
+	return uploads, middleware.AdminOriginCheck([]string{"https://admin-ui.example.test"})(mux)
 }
 
-func putUpload(t *testing.T, mux *http.ServeMux, uploadURL string, body []byte) *httptest.ResponseRecorder {
+func newPlatformImageUploads(t *testing.T, ti *testInstance) (*assetsvc.PlatformImageUploads, http.Handler) {
 	t.Helper()
-	parsed, err := url.Parse(uploadURL)
-	require.NoError(t, err)
-	request := httptest.NewRequest(http.MethodPut, parsed.Path, bytes.NewReader(body))
+	return newPlatformImageUploadsWithCache(t, ti, testenv.NewMemoryCache())
+}
+
+func putUpload(t *testing.T, handler http.Handler, upload assetsvc.PlatformImageUpload, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPut, upload.URL, bytes.NewReader(body))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if upload.Token != "" {
+		request.Header.Set("Authorization", "Bearer "+upload.Token)
+	}
 	response := httptest.NewRecorder()
-	mux.ServeHTTP(response, request)
+	handler.ServeHTTP(response, request)
 	return response
 }
 
@@ -52,9 +64,10 @@ func TestPlatformImageUploads_StoresServableImageOnce(t *testing.T) {
 
 	upload, err := uploads.Issue(ctx, "staff@example.test")
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(upload.URL, "https://admin.example.test/admin/assets.uploadImage/"))
+	require.Equal(t, "https://admin.example.test/admin/assets.uploadImage", upload.URL, "the token stays out of the URL")
+	require.NotEmpty(t, upload.Token)
 
-	response := putUpload(t, mux, upload.URL, image)
+	response := putUpload(t, mux, upload, image)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var stored assetsvc.StoredPlatformImage
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &stored))
@@ -69,7 +82,7 @@ func TestPlatformImageUploads_StoresServableImageOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, body.Close())
 
-	require.Equal(t, http.StatusNotFound, putUpload(t, mux, upload.URL, image).Code, "an upload URL accepts one upload")
+	require.Equal(t, http.StatusUnauthorized, putUpload(t, mux, upload, image).Code, "a token accepts one upload")
 }
 
 func TestPlatformImageUploads_RejectsUnknownTokensAndNonImages(t *testing.T) {
@@ -77,17 +90,55 @@ func TestPlatformImageUploads_RejectsUnknownTokensAndNonImages(t *testing.T) {
 	ctx, ti := newTestAssetsService(t)
 	uploads, mux := newPlatformImageUploads(t, ti)
 
-	require.Equal(t, http.StatusNotFound, putUpload(t, mux, "https://admin.example.test/admin/assets.uploadImage/unknown", testPNG(t)).Code)
+	uploadURL := "https://admin.example.test" + assetsvc.PlatformImageUploadPath
+	require.Equal(t, http.StatusUnauthorized, putUpload(t, mux, assetsvc.PlatformImageUpload{URL: uploadURL, Token: "unknown"}, testPNG(t)).Code)
+	require.Equal(t, http.StatusUnauthorized, putUpload(t, mux, assetsvc.PlatformImageUpload{URL: uploadURL}, testPNG(t)).Code, "a request without a token is refused")
 
 	svg, err := uploads.Issue(ctx, "staff@example.test")
 	require.NoError(t, err)
-	require.Equal(t, http.StatusUnsupportedMediaType, putUpload(t, mux, svg.URL, []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`)).Code)
-	require.Equal(t, http.StatusNotFound, putUpload(t, mux, svg.URL, testPNG(t)).Code, "a rejected upload still spends the URL")
+	require.Equal(t, http.StatusUnsupportedMediaType, putUpload(t, mux, svg, []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`)).Code)
+	require.Equal(t, http.StatusUnauthorized, putUpload(t, mux, svg, testPNG(t)).Code, "a rejected upload still spends the token")
 
 	large, err := uploads.Issue(ctx, "staff@example.test")
 	require.NoError(t, err)
-	require.Equal(t, http.StatusRequestEntityTooLarge, putUpload(t, mux, large.URL, make([]byte, assetsvc.MaxFileSizeImage+1)).Code)
+	require.Equal(t, http.StatusRequestEntityTooLarge, putUpload(t, mux, large, make([]byte, assetsvc.MaxFileSizeImage+1)).Code)
 
 	_, err = uploads.Issue(ctx, "")
 	require.Error(t, err)
+}
+
+// failingRedeemCache stores grants but fails every redemption, as a Redis
+// outage would.
+type failingRedeemCache struct{ cache.Cache }
+
+func (failingRedeemCache) GetAndDelete(context.Context, string, any) error {
+	return errors.New("connection refused")
+}
+
+func TestPlatformImageUploads_CacheFailureIsNotAnUnknownToken(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAssetsService(t)
+	uploads, mux := newPlatformImageUploadsWithCache(t, ti, failingRedeemCache{Cache: testenv.NewMemoryCache()})
+
+	upload, err := uploads.Issue(ctx, "staff@example.test")
+	require.NoError(t, err)
+	response := putUpload(t, mux, upload, testPNG(t))
+	require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
+}
+
+func TestNewPlatformImageUploads_RequiresHTTPSExceptOnLoopback(t *testing.T) {
+	t.Parallel()
+	site := &url.URL{Scheme: "https", Host: "app.example.test"}
+	for _, base := range []string{"https://admin.example.test", "http://localhost:8084", "http://127.0.0.1:8084", "http://[::1]:8084"} {
+		parsed, err := url.Parse(base)
+		require.NoError(t, err)
+		_, err = assetsvc.NewPlatformImageUploads(nil, testenv.NewMemoryCache(), parsed, site, testenv.NewLogger(t))
+		require.NoError(t, err, base)
+	}
+	for _, base := range []string{"http://admin.example.test", "http://10.0.0.1:8084", "http://user:pass@localhost:8084", "ftp://admin.example.test", "admin.example.test"} {
+		parsed, err := url.Parse(base)
+		require.NoError(t, err)
+		_, err = assetsvc.NewPlatformImageUploads(nil, testenv.NewMemoryCache(), parsed, site, testenv.NewLogger(t))
+		require.Error(t, err, base)
+	}
 }

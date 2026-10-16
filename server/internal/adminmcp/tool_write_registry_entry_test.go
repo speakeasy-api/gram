@@ -3,6 +3,7 @@ package adminmcp
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -142,4 +143,59 @@ func TestRegistryEntryWriterViewRejectsTenantTarget(t *testing.T) {
 	proposal.Target.OrganizationID = f.orgA
 	_, err = writer.view(proposal)
 	require.ErrorIs(t, err, ErrProposalInvalidated)
+}
+
+func TestRegistryEntryWriterAcceptsMoreRemotesThanAReadPage(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "admin_mcp_registry_create_many_remotes")
+	writer, _, _ := newRegistryEntryWriter(t, f)
+	ctx := writeContext(t, f)
+
+	remotes := make([]string, 0, maxRegistryPage+1)
+	for i := range maxRegistryPage + 1 {
+		remotes = append(remotes, `{"type":"streamable-http","url":"https://example.test/mcp/`+strconv.Itoa(i)+`"}`)
+	}
+	record := `{"server":{"name":"example.test/` + uuid.NewString() + `","description":"Demo server","version":"1.0.0","remotes":[` + strings.Join(remotes, ",") + `]}}`
+	_, readable := projectRegistryRecord([]byte(record), maxRegistryPage)
+	require.False(t, readable, "reads keep their page bound")
+
+	prepared, err := writer.prepare(ctx, PrepareCreateRegistryEntryInput{RecordJSON: record, RetryKey: "many-remotes"})
+	require.NoError(t, err)
+	var preview registryCreatePreview
+	require.NoError(t, json.Unmarshal(prepared.Preview, &preview))
+	require.Equal(t, []RegistryTransportSummary{{Type: "streamable-http", Count: maxRegistryPage + 1}}, preview.Transports)
+}
+
+func TestRegistryEntryWriterReplaysRetryAfterExecution(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "admin_mcp_registry_create_retry")
+	writer, tools, _ := newRegistryEntryWriter(t, f)
+	ctx := writeContext(t, f)
+	record := registryRecord("example.test/" + uuid.NewString())
+
+	prepared, err := writer.prepare(ctx, PrepareCreateRegistryEntryInput{RecordJSON: record, RetryKey: "retry-after-execute"})
+	require.NoError(t, err)
+	approveRegistryProposal(t, f, writer, prepared)
+	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.NoError(t, err)
+
+	retried, err := writer.prepare(ctx, PrepareCreateRegistryEntryInput{RecordJSON: record, RetryKey: "retry-after-execute"})
+	require.NoError(t, err, "a retry replays the stored proposal instead of refusing the now-taken name")
+	require.True(t, retried.Replay)
+	require.Equal(t, prepared.ProposalID, retried.ProposalID)
+	require.Equal(t, string(ProposalSucceeded), retried.Status)
+
+	_, err = writer.prepare(ctx, PrepareCreateRegistryEntryInput{RecordJSON: registryRecord("example.test/" + uuid.NewString()), RetryKey: "retry-after-execute"})
+	require.ErrorIs(t, err, ErrProposalConflict, "a reused retry key for a different change is refused")
+	_, err = writer.prepare(ctx, PrepareCreateRegistryEntryInput{RecordJSON: record, RetryKey: "fresh-key"})
+	require.ErrorContains(t, err, "already exists", "a new retry key still gets the name check")
+}
+
+func TestRegistryCreateErrorMapsNameConflictToStaleState(t *testing.T) {
+	t.Parallel()
+	require.ErrorIs(t, registryCreateError(mcpregistry.ErrConflict), ErrStaleState)
+	require.ErrorIs(t, registryCreateError(&mcpregistry.InvalidError{}), ErrStaleState, "a state-dependent rejection after validation is stale")
+	err := registryCreateError(mcpregistry.ErrNotFound)
+	require.NotErrorIs(t, err, ErrStaleState)
+	require.ErrorIs(t, err, mcpregistry.ErrNotFound)
 }

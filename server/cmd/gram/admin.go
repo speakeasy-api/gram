@@ -567,7 +567,10 @@ func newAdminCommand() *cli.Command {
 				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
 				writeDeps := adminmcp.WriteDependencies{Features: productFeatures, Registry: registryService, ImageUploads: nil}
 				if platformAssets != nil {
-					imageUploads := assets.NewPlatformImageUploads(platformAssets, staffCache, adminServerURL, siteURL, logger)
+					imageUploads, err := assets.NewPlatformImageUploads(platformAssets, staffCache, adminServerURL, siteURL, logger)
+					if err != nil {
+						return fmt.Errorf("configure staff Admin MCP image uploads: %w", err)
+					}
 					writeDeps.ImageUploads = imageUploads
 					mux.Handle(http.MethodPut, assets.PlatformImageUploadPath, imageUploads.Handler().ServeHTTP)
 				}
