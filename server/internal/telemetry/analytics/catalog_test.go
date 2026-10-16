@@ -190,15 +190,14 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 	require.Equal(t, []any{"org", "proj", int64(1), int64(2), ""}, args)
 
 	// Tool calls read a table that is already one row per call, so nothing
-	// sorts the window. The scan widens by an hour each side, and the call's
-	// own start decides the window.
+	// sorts the window. The call's own start decides the window.
 	for _, ds := range []*Dataset{ToolCalls, Skills} {
 		query, args, err := ds.Source.Rows(qc).ToSql()
 		require.NoError(t, err, ds.Name)
 		require.NotContains(t, query, "LIMIT 1 BY", ds.Name)
 		require.Contains(t, query, "FROM tool_calls WHERE", ds.Name)
 		require.Contains(t, query, "GROUP BY organization_id, project_id, event_id HAVING started_at >= ? AND started_at < ?", ds.Name)
-		require.Equal(t, []any{"org", "proj", int64(-3600), int64(3600), int64(1), int64(2)}, args, ds.Name)
+		require.Equal(t, []any{"org", "proj", int64(1), int64(2)}, args, ds.Name)
 	}
 }
 

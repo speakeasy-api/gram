@@ -87,18 +87,13 @@ func (s Source) Rows(qc QueryContext) squirrel.SelectBuilder {
 	return builder
 }
 
-// merged reads one row per Key from the source's table. A row is filed under
-// the hour of each observation, so a call can span two hours: the scan widens
-// the window by an hour each side, and the call's own start decides whether
-// it falls inside.
+// merged reads one row per Key from the source's table. The call's start
+// decides whether it falls inside the window.
 func (s Source) merged(qc QueryContext) squirrel.SelectBuilder {
-	const hour = int64(3600)
 	builder := sq.Select(s.Columns...).
 		From(s.Table).
 		Where(squirrel.Eq{"organization_id": qc.Tenant.OrganizationID}).
 		Where(squirrel.Eq{"project_id": qc.Tenant.ProjectID}).
-		Where("call_hour >= toDateTime(?, 'UTC')", qc.Window.FromUnixNano/1e9/hour*hour-hour).
-		Where("call_hour < toDateTime(?, 'UTC')", qc.Window.ToUnixNano/1e9+hour).
 		GroupBy("organization_id", "project_id", s.Key).
 		Having("started_at >= ?", qc.Window.FromUnixNano).
 		Having("started_at < ?", qc.Window.ToUnixNano)
