@@ -21,7 +21,6 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
@@ -223,7 +222,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
 			continue
 		}
-		if userSessionIssuerID != uuid.Nil && roledelivery.HasPlatformTool(row.ToolUrns) {
+		if userSessionIssuerID != uuid.Nil && row.HasPlatformTool {
 			continue
 		}
 		candidates = append(candidates, metaMemberCandidate{

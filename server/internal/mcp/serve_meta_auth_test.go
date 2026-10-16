@@ -90,12 +90,14 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 func TestServeOrganizationGateway_ExcludesPlatformToolsets(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
-		name     string
-		platform bool
-		listed   bool
+		name   string
+		tools  []urn.Tool
+		listed bool
 	}{
-		{name: "without platform tools", platform: false, listed: true},
-		{name: "with platform tools", platform: true, listed: false},
+		{name: "without tools", tools: []urn.Tool{}, listed: true},
+		{name: "with a platform tool", tools: []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "add_reaction")}, listed: false},
+		// Only the kind segment marks a Platform tool.
+		{name: "with a platform-named source", tools: []urn.Tool{urn.NewTool(urn.ToolKindHTTP, "platform", "add_reaction")}, listed: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -107,11 +109,7 @@ func TestServeOrganizationGateway_ExcludesPlatformToolsets(t *testing.T) {
 			toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), auth, slug)
 			_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{ID: uuid.New(), ProjectID: *auth.ProjectID, Name: conv.ToPGText(tt.name), Slug: conv.ToPGText(slug), ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPublic})
 			require.NoError(t, err)
-			tools := []urn.Tool{}
-			if tt.platform {
-				tools = append(tools, urn.NewTool(urn.ToolKindPlatform, "slack", "add_reaction"))
-			}
-			_, err = toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{ToolsetID: toolset.ID, Version: 1, ToolUrns: tools, ResourceUrns: []urn.Resource{}, PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+			_, err = toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{ToolsetID: toolset.ID, Version: 1, ToolUrns: tt.tools, ResourceUrns: []urn.Resource{}, PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 			require.NoError(t, err)
 
 			w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
