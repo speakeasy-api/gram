@@ -1844,8 +1844,8 @@ func newStartCommand() *cli.Command {
 				riskAnalysisDescriber = riskSignaler
 			}
 			riskFindings := riskchrepo.New(chDB)
-			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
-			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
+			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, analyticsSvc.Engine())
+			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, analyticsSvc.Engine())
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				AssistantIdentity:         assistantsSvc,
 				SignalAuthoring:           sigintSvc,

@@ -20,6 +20,16 @@ type FeatureChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
+// CatalogReader serves the catalog one tenant may read: every dataset
+// except those behind a product feature its organization lacks. Engine is
+// the implementation; widget and dashboard validation read through it so a
+// saved question can name only what a query could run.
+type CatalogReader interface {
+	Catalog(ctx context.Context, tenant Tenant) (*Catalog, error)
+}
+
+var _ CatalogReader = (*Engine)(nil)
+
 // Engine is the query path without its transport, shared by the analytics
 // RPC, the Explore page and the Platform MCP: the catalog bound to its
 // loaders, the product features that gate datasets, and the connection plans

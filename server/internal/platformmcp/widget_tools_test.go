@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	dashboardsrepo "github.com/speakeasy-api/gram/server/internal/dashboards/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -37,6 +38,7 @@ type widgetToolsFixture struct {
 	management *widgets.Service
 	db         *pgxpool.Pool
 	flags      *feature.InMemory
+	features   *switchableFeatures
 	principal  Principal
 	project    ResolvedProject
 	logs       *bytes.Buffer
@@ -59,14 +61,17 @@ func newWidgetToolsFixture(t *testing.T) (context.Context, *widgetToolsFixture) 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := widgets.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger())
+	features := &switchableFeatures{}
+	catalogs, err := analytics.NewEngine(db, nil, features)
+	require.NoError(t, err)
+	management := widgets.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger(), catalogs)
 	service := NewWidgetService(slog.New(slog.NewJSONHandler(logs, nil)), management, NewPostgresReader(logger, db), engine, flags, NewPostgresOrganizationSlugResolver(db), "test-widget-tools-key")
 	require.NotNil(t, service)
 
 	reg := newRegistrar(newTestMCPServer())
 	registerWidgetTools(reg, service)
 
-	return widgetCallerContext(t.Context(), principal, project, authz.ScopeProjectRead, authz.ScopeProjectWrite), &widgetToolsFixture{reg: reg, service: service, management: management, db: db, flags: flags, principal: principal, project: project, logs: logs}
+	return widgetCallerContext(t.Context(), principal, project, authz.ScopeProjectRead, authz.ScopeProjectWrite), &widgetToolsFixture{reg: reg, service: service, management: management, db: db, flags: flags, features: features, principal: principal, project: project, logs: logs}
 }
 
 func widgetCallerContext(ctx context.Context, principal Principal, project ResolvedProject, scopes ...authz.Scope) context.Context {
@@ -625,4 +630,23 @@ func TestWidgetToolsHideUnexpectedFailures(t *testing.T) {
 	require.Equal(t, unavailableCode, refusal.Code)
 	require.NotContains(t, refusal.Message, "on fire")
 	require.Contains(t, f.logs.String(), "on fire", "the cause is logged for operators")
+}
+
+func TestSaveWidgetOnAGatedDatasetFollowsTheEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, f := newWidgetToolsFixture(t)
+	arguments := saveArguments(f.project.ID.String(), "Evaluations by sensor")
+	arguments["dataset"] = "sensor_evaluations"
+	arguments["query"] = map[string]any{"window": "7d", "grain": "day", "dimensions": []any{"sensor"}, "measures": []any{map[string]any{"op": "count"}}}
+
+	_, err := f.invoke(t, ctx, saveWidgetToolName, arguments)
+	refusal := requireWidgetRefusal(t, err)
+	require.Equal(t, "invalid_request", refusal.Code)
+	require.Contains(t, refusal.Message, "unknown_dataset", "a dataset the organization is not entitled to is refused as unknown")
+
+	f.features.enabled.Store(true)
+	preview := f.write(t, ctx, saveWidgetToolName, arguments)
+	created := f.write(t, ctx, saveWidgetToolName, confirmed(arguments, preview, "gated-create"))
+	require.Equal(t, "sensor_evaluations", created.Widget.Dataset)
+	require.Nil(t, created.Widget.InvalidReason)
 }

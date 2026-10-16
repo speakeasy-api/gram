@@ -78,30 +78,32 @@ const copySuffix = " (copy)"
 
 // Service serves dashboards: a project's layouts of saved widgets.
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	auth    *auth.Auth
-	authz   *authz.Engine
-	audit   *audit.Logger
-	catalog *analytics.Catalog
-	now     func() time.Time
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	auth   *auth.Auth
+	authz  *authz.Engine
+	audit  *audit.Logger
+	// catalogs serves the catalog the request's tenant may read, which saved
+	// filters and copied widgets are validated against.
+	catalogs analytics.CatalogReader
+	now      func() time.Time
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger, catalogs analytics.CatalogReader) *Service {
 	logger = logger.With(attr.SlogComponent("dashboards"))
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/dashboards"),
-		logger:  logger,
-		db:      db,
-		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
-		audit:   auditLogger,
-		catalog: analytics.Default,
-		now:     time.Now,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/dashboards"),
+		logger:   logger,
+		db:       db,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		audit:    auditLogger,
+		catalogs: catalogs,
+		now:      time.Now,
 	}
 }
 
@@ -450,7 +452,15 @@ func (s *Service) SaveDashboardFilters(ctx context.Context, payload *gen.SaveDas
 // caller's transaction. A non-empty expectedVersion refuses the change with
 // ErrStaleVersion when the dashboard has changed since that version.
 func (s *Service) SaveDashboardFiltersInTx(ctx context.Context, dbtx pgx.Tx, id, expectedVersion string, filters *gen.DashboardFilters) (*gen.Dashboard, error) {
-	if reason := checkFilters(s.catalog, filters); reason != "" {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	catalog, err := s.catalogFor(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
+	if reason := checkFilters(catalog, filters); reason != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
 	encoded, err := mv.EncodeDashboardFilters(filters)
@@ -646,10 +656,14 @@ type copyPlacement struct {
 func (s *Service) copyInto(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, source copySource) (*gen.Dashboard, error) {
 	queries := repo.New(dbtx)
 	widgetQueries := widgetsrepo.New(dbtx)
+	catalog, err := s.catalogFor(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
 	now := s.now()
 	copies := make(map[string]uuid.UUID, len(source.widgets))
 	for _, widget := range source.widgets {
-		reason, err := widgets.Validate(s.catalog, widget.dataset, widget.query, widget.visualization, now)
+		reason, err := widgets.Validate(catalog, widget.dataset, widget.query, widget.visualization, now)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "validate widget").LogError(ctx, s.logger)
 		}
@@ -920,6 +934,16 @@ func (s *Service) view(ctx context.Context, queries *repo.Queries, row repo.Dash
 		return nil, oops.E(oops.CodeUnexpected, err, "list dashboard cards").LogError(ctx, s.logger)
 	}
 	return mv.BuildDashboardView(row, placements), nil
+}
+
+// catalogFor reads the catalog the request's tenant may read. A dataset
+// behind a product feature the organization lacks is not in it.
+func (s *Service) catalogFor(ctx context.Context, authCtx *contextvalues.AuthContext) (*analytics.Catalog, error) {
+	catalog, err := s.catalogs.Catalog(ctx, analytics.Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read analytics catalog").LogError(ctx, s.logger)
+	}
+	return catalog, nil
 }
 
 func (s *Service) auditBase(authCtx *contextvalues.AuthContext, row repo.Dashboard) audit.DashboardEventBase {
