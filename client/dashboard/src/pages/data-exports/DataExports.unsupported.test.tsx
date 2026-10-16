@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ConfigureExportValues } from "./ConfigureExportSheet";
@@ -27,7 +33,11 @@ vi.mock("@gram/client/react-query/listDataExportsForOrg.js", () => ({
   buildListDataExportsForOrgQuery: () => ({ queryKey: ["exports"] }),
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({}),
+  useQueryClient: () => ({
+    invalidateQueries: vi
+      .fn<() => Promise<void>>()
+      .mockResolvedValue(undefined),
+  }),
   useQuery: () => ({
     data: {
       routes: [
@@ -119,3 +129,37 @@ it.each(["draft", "refreshed route"])(
     expect(state.mutateAsync).not.toHaveBeenCalled();
   },
 );
+
+it("saves a known-source export through destination creation and route update", async () => {
+  state.mutateAsync.mockResolvedValue({ id: "destination-created" });
+  render(
+    <MemoryRouter>
+      <DataExports />
+    </MemoryRouter>,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Configure Product telemetry export" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save export" }));
+  await waitFor(() => expect(state.mutateAsync).toHaveBeenCalledTimes(2));
+  expect(state.mutateAsync).toHaveBeenNthCalledWith(1, {
+    request: {
+      gramProject: "default",
+      createDestinationForm: expect.objectContaining({
+        destinationType: "otel",
+        name: "Example destination",
+      }),
+    },
+  });
+  expect(state.mutateAsync).toHaveBeenNthCalledWith(2, {
+    request: {
+      id: "route-test",
+      gramProject: "default",
+      updateRouteRequestBody: {
+        dataSource: "product_telemetry",
+        enabled: true,
+        otelDestinationId: "destination-created",
+      },
+    },
+  });
+});

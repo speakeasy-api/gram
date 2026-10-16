@@ -14,6 +14,8 @@ import {
   defaultRuleDraft,
   toDraft,
   targetSummary,
+  matchesRuleSearch,
+  type ActorAttribute,
   type SpendRule,
 } from "./budgets-data";
 import {
@@ -21,9 +23,17 @@ import {
   useBudgetRules,
   useCreateBudgetRule,
   useUpdateBudgetRule,
+  useActorAttributes,
 } from "./budgets-queries";
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), rules: [] as SpendRule[] }));
+const mocks = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  rules: [] as SpendRule[],
+  catalog: { data: { attributes: [] }, isError: false } as {
+    data: { attributes: ActorAttribute[] } | undefined;
+    isError: boolean;
+  },
+}));
 vi.mock("@gram/client/react-query/spendRulesListRules.js", () => ({
   useSpendRulesListRules: () => ({
     data: { rules: mocks.rules },
@@ -53,11 +63,22 @@ vi.mock("@gram/client/react-query/spendRulesListEvents.js", () => ({
   useSpendRulesListEvents: () => ({ data: { events: [] }, refetch: vi.fn() }),
 }));
 vi.mock("@gram/client/react-query/spendRulesActorAttributes.js", () => ({
-  useSpendRulesActorAttributes: () => ({ data: { attributes: [] } }),
+  useSpendRulesActorAttributes: () => mocks.catalog,
 }));
 
 afterEach(cleanup);
-beforeEach(() => mocks.mutate.mockClear());
+beforeEach(() => {
+  mocks.mutate.mockClear();
+  mocks.rules = [];
+  mocks.catalog = {
+    data: {
+      attributes: [
+        { name: "department_name", type: "string", description: "Department" },
+      ],
+    },
+    isError: false,
+  };
+});
 
 function rule(overrides: Partial<SpendRule> = {}): SpendRule {
   return {
@@ -230,4 +251,190 @@ it("blocks edits and previews for an unsupported stored target", () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("preserves explicitly unsupported attribute types in the catalog", () => {
+  mocks.catalog.data!.attributes.push({
+    name: "future_attribute",
+    type: unrecognized("future_type"),
+    description: "Future attribute",
+  });
+  const { result } = renderHook(() => useActorAttributes());
+  expect(result.current.attributes).toEqual(mocks.catalog.data!.attributes);
+});
+
+it.each([
+  {
+    name: "unknown type",
+    data: {
+      attributes: [
+        {
+          name: "department_name",
+          type: "future_type",
+          description: "Department",
+        },
+      ],
+    },
+    isError: false,
+  },
+  { name: "unloaded catalog", data: undefined, isError: false },
+  { name: "failed catalog", data: undefined, isError: true },
+])("blocks preview and target writes for $name", ({ data, isError }) => {
+  mocks.catalog = { data, isError };
+  const { result } = renderHook(() => ({
+    create: useCreateBudgetRule(),
+    update: useUpdateBudgetRule(),
+    preview: usePreviewBudgetRule(),
+  }));
+  const draft = toDraft(rule());
+  act(() => {
+    result.current.create.create(draft);
+    result.current.update.update({ id: "rule-id", ...draft });
+    result.current.preview.preview(draft);
+  });
+  expect(mocks.mutate).not.toHaveBeenCalled();
+  act(() => result.current.update.update({ id: "rule-id", enabled: false }));
+  expect(mocks.mutate).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  {
+    name: "known string",
+    attributes: [
+      { name: "department_name", type: "string", description: "Department" },
+    ],
+    operator: "equals",
+  },
+  {
+    name: "known list",
+    attributes: [
+      { name: "department_name", type: "list", description: "Departments" },
+    ],
+    operator: "includes",
+  },
+  {
+    name: "custom attribute absent from catalog",
+    attributes: [{ name: "email", type: "string", description: "Email" }],
+    operator: "equals",
+  },
+  { name: "empty catalog", attributes: [], operator: "equals" },
+])("allows preview and target writes for $name", ({ attributes, operator }) => {
+  mocks.catalog = { data: { attributes }, isError: false };
+  const { result } = renderHook(() => ({
+    create: useCreateBudgetRule(),
+    update: useUpdateBudgetRule(),
+    preview: usePreviewBudgetRule(),
+  }));
+  const draft = toDraft(rule({ target: { ...rule().target, operator } }));
+  act(() => {
+    result.current.create.create(draft);
+    result.current.update.update({ id: "rule-id", ...draft });
+    result.current.preview.preview(draft);
+  });
+  expect(mocks.mutate).toHaveBeenCalledTimes(3);
+  expect(mocks.mutate.mock.calls[0]![0]).toEqual(
+    expect.objectContaining({
+      request: {
+        createSpendRuleRequestBody: expect.objectContaining({
+          target: draft.target,
+        }),
+      },
+    }),
+  );
+});
+
+it("keeps an explicitly unsupported attribute read-only in the editor", () => {
+  mocks.catalog.data!.attributes[0]!.type = "future_type";
+  render(
+    <RuleSheet
+      open
+      onOpenChange={vi.fn<() => void>()}
+      rule={rule()}
+      onSubmit={vi.fn<() => void>()}
+    />,
+  );
+  expect(
+    screen.getByText(/This target condition is not supported/),
+  ).toBeTruthy();
+  expect(screen.queryByRole("textbox", { name: "Condition value" })).toBeNull();
+  expect(screen.getByText("Usage preview unavailable")).toBeTruthy();
+  expect(
+    screen
+      .getByRole("button", { name: "Save changes" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mocks.mutate).not.toHaveBeenCalled();
+});
+
+it("waits for the catalog then enables a known target without rewriting it", () => {
+  mocks.catalog = { data: undefined, isError: false };
+  const onSubmit = vi.fn<() => void>();
+  const props = {
+    open: true,
+    onOpenChange: vi.fn<() => void>(),
+    rule: rule(),
+    onSubmit,
+  };
+  const { rerender } = render(<RuleSheet {...props} />);
+  expect(screen.getByText("Loading target attributes…")).toBeTruthy();
+  expect(
+    screen
+      .getByRole("button", { name: "Save changes" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mocks.mutate).not.toHaveBeenCalled();
+  mocks.catalog = {
+    data: {
+      attributes: [
+        { name: "department_name", type: "string", description: "Department" },
+      ],
+    },
+    isError: false,
+  };
+  rerender(<RuleSheet {...props} />);
+  expect(screen.queryByText("Loading target attributes…")).toBeNull();
+  expect(screen.getByRole("textbox", { name: "Condition value" })).toBeTruthy();
+  const save = screen.getByRole("button", { name: "Save changes" });
+  expect(save.hasAttribute("disabled")).toBe(false);
+  fireEvent.click(save);
+  expect(onSubmit).toHaveBeenCalledWith(toDraft(props.rule));
+});
+
+it("retains attribute and value search for targets with unsupported operators", () => {
+  const stored = rule({ target: unsupportedTarget });
+  expect(targetSummary(stored.target)).toBe("Unsupported target condition");
+  expect(matchesRuleSearch(stored, " ENGINEERING ")).toBe(true);
+  expect(matchesRuleSearch(stored, "department_name")).toBe(true);
+  expect(matchesRuleSearch(stored, "Finance")).toBe(false);
+});
+
+it.each([
+  { type: "string", operator: "equals" },
+  { type: "list", operator: "includes" },
+])("keeps known $type target edits saveable", ({ type, operator }) => {
+  mocks.catalog.data!.attributes[0]!.type = type;
+  const stored = rule({
+    action: "flag",
+    target: { ...rule().target, operator },
+  });
+  const onSubmit = vi.fn<() => void>();
+  render(
+    <RuleSheet
+      open
+      onOpenChange={vi.fn<() => void>()}
+      rule={stored}
+      onSubmit={onSubmit}
+    />,
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "Condition value" }), {
+    target: { value: "Support" },
+  });
+  const save = screen.getByRole("button", { name: "Save changes" });
+  expect(save.hasAttribute("disabled")).toBe(false);
+  fireEvent.click(save);
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      target: { attribute: "department_name", operator, value: "Support" },
+    }),
+  );
 });

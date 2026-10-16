@@ -432,7 +432,7 @@ export function narrowingLabel(entry: {
       ),
     ),
   ];
-  const tools = entry.tools ?? [];
+  const tools = [...new Set(entry.tools ?? [])];
 
   // A rule stores one or the other, but a summary can hold both — from two
   // rules — and naming only the annotations would hide the tools.

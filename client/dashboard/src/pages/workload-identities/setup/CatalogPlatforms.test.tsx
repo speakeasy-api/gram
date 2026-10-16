@@ -278,3 +278,17 @@ it("keeps an unsupported platform's direct setup link read-only", () => {
   expect(screen.queryByText("Access Hub list")).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();
 });
+
+it.each([false, true])(
+  "redirects a disabled catalog platform even when unsupported (%s)",
+  (unsupported) => {
+    const platform = structuredClone(claudeTagPlatform);
+    platform.enabled = false;
+    if (unsupported) platform.steps[0]!.phase = unrecognized("future_phase");
+    catalogQuery.platforms = [platform];
+    renderPage("/access-hub/catalog/claude-tag?setup=&step=agent");
+    expect(screen.getByText("Access Hub list")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Refresh page" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  },
+);

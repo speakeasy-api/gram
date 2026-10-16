@@ -547,3 +547,29 @@ it("treats unknown applicability as unknown reach", () => {
   expect(accessSummary(row)).toBe("Access unknown");
   expect(scopeState(row, "use").value).toBe("Access unknown");
 });
+
+it.each(["future_kind", "constructor", "__proto__"])(
+  "does not infer reach for principal kind %s",
+  (kind) => {
+    const row = rowFor([entry({ kind: unrecognized(kind) })]);
+    expect(accessSummary(row)).toBe("Access unknown");
+    expect(scopeState(row, "use").value).toBe("Access unknown");
+  },
+);
+
+it("marks members reached by an unknown principal kind as unknown without changing unrelated rows", () => {
+  const rows = buildAccessRows([
+    role("Future group", {
+      kind: unrecognized("future_group"),
+      memberIds: ["u1"],
+    }),
+    entry({}),
+    entry({ principalUrn: "user:unrelated" }),
+  ]);
+  expect(
+    accessSummary(rows.find((row) => row.principalUrn === "user:u1")!),
+  ).toBe("Access unknown");
+  expect(
+    accessSummary(rows.find((row) => row.principalUrn === "user:unrelated")!),
+  ).toBe("All tools");
+});

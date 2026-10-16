@@ -644,3 +644,25 @@ it("explains the required admin permission on disabled remove controls", () => {
     screen.queryByRole("button", { name: "Access cannot be changed here." }),
   ).toBeNull();
 });
+
+it("keeps an unsupported principal visible with all audience edits disabled", () => {
+  renderList([entry({ kind: unrecognized("future_kind") })]);
+  expect(screen.getByText("Hana Sato")).toBeTruthy();
+  expandFirstRow();
+  for (const button of screen.getAllByRole("button", {
+    name: "Access unknown",
+  })) {
+    expect(button.hasAttribute("disabled")).toBe(true);
+  }
+  expect(
+    screen
+      .getByRole("button", { name: "Access cannot be changed here." })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(
+    screen
+      .getByRole("button", { name: /Grant access/ })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+  expect(mutate).not.toHaveBeenCalled();
+});

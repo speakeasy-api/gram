@@ -31,7 +31,7 @@ import {
   formatUsd,
   parseRuleUrn,
   ruleStatusOf,
-  targetSummary,
+  matchesRuleSearch,
   usageByRuleId,
   type RuleAction,
   type RuleDraft,
@@ -308,11 +308,7 @@ function RulesTab({
         return false;
       }
       if (!q) return true;
-      return (
-        r.name.toLowerCase().includes(q) ||
-        r.description.toLowerCase().includes(q) ||
-        targetSummary(r.target).toLowerCase().includes(q)
-      );
+      return matchesRuleSearch(r, q);
     });
   }, [rules, query, actionFilter]);
 

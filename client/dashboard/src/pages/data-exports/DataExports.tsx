@@ -218,7 +218,7 @@ type DestinationEditCandidate = {
 function sourceLabel(dataSource: string): string {
   return (
     DATA_SOURCE_OPTIONS.find((option) => option.value === dataSource)?.label ??
-    dataSource.replaceAll("_", " ")
+    "Unknown data source"
   );
 }
 

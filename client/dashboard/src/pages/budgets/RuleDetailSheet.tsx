@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { EventTypeBadge, RuleActionBadge, UsageBar } from "./budget-shared";
 import {
   WINDOW_LABELS,
-  isRuleTargetOperator,
+  isSupportedRuleTarget,
   formatUsd,
   parseRuleUrn,
   sortEventsByRecency,
@@ -27,7 +27,11 @@ import {
   type SpendRuleActorUsage,
   type SpendRuleUsage,
 } from "./budgets-data";
-import { useBudgetEvents, usePreviewBudgetRule } from "./budgets-queries";
+import {
+  useActorAttributes,
+  useBudgetEvents,
+  usePreviewBudgetRule,
+} from "./budgets-queries";
 
 /** Read-only drill-down for one rule: live budget state, which people are
  *  driving the spend, and the rule's lifecycle events. */
@@ -127,6 +131,11 @@ function RuleDetail({
   });
   const events = useMemo(() => sortEventsByRecency(ruleEvents), [ruleEvents]);
 
+  const {
+    attributes,
+    isLoading: attributesLoading,
+    isError: attributesError,
+  } = useActorAttributes();
   const actors = preview?.actors ?? [];
   const knownWindow = Object.hasOwn(WINDOW_LABELS, rule.windowKind);
 
@@ -190,7 +199,15 @@ function RuleDetail({
         </section>
 
         {/* Who is driving the spend */}
-        {!knownWindow || !isRuleTargetOperator(rule.target.operator) ? (
+        {attributesLoading ? (
+          <Text muted small>
+            Loading target attributes…
+          </Text>
+        ) : attributesError ? (
+          <Text muted small>
+            Could not load target attributes. Refresh the page to preview usage.
+          </Text>
+        ) : !knownWindow || !isSupportedRuleTarget(rule.target, attributes) ? (
           <p className="text-muted-foreground text-xs">
             Usage preview is unavailable for this{" "}
             {!knownWindow ? "window" : "target condition"}. Refresh the page for

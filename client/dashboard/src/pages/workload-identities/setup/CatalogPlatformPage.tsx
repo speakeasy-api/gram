@@ -69,7 +69,7 @@ function CatalogPlatform({
     );
   }
 
-  if (entry?.unsupported) {
+  if (entry?.enabled && entry.unsupported) {
     const connected =
       connectedIssuer(entry, policy.data?.issuers ?? []) !== undefined;
     return (

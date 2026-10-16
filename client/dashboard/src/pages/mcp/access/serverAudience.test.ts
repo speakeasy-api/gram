@@ -280,3 +280,27 @@ it("deduplicates generic unknown annotation labels", () => {
     }),
   ).toBe("unknown annotation, read-only tools");
 });
+
+it("does not infer access for an unsupported principal kind", () => {
+  expect(
+    effectiveReach([
+      entry({
+        principalUrn: "group:future",
+        kind: unrecognized("future_group"),
+      }),
+    ])?.toolsLabel,
+  ).toBe("Access unknown");
+});
+
+it("counts distinct tools when multiple grants contribute to a summary", () => {
+  expect(narrowingLabel({ tools: ["search", "search"] })).toBe("search");
+  expect(narrowingLabel({ tools: ["search", "fetch", "search"] })).toBe(
+    "2 tools",
+  );
+  expect(
+    narrowingLabel({
+      tools: ["search", "search"],
+      dispositions: ["future_one", "future_two"],
+    }),
+  ).toBe("unknown annotation tools and search");
+});
