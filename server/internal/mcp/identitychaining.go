@@ -110,6 +110,11 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 		}
 		tokens, err = s.resolveAccessTokens(ctx, authentication, true)
+		if errors.Is(err, remotesessions.ErrChosenClientUnbound) {
+			// The credential's chosen client is gone from the issuer; only
+			// reconnecting records a usable choice.
+			return none, s.rejectRemoteSession(ctx, w, authentication, err)
+		}
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
 		}

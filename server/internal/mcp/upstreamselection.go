@@ -270,7 +270,9 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 
 // apply rewrites each proxied member's routing identity from the credential's
 // choice: the chosen client's issuer, none for no-auth, or the reason the
-// member cannot be reached. A member's failure degrades that member alone.
+// member cannot be reached. A missing or unusable choice degrades that member
+// alone; the choices are read in one query, so a failure to read them
+// degrades every proxied member, while hosted members keep serving.
 func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members []metaMember) {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
