@@ -108,9 +108,11 @@ The allocator is therefore the last statement of a posting transaction
 is held until commit. Sequence order and commit order agree. Only the tail of a
 writing transaction is serialized per organization; reads never are.
 
-Gaps are possible and harmless — a transaction that allocates and then rolls
-back leaves its number unused, and `seq >` skips it with no reader visible
-effect. `TestConcurrentWritesNeverSkipACursor` runs a forward-only reader
+Gaps are possible and harmless. A rollback undoes the allocator's `UPDATE`, so
+it leaves no gap; a gap comes from a post that allocates a number and then
+finds a concurrent retry already committed the same idempotency key, which
+commits the allocation without inserting a message. `seq >` skips the unused
+number with no reader visible effect. `TestConcurrentWritesNeverSkipACursor` runs a forward-only reader
 against 32 concurrent writers and fails if a single message is skipped.
 
 ### Atomicity
@@ -178,14 +180,14 @@ it. Retention wakes subscribers because it changes what can still be fetched.
 ## REST and tools
 
 `GET /channels/api` returns the snapshot. `POST /channels/api` accepts
-`{operation, arguments}`. `POST /channels/mcp` serves MCP (initialize, ping,
-tools/list, tools/call, resources/list, resources/read, subscriptions/listen,
-notifications/cancelled).
+`{operation, arguments}`. `POST /channels/mcp` serves MCP (initialize,
+server/discover, ping, tools/list, tools/call, resources/list, resources/read,
+subscriptions/listen, notifications/cancelled).
 
 ### Status codes
 
-Clients blank protected content on lost access, so a rejected payload must not
-look like one:
+These apply to `/channels/api`. Clients blank protected content on lost
+access, so a rejected payload must not look like one:
 
 | status | meaning                                                                  | client action                                   |
 | ------ | ------------------------------------------------------------------------ | ----------------------------------------------- |
@@ -196,7 +198,24 @@ look like one:
 | 503    | storage unavailable                                                      | transient                                       |
 | 500    | unexpected (generic body; detail is logged server-side)                  | transient                                       |
 
-Every error body is `{"error": string}`.
+Every `/channels/api` error body is `{"error": string}`.
+
+`/channels/mcp` answers an unauthenticated request with 401 and a
+`WWW-Authenticate` challenge naming the Channels resource metadata, and a
+malformed JSON-RPC body with 400. Every other failure is HTTP 200 carrying a
+JSON-RPC `error` object:
+
+| code     | meaning                                                                       |
+| -------- | ----------------------------------------------------------------------------- |
+| `-32000` | the operation was refused; `message` says why (denied, invalid, rate limited) |
+| `-32601` | unknown method                                                                |
+| `-32602` | invalid subscription parameters or unknown resource                           |
+| `-32603` | unexpected server failure (generic message; detail is logged server-side)     |
+
+Every MCP result carries `resultType: "complete"` and the server identity under
+`_meta["io.modelcontextprotocol/serverInfo"]`. The results of server/discover,
+tools/list, resources/list and resources/read also carry `ttlMs: 0` and
+`cacheScope: "private"`: each is computed for the authenticated caller.
 
 ### Snapshot
 
@@ -209,8 +228,10 @@ hasMore, limits, grants?}`
   active first). `threadsHasMore` reports that the organization has more, and
   `threadsNextAfter` is the opaque cursor for `channels_conversations`. A
   snapshot never silently truncates conversation discovery.
-- `cursor` is the highest sequence in the payload and is the forward poll
-  cursor. `0` when there is nothing readable.
+- `cursor` is the forward poll cursor: the highest sequence in the payload,
+  and never below the organization's retention floor. When nothing is readable
+  it is the retention floor (`0` if retention has never removed anything), so
+  a client that starts from it is never immediately told its cursor is stale.
 - each `threads` entry is
   `{id, title, parentId?, participants?, instanceIds?, lastMessage?, messageCount}`.
   An absent `participants` is what marks a conversation organization-public.
@@ -511,8 +532,21 @@ as, how its lease is renewed, and what happens when it expires mid-session —
 and inventing one implicitly would bypass the connection and presence workflow
 that makes presence mean anything. The dedicated endpoint shares the same
 product authorization as the dashboard, so this is a placement decision, not an
-authorization gap. Organization-management parity is a follow-up before general
-availability, not an alternative authorization path.
+authorization gap.
+
+Administration needs no instance, so it is assessed on its own. Both
+administrator outcomes — switching Channels on or off for the organization and
+setting or removing a member's access exception — are already available to an
+agent as `channels_admin` on `/channels/mcp`. That tool runs the same
+`administer` path as the dashboard: it requires `channels:admin`, writes the
+audit entry in the same transaction as the change, and returns the committed
+configuration. A second Platform MCP mutation for the same change would be a
+parallel authorization and audit path to keep in step for a surface that is
+still behind a deployment rollout gate, while `get_my_channels_access` already
+names the endpoint and tells an administrator they may administer there. Adding
+the two outcomes to the general catalogue is a decision for general
+availability, together with the confirmation and concurrency safeguards a
+Platform MCP mutation carries.
 
 `channels_dashboard_session` is omitted from **every** catalogue, including this
 package's own `tools/list`, and `tools/call` refuses it. Its only authority is

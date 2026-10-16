@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/channels/repo"
 )
 
 // TestConversationsAndIsolation covers the product's access rules end to end
@@ -366,13 +368,10 @@ func TestResumeRequiresTheStoredSecret(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, status, "another account resumed someone else's instance: %v", body)
 
 	// Only the hash is stored.
-	var stored string
-	require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"SELECT resume_hash FROM channels_instances WHERE organization_id=$1 AND id=$2",
-		testOrg, mustUUID(t, alice["instanceId"]),
-	).Scan(&stored))
-	require.NotEqual(t, alice["resumeToken"], stored)
-	require.Len(t, stored, 64)
+	stored, err := repo.New(f.db).GetInstance(t.Context(), repo.GetInstanceParams{OrganizationID: testOrg, ID: mustUUID(t, alice["instanceId"])})
+	require.NoError(t, err)
+	require.NotEqual(t, alice["resumeToken"], stored.ResumeHash.String)
+	require.Len(t, stored.ResumeHash.String, 64)
 }
 
 // TestStorageOwnershipIsTheDefaultProject pins the documented tenancy
@@ -389,14 +388,25 @@ func TestStorageOwnershipIsTheDefaultProject(t *testing.T) {
 		"instanceId": alice["instanceId"], "threadId": thread["id"],
 		"text": "owned", "idempotencyKey": "owned-1",
 	})
-	for _, table := range []string{"channels_settings", "channels_instances", "channels_conversations", "channels_messages"} {
-		var stray int64
-		require.NoError(t, f.db.QueryRow(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-			"SELECT count(*) FROM "+table+" rows JOIN projects ON projects.id = rows.project_id "+
-				"WHERE rows.organization_id = $1 AND projects.slug <> 'default'", testOrg,
-		).Scan(&stray))
-		require.Zero(t, stray, "%s stored rows outside the canonical default project", table)
-	}
+	// Every other project-owned table: a direct conversation writes its
+	// participants and endpoints, a follow writes a preference, and an
+	// administrator writes an access exception.
+	bob := f.connect(t, "bob", "Other agent")
+	f.post(t, "alice", "channels_dm", map[string]any{
+		"instanceId": alice["instanceId"], "recipientInstanceId": bob["instanceId"],
+	})
+	f.post(t, "alice", "channels_follow", map[string]any{"threadId": thread["id"], "follow": true})
+	f.post(t, "alice", "channels_admin", map[string]any{"subjectId": "carol", "canConnect": true})
+
+	rows, err := repo.New(f.db).FixtureCountRows(t.Context(), testOrg)
+	require.NoError(t, err)
+	require.Positive(t, rows.Participants)
+	require.Positive(t, rows.Endpoints)
+	require.Positive(t, rows.Preferences)
+	require.Positive(t, rows.AccessExceptions)
+	stray, err := repo.New(f.db).FixtureCountRowsOutsideDefaultProject(t.Context(), testOrg)
+	require.NoError(t, err)
+	require.Zero(t, stray, "rows were stored outside the canonical default project")
 }
 
 // sortedEndpoints normalizes a recorded endpoint list so a comparison does not
@@ -413,4 +423,61 @@ func sortedEndpoints(t *testing.T, value any) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// Every MCP result carries the members MCP 2026-07-28 defines, and the
+// cacheable methods also carry caching members scoped to the caller.
+func TestMCPResultsCarryTheProtocolEnvelope(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "channels_envelope")
+	f.enable(t, "alice")
+
+	discovered := mapOf(t, f.rpc(t, "alice", "server/discover", map[string]any{})["result"])
+	require.Contains(t, discovered["supportedVersions"], "2026-07-28")
+	require.Contains(t, mapOf(t, discovered["capabilities"]), "resources")
+
+	for _, method := range []string{"server/discover", "tools/list", "resources/list"} {
+		result := mapOf(t, f.rpc(t, "alice", method, map[string]any{})["result"])
+		require.Equal(t, "complete", result["resultType"], method)
+		require.Equal(t, "Speakeasy Channels", mapOf(t, mapOf(t, result["_meta"])["io.modelcontextprotocol/serverInfo"])["name"], method)
+		require.Equal(t, "private", result["cacheScope"], method)
+		require.InDelta(t, 0, result["ttlMs"], 0, method)
+	}
+
+	pinged := mapOf(t, f.rpc(t, "alice", "ping", map[string]any{})["result"])
+	require.Equal(t, "complete", pinged["resultType"])
+	require.NotContains(t, pinged, "cacheScope", "only cacheable methods carry caching members")
+}
+
+// Resuming an expired instance adds a live lease, so it is held to the
+// organization's live-instance cap like a new connection.
+func TestResumingAnExpiredInstanceRespectsTheInstanceCap(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "channels_resume_cap")
+	f.handler.limits.ActiveInstances = 1
+	f.enable(t, "alice")
+	first := f.connect(t, "alice", "First")
+	require.NoError(t, repo.New(f.db).FixtureAgeInstances(t.Context(), repo.FixtureAgeInstancesParams{OrganizationID: testOrg, AgeDays: 1}))
+	f.connect(t, "alice", "Second")
+
+	body, status := f.try(t, "alice", "channels_connect", map[string]any{
+		"instanceId": first["instanceId"], "resumeToken": first["resumeToken"],
+	})
+	require.Equal(t, http.StatusTooManyRequests, status, "%v", body)
+}
+
+// The snapshot reports the caller's own effective access, after any access
+// exception, so a client can gate participation on what the server enforces.
+func TestSnapshotReportsTheViewersEffectiveAccess(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "channels_viewer")
+	f.enable(t, "alice")
+
+	require.Equal(t, map[string]any{"canConnect": true, "canReadAll": false, "canAdmin": true}, mapOf(t, f.snapshot(t, "alice")["viewer"]))
+	require.Equal(t, map[string]any{"canConnect": true, "canReadAll": true, "canAdmin": true}, mapOf(t, f.snapshot(t, "observer")["viewer"]))
+
+	// An exception that withdraws the administrator's own participation shows
+	// in the snapshot the change returns.
+	changed := f.post(t, "alice", "channels_admin", map[string]any{"subjectId": "alice", "canConnect": false})
+	require.Equal(t, map[string]any{"canConnect": false, "canReadAll": false, "canAdmin": true}, mapOf(t, changed["viewer"]))
 }

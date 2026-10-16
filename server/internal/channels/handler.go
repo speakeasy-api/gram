@@ -12,13 +12,48 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
 
 const (
 	// maxRequestBytes bounds any single request body.
 	maxRequestBytes = 65536
-	protocolVersion = "2026-07-28"
+	protocolVersion = mcpversions.Version20260728
+
+	// metaKeyServerInfo is the _meta key MCP 2026-07-28 reserves for the
+	// server's identity on every result of its stateless protocol.
+	metaKeyServerInfo = "io.modelcontextprotocol/serverInfo"
+
+	// resultTypeComplete is the resultType MCP 2026-07-28 requires on every
+	// ordinary result. Channels has no multi round-trip requests.
+	resultTypeComplete = "complete"
 )
+
+// SupportedProtocolVersions lists the MCP revisions the Channels endpoint
+// serves, oldest first. server/discover reports it and the transport refuses
+// any other declared version.
+var SupportedProtocolVersions = []string{
+	mcpversions.Version20241105,
+	mcpversions.Version20250326,
+	mcpversions.Version20250618,
+	mcpversions.Version20251125,
+	mcpversions.Version20260728,
+}
+
+// serverIdentity is the Channels server's name on initialize, server/discover
+// and every result's _meta. It is display information only.
+var serverIdentity = json.RawMessage(`{"name":"Speakeasy Channels","version":"1.0.0"}`)
+
+// cacheableMethods are the methods MCP 2026-07-28 requires caching members on.
+// Every Channels result is computed for an authenticated caller, so each one
+// is marked private, and its zero TTL marks it immediately stale because
+// nothing advertises a list-changed notification.
+var cacheableMethods = map[string]bool{
+	"server/discover": true,
+	"tools/list":      true,
+	"resources/list":  true,
+	"resources/read":  true,
+}
 
 func (h *Handler) principal(r *http.Request) (Principal, error) {
 	if h.authenticate == nil {
@@ -79,8 +114,41 @@ type rpcRequest struct {
 	Params  json.RawMessage `json:"params"`
 }
 
-func rpcResult(id json.RawMessage, v any) any {
-	return map[string]any{"jsonrpc": "2.0", "id": id, "result": v}
+// rpcResult wraps a result in its JSON-RPC envelope and adds the members MCP
+// 2026-07-28 defines on every result: resultType and the server identity under
+// _meta, plus the caching members for a cacheable method. Earlier revisions
+// permit extra result members, so they are emitted unconditionally. Existing
+// resultType and _meta entries are kept.
+func rpcResult(id json.RawMessage, method string, v any) (any, error) {
+	encoded, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("encode channels result: %w", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil || fields == nil {
+		return nil, fmt.Errorf("channels result is not an object: %w", err)
+	}
+	if _, ok := fields["resultType"]; !ok {
+		fields["resultType"] = json.RawMessage(strconv.Quote(resultTypeComplete))
+	}
+	var meta map[string]json.RawMessage
+	if raw, ok := fields["_meta"]; ok {
+		_ = json.Unmarshal(raw, &meta)
+	}
+	if meta == nil {
+		meta = map[string]json.RawMessage{}
+	}
+	if _, ok := meta[metaKeyServerInfo]; !ok {
+		meta[metaKeyServerInfo] = serverIdentity
+	}
+	if fields["_meta"], err = json.Marshal(meta); err != nil {
+		return nil, fmt.Errorf("encode channels result _meta: %w", err)
+	}
+	if cacheableMethods[method] {
+		fields["ttlMs"] = json.RawMessage("0")
+		fields["cacheScope"] = json.RawMessage(`"private"`)
+	}
+	return map[string]any{"jsonrpc": "2.0", "id": id, "result": fields}, nil
 }
 
 func rpcError(id json.RawMessage, code int, msg string) any {
@@ -189,7 +257,13 @@ func (h *Handler) serveMCP(w http.ResponseWriter, r *http.Request, p Principal) 
 		writeJSON(w, http.StatusOK, rpcError(req.ID, -32000, err.Error()))
 		return
 	}
-	writeJSON(w, http.StatusOK, rpcResult(req.ID, result))
+	envelope, err := rpcResult(req.ID, req.Method, result)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "channels MCP result encoding failed", attr.SlogError(err))
+		writeJSON(w, http.StatusOK, rpcError(req.ID, -32603, "channels request failed"))
+		return
+	}
+	writeJSON(w, http.StatusOK, envelope)
 }
 
 var errUnknownMethod = errors.New("method not found")
@@ -199,9 +273,15 @@ func (h *Handler) callMCP(r *http.Request, req rpcRequest) (any, error) {
 	case "initialize":
 		return map[string]any{
 			"protocolVersion": protocolVersion,
-			"serverInfo":      map[string]any{"name": "Speakeasy Channels", "version": "1.0.0"},
-			"capabilities":    map[string]any{"tools": map[string]any{}, "resources": map[string]any{}},
+			"serverInfo":      serverIdentity,
+			"capabilities":    serverCapabilities(),
 			"instructions":    serverInstructions,
+		}, nil
+	case "server/discover":
+		return map[string]any{
+			"supportedVersions": SupportedProtocolVersions,
+			"capabilities":      serverCapabilities(),
+			"instructions":      serverInstructions,
 		}, nil
 	case "ping":
 		return map[string]any{}, nil
@@ -256,6 +336,10 @@ func (h *Handler) callMCP(r *http.Request, req rpcRequest) (any, error) {
 	default:
 		return nil, errUnknownMethod
 	}
+}
+
+func serverCapabilities() map[string]any {
+	return map[string]any{"tools": map[string]any{}, "resources": map[string]any{}}
 }
 
 func resourceField(uri string) string {
@@ -498,7 +582,11 @@ func (h *Handler) listen(w http.ResponseWriter, r *http.Request, p Principal, re
 		return
 	}
 	complete := func() {
-		_ = send(rpcResult(req.ID, map[string]any{"resultType": "complete", "_meta": meta}))
+		envelope, err := rpcResult(req.ID, req.Method, map[string]any{"_meta": meta})
+		if err != nil {
+			return
+		}
+		_ = send(envelope)
 	}
 
 	wake, unsubscribe := h.events.subscribe(p.OrganizationID)

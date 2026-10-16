@@ -143,6 +143,11 @@ type ConversionOptions struct {
 	OrganizationID string
 }
 
+// legacyDocumentPage is how many legacy documents one listing query reads. A
+// development database holds a handful; paging keeps an unscoped run complete
+// however many there are.
+const legacyDocumentPage = 1000
+
 // ConvertLegacyState copies the superseded channels_state document into the
 // normalized tables.
 //
@@ -161,12 +166,22 @@ func ConvertLegacyState(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 		return result, fmt.Errorf("%w: no database", ErrUnavailable)
 	}
 	queries := repo.New(db)
-	documents, err := queries.ListLegacyChannelsStates(ctx, repo.ListLegacyChannelsStatesParams{
-		OrganizationID: opts.OrganizationID,
-		ResultLimit:    1000,
-	})
-	if err != nil {
-		return result, fmt.Errorf("list legacy channels documents: %w", err)
+	var documents []repo.ListLegacyChannelsStatesRow
+	after := ""
+	for {
+		page, err := queries.ListLegacyChannelsStates(ctx, repo.ListLegacyChannelsStatesParams{
+			OrganizationID:      opts.OrganizationID,
+			AfterOrganizationID: after,
+			ResultLimit:         legacyDocumentPage,
+		})
+		if err != nil {
+			return result, fmt.Errorf("list legacy channels documents: %w", err)
+		}
+		documents = append(documents, page...)
+		if len(page) < legacyDocumentPage {
+			break
+		}
+		after = page[len(page)-1].OrganizationID
 	}
 	var failures []error
 	for _, document := range documents {
@@ -218,10 +233,10 @@ func convertOne(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, do
 	if err != nil {
 		return result, fmt.Errorf("load channels settings: %w", err)
 	}
+	// Converted rows belong to the organization's canonical Channels project,
+	// whatever project the document itself recorded, so they share the
+	// lifetime of every row the live service writes.
 	projectID := settings.ProjectID
-	if document.ProjectID.Valid {
-		projectID = document.ProjectID.UUID
-	}
 
 	// A conversion carries the document's own message sequence numbers across,
 	// so it can only be applied to an organization whose normalized tables
@@ -230,10 +245,11 @@ func convertOne(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, do
 	// renumbering would change identifiers clients already hold. Refuse
 	// instead, loudly.
 	foreign, err := q.CountForeignChannelsRows(ctx, repo.CountForeignChannelsRowsParams{
-		OrganizationID:  organizationID,
-		MessageIds:      expectedMessageIDs(organizationID, state),
-		ConversationIds: expectedConversationIDs(organizationID, state),
-		InstanceIds:     expectedInstanceIDs(organizationID, state),
+		OrganizationID:      organizationID,
+		MessageIds:          expectedMessageIDs(organizationID, state),
+		ConversationIds:     expectedConversationIDs(organizationID, state),
+		InstanceIds:         expectedInstanceIDs(organizationID, state),
+		ExceptionSubjectIds: sortedKeys(state.Grants),
 	})
 	if err != nil {
 		return result, fmt.Errorf("inspect existing channels rows: %w", err)
@@ -242,6 +258,23 @@ func convertOne(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, do
 		return result, fmt.Errorf(
 			"%w: this organization already holds %d normalized Channels rows that did not come from this document; "+
 				"converting would reuse sequence numbers the live service has already issued", ErrDenied, foreign)
+	}
+	// The allocators are the other evidence of live use: a sequence the
+	// service handed out above what this document converts to was handed out
+	// by the service, even if the row it numbered is gone.
+	highest, announced := legacyCounters(state)
+	if settings.MessageSeq > highest || settings.AnnounceSeq > announced {
+		return result, fmt.Errorf(
+			"%w: this organization's Channels sequences are already past what this document converts to; "+
+				"converting would reuse sequence numbers the live service has already issued", ErrDenied)
+	}
+	// A settings row with no sequences issued is one this conversion is
+	// creating, so it takes the document's availability. On a repeat the
+	// organization's current availability is kept: an administrator may have
+	// changed it since.
+	enabled := settings.Enabled
+	if settings.MessageSeq == 0 && settings.AnnounceSeq == 0 {
+		enabled = state.Enabled
 	}
 
 	announce := int64(0)
@@ -368,7 +401,6 @@ func convertOne(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, do
 		}
 	}
 
-	highest := state.Cursor
 	for _, message := range state.Messages {
 		_, hasThread := state.Threads[message.ThreadID]
 		_, hasInstance := state.Instances[message.InstanceID]
@@ -378,7 +410,6 @@ func convertOne(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, do
 			result.SkippedMessages++
 			continue
 		}
-		highest = max(highest, message.ID)
 		if err := q.ImportMessage(ctx, repo.ImportMessageParams{
 			ID:             legacyID(organizationID, legacyKindMessage, strconv.FormatInt(message.ID, 10)),
 			OrganizationID: organizationID,
@@ -406,8 +437,10 @@ func convertOne(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, do
 				ConversationID: legacyID(organizationID, LegacyKindConversation, conversationKey),
 				Followed:       wanted.followed,
 				Muted:          wanted.muted,
-				SetFollowed:    true,
-				SetMuted:       true,
+				// Insert-only: an existing preference was written by an
+				// earlier conversion or changed by its owner since.
+				SetFollowed: false,
+				SetMuted:    false,
 			}); err != nil {
 				return result, fmt.Errorf("import channels preference: %w", err)
 			}
@@ -416,7 +449,7 @@ func convertOne(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, do
 
 	for _, subject := range sortedKeys(state.Grants) {
 		item := state.Grants[subject]
-		if _, err := q.UpsertChannelsAccessException(ctx, repo.UpsertChannelsAccessExceptionParams{
+		if err := q.ImportChannelsAccessException(ctx, repo.ImportChannelsAccessExceptionParams{
 			OrganizationID: organizationID,
 			ProjectID:      projectID,
 			SubjectID:      subject,
@@ -429,7 +462,7 @@ func convertOne(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, do
 
 	if err := q.SetChannelsCounters(ctx, repo.SetChannelsCountersParams{
 		OrganizationID: organizationID,
-		Enabled:        state.Enabled,
+		Enabled:        enabled,
 		MessageSeq:     highest,
 		AnnounceSeq:    announce,
 	}); err != nil {
@@ -444,6 +477,20 @@ func convertOne(ctx context.Context, db *pgxpool.Pool, queries *repo.Queries, do
 		return result, fmt.Errorf("commit channels conversion: %w", err)
 	}
 	return result, nil
+}
+
+// legacyCounters returns the message and announcement sequences a conversion
+// of state lifts the organization's allocators to.
+func legacyCounters(state legacyState) (int64, int64) {
+	highest := state.Cursor
+	for _, message := range state.Messages {
+		_, hasThread := state.Threads[message.ThreadID]
+		_, hasInstance := state.Instances[message.InstanceID]
+		if hasThread && hasInstance {
+			highest = max(highest, message.ID)
+		}
+	}
+	return highest, int64(len(state.Instances) + len(state.Threads))
 }
 
 // The expected*IDs helpers enumerate exactly what this document converts to,

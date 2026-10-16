@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/channels/repo"
 )
 
 // TestConversationDiscoveryIsPaged is the fix for a snapshot that silently
@@ -123,8 +125,7 @@ func TestConversationCountsAreMaintained(t *testing.T) {
 	require.Equal(t, int64(4), threadCount(t, f, "alice", thread["id"]), "a replay inflated the count")
 
 	// Retention takes messages away, so it has to take them off the count too.
-	_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_messages SET created_at = now() - interval '200 days' WHERE organization_id = $1 AND seq <= 2", testOrg)
+	err := repo.New(f.db).FixtureAgeMessages(t.Context(), repo.FixtureAgeMessagesParams{OrganizationID: testOrg, AgeDays: 200, ThroughSeq: 2})
 	require.NoError(t, err)
 	swept, err := f.handler.RunRetention(t.Context(), time.Now())
 	require.NoError(t, err)
@@ -156,8 +157,7 @@ func TestHistoryStalenessIsPerConversation(t *testing.T) {
 			"text": "old", "idempotencyKey": "old-" + strconv.Itoa(index),
 		})
 	}
-	_, err := f.db.Exec(t.Context(), //nolint:glint // notestingrawsql: asserts a storage invariant (tenancy of project_id, the uniqueness of a cursor space, retention ageing) that deliberately has no production query; routing it through one would check the code against itself.
-		"UPDATE channels_messages SET created_at = now() - interval '200 days' WHERE organization_id = $1 AND seq <= 2", testOrg)
+	err := repo.New(f.db).FixtureAgeMessages(t.Context(), repo.FixtureAgeMessagesParams{OrganizationID: testOrg, AgeDays: 200, ThroughSeq: 2})
 	require.NoError(t, err)
 	swept, err := f.handler.RunRetention(t.Context(), time.Now())
 	require.NoError(t, err)
