@@ -1,3 +1,4 @@
+import { invalidateUpstreamHeaderDependents } from "@/lib/environment-header-dependents";
 import { Assistant } from "@gram/client/models/components/assistant.js";
 import {
   invalidateAllAssistantsGet,
@@ -92,6 +93,13 @@ export function AssistantDraftProvider({
     void invalidateAllTrigger(queryClient);
   }, [queryClient]);
 
+  // Onboarding writes environment entries through the SDK directly, which the
+  // query client's mutation hook does not see, so upstream tool listings and
+  // environment header previews are refreshed here after those writes.
+  const invalidateEnvironmentEntries = useCallback(() => {
+    void invalidateUpstreamHeaderDependents(queryClient);
+  }, [queryClient]);
+
   const invalidateSkillAttachments = useCallback(() => {
     void invalidateAllAssistantsList(queryClient);
     void invalidateAllSkill(queryClient);
@@ -135,6 +143,7 @@ export function AssistantDraftProvider({
       assistant,
       refetchAssistant: refetch,
       invalidateAll,
+      invalidateEnvironmentEntries,
       invalidateSkillAttachments,
       registerPending,
       resolvePending,
@@ -148,6 +157,7 @@ export function AssistantDraftProvider({
       assistant,
       refetch,
       invalidateAll,
+      invalidateEnvironmentEntries,
       invalidateSkillAttachments,
       registerPending,
       resolvePending,

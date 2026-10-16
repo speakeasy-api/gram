@@ -206,6 +206,18 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDTunnelHeaders(ctx, repo.PostflightIDTunnelHeadersParams{TunnelID: s.det("tunhdr-tunnel"), ProjectID: proj})
 		}, 2, "demo seed postflight: expected 2 non-secret headers on the tunhdr tunnel, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDTunnelHeaders(ctx, repo.PostflightIDTunnelHeadersParams{TunnelID: s.det("tunenv-tunnel"), ProjectID: proj})
+		}, 1, "demo seed postflight: expected 1 non-secret header on the tunenv tunnel, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDTunnelEnvironmentLinkedServers(ctx, repo.PostflightIDTunnelEnvironmentLinkedServersParams{ProjectID: proj, TunnelID: s.det("tunenv-tunnel")})
+		}, 2, "demo seed postflight: expected 2 environment-linked MCP servers on the tunenv tunnel, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDTunnelEnvironmentHeaderEntries(ctx, repo.PostflightIDTunnelEnvironmentHeaderEntriesParams{
+				EnvironmentIds: []uuid.UUID{s.det("tunenv-env-prod"), s.det("tunenv-env-sandbox")},
+				ProjectID:      proj,
+			})
+		}, 4, "demo seed postflight: expected 4 MCP_HEADER_ entries in the tunenv environments, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
 		{byProj(s.q.PostflightIDProjectAgentSessions), 1, "demo seed postflight: expected 1 project-scoped managed agent session, found %d"},

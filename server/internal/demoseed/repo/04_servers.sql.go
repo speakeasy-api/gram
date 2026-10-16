@@ -496,6 +496,54 @@ func (q *Queries) ServersInsertEngineeringEssentialsServers(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
+const serversInsertEnvironment = `-- name: ServersInsertEnvironment :exec
+INSERT INTO environments (id, organization_id, project_id, name, slug, description)
+VALUES ($1::uuid, $2::text, $3::uuid, $4::text, $5::text,
+        $6::text)
+`
+
+type ServersInsertEnvironmentParams struct {
+	ID          uuid.UUID
+	OrgID       string
+	ProjectID   uuid.UUID
+	Name        string
+	Slug        string
+	Description string
+}
+
+// An environment for per-server environment headers. Environments are
+// deleted by organization at the top of the seed (OrgDeleteEnvironments),
+// since projects deleting them would only null their project_id.
+func (q *Queries) ServersInsertEnvironment(ctx context.Context, arg ServersInsertEnvironmentParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEnvironment,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.Description,
+	)
+	return err
+}
+
+const serversInsertEnvironmentEntry = `-- name: ServersInsertEnvironmentEntry :exec
+INSERT INTO environment_entries (environment_id, name, value, is_secret)
+VALUES ($1::uuid, $2::text, $3::text, FALSE)
+`
+
+type ServersInsertEnvironmentEntryParams struct {
+	EnvironmentID uuid.UUID
+	Name          string
+	Value         string
+}
+
+// Values are non-secret placeholders: a fake ciphertext would fail
+// decryption.
+func (q *Queries) ServersInsertEnvironmentEntry(ctx context.Context, arg ServersInsertEnvironmentEntryParams) error {
+	_, err := q.db.Exec(ctx, serversInsertEnvironmentEntry, arg.EnvironmentID, arg.Name, arg.Value)
+	return err
+}
+
 const serversInsertGatewayEndpoints = `-- name: ServersInsertGatewayEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
   ($1::uuid, $2::uuid,
@@ -1329,9 +1377,10 @@ func (q *Queries) ServersInsertTunneledMCPEndpoint(ctx context.Context, arg Serv
 
 const serversInsertTunneledMCPServer = `-- name: ServersInsertTunneledMCPServer :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
-                         user_session_issuer_id, visibility)
+                         environment_id, user_session_issuer_id, visibility)
 VALUES ($1::uuid, $2::uuid, $3::text, $4::text,
-        $5::uuid, $6::uuid, 'private')
+        $5::uuid, $6::uuid,
+        $7::uuid, 'private')
 `
 
 type ServersInsertTunneledMCPServerParams struct {
@@ -1340,9 +1389,11 @@ type ServersInsertTunneledMCPServerParams struct {
 	Name                string
 	Slug                string
 	TunneledMcpServerID uuid.UUID
+	EnvironmentID       uuid.NullUUID
 	UserSessionIssuerID uuid.UUID
 }
 
+// environment_id is the server's linked environment, NULL for none.
 func (q *Queries) ServersInsertTunneledMCPServer(ctx context.Context, arg ServersInsertTunneledMCPServerParams) error {
 	_, err := q.db.Exec(ctx, serversInsertTunneledMCPServer,
 		arg.ID,
@@ -1350,6 +1401,7 @@ func (q *Queries) ServersInsertTunneledMCPServer(ctx context.Context, arg Server
 		arg.Name,
 		arg.Slug,
 		arg.TunneledMcpServerID,
+		arg.EnvironmentID,
 		arg.UserSessionIssuerID,
 	)
 	return err
