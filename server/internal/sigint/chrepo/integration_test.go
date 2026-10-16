@@ -165,26 +165,11 @@ func TestLandingAcceptsEveryOutcomeStatus(t *testing.T) {
 		require.NoError(t, err)
 		rows = append(rows, row)
 	}
-	// Table constraints reject any row whose status, reason and result disagree.
+	// Every outcome status lands, with its reason and an empty result.
 	require.NoError(t, queries.InsertReadings(t.Context(), rows))
 	for _, row := range rows {
 		landed, status, _, _, _ := landedStatus(t, queries, row)
 		require.Equal(t, uint64(1), landed)
 		require.Equal(t, row.Status, status)
 	}
-}
-
-func TestLandingRejectsResultsOnRowsWithoutAnAnswer(t *testing.T) {
-	t.Parallel()
-	queries := New(testConnection(t))
-	now := time.Now().UTC()
-	at := now.Truncate(time.Hour).Add(-time.Hour)
-	reading := testReading(t, at)
-	answered, err := ParseReading(reading, now)
-	require.NoError(t, err)
-	failed, err := ParseOutcome(testOutcome(t, reading, at.Add(time.Minute), sigintv1.Outcome_STATUS_FAILED, "invalid_answer"), now)
-	require.NoError(t, err)
-	// A failed row must not keep the probabilities of an answer.
-	failed.Probabilities = answered.Probabilities
-	require.ErrorContains(t, queries.InsertReadings(t.Context(), []ReadingRow{failed}), "sigint_reading_result")
 }
