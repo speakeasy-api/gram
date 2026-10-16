@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -51,7 +52,10 @@ func newDashboardToolFixture(t *testing.T) (context.Context, dashboardToolFixtur
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := dashboards.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger())
+	features := &switchableFeatures{}
+	catalogs, err := analytics.NewEngine(db, nil, features)
+	require.NoError(t, err)
+	management := dashboards.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger(), catalogs)
 	service := NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, flags, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key")
 	require.NotNil(t, service)
 	require.Nil(t, NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, nil, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key"), "without flags the tools are served as unavailable")

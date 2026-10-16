@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/widgets/repo"
 )
@@ -149,7 +150,11 @@ func (s *Service) read(ctx context.Context, authCtx *contextvalues.AuthContext, 
 	if err != nil {
 		return Snapshot{}, err
 	}
-	return Snapshot{Widget: s.view(ctx, row, s.now(), dashboards), Version: Version(row)}, nil
+	catalog, err := s.catalogFor(ctx, authCtx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return Snapshot{Widget: s.view(ctx, catalog, row, s.now(), dashboards), Version: Version(row)}, nil
 }
 
 // ReadForChange reads a widget and refuses, as AuthorizeChange does,
@@ -206,10 +211,14 @@ func (s *Service) list(ctx context.Context, limit pgtype.Int4) ([]Snapshot, erro
 		byWidget[row.WidgetID] = append(byWidget[row.WidgetID], &gen.WidgetDashboard{ID: row.DashboardID.String(), Name: row.DashboardName})
 	}
 
+	catalog, err := s.catalogFor(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
 	now := s.now()
 	out := make([]Snapshot, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, Snapshot{Widget: s.view(ctx, row, now, byWidget[row.ID]), Version: Version(row)})
+		out = append(out, Snapshot{Widget: s.view(ctx, catalog, row, now, byWidget[row.ID]), Version: Version(row)})
 	}
 	return out, nil
 }
@@ -217,10 +226,15 @@ func (s *Service) list(ctx context.Context, limit pgtype.Int4) ([]Snapshot, erro
 // Check validates a widget as a save would, without writing it: the query
 // against the catalog and the visualization against the query.
 func (s *Service) Check(ctx context.Context, input Input) error {
-	if _, err := s.authorize(ctx, authz.ScopeProjectRead); err != nil {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
 		return err
 	}
-	_, _, err := s.checkInput(ctx, input)
+	catalog, err := s.catalogFor(ctx, authCtx)
+	if err != nil {
+		return err
+	}
+	_, _, err = s.checkInput(ctx, catalog, input)
 	return err
 }
 
@@ -232,7 +246,11 @@ func (s *Service) CreateInTx(ctx context.Context, tx pgx.Tx, caller Caller, inpu
 		return Snapshot{}, err
 	}
 
-	query, visualization, err := s.checkInput(ctx, input)
+	catalog, err := s.catalogFor(ctx, authCtx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	query, visualization, err := s.checkInput(ctx, catalog, input)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -266,7 +284,11 @@ func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, caller Caller, i
 	if err != nil {
 		return Snapshot{}, err
 	}
-	reason, err := s.problem(ctx, source.Dataset, source.Query, source.Visualization)
+	catalog, err := s.catalogFor(ctx, authCtx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	reason, err := s.problem(ctx, catalog, source.Dataset, source.Query, source.Visualization)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -314,7 +336,11 @@ func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, change Change, inpu
 	}
 	widgetID := change.widgetID
 
-	query, visualization, err := s.checkInput(ctx, input)
+	catalog, err := s.catalogFor(ctx, authCtx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	query, visualization, err := s.checkInput(ctx, catalog, input)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -346,7 +372,7 @@ func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, change Change, inpu
 		return Snapshot{}, err
 	}
 	view := mv.BuildWidgetView(row, "", dashboards)
-	if err := s.audit.LogWidgetUpdate(ctx, tx, audit.LogWidgetUpdateEvent{WidgetEventBase: s.auditBase(authCtx, row), Before: s.view(ctx, before, s.now(), dashboards), After: view}); err != nil {
+	if err := s.audit.LogWidgetUpdate(ctx, tx, audit.LogWidgetUpdateEvent{WidgetEventBase: s.auditBase(authCtx, row), Before: s.view(ctx, catalog, before, s.now(), dashboards), After: view}); err != nil {
 		return Snapshot{}, oops.E(oops.CodeUnexpected, err, "audit widget update").LogError(ctx, s.logger)
 	}
 	return Snapshot{Widget: view, Version: Version(row)}, nil
@@ -434,14 +460,14 @@ func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, change Change, expe
 // checkInput validates a widget and encodes its query and visualization for
 // storage. It repeats the RPC's name and description limits for callers that
 // bring their own input.
-func (s *Service) checkInput(ctx context.Context, input Input) ([]byte, []byte, error) {
+func (s *Service) checkInput(ctx context.Context, catalog *analytics.Catalog, input Input) ([]byte, []byte, error) {
 	if length := utf8.RuneCountInString(input.Name); length == 0 || length > maxNameLength {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "invalid_name: a widget's name must be 1 to %d characters", maxNameLength)
 	}
 	if input.Description != nil && utf8.RuneCountInString(*input.Description) > maxDescriptionLength {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "invalid_description: a widget's description must be at most %d characters", maxDescriptionLength)
 	}
-	return s.checkWidget(ctx, input.Dataset, input.Query, input.Visualization)
+	return s.checkWidget(ctx, catalog, input.Dataset, input.Query, input.Visualization)
 }
 
 // lockWidget loads a widget for update, holding its row lock for the rest of

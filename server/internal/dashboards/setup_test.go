@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -39,10 +42,20 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service   *dashboards.Service
+	features  *testFeatures
 	conn      *pgxpool.Pool
 	orgID     string
 	projectID uuid.UUID
 	userID    string
+}
+
+// testFeatures is a per-test product feature set: whether the organization
+// has signals intelligence, which the sensor datasets need. The real client
+// caches in a Redis every test shares, under one fixed organization.
+type testFeatures struct{ signalsIntelligence atomic.Bool }
+
+func (f *testFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+	return feature == productfeatures.FeatureSignalsIntelligence && f.signalsIntelligence.Load(), nil
 }
 
 // newTestService builds the service against a cloned database and an auth
@@ -67,10 +80,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := dashboards.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger())
+	features := &testFeatures{}
+	catalogs, err := analytics.NewEngine(conn, nil, features)
+	require.NoError(t, err)
+	service := dashboards.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), catalogs)
 
 	return ctx, &testInstance{
 		service:   service,
+		features:  features,
 		conn:      conn,
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,

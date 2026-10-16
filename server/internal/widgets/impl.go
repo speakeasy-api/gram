@@ -41,30 +41,32 @@ const copySuffix = " (copy)"
 // Service serves widgets: Explore's saved questions, each kept with the
 // chart that draws it.
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	auth    *auth.Auth
-	authz   *authz.Engine
-	audit   *audit.Logger
-	catalog *analytics.Catalog
-	now     func() time.Time
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	auth   *auth.Auth
+	authz  *authz.Engine
+	audit  *audit.Logger
+	// catalogs serves the catalog the request's tenant may read, which is
+	// what every widget is validated against.
+	catalogs analytics.CatalogReader
+	now      func() time.Time
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger, catalogs analytics.CatalogReader) *Service {
 	logger = logger.With(attr.SlogComponent("widgets"))
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/widgets"),
-		logger:  logger,
-		db:      db,
-		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
-		audit:   auditLogger,
-		catalog: analytics.Default,
-		now:     time.Now,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/widgets"),
+		logger:   logger,
+		db:       db,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		audit:    auditLogger,
+		catalogs: catalogs,
+		now:      time.Now,
 	}
 }
 
@@ -107,8 +109,19 @@ func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextval
 
 // view renders a stored widget, validating it as it is read, with the
 // dashboards it is placed on.
-func (s *Service) view(ctx context.Context, row repo.Widget, now time.Time, dashboards []*gen.WidgetDashboard) *gen.Widget {
-	return mv.BuildWidgetView(row, s.validate(ctx, row.Dataset, row.Query, row.Visualization, now), dashboards)
+func (s *Service) view(ctx context.Context, catalog *analytics.Catalog, row repo.Widget, now time.Time, dashboards []*gen.WidgetDashboard) *gen.Widget {
+	return mv.BuildWidgetView(row, s.validate(ctx, catalog, row.Dataset, row.Query, row.Visualization, now), dashboards)
+}
+
+// catalogFor reads the catalog the request's tenant may read. A dataset
+// behind a product feature the organization lacks is not in it, so a widget
+// on one is refused when saved and reads as broken.
+func (s *Service) catalogFor(ctx context.Context, authCtx *contextvalues.AuthContext) (*analytics.Catalog, error) {
+	catalog, err := s.catalogs.Catalog(ctx, analytics.Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read analytics catalog").LogError(ctx, s.logger)
+	}
+	return catalog, nil
 }
 
 // dashboardsOf renders the dashboards a widget is on.
@@ -131,8 +144,8 @@ func (s *Service) usage(ctx context.Context, queries *repo.Queries, projectID, w
 
 // validate returns what is wrong with a widget, or "", logging a failure
 // that is not the widget's fault rather than returning its detail.
-func (s *Service) validate(ctx context.Context, dataset string, query, visualization []byte, now time.Time) string {
-	reason, err := Validate(s.catalog, dataset, query, visualization, now)
+func (s *Service) validate(ctx context.Context, catalog *analytics.Catalog, dataset string, query, visualization []byte, now time.Time) string {
+	reason, err := Validate(catalog, dataset, query, visualization, now)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "validate widget", attr.SlogError(err))
 	}
@@ -142,8 +155,8 @@ func (s *Service) validate(ctx context.Context, dataset string, query, visualiza
 // problem returns what is wrong with a widget about to be written, or "". A
 // failure that is not the widget's fault is a server error rather than a
 // rejection the caller could fix.
-func (s *Service) problem(ctx context.Context, dataset string, query, visualization []byte) (string, error) {
-	reason, err := Validate(s.catalog, dataset, query, visualization, s.now())
+func (s *Service) problem(ctx context.Context, catalog *analytics.Catalog, dataset string, query, visualization []byte) (string, error) {
+	reason, err := Validate(catalog, dataset, query, visualization, s.now())
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "validate widget").LogError(ctx, s.logger)
 	}
@@ -244,8 +257,8 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 // query key the server does not know is refused. The payload bytes are what
 // is stored, not a re-encoding of the decoded query, which would add zero
 // values the client reads as a different query.
-func (s *Service) checkWidget(ctx context.Context, dataset string, query, visualization map[string]any) ([]byte, []byte, error) {
-	if _, ok := s.catalog.Dataset(dataset); !ok {
+func (s *Service) checkWidget(ctx context.Context, catalog *analytics.Catalog, dataset string, query, visualization map[string]any) ([]byte, []byte, error) {
+	if _, ok := catalog.Dataset(dataset); !ok {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown_dataset: dataset %q does not exist", dataset)
 	}
 	encodedQuery, err := json.Marshal(query)
@@ -256,7 +269,7 @@ func (s *Service) checkWidget(ctx context.Context, dataset string, query, visual
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, err, "visualization is not encodable as JSON")
 	}
-	reason, err := s.problem(ctx, dataset, encodedQuery, encodedVisualization)
+	reason, err := s.problem(ctx, catalog, dataset, encodedQuery, encodedVisualization)
 	if err != nil {
 		return nil, nil, err
 	}
