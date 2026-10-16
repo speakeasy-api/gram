@@ -1,4 +1,4 @@
-import { supportsAudienceEditing } from "./manageAccessState";
+import { supportsAudienceReading } from "./manageAccessState";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
@@ -207,7 +207,7 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
   for (const row of rows.values()) {
     for (const entry of entries) {
       if (!reaches(entry, row)) continue;
-      if (!supportsAudienceEditing([entry])) {
+      if (!supportsAudienceReading([entry])) {
         row.accessUnknown = true;
         continue;
       }

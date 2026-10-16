@@ -286,6 +286,7 @@ export function TokenEndpointAuthMethodField({
   privateKeyJwtUnavailable,
   hideNone = false,
   disabled = false,
+  unsupported = false,
 }: {
   value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
   onChange: (
@@ -300,7 +301,20 @@ export function TokenEndpointAuthMethodField({
   /** A service account must prove who it is, so `none` is not offered. */
   hideNone?: boolean;
   disabled?: boolean;
+  unsupported?: boolean;
 }): JSX.Element {
+  if (unsupported) {
+    return (
+      <Stack gap={2}>
+        <Label className="text-muted-foreground text-xs">
+          Token endpoint authentication
+        </Label>
+        <Text small muted>
+          Unsupported authentication method
+        </Text>
+      </Stack>
+    );
+  }
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">
@@ -435,6 +449,7 @@ export function ClientCredentialsFields({
   clientSecret,
   tokenEndpointAuthMethod,
   allowPrivateKeyJwt = false,
+  unsupportedAuthMethod = false,
   clientIdEditable = true,
   clientSecretLabel = "Client Secret (optional)",
   clientSecretPlaceholder = "••••••••",
@@ -450,6 +465,7 @@ export function ClientCredentialsFields({
     | CreateRemoteSessionClientFormTokenEndpointAuthMethod
     | "";
   allowPrivateKeyJwt?: boolean;
+  unsupportedAuthMethod?: boolean;
   clientIdEditable?: boolean;
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
@@ -506,6 +522,7 @@ export function ClientCredentialsFields({
             {clientSecretLabel}
           </Label>
           <Input
+            disabled={unsupportedAuthMethod}
             type="password"
             value={clientSecret}
             onChange={onClientSecretChange}
@@ -518,6 +535,7 @@ export function ClientCredentialsFields({
         value={tokenEndpointAuthMethod}
         onChange={onTokenEndpointAuthMethodChange}
         allowPrivateKeyJwt={allowPrivateKeyJwt}
+        unsupported={unsupportedAuthMethod}
       />
     </Stack>
   );

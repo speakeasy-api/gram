@@ -257,6 +257,7 @@ export function ClientCard({
               hideNone={serviceAccount}
               privateKeyJwtUnavailable={privateKeyJwtUnavailable}
               disabled={!canEdit}
+              unsupported={!supportsAuthMethod}
             />
             {privateKeyJwtSelected && (
               <ClientAssertionAudienceField

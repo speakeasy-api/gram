@@ -8,7 +8,7 @@ import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentiti
 import { Plus } from "lucide-react";
 import { Navigate, useParams, useSearchParams } from "react-router";
 import { CatalogEmptyState, IssuerDetail } from "../WorkloadIssuerDetail";
-import type { CatalogEntry } from "./definition";
+import { UNSUPPORTED_SETUP_MESSAGE, type CatalogEntry } from "./definition";
 import { PlatformSetupSheet } from "./PlatformSetupSheet";
 import { PlatformTitle } from "./PlatformTitle";
 import { connectedIssuer, useCatalogEntries } from "./platforms";
@@ -65,6 +65,26 @@ function CatalogPlatform({
     return (
       <ResourceListPage title="Catalog platform" stage="preview">
         <SkeletonTable />
+      </ResourceListPage>
+    );
+  }
+
+  if (entry?.unsupported) {
+    const connected =
+      connectedIssuer(entry, policy.data?.issuers ?? []) !== undefined;
+    return (
+      <ResourceListPage
+        title={<PlatformTitle name={entry.displayName} icon={entry.icon} />}
+        stage="preview"
+        description={entry.description}
+      >
+        {connected && <p className="mb-3">Connected</p>}
+        <p className="text-muted-foreground mb-3 text-sm">
+          {UNSUPPORTED_SETUP_MESSAGE}
+        </p>
+        <Button variant="secondary" onClick={() => window.location.reload()}>
+          <Button.Text>Refresh page</Button.Text>
+        </Button>
       </ResourceListPage>
     );
   }

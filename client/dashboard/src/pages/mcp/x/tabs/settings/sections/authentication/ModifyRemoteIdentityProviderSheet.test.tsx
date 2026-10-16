@@ -118,27 +118,33 @@ vi.mock("./IssuerFormFields", () => ({
   ClientCredentialsFields: ({
     clientSecret,
     tokenEndpointAuthMethod,
+    unsupportedAuthMethod,
     onClientSecretChange,
     onTokenEndpointAuthMethodChange,
   }: {
     clientSecret: string;
     tokenEndpointAuthMethod: AuthMethod | "";
+    unsupportedAuthMethod?: boolean;
     onClientSecretChange: (value: string) => void;
     onTokenEndpointAuthMethodChange: (method: AuthMethod) => void;
   }) => (
     <>
-      <select
-        aria-label="Authentication method"
-        value={tokenEndpointAuthMethod}
-        onChange={(event) =>
-          onTokenEndpointAuthMethodChange(event.target.value as AuthMethod)
-        }
-      >
-        <option value={AuthMethod.ClientSecretBasic}>
-          client_secret_basic
-        </option>
-        <option value={AuthMethod.PrivateKeyJwt}>private_key_jwt</option>
-      </select>
+      {unsupportedAuthMethod ? (
+        <span>Unsupported authentication method</span>
+      ) : (
+        <select
+          aria-label="Authentication method"
+          value={tokenEndpointAuthMethod}
+          onChange={(event) =>
+            onTokenEndpointAuthMethodChange(event.target.value as AuthMethod)
+          }
+        >
+          <option value={AuthMethod.ClientSecretBasic}>
+            client_secret_basic
+          </option>
+          <option value={AuthMethod.PrivateKeyJwt}>private_key_jwt</option>
+        </select>
+      )}
       {tokenEndpointAuthMethod !== AuthMethod.PrivateKeyJwt && (
         <input
           aria-label="Rotate client secret"
@@ -308,6 +314,14 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
       expect(sdk.updateIssuer).not.toHaveBeenCalled();
       expect(sdk.updateClient).not.toHaveBeenCalled();
       expect(screen.getByText(/unsupported client configuration/)).toBeTruthy();
+      if (kind === "method") {
+        expect(
+          screen.getByText("Unsupported authentication method"),
+        ).toBeTruthy();
+        expect(
+          screen.queryByRole("combobox", { name: "Authentication method" }),
+        ).toBeNull();
+      }
     },
   );
 

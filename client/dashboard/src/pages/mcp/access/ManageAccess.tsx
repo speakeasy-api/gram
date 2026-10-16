@@ -1,4 +1,4 @@
-import { supportsAudienceEditing } from "./manageAccessState";
+import { supportsAudienceReading } from "./manageAccessState";
 import {
   InlineChoice,
   type InlineChoiceOption,
@@ -133,7 +133,7 @@ export function ManageAccess({
   const { hasAnyScope } = useRBAC();
   const direct = useMemo(() => ownRules(entries), [entries]);
   const supportsEditing = useMemo(
-    () => supportsAudienceEditing(entries),
+    () => supportsAudienceReading(entries),
     [entries],
   );
   const isAdmin = hasAnyScope(["org:admin"]);
@@ -426,6 +426,7 @@ export function ManageAccess({
                 onRevoke={() => removeRow(row)}
                 onEditRole={() => editRole(row)}
                 canManage={canManage}
+                isAdmin={isAdmin}
                 pending={setAudience.isPending}
               />
             ))}
@@ -554,6 +555,7 @@ function PrincipalRow({
   onRevoke,
   onEditRole,
   canManage,
+  isAdmin,
   pending,
 }: {
   row: AccessRow;
@@ -570,6 +572,7 @@ function PrincipalRow({
   onRevoke: () => void;
   onEditRole: () => void;
   canManage: boolean;
+  isAdmin: boolean;
   pending: boolean;
 }): JSX.Element {
   // Collapsed by default: an administrator scanning the list wants to know
@@ -645,11 +648,13 @@ function PrincipalRow({
             // A role reached by an organization-wide rule is not removed
             // here, it is subtracted — so the label says what it does.
             label={
-              !canManage
-                ? "Access cannot be changed here."
-                : reaches
-                  ? `Remove ${row.displayName} from this server`
-                  : `Remove ${row.displayName}`
+              !isAdmin
+                ? "Only organization admins can change access."
+                : !canManage
+                  ? "Access cannot be changed here."
+                  : reaches
+                    ? `Remove ${row.displayName} from this server`
+                    : `Remove ${row.displayName}`
             }
             onClick={onRevoke}
             disabled={pending || !canRemove}

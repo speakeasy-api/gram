@@ -539,3 +539,11 @@ it("does not claim known access survives an unknown inherited block", () => {
   ]);
   expect(accessSummary(row)).toBe("Access unknown");
 });
+
+it("treats unknown applicability as unknown reach", () => {
+  const row = rowFor([
+    entry({ appliesTo: unrecognized("future_applicability") }),
+  ]);
+  expect(accessSummary(row)).toBe("Access unknown");
+  expect(scopeState(row, "use").value).toBe("Access unknown");
+});

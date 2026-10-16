@@ -157,3 +157,20 @@ it("preserves unknown audience configuration for unrelated non-JWT edits and blo
       .getAttribute("aria-disabled"),
   ).toBe("true");
 });
+
+it("labels an unknown authentication method as unsupported rather than the default", () => {
+  testState.admin = true;
+  render(
+    <ClientCard
+      client={{
+        ...client,
+        tokenEndpointAuthMethod: unrecognized("future_auth"),
+      }}
+      issuer={issuer}
+      issuerId="issuer-1"
+    />,
+  );
+  expect(screen.getByText("Unsupported authentication method")).toBeTruthy();
+  expect(screen.queryByText("client_secret_basic (default)")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+});

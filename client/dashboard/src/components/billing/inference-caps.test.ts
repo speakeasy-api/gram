@@ -79,6 +79,21 @@ describe("cap copy", () => {
 
   const FORBIDDEN = ["chat", "internal", "spend cap", "fallback key"] as const;
 
+  it.each(["future_inference", "another_future_cap", "constructor"])(
+    "keeps unknown identifier %s out of labels and paused copy",
+    (key) => {
+      const unknown = unrecognized(key);
+      const copy = [
+        inferenceCapLabel(unknown),
+        inferenceCapPausedNote(unknown),
+        inferenceCapRaiseLabel(unknown),
+      ]
+        .join(" ")
+        .toLowerCase();
+      for (const term of [...FORBIDDEN, key]) expect(copy).not.toContain(term);
+    },
+  );
+
   // The correction this section exists for: the misleading identifiers are gone
   // from everything a customer reads.
   it.each<InferenceSpendCap["keyType"]>(["internal", "chat"])(
@@ -156,6 +171,19 @@ describe("sortInferenceCaps", () => {
     expect(sortInferenceCaps([chat, internal]).map((c) => c.keyType)).toEqual([
       "chat",
       "internal",
+    ]);
+  });
+
+  it("places unknown caps after known caps and preserves their relative order", () => {
+    const unknown = cap({ keyType: unrecognized("future_inference") });
+    const another = cap({ keyType: unrecognized("another_future_cap") });
+    const chat = cap();
+    const internal = cap({ keyType: "internal" });
+    expect(sortInferenceCaps([unknown, internal, another, chat])).toEqual([
+      chat,
+      internal,
+      unknown,
+      another,
     ]);
   });
 

@@ -96,10 +96,15 @@ export function callPathFor(
   outcome: EnforcementOutcome | undefined,
   server: string,
 ): CallPath {
-  if (
-    (outcome !== undefined && !isKnownEnumValue(EnforcementOutcome, outcome)) ||
-    (phase !== undefined && phase !== "request" && phase !== "response")
-  ) {
+  if (phase !== undefined && phase !== "request" && phase !== "response") {
+    return {
+      left: { blocked: null, label: "Unknown" },
+      right: { blocked: null, label: "Unknown" },
+      serverReached: null,
+      caption: "The call path is unavailable for this phase.",
+    };
+  }
+  if (outcome !== undefined && !isKnownEnumValue(EnforcementOutcome, outcome)) {
     const response = phase === "response";
     return {
       left: response

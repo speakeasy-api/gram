@@ -13,25 +13,28 @@ import type { WorkloadPlatformBlock } from "@gram/client/models/components/workl
 import { useWorkloadPlatforms } from "@gram/client/react-query/workloadPlatforms.js";
 import { useMemo } from "react";
 import type { SubjectRule } from "./template";
-import type { CatalogEntry, SetupBlock, SetupDefinition } from "./definition";
+import type {
+  CatalogEntry,
+  CatalogItem,
+  SetupBlock,
+  SetupDefinition,
+} from "./definition";
 
 /**
  * The catalog the server ships, as the renderer's types. The server validates
  * every entry when it loads. Platforms using controls this dashboard cannot
- * represent are hidden; supported entries are reshaped for the renderer.
+ * represent remain visible without setup; supported entries are reshaped for
+ * the renderer.
  */
 export function useCatalogEntries(): {
-  entries: CatalogEntry[];
+  entries: CatalogItem[];
   isPending: boolean;
   isError: boolean;
   refetch: () => void;
 } {
   const query = useWorkloadPlatforms({}, undefined, { throwOnError: false });
   const entries = useMemo(
-    () =>
-      (query.data?.platforms ?? [])
-        .filter(supportsPlatform)
-        .map(toCatalogEntry),
+    () => (query.data?.platforms ?? []).map(toCatalogItem),
     [query.data],
   );
   return {
@@ -39,6 +42,21 @@ export function useCatalogEntries(): {
     isPending: query.isPending,
     isError: query.isError,
     refetch: () => void query.refetch(),
+  };
+}
+
+export function toCatalogItem(platform: WorkloadPlatform): CatalogItem {
+  if (supportsPlatform(platform)) return toCatalogEntry(platform);
+  // Keep only known display metadata. Unsupported setup fields must never be
+  // converted into plausible defaults or reach the setup renderer.
+  return {
+    key: platform.key,
+    displayName: platform.displayName,
+    description: platform.description,
+    icon: optional(platform.icon),
+    enabled: platform.enabled,
+    issuer: { value: platform.issuer.value },
+    unsupported: true,
   };
 }
 
@@ -200,7 +218,7 @@ export function duplicateRuleMessage(
  * catalog key they were created from (AIM-374).
  */
 export function connectedIssuer(
-  entry: CatalogEntry,
+  entry: Pick<CatalogItem, "issuer">,
   issuers: WorkloadIssuer[],
 ): WorkloadIssuer | undefined {
   return issuers.find((issuer) => issuer.issuer === entry.issuer.value);

@@ -15,11 +15,15 @@ vi.mock("@/components/ui/MoreActions", () => ({
   MoreActions: ({
     actions,
   }: {
-    actions: Array<{ label: string; onClick: () => void }>;
+    actions: Array<{ label: string; onClick: () => void; disabled?: boolean }>;
   }) => (
     <>
       {actions.map((action) => (
-        <button key={action.label} onClick={action.onClick}>
+        <button
+          key={action.label}
+          onClick={action.onClick}
+          disabled={action.disabled}
+        >
           {action.label}
         </button>
       ))}
@@ -219,7 +223,7 @@ describe("ExportMap", () => {
   });
 });
 
-it("disables toggling an export with an unknown data source", () => {
+it("disables toggling and configuring an export with an unknown data source", () => {
   render(
     <MemoryRouter>
       <ExportMap
@@ -238,4 +242,11 @@ it("disables toggling an export with an unknown data source", () => {
   expect((screen.getByRole("checkbox") as HTMLInputElement).disabled).toBe(
     true,
   );
+  for (const button of screen.getAllByRole("button", {
+    name: /^Configure.*export$/,
+  })) {
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(button);
+  }
+  expect(callbacks.onConfigure).not.toHaveBeenCalled();
 });

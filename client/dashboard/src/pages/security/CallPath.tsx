@@ -117,7 +117,13 @@ export function CallPath({
         <PathNode
           eyebrow="Speakeasy gateway"
           name={surfaceLabel}
-          sub={`Scanned ${response ? "response" : "request"}`}
+          sub={
+            result.phase !== undefined &&
+            result.phase !== "request" &&
+            result.phase !== "response"
+              ? "Phase unknown"
+              : `Scanned ${response ? "response" : "request"}`
+          }
           className={cn(
             "border-foreground border-l-2",
             rating ? SEVERITY_EDGE[rating] : "border-l-foreground",
