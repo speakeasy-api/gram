@@ -2028,3 +2028,14 @@ SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until,
 FROM sign_in_revocation_deliveries
 WHERE organization_id = @organization_id
 ORDER BY created_at, id;
+
+-- name: MarkTunneledMCPServerSeenFixture :exec
+-- Test fixture: records an agent sighting on a live tunneled source the way
+-- the tunnel gateway does, so tests can reach the "seen before, not connected
+-- now" state.
+UPDATE tunneled_mcp_servers
+SET status = 'active',
+    last_seen_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
