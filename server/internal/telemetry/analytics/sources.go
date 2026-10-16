@@ -76,7 +76,7 @@ type Source struct {
 // of the dataset, and filtering first would leave its stale copy to win.
 func (s Source) Rows(qc QueryContext) squirrel.SelectBuilder {
 	if s.Table != "" {
-		return s.merged(qc)
+		return s.fromTable(qc)
 	}
 	builder := sq.Select(s.Columns...).
 		FromSelect(where(collapsedAgentEvents(qc), s.Where), "observed").
@@ -87,11 +87,11 @@ func (s Source) Rows(qc QueryContext) squirrel.SelectBuilder {
 	return builder
 }
 
-// merged reads one row per Key from the source's table. The call's start
+// fromTable reads one row per Key from the source's table. The call's start
 // decides whether it falls inside the window. Until merges catch up a call
 // can sit in several partial rows, so the started_at index only picks the
 // keys, and every row of those keys is merged.
-func (s Source) merged(qc QueryContext) squirrel.SelectBuilder {
+func (s Source) fromTable(qc QueryContext) squirrel.SelectBuilder {
 	tenant := squirrel.Eq{"organization_id": qc.Tenant.OrganizationID, "project_id": qc.Tenant.ProjectID}
 	keys := sq.Select(s.Key).
 		From(s.Table).
