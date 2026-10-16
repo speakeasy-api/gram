@@ -58,6 +58,7 @@ SELECT page.id AS mcp_server_id,
          JOIN projects AS other_project
            ON other_project.id = other.project_id
           AND other_project.organization_id = page.organization_id
+          AND other_project.deleted IS FALSE
          WHERE other.user_session_issuer_id = page.user_session_issuer_id
            AND other.deleted IS FALSE
        )::bigint AS issuer_server_count,
@@ -147,6 +148,7 @@ WHERE s.id = @mcp_server_id::uuid
       JOIN projects AS other_project
         ON other_project.id = other.project_id
        AND other_project.organization_id = p.organization_id
+       AND other_project.deleted IS FALSE
       WHERE other.user_session_issuer_id = s.user_session_issuer_id
         AND other.id <> s.id
         AND other.deleted IS FALSE
@@ -206,9 +208,11 @@ VALUES (@project_id, @organization_id, @resource_identifier, @authorization_serv
 
 -- name: SeedAssociationFixture :exec
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope, deleted_at)
-SELECT @project_id, @organization_id, @mcp_server_id, c.id, c.attachment_scope, CASE WHEN @removed::boolean THEN clock_timestamp() END
-FROM remote_session_clients AS c
-WHERE c.id = @remote_session_client_id;
+VALUES (
+    @project_id, @organization_id, @mcp_server_id, @remote_session_client_id,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id),
+    CASE WHEN @removed::boolean THEN clock_timestamp() END
+);
 
 -- name: ListLiveAssociationsFixture :many
 SELECT remote_session_client_id

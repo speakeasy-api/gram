@@ -2669,9 +2669,10 @@ func (q *Queries) InsertKillswitchPrescriptionFixture(ctx context.Context, arg I
 
 const insertMCPServerRemoteSessionClientFixture = `-- name: InsertMCPServerRemoteSessionClientFixture :exec
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
-SELECT $1, $2, $3, c.id, c.attachment_scope
-FROM remote_session_clients AS c
-WHERE c.id = $4
+VALUES (
+    $1, $2, $3, $4,
+    (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = $4)
+)
 `
 
 type InsertMCPServerRemoteSessionClientFixtureParams struct {

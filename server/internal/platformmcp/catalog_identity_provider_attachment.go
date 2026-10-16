@@ -170,6 +170,22 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
 	}
 
+	// Checked before registering, which may create an upstream client with no
+	// delete path, and again under the server lock before binding it.
+	current, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        registration.McpServerID.UUID,
+		ProjectID: project.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CatalogIdentityProviderAttachmentResult{}, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("load registered mcp server: %w", err)
+	}
+	if current.RemoteMcpServerID != registration.RemoteMcpServerID || current.UserSessionIssuerID != registration.UserSessionIssuerID {
+		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentConflict
+	}
+
 	// Resolved before registering so a provider this flow cannot serve costs no
 	// upstream client: a dynamic registration may have no portable delete API,
 	// so one made and then abandoned is a client left behind at the provider.
