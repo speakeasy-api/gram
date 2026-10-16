@@ -46,18 +46,19 @@ func createImageUploadURL(ctx context.Context, uploads PlatformImageUploader, wr
 	if err != nil {
 		return ImageUploadURLOutput{}, fmt.Errorf("issue image upload URL: %w", err)
 	}
-	authorization := "Bearer " + upload.Token
 	return ImageUploadURLOutput{
 		UploadURL: upload.URL, Method: http.MethodPut, MaxBytes: assets.MaxFileSizeImage,
-		Headers:             map[string]string{"Authorization": authorization},
+		Headers:             map[string]string{"Authorization": "Bearer " + upload.Token},
 		AllowedContentTypes: slices.Clone(assets.PlatformImageTypes),
 		ExpiresAt:           upload.ExpiresAt.UTC().Format(time.RFC3339),
-		ExampleCommand:      "curl -fsS -X PUT -H 'Authorization: " + authorization + "' --data-binary @icon.png '" + upload.URL + "'",
+		// The example reads the header from stdin through a shell builtin, so
+		// the token never appears in curl's arguments or a process listing.
+		ExampleCommand: "printf 'Authorization: Bearer %s' \"$UPLOAD_TOKEN\" | curl -fsS -X PUT -H @- --data-binary @icon.png '" + upload.URL + "'",
 	}, nil
 }
 
 func registerImageUploadTool(server *mcp.Server, uploads PlatformImageUploader, writes WriteConfig) {
-	mcp.AddTool(server, &mcp.Tool{Name: "create_image_upload_url", Title: "Create Image Upload URL", Description: "Create a single-use upload token, valid for 15 minutes, that publishes one image as a public Speakeasy asset, for example a registry entry icon. PUT the raw file bytes to upload_url with the returned headers (the token is sent as an Authorization bearer header), from a shell with access to the admin site, as example_command shows. The image is public and stays stored once uploaded. PNG, JPEG, GIF or WebP up to 4 MiB; the type is detected from the bytes and SVG is refused. The PUT response contains the asset ID and its public URL, usable as a registry entry's server.icons[].src (registry icons accept PNG, JPEG or WebP). Identical images share one asset. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(false)}}, func(ctx context.Context, _ *mcp.CallToolRequest, _ CreateImageUploadURLInput) (*mcp.CallToolResult, ImageUploadURLOutput, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "create_image_upload_url", Title: "Create Image Upload URL", Description: "Create a single-use upload token, valid for 15 minutes, that publishes one image as a public Speakeasy asset, for example a registry entry icon. PUT the raw file bytes to upload_url with the returned headers (the token is sent as an Authorization bearer header), from a shell with access to the admin site, as example_command shows with the token in UPLOAD_TOKEN; keep the token out of command arguments. The image is public and stays stored once uploaded. PNG, JPEG, GIF or WebP up to 4 MiB; the type is detected from the bytes and SVG is refused. The PUT response contains the asset ID and its public URL, usable as a registry entry's server.icons[].src (registry icons accept PNG, JPEG or WebP). Identical images share one asset. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(false)}}, func(ctx context.Context, _ *mcp.CallToolRequest, _ CreateImageUploadURLInput) (*mcp.CallToolResult, ImageUploadURLOutput, error) {
 		out, err := createImageUploadURL(ctx, uploads, writes)
 		return nil, out, err
 	})

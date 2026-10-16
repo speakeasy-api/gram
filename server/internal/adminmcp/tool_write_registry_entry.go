@@ -72,6 +72,15 @@ func (s *registryEntryWriter) normalizeRegistryRecord(raw []byte) (json.RawMessa
 	if err := json.Compact(&compact, raw); err != nil {
 		return nil, registryProjection{}, errors.New("record_json must be one JSON object")
 	}
+	// Refuse state-independent metadata rejections here, so a record that can
+	// never be created is not approved and later reported as stale.
+	if err := mcpregistry.CheckCreateMetadata(compact.Bytes()); err != nil {
+		var invalid *mcpregistry.InvalidError
+		if errors.As(err, &invalid) && len(invalid.Issues) > 0 {
+			return nil, registryProjection{}, fmt.Errorf("record_json is not a valid registry record: %s: %s", invalid.Issues[0].Path, invalid.Issues[0].Message)
+		}
+		return nil, registryProjection{}, errors.New("record_json has unreadable metadata")
+	}
 	// The input cap already bounds the record, so creation accepts every
 	// schema-valid transport list rather than the read projection's bound.
 	projection, ok := projectRegistryRecord(compact.Bytes(), math.MaxInt)
@@ -238,6 +247,10 @@ func (s *registryEntryWriter) execution(_ writeAuthority) ProposalExecution {
 // The record already passed schema validation, so an invalid record here
 // depends on registry state (such as an Okta mapping another entry now holds)
 // and is stale too.
+// registryCreateError maps a creation failure at execution. Prepare and
+// revalidation already refuse state-independent record problems, so a
+// rejection here comes from registry state that changed after approval, such
+// as a taken name or Okta mapping.
 func registryCreateError(err error) error {
 	var invalid *mcpregistry.InvalidError
 	switch {

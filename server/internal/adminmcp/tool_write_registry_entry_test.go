@@ -100,6 +100,10 @@ func TestRegistryEntryWriterRejectsInvalidAndDuplicateRecords(t *testing.T) {
 	_, err = writer.prepare(ctx, PrepareCreateRegistryEntryInput{RecordJSON: strings.Repeat(" ", maxRegistryRecordInput+1), RetryKey: "too-large"})
 	require.ErrorContains(t, err, "at most")
 
+	owned := `{"server":{"name":"example.test/owned","description":"Demo server","version":"1.0.0","remotes":[]},"_meta":{"com.speakeasy.ai/registry":{"publishedAt":"2026-01-01T00:00:00Z"}}}`
+	_, err = writer.prepare(ctx, PrepareCreateRegistryEntryInput{RecordJSON: owned, RetryKey: "owned-metadata"})
+	require.ErrorContains(t, err, "backend-owned", "records creation would always refuse are rejected before approval")
+
 	existing := "example.test/" + uuid.NewString()
 	_, err = registry.Create(t.Context(), json.RawMessage(registryRecord(existing)))
 	require.NoError(t, err)
