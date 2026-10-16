@@ -5239,15 +5239,26 @@ RETURNING id;
 
 -- name: PlantEMACredentialFixture :one
 -- TEST FIXTURE ONLY. A cached credential slot for either provider, live or
--- retired, without the rows a real publish references.
+-- retired, without the rows a real publish references. It names the target's
+-- binding at its current generation unless binding_generation overrides it.
 INSERT INTO remote_session_ema_credentials (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
-  resource, subject_urn, client_selection, ema_provider, internal_session_issuer_id, trusted_issuer_session_id,
+  resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
+  ema_provider, internal_session_issuer_id, trusted_issuer_session_id,
   access_token_encrypted, access_expires_at, updated_at, deleted_at
 )
 VALUES (
   @organization_id, @project_id, @user_session_issuer_id, @remote_session_issuer_id, @remote_session_client_id,
-  @resource, @subject_urn, 'binding', @ema_provider::text, sqlc.narg('internal_session_issuer_id')::uuid,
+  @resource, @subject_urn, 'binding',
+  (SELECT b.id FROM remote_session_ema_bindings b
+   WHERE b.organization_id = @organization_id AND b.project_id = @project_id
+     AND b.user_session_issuer_id = @user_session_issuer_id AND b.remote_session_issuer_id = @remote_session_issuer_id
+     AND b.resource = @resource),
+  COALESCE(sqlc.narg('binding_generation')::bigint, (SELECT b.generation FROM remote_session_ema_bindings b
+   WHERE b.organization_id = @organization_id AND b.project_id = @project_id
+     AND b.user_session_issuer_id = @user_session_issuer_id AND b.remote_session_issuer_id = @remote_session_issuer_id
+     AND b.resource = @resource)),
+  @ema_provider::text, sqlc.narg('internal_session_issuer_id')::uuid,
   sqlc.narg('trusted_issuer_session_id')::uuid,
   CASE WHEN @retired::boolean THEN NULL ELSE 'encrypted-fixture' END,
   clock_timestamp() + interval '1 hour', @updated_at::timestamptz,
@@ -5578,12 +5589,19 @@ LIMIT 1;
 -- Status only: when the vendor last accepted an assertion for one binding
 -- target, per provider, attributed as ListEMAVendorAcceptance does. Only
 -- credentials that still hold an access token count, so retiring or purging
--- one is never read as an acceptance; the evidence goes when they do.
+-- one is never read as an acceptance; the evidence goes when they do. Only
+-- credentials of the binding's current generation and client, in a live
+-- project, count: unlink and rebind retire older ones lazily.
 SELECT c.ema_provider,
   rc.remote_session_issuer_id AS external_issuer_id,
   c.internal_session_issuer_id,
   MAX(c.updated_at)::timestamptz AS last_accepted_at
 FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
   AND t.deleted IS FALSE
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
@@ -5602,6 +5620,11 @@ SELECT c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.res
   c.internal_session_issuer_id,
   MAX(c.updated_at)::timestamptz AS last_accepted_at
 FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
   AND t.deleted IS FALSE
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
@@ -5699,12 +5722,38 @@ SELECT i.issuer, c.ema_provider,
   c.internal_session_issuer_id,
   MAX(c.updated_at)::timestamptz AS last_accepted_at
 FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
 JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
   AND (i.project_id = c.project_id OR (i.project_id IS NULL AND (i.organization_id = c.organization_id OR i.organization_id IS NULL)))
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
   AND t.deleted IS FALSE
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
 WHERE c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
+
+-- name: ListEMAVendorAcceptanceForIssuers :many
+-- ListEMAVendorAcceptance for one vendor, named by its issuer spellings.
+SELECT i.issuer, c.ema_provider,
+  rc.remote_session_issuer_id AS external_issuer_id,
+  c.internal_session_issuer_id,
+  MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  AND (i.project_id = c.project_id OR (i.project_id IS NULL AND (i.organization_id = c.organization_id OR i.organization_id IS NULL)))
+LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
+WHERE c.organization_id = @organization_id::text AND i.issuer = ANY(@issuers::text[])
   AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
 GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
 

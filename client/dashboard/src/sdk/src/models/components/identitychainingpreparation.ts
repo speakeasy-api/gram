@@ -73,7 +73,7 @@ export type IdentityChainingPreparation = {
   grantTypes: Array<string> | null;
   issuer?: string | undefined;
   /**
-   * When the vendor last accepted an assertion for this binding from any provider, so chaining has worked for it. Omitted when it never has. Returned by readEMA only.
+   * When the vendor last accepted an assertion for this binding, from a provider that can serve it now, so chaining has worked for it. Omitted when it never has. Returned by readEMA only.
    */
   lastAcceptedAt?: Date | undefined;
   /**

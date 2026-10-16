@@ -318,11 +318,20 @@ func (a EMAVendorAcceptance) record(provider string, externalIssuer, internalIss
 
 // VendorEMAAcceptance reads one vendor's acceptance across the organization.
 func VendorEMAAcceptance(ctx context.Context, q *repo.Queries, organizationID, vendorIssuer string) (EMAVendorAcceptance, error) {
-	all, err := ListEMAVendorAcceptance(ctx, q, organizationID)
+	rows, err := q.ListEMAVendorAcceptanceForIssuers(ctx, repo.ListEMAVendorAcceptanceForIssuersParams{
+		OrganizationID: organizationID, Issuers: issuerSpellings(vendorIssuer),
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list ema vendor acceptance: %w", err)
 	}
-	return all[vendorIssuer], nil
+	accepted := EMAVendorAcceptance{}
+	for _, row := range rows {
+		if vendor, err := NormalizeVendorIssuer(row.Issuer); err != nil || vendor != vendorIssuer {
+			continue
+		}
+		accepted.record(row.EmaProvider, row.ExternalIssuerID, row.InternalSessionIssuerID, row.LastAcceptedAt)
+	}
+	return accepted, nil
 }
 
 // StampEMAProviderLastAccepted sets each provider's last acceptance from the
