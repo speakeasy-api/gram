@@ -52,7 +52,11 @@ func (o Outcome) Succeeded() bool { return o.Reason == ReasonSuccess }
 
 // cacheable keeps provider rejections from repeating on every call; local,
 // delegation and transient failures stay immediately retryable.
-func (o Outcome) cacheable() bool {
+func (o Outcome) cacheable() bool { return o.ProviderRefusal() }
+
+// ProviderRefusal reports a definitive refusal by the provider, the only
+// failure a refresh can see as RefreshRefused.
+func (o Outcome) ProviderRefusal() bool {
 	if o.Retryable {
 		return false
 	}
