@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -258,6 +259,10 @@ func TestListEMAServices_HidesServersTheCallerCannotRead(t *testing.T) {
 	svc = listEMAServicesByVendor(t, none, ti)[vendor]
 	require.Empty(t, svc.Servers)
 	require.Equal(t, 2, svc.HiddenServerCount)
+
+	denied := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, readable.String()))
+	_, err = ti.service.ListEMAServices(denied, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestListEMAServices_MatchesServersByCachedCanonicalResource(t *testing.T) {
