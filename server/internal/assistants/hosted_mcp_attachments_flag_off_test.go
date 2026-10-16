@@ -25,7 +25,7 @@ func TestHostedAttachmentWritesLeaveNoTwinsFlagOff(t *testing.T) {
 		before := f.runtime(t)
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
-			[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil)
+			[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
 		require.EqualValues(t, 1, counts.Toolsets, "older pods read hosted servers from assistant_toolsets")
@@ -41,7 +41,7 @@ func TestHostedAttachmentWritesLeaveNoTwinsFlagOff(t *testing.T) {
 		before := f.runtime(t)
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, nil,
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
 		require.EqualValues(t, 1, counts.Toolsets)
@@ -56,7 +56,7 @@ func TestHostedAttachmentWritesLeaveNoTwinsFlagOff(t *testing.T) {
 		view := f.view(t)
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, view.Toolsets,
-			append(view.McpServers, &types.AssistantMCPServerRef{McpServerSlug: "org-test-billing-x1"}), nil, nil, nil)
+			append(view.McpServers, &types.AssistantMCPServerRef{McpServerSlug: "org-test-billing-x1"}), nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
 		require.EqualValues(t, 2, counts.Toolsets, "attached in today's row shape")
@@ -72,7 +72,7 @@ func TestHostedAttachmentWritesLeaveNoTwinsFlagOff(t *testing.T) {
 		f.setToolsetMCPEnabled(t, false)
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, nil,
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
 		require.EqualValues(t, 1, counts.Toolsets)
@@ -92,7 +92,7 @@ func TestHostedAttachmentWritesLeaveNoTwinsFlagOff(t *testing.T) {
 		before := f.runtime(t)
 		view := f.view(t)
 
-		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, view.Toolsets, view.McpServers, nil, nil, nil)
+		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, view.Toolsets, view.McpServers, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		counts := f.counts(t)
 		require.EqualValues(t, 2, counts.Toolsets)
@@ -109,13 +109,13 @@ func TestHostedAttachmentWritesLeaveNoTwinsFlagOff(t *testing.T) {
 		// An older dashboard echoes a hosted server in both arrays.
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
 			[]*types.AssistantToolsetRef{{ToolsetSlug: "billing", EnvironmentSlug: &staging}},
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		require.Equal(t, "staging", f.runtime(t)[0].Headers["Gram-Environment"])
 
 		_, err = f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
 			[]*types.AssistantToolsetRef{},
-			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		require.Equal(t, []string{"remote"}, runtimeIDs(f.runtime(t)), "removing it from toolsets detaches it")
 	})
@@ -127,7 +127,7 @@ func TestHostedAttachmentWritesLeaveNoTwinsFlagOff(t *testing.T) {
 		f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
 
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, nil,
-			[]*types.AssistantMCPServerRef{}, nil, nil, nil)
+			[]*types.AssistantMCPServerRef{}, nil, nil, nil, allowAllMCPEnable)
 		require.NoError(t, err)
 		require.Equal(t, []string{"billing"}, runtimeIDs(f.runtime(t)))
 	})
@@ -137,7 +137,7 @@ func TestHostedAttachmentCreateByServerSlugFlagOff(t *testing.T) {
 	t.Parallel()
 	f := newPhaseAHostedAttachmentFixture(t, "hosted_create_by_server_off")
 	record, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
-		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, 300, 1, StatusActive, false)
+		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, 300, 1, StatusActive, false, allowAllMCPEnable)
 	require.NoError(t, err)
 	f.assistant = record.ID
 	counts := f.counts(t)

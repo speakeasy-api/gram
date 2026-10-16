@@ -41,11 +41,8 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 	for i := range candidates {
 		s := &candidates[i]
 		// Keep the row for removals; only automatic additions use eligibility.
-		for _, tool := range s.ToolUrns {
-			if tool.Kind == urn.ToolKindPlatform {
-				s.Eligible = false
-				break
-			}
+		if HasPlatformTool(s.ToolUrns) {
+			s.Eligible = false
 		}
 	}
 	return candidates, nil

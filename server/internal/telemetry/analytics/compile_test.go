@@ -59,12 +59,12 @@ func TestCompileGrouped(t *testing.T) {
 	require.Contains(t, plan.SQL, "count() AS count")
 	require.Contains(t, plan.SQL, "sum(duration_nano / 1e6) AS total_ms")
 	require.Contains(t, plan.SQL, "quantile(0.95)(duration_nano / 1e6) AS p95_duration_ms")
-	require.Contains(t, plan.SQL, "LIMIT 1 BY organization_id, project_id, record_id", "the source query de-duplicates before anything aggregates")
+	require.Contains(t, plan.SQL, "GROUP BY organization_id, project_id, event_id HAVING", "the source query merges before anything aggregates")
 	require.Contains(t, plan.SQL, "WHERE surface IN (?,?)")
 	require.Contains(t, plan.SQL, "GROUP BY time_bucket, user, tool_name")
 	require.Contains(t, plan.SQL, "ORDER BY total_ms DESC, time_bucket ASC, user ASC, tool_name ASC")
 	require.Contains(t, plan.SQL, "LIMIT 100", "the default limit applies")
-	require.Equal(t, []any{"org-1", "project-1", testFrom, testTo, "tool_call", "tool_call_result", "tool_decision", "", "claude-code", "codex"}, plan.Args, "tenancy, window, the source query's own event_type and event_id guards, then the filter values")
+	require.Equal(t, []any{"org-1", "project-1", "org-1", "project-1", testFrom, testTo, testFrom, testTo, "claude-code", "codex"}, plan.Args, "tenancy and window for the source query, then the filter values")
 	require.NotContains(t, plan.SQL, "project-1", "tenancy is bound, never interpolated")
 }
 
@@ -131,7 +131,7 @@ func TestCompileSkills(t *testing.T) {
 	}, plan.Columns)
 	require.Contains(t, plan.SQL, "skill_name AS skill")
 	require.Contains(t, plan.SQL, "uniqExact(nullIf(skill_name, '')) AS count_distinct_skill", "skills used counts the invocations that named one")
-	require.Contains(t, plan.SQL, "HAVING skill_name != ''", "the source keeps only the collapsed calls that named a skill")
+	require.Contains(t, plan.SQL, "AND skill_name != '') AS src", "the source keeps only the collapsed calls that named a skill")
 	require.Contains(t, plan.SQL, "WHERE skill_name IN (?,?)")
 	require.Contains(t, plan.SQL, "GROUP BY skill")
 	require.Equal(t, []any{"deploy", "review"}, plan.Args[len(plan.Args)-2:], "the filter values are bound last")
