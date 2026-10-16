@@ -307,7 +307,23 @@ function marketplaceSteps(
 
   return [
     {
-      title: "Add to your Claude Code settings",
+      title: "Add the Speakeasy marketplace",
+      description: "Run this in Claude Code.",
+      code: `/plugin marketplace add ${marketplaceURL}`,
+    },
+    {
+      title: "Install Platform MCP",
+      code: `/plugin install ${PLATFORM_MCP_PLUGIN_NAME}@${PUBLIC_MARKETPLACE_NAME}`,
+    },
+    {
+      title: "Sign in",
+      description:
+        "Open /mcp, select Platform MCP, and choose Authenticate. Restarting alone may not open the sign-in page.",
+    },
+    {
+      title: "Keep Platform MCP up to date",
+      description:
+        "/plugin marketplace add leaves auto-update off, so Platform MCP stays on the version you installed. Add these settings to turn auto-update on, for yourself or for everyone in your organization.",
       children: (
         <ClaudeCodeSettingsInstall
           title={null}
@@ -318,11 +334,6 @@ function marketplaceSteps(
           nextStep={null}
         />
       ),
-    },
-    {
-      title: "Restart Claude Code and sign in",
-      description:
-        "Open /mcp, select Platform MCP, and choose Authenticate. Restarting alone may not open the sign-in page.",
     },
   ];
 }
