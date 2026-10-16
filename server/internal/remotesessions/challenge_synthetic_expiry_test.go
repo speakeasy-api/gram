@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -229,6 +230,9 @@ type syntheticLoginOptions struct {
 	globalIssuer bool
 	// idTokenIssuer, when set, publishes jwks_uri on the fixture and wires a verifier that trusts its TLS cert.
 	idTokenIssuer *idTokenIssuer
+	// openIDScope adds openid to the issuer's scopes, so the login is an
+	// OpenID request and its authorize redirect carries a nonce.
+	openIDScope bool
 	// wrapVerifier, when set, decorates the verifier so a test can act mid-verification.
 	wrapVerifier func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier
 	// registrationTelemetry gives the manager a readable meter so a test can
@@ -374,6 +378,10 @@ func withIDTokenIssuer(issuer *idTokenIssuer) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.idTokenIssuer = issuer }
 }
 
+func withOpenIDScope() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.openIDScope = true }
+}
+
 func withIDTokenSigningAlgs(algs ...string) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.signingAlgs = algs }
 }
@@ -438,6 +446,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	options := syntheticLoginOptions{issuerScopes: []string{"channels:history"}}
 	for _, opt := range opts {
 		opt(&options)
+	}
+	if options.openIDScope && !slices.Contains(options.issuerScopes, "openid") {
+		options.issuerScopes = append(slices.Clone(options.issuerScopes), "openid")
 	}
 
 	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: options.maxDBConns})

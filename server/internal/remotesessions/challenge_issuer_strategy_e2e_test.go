@@ -548,3 +548,45 @@ func TestRemoteLoginCallback_BareStateDoesNotConsumeLogin(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, uuid.Nil, session.ID)
 }
+
+// nonceOf reports whether an authorize redirect carries a nonce.
+func nonceOf(t *testing.T, authURL string) bool {
+	t.Helper()
+	parsed, err := url.Parse(authURL)
+	require.NoError(t, err)
+	return parsed.Query().Has("nonce")
+}
+
+// A nonce rides only on an OpenID request: some plain OAuth servers reject any
+// authorize parameter they do not recognise, and the login must still finish.
+func TestRemoteLogin_NonceSentOnlyWithOpenIDScope(t *testing.T) {
+	t.Parallel()
+
+	_, plain := newSyntheticExpiryEnv(t, "nonce-plain-oauth", scopelessToken,
+		withIssuerScopes("read"),
+		withAuthorizeQuery("?nonce=baked"),
+	)
+	require.Equal(t, "read", scopeOf(t, plain.authURL))
+	require.False(t, nonceOf(t, plain.authURL), "a plain OAuth request carries no nonce")
+
+	_, openid := newSyntheticExpiryEnv(t, "nonce-openid", scopelessToken,
+		withIssuerScopes("read", "openid"),
+		withClientScope("read", "openid"),
+	)
+	require.True(t, nonceOf(t, openid.authURL), "an OpenID request carries a nonce for the ID token to echo")
+
+	_, baked := newSyntheticExpiryEnv(t, "nonce-baked-openid", scopelessToken,
+		withIssuerScopes([]string{}...),
+		withAuthorizeQuery("?scope=openid+profile"),
+	)
+	require.Equal(t, "openid profile", scopeOf(t, baked.authURL))
+	require.True(t, nonceOf(t, baked.authURL), "openid baked into the endpoint still asks for a nonce")
+
+	_, omitted := newSyntheticExpiryEnv(t, "nonce-omitted-scope", scopelessToken,
+		withIssuerScopes("openid"),
+		withOmitScopeFallback(),
+		withAuthorizeQuery("?scope=openid"),
+	)
+	require.Empty(t, scopeOf(t, omitted.authURL))
+	require.False(t, nonceOf(t, omitted.authURL), "an omitted scope is not an OpenID request")
+}
