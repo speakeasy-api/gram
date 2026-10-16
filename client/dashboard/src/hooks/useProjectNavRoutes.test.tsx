@@ -37,6 +37,7 @@ const routes = {
   agentSessions: route("Agent Sessions", "agent-sessions"),
   assistants: route("Assistants", "assistants"),
   catalog: route("Catalog", "catalog"),
+  channels: route("Channels", "channels"),
   chat: route("Project Assistant", "chat"),
   skills: route("Skills", "skills"),
   costs: route("Costs", "costs"),
@@ -106,6 +107,7 @@ beforeEach(() => {
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
+    [FEATURE_FLAGS.channels]: unavailableFeatureFlag("loading"),
   };
 });
 
@@ -230,6 +232,7 @@ describe("useProjectNavRoutes", () => {
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
+        [FEATURE_FLAGS.channels]: unavailableFeatureFlag(status),
       };
 
       const { result } = renderHook(() => useProjectNavRoutes());
@@ -238,6 +241,7 @@ describe("useProjectNavRoutes", () => {
       expect(navRoutes).not.toContain(routes.assistants);
       expect(navRoutes).not.toContain(routes.watchdog);
       expect(navRoutes).not.toContain(routes.explore);
+      expect(navRoutes).not.toContain(routes.channels);
       expect(navRoutes).toContain(routes.deployments);
       // Without Watchdog, the legacy risk pages stay in the nav.
       expect(navRoutes).toContain(routes.riskOverview);
@@ -268,12 +272,14 @@ describe("useProjectNavRoutes", () => {
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
       [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
+      [FEATURE_FLAGS.channels]: { status: "enabled" },
     };
 
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
 
     expect(navRoutes).toContain(routes.assistants);
+    expect(navRoutes).toContain(routes.channels);
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).toContain(routes.explore);
     expect(navRoutes).not.toContain(routes.deployments);

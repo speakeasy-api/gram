@@ -8,6 +8,7 @@ import { cn } from "./lib/utils";
 import AssistantPage from "./pages/assistants/Assistant";
 import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
 import NewAssistantPage from "./pages/assistants/NewAssistant";
+import Channels from "./pages/channels/Channels";
 import Billing from "./pages/billing/Billing";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import CatalogDetail, {
@@ -355,6 +356,12 @@ const ROUTE_STRUCTURE = {
         component: PromptPage,
       },
     },
+  },
+  channels: {
+    title: "Channels",
+    url: "channels",
+    icon: "messages-square",
+    component: Channels,
   },
   assistants: {
     title: "Assistants",
