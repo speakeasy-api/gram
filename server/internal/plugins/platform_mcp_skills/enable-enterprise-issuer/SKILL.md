@@ -21,9 +21,15 @@ read-only; it cannot enable, disable, rotate, or replace an issuer.
    specified; otherwise ask the user to confirm the returned organization.
    Never guess an organization name or construct an issuer URI.
 3. Live membership, external organization-admin access, verified domains and
-   deployment availability remain authoritative. For `unavailable` or
-   `verified_domain_required`, explain the returned limitation and stop. Do not
-   change domains, sign-in providers, or deployment settings to bypass it.
+   deployment availability remain authoritative. For `unavailable`, explain the
+   returned limitation and stop. For `verified_domain_required`, explain that
+   the organization needs a verified company domain first, and ask an
+   organization administrator to verify one in the dashboard under
+   **Organization** → **IDP and SSO** → **Single sign-on**, then read the issuer
+   again. This workflow has no domain tool: do not verify domains yourself or
+   change sign-in providers or deployment settings to bypass it. The same
+   handoff applies when `get_xaa_readiness` reports `verified_domain_required`;
+   after the domain is verified, call `get_xaa_readiness` again.
 
 ## Guide setup and retrieve the issuer
 
@@ -66,17 +72,37 @@ or imply that support staff may mutate the organization's issuer.
 
 Show the exact public issuer URI from the successful read. Explain that the
 service's administrator must register it in that service's enterprise-managed
-authorization settings, and that Speakeasy must then be added to that
-service's EMA provider order: registering the URI alone changes nothing. This is a separate trust change requiring the user's
-explicit authorization; do not change ordinary employee SSO login settings or
-replace an existing trusted issuer automatically.
+authorization settings: registering the URI alone changes nothing. Once the
+organization has a Speakeasy issuer and sign-in enforcement is on, servers that
+use Speakeasy's own sign-in (their sign-in trusts no external identity
+provider) use it by default; without sign-in enforcement it cannot vouch.
+Speakeasy vouches only for those servers: a server that signs people in through
+an external identity provider such as Okta is vouched for only by that
+provider, even when the service accepts Speakeasy. Changing a server's sign-in
+is a separate trust change requiring
+the user's explicit authorization; do not change ordinary employee SSO login
+settings or replace an existing trusted issuer automatically.
 
 If the user wants to configure an MCP connection too, use `list_projects`,
 `find_mcp`, and `get_mcp` to identify an exact project and MCP server. Follow its
 supported setup handoff and obtain separate authorization for any provider or
-binding changes. Choosing Speakeasy as an MCP server's enterprise authorization
-provider isn't available through this workflow or the dashboard yet; say so
-rather than implying this skill can select the provider.
+binding changes. This workflow cannot choose Speakeasy as an MCP server's
+enterprise authorization provider. With nothing saved the service accepts every
+identity provider, and who vouches is derived:
+the server's trusted external identity provider alone, or the organization's Speakeasy issuer when the sign-in trusts none.
+An organization admin chooses which identity providers a service accepts on the
+dashboard's **Organization** → **IDP and SSO** → **Identity providers** →
+**Services** page for the vendor, or through the organization's
+`setEMAProviders` management API; pass `expected_providers` from the list you
+last read, and on a conflict re-read and reconcile the list before retrying.
+The choice is stored as an ordered list, but
+each server uses only the provider its sign-in goes through, so the list acts
+as the set of accepted providers. Saving a provider list needs the
+provider-list rollout; restoring the default needs only organization admin. A
+saved list that leaves out a server's provider leaves that server with nobody
+to vouch; the dashboard flags such servers as needing attention. The MCP server's **Settings** page
+turns enterprise-managed authorization on or off for that server and shows the
+sign-in, who vouches, and what the vendor has to trust.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for
 enterprise authorization readiness. Do not substitute a Platform MCP registration
 ID or generic registration readiness for this check.

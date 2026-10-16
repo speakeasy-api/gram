@@ -136,6 +136,14 @@ DELETE FROM remote_sessions WHERE user_session_issuer_id IN
   OR remote_session_client_id IN
   (SELECT id FROM remote_session_clients WHERE project_id = @project_id::uuid OR organization_id = @org_id::text);
 
+-- Cached EMA credentials and the trusted issuer sessions they cite SET NULL
+-- on their parents, so clear them by tenant first.
+-- name: OrgDeleteRemoteSessionEMACredentials :exec
+DELETE FROM remote_session_ema_credentials WHERE organization_id = @org_id::text;
+
+-- name: OrgDeleteTrustedIssuerSessions :exec
+DELETE FROM trusted_issuer_sessions WHERE organization_id = @org_id::text;
+
 -- name: OrgDeleteRemoteSessionEMABindings :exec
 DELETE FROM remote_session_ema_bindings
 WHERE organization_id = @org_id::text

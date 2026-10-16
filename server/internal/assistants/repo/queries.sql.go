@@ -995,11 +995,9 @@ type EnableMCPForToolsetsParams struct {
 	ProjectID  uuid.UUID
 }
 
-// Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
-// toolset attached to an assistant must be MCP-reachable for the runtime's
-// startup config to build; we enable on attach so users don't have to do it
-// separately. mcp_slug is required for an MCP-reachable toolset, so we skip
-// rows that lack one.
+// Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
+// attached toolsets are enabled so users don't have to do it separately; the
+// caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
 func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
 	if err != nil {
@@ -3914,7 +3912,7 @@ func (q *Queries) ResolveThreadProjectID(ctx context.Context, threadID uuid.UUID
 }
 
 const resolveToolsetsForWrite = `-- name: ResolveToolsetsForWrite :many
-SELECT t.id, t.slug
+SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
 FROM toolsets t
 WHERE t.project_id = $1
   AND t.deleted IS FALSE
@@ -3941,8 +3939,9 @@ type ResolveToolsetsForWriteParams struct {
 }
 
 type ResolveToolsetsForWriteRow struct {
-	ID   uuid.UUID
-	Slug string
+	ID         uuid.UUID
+	Slug       string
+	EnablesMcp bool
 }
 
 // Also locks the toolsets behind canonical wrappers named by slug, so server
@@ -3958,7 +3957,7 @@ func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolse
 	var items []ResolveToolsetsForWriteRow
 	for rows.Next() {
 		var i ResolveToolsetsForWriteRow
-		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
+		if err := rows.Scan(&i.ID, &i.Slug, &i.EnablesMcp); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

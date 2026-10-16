@@ -274,7 +274,7 @@ func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testi
 
 // seedRemoteMCPServerForIssuer binds one remote MCP server at mcpURL to the
 // user session issuer so FallbackResourceForClient derives it unambiguously.
-func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID uuid.UUID, slug, mcpURL string) {
+func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID uuid.UUID, slug, mcpURL string) uuid.UUID {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -289,7 +289,7 @@ func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testIns
 	})
 	require.NoError(t, err)
 
-	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  uuid.New(),
 		ProjectID:           *authCtx.ProjectID,
 		Name:                conv.ToPGText(slug),
@@ -299,6 +299,7 @@ func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testIns
 		UserSessionIssuerID: conv.ToNullUUID(userIssuerID),
 	})
 	require.NoError(t, err)
+	return server.ID
 }
 
 // attachClientUpstream gives one client a private user session issuer carrying

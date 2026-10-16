@@ -435,6 +435,7 @@ const (
 	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
+	McpServerIDsKey        = attribute.Key("gram.mcp_server.ids")
 	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
 	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
@@ -654,6 +655,8 @@ const (
 	OktaReconcileRunIDKey             = attribute.Key("gram.okta_applications.run_id")
 	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
+	DirectoryMembershipsOpenedKey     = attribute.Key("gram.directory_group.memberships_opened")
+	DirectoryMembershipsClosedKey     = attribute.Key("gram.directory_group.memberships_closed")
 	OutcomeKey                        = attribute.Key("gram.outcome")
 	PackageNameKey                    = attribute.Key("gram.package.name")
 	PackageVersionKey                 = attribute.Key("gram.package.version")
@@ -2550,6 +2553,14 @@ func SlogWorkOSDirectoryGroupID(v string) slog.Attr {
 	return slog.String(string(WorkOSDirectoryGroupIDKey), v)
 }
 
+func SlogDirectoryMembershipsOpened(v int) slog.Attr {
+	return slog.Int(string(DirectoryMembershipsOpenedKey), v)
+}
+
+func SlogDirectoryMembershipsClosed(v int) slog.Attr {
+	return slog.Int(string(DirectoryMembershipsClosedKey), v)
+}
+
 func SlogOutboxID(v int64) slog.Attr { return slog.Int64(string(OutboxIDKey), v) }
 
 func SlogOutboxPublicID(v string) slog.Attr { return slog.String(string(OutboxPublicIDKey), v) }
@@ -3008,6 +3019,9 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
+
+func McpServerIDs(v []string) attribute.KeyValue { return McpServerIDsKey.StringSlice(v) }
+func SlogMcpServerIDs(v []string) slog.Attr      { return slog.Any(string(McpServerIDsKey), v) }
 
 func McpEndpointID(v string) attribute.KeyValue { return McpEndpointIDKey.String(v) }
 func SlogMcpEndpointID(v string) slog.Attr      { return slog.String(string(McpEndpointIDKey), v) }

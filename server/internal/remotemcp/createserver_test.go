@@ -56,6 +56,8 @@ func TestCreateServerAndMcpServer(t *testing.T) {
 	require.Equal(t, "Remote source", *mcpServer.Name)
 	require.Equal(t, types.McpServerVisibility("disabled"), mcpServer.Visibility)
 	require.NotNil(t, mcpServer.UserSessionIssuerID)
+	require.Nil(t, mcpServer.Toolset, "remote-backed servers carry no toolset summary")
+	require.Nil(t, mcpServer.PrimaryEndpointID, "a new remote server has no endpoint yet")
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

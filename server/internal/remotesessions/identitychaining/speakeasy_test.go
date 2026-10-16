@@ -77,6 +77,7 @@ type speakeasyLiveFixture struct {
 func newSpeakeasyLiveFixture(t *testing.T) *speakeasyLiveFixture {
 	t.Helper()
 	f := newChainStoreFixture(t)
+	useSpeakeasySignIn(t, f.db, f.req)
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tp := testenv.NewTracerProvider(t)

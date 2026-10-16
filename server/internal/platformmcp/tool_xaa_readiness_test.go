@@ -414,6 +414,11 @@ func TestXAAReadinessOktaSignInGuidanceCoversEveryStep(t *testing.T) {
 		return reg.Descriptors()[0]
 	}()
 	require.Contains(t, descriptor.Description, "send the administrator to the dashboard")
+	require.Contains(t, descriptor.Description, "the organization's Speakeasy issuer when the endpoint trusts none")
+	require.Contains(t, descriptor.Description, "setEMAProviders management API")
+	require.NotContains(t, descriptor.Description, "appends")
+	require.Contains(t, platformOverview, "default EMA providers are derived")
+	require.Contains(t, platformOverview, "the list acts as the set of accepted providers")
 }
 
 type xaaServerStub struct {
