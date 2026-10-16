@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -195,6 +196,20 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	resp, err = callTool(t, f.ti, notionSlug, notionBearer, "ping")
 	requireReconnect(t, resp, err, notionSlug)
 	require.Equal(t, before, notionUpstream.requestCount())
+
+	// Unbinding the chosen client from the issuer, though it stays associated
+	// with the server, also asks for a reconnection rather than serving.
+	_, err = remotesessions_repo.New(f.ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, remotesessions_repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
+		RemoteSessionClientID: linearClient,
+		UserSessionIssuerID:   sharedIssuerID,
+		ProjectID:             f.projectID,
+		OrganizationID:        f.orgID,
+	})
+	require.NoError(t, err)
+	before = linearUpstream.requestCount()
+	resp, err = callTool(t, f.ti, linearSlug, linearBearer, "ping")
+	requireReconnect(t, resp, err, linearSlug)
+	require.Equal(t, before, linearUpstream.requestCount())
 }
 
 // A gateway member's credential comes from the client the credential chose
