@@ -93,6 +93,9 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 	}
 
 	if _, err := maintenance.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true;"); err != nil {
+		// The caller never receives the container, so its terminate hook
+		// cannot close the pool.
+		maintenance.Close()
 		return nil, nil, fmt.Errorf("mark template database: %w", err)
 	}
 
