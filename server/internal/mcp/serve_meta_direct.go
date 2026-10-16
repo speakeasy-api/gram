@@ -38,6 +38,7 @@ type memberDescribeResult struct {
 // member order. Each describe gets its own deadline from when it starts, so
 // members queued behind slow ones are not starved, within an overall budget.
 func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
+	requestCtx := ctx
 	ctx, cancelAll := context.WithTimeout(ctx, memberDescribeBudget*s.metaRuntime.MemberCallTimeout)
 	defer cancelAll()
 	results := make([]memberDescribeResult, len(members))
@@ -45,9 +46,16 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 	group.SetLimit(maxConcurrentMemberDescribes)
 	for i, member := range members {
 		group.Go(func() error {
-			ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
-			defer cancel()
-			results[i].catalog, results[i].err = s.describeMetaMember(ctx, logger, gate, member)
+			if ctx.Err() == nil {
+				memberCtx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
+				results[i].catalog, results[i].err = s.describeMetaMember(memberCtx, logger, gate, member)
+				cancel()
+			}
+			// Past the budget, any failure (including never starting) is the
+			// budget's, not the member's, so it is skipped like a slow member.
+			if ctx.Err() != nil && requestCtx.Err() == nil && (results[i].err != nil || results[i].catalog == nil) {
+				results[i] = memberDescribeResult{catalog: nil, err: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}}
+			}
 			return nil
 		})
 	}
