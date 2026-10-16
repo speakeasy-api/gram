@@ -323,7 +323,7 @@ function marketplaceSteps(
     {
       title: "Keep Platform MCP up to date",
       description:
-        "/plugin marketplace add leaves auto-update off, so Platform MCP stays on the version you installed. To turn it on for yourself, run /plugin, open Marketplaces, select speakeasy, and choose Enable auto-update. To turn it on for everyone in your organization, add these settings to managed settings.",
+        "/plugin marketplace add leaves auto-update off, so Platform MCP stays on the version you installed. To turn it on for yourself, run /plugin, open Marketplaces, select speakeasy, and choose Enable auto-update. To turn it on for everyone in your organization, add these settings to managed settings, then restart Claude Code.",
       children: (
         <ClaudeCodeSettingsInstall
           title={null}

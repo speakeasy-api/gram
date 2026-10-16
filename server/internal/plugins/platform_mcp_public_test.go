@@ -158,6 +158,7 @@ func TestLocalPlatformMCPFilesTargetsLocalServer(t *testing.T) {
 	require.Contains(t, readme, `"url": "`+marketplaceRepoURL+`"`)
 	require.Contains(t, readme, `"`+PublicMarketplaceName+`": {`+"\n      \"autoUpdate\": true,")
 	require.Contains(t, readme, `"`+platformMCPPluginName+"@"+PublicMarketplaceName+`": true`)
+	require.Less(t, strings.Index(readme, "/plugin marketplace add"), strings.Index(readme, "/plugin install"))
 	require.Less(t, strings.Index(readme, "/plugin install"), strings.Index(readme, `"autoUpdate": true`))
 	require.Contains(t, readme, "choose **Enable auto-update**")
 	require.Contains(t, readme, "merge this into managed settings")
