@@ -116,7 +116,8 @@ describe("PlatformMCPInstallWalkthrough", () => {
     expect(
       screen.getByText("/plugin install speakeasy@speakeasy"),
     ).toBeTruthy();
-    // Settings follow, so auto-update can be turned on.
+    // Auto-update follows: the /plugin toggle for one user, settings for an org.
+    expect(text).toContain("choose Enable auto-update");
     expect(text).toContain(
       '"url": "https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git"',
     );

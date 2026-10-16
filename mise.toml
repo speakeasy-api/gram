@@ -46,6 +46,11 @@ aube = "1.38.1"
 # npm would ship verbatim.
 "github:pnpm/pnpm" = "11.19.0"
 watchexec = "2.5.1"
+# Python itself is not a mise tool: uv provisions the interpreter, and putting
+# python on PATH here would shadow the system python3 that CI uses for its own
+# scripting. The version lives in `.python-version` instead, which uv reads
+# natively — without it uv takes the newest interpreter satisfying
+# `requires-python`, and pystreams' spaCy wheels break outside 3.14.
 uv = "0.12.1"
 yq = "4.53.3"
 hk = "1.56.1"
