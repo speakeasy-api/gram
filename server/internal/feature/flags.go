@@ -75,10 +75,6 @@ const (
 	// organization group (org slug), rolled out to everyone once no phase A pods
 	// remain. Fails closed to the toolset key. Removed once the AIM-507 move ships.
 	FlagHostedMCPServerKeyWrites Flag = "hosted-mcp-server-key-writes"
-	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
-	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
-	// rollout gate; removed once the ClickHouse read path is GA.
-	FlagRiskOverviewFromClickHouse Flag = "risk-overview-from-clickhouse"
 	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.

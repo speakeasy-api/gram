@@ -599,7 +599,6 @@ trackedFiles:
   src/funcs/riskExclusionsUpdate.ts: {}
   src/funcs/riskExprCompile.ts: {}
   src/funcs/riskOverviewGet.ts: {}
-  src/funcs/riskOverviewRules.ts: {}
   src/funcs/riskOverviewUserBreakdown.ts: {}
   src/funcs/riskPoliciesCreate.ts: {}
   src/funcs/riskPoliciesDelete.ts: {}
@@ -1676,7 +1675,6 @@ trackedFiles:
   src/models/components/riskresultredacted.ts: {}
   src/models/components/riskrevealpayloadresult.ts: {}
   src/models/components/riskrulebreakdownentry.ts: {}
-  src/models/components/riskrulebreakdownresult.ts: {}
   src/models/components/risksegment.ts: {}
   src/models/components/risksignal.ts: {}
   src/models/components/risksignalsresult.ts: {}
@@ -2359,7 +2357,6 @@ trackedFiles:
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
   src/models/operations/getriskpolicychallenge.ts: {}
-  src/models/operations/getriskrulebreakdown.ts: {}
   src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
   src/models/operations/getrole.ts: {}
@@ -3694,8 +3691,6 @@ trackedFiles:
   src/react-query/riskReleaseSessionQuarantine.ts: {}
   src/react-query/riskRevealResultPayload.ts: {}
   src/react-query/riskRevokePolicyBypassRequest.ts: {}
-  src/react-query/riskRuleBreakdown.core.ts: {}
-  src/react-query/riskRuleBreakdown.ts: {}
   src/react-query/riskSaveEvalReview.ts: {}
   src/react-query/riskSignals.core.ts: {}
   src/react-query/riskSignals.ts: {}
@@ -7820,7 +7815,7 @@ examples:
     speakeasy-default-get-risk-overview:
       responses:
         "200":
-          application/json: {"active_policies": 705076, "findings": 312140, "flagged_sessions": 627926, "from": "2024-11-29T21:45:00.489Z", "messages_scanned": 821642, "time_series_findings": [], "to": "2025-12-13T22:42:16.392Z", "top_categories": [], "top_rules": [{"findings": 241800, "rule_id": "<id>", "source": "<value>"}], "top_users": [{"email": "Camilla.Bode5@hotmail.com", "external_user_id": "<id>", "findings": 53434}]}
+          application/json: {"findings": 312140, "flagged_sessions": 627926, "from": "2024-11-29T21:45:00.489Z", "time_series_findings": [], "to": "2025-12-13T22:42:16.392Z", "top_categories": [], "top_rules": [{"findings": 241800, "rule_id": "<id>", "source": "<value>"}], "top_users": [{"email": "Camilla.Bode5@hotmail.com", "external_user_id": "<id>", "findings": 53434}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

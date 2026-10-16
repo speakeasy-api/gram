@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -17,7 +16,7 @@ type GetRiskRuleBreakdown struct {
 
 type getRiskRuleBreakdownInput struct {
 	Category string  `json:"category" jsonschema:"Category key to break down by rule_id."`
-	From     *string `json:"from,omitempty" jsonschema:"Inclusive start of the window as an ISO 8601 timestamp. Defaults to the same 7-day window as the risk overview."`
+	From     *string `json:"from,omitempty" jsonschema:"Inclusive start of the window as an ISO 8601 timestamp. Defaults to the last 7 calendar days."`
 	To       *string `json:"to,omitempty" jsonschema:"Exclusive end of the window as an ISO 8601 timestamp. Defaults to now."`
 }
 
@@ -68,14 +67,7 @@ func (s *GetRiskRuleBreakdown) Call(ctx context.Context, _ toolconfig.ToolCallEn
 		return fmt.Errorf("category is required")
 	}
 
-	result, err := s.risk.GetRiskRuleBreakdown(ctx, &risk.GetRiskRuleBreakdownPayload{
-		ApikeyToken:      nil,
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		Category:         input.Category,
-		From:             input.From,
-		To:               input.To,
-	})
+	result, err := s.risk.GetRuleBreakdown(ctx, input.Category, input.From, input.To)
 	if err != nil {
 		return fmt.Errorf("get risk rule breakdown: %w", err)
 	}
