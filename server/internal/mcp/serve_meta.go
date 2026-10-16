@@ -246,7 +246,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		toolSelection:       nil,
-		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode.String),
+		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
 		sessionID:           parseMcpSessionID(r.Header),
 		chatID:              r.Header.Get("Gram-Chat-ID"),

@@ -13,7 +13,8 @@ func (m DiscoveryMode) Valid() bool {
 	return m == DiscoveryModeProgressive || m == DiscoveryModeDirect
 }
 
-// ResolveDiscoveryMode preserves Progressive discovery for unset defaults.
+// ResolveDiscoveryMode serves modes this build does not support, such as one
+// stored by a newer release before a rollback, as Progressive.
 func ResolveDiscoveryMode(value string) DiscoveryMode {
 	if DiscoveryMode(value) == DiscoveryModeDirect {
 		return DiscoveryModeDirect
