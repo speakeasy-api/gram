@@ -299,7 +299,9 @@ func TestGatewayDirectBoundsTheWholeInventory(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Less(t, time.Since(started), 2*time.Second)
-	require.NotContains(t, w.Body.String(), "--ping")
+	// Members past the budget are skipped, not a failed listing.
+	require.NotContains(t, w.Body.String(), `"error"`)
+	require.Contains(t, w.Body.String(), `"tools":[]`)
 }
 
 func TestGatewayDirectGivesQueuedMembersTheirOwnDeadline(t *testing.T) {
