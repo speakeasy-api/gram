@@ -4359,6 +4359,9 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS user_session_consent_resources_project_id_idx
 ON user_session_consent_resources (project_id);
 
+CREATE INDEX IF NOT EXISTS user_session_consent_resources_user_session_consent_id_idx
+ON user_session_consent_resources (user_session_consent_id);
+
 -- One row per WorkOS session established by a Speakeasy sign-in, from the
 -- dashboard login or an MCP authorization. MCP grants (user_sessions) record
 -- the sign-in that created them, so revoking a sign-in revokes its grants.
