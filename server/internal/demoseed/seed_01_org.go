@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 )
 
 // orgStep is one ordered statement of the org phase.
@@ -313,23 +314,13 @@ func (s *seeder) orgProject(ctx context.Context) error {
 		}
 	}
 
-	// The sensors show current-message context, five- and ten-message sliding
-	// windows, and a disabled draft.
-	sensors := []struct {
-		key, name, slug, desc, instructions, mode, inputStrategy string
-		enabled                                                  bool
-		windowSize                                               int32
-	}{
-		{"service-areas", "Service areas", "service-areas", "Labels every service area discussed in a conversation.",
-			"Select every product service that materially appears in the target message.", "multi_label", "single_message", true, 5},
-		{"primary-service", "Primary service", "primary-service", "Chooses the service most central to a conversation.",
-			"Choose the single service that best describes the target request.", "exclusive", "sliding_window", true, 5},
-		{"impact", "Customer impact", "customer-impact", "Orders conversations by customer impact.",
-			"Score the target message impact from low to high using the supplied levels.", "ordered_score", "sliding_window", true, 10},
-		{"draft-campaign", "Draft campaign", "draft-campaign", "An incomplete campaign classifier awaiting its labels.",
-			"", "multi_label", "single_message", false, 5},
-	}
-	for _, sen := range sensors {
+	for _, sen := range demoSigintSensors {
+		// Input configuration is an application-enforced enum. Reject an invalid
+		// shared definition so the ClickHouse readings never report a context the
+		// evaluator would not run.
+		if err := evaluation.ValidateInputConfiguration(sen.inputStrategy, int(sen.windowSize)); err != nil {
+			return fmt.Errorf("demo sigint sensor %s: %w", sen.key, err)
+		}
 		if err := s.q.OrgInsertSigintSensor(ctx, repo.OrgInsertSigintSensorParams{
 			ID:            s.det("sigint-sensor-" + sen.key),
 			ProjectID:     proj,
@@ -346,21 +337,7 @@ func (s *seeder) orgProject(ctx context.Context) error {
 		}
 	}
 
-	memberships := []struct {
-		key, sensor, signal string
-		order               int32
-	}{
-		{"service-api", "service-areas", "api", 0},
-		{"service-database", "service-areas", "database", 1},
-		{"service-authentication", "service-areas", "authentication", 2},
-		{"primary-api", "primary-service", "api", 0},
-		{"primary-database", "primary-service", "database", 1},
-		{"primary-worker", "primary-service", "worker", 2},
-		{"impact-low", "impact", "low", 0},
-		{"impact-medium", "impact", "medium", 1},
-		{"impact-high", "impact", "high", 2},
-	}
-	for _, m := range memberships {
+	for _, m := range demoSigintMemberships {
 		if err := s.q.OrgInsertSigintSensorSignal(ctx, repo.OrgInsertSigintSensorSignalParams{
 			ID:        s.det("sigint-membership-" + m.key),
 			ProjectID: proj,
@@ -508,4 +485,45 @@ func (s *seeder) orgGlobalRoleURN(ctx context.Context, slug string) (string, err
 	default:
 		return urn, nil
 	}
+}
+
+// demoSigintSensor is one seeded signals intelligence sensor.
+type demoSigintSensor struct {
+	key, name, slug, desc, instructions, mode, inputStrategy string
+	enabled                                                  bool
+	windowSize                                               int32
+}
+
+// demoSigintSensors show current-message context, five- and ten-message
+// sliding windows, and a disabled draft. The ClickHouse readings are generated
+// for the enabled ones.
+var demoSigintSensors = []demoSigintSensor{
+	{"service-areas", "Service areas", "service-areas", "Labels every service area discussed in a conversation.",
+		"Select every product service that materially appears in the target message.", "multi_label", "single_message", true, 5},
+	{"primary-service", "Primary service", "primary-service", "Chooses the service most central to a conversation.",
+		"Choose the single service that best describes the target request.", "exclusive", "sliding_window", true, 5},
+	{"impact", "Customer impact", "customer-impact", "Orders conversations by customer impact.",
+		"Score the target message impact from low to high using the supplied levels.", "ordered_score", "sliding_window", true, 10},
+	{"draft-campaign", "Draft campaign", "draft-campaign", "An incomplete campaign classifier awaiting its labels.",
+		"", "multi_label", "single_message", false, 5},
+}
+
+// demoSigintMembership places one signal at a position in a sensor.
+type demoSigintMembership struct {
+	key, sensor, signal string
+	order               int32
+}
+
+// demoSigintMemberships order each enabled sensor's signals. Signal slugs equal
+// their keys.
+var demoSigintMemberships = []demoSigintMembership{
+	{"service-api", "service-areas", "api", 0},
+	{"service-database", "service-areas", "database", 1},
+	{"service-authentication", "service-areas", "authentication", 2},
+	{"primary-api", "primary-service", "api", 0},
+	{"primary-database", "primary-service", "database", 1},
+	{"primary-worker", "primary-service", "worker", 2},
+	{"impact-low", "impact", "low", 0},
+	{"impact-medium", "impact", "medium", 1},
+	{"impact-high", "impact", "high", 2},
 }

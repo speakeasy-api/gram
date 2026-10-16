@@ -3,85 +3,6 @@ package analytics
 // The field literals below state only what a field has; an omitted field is
 // its zero value by design, and the file is excluded from exhaustruct for it.
 
-// Sessions is one row per agent session, collapsed from observed events.
-var Sessions = &Dataset{
-	Name:        "sessions",
-	Kind:        KindEvent,
-	Grain:       "session",
-	Description: "One row per agent session, collapsed from observed events. count counts sessions.",
-	TimeExpr:    "started_at",
-	Fields: []Field{
-		{
-			Name:      "session",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "session_id",
-			Typeahead: "session_id",
-		},
-		// A session opens broken down by who was in it: text lives on events,
-		// not on the collapsed session row.
-		{
-			Name:         "user",
-			Type:         TypeString,
-			Role:         RoleDimension,
-			Default:      true,
-			Operators:    equalsIn,
-			Aggregations: countDistinct,
-			Expr:         "user_email",
-			Typeahead:    "user_email",
-		},
-		{
-			Name:      "model",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "model",
-			Typeahead: "model",
-		},
-		{
-			Name:      "surface",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "surface",
-			Typeahead: "surface",
-		},
-		{
-			Name:      "provider",
-			Type:      TypeString,
-			Role:      RoleDimension,
-			Operators: equalsIn,
-			Expr:      "provider",
-			Typeahead: "provider",
-		},
-		{
-			Name:         "turn_count",
-			Type:         TypeInt64,
-			Role:         RoleMeasure,
-			Aggregations: []Aggregation{AggregationSum, AggregationAvg},
-			Expr:         "turn_count",
-		},
-		{
-			Name:         "tool_call_count",
-			Type:         TypeInt64,
-			Role:         RoleMeasure,
-			Aggregations: []Aggregation{AggregationSum, AggregationAvg},
-			Expr:         "tool_call_count",
-		},
-		// The time columns are Int64 nanoseconds, hence the division.
-		{
-			Name:         "duration_seconds",
-			Type:         TypeFloat64,
-			Role:         RoleMeasure,
-			Unit:         "s",
-			Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95},
-			Expr:         "(ended_at - started_at) / 1e9",
-		},
-	},
-	Source: sessionsSource,
-}
-
 // ToolCalls is one row per tool call, resolved to its terminal observation.
 var ToolCalls = &Dataset{
 	Name:        "tool_calls",
@@ -276,4 +197,4 @@ var Lookups = []*Lookup{
 }
 
 // Default is the v1 catalog: every dataset reads agent_events.
-var Default = MustCatalog(Lookups, Sessions, ToolCalls, Skills)
+var Default = MustCatalog(Lookups, ToolCalls, Skills)

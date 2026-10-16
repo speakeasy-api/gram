@@ -319,7 +319,7 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 	}
 }
 
-// Postflight: the Explore datasets have sessions and tool calls to collapse,
+// Postflight: the Explore datasets have tool calls to collapse,
 // every demo user and both harnesses are represented, and cost is only ever
 // stated where the provider states it.
 func chAgentEventChecks() []chCheck {
