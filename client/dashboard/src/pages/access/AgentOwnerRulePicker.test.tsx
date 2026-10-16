@@ -22,16 +22,14 @@ it("uses owner selectors and preserves the other selected owners", () => {
   const onChange = vi.fn<(selectors: Selector[] | null) => void>();
   const view = render(
     <AgentOwnerRulePicker
-      selectors={[
-        { resourceKind: "agent", resourceId: "*", ownerUserId: "user-a" },
-      ]}
+      selectors={[{ resourceKind: "agent", resourceId: "*", owner: "user-a" }]}
       onChange={onChange}
     />,
   );
   fireEvent.click(screen.getByRole("checkbox", { name: "Person B" }));
   expect(onChange).toHaveBeenLastCalledWith([
-    { resourceKind: "agent", resourceId: "*", ownerUserId: "user-a" },
-    { resourceKind: "agent", resourceId: "*", ownerUserId: "user-b" },
+    { resourceKind: "agent", resourceId: "*", owner: "user-a" },
+    { resourceKind: "agent", resourceId: "*", owner: "user-b" },
   ]);
   view.rerender(
     <AgentOwnerRulePicker
@@ -45,9 +43,9 @@ it("uses owner selectors and preserves the other selected owners", () => {
     }),
   );
   expect(onChange).toHaveBeenLastCalledWith([
-    { resourceKind: "agent", resourceId: "*", ownerUserId: "user-a" },
-    { resourceKind: "agent", resourceId: "*", ownerUserId: "user-b" },
-    { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
+    { resourceKind: "agent", resourceId: "*", owner: "user-a" },
+    { resourceKind: "agent", resourceId: "*", owner: "user-b" },
+    { resourceKind: "agent", resourceId: "*", owner: "self" },
   ]);
 });
 
@@ -56,15 +54,15 @@ it("can remove an owner without removing other owners", () => {
   render(
     <AgentOwnerRulePicker
       selectors={[
-        { resourceKind: "agent", resourceId: "*", ownerUserId: "user-a" },
-        { resourceKind: "agent", resourceId: "*", ownerUserId: "user-b" },
+        { resourceKind: "agent", resourceId: "*", owner: "user-a" },
+        { resourceKind: "agent", resourceId: "*", owner: "user-b" },
       ]}
       onChange={onChange}
     />,
   );
   fireEvent.click(screen.getByRole("checkbox", { name: "Person A" }));
   expect(onChange).toHaveBeenLastCalledWith([
-    { resourceKind: "agent", resourceId: "*", ownerUserId: "user-b" },
+    { resourceKind: "agent", resourceId: "*", owner: "user-b" },
   ]);
 });
 
@@ -72,13 +70,13 @@ it.each([
   { selectors: null, label: "Anyone in the organization" },
   {
     selectors: [
-      { resourceKind: "agent" as const, resourceId: "*", ownerUserId: "*" },
+      { resourceKind: "agent" as const, resourceId: "*", owner: "*" },
     ],
     label: "Anyone in the organization",
   },
   {
     selectors: [
-      { resourceKind: "agent" as const, resourceId: "*", ownerUserId: "self" },
+      { resourceKind: "agent" as const, resourceId: "*", owner: "self" },
     ],
     label: "Each role holder",
   },
@@ -110,7 +108,7 @@ it("replaces selectors when switching between all, self, and selected people", (
     expect(screen.getByRole("combobox").textContent).toContain(label);
   };
   choose("Each role holder", [
-    { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
+    { resourceKind: "agent", resourceId: "*", owner: "self" },
   ]);
   expect(screen.queryByLabelText("Find owners")).toBeNull();
   choose("Selected people", []);

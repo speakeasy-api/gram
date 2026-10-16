@@ -987,7 +987,7 @@ var SelectorModel = Type("Selector", func() {
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
 	})
-	Attribute("owner_user_id", String, func() {
+	Attribute("owner", String, func() {
 		Description("Agent owner filter (agent scopes only): 'self' for the caller, a user ID for a specified owner, or '*' for any owner. With resource_id='*', agent:write permits creation and management for these owners.")
 	})
 	Attribute("disposition", String, func() {

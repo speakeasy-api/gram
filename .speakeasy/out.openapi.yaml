@@ -103612,7 +103612,7 @@ components:
             - destructive
             - idempotent
             - open_world
-        owner_user_id:
+        owner:
           type: string
           description: 'Agent owner filter (agent scopes only): ''self'' for the caller, a user ID for a specified owner, or ''*'' for any owner. With resource_id=''*'', agent:write permits creation and management for these owners.'
         project_id:

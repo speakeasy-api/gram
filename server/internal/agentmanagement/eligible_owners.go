@@ -80,7 +80,7 @@ func eligibleOwnerTargets(grants []authz.Grant, callerID string) (bool, []string
 		if grant.Scope != authz.ScopeAgentWrite && grant.Scope != authz.ScopeRoot {
 			continue
 		}
-		ownerID := grant.Selector[authz.SelectorKeyOwnerUserID]
+		ownerID := grant.Selector[authz.SelectorKeyOwner]
 		if ownerID == authz.AgentOwnerSelf {
 			ownerID = callerID
 		}

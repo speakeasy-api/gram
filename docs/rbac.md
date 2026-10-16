@@ -70,7 +70,7 @@ An agent-authenticated request loads the same way but from the agent's own set: 
 ### Agent creation and management
 
 `agent:write` permits both creation and management. Agent selectors use
-`resource_kind: agent`, with `owner_user_id: self` for each grant holder's
+`resource_kind: agent`, with `owner: self` for each grant holder's
 own agents, a user ID for a specified owner, or `*` for any owner in the
 organization. Omitting the owner dimension preserves unrestricted owner access.
 With `resource_id: *`, a write grant permits creating agents for those owners.
@@ -683,12 +683,12 @@ System roles are seeded when an organization is provisioned, and the first user 
 
 ### Agent grant reference
 
-| Agent creation action                                      | Required permission         | Target and behavior                                                                                                                                                                               |
-| ---------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create a new agent                                         | `agent:write`               | `agent` selector with `resource_id: *` and optional `owner_user_id`: `self`, a specified user ID, or `*`. Owner choices are filtered to permitted members; the server validates both memberships. |
-| Configure creation eligibility in the existing role editor | `org:admin`                 | The same role assignment and save flow as other permissions. Adding creation defaults to self-owned agents.                                                                                       |
-| Manage an already-owned agent                              | Current unblocked ownership | Independent of creation eligibility. The inventory and management controls remain available when creation is removed.                                                                             |
-| Manage another owner's agent                               | `agent:write`               | The agent ID and current persisted owner must match the grant. Write also implies read; credential authorization and ownership transfer remain separate permissions.                              |
+| Agent creation action                                      | Required permission         | Target and behavior                                                                                                                                                                       |
+| ---------------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create a new agent                                         | `agent:write`               | `agent` selector with `resource_id: *` and optional `owner`: `self`, a specified user ID, or `*`. Owner choices are filtered to permitted members; the server validates both memberships. |
+| Configure creation eligibility in the existing role editor | `org:admin`                 | The same role assignment and save flow as other permissions. Adding creation defaults to self-owned agents.                                                                               |
+| Manage an already-owned agent                              | Current unblocked ownership | Independent of creation eligibility. The inventory and management controls remain available when creation is removed.                                                                     |
+| Manage another owner's agent                               | `agent:write`               | The agent ID and current persisted owner must match the grant. Write also implies read; credential authorization and ownership transfer remain separate permissions.                      |
 
 ## Dashboard Grant Reference
 

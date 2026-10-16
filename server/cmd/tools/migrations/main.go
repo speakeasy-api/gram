@@ -94,7 +94,7 @@ func run() int {
 		return runHostedMCPWrappers(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, admin-agent-creation, hosted-mcp-wrappers)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, hosted-mcp-wrappers)")
 		return 2
 	}
 }

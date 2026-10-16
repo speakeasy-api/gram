@@ -6498,7 +6498,7 @@ type SelectorResponseBody struct {
 	// Agent owner filter (agent scopes only): 'self' for the caller, a user ID for
 	// a specified owner, or '*' for any owner. With resource_id='*', agent:write
 	// permits creation and management for these owners.
-	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	Owner *string `form:"owner,omitempty" json:"owner,omitempty" xml:"owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
@@ -7096,7 +7096,7 @@ type SelectorRequestBody struct {
 	// Agent owner filter (agent scopes only): 'self' for the caller, a user ID for
 	// a specified owner, or '*' for any owner. With resource_id='*', agent:write
 	// permits creation and management for these owners.
-	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	Owner *string `form:"owner,omitempty" json:"owner,omitempty" xml:"owner,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).

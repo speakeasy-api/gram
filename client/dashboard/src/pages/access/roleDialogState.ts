@@ -65,7 +65,7 @@ function selectorIdentity(s: Selector): string {
     s.tool ?? "",
     s.disposition ?? "",
     s.serverUrl ?? "",
-    s.ownerUserId ?? "",
+    s.owner ?? "",
   ]);
 }
 
@@ -157,16 +157,16 @@ export function computeRuleLabel(
   ) {
     if (
       selectors === null ||
-      selectors.some((s) => !s.ownerUserId || s.ownerUserId === "*")
+      selectors.some((s) => !s.owner || s.owner === "*")
     ) {
       return "Anyone in the organization";
     }
     if (selectors.length === 0) return "Select people…";
-    if (selectors.length === 1 && selectors[0]?.ownerUserId === "self") {
+    if (selectors.length === 1 && selectors[0]?.owner === "self") {
       return "Each role holder";
     }
-    const self = selectors.some((s) => s.ownerUserId === "self");
-    const count = selectors.filter((s) => s.ownerUserId !== "self").length;
+    const self = selectors.some((s) => s.owner === "self");
+    const count = selectors.filter((s) => s.owner !== "self").length;
     const people = `${count} selected ${count === 1 ? "person" : "people"}`;
     return self ? `Each role holder and ${people}` : people;
   }

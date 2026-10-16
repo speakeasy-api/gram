@@ -83,9 +83,7 @@ it("defaults agent creation to self and preserves owner targets on save", () => 
   const grants = setPlatformAllow({}, "agent:write", true);
   expect(save(grants)).toContainEqual({
     scope: "agent:write",
-    selectors: [
-      { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
-    ],
+    selectors: [{ resourceKind: "agent", resourceId: "*", owner: "self" }],
   });
   for (const owner of ["self", "user-example"]) {
     const stored = [
@@ -95,7 +93,7 @@ it("defaults agent creation to self and preserves owner targets on save", () => 
           {
             resourceKind: "agent" as const,
             resourceId: "*",
-            ownerUserId: owner,
+            owner,
           },
         ],
       },

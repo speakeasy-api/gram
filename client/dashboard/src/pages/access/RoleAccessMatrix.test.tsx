@@ -24,7 +24,7 @@ it("edits owner targets through the Agents Manage permission", () => {
                   {
                     resourceKind: "agent",
                     resourceId: "*",
-                    ownerUserId: "self",
+                    owner: "self",
                   },
                 ],
               },

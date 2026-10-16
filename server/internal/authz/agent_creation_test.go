@@ -57,3 +57,14 @@ func TestOwnerScopedAgentGrantRejectsMissingOwnerDimension(t *testing.T) {
 		})
 	}
 }
+
+func TestAgentSelectorUsesOwnerRatherThanOwnerUserID(t *testing.T) {
+	t.Parallel()
+	selector := AgentOwnerSelector(ScopeAgentWrite, AgentOwnerSelf)
+	require.Equal(t, "self", selector["owner"])
+	require.NotContains(t, selector, "owner_user_id")
+	require.NoError(t, ValidateSelector(ScopeAgentWrite, selector))
+	delete(selector, SelectorKeyOwner)
+	selector["owner_user_id"] = AgentOwnerSelf
+	require.Error(t, ValidateSelector(ScopeAgentWrite, selector))
+}

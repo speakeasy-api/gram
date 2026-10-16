@@ -14,7 +14,12 @@ func TestAgentOwnerSelectorRoundTripsThroughManagementAPI(t *testing.T) {
 		t.Run(owner, func(t *testing.T) {
 			t.Parallel()
 			selector := authz.AgentOwnerSelector(authz.ScopeAgentWrite, owner)
-			require.Equal(t, selector, genSelectorToAuthz(authzSelectorToGen(selector)))
+			generated := authzSelectorToGen(selector)
+			require.Equal(t, new(owner), generated.Owner)
+			require.Equal(t, selector, genSelectorToAuthz(generated))
+			encoded, err := genSelectorToAuthz(generated).MarshalJSON()
+			require.NoError(t, err)
+			require.JSONEq(t, `{"resource_kind":"agent","resource_id":"*","owner":"`+owner+`"}`, string(encoded))
 		})
 	}
 }

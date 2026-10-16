@@ -18,12 +18,12 @@ import type { RoleGrant } from "./types";
 it("detects an owner-only change to an agent write grant", () => {
   const before = {
     "agent:write": grant("agent:write", [
-      { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
+      { resourceKind: "agent", resourceId: "*", owner: "self" },
     ]),
   };
   const after = {
     "agent:write": grant("agent:write", [
-      { resourceKind: "agent", resourceId: "*", ownerUserId: "other" },
+      { resourceKind: "agent", resourceId: "*", owner: "other" },
     ]),
   };
   expect(grantKeysString(before)).not.toBe(grantKeysString(after));
@@ -395,7 +395,7 @@ describe("computeRuleLabel", () => {
         sel({
           resourceKind: "agent",
           resourceId: "*",
-          ownerUserId: resourceId,
+          owner: resourceId,
         }),
       ) ?? null;
     expect(computeRuleLabel(selectors, "agent", projects)).toBe(label);

@@ -71,7 +71,7 @@ function isUnrestrictedSelectorList(selectors: Selector[]): boolean {
     s.tool == null &&
     s.projectId == null &&
     s.serverUrl == null &&
-    s.ownerUserId == null
+    s.owner == null
   );
 }
 

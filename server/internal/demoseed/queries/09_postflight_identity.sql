@@ -488,7 +488,7 @@ WHERE g.organization_id = @org_id::text AND r.organization_id = @org_id::text
   AND g.scope = 'agent:write'
   AND g.selectors = jsonb_build_object(
     'resource_kind', 'agent', 'resource_id', '*',
-    'owner_user_id', CASE r.workos_slug
+    'owner', CASE r.workos_slug
       WHEN 'engineer' THEN 'self'
       WHEN 'collaborator' THEN @specified_owner_id::text
       WHEN 'temporary-escalation' THEN '*'

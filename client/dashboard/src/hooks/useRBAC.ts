@@ -246,12 +246,12 @@ export function canCreateAgentForInGrants(
       return false;
     if (!grant.selectors) return true;
     return grant.selectors.some((selector) => {
-      const owner = selector.ownerUserId;
+      const owner = selector.owner;
       if (owner === "self" && callerUserId !== ownerUserId) return false;
       return selectorMatchesStrict(selector, {
         resourceKind: "agent",
         resourceId: "*",
-        ownerUserId: owner === "self" ? "self" : ownerUserId,
+        owner: owner === "self" ? "self" : ownerUserId,
       });
     });
   });

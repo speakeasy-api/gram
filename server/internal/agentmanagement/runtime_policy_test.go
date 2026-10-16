@@ -93,7 +93,7 @@ func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 
 	selector := authz.NewSelector(scope, resource)
 	if len(owners) > 0 {
-		selector[authz.SelectorKeyOwnerUserID] = owners[0]
+		selector[authz.SelectorKeyOwner] = owners[0]
 	}
 	selectors, err := selector.MarshalJSON()
 	require.NoError(t, err)

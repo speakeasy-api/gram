@@ -36,7 +36,7 @@ FROM unnest(@scopes::text[]) AS scope;
 -- name: RolesInsertAgentCreationGrants :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 SELECT @organization_id::text, 'role:organization:' || r.id, 'agent:write',
-       jsonb_build_object('resource_kind', 'agent', 'resource_id', '*', 'owner_user_id', v.owner_id)
+       jsonb_build_object('resource_kind', 'agent', 'resource_id', '*', 'owner', v.owner_id)
 FROM organization_roles r
 JOIN (VALUES
   ('engineer', 'self'),

@@ -7664,7 +7664,7 @@ func unmarshalSelectorResponseBodyToAccessSelector(v *SelectorResponseBody) *acc
 	res := &access.Selector{
 		ResourceKind: *v.ResourceKind,
 		ResourceID:   *v.ResourceID,
-		OwnerUserID:  v.OwnerUserID,
+		Owner:        v.Owner,
 		Disposition:  v.Disposition,
 		Tool:         v.Tool,
 		ProjectID:    v.ProjectID,
@@ -7703,7 +7703,7 @@ func marshalAccessSelectorToSelectorRequestBody(v *access.Selector) *SelectorReq
 	res := &SelectorRequestBody{
 		ResourceKind: v.ResourceKind,
 		ResourceID:   v.ResourceID,
-		OwnerUserID:  v.OwnerUserID,
+		Owner:        v.Owner,
 		Disposition:  v.Disposition,
 		Tool:         v.Tool,
 		ProjectID:    v.ProjectID,
@@ -7742,7 +7742,7 @@ func marshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *access.
 	res := &access.Selector{
 		ResourceKind: v.ResourceKind,
 		ResourceID:   v.ResourceID,
-		OwnerUserID:  v.OwnerUserID,
+		Owner:        v.Owner,
 		Disposition:  v.Disposition,
 		Tool:         v.Tool,
 		ProjectID:    v.ProjectID,

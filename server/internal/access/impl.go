@@ -660,8 +660,8 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ProjectID != nil {
 		sel["project_id"] = *s.ProjectID
 	}
-	if s.OwnerUserID != nil {
-		sel[authz.SelectorKeyOwnerUserID] = *s.OwnerUserID
+	if s.Owner != nil {
+		sel[authz.SelectorKeyOwner] = *s.Owner
 	}
 	if s.ServerURL != nil {
 		sel["server_url"] = *s.ServerURL
@@ -677,7 +677,7 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 		Tool:         nil,
 		ProjectID:    nil,
 		ServerURL:    nil,
-		OwnerUserID:  nil,
+		Owner:        nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -688,8 +688,8 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	if v, ok := sel["project_id"]; ok {
 		s.ProjectID = &v
 	}
-	if v, ok := sel[authz.SelectorKeyOwnerUserID]; ok {
-		s.OwnerUserID = &v
+	if v, ok := sel[authz.SelectorKeyOwner]; ok {
+		s.Owner = &v
 	}
 	if v, ok := sel["server_url"]; ok {
 		s.ServerURL = &v

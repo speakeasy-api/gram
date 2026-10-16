@@ -36,10 +36,10 @@ func (c Check) WithStrictSelectorMatch() Check {
 
 func (c Check) matchesAllowSelector(selector Selector) bool {
 	// Owner-scoped authority must not satisfy a check that omitted its owner.
-	if selector[SelectorKeyOwnerUserID] != "" && c.Dimensions[SelectorKeyOwnerUserID] == "" {
+	if selector[SelectorKeyOwner] != "" && c.Dimensions[SelectorKeyOwner] == "" {
 		return false
 	}
-	if c.selectorMatch == selectorMatchAgentOwnerID && selector[SelectorKeyOwnerUserID] == AgentOwnerSelf {
+	if c.selectorMatch == selectorMatchAgentOwnerID && selector[SelectorKeyOwner] == AgentOwnerSelf {
 		return false
 	}
 	if c.selectorMatch != selectorMatchNormal {

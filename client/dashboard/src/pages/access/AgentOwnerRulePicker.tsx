@@ -23,23 +23,20 @@ export function AgentOwnerRulePicker({
   const members = useMembers();
   const [search, setSearch] = useState("");
   let mode = "selected";
-  if (
-    selectors === null ||
-    selectors.some((s) => !s.ownerUserId || s.ownerUserId === "*")
-  )
+  if (selectors === null || selectors.some((s) => !s.owner || s.owner === "*"))
     mode = "all";
-  else if (selectors.length === 1 && selectors[0]?.ownerUserId === "self")
+  else if (selectors.length === 1 && selectors[0]?.owner === "self")
     mode = "self";
-  const selected = new Set(selectors?.map((s) => s.ownerUserId) ?? []);
+  const selected = new Set(selectors?.map((s) => s.owner) ?? []);
   const toggle = (id: string) => {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
     else next.add(id);
     onChange(
-      [...next].map((ownerUserId) => ({
+      [...next].map((owner) => ({
         resourceKind: "agent",
         resourceId: "*",
-        ownerUserId,
+        owner,
       })),
     );
   };
@@ -56,7 +53,7 @@ export function AgentOwnerRulePicker({
           if (value === "all") onChange(null);
           else if (value === "self")
             onChange([
-              { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
+              { resourceKind: "agent", resourceId: "*", owner: "self" },
             ]);
           else onChange([]);
         }}

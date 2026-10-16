@@ -642,7 +642,7 @@ export function setPlatformAllow(
       effect: "allow",
       selectors:
         scope === "agent:write"
-          ? [{ resourceKind: "agent", resourceId: "*", ownerUserId: "self" }]
+          ? [{ resourceKind: "agent", resourceId: "*", owner: "self" }]
           : null,
     });
   }

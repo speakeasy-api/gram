@@ -15,9 +15,7 @@ describe("owner-scoped agent creation", () => {
     const selfOnly = [
       {
         scope: "agent:write",
-        selectors: [
-          { resourceKind: "agent", resourceId: "*", ownerUserId: "self" },
-        ],
+        selectors: [{ resourceKind: "agent", resourceId: "*", owner: "self" }],
       },
     ];
     expect(canCreateAgentForInGrants(selfOnly, "user-a", "self")).toBe(false);
@@ -26,9 +24,7 @@ describe("owner-scoped agent creation", () => {
         [
           {
             scope: "agent:write",
-            selectors: [
-              { resourceKind: "agent", resourceId: "*", ownerUserId: "*" },
-            ],
+            selectors: [{ resourceKind: "agent", resourceId: "*", owner: "*" }],
           },
         ],
         "user-a",
@@ -51,7 +47,7 @@ describe("owner-scoped agent creation", () => {
           {
             resourceKind: "agent" as const,
             resourceId: "*",
-            ownerUserId: "self",
+            owner: "self",
           },
         ],
       },
@@ -68,7 +64,7 @@ describe("owner-scoped agent creation", () => {
           {
             resourceKind: "agent" as const,
             resourceId: "*",
-            ownerUserId: "bob",
+            owner: "bob",
           },
         ],
       },

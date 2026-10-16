@@ -6,7 +6,7 @@ const AgentOwnerSelf = "self"
 // AgentOwnerSelector covers all agents belonging to the selected owner.
 func AgentOwnerSelector(scope Scope, ownerUserID string) Selector {
 	selector := NewSelector(scope, WildcardResource)
-	selector[SelectorKeyOwnerUserID] = ownerUserID
+	selector[SelectorKeyOwner] = ownerUserID
 	return selector
 }
 
@@ -21,12 +21,12 @@ func AgentCreationChecks(callerUserID, ownerUserID string) []Check {
 func AgentChecks(scope Scope, agentID, callerUserID, ownerUserID string) []Check {
 	checks := []Check{{
 		Scope: scope, ResourceKind: ResourceKindAgent,
-		ResourceID: agentID, Dimensions: map[string]string{SelectorKeyOwnerUserID: ownerUserID}, selectorMatch: selectorMatchAgentOwnerID,
+		ResourceID: agentID, Dimensions: map[string]string{SelectorKeyOwner: ownerUserID}, selectorMatch: selectorMatchAgentOwnerID,
 	}}
 	if callerUserID == ownerUserID {
 		checks = append(checks, Check{
 			Scope: scope, ResourceKind: ResourceKindAgent,
-			ResourceID: agentID, Dimensions: map[string]string{SelectorKeyOwnerUserID: AgentOwnerSelf}, selectorMatch: selectorMatchStrict,
+			ResourceID: agentID, Dimensions: map[string]string{SelectorKeyOwner: AgentOwnerSelf}, selectorMatch: selectorMatchStrict,
 		})
 	}
 	return checks
