@@ -2,7 +2,7 @@
 
 Acceptance contract for the demo seed. Every dashboard page a demo user can
 reach must render populated (no empty state, no error boundary) from the data
-in `postgres.sql` + `clickhouse.sql`. A page is DONE when its `verify.md`
+in the demo seed (`server/internal/demoseed/`). A page is DONE when its `verify.md`
 check passes.
 
 Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not seeded.
@@ -208,10 +208,9 @@ present in a developer's org and deliberately absent from the shared demo org.
 
 1. New page = new row here + seed data + a `verify.md` check, in the same
    commit.
-2. All ids derive from the fixed constants in `postgres.sql` (org
-   `org_gram_demo_workspace`, projects `dec0de00-…0001`/`…0002`); chat ids are
-   `md5('gram-demo-chat-' || n)` in BOTH stores; the owner index formula
-   `1 + (n % 6)` must stay identical in both files.
+2. All ids derive from the tenant's Spec through the seeder helpers (org
+   `org_gram_demo_workspace`, project `dec0de00-…0001`); chat ids, owners,
+   and timestamps come from the `names.go` helpers, which BOTH stores use.
 3. Timestamps are always relative to `now()`, trailing ≤ 12 days, so every
    chat clears the MV date cutoffs, the daily prod rerun keeps data fresh, and
    MVs populate on INSERT — never hand-backfill an MV target. Billing meter
@@ -219,7 +218,7 @@ present in a developer's org and deliberately absent from the shared demo org.
    summary target, wait for delete visibility, then let the fresh raw inserts
    incrementally repopulate UTC-day summaries.
 4. Every new CH insert target (or new MV) gets a matching scoped DELETE in
-   `clickhouse.sql`, or re-runs double the numbers.
+   `ch_01_purge_telemetry.go`, or re-runs double the numbers.
 5. Cost/session MVs are provenance-first: usage rows must be Claude OTEL
    api_request (+`prompt.id`), `cursor:usage:*`, codex OTEL, or agent
    PostToolUse hook shapes — generic `chat:completion` rows are ignored.
