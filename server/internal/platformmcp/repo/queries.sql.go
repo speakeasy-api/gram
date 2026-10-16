@@ -8419,7 +8419,9 @@ WITH member_roles AS (
       OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
         WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), $3::text) > 0))
 )
-SELECT id, display_name, email, role_ids, exact_email_match, count(*) OVER ()::bigint AS total_matches
+SELECT id, display_name, email, role_ids, exact_email_match,
+  count(*) FILTER (WHERE exact_email_match) OVER ()::bigint AS exact_email_matches,
+  count(*) OVER ()::bigint AS total_matches
 FROM matching
 ORDER BY exact_email_match DESC, email, id
 LIMIT $1
@@ -8433,18 +8435,21 @@ type SearchPlatformMCPAccessMembersParams struct {
 }
 
 type SearchPlatformMCPAccessMembersRow struct {
-	ID              string
-	DisplayName     string
-	Email           string
-	RoleIds         []string
-	ExactEmailMatch pgtype.Bool
-	TotalMatches    int64
+	ID                string
+	DisplayName       string
+	Email             string
+	RoleIds           []string
+	ExactEmailMatch   pgtype.Bool
+	ExactEmailMatches int64
+	TotalMatches      int64
 }
 
 // Count distinct members and return only a bounded page from the same snapshot.
 // Active local role assignments follow the access roster's WorkOS identity join.
 // A member whose whole normalized email equals the query sorts first, so a
 // small result page always carries the exact match the caller asked for.
+// Emails are unique only case-sensitively, so exact_email_matches counts every
+// member the normalized query names, including any cut off by the page limit.
 func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg SearchPlatformMCPAccessMembersParams) ([]SearchPlatformMCPAccessMembersRow, error) {
 	rows, err := q.db.Query(ctx, searchPlatformMCPAccessMembers,
 		arg.ResultLimit,
@@ -8465,6 +8470,7 @@ func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg Search
 			&i.Email,
 			&i.RoleIds,
 			&i.ExactEmailMatch,
+			&i.ExactEmailMatches,
 			&i.TotalMatches,
 		); err != nil {
 			return nil, err

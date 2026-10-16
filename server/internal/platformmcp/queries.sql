@@ -3630,6 +3630,8 @@ LIMIT 2;
 -- Active local role assignments follow the access roster's WorkOS identity join.
 -- A member whose whole normalized email equals the query sorts first, so a
 -- small result page always carries the exact match the caller asked for.
+-- Emails are unique only case-sensitively, so exact_email_matches counts every
+-- member the normalized query names, including any cut off by the page limit.
 WITH member_roles AS (
   SELECT ora.workos_user_id,
     array_agg(DISTINCT COALESCE(r.id::text, g.id::text)) AS role_ids,
@@ -3656,7 +3658,9 @@ WITH member_roles AS (
       OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
         WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), @query::text) > 0))
 )
-SELECT id, display_name, email, role_ids, exact_email_match, count(*) OVER ()::bigint AS total_matches
+SELECT id, display_name, email, role_ids, exact_email_match,
+  count(*) FILTER (WHERE exact_email_match) OVER ()::bigint AS exact_email_matches,
+  count(*) OVER ()::bigint AS total_matches
 FROM matching
 ORDER BY exact_email_match DESC, email, id
 LIMIT @result_limit;

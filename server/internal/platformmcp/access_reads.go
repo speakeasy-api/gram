@@ -363,9 +363,11 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 	// a filtered cohort smaller than five. The one exception is a query that
 	// is a member's complete email: the administrator already knows who they
 	// are looking for, so returning only that member reveals nothing beyond
-	// membership, which the dashboard's member list shows them anyway.
+	// membership, which the dashboard's member list shows them anyway. Emails
+	// that differ only in case name several members; those stay suppressed so
+	// the caller is never handed a reference to the wrong person.
 	if output.Suppressed {
-		if !rows[0].ExactEmailMatch.Bool {
+		if !rows[0].ExactEmailMatch.Bool || rows[0].ExactEmailMatches != 1 {
 			return output, nil
 		}
 		rows = rows[:1]

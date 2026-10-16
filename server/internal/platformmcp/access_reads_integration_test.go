@@ -127,6 +127,27 @@ func TestAccessReadServiceReturnsExactEmailMatchFromSmallMemberSearch(t *testing
 	require.Empty(t, unknown.Members)
 }
 
+func TestAccessReadServiceSuppressesAmbiguousExactEmailMatch(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_members_ambiguous")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	// User emails are unique only case-sensitively, so both normalize to the query.
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-lower", "member@example.test")
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, "member-upper", "Member@example.test")
+
+	ambiguous, err := service.ListMembers(ctx, principal, ListAccessMembersInput{Query: "member@example.test", Limit: 1})
+	require.NoError(t, err)
+	require.True(t, ambiguous.Suppressed)
+	require.False(t, ambiguous.ExactEmailMatch)
+	require.Empty(t, ambiguous.Members)
+	require.Empty(t, ambiguous.ExpiresAt)
+}
+
 func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {
 	t.Parallel()
 
