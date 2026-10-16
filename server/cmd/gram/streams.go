@@ -84,6 +84,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/sigint"
+	sigintchrepo "github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -746,6 +748,7 @@ func newStreamsCommand() *cli.Command {
 				if lakeStore != nil {
 					mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
 				}
+				mustReceiveBatch(rg, &sigintv1.Reading{}, &sigintv1.ReadingCHWriter{}, sigint.NewReadingCHWriter(logger, sigintchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 				roleDistributionGuard := admission.NewGuard()
