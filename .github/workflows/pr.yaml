@@ -1708,31 +1708,6 @@ jobs:
           overwrite: true
           retention-days: 30
 
-      - name: Upload test results to Datadog
-        # Reports every run, failures included, to Datadog Test Optimization
-        # under service gram-server. Never blocks the job: runs without the
-        # secret (such as PRs from forks) skip, and upload errors are ignored.
-        if: always()
-        continue-on-error: true
-        timeout-minutes: 5
-        shell: bash
-        env:
-          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
-          DD_ENV: ci
-          MATRIX_SHARD: ${{ matrix.shard }}
-        run: |
-          if [ -z "$DATADOG_API_KEY" ]; then
-            echo "DATADOG_API_KEY is not available; skipping the Datadog upload."
-            exit 0
-          fi
-          if [ ! -s server/junit-report.xml ]; then
-            echo "No JUnit report was written; skipping the Datadog upload."
-            exit 0
-          fi
-          # datadog-ci is a root devDependency, pinned by the lockfile.
-          aube install --frozen-lockfile --filter .
-          mise run datadog:junit --service gram-server --tags "shard:${MATRIX_SHARD},race:true" server/junit-report.xml
-
       - name: Let tracked flaky tests through
         # Passes only when every failure is an open flaky-test ticket (see
         # ci/cmd/flaky). A failing candidate is quarantined and handed to the
