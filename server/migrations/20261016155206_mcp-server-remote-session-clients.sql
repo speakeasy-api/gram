@@ -1,11 +1,3 @@
--- Create "set_mcp_server_remote_session_client_scope" function
-CREATE FUNCTION "set_mcp_server_remote_session_client_scope" () RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  SELECT attachment_scope INTO NEW.client_attachment_scope
-  FROM remote_session_clients WHERE id = NEW.remote_session_client_id;
-  RETURN NEW;
-END;
-$$;
 -- Create "mcp_server_remote_session_clients" table
 CREATE TABLE "mcp_server_remote_session_clients" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -25,7 +17,9 @@ CREATE TABLE "mcp_server_remote_session_clients" (
   CONSTRAINT "mcp_server_remote_session_clients_client_scope_check" CHECK (((client_attachment_scope = ('project:'::text || (project_id)::text)) OR (client_attachment_scope = ('organization:'::text || organization_id))) OR (client_attachment_scope = 'global'::text))
 );
 -- Create index "mcp_server_remote_session_clients_client_idx" to table: "mcp_server_remote_session_clients"
-CREATE INDEX "mcp_server_remote_session_clients_client_idx" ON "mcp_server_remote_session_clients" ("remote_session_client_id") WHERE (deleted IS FALSE);
+CREATE INDEX "mcp_server_remote_session_clients_client_idx" ON "mcp_server_remote_session_clients" ("remote_session_client_id");
+-- Create index "mcp_server_remote_session_clients_mcp_server_id_idx" to table: "mcp_server_remote_session_clients"
+CREATE INDEX "mcp_server_remote_session_clients_mcp_server_id_idx" ON "mcp_server_remote_session_clients" ("mcp_server_id");
 -- Create index "mcp_server_remote_session_clients_project_id_idx" to table: "mcp_server_remote_session_clients"
 CREATE INDEX "mcp_server_remote_session_clients_project_id_idx" ON "mcp_server_remote_session_clients" ("project_id");
 -- Create index "mcp_server_remote_session_clients_server_client_key" to table: "mcp_server_remote_session_clients"
@@ -50,5 +44,3 @@ COMMENT ON COLUMN "mcp_server_remote_session_clients"."updated_at" IS '@access: 
 COMMENT ON COLUMN "mcp_server_remote_session_clients"."deleted_at" IS '@access: confidential';
 -- Set comment to column: "deleted" on table: "mcp_server_remote_session_clients"
 COMMENT ON COLUMN "mcp_server_remote_session_clients"."deleted" IS '@access: confidential';
--- Create trigger "mcp_server_remote_session_clients_scope"
-CREATE TRIGGER "mcp_server_remote_session_clients_scope" BEFORE INSERT OR UPDATE OF "remote_session_client_id" ON "mcp_server_remote_session_clients" FOR EACH ROW EXECUTE FUNCTION "set_mcp_server_remote_session_client_scope"();

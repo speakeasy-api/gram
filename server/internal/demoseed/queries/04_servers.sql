@@ -229,10 +229,12 @@ WHERE id = @mcp_server_id::uuid
 -- only consumer of its user session issuer; the seed writes it directly.
 -- name: ServersInsertServerClientAssociation :exec
 INSERT INTO mcp_server_remote_session_clients
-  (id, project_id, organization_id, mcp_server_id, remote_session_client_id)
-VALUES
-  (@id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
-   @remote_session_client_id::uuid);
+  (id, project_id, organization_id, mcp_server_id, remote_session_client_id,
+   client_attachment_scope)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
+       c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = @remote_session_client_id::uuid;
 
 -- Linear's protected resource, read recently, with a scope pin for the server's scope panel.
 -- name: ServersUpsertLinearProtectedResource :exec

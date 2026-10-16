@@ -9328,7 +9328,8 @@ CREATE TABLE IF NOT EXISTS mcp_server_remote_session_clients (
   organization_id TEXT NOT NULL,
   mcp_server_id uuid NOT NULL,
   remote_session_client_id uuid NOT NULL,
-  -- Filled by the trigger, then pinned to the client by a composite foreign key.
+  -- The client's attachment_scope, copied by the writer and pinned to the
+  -- client by a composite foreign key.
   client_attachment_scope TEXT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9358,28 +9359,16 @@ COMMENT ON COLUMN mcp_server_remote_session_clients.updated_at IS '@access: conf
 COMMENT ON COLUMN mcp_server_remote_session_clients.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_server_remote_session_clients.deleted IS '@access: confidential';
 
-CREATE OR REPLACE FUNCTION set_mcp_server_remote_session_client_scope()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  SELECT attachment_scope INTO NEW.client_attachment_scope
-  FROM remote_session_clients WHERE id = NEW.remote_session_client_id;
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER mcp_server_remote_session_clients_scope
-BEFORE INSERT OR UPDATE OF remote_session_client_id ON mcp_server_remote_session_clients
-FOR EACH ROW EXECUTE FUNCTION set_mcp_server_remote_session_client_scope();
-
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_remote_session_clients_server_client_key
 ON mcp_server_remote_session_clients (mcp_server_id, remote_session_client_id)
 WHERE deleted IS FALSE;
 
+-- Unfiltered so the cascading foreign keys find removed rows too.
 CREATE INDEX IF NOT EXISTS mcp_server_remote_session_clients_client_idx
-ON mcp_server_remote_session_clients (remote_session_client_id)
-WHERE deleted IS FALSE;
+ON mcp_server_remote_session_clients (remote_session_client_id);
+
+CREATE INDEX IF NOT EXISTS mcp_server_remote_session_clients_mcp_server_id_idx
+ON mcp_server_remote_session_clients (mcp_server_id);
 
 CREATE INDEX IF NOT EXISTS mcp_server_remote_session_clients_project_id_idx
 ON mcp_server_remote_session_clients (project_id);
@@ -9403,7 +9392,8 @@ CREATE TABLE IF NOT EXISTS upstream_client_selections (
   mcp_server_id uuid NOT NULL,
   -- NULL exactly when no_auth: the server needs no upstream authentication.
   remote_session_client_id uuid,
-  -- Filled by the trigger, then pinned to the client by a composite foreign key.
+  -- The chosen client's attachment_scope, copied by the writer and pinned to
+  -- the client by a composite foreign key.
   client_attachment_scope TEXT,
   no_auth boolean NOT NULL DEFAULT FALSE,
   -- How the choice was made, for coverage reporting; validated in application
@@ -9422,7 +9412,11 @@ CREATE TABLE IF NOT EXISTS upstream_client_selections (
   CONSTRAINT upstream_client_selections_no_auth_check CHECK (no_auth = (remote_session_client_id IS NULL)),
   CONSTRAINT upstream_client_selections_client_scope_check CHECK (
     (remote_session_client_id IS NULL AND client_attachment_scope IS NULL)
-    OR client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id, 'global')
+    OR (
+      remote_session_client_id IS NOT NULL
+      AND client_attachment_scope IS NOT NULL
+      AND client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id, 'global')
+    )
   )
 );
 
@@ -9441,36 +9435,16 @@ COMMENT ON COLUMN upstream_client_selections.updated_at IS '@access: confidentia
 COMMENT ON COLUMN upstream_client_selections.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN upstream_client_selections.deleted IS '@access: confidential';
 
-CREATE OR REPLACE FUNCTION set_upstream_client_selection_scope()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  IF NEW.remote_session_client_id IS NULL THEN
-    NEW.client_attachment_scope := NULL;
-  ELSE
-    SELECT attachment_scope INTO NEW.client_attachment_scope
-    FROM remote_session_clients WHERE id = NEW.remote_session_client_id;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER upstream_client_selections_scope
-BEFORE INSERT OR UPDATE OF remote_session_client_id ON upstream_client_selections
-FOR EACH ROW EXECUTE FUNCTION set_upstream_client_selection_scope();
-
 CREATE UNIQUE INDEX IF NOT EXISTS upstream_client_selections_credential_server_key
 ON upstream_client_selections (credential_kind, credential_id, mcp_server_id)
 WHERE deleted IS FALSE;
 
+-- Unfiltered so the cascading foreign keys find removed rows too.
 CREATE INDEX IF NOT EXISTS upstream_client_selections_client_idx
-ON upstream_client_selections (remote_session_client_id)
-WHERE deleted IS FALSE AND remote_session_client_id IS NOT NULL;
+ON upstream_client_selections (remote_session_client_id);
 
 CREATE INDEX IF NOT EXISTS upstream_client_selections_mcp_server_idx
-ON upstream_client_selections (mcp_server_id)
-WHERE deleted IS FALSE;
+ON upstream_client_selections (mcp_server_id);
 
 CREATE INDEX IF NOT EXISTS upstream_client_selections_project_id_idx
 ON upstream_client_selections (project_id);

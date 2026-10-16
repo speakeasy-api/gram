@@ -157,6 +157,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 						RemoteSessionClientID: clientID,
 						McpServerID:           result.MCPServerID,
 						UserSessionIssuerID:   server[0].UserSessionIssuerID,
+						RequireSoleConsumer:   result.Outcome == OutcomeSoleConsumer,
 						RespectRemoved:        result.RespectRemoved,
 					})
 					if err != nil {
