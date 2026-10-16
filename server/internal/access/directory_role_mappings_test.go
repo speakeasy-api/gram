@@ -309,7 +309,7 @@ func TestService_SyncDirectoryGroups_SavesGroupsFromLinkedDirectories(t *testing
 		{ID: "directory_group_" + uuid.NewString(), DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Engineering", RawAttributes: nil, CreatedAt: "2026-01-01T00:00:00Z", UpdatedAt: "2026-01-02T00:00:00Z"},
 		{ID: "directory_group_" + uuid.NewString(), DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Sales", RawAttributes: []byte(`{"id":"sales"}`), CreatedAt: "2026-01-01T00:00:00Z", UpdatedAt: "2026-01-02T00:00:00Z"},
 	}, nil).Once()
-	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, mock.Anything, mock.Anything).Return([]thirdpartyworkos.DirectoryUser{}, nil)
+	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, mock.Anything).Return([]thirdpartyworkos.DirectoryUser{}, nil)
 
 	result, err := ti.service.SyncDirectoryGroups(ctx, &gen.SyncDirectoryGroupsPayload{})
 	require.NoError(t, err)
@@ -393,7 +393,7 @@ func TestService_SyncDirectoryGroups_KeepsDeletedAndNewerGroups(t *testing.T) {
 		// Older than the stored row: only the timestamp guard keeps it as is.
 		{ID: newerWorkOSID, DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Renamed", RawAttributes: nil, CreatedAt: stale, UpdatedAt: stale},
 	}, nil).Once()
-	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, mock.Anything, mock.Anything).Return([]thirdpartyworkos.DirectoryUser{}, nil)
+	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, mock.Anything).Return([]thirdpartyworkos.DirectoryUser{}, nil)
 
 	_, err = ti.service.SyncDirectoryGroups(ctx, &gen.SyncDirectoryGroupsPayload{})
 	require.NoError(t, err)
@@ -458,7 +458,7 @@ func TestService_SyncDirectoryGroups_AddsMembersFromBeforeEventCursor(t *testing
 	ti.roles.On("ListDirectoryGroups", mock.Anything, "directory_linked").Return([]thirdpartyworkos.DirectoryGroup{
 		{ID: workosGroupID, DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Engineering", RawAttributes: nil, CreatedAt: "2026-05-14T17:04:54Z", UpdatedAt: "2026-05-14T17:04:54Z"},
 	}, nil).Once()
-	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, mock.Anything, workosGroupID).Return([]thirdpartyworkos.DirectoryUser{
+	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, workosGroupID).Return([]thirdpartyworkos.DirectoryUser{
 		listedDirectoryUser(newcomerWorkOSID, "newcomer@test.com", "active"),
 		listedDirectoryUser(historicalWorkOSID, "historical@test.com", "active"),
 		listedDirectoryUser(unsyncedWorkOSID, "Unsynced@Test.com", "active"),
@@ -516,7 +516,7 @@ func TestService_SyncDirectoryGroups_GrantsGroupRoleToMemberFromBeforeEventCurso
 	ti.roles.On("ListDirectoryGroups", mock.Anything, "directory_linked").Return([]thirdpartyworkos.DirectoryGroup{
 		{ID: workosGroupID, DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Engineering", RawAttributes: nil, CreatedAt: "2026-05-14T17:04:54Z", UpdatedAt: "2026-05-14T17:04:54Z"},
 	}, nil).Once()
-	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, mock.Anything, workosGroupID).Return([]thirdpartyworkos.DirectoryUser{
+	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, workosGroupID).Return([]thirdpartyworkos.DirectoryUser{
 		listedDirectoryUser(workosUserID, "eng@test.com", "active"),
 	}, nil).Once()
 
@@ -555,7 +555,7 @@ func TestService_SyncDirectoryGroups_ClosesMembershipsOfUnlistedMembers(t *testi
 	ti.roles.On("ListDirectoryGroups", mock.Anything, "directory_linked").Return([]thirdpartyworkos.DirectoryGroup{
 		{ID: workosGroupID, DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Engineering", RawAttributes: nil, CreatedAt: "2026-05-14T17:04:54Z", UpdatedAt: "2026-05-14T17:04:54Z"},
 	}, nil).Once()
-	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, mock.Anything, workosGroupID).Return([]thirdpartyworkos.DirectoryUser{
+	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, workosGroupID).Return([]thirdpartyworkos.DirectoryUser{
 		listedDirectoryUser(inactiveWorkOSID, "inactive@test.com", "inactive"),
 	}, nil).Once()
 
@@ -584,7 +584,7 @@ func TestService_SyncDirectoryGroups_FailedMemberListingChangesNothing(t *testin
 	ti.roles.On("ListDirectoryGroups", mock.Anything, "directory_linked").Return([]thirdpartyworkos.DirectoryGroup{
 		{ID: workosGroupID, DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Engineering", RawAttributes: nil, CreatedAt: "2026-05-14T17:04:54Z", UpdatedAt: "2026-05-14T17:04:54Z"},
 	}, nil).Once()
-	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, mock.Anything, workosGroupID).Return(nil, fmt.Errorf("workos unavailable")).Once()
+	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, workosGroupID).Return(nil, fmt.Errorf("workos unavailable")).Once()
 
 	_, err := ti.service.SyncDirectoryGroups(ctx, &gen.SyncDirectoryGroupsPayload{})
 	requireOopsCode(t, err, oops.CodeGatewayError)
@@ -623,7 +623,7 @@ func TestService_SyncDirectoryGroups_KeepsMembershipRemovedDuringListing(t *test
 	ti.roles.On("ListDirectoryGroups", mock.Anything, "directory_linked").Return([]thirdpartyworkos.DirectoryGroup{
 		{ID: workosGroupID, DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Engineering", RawAttributes: nil, CreatedAt: "2026-05-14T17:04:54Z", UpdatedAt: "2026-05-14T17:04:54Z"},
 	}, nil).Once()
-	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, mock.Anything, workosGroupID).Run(removeDuringListing).Return([]thirdpartyworkos.DirectoryUser{
+	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, workosGroupID).Run(removeDuringListing).Return([]thirdpartyworkos.DirectoryUser{
 		listedDirectoryUser(memberWorkOSID, "member@test.com", "active"),
 	}, nil).Once()
 
@@ -661,7 +661,7 @@ func TestService_SyncDirectoryGroups_IgnoresDirectoryUserOfAnotherOrganization(t
 	ti.roles.On("ListDirectoryGroups", mock.Anything, "directory_linked").Return([]thirdpartyworkos.DirectoryGroup{
 		{ID: workosGroupID, DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Engineering", RawAttributes: nil, CreatedAt: "2026-05-14T17:04:54Z", UpdatedAt: "2026-05-14T17:04:54Z"},
 	}, nil).Once()
-	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, "directory_linked", workosGroupID).Return([]thirdpartyworkos.DirectoryUser{
+	ti.roles.On("ListDirectoryGroupUsers", mock.Anything, workosGroupID).Return([]thirdpartyworkos.DirectoryUser{
 		listedDirectoryUser(otherWorkOSUserID, "other@test.com", "active"),
 	}, nil).Once()
 

@@ -372,7 +372,7 @@ func (s *StubClient) SetDirectoryUsers(directoryID string, users ...DirectoryUse
 	s.directoryUsers[directoryID] = append([]DirectoryUser(nil), users...)
 }
 
-func (s *StubClient) ListDirectoryGroupUsers(_ context.Context, _, groupID string) ([]DirectoryUser, error) {
+func (s *StubClient) ListDirectoryGroupUsers(_ context.Context, groupID string) ([]DirectoryUser, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 

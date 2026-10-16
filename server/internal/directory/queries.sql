@@ -500,7 +500,8 @@ SELECT id
 FROM directory_users
 WHERE organization_id = @organization_id
   AND workos_directory_user_id = @workos_directory_user_id
-  AND deleted_at IS NULL;
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE;
 
 -- name: ListOpenOrganizationDirectoryGroupMemberships :many
 SELECT m.workos_directory_user_id, m.workos_created_at

@@ -112,11 +112,6 @@ func (h *Handler) handleWorkosListDirectoryUsers(w http.ResponseWriter, r *http.
 	ctx := r.Context()
 	q := r.URL.Query()
 
-	orgID, err := h.directoryOrgID(ctx, firstQuery(q, "directory"))
-	if err != nil {
-		writeWorkosError(w, http.StatusBadRequest, "directory is required")
-		return
-	}
 	limit, after, err := parseDirectoryPageParams(q, workosDirectoryUserIDPrefix)
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
@@ -125,6 +120,23 @@ func (h *Handler) handleWorkosListDirectoryUsers(w http.ResponseWriter, r *http.
 	groupID, err := optionalPrefixedQueryID(q, "group", workosDirectoryGroupIDPrefix)
 	if err != nil {
 		writeWorkosError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// WorkOS takes either a directory or a group; a group names its
+	// directory's organization.
+	var orgID uuid.UUID
+	switch directoryID := firstQuery(q, "directory"); {
+	case directoryID != "":
+		orgID, err = h.directoryOrgID(ctx, directoryID)
+	case groupID.Valid:
+		var group repo.DirectoryGroup
+		group, err = repo.New(h.db).GetDirectoryGroup(ctx, groupID.UUID)
+		orgID = group.OrganizationID
+	default:
+		err = errors.New("directory or group is required")
+	}
+	if err != nil {
+		writeWorkosError(w, http.StatusBadRequest, "directory or group is required")
 		return
 	}
 	if err := h.ensureDirectoryFixtures(ctx, orgID); err != nil {

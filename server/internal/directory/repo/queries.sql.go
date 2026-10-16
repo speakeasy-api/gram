@@ -382,7 +382,8 @@ SELECT id
 FROM directory_users
 WHERE organization_id = $1
   AND workos_directory_user_id = $2
-  AND deleted_at IS NULL
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
 `
 
 type GetOrganizationDirectoryUserIDByWorkOSIDParams struct {
