@@ -22,9 +22,10 @@ retention_days=30
 since=$(date -u -d "${retention_days} days ago" +%F 2>/dev/null || date -u -v-"${retention_days}"d +%F)
 
 # Newest first. Runs from before the upload step existed have no reports and
-# are skipped below.
-candidates=$(gh api --paginate \
-  "repos/{owner}/{repo}/actions/workflows/pr.yaml/runs?branch=${branch}&event=push&status=success&created=%3E%3D${since}&per_page=100" \
+# are skipped below. Query values go through -f so gh encodes them; a branch
+# name can contain characters such as & that would break an interpolated URL.
+candidates=$(gh api --method GET --paginate "repos/{owner}/{repo}/actions/workflows/pr.yaml/runs" \
+  -f branch="$branch" -f event=push -f status=success -f created=">=${since}" -f per_page=100 \
   --jq '.workflow_runs[].id')
 
 found=0
@@ -35,8 +36,8 @@ for run_id in $candidates; do
 
   # Listing first separates "this run has no reports" from a failed download,
   # which aborts the refresh rather than silently shrinking the sample.
-  available=$(gh api --paginate "repos/{owner}/{repo}/actions/runs/${run_id}/artifacts?per_page=100" \
-    --jq '[.artifacts[] | select(.name | startswith("server-test-timings-")) | select(.expired | not)] | length' |
+  available=$(gh api --method GET --paginate "repos/{owner}/{repo}/actions/runs/${run_id}/artifacts" \
+    -f per_page=100 --jq '[.artifacts[] | select(.name | startswith("server-test-timings-")) | select(.expired | not)] | length' |
     awk '{ total += $1 } END { print total + 0 }')
   if [ "$available" -eq 0 ]; then
     echo "Run $run_id has no server-test timing artifacts; skipping"
