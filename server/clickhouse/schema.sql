@@ -2191,14 +2191,6 @@ TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'One row per observed agent occurrence, resolved by the ingest dialects into agent vocabulary rather than the shape it arrived in. Rows sharing a session_id belong to the same agent session. Append-only: every observation is retained so the lineage of a fact stays queryable, and de-duplication is performed at read time. The queryable surface is defined by the semantic layer, not by this table.';
 
--- agent_metrics is ReplacingMergeTree, unlike agent_events, because metric
--- measures are sums: duplicates corrupt them directly and there is no
--- count-distinct equivalent to read around them. Fingerprint collisions resolve
--- last-write-wins, the engine default, which the OTel spec permits: receivers
--- must de-duplicate but which point wins in an overlap is unspecified.
---
--- Retained for 730 days against agent_events 90, because billing reads
--- measures across historical cycles, not narrative.
 CREATE TABLE IF NOT EXISTS tool_calls (
     organization_id String COMMENT 'Organization that owns the call.\n@access: confidential' CODEC(ZSTD),
     project_id String COMMENT 'Project that owns the call.\n@access: confidential' CODEC(ZSTD),
@@ -2224,7 +2216,7 @@ PARTITION BY toYYYYMMDD(call_hour)
 ORDER BY (organization_id, project_id, call_hour, event_id)
 TTL call_hour + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
-COMMENT 'One row per tool call, folded from agent_events by tool_calls_mv as records arrive. Read with the -Merge combinators and GROUP BY event_id. Filled forward only, from the time the view was created.';
+COMMENT 'One row per tool call, folded from agent_events by tool_calls_mv as records arrive. Read with the -Merge combinators and GROUP BY organization_id, project_id, event_id, across call_hour. Filled forward only, from the time the view was created.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS tool_calls_mv TO tool_calls AS
 SELECT
@@ -2247,6 +2239,14 @@ FROM agent_events
 WHERE event_type IN ('tool_call', 'tool_call_result', 'tool_decision') AND event_id != ''
 GROUP BY organization_id, project_id, call_hour, event_id;
 
+-- agent_metrics is ReplacingMergeTree, unlike agent_events, because metric
+-- measures are sums: duplicates corrupt them directly and there is no
+-- count-distinct equivalent to read around them. Fingerprint collisions resolve
+-- last-write-wins, the engine default, which the OTel spec permits: receivers
+-- must de-duplicate but which point wins in an overlap is unspecified.
+--
+-- Retained for 730 days against agent_events 90, because billing reads
+-- measures across historical cycles, not narrative.
 CREATE TABLE IF NOT EXISTS agent_metrics (
     -- Tenancy, stamped at the ingest edge from authenticated state.
     organization_id String COMMENT 'Organization the data point belongs to, from the provenance stamped at the ingest edge.\n@access: confidential' CODEC(ZSTD),
