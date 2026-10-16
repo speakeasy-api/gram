@@ -3,7 +3,7 @@ export const FEATURE_FLAGS = {
   budgets: "gram-budgets",
   // UI-only rollout gate for the Channels page; the server serves Channels
   // only where the deployment enables it.
-  channels: "gram-channels",
+  channels: "channels",
   deploymentsPage: "gram-deployments-page",
   deviceAgent: "gram-device-agent",
   deviceIntegrations: "gram-device-integrations",
