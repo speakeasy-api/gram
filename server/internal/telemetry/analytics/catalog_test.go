@@ -13,23 +13,21 @@ import (
 func TestDefaultCatalog(t *testing.T) {
 	t.Parallel()
 
-	names := make([]string, 0, 3)
+	names := make([]string, 0, 2)
 	for _, ds := range Default.Datasets() {
 		names = append(names, ds.Name)
 	}
-	require.Equal(t, []string{"sessions", "tool_calls", "skills"}, names)
+	require.Equal(t, []string{"tool_calls", "skills"}, names)
 
-	sessions, ok := Default.Dataset("sessions")
+	toolCalls, ok := Default.Dataset("tool_calls")
 	require.True(t, ok)
-	user, ok := sessions.Field("user")
+	user, ok := toolCalls.Field("user")
 	require.True(t, ok)
 	require.True(t, user.AdmitsOperator("in"))
 	require.False(t, user.AdmitsAggregation("sum"), "a dimension admits operators, not a measure's aggregations")
 	require.True(t, user.AdmitsAggregation("count_distinct"), "the one aggregation a dimension declares is over its own values")
 	require.False(t, user.AdmitsOperator("count_distinct"), "an aggregation is not a filter operator")
 
-	toolCalls, ok := Default.Dataset("tool_calls")
-	require.True(t, ok)
 	for _, name := range []string{"tool_name", "mcp_server", "session", "user"} {
 		field, ok := toolCalls.Field(name)
 		require.True(t, ok, name)
@@ -57,14 +55,14 @@ func TestDefaultCatalog(t *testing.T) {
 		require.True(t, ok, "%s reads on a skill invocation as on any call", name)
 	}
 
-	duration, ok := sessions.Field("duration_seconds")
+	duration, ok := toolCalls.Field("duration_ms")
 	require.True(t, ok)
 	require.True(t, duration.AdmitsAggregation("p95"))
 	require.False(t, duration.AdmitsOperator("equals"), "a measure admits aggregations, not operators")
 
 	_, ok = Default.Dataset("project")
 	require.False(t, ok, "project is tenancy, never a dataset or a field")
-	_, ok = sessions.Field("project")
+	_, ok = toolCalls.Field("project")
 	require.False(t, ok)
 }
 
@@ -81,7 +79,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 			Fields: []Field{
 				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: ""},
 			},
-			Source: sessionsSource,
+			Source: toolCallsSource,
 		}
 	}
 
@@ -192,7 +190,6 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 	}
 	toolCallBinds = append(toolCallBinds, "") // event_type IN (...), event_id != ''
 	trailing := map[string][]any{
-		Sessions.Name:  {""}, // session_id != ''
 		ToolCalls.Name: toolCallBinds,
 		// The same collapse; the skill predicate is a literal on the collapsed row.
 		Skills.Name: toolCallBinds,
@@ -211,35 +208,15 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 	}
 }
 
-// TestToolCallPredicatesShareOneVocabulary: the sessions count and the tool
-// call dataset admit the same event types. One is bound by squirrel and the
-// other rendered inside an aggregate, so pin that they say the same thing.
-func TestToolCallPredicatesShareOneVocabulary(t *testing.T) {
-	t.Parallel()
-
-	qc := QueryContext{Tenant: Tenant{OrganizationID: "org", ProjectID: "project"}, Window: Window{FromUnixNano: 1, ToUnixNano: 2}}
-
-	sessions, _, err := sessionsSource.Rows(qc).ToSql()
-	require.NoError(t, err)
-	require.Contains(t, sessions, toolCallEventTypesSQL)
-	require.Equal(t, "event_type IN ('tool_call', 'tool_call_result', 'tool_decision')", toolCallEventTypesSQL)
-
-	_, args, err := toolCallsSource.Rows(qc).ToSql()
-	require.NoError(t, err)
-	for _, eventType := range toolCallEventTypes {
-		require.Contains(t, args, eventType)
-	}
-}
-
 // TestDatasetWindowIsBoundedByItsTableRetention: an event dataset reads
 // agent_events and a metric dataset agent_metrics, and each may ask for no
 // more than its table keeps.
 func TestDatasetWindowIsBoundedByItsTableRetention(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, MaxEventTimeRangeDays, Sessions.MaxTimeRangeDays())
 	require.Equal(t, MaxEventTimeRangeDays, ToolCalls.MaxTimeRangeDays())
-	require.Equal(t, int64(MaxEventTimeRangeDays)*nanosPerDay, Sessions.MaxTimeRangeNanos())
+	require.Equal(t, MaxEventTimeRangeDays, Skills.MaxTimeRangeDays())
+	require.Equal(t, int64(MaxEventTimeRangeDays)*nanosPerDay, ToolCalls.MaxTimeRangeNanos())
 
 	metric := &Dataset{Name: "spend", Kind: KindMetric, Grain: "measurement", Description: "", TimeExpr: "t", Fields: nil, Source: Source{}}
 	require.Equal(t, MaxMetricTimeRangeDays, metric.MaxTimeRangeDays())
@@ -293,13 +270,13 @@ func TestDimensionValuesSkipTheCollapse(t *testing.T) {
 func TestDimensionValuesWithoutTypeaheadReadTheRows(t *testing.T) {
 	t.Parallel()
 
-	ds := *Sessions
-	ds.Fields = slices.Clone(Sessions.Fields)
+	ds := *ToolCalls
+	ds.Fields = slices.Clone(ToolCalls.Fields)
 	for i := range ds.Fields {
 		ds.Fields[i].Typeahead = ""
 	}
-	plan, err := CompileValues(MustCatalog(nil, &ds), Tenant{OrganizationID: "org", ProjectID: "proj"}, nil, ValuesRequest{Dataset: ds.Name, Dimension: "model", FromUnixNano: 1, ToUnixNano: 2, Limit: 0})
+	plan, err := CompileValues(MustCatalog(Lookups, &ds), Tenant{OrganizationID: "org", ProjectID: "proj"}, nil, ValuesRequest{Dataset: ds.Name, Dimension: "tool_name", FromUnixNano: 1, ToUnixNano: 2, Limit: 0})
 	require.NoError(t, err)
-	require.Contains(t, plan.SQL, "SELECT model AS value, count() AS n FROM (")
+	require.Contains(t, plan.SQL, "SELECT tool_name AS value, count() AS n FROM (")
 	require.Contains(t, plan.SQL, "LIMIT 1 BY")
 }

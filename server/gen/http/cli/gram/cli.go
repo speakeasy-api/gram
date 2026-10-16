@@ -14385,7 +14385,7 @@ func analyticsQueryUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics query --body '{\n      \"dataset\": \"sessions\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"hour\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"tool_calls\",\n            \"field\": \"tool_call_count\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"tool_calls\"\n         }\n      ],\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics query --body '{\n      \"dataset\": \"tool_calls\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"hour\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"total_ms\",\n            \"field\": \"duration_ms\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"total_ms\"\n         }\n      ],\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func analyticsDescribeUsage() {
@@ -14427,7 +14427,7 @@ func analyticsDimensionValuesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics dimension-values --body '{\n      \"dataset\": \"sessions\",\n      \"dimension\": \"model\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics dimension-values --body '{\n      \"dataset\": \"tool_calls\",\n      \"dimension\": \"tool_name\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.

@@ -131,7 +131,10 @@ JSON framing counts toward the budget; an oversized target still fails evaluatio
 Other failures in older content affect only larger slices, and a history
 lookup failure does not prevent target-only readings. Redelivery creates a fresh
 buffer. The classifier contract remains questions plus state. Definition hashes
-include strategy, size and the versioned target-framing contract.
+include strategy, size and the versioned target-framing contract. Each reading's
+`input` records what that attempt actually supplied: strategy, requested and
+supplied message counts including the target, and whether the content budget
+truncated available history.
 
 ### Request goldens
 
