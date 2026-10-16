@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { useEffect, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -147,7 +148,10 @@ function ConnectionCard({
   }, [location.hash, location.key]);
   const queryClient = useQueryClient();
   const step = connectionStep(connection);
-  const status = CONNECTION_STATUS[connection.status];
+  const status = enumPresentation(CONNECTION_STATUS, connection.status, {
+    variant: "neutral",
+    label: "Unknown",
+  });
   const verify = useVerifyIdentityProviderConnectionMutation({
     onSuccess: (updated) => {
       if (updated.status === "verified") {

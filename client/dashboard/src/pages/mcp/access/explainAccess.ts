@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import type { ExplainedAccessLevel } from "@gram/client/models/components/explainedaccesslevel.js";
 import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
 import type { ExplainResourceAccessResult } from "@gram/client/models/components/explainresourceaccessresult.js";
@@ -242,7 +243,11 @@ export function ruleAccessLabel(
   rule: ExplainedAccessRule,
   explained: ExplainedLevel,
 ): string {
-  const access = RULE_LEVEL_NAME[rule.level];
+  const access = enumPresentation(
+    RULE_LEVEL_NAME,
+    rule.level,
+    "Unknown access",
+  );
   const narrowing = narrowingLabel(rule);
   // A label leading with a tool name keeps the name exactly as the tool has
   // it; one leading with words ("all tools", "read-only tools") reads as a
@@ -317,7 +322,9 @@ export function groupRules(
   }
   return [...groups.entries()].map(([key, members]) => {
     const ordered = [...members].sort(
-      (a, b) => RULE_LEVEL_RANK[a.level] - RULE_LEVEL_RANK[b.level],
+      (a, b) =>
+        enumPresentation(RULE_LEVEL_RANK, a.level, 4) -
+        enumPresentation(RULE_LEVEL_RANK, b.level, 4),
     );
     const labels = [
       ...new Set(ordered.map((rule) => ruleAccessLabel(rule, explained))),
@@ -343,6 +350,7 @@ export function ruleReachLabel(
     case "all_resources":
       return "All servers";
   }
+  return "Unknown reach";
 }
 
 const EFFECT_BADGE: Record<
@@ -361,7 +369,10 @@ export function effectBadge(rule: ExplainedAccessRule): {
   label: string;
   variant: BadgeVariant;
 } {
-  return EFFECT_BADGE[rule.effect];
+  return enumPresentation(EFFECT_BADGE, rule.effect, {
+    label: "Unknown",
+    variant: "neutral",
+  });
 }
 
 /**
@@ -401,6 +412,7 @@ export function effectNote(
           return blockedByNote(level);
       }
   }
+  return "Access effect unavailable.";
 }
 
 /**

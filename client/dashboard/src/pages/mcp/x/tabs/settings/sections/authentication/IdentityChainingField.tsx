@@ -162,6 +162,7 @@ function stateCopy(
         tone: "destructive",
       };
   }
+  return { label: "Unknown", variant: "neutral" };
 }
 
 function ClientPicker({

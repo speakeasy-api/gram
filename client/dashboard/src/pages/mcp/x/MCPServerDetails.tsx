@@ -1,3 +1,5 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -354,7 +356,7 @@ export function MCPServerStatusDropdown({
   const currentLabel = visibilityLabel(server.visibility);
   const currentDotClass =
     options.find((option) => option.value === server.visibility)?.dotClass ??
-    "bg-green-400";
+    "bg-muted-foreground";
   // Public is gated on the source's consent; the option stays visible but
   // disabled, and this footer takes the owner to where consent is given.
   const publicBlocked = isTunneled && !sourceAllowsPublic;
@@ -382,6 +384,14 @@ export function MCPServerStatusDropdown({
       <DropdownMenuTrigger asChild disabled={!canWrite || updating}>
         <button
           type="button"
+          title={
+            isKnownEnumValue(
+              KnownUpdateMcpServerFormVisibility,
+              server.visibility,
+            )
+              ? undefined
+              : "Refresh the page before changing this server’s availability."
+          }
           disabled={!canWrite || updating}
           className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -485,6 +495,7 @@ function visibilityLabel(visibility: McpServerVisibility): string {
     case "private":
       return "Private";
   }
+  return "Unknown";
 }
 
 function visibilityToast(visibility: McpServerVisibility): string {
@@ -496,6 +507,7 @@ function visibilityToast(visibility: McpServerVisibility): string {
     case "private":
       return "MCP server set to private";
   }
+  return "MCP server updated";
 }
 
 function useMcpServerVisibilityUpdate(server: McpServer): {
@@ -505,7 +517,10 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
 } {
   const { hasScope } = useRBAC();
   // These controls offer no public state for hosted servers; their visibility stays on the toolset page.
-  const canWrite = hasScope("mcp:write") && !isCanonicalHostedWrapper(server);
+  const canWrite =
+    hasScope("mcp:write") &&
+    !isCanonicalHostedWrapper(server) &&
+    isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
   const queryClient = useQueryClient();
   const update = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
@@ -532,7 +547,12 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   });
 
   const updateVisibility = (next: McpServerVisibility) => {
-    if (next === server.visibility) return;
+    if (
+      !canWrite ||
+      !isKnownEnumValue(KnownUpdateMcpServerFormVisibility, next) ||
+      next === server.visibility
+    )
+      return;
     update.mutate({
       request: {
         updateMcpServerForm: {

@@ -1,3 +1,5 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { SetSpendCapRequestBodyKeyType as KnownSetSpendCapRequestBodyKeyType } from "@gram/client/models/components/setspendcaprequestbody.js";
 import { InferenceCapMeter } from "@/components/billing/inference-cap-meter";
 import { BookingCalendarLink } from "@/pages/demo/components/booking-calendar/BookingCalendarLink";
 import {
@@ -107,6 +109,14 @@ function controlFor(
   refetching: boolean,
   announcesLock: boolean,
 ): JSX.Element {
+  if (!isKnownEnumValue(KnownSetSpendCapRequestBodyKeyType, cap.keyType)) {
+    return (
+      <CapReadOnly
+        cap={cap}
+        note="Refresh the page before editing this unsupported inference cap."
+      />
+    );
+  }
   if (cap.disabled) return <CapReadOnly cap={cap} note={DISABLED_NOTE} />;
 
   // Nothing writable here, so the mutation is never mounted — the lock holds
@@ -270,7 +280,11 @@ function CapForm({
     // that holds if a submission reaches the form some other way. It refuses
     // before the amount is judged: a form that isn't accepting a save has
     // nothing to say about what is in the field.
-    if (locked) return;
+    if (
+      locked ||
+      !isKnownEnumValue(KnownSetSpendCapRequestBodyKeyType, cap.keyType)
+    )
+      return;
 
     setSubmitted(true);
     if (validationError !== null) return;

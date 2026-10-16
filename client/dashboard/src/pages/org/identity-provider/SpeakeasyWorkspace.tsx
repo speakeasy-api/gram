@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router";
@@ -156,10 +157,20 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
               <div className="flex flex-wrap items-center gap-3">
                 <SettingsSection.Title>Status</SettingsSection.Title>
                 <Badge
-                  variant={ISSUER_STATE_BADGE[issuer.state].variant}
+                  variant={
+                    enumPresentation(ISSUER_STATE_BADGE, issuer.state, {
+                      variant: "neutral",
+                      label: "Unknown",
+                    }).variant
+                  }
                   size="sm"
                 >
-                  {ISSUER_STATE_BADGE[issuer.state].label}
+                  {
+                    enumPresentation(ISSUER_STATE_BADGE, issuer.state, {
+                      variant: "neutral",
+                      label: "Unknown",
+                    }).label
+                  }
                 </Badge>
               </div>
             </SettingsSection.Header>
@@ -262,10 +273,20 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                             {key.kid}
                           </code>
                           <Badge
-                            variant={KEY_STATE_BADGE[key.state].variant}
+                            variant={
+                              enumPresentation(KEY_STATE_BADGE, key.state, {
+                                variant: "neutral",
+                                label: "Unknown",
+                              }).variant
+                            }
                             size="sm"
                           >
-                            {KEY_STATE_BADGE[key.state].label}
+                            {
+                              enumPresentation(KEY_STATE_BADGE, key.state, {
+                                variant: "neutral",
+                                label: "Unknown",
+                              }).label
+                            }
                           </Badge>
                         </li>
                       ))}

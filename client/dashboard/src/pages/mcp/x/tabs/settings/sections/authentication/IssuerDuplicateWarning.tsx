@@ -40,6 +40,7 @@ function tierRationale(
       }
       return "It's already configured here, so a second record would double the metadata and documentation you maintain.";
   }
+  return "An identity provider already exists for this issuer URL.";
 }
 
 // tierCopy explains where a matching issuer already exists. A project-specific
@@ -55,6 +56,7 @@ function tierCopy(match: RemoteSessionIssuerDuplicateMatch): string {
         return `Project "${match.projectName}" already has an authorization server for this issuer URL.`;
       return `This project already has an authorization server for this issuer URL.`;
   }
+  return "An identity provider already exists for this issuer URL.";
 }
 
 function tierLabel(match: RemoteSessionIssuerDuplicateMatch): string {
@@ -68,6 +70,7 @@ function tierLabel(match: RemoteSessionIssuerDuplicateMatch): string {
         ? `Project ${match.projectName}`
         : "This project";
   }
+  return "Unknown scope";
 }
 
 // matchDisplayName mirrors how issuers are named everywhere else: the display

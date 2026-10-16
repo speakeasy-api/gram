@@ -1,3 +1,4 @@
+import { supportsAudienceEditing } from "./manageAccessState";
 import {
   InlineChoice,
   type InlineChoiceOption,
@@ -130,7 +131,12 @@ export function ManageAccess({
   // The row controls are gated by RequireScope; the remove button carries the
   // same gate as a disabled state so it cannot be clicked without the scope.
   const { hasAnyScope } = useRBAC();
-  const canManage = hasAnyScope(["org:admin"]);
+  const direct = useMemo(() => ownRules(entries), [entries]);
+  const supportsEditing = useMemo(
+    () => supportsAudienceEditing(direct),
+    [direct],
+  );
+  const canManage = hasAnyScope(["org:admin"]) && supportsEditing;
   const showPlugins = canManage && rolePlugins !== undefined;
   const [page, setPage] = useState(0);
   // Which kind of principal the picker is open for.
@@ -158,7 +164,6 @@ export function ManageAccess({
     );
   }, [membersData]);
 
-  const direct = useMemo(() => ownRules(entries), [entries]);
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
 
   // Agents a role's or everyone's unnarrowed connect block reaches. Unlike a
@@ -310,6 +315,12 @@ export function ManageAccess({
 
   return (
     <div>
+      {!supportsEditing && (
+        <p className="text-muted-foreground mb-3 text-sm">
+          Some access rules are not supported by this version. Refresh the page
+          before editing.
+        </p>
+      )}
       <Card.Dashboard
         title="Manage access to this server"
         // Rows run edge to edge under the header.
@@ -322,7 +333,7 @@ export function ManageAccess({
           >
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="secondary" size="sm">
+                <Button variant="secondary" size="sm" disabled={!canManage}>
                   <Button.LeftIcon>
                     <Plus className="h-4 w-4" />
                   </Button.LeftIcon>

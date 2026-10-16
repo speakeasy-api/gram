@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { ClosedEnum, OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -31,7 +32,7 @@ export const LastError = {
 /**
  * Why the last verification did not complete: Okta rejected the credential, or could not be reached. Omitted when it completed.
  */
-export type LastError = ClosedEnum<typeof LastError>;
+export type LastError = OpenEnum<typeof LastError>;
 
 /**
  * Which checklist template applies: custom_app when the admin creates the API Services app by hand, oin when the Speakeasy OIN listing is added from the catalog.
@@ -43,7 +44,7 @@ export const OktaIdentityProviderConnectionListingMode = {
 /**
  * Which checklist template applies: custom_app when the admin creates the API Services app by hand, oin when the Speakeasy OIN listing is added from the catalog.
  */
-export type OktaIdentityProviderConnectionListingMode = ClosedEnum<
+export type OktaIdentityProviderConnectionListingMode = OpenEnum<
   typeof OktaIdentityProviderConnectionListingMode
 >;
 
@@ -72,7 +73,7 @@ export const OktaIdentityProviderConnectionStatus = {
 /**
  * Connection state. pending until the client ID is submitted and verified; verified when every required scope is granted over DPoP; degraded when verification found gaps (see verification_reasons); revoked once the credential was withdrawn.
  */
-export type OktaIdentityProviderConnectionStatus = ClosedEnum<
+export type OktaIdentityProviderConnectionStatus = OpenEnum<
   typeof OktaIdentityProviderConnectionStatus
 >;
 
@@ -86,7 +87,7 @@ export const VerificationReasons = {
   ReadFailedOktaUsersRead: "read_failed:okta.users.read",
   ReadFailedOktaGroupsRead: "read_failed:okta.groups.read",
 } as const;
-export type VerificationReasons = ClosedEnum<typeof VerificationReasons>;
+export type VerificationReasons = OpenEnum<typeof VerificationReasons>;
 
 /**
  * An organization's Okta connection: the service application Speakeasy authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.
@@ -189,15 +190,13 @@ export type OktaIdentityProviderConnection = {
 };
 
 /** @internal */
-export const LastError$inboundSchema: z.ZodMiniEnum<typeof LastError> = z.enum(
-  LastError,
-);
+export const LastError$inboundSchema: z.ZodMiniType<LastError, unknown> =
+  openEnums.inboundSchema(LastError);
 
 /** @internal */
 export const OktaIdentityProviderConnectionListingMode$inboundSchema:
-  z.ZodMiniEnum<typeof OktaIdentityProviderConnectionListingMode> = z.enum(
-    OktaIdentityProviderConnectionListingMode,
-  );
+  z.ZodMiniType<OktaIdentityProviderConnectionListingMode, unknown> = openEnums
+    .inboundSchema(OktaIdentityProviderConnectionListingMode);
 
 /** @internal */
 export const OktaIdentityProviderConnectionProvider$inboundSchema:
@@ -206,14 +205,16 @@ export const OktaIdentityProviderConnectionProvider$inboundSchema:
   );
 
 /** @internal */
-export const OktaIdentityProviderConnectionStatus$inboundSchema: z.ZodMiniEnum<
-  typeof OktaIdentityProviderConnectionStatus
-> = z.enum(OktaIdentityProviderConnectionStatus);
+export const OktaIdentityProviderConnectionStatus$inboundSchema: z.ZodMiniType<
+  OktaIdentityProviderConnectionStatus,
+  unknown
+> = openEnums.inboundSchema(OktaIdentityProviderConnectionStatus);
 
 /** @internal */
-export const VerificationReasons$inboundSchema: z.ZodMiniEnum<
-  typeof VerificationReasons
-> = z.enum(VerificationReasons);
+export const VerificationReasons$inboundSchema: z.ZodMiniType<
+  VerificationReasons,
+  unknown
+> = openEnums.inboundSchema(VerificationReasons);
 
 /** @internal */
 export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<

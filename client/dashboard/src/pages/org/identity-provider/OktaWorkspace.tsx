@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { ArrowLeft } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { Link, useNavigate } from "react-router";
@@ -40,12 +41,18 @@ export function OktaProviderCard(): JSX.Element {
           <Badge
             variant={
               connected
-                ? CONNECTION_STATUS[connection.status].variant
+                ? enumPresentation(CONNECTION_STATUS, connection.status, {
+                    variant: "neutral",
+                    label: "Unknown",
+                  }).variant
                 : "neutral"
             }
           >
             {connected
-              ? CONNECTION_STATUS[connection.status].label
+              ? enumPresentation(CONNECTION_STATUS, connection.status, {
+                  variant: "neutral",
+                  label: "Unknown",
+                }).label
               : "Not connected"}
           </Badge>
         )}

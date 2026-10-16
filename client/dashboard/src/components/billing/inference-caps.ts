@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import type {
   InferenceSpendCap,
   InferenceSpendCapKeyType,
@@ -47,6 +48,16 @@ const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
   },
 };
 
+const UNKNOWN_CAP_COPY: CapCopy = {
+  name: "Unknown inference",
+  slug: "unknown",
+  paused: "Inference is paused. Refresh the page for updated details.",
+};
+
+function capCopy(keyType: InferenceSpendCapKeyType): CapCopy {
+  return enumPresentation(CAP_COPY, keyType, UNKNOWN_CAP_COPY);
+}
+
 /**
  * The display order the caps are always rendered in.
  *
@@ -81,12 +92,17 @@ export function spendCapFillPercent(used: number, cap: number): number {
 
 /** The label for a cap. The one place a key type becomes words. */
 export function inferenceCapLabel(keyType: InferenceSpendCapKeyType): string {
-  return `${CAP_COPY[keyType].name} cap`;
+  return `${capCopy(keyType).name} cap`;
 }
 
 /** The anchor for a cap's own control, unique per key and free of identifiers. */
 export function inferenceCapAnchor(keyType: InferenceSpendCapKeyType): string {
-  return `${INFERENCE_CAPS_ANCHOR}-${CAP_COPY[keyType].slug}`;
+  const copy = capCopy(keyType);
+  const slug =
+    copy === UNKNOWN_CAP_COPY
+      ? `unknown-${encodeURIComponent(keyType)}`
+      : copy.slug;
+  return `${INFERENCE_CAPS_ANCHOR}-${slug}`;
 }
 
 /** Whether an element id is one this section answers for. */
@@ -99,7 +115,7 @@ export function isInferenceCapAnchor(id: string): boolean {
 export function inferenceCapPausedNote(
   keyType: InferenceSpendCapKeyType,
 ): string {
-  return CAP_COPY[keyType].paused;
+  return capCopy(keyType).paused;
 }
 
 /**
@@ -112,7 +128,7 @@ export function inferenceCapPausedNote(
 export function inferenceCapRaiseLabel(
   keyType: InferenceSpendCapKeyType,
 ): string {
-  return `Raise ${CAP_COPY[keyType].name.toLowerCase()} cap`;
+  return `Raise ${capCopy(keyType).name.toLowerCase()} cap`;
 }
 
 /**

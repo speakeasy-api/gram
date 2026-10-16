@@ -1,13 +1,19 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ClientCard } from "./ClientCard";
 
 // Unlike OverviewTab.test, this renders the real Radix select fields, which a
 // disabled fieldset does not stop from opening.
+
+const testState = vi.hoisted(() => ({ admin: false }));
+beforeEach(() => {
+  testState.admin = false;
+});
 
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
   useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
@@ -15,7 +21,7 @@ vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
 vi.mock("@/contexts/Auth", () => ({ useIsPlatformAdmin: () => true }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasAnyScope: () => false,
+    hasAnyScope: () => testState.admin,
     hasScope: () => false,
     hasAllScopes: () => false,
     isLoading: false,
@@ -85,6 +91,30 @@ describe("client card without org:admin", () => {
     expect((screen.getByRole("switch") as HTMLButtonElement).disabled).toBe(
       true,
     );
+    expect(screen.getByTestId("key-set").getAttribute("data-disabled")).toBe(
+      "true",
+    );
+  });
+});
+
+describe("client card with unsupported configuration", () => {
+  it.each([
+    { tokenEndpointAuthMethod: unrecognized("future_auth") },
+    { tokenEndpointAuthAudienceFormat: unrecognized("future_audience") },
+  ])("disables editing for an administrator: %j", (unknown) => {
+    testState.admin = true;
+    render(
+      <ClientCard
+        client={{ ...client, ...unknown }}
+        issuer={issuer}
+        issuerId="issuer-1"
+      />,
+    );
+    expect(
+      (screen.getByLabelText("Audience") as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    expect(screen.getByText(/unsupported client configuration/)).toBeTruthy();
     expect(screen.getByTestId("key-set").getAttribute("data-disabled")).toBe(
       "true",
     );

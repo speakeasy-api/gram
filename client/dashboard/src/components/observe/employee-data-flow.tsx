@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
@@ -445,7 +446,11 @@ function ServerClassBadge({
   serverClass: NonNullable<EmployeeDataFlowNode["serverClass"]>;
   count?: number;
 }) {
-  const meta = SERVER_CLASS_BADGE_META[serverClass];
+  const meta = enumPresentation(SERVER_CLASS_BADGE_META, serverClass, {
+    variant: "information",
+    icon: Globe,
+    tooltip: "Unknown server type",
+  });
   const ClassIcon = meta.icon;
   const tooltip =
     count !== undefined

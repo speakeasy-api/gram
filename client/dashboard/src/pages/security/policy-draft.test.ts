@@ -1,6 +1,11 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import { policyMCPScopeValue, policyMCPScopePayload } from "./policy-mcp-scope";
 import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  supportsPolicyDraft,
+  supportsPolicyEditing,
+  actionBadgeVariant,
   draftFromPreset,
   draftFromSuggestion,
   draftKind,
@@ -252,4 +257,53 @@ describe("policy start session", () => {
     clearPolicyStartSession("default");
     expect(loadPolicyStartSession("default")).toBeNull();
   });
+});
+
+describe("policy forward compatibility", () => {
+  it.each(["policyType", "action"] as const)(
+    "refuses to convert an unknown %s to a supported draft",
+    (field) => {
+      const preset = {
+        ...secretsPreset,
+        [field]: unrecognized("future_value"),
+      };
+      const suggestion = {
+        ...refundSuggestion,
+        [field]: unrecognized("future_value"),
+      };
+      expect(supportsPolicyDraft(preset)).toBe(false);
+      expect(supportsPolicyDraft(suggestion)).toBe(false);
+      expect(() => draftFromPreset(preset)).toThrow("not supported");
+      expect(() => draftFromSuggestion(suggestion)).toThrow("not supported");
+    },
+  );
+
+  it("refuses editing an unknown audience instead of changing it to everyone", () => {
+    expect(
+      supportsPolicyEditing({ ...secretsPreset, audienceType: "everyone" }),
+    ).toBe(true);
+    expect(
+      supportsPolicyEditing({
+        ...secretsPreset,
+        audienceType: unrecognized("future_audience"),
+      }),
+    ).toBe(false);
+  });
+
+  it("preserves unknown tool annotations through policy edits", () => {
+    const scope = {
+      allServers: true,
+      servers: [],
+      toolAnnotations: [unrecognized("futureHint"), "readOnlyHint" as const],
+    };
+    const value = policyMCPScopeValue(scope);
+    expect(policyMCPScopePayload(value)?.toolAnnotations).toEqual([
+      "futureHint",
+      "readOnlyHint",
+    ]);
+  });
+});
+
+it("presents unknown policy actions neutrally", () => {
+  expect(actionBadgeVariant("future_action")).toBe("neutral");
 });

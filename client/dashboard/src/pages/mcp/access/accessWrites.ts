@@ -402,7 +402,7 @@ export function revokeRowWrite(
     };
   }
   return {
-    entries: SCOPE_ROWS.reduce<AudienceRule[]>(
+    entries: SCOPE_ROWS.reduce<SetResourceAudienceEntry[]>(
       (entries, { key }) =>
         withRule(entries, row.principalUrn, BLOCK_LEVEL[key]),
       cleared,
@@ -477,8 +477,14 @@ export function narrowingSeed(
     : [...new Set(cell.grants.flatMap((grant) => grant.dispositions ?? []))];
   const dispositions = granted.filter(
     (disposition) =>
-      (reachableTools(cell, [{ name: "", annotations: [disposition] }]) ?? [])
-        .length > 0,
+      (
+        reachableTools(cell, [
+          {
+            name: "",
+            annotations: DISPOSITIONS.filter((known) => known === disposition),
+          },
+        ]) ?? []
+      ).length > 0,
   );
   return { tools: [], dispositions };
 }

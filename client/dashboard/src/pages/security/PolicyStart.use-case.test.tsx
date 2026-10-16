@@ -5,7 +5,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PolicyStartChooser } from "./PolicyStart";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
+import { DraftReview, PolicyStartChooser } from "./PolicyStart";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn<(to: unknown, options?: unknown) => void>(),
@@ -210,4 +212,70 @@ describe("PolicyStartChooser Shadow AI use case", () => {
     );
     expect(mocks.setKind).not.toHaveBeenCalled();
   });
+});
+
+describe("unsupported policy drafts", () => {
+  afterEach(cleanup);
+
+  it("keeps unsupported presets visible without offering an unsafe conversion", () => {
+    presets.push({
+      ...presets[0]!,
+      id: "future_preset",
+      label: "Newer settings",
+      action: unrecognized("constructor"),
+    });
+    try {
+      renderChooser();
+      const row = screen.getByRole("button", { name: /Newer settings/ });
+      expect(row.hasAttribute("disabled")).toBe(true);
+      expect(row.textContent).toContain("Unknown");
+      expect(row.textContent).toContain("Refresh the page");
+    } finally {
+      presets.pop();
+    }
+  });
+
+  it.each(["policyType", "action"] as const)(
+    "shows a recoverable state for an unknown suggested %s",
+    (field) => {
+      const suggestion: SuggestRiskPolicyResult = {
+        presetId: "",
+        name: "A newer policy",
+        policyType: "standard",
+        action: "block",
+        score: 8,
+        sources: [],
+        presidioEntities: [],
+        prompt: "",
+        userMessage: "",
+        rationale: "",
+        confidence: 1,
+        alternatives: [],
+        [field]: unrecognized("future_value"),
+      };
+      const onBack = vi.fn<() => void>();
+      const onContinue = vi.fn<() => void>();
+      render(
+        <DraftReview
+          description="A risk"
+          review={{ suggestion, overridePresetId: null }}
+          presets={[]}
+          mode="presidio"
+          promptPoliciesEnabled
+          onOverride={vi.fn<() => void>()}
+          onBack={onBack}
+          onContinue={onContinue}
+        />,
+      );
+      expect(
+        screen.getByText(/This draft uses newer policy settings/),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Continue/ })).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Choose another starting point" }),
+      );
+      expect(onBack).toHaveBeenCalledOnce();
+      expect(onContinue).not.toHaveBeenCalled();
+    },
+  );
 });

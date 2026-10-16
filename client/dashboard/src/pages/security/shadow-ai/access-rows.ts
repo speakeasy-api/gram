@@ -1,8 +1,11 @@
+import { AIToolAccessSummaryDecision } from "@gram/client/models/components/aitoolaccesssummary.js";
+import { isKnownEnumValue } from "@/lib/enum";
 import { scanTargetAccessOf } from "@/components/shadow-ai/access";
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 
 export type AccessDecision = "approved" | "blocked" | "unreviewed";
+export type StoredDecision = AccessDecision | "unknown";
 
 /** One row of the Access step: a target of the organization's scan target
  *  library, with the device agent's evidence for it when there is any. The
@@ -15,7 +18,7 @@ export interface AccessRow {
   /** Whether a decision about the target has anything to enforce. */
   enforceable: boolean;
   /** The decision on file. */
-  stored: AccessDecision;
+  stored: StoredDecision;
   rationale: string | undefined;
 }
 
@@ -30,11 +33,17 @@ export function buildAccessRows(
   );
   return targets.map((target) => {
     const access = scanTargetAccessOf(target);
+    const stored: StoredDecision = isKnownEnumValue(
+      AIToolAccessSummaryDecision,
+      access.decision,
+    )
+      ? access.decision
+      : "unknown";
     return {
       target,
       detection: byTarget.get(target.id),
-      enforceable: access.enforceable,
-      stored: access.decision,
+      enforceable: access.enforceable && stored !== "unknown",
+      stored,
       rationale: access.rationale,
     };
   });
@@ -45,7 +54,7 @@ export function buildAccessRows(
 export function effectiveDecision(
   row: AccessRow,
   draft: ReadonlyMap<string, AccessDecision>,
-): AccessDecision {
+): StoredDecision {
   return draft.get(row.target.id) ?? row.stored;
 }
 
@@ -99,11 +108,13 @@ export function countDecisions(
     inventoryOnly: 0,
   };
   for (const row of rows) {
+    if (row.stored === "unknown") continue;
     if (!row.enforceable) {
       counts.inventoryOnly += 1;
       continue;
     }
-    counts[effectiveDecision(row, draft)] += 1;
+    const decision = effectiveDecision(row, draft);
+    if (decision !== "unknown") counts[decision] += 1;
   }
   return counts;
 }

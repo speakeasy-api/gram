@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -24,7 +25,7 @@ export const McpServerNetworkAccessMode = {
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
-export type McpServerNetworkAccessMode = ClosedEnum<
+export type McpServerNetworkAccessMode = OpenEnum<
   typeof McpServerNetworkAccessMode
 >;
 
@@ -39,7 +40,7 @@ export const McpServerVisibility = {
 /**
  * The visibility of an MCP server
  */
-export type McpServerVisibility = ClosedEnum<typeof McpServerVisibility>;
+export type McpServerVisibility = OpenEnum<typeof McpServerVisibility>;
 
 /**
  * An MCP server configuration: authentication, environment, and backend selection for an MCP server.
@@ -128,14 +129,16 @@ export type McpServer = {
 };
 
 /** @internal */
-export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
-  typeof McpServerNetworkAccessMode
-> = z.enum(McpServerNetworkAccessMode);
+export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniType<
+  McpServerNetworkAccessMode,
+  unknown
+> = openEnums.inboundSchema(McpServerNetworkAccessMode);
 
 /** @internal */
-export const McpServerVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof McpServerVisibility
-> = z.enum(McpServerVisibility);
+export const McpServerVisibility$inboundSchema: z.ZodMiniType<
+  McpServerVisibility,
+  unknown
+> = openEnums.inboundSchema(McpServerVisibility);
 
 /** @internal */
 export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z

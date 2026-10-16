@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { ClosedEnum, OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const EndpointNamespaceKind = {
 /**
  * Pinned endpoint namespace
  */
-export type EndpointNamespaceKind = ClosedEnum<typeof EndpointNamespaceKind>;
+export type EndpointNamespaceKind = OpenEnum<typeof EndpointNamespaceKind>;
 
 /**
  * Private-network provider
@@ -88,9 +89,10 @@ export type NetworkIngress = {
 };
 
 /** @internal */
-export const EndpointNamespaceKind$inboundSchema: z.ZodMiniEnum<
-  typeof EndpointNamespaceKind
-> = z.enum(EndpointNamespaceKind);
+export const EndpointNamespaceKind$inboundSchema: z.ZodMiniType<
+  EndpointNamespaceKind,
+  unknown
+> = openEnums.inboundSchema(EndpointNamespaceKind);
 
 /** @internal */
 export const NetworkIngressProvider$inboundSchema: z.ZodMiniEnum<

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { ClosedEnum, OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -39,7 +40,7 @@ export const PromptTemplateKind = {
 /**
  * The kind of prompt the template is used for
  */
-export type PromptTemplateKind = ClosedEnum<typeof PromptTemplateKind>;
+export type PromptTemplateKind = OpenEnum<typeof PromptTemplateKind>;
 
 /**
  * A prompt template
@@ -142,9 +143,10 @@ export const Engine$inboundSchema: z.ZodMiniEnum<typeof Engine> = z.enum(
 );
 
 /** @internal */
-export const PromptTemplateKind$inboundSchema: z.ZodMiniEnum<
-  typeof PromptTemplateKind
-> = z.enum(PromptTemplateKind);
+export const PromptTemplateKind$inboundSchema: z.ZodMiniType<
+  PromptTemplateKind,
+  unknown
+> = openEnums.inboundSchema(PromptTemplateKind);
 
 /** @internal */
 export const PromptTemplate$inboundSchema: z.ZodMiniType<

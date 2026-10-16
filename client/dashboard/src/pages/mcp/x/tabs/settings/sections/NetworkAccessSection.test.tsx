@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -366,6 +367,36 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("NetworkAccessSection", () => {
+  it.each([
+    { networkAccessMode: unrecognized("future_mode") },
+    { visibility: unrecognized("future_visibility") },
+  ])(
+    "disables network edits when stored settings are unsupported: %j",
+    (unknown) => {
+      render(
+        <NetworkAccessSection
+          mcpServer={{ ...baseServer, ...unknown }}
+          endpoints={endpoints}
+        />,
+      );
+      expect(
+        (
+          screen.getByRole("combobox", {
+            name: "Network access mode",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      expect(
+        screen.getByText(/unsupported network configuration/),
+      ).toBeTruthy();
+      expect(testState.mutate).not.toHaveBeenCalled();
+    },
+  );
+
   it("updates a hosted toolset and invalidates all affected caches on success", async () => {
     render(<NetworkAccessSection toolset={hostedToolset} />);
 

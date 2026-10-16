@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { IdentityLink } from "@/components/identity-link";
 import type { IdentityRef } from "@/lib/identity-urn";
 import { Button } from "@/components/ui/Button";
@@ -156,9 +157,9 @@ function RuleDetail({
               Budget
             </Text>
             <span className="text-muted-foreground text-xs">
-              {WINDOW_LABELS[rule.windowKind]} window · resets in{" "}
-              {timeUntilWindowReset(rule.windowKind)} · warns at{" "}
-              {rule.warnAtPct}%
+              {enumPresentation(WINDOW_LABELS, rule.windowKind, "Unknown")}{" "}
+              window · resets in {timeUntilWindowReset(rule.windowKind)} · warns
+              at {rule.warnAtPct}%
             </span>
           </div>
           {usage ? (

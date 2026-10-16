@@ -1,3 +1,9 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import {
+  WindowKind,
+  CreateSpendRuleRequestBodyAction,
+} from "@gram/client/models/components/createspendrulerequestbody.js";
+import { enumPresentation } from "@/lib/enum";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -147,7 +153,11 @@ function useRulePreview(
   const [preview, setPreview] = useState<PreviewSpendRuleResult | null>(null);
 
   useEffect(() => {
-    if (draft.limitUsd <= 0 || draft.target.value.trim() === "") {
+    if (
+      !isKnownEnumValue(WindowKind, draft.windowKind) ||
+      draft.limitUsd <= 0 ||
+      draft.target.value.trim() === ""
+    ) {
       // No preview request will be issued for an invalid draft — drop any
       // previous result so a stale usage/breach preview isn't shown for it.
       setPreview(null);
@@ -198,6 +208,8 @@ function RuleForm({
   const { preview, loading: previewLoading } = useRulePreview(draft);
 
   const canSubmit =
+    isKnownEnumValue(WindowKind, draft.windowKind) &&
+    isKnownEnumValue(CreateSpendRuleRequestBodyAction, draft.action) &&
     draft.name.trim() !== "" &&
     draft.target.value.trim() !== "" &&
     draft.limitUsd > 0 &&
@@ -306,7 +318,7 @@ function RuleForm({
               <SelectContent>
                 {WINDOWS.map((w) => (
                   <SelectItem key={w} value={w}>
-                    {WINDOW_LABELS[w]}
+                    {enumPresentation(WINDOW_LABELS, w, "Unknown")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -341,9 +353,9 @@ function RuleForm({
           </Field>
         </div>
         <p className="text-muted-foreground -mt-4 text-xs">
-          {WINDOW_RESET_HINTS[draft.windowKind]} Each matched person gets{" "}
-          {formatUsd(draft.limitUsd)} per window; a warning event fires at{" "}
-          {draft.warnAtPct}% of it.
+          {enumPresentation(WINDOW_RESET_HINTS, draft.windowKind, "Unknown")}{" "}
+          Each matched person gets {formatUsd(draft.limitUsd)} per window; a
+          warning event fires at {draft.warnAtPct}% of it.
         </p>
 
         {/* On breach */}

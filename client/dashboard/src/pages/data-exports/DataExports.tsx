@@ -1,3 +1,5 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import { UpdateRouteRequestBodyDataSource as KnownUpdateRouteRequestBodyDataSource } from "@gram/client/models/components/updaterouterequestbody.js";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { SettingsPage } from "@/components/page-templates";
 import { ProjectAvatar } from "@/components/project-menu";
@@ -70,7 +72,7 @@ const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
 ];
 
 function renderDataSourceDescription(
-  dataSource: DataSourceValue,
+  dataSource: string,
   links: { eventFeed?: string; riskPolicies?: string; toolLogs?: string } = {},
 ): ReactNode {
   if (dataSource === DataSource.ProductTelemetry) {
@@ -504,7 +506,10 @@ function DataExportsInner(): JSX.Element {
           id: route.id,
           gramProject: project.slug,
           updateRouteRequestBody: {
-            dataSource: route.dataSource,
+            dataSource: requireKnownEnumValue(
+              KnownUpdateRouteRequestBodyDataSource,
+              route.dataSource,
+            ),
             enabled,
             otelDestinationId: route.otelDestinationId,
           },

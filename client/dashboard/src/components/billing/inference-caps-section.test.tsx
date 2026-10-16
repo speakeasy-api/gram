@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -1220,6 +1221,23 @@ describe("InferenceCapsSection", () => {
     expect(meters()).toHaveLength(2);
 
     expect(otherField()).not.toBeNull();
+    fireEvent.click(saveButton(OTHER_LABEL)!);
+    expect(lastSentCap()).toEqual({ keyType: "chat", monthlyCredits: 250 });
+  });
+
+  it("keeps an unknown inference cap read-only without blocking known caps", () => {
+    loadedCaps([
+      otherCap(),
+      cap({ keyType: unrecognized("future_inference") }),
+    ]);
+    render(<InferenceCapsSection />);
+    expect(
+      screen.getByText(
+        /Refresh the page before editing this unsupported inference cap/,
+      ),
+    ).toBeTruthy();
+    expect(saveButton("Unknown inference cap")).toBeNull();
+    expect(meters()).toHaveLength(2);
     fireEvent.click(saveButton(OTHER_LABEL)!);
     expect(lastSentCap()).toEqual({ keyType: "chat", monthlyCredits: 250 });
   });

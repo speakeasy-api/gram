@@ -1,3 +1,9 @@
+import type { EventType as BudgetEventFilter } from "@gram/client/models/operations/listspendruleevents.js";
+import { requireKnownEnumValue } from "@/lib/enum";
+import {
+  CreateSpendRuleRequestBodyAction,
+  WindowKind,
+} from "@gram/client/models/components/createspendrulerequestbody.js";
 /* The single adapter seam between the budgets UI and the generated spend-rules
  * SDK. Every @gram/client import for this feature lives here: the components
  * consume app-owned types (budgets-data.ts) and the app-owned hooks below, and
@@ -29,7 +35,6 @@ import {
   type ActorAttribute,
   type PreviewSpendRuleResult,
   type RuleDraft,
-  type SpendEventType,
   type SpendRule,
   type SpendRuleActorUsage,
   type SpendRuleEvent,
@@ -128,8 +133,15 @@ function mapPreview(p: SdkPreviewSpendRuleResult): PreviewSpendRuleResult {
   };
 }
 
-function mapActorAttribute(a: SdkActorAttribute): ActorAttribute {
-  return { name: a.name, type: a.type, description: a.description };
+function mapActorAttribute(a: SdkActorAttribute): ActorAttribute[] {
+  if (a.type !== "string" && a.type !== "list") return [];
+  return [
+    {
+      name: a.name,
+      type: a.type === "list" ? "list" : "string",
+      description: a.description,
+    },
+  ];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -181,7 +193,7 @@ export function useActorAttributes(): {
     staleTime: Infinity,
   });
   const attributes = useMemo(
-    () => (query.data?.attributes ?? []).map(mapActorAttribute),
+    () => (query.data?.attributes ?? []).flatMap(mapActorAttribute),
     [query.data],
   );
   return {
@@ -192,7 +204,7 @@ export function useActorAttributes(): {
 }
 
 export interface BudgetEventsParams {
-  eventType?: SpendEventType;
+  eventType?: BudgetEventFilter;
   cursor?: string;
   limit?: number;
   ruleId?: string;
@@ -249,7 +261,18 @@ export function useCreateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   const { mutate } = mutation;
   const create = useCallback(
     (draft: RuleDraft) => {
-      mutate({ request: { createSpendRuleRequestBody: draft } });
+      mutate({
+        request: {
+          createSpendRuleRequestBody: {
+            ...draft,
+            action: requireKnownEnumValue(
+              CreateSpendRuleRequestBodyAction,
+              draft.action,
+            ),
+            windowKind: requireKnownEnumValue(WindowKind, draft.windowKind),
+          },
+        },
+      });
     },
     [mutate],
   );
@@ -267,7 +290,24 @@ export function useUpdateBudgetRule(cb: BudgetMutationCallbacks = {}): {
   const { mutate } = mutation;
   const update = useCallback(
     (input: UpdateBudgetRuleInput) => {
-      mutate({ request: { updateSpendRuleRequestBody: input } });
+      mutate({
+        request: {
+          updateSpendRuleRequestBody: {
+            ...input,
+            action:
+              input.action === undefined
+                ? undefined
+                : requireKnownEnumValue(
+                    CreateSpendRuleRequestBodyAction,
+                    input.action,
+                  ),
+            windowKind:
+              input.windowKind === undefined
+                ? undefined
+                : requireKnownEnumValue(WindowKind, input.windowKind),
+          },
+        },
+      });
     },
     [mutate],
   );
@@ -320,7 +360,7 @@ export function usePreviewBudgetRule(): {
               target: input.target,
               limitUsd: input.limitUsd,
               warnAtPct: input.warnAtPct,
-              windowKind: input.windowKind,
+              windowKind: requireKnownEnumValue(WindowKind, input.windowKind),
             },
           },
         },

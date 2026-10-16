@@ -1,3 +1,5 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import { UpdatePromptTemplateFormKind } from "@gram/client/models/components/updateprompttemplateform.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Tool } from "@/lib/toolTypes";
@@ -58,7 +60,10 @@ export function useToolUpdate({
           updatePromptTemplateForm: {
             ...tool,
             ...updates,
-            kind: "prompt",
+            kind: requireKnownEnumValue(
+              UpdatePromptTemplateFormKind,
+              tool.kind,
+            ),
           },
         });
         void invalidateTemplate(queryClient, [{ name: tool.name }]);

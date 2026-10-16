@@ -114,4 +114,9 @@ export function GatewayNotServed({
     case undefined:
       return null;
   }
+  return (
+    <Text small>
+      Gateway status unavailable. Refresh the page for updated details.
+    </Text>
+  );
 }
