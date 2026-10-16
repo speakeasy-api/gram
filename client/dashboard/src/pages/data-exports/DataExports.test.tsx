@@ -249,4 +249,7 @@ it("disables toggling and configuring an export with an unknown data source", ()
     fireEvent.click(button);
   }
   expect(callbacks.onConfigure).not.toHaveBeenCalled();
+  expect(screen.getByText("Unknown data source")).toBeTruthy();
+  expect(screen.queryByText("future source")).toBeNull();
+  expect(screen.queryByText("future_source")).toBeNull();
 });

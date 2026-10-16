@@ -132,24 +132,30 @@ type MCPDistribution struct {
 }
 
 type MCP struct {
-	ID               string            `json:"id"`
-	ProjectID        string            `json:"project_id"`
-	ProjectName      string            `json:"project_name,omitempty"`
-	ProjectSlug      string            `json:"project_slug,omitempty"`
-	Name             string            `json:"name,omitempty"`
-	Slug             string            `json:"slug,omitempty"`
-	Version          string            `json:"version,omitempty"`
-	Visibility       string            `json:"visibility"`
-	EffectiveEnabled bool              `json:"effective_enabled"`
-	Model            string            `json:"model"`
-	BackendKind      MCPBackendKind    `json:"backend_kind"`
-	UpstreamURL      string            `json:"upstream_url,omitempty"`
-	Source           MCPSource         `json:"source"`
-	Registration     *MCPRegistration  `json:"registration,omitempty"`
-	Readiness        MCPReadiness      `json:"readiness"`
-	Distributions    []MCPDistribution `json:"distributions"`
-	Operations       []string          `json:"operations"`
-	DashboardPath    string            `json:"dashboard_path,omitempty"`
+	ID          string `json:"id"`
+	ProjectID   string `json:"project_id"`
+	ProjectName string `json:"project_name,omitempty"`
+	ProjectSlug string `json:"project_slug,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Slug        string `json:"slug,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Visibility  string `json:"visibility"`
+
+	// EffectiveEnabled is true only for recognized enabled visibility values.
+	EffectiveEnabled bool `json:"effective_enabled" jsonschema:"true only when enabled_state is enabled; false may mean disabled or unknown"`
+
+	// EnabledState distinguishes confirmed disabled servers from unknown visibility.
+	EnabledState string `json:"enabled_state" jsonschema:"enabled for private or public visibility; disabled for disabled visibility; unknown for unrecognized visibility"`
+
+	Model         string            `json:"model"`
+	BackendKind   MCPBackendKind    `json:"backend_kind"`
+	UpstreamURL   string            `json:"upstream_url,omitempty"`
+	Source        MCPSource         `json:"source"`
+	Registration  *MCPRegistration  `json:"registration,omitempty"`
+	Readiness     MCPReadiness      `json:"readiness"`
+	Distributions []MCPDistribution `json:"distributions"`
+	Operations    []string          `json:"operations"`
+	DashboardPath string            `json:"dashboard_path,omitempty"`
 
 	// ToolExposure is the tool list this server puts in front of people, and
 	// the version token add_tools_to_mcp and remove_tools_from_mcp take back.
@@ -208,6 +214,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
 		Instructions: strings.Join([]string{
+			"MCP inventory reports enabled_state as enabled, disabled, or unknown. Treat unknown as indeterminate, never as disabled or enabled. The compatibility boolean effective_enabled is true only for confirmed enabled servers; false alone does not establish that a server is disabled.",
 			"# What this server is",
 			"Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. An MCP server reaches a person in stages: added to a project, its OAuth provider connected, confirmed working, put into a plugin — the bundle of MCP servers and skills you share with people — and published to them. Someone asking to \"set up Slack for support\" is asking for all five. Name the stage you are at in those words. When the organisation has a Shadow MCP policy that blocks unreviewed servers, an organization administrator putting a server of the user's own into a plugin counts as the review: the server is recorded in Shadow MCP as approved for the people who receive it, and the result says so with a link to its page. Later distributions widen that approval to the new people; they never narrow it, and removing the server from a plugin does not revoke it. Tell the administrator that; narrowing or revoking the approval is done by deciding the server's Shadow MCP access here or from that page, and stopping the server reaching people is done by removing it from the plugin or turning it off. Making such a server public stays refused under the policy, because an approval never grants anonymous access.",
 			"# How to talk about it",

@@ -1,4 +1,4 @@
-import { requireKnownEnumValue } from "@/lib/enum";
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
 import { FailurePosture as KnownFailurePosture } from "@gram/client/models/components/createinstancerequestbody.js";
 import { CodeBlock } from "@/components/code";
 import { InputField } from "@/components/moon/input-field";
@@ -741,14 +741,21 @@ export function SetupContent({
           {buildLiteLLMEnvironment(serverURL, instance.project.slug)}
         </CodeBlock>
       </SetupSection>
-      <SetupSection
-        title="LiteLLM configuration"
-        description="Merge this guardrail fragment into your LiteLLM configuration."
-      >
-        <CodeBlock language="yaml" copyLabel="LiteLLM configuration">
-          {buildLiteLLMGuardrailConfig(serverURL, instance.failurePosture)}
-        </CodeBlock>
-      </SetupSection>
+      {isKnownEnumValue(KnownFailurePosture, instance.failurePosture) ? (
+        <SetupSection
+          title="LiteLLM configuration"
+          description="Merge this guardrail fragment into your LiteLLM configuration."
+        >
+          <CodeBlock language="yaml" copyLabel="LiteLLM configuration">
+            {buildLiteLLMGuardrailConfig(serverURL, instance.failurePosture)}
+          </CodeBlock>
+        </SetupSection>
+      ) : (
+        <Alert variant="warning">
+          This instance uses an unsupported failure posture. Refresh the page
+          before configuring LiteLLM.
+        </Alert>
+      )}
       <SetupSection
         title="Verify safe traffic"
         description="Set LITELLM_VIRTUAL_KEY and LITELLM_MODEL in your shell, then run this against the proxy."

@@ -1,5 +1,6 @@
 import {
   ResourceAudienceEntryAppliesTo,
+  ResourceAudienceEntryKind,
   type ResourceAudienceEntry,
 } from "@gram/client/models/components/resourceaudienceentry.js";
 import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
@@ -147,14 +148,16 @@ export function supportsAudienceEditing(entries: AudienceRule[]): boolean {
   );
 }
 
-/** Read rules must have understood applicability before resolving their reach. */
+/** Read rules must have understood principal kinds and applicability to resolve reach. */
 export function supportsAudienceReading(
   entries: ResourceAudienceEntry[],
 ): boolean {
   return (
     supportsAudienceEditing(entries) &&
-    entries.every((entry) =>
-      isKnownEnumValue(ResourceAudienceEntryAppliesTo, entry.appliesTo),
+    entries.every(
+      (entry) =>
+        isKnownEnumValue(ResourceAudienceEntryAppliesTo, entry.appliesTo) &&
+        isKnownEnumValue(ResourceAudienceEntryKind, entry.kind),
     )
   );
 }

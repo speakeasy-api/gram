@@ -8,6 +8,7 @@ import {
   DiagnosticsPanel,
   RevokeInstanceDialog,
   RotateKeyDialog,
+  SetupContent,
 } from "./litellm-integration-row";
 
 const state = vi.hoisted(() => ({
@@ -221,4 +222,45 @@ describe("LiteLLM integration dialogs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revoke integration" }));
     expect(onConfirm).toHaveBeenCalledOnce();
   });
+});
+
+describe("LiteLLM setup failure posture", () => {
+  it("withholds guardrail configuration for an unknown posture while preserving a one-time key", () => {
+    render(
+      <SetupContent
+        result={{
+          ...result,
+          instance: {
+            ...instance,
+            failurePosture: unrecognized("future_posture"),
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText(/unsupported failure posture/)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Copy LiteLLM configuration" }),
+    ).toBeNull();
+    expect(screen.queryByText(/unreachable_fallback/)).toBeNull();
+    expect(screen.queryByText(/future_posture/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Copy integration key" }),
+    ).toBeTruthy();
+    expect(screen.getByText(result.key)).toBeTruthy();
+  });
+  it.each(["fail_closed", "fail_open"] as const)(
+    "keeps configuration copyable for %s",
+    (posture) => {
+      render(
+        <SetupContent instance={{ ...instance, failurePosture: posture }} />,
+      );
+      expect(
+        screen.getByRole("button", { name: "Copy LiteLLM configuration" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(new RegExp(`unreachable_fallback: ${posture}`)),
+      ).toBeTruthy();
+      expect(screen.queryByText(/unsupported failure posture/)).toBeNull();
+    },
+  );
 });

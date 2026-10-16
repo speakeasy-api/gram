@@ -36,9 +36,41 @@ export interface RuleTargetCondition {
  *  server would reject. */
 export interface ActorAttribute {
   name: string;
-  /** Value kind: a scalar string, or a list of strings (uses `includes`). */
-  type: "string" | "list";
+  /** Preserve future kinds so unsupported targets never become string conditions. */
+  type: string;
   description: string;
+}
+
+const STRING_TARGET_OPERATORS: readonly RuleTargetOperator[] = [
+  "equals",
+  "not_equals",
+  "starts_with",
+  "ends_with",
+  "contains",
+  "matches",
+];
+const LIST_TARGET_OPERATORS: readonly RuleTargetOperator[] = ["includes"];
+
+/** Missing custom attributes retain the existing string picker; explicit future types are unsupported. */
+export function operatorsForAttribute(
+  attribute: ActorAttribute | undefined,
+): readonly RuleTargetOperator[] {
+  if (!attribute || attribute.type === "string") return STRING_TARGET_OPERATORS;
+  if (attribute?.type === "list") return LIST_TARGET_OPERATORS;
+  return [];
+}
+
+export function isSupportedRuleTarget(
+  target: RuleTargetCondition,
+  attributes: readonly ActorAttribute[],
+): boolean {
+  const attribute = attributes.find(
+    (attribute) => attribute.name === target.attribute,
+  );
+  if (!attribute) return isRuleTargetOperator(target.operator);
+  return operatorsForAttribute(attribute).some(
+    (operator) => operator === target.operator,
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -324,6 +356,18 @@ export function targetSummary(target: RuleTargetCondition): string {
   if (!isRuleTargetOperator(target.operator))
     return "Unsupported target condition";
   return `${targetAttributeLabel(target.attribute)} ${operatorSummary(target.operator)} ${target.value}`;
+}
+
+/** Keep target values searchable even when their presentation is unsupported. */
+export function matchesRuleSearch(rule: SpendRule, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  return [
+    rule.name,
+    rule.description,
+    targetSummary(rule.target),
+    rule.target.attribute,
+    rule.target.value,
+  ].some((text) => text.toLowerCase().includes(needle));
 }
 
 /** Title-case an attribute name for display, e.g. department_name → Department
