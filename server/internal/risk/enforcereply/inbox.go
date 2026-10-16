@@ -64,6 +64,12 @@ type Outcome struct {
 	// Deadline reports that at least one lane reached its wait deadline.
 	Deadline bool
 
+	// CallerBudget names the lanes whose deadline came from the caller's own
+	// context rather than the lane's wait budget. Such a lane was cut off
+	// before the consumer had its full time to reply, so its absence says the
+	// caller ran out of budget, not that the consumer is broken.
+	CallerBudget map[Lane]bool
+
 	// Truncated reports that the dispatcher size-limited content before publication.
 	Truncated bool
 }
