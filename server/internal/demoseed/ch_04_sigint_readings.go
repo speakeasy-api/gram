@@ -42,6 +42,23 @@ var sigintReadingResultTypes = map[string]string{
 // paid classifier calls or claiming these are real evaluations. The org-scoped
 // purge in chPurge removes the previous generation.
 func (s *seeder) chSigintReadings(ctx context.Context, ch driver.Conn) error {
+	rows, err := s.sigintReadingRows()
+	if err != nil {
+		return err
+	}
+	if err := chrepo.New(ch).InsertReadings(ctx, rows); err != nil {
+		return fmt.Errorf("insert demo sensor readings: %w", err)
+	}
+	return s.chRunChecks(ctx, ch, []chCheck{{
+		cond:     `(SELECT count() FROM sigint_readings FINAL WHERE organization_id = @org) != ` + strconv.Itoa(len(rows)),
+		settings: chFinalSettings,
+		msg:      "demo seed postflight: expected 400 retrospective readings for each enabled sensor",
+	}})
+}
+
+// sigintReadingRows builds the readings. They bypass the Pub/Sub writer's
+// parser, so a unit test holds them to the same rules.
+func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 	var rows []chrepo.ReadingRow
 	for _, sensor := range demoSigintSensors {
 		if !sensor.enabled {
@@ -57,26 +74,19 @@ func (s *seeder) chSigintReadings(ctx context.Context, ch driver.Conn) error {
 		// The formulas are fixed to three members; a reshaped sensor must update
 		// them rather than silently seed stale readings.
 		if len(members) != sigintReadingMembers {
-			return fmt.Errorf("demo sigint sensor %s has %d members, readings expect %d", sensor.key, len(members), sigintReadingMembers)
+			return nil, fmt.Errorf("demo sigint sensor %s has %d members, readings expect %d", sensor.key, len(members), sigintReadingMembers)
 		}
 		if _, ok := sigintReadingResultTypes[sensor.mode]; !ok {
-			return fmt.Errorf("demo sigint sensor %s has unsupported mode %s", sensor.key, sensor.mode)
+			return nil, fmt.Errorf("demo sigint sensor %s has unsupported mode %s", sensor.key, sensor.mode)
 		}
 		if err := evaluation.ValidateInputConfiguration(sensor.inputStrategy, int(sensor.windowSize)); err != nil {
-			return fmt.Errorf("demo sigint sensor %s: %w", sensor.key, err)
+			return nil, fmt.Errorf("demo sigint sensor %s: %w", sensor.key, err)
 		}
 		for n := range sigintReadingDays {
 			rows = append(rows, s.sigintReading(sensor, members, n))
 		}
 	}
-	if err := chrepo.New(ch).InsertReadings(ctx, rows); err != nil {
-		return fmt.Errorf("insert demo sensor readings: %w", err)
-	}
-	return s.chRunChecks(ctx, ch, []chCheck{{
-		cond:     `(SELECT count() FROM sigint_readings FINAL WHERE organization_id = @org) != ` + strconv.Itoa(len(rows)),
-		settings: chFinalSettings,
-		msg:      "demo seed postflight: expected 400 retrospective readings for each enabled sensor",
-	}})
+	return rows, nil
 }
 
 func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMembership, n int) chrepo.ReadingRow {

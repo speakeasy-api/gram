@@ -30,7 +30,8 @@ physical insert, including duplicates, and replacement does not retract them.
 can record why an eligible message has no answer. Coverage counts these outcomes
 and messages that never produced a row. It does not drop them. Only answered rows
 carry a result type, probabilities, a selected signal, an expected index or a
-confidence. The table constraints enforce this.
+confidence. `ParseReading` validates every row before insert. The table has no
+CHECK constraints, so rules can change without a migration.
 
 `input_*` columns record the message context an attempt actually supplied:
 strategy, requested and supplied message counts including the target, and budget
