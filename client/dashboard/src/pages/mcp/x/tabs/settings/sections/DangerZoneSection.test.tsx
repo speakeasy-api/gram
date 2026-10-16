@@ -195,3 +195,85 @@ describe("DangerZoneSection on a tunneled server", () => {
     expect(screen.getByText("Delete this MCP server?")).toBeTruthy();
   });
 });
+
+const base = {
+  projectId: "project-1",
+  name: "Example server",
+  networkAccessMode: "public_only",
+  visibility: "disabled",
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+};
+
+function renderServer(server: McpServer): void {
+  grants.writable = new Set(["project-1", server.id]);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <TooltipProvider>
+          <DangerZoneSection mcpServer={server} endpoints={[]} />
+        </TooltipProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("DangerZoneSection availability", () => {
+  it("keeps a hosted server's availability switch read-only", () => {
+    renderServer({
+      ...base,
+      id: "hosted-1",
+      toolsetId: "hosted-1",
+    } as McpServer);
+
+    expect(
+      screen.getByRole("switch", { name: "Enable MCP server" }),
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("leaves other servers' availability switch editable", () => {
+    renderServer({
+      ...base,
+      id: "server-1",
+      unproxiedMcpServerId: "unproxied-1",
+    } as McpServer);
+
+    expect(
+      screen.getByRole("switch", { name: "Enable MCP server" }),
+    ).toHaveProperty("disabled", false);
+  });
+});
+
+describe("DangerZoneSection delete", () => {
+  it("offers no delete for a hosted server", () => {
+    renderServer({
+      ...base,
+      id: "hosted-1",
+      toolsetId: "hosted-1",
+    } as McpServer);
+
+    expect(
+      screen.queryByRole("button", { name: /Delete MCP server/ }),
+    ).toBeNull();
+  });
+
+  it("keeps delete for other servers", () => {
+    renderServer({ ...base, id: "server-1" } as McpServer);
+
+    expect(
+      screen.getByRole("button", { name: /Delete MCP server/ }),
+    ).toBeTruthy();
+  });
+
+  it("keeps delete for toolset-backed servers with a different id", () => {
+    renderServer({
+      ...base,
+      id: "server-2",
+      toolsetId: "toolset-1",
+    } as McpServer);
+
+    expect(
+      screen.getByRole("button", { name: /Delete MCP server/ }),
+    ).toBeTruthy();
+  });
+});
