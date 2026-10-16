@@ -252,7 +252,13 @@ export function canCreateAgentForInGrants(
   callerUserId: string,
   ownerUserId: string,
 ): boolean {
-  if (!callerUserId || !ownerUserId) return false;
+  if (
+    !callerUserId ||
+    callerUserId === "*" ||
+    !ownerUserId ||
+    ownerUserId === "*"
+  )
+    return false;
   return grants.some((grant) => {
     if ((grant.effect ?? "allow") !== "allow" || grant.scope !== "agent:write")
       return false;

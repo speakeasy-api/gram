@@ -44,7 +44,7 @@ func (s *Service) ListEligibleOwners(ctx context.Context, payload *gen.ListEligi
 		return nil, oops.C(oops.CodeBadRequest)
 	}
 	search = strings.TrimSpace(search)
-	allOwners, ownerIDs := eligibleOwnerTargets(human.grants, human.Auth.UserID)
+	allOwners, ownerIDs := human.access.CreationOwners()
 	rows, err := orgrepo.New(s.db).ListEligibleAgentOwners(ctx, orgrepo.ListEligibleAgentOwnersParams{
 		OrganizationID: human.Auth.ActiveOrganizationID,
 		AllOwners:      allOwners, OwnerUserIds: ownerIDs,
@@ -62,28 +62,4 @@ func (s *Service) ListEligibleOwners(ctx context.Context, payload *gen.ListEligi
 		result.Owners = append(result.Owners, &gen.AgentEligibleOwner{UserID: row.UserID, DisplayName: row.DisplayName})
 	}
 	return result, nil
-}
-
-// eligibleOwnerTargets compiles owner-scoped write grants into SQL
-// constraints. Agent write has no exclusion scope; strict containment proves
-// authority for both wildcard and concrete owners.
-func eligibleOwnerTargets(grants []authz.Grant, callerID string) (bool, []string) {
-	grants = authz.BindSelectorValue(grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, callerID)
-	if authz.GrantsContainSelector(grants, authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, authz.WildcardResource)) {
-		return true, []string{}
-	}
-	owners := make([]string, 0)
-	for _, grant := range grants {
-		if grant.Scope != authz.ScopeAgentWrite && grant.Scope != authz.ScopeRoot {
-			continue
-		}
-		ownerID := grant.Selector[authz.SelectorKeyOwner]
-		if ownerID == "" || ownerID == authz.WildcardResource || slices.Contains(owners, ownerID) {
-			continue
-		}
-		if authz.GrantsContainSelector(grants, authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, ownerID)) {
-			owners = append(owners, ownerID)
-		}
-	}
-	return false, owners
 }

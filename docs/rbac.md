@@ -81,10 +81,15 @@ Initial policy containment and atomic auditing still apply.
 
 Management checks use the agent's current persisted owner, including after a
 transfer. A grant restricted to one owner cannot manage another owner's agent.
-The service resolves `owner: self` to the caller's user ID before evaluating
-ordinary strict selectors. Creation uses grant containment over all agents of
-the intended owner, not a wildcard runtime check. The generic authorization
-engine has no ownership-specific matching or resource-validation exceptions.
+The request-local `authz.AgentAccess` adapter binds `owner: self` once and always
+uses strict, owner-bearing checks. Agent management, assistant identity selection,
+and OAuth consent use that adapter; database reads, membership checks, locks,
+and intrinsic ownership stay in their application layers. Creation requires
+authority over all agents of the intended owner, not a wildcard runtime check.
+`RequireCreate` records ordinary engine allow/deny challenges. Its allow-only
+containment contract is valid only because agent write has no exclusion scope;
+the engine rejects authority checks for scopes with exclusions. The generic
+matcher has no ownership-specific rules.
 Owners retain intrinsic management of their own agents without agent grants,
 unless owner reassignment is required. Removing write permission prevents new
 creation and delegated edits, but does not remove intrinsic owner management or
@@ -97,6 +102,8 @@ the caller may create for; neither `org:read` nor `project:read` is required.
 Owner discovery applies these targets in the database before pagination. Pages
 default to 50 owners, with a maximum of 100; the next-page cursor names only an
 eligible owner already returned. Optional search matches display names.
+Local creation affordances remain advisory; shared JSON policy cases exercise
+both Go authorization and the TypeScript projection to detect semantic drift.
 
 Existing unrestricted Admin write grants already permit creation; no creation
 scope or backfill is needed. Use the role editor's **Agents → Manage** permission

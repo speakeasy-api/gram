@@ -81,12 +81,16 @@ func GrantsContainSelector(grants []Grant, scope Scope, selector Selector) bool 
 	if selector[SelectorKeyResourceID] == "" || ValidateSelector(scope, selector) != nil {
 		return false
 	}
+	check := strictSelectorCheck(scope, selector)
+	grant, _ := matchingGrant(grants, check.expand())
+	return grant != nil
+}
+
+func strictSelectorCheck(scope Scope, selector Selector) Check {
 	dimensions := maps.Clone(selector)
 	delete(dimensions, SelectorKeyResourceKind)
 	delete(dimensions, SelectorKeyResourceID)
-	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict}
-	grant, _ := matchingGrant(grants, check.expand())
-	return grant != nil
+	return Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict}
 }
 
 // expand returns all scope variants that would satisfy this check: the check's

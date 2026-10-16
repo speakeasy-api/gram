@@ -234,14 +234,43 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 	return e.evaluateRequired(ctx, loadedGrantAuthorization(grants), checks...)
 }
 
+// EvaluateLoadedAuthority authorizes an authority selector, including wildcard
+// resources, against explicit grants and records the ordinary challenge decision.
+// It only supports scopes without exclusions: allow containment cannot prove
+// effective authority when a narrower exclusion may overlap the requested set.
+// Runtime resource checks must continue to use EvaluateLoadedGrants or Require.
+func (e *Engine) EvaluateLoadedAuthority(ctx context.Context, grants []Grant, scope Scope, selector Selector) error {
+	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
+		return oops.C(oops.CodeForbidden)
+	}
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return oops.C(oops.CodeForbidden)
+	}
+	check := strictSelectorCheck(scope, selector)
+	validate := func(check Check) error {
+		if _, hasExclusion := ExclusionScopeFor(scope); hasExclusion {
+			return fmt.Errorf("authority authorization for scope %q requires exclusion-aware containment: %w", scope, ErrInvalidCheck)
+		}
+		if selector[SelectorKeyResourceID] == "" {
+			return InvalidCheck(scope, selector[SelectorKeyResourceID])
+		}
+		return ValidateSelector(scope, selector)
+	}
+	return e.evaluateWithValidation(ctx, loadedGrantAuthorization(grants), validate, check)
+}
+
 func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthorization, checks ...Check) error {
+	return e.evaluateWithValidation(ctx, authorization, validateInput, checks...)
+}
+
+func (e *Engine) evaluateWithValidation(ctx context.Context, authorization grantAuthorization, validate func(Check) error, checks ...Check) error {
 	if len(checks) == 0 {
 		return e.mapError(ctx, ErrNoChecks)
 	}
 
 	matches := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
-		if err := validateInput(check); err != nil {
+		if err := validate(check); err != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequire,
 				Outcome:              authzrepo.OutcomeError,

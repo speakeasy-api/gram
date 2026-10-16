@@ -302,8 +302,8 @@ func consentAgentCandidateEligible(human consentHumanAuthorization, agent agents
 	if agent.OrganizationID != target.OrganizationID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
 		return false
 	}
-	grants := authz.BindSelectorValue(human.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, human.userID)
-	return agent.OwnerUserID == human.userID || authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID))
+	access := authz.NewAgentAccess(human.userID, human.grants)
+	return agent.OwnerUserID == human.userID || access.Allows(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID)
 }
 
 // consentPolicyConnect checks effective access, including exclusion scopes, for

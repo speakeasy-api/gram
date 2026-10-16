@@ -1,0 +1,82 @@
+[
+  {
+    "name": "self",
+    "caller": "caller",
+    "owner": "caller",
+    "grantOwner": "self",
+    "resourceId": "*",
+    "allowed": true
+  },
+  {
+    "name": "another owner",
+    "caller": "caller",
+    "owner": "owner",
+    "grantOwner": "owner",
+    "resourceId": "*",
+    "allowed": true
+  },
+  {
+    "name": "transfer outside grant",
+    "caller": "caller",
+    "owner": "new-owner",
+    "grantOwner": "owner",
+    "resourceId": "*",
+    "allowed": false
+  },
+  {
+    "name": "self does not follow others",
+    "caller": "caller",
+    "owner": "owner",
+    "grantOwner": "self",
+    "resourceId": "*",
+    "allowed": false
+  },
+  {
+    "name": "unresolved self",
+    "caller": "",
+    "owner": "owner",
+    "grantOwner": "self",
+    "resourceId": "*",
+    "allowed": false
+  },
+  {
+    "name": "wildcard caller",
+    "caller": "*",
+    "owner": "owner",
+    "grantOwner": "self",
+    "resourceId": "*",
+    "allowed": false
+  },
+  {
+    "name": "missing owner",
+    "caller": "caller",
+    "owner": "",
+    "grantOwner": "*",
+    "resourceId": "*",
+    "allowed": false
+  },
+  {
+    "name": "wildcard is not an intended owner",
+    "caller": "caller",
+    "owner": "*",
+    "grantOwner": "*",
+    "resourceId": "*",
+    "allowed": false
+  },
+  {
+    "name": "all owners",
+    "caller": "caller",
+    "owner": "owner",
+    "grantOwner": "*",
+    "resourceId": "*",
+    "allowed": true
+  },
+  {
+    "name": "concrete agent",
+    "caller": "caller",
+    "owner": "owner",
+    "grantOwner": "owner",
+    "resourceId": "existing-agent",
+    "allowed": false
+  }
+]

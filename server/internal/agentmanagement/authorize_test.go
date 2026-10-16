@@ -19,7 +19,16 @@ import (
 type fakeAuthorizationEngine struct {
 	allowed          map[string]bool
 	checks           []authz.Check
+	authorities      []authz.Selector
 	loadedGrantsOnly bool
+}
+
+func (f *fakeAuthorizationEngine) EvaluateLoadedAuthority(_ context.Context, grants []authz.Grant, scope authz.Scope, selector authz.Selector) error {
+	f.authorities = append(f.authorities, selector)
+	if !authz.GrantsContainSelector(grants, scope, selector) {
+		return oops.C(oops.CodeForbidden)
+	}
+	return nil
 }
 
 func (f *fakeAuthorizationEngine) EvaluateLoadedGrants(_ context.Context, grants []authz.Grant, checks ...authz.Check) error {
@@ -235,6 +244,7 @@ func TestCreateForAnotherOwnerUsesIntendedOwnerSelector(t *testing.T) {
 	_, err = authorizer.RequireCreate(ctx, conn, "owner")
 	require.NoError(t, err)
 	require.Empty(t, engine.checks, "creation proves containment without a wildcard runtime check")
+	require.Equal(t, authz.AgentOwnerSelector(authz.ScopeAgentWrite, "owner"), engine.authorities[len(engine.authorities)-1])
 
 	_, err = authorizer.RequireCreate(ctx, conn, "caller")
 	requireOopsCode(t, err, oops.CodeForbidden)

@@ -23,6 +23,49 @@ func staticChallengeLogging(enabled bool) ChallengeLoggingEnabled {
 	}
 }
 
+func TestEngineAuthorityRecordsCreationDecision(t *testing.T) {
+	t.Parallel()
+	for _, allowed := range []bool{false, true} {
+		name := "deny"
+		if allowed {
+			name = "allow"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			orgID := "org_" + uuid.NewString()
+			ctx := enterpriseSessionCtxWithOrg(t, orgID)
+			conn := newTestDB(t)
+			seedOrganization(t, ctx, conn, orgID)
+			engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
+			var grants []Grant
+			if allowed {
+				grants = []Grant{NewGrantWithSelector(ScopeAgentWrite, AgentOwnerSelector(ScopeAgentWrite, "owner"))}
+			}
+			err := NewAgentAccess("caller", grants).RequireCreate(ctx, engine, "owner")
+			if allowed {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+			rows := listChallengeOutboxRows(t, conn)
+			require.Len(t, rows, 1)
+			message := &authzv1.Challenge{}
+			require.NoError(t, proto.Unmarshal(rows[0].Message, message))
+			require.Equal(t, name, message.GetOutcome())
+			require.Len(t, message.GetRequestedChecks(), 1)
+		})
+	}
+}
+
+func TestEngineAuthorityRejectsScopesWithExclusions(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	err := engine.EvaluateLoadedAuthority(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, WildcardResource)}, ScopeMCPConnect, NewSelector(ScopeMCPConnect, WildcardResource))
+	var invalid *oops.ShareableError
+	require.ErrorAs(t, err, &invalid)
+	require.Equal(t, oops.CodeUnexpected, invalid.Code)
+}
+
 func TestEngineRequire_requiresAuthContext(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())

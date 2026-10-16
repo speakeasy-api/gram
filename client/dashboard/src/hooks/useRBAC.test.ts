@@ -1,5 +1,6 @@
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
+import agentCreationCases from "../../../../server/internal/authz/testdata/agent_creation_cases.json";
 import {
   bindSelectorValue,
   canCreateAgentForInGrants,
@@ -10,6 +11,29 @@ import {
   selectorMatches,
   selectorMatchesStrict,
 } from "./useRBAC";
+
+describe("shared agent creation policy cases", () => {
+  it.each(agentCreationCases)("$name", (tc) => {
+    expect(
+      canCreateAgentForInGrants(
+        [
+          {
+            scope: "agent:write",
+            selectors: [
+              {
+                resourceKind: "agent",
+                resourceId: tc.resourceId,
+                owner: tc.grantOwner,
+              },
+            ],
+          },
+        ],
+        tc.caller,
+        tc.owner,
+      ),
+    ).toBe(tc.allowed);
+  });
+});
 
 describe("selector value binding", () => {
   it.each(["owner", "tool", "projectId"])(

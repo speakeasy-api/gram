@@ -61,12 +61,12 @@ func TestEligibleOwnerTargetsMatchesCreationContainment(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			all, owners := eligibleOwnerTargets(tc.grants, "caller")
+			access := authz.NewAgentAccess("caller", tc.grants)
+			all, owners := access.CreationOwners()
 			require.Equal(t, tc.all, all)
 			require.ElementsMatch(t, tc.owners, owners)
 			for _, ownerID := range []string{"caller", "employee", "unrelated", "self"} {
-				grants := authz.BindSelectorValue(tc.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, "caller")
-				allowed := authz.GrantsContainSelector(grants, authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, ownerID))
+				allowed := access.CanCreate(ownerID)
 				require.Equal(t, allowed, all || slices.Contains(owners, ownerID), ownerID)
 			}
 		})

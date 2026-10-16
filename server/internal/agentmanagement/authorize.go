@@ -33,6 +33,7 @@ const (
 type HumanContext struct {
 	Auth   *contextvalues.AuthContext
 	grants []authz.Grant
+	access authz.AgentAccess
 }
 
 // LiveGrants returns an isolated copy of the caller grants loaded by the
@@ -58,6 +59,7 @@ type AgentPermissions struct {
 
 type authorizationEngine interface {
 	EvaluateLoadedGrants(context.Context, []authz.Grant, ...authz.Check) error
+	EvaluateLoadedAuthority(context.Context, []authz.Grant, authz.Scope, authz.Selector) error
 }
 
 // Authorizer implements the reusable human-only agent management seam.
@@ -145,7 +147,7 @@ func (a *Authorizer) lockHumanMemberships(ctx context.Context, dbtx repo.DBTX, a
 		return HumanContext{}, fmt.Errorf("load live authorization grants: %w", err)
 	}
 
-	return HumanContext{Auth: authCtx, grants: grants}, nil
+	return HumanContext{Auth: authCtx, grants: grants, access: authz.NewAgentAccess(authCtx.UserID, grants)}, nil
 }
 
 // RequireCreate evaluates creation eligibility against the intended owner and
@@ -160,9 +162,8 @@ func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, ownerUse
 	if a.authz == nil {
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
 	}
-	grants := authz.BindSelectorValue(human.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, human.Auth.UserID)
-	if !authz.GrantsContainSelector(grants, authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, ownerUserID)) {
-		return HumanContext{}, oops.C(oops.CodeForbidden)
+	if err := human.access.RequireCreate(ctx, a.authz, ownerUserID); err != nil {
+		return HumanContext{}, fmt.Errorf("require agent creation: %w", err)
 	}
 	return human, nil
 }
@@ -260,8 +261,7 @@ func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, 
 	if a.authz == nil {
 		return HumanContext{}, repo.Agent{}, errors.New("agent authorization engine is unavailable")
 	}
-	grants := authz.BindSelectorValue(human.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, human.Auth.UserID)
-	if err := a.authz.EvaluateLoadedGrants(ctx, grants, authz.AgentCheck(scope, agent.ID.String(), agent.OwnerUserID)); err != nil {
+	if err := human.access.Require(ctx, a.authz, scope, agent.ID.String(), agent.OwnerUserID); err != nil {
 		// Selected-agent denials deliberately do not distinguish absent,
 		// cross-tenant, or unauthorized resources.
 		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
@@ -277,12 +277,11 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 		return AgentPermissions{}, errors.New("agent authorization engine is unavailable")
 	}
 
-	grants := authz.BindSelectorValue(human.grants, authz.SelectorKeyOwner, authz.AgentOwnerSelf, human.Auth.UserID)
 	return AgentPermissions{
-		Read:      authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentRead, agent.ID.String(), agent.OwnerUserID)),
-		Write:     authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentWrite, agent.ID.String(), agent.OwnerUserID)),
-		Authorize: authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID)),
-		Transfer:  authz.GrantsSatisfy(grants, authz.AgentCheck(authz.ScopeAgentTransfer, agent.ID.String(), agent.OwnerUserID)),
+		Read:      human.access.Allows(authz.ScopeAgentRead, agent.ID.String(), agent.OwnerUserID),
+		Write:     human.access.Allows(authz.ScopeAgentWrite, agent.ID.String(), agent.OwnerUserID),
+		Authorize: human.access.Allows(authz.ScopeAgentAuthorize, agent.ID.String(), agent.OwnerUserID),
+		Transfer:  human.access.Allows(authz.ScopeAgentTransfer, agent.ID.String(), agent.OwnerUserID),
 	}, nil
 }
 
