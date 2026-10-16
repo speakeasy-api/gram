@@ -5,10 +5,15 @@ import "encoding/json"
 // SchemaTool is one member tool as reported by describe_tools: the qualified
 // name with the full input schema an agent needs before calling it.
 type SchemaTool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
-	Annotations any             `json:"annotations,omitempty"`
+	Title        string          `json:"title,omitempty"`
+	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
+	Icons        json.RawMessage `json:"icons,omitempty"`
+	Execution    json.RawMessage `json:"execution,omitempty"`
+	Meta         map[string]any  `json:"_meta,omitempty"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description,omitempty"`
+	InputSchema  json.RawMessage `json:"inputSchema,omitempty"`
+	Annotations  any             `json:"annotations,omitempty"`
 }
 
 // DescribeToolsResult is the structuredContent payload of a describe_tools

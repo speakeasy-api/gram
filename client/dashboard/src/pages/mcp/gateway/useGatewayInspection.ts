@@ -9,11 +9,13 @@ const listedServerSchema = z.object({
   status: z.string().optional(),
 });
 
-const toolSchema = z.object({
-  name: z.string(),
-  description: z.string().optional(),
-  inputSchema: z.unknown().optional(),
-});
+const toolSchema = z
+  .object({
+    name: z.string(),
+    description: z.string().optional(),
+    inputSchema: z.unknown().optional(),
+  })
+  .passthrough();
 
 type GatewayTool = z.infer<typeof toolSchema>;
 type GatewayListedServer = z.infer<typeof listedServerSchema>;
@@ -27,6 +29,7 @@ export interface GatewayServerDescription {
 }
 
 export interface GatewayInspection {
+  discoveryMode: "direct" | "progressive";
   /** Sent to every client on connect; the runtime generates it. */
   instructions: string | undefined;
   protocolVersion: string | undefined;
@@ -120,7 +123,11 @@ async function rpc(
  */
 export function useGatewayInspection(
   mcpUrl: string | undefined,
-  options?: { headers?: Record<string, string>; enabled?: boolean },
+  options?: {
+    headers?: Record<string, string>;
+    enabled?: boolean;
+    configurationKey?: string;
+  },
 ): {
   data: GatewayInspection | undefined;
   isLoading: boolean;
@@ -129,11 +136,11 @@ export function useGatewayInspection(
   error: Error | null;
   refetch: () => void;
 } {
-  const { headers, enabled = true } = options ?? {};
+  const { headers, enabled = true, configurationKey } = options ?? {};
   const headersKey = authCacheKey(headers);
 
   const query = useQuery<GatewayInspection, Error>({
-    queryKey: ["gatewayInspection", mcpUrl, headersKey],
+    queryKey: ["gatewayInspection", mcpUrl, headersKey, configurationKey],
     queryFn: async () => {
       if (!mcpUrl) throw new Error("No gateway URL configured");
 
@@ -150,31 +157,56 @@ export function useGatewayInspection(
         })
         .parse(initResult);
 
-      const toolsResult = await rpc(mcpUrl, headers, "tools/list", {});
-      const { tools } = z
-        .object({ tools: z.array(toolSchema) })
-        .parse(toolsResult);
+      const tools: GatewayTool[] = [];
+      const seenCursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const toolsResult = await rpc(mcpUrl, headers, "tools/list", {
+          cursor,
+        });
+        const listing = z
+          .object({
+            tools: z.array(toolSchema),
+            nextCursor: z.string().optional(),
+          })
+          .parse(toolsResult);
+        tools.push(...listing.tools);
+        cursor = listing.nextCursor;
+        if (cursor) {
+          if (seenCursors.has(cursor) || seenCursors.size >= 100)
+            throw new Error(
+              "The gateway returned an incomplete tool list. Reconnect to try again.",
+            );
+          seenCursors.add(cursor);
+        }
+      } while (cursor);
+      const discoveryMode = tools.some((tool) => tool.name === "list_servers")
+        ? "progressive"
+        : "direct";
 
       // Bundle state is a best-effort extra: a member outage must not blank
       // out the tool surface above, which is the tab's primary content.
       let servers: GatewayListedServer[] | undefined;
-      try {
-        const callResult = await rpc(mcpUrl, headers, "tools/call", {
-          name: "list_servers",
-          arguments: {},
-        });
-        servers = z
-          .object({
-            structuredContent: z.object({
-              servers: z.array(listedServerSchema),
-            }),
-          })
-          .parse(callResult).structuredContent.servers;
-      } catch {
-        servers = undefined;
+      if (discoveryMode === "progressive") {
+        try {
+          const callResult = await rpc(mcpUrl, headers, "tools/call", {
+            name: "list_servers",
+            arguments: {},
+          });
+          servers = z
+            .object({
+              structuredContent: z.object({
+                servers: z.array(listedServerSchema),
+              }),
+            })
+            .parse(callResult).structuredContent.servers;
+        } catch {
+          servers = undefined;
+        }
       }
 
       return {
+        discoveryMode,
         instructions: init.instructions,
         protocolVersion: init.protocolVersion,
         serverName: init.serverInfo?.name,

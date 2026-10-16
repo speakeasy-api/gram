@@ -83,8 +83,9 @@ type AllowEntry struct {
 }
 
 // SessionSelection is the consent-screen tool policy persisted on
-// user_sessions.tool_selection. A NULL column (no document) is the only
-// all-tools representation. Any document is restrictive: a tool is in scope
+// the legacy user_sessions.tool_selection document. A nil selection is unrestricted;
+// versioned policies may carry connection options without a selection. Any
+// SessionSelection document is restrictive: a tool is in scope
 // iff some allow entry includes it — by exact name for tool entries and
 // snapshot expansions, or by serve-time hint matching for live annotation
 // entries. An empty allow list authorizes zero tools.
