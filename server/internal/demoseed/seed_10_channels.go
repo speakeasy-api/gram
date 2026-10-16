@@ -34,13 +34,29 @@ func (s *seeder) channelsPurgeSteps(ctx context.Context) []orgStep {
 // channelsStrayStateGuard refuses the run when the superseded Channels
 // document still holds content. A developer may be holding proof-of-concept
 // conversations in it, and a reseed is not consent to delete them.
+//
+// The refusal deliberately does NOT tell the operator to convert and then
+// reseed. Converting does not make a reseed safe, in three separate ways:
+// channels.ConvertLegacyState never empties the document, so this guard would
+// keep refusing; the conversion writes into exactly the channels_* tables the
+// purge above clears, so a later reseed would delete what it imported; and the
+// conversion refuses an organization whose normalized tables already hold rows
+// that are not its own output, which is every organization this seed has run
+// against. So the only honest instruction is to take the data out of this
+// organization first.
 func (s *seeder) channelsStrayStateGuard(ctx context.Context) error {
 	n, err := s.q.ChannelsCountStrayState(ctx, s.orgID())
 	if err != nil {
 		return fmt.Errorf("count superseded channels state: %w", err)
 	}
 	if n > 0 {
-		return fmt.Errorf("the superseded Channels document for this organization still holds content. Run %q to carry it into the normalized tables, then reseed. The seed will not delete it", "gram channels-convert --organization <id> --apply")
+		return fmt.Errorf(
+			"the superseded Channels document for this organization still holds content, and this seed will not delete it. "+
+				"A reseed deletes every Channels row in this organization, so converting the document does not carry it through one: "+
+				"%q writes into the very tables the reseed clears, and it refuses outright once a seed has populated them. "+
+				"Copy anything worth keeping out of this organization, then empty the document yourself to let the seed proceed",
+			"gram channels-convert --organization <id> --apply",
+		)
 	}
 	return nil
 }
