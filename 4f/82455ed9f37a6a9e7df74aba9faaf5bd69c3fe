@@ -1,0 +1,20 @@
+server/internal/authz/agent_access_test.go
+  h_2620cc60cfd1e9 86-105
+server/internal/authz/engine_test.go
+  h_2620cc60cfd1e9 67-68
+server/internal/mcp/authnchallenge_consent_agent.go
+  h_2620cc60cfd1e9 187,189,261-262,303,307
+server/internal/mcp/authnchallenge_consent_agent_internal_test.go
+  h_2620cc60cfd1e9 31-34,54-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4f82455ed9f37a6a9e7df74aba9faaf5bd69c3fe",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
