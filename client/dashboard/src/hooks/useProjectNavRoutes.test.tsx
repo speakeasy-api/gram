@@ -37,6 +37,7 @@ const routes = {
   agentSessions: route("Agent Sessions", "agent-sessions"),
   assistants: route("Assistants", "assistants"),
   catalog: route("Catalog", "catalog"),
+  channels: route("Channels", "channels"),
   chat: route("Project Assistant", "chat"),
   skills: route("Skills", "skills"),
   costs: route("Costs", "costs"),

@@ -247,6 +247,7 @@ export function AppSidebar({
             Icon={(p) => <Icon {...p} name="hammer" />}
             items={[
               { item: routes.mcp, ...accessFor(routes.mcp) },
+              { item: routes.channels, ...accessFor(routes.channels) },
               ...(isAssistantsEnabled
                 ? [{ item: routes.assistants, ...accessFor(routes.assistants) }]
                 : []),

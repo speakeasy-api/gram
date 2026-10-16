@@ -550,27 +550,30 @@ export interface ButtonProps
  */
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ icon, iconAfter = false, tooltip, href, children, ...props }, ref) => {
+    // Keyed: the icon sits in a list beside the caller's children, and only
+    // this component can name it.
     const iconElement = icon ? (
       iconAfter ? (
-        <ButtonRightIcon>
+        <ButtonRightIcon key="button-icon">
           <Icon name={icon} />
         </ButtonRightIcon>
       ) : (
-        <ButtonLeftIcon>
+        <ButtonLeftIcon key="button-icon">
           <Icon name={icon} />
         </ButtonLeftIcon>
       )
     ) : null;
 
-    const content = props.asChild ? (
-      children
-    ) : (
-      <>
-        {!iconAfter && iconElement}
-        {children}
-        {iconAfter && iconElement}
-      </>
-    );
+    // Keep compound children visible to BaseButton's validation and text
+    // wrapping. An icon-only button passes the icon through on its own: a
+    // one-element list would ask React for a key the caller cannot give.
+    const content = props.asChild
+      ? children
+      : React.Children.toArray([
+          !iconAfter && iconElement,
+          children,
+          iconAfter && iconElement,
+        ]);
 
     const button = (
       <BaseButton ref={ref} {...props} {...(href ? { asChild: true } : {})}>

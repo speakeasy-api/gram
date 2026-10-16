@@ -104,6 +104,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         ? [{ route: routes.deployments, scope: readWrite }]
         : []),
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
+      // Channels authorizes each operation against its organization grants.
+      { route: routes.channels, scope: [] },
       ...(isAssistantsEnabled
         ? [
             {

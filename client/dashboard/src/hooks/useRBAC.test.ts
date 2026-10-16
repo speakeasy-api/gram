@@ -1,3 +1,4 @@
+import { listUserGrantsResultFromJSON } from "@gram/client/models/components/listusergrantsresult.js";
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -8,6 +9,51 @@ import {
   selectorMatches,
   selectorMatchesStrict,
 } from "./useRBAC";
+
+describe("Channels effective-grants contract", () => {
+  const scopes = ["channels:connect", "channels:admin", "channels:read_all"];
+
+  it("decodes successful grant responses containing Channels scopes", () => {
+    // These are real scope slugs, not unknown values to discard: rejecting a
+    // 200 response makes MembershipSyncGuard unmount the entire route outlet.
+    const result = listUserGrantsResultFromJSON(
+      JSON.stringify({
+        grants: scopes.map((scope) => ({ scope, sub_scopes: [scope] })),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value?.grants.map((grant) => grant.scope)).toEqual(scopes);
+    expect(result.value?.grants.map((grant) => grant.subScopes)).toEqual(
+      scopes.map((scope) => [scope]),
+    );
+  });
+
+  it("still rejects unrecognized grant scopes rather than weakening validation", () => {
+    const result = listUserGrantsResultFromJSON(
+      JSON.stringify({
+        grants: [{ scope: "unknown:permission" }],
+      }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("does not retain permissions removed by the next valid grant response", () => {
+    const before = listUserGrantsResultFromJSON(
+      JSON.stringify({
+        grants: [{ scope: "project:write" }, { scope: "channels:connect" }],
+      }),
+    );
+    const after = listUserGrantsResultFromJSON(JSON.stringify({ grants: [] }));
+    expect(before.ok).toBe(true);
+    expect(after.ok).toBe(true);
+    expect(hasScopeInGrants(before.value!.grants, "project:write", "*")).toBe(
+      true,
+    );
+    expect(hasScopeInGrants(after.value!.grants, "project:write", "*")).toBe(
+      false,
+    );
+  });
+});
 
 describe("grants query key", () => {
   it("isolates effective grants by session", () => {
