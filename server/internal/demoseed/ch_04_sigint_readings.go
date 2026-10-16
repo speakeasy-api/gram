@@ -1,11 +1,13 @@
 package demoseed
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"time"
 
@@ -21,65 +23,76 @@ const (
 	// sensor gets: more than a year, so annual trend examples have a full cycle.
 	sigintReadingDays = 400
 
-	// sigintReadingCount is the expected landed row count: one reading per day
-	// for each of the three enabled sensors.
-	sigintReadingCount = sigintReadingDays * 3
+	// sigintReadingMembers is the member count the reading formulas below are
+	// written for: three signals or levels per enabled sensor.
+	sigintReadingMembers = 3
 )
 
-// sigintReadingSensor is one enabled sensor from the Postgres seed, with the
-// configured message context its readings report.
-type sigintReadingSensor struct {
-	key, slug, resultType, inputStrategy string
-	requestedMessages                    uint8
+// sigintReadingResultTypes maps a sensor mode to its stored result variant.
+var sigintReadingResultTypes = map[string]string{
+	"multi_label":   "multi_label",
+	"exclusive":     "choice",
+	"ordered_score": "score",
 }
 
-// sigintReadingSensors mirror seed_01_org.go's enabled sensors, in mode order.
-var sigintReadingSensors = []sigintReadingSensor{
-	{key: "service-areas", slug: "service-areas", resultType: "multi_label", inputStrategy: "single_message", requestedMessages: 1},
-	{key: "primary-service", slug: "primary-service", resultType: "choice", inputStrategy: "sliding_window", requestedMessages: 5},
-	{key: "impact", slug: "customer-impact", resultType: "score", inputStrategy: "sliding_window", requestedMessages: 10},
-}
-
-// chSigintReadings regenerates synthetic retrospective sensor readings. They
-// reference the configured sensors and their ordered members, with each
-// sensor's message context. Annual and weekly variation supports trend
-// examples without paid classifier calls or claiming these are real
-// evaluations. The org-scoped purge in chPurge removes the previous generation.
+// chSigintReadings regenerates synthetic retrospective sensor readings for the
+// enabled sensors seed_01_org.go configures, using their ordered members and
+// message context. Annual and weekly variation supports trend examples without
+// paid classifier calls or claiming these are real evaluations. The org-scoped
+// purge in chPurge removes the previous generation.
 func (s *seeder) chSigintReadings(ctx context.Context, ch driver.Conn) error {
-	rows := make([]chrepo.ReadingRow, 0, sigintReadingCount)
-	for n := range sigintReadingDays {
-		for mode := range sigintReadingSensors {
-			rows = append(rows, s.sigintReading(n, mode))
+	var rows []chrepo.ReadingRow
+	for _, sensor := range demoSigintSensors {
+		if !sensor.enabled {
+			continue
+		}
+		var members []demoSigintMembership
+		for _, m := range demoSigintMemberships {
+			if m.sensor == sensor.key {
+				members = append(members, m)
+			}
+		}
+		slices.SortFunc(members, func(a, b demoSigintMembership) int { return cmp.Compare(a.order, b.order) })
+		// The formulas are fixed to three members; a reshaped sensor must update
+		// them rather than silently seed stale readings.
+		if len(members) != sigintReadingMembers {
+			return fmt.Errorf("demo sigint sensor %s has %d members, readings expect %d", sensor.key, len(members), sigintReadingMembers)
+		}
+		if _, ok := sigintReadingResultTypes[sensor.mode]; !ok {
+			return fmt.Errorf("demo sigint sensor %s has unsupported mode %s", sensor.key, sensor.mode)
+		}
+		for n := range sigintReadingDays {
+			rows = append(rows, s.sigintReading(sensor, members, n))
 		}
 	}
 	if err := chrepo.New(ch).InsertReadings(ctx, rows); err != nil {
 		return fmt.Errorf("insert demo sensor readings: %w", err)
 	}
 	return s.chRunChecks(ctx, ch, []chCheck{{
-		cond:     `(SELECT count() FROM sigint_readings FINAL WHERE organization_id = @org) != ` + strconv.Itoa(sigintReadingCount),
+		cond:     `(SELECT count() FROM sigint_readings FINAL WHERE organization_id = @org) != ` + strconv.Itoa(len(rows)),
 		settings: chFinalSettings,
-		msg:      "demo seed postflight: expected 400 retrospective readings for each configured sensor",
+		msg:      "demo seed postflight: expected 400 retrospective readings for each enabled sensor",
 	}})
 }
 
-func (s *seeder) sigintReading(n, mode int) chrepo.ReadingRow {
-	sensor := sigintReadingSensors[mode]
+func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMembership, n int) chrepo.ReadingRow {
 	day := float64(n)
 	probability := 0.5 + 0.3*math.Sin(day*2*math.Pi/365) + 0.1*math.Sin(day*2*math.Pi/7)
 	remainderShare := 0.5 + 0.3*math.Sin(day*2*math.Pi/7+1)
-	distribution := [3]float64{probability, (1 - probability) * remainderShare, (1 - probability) * (1 - remainderShare)}
-	selected := 0
-	for i, value := range distribution {
-		if value > distribution[selected] {
-			selected = i
-		}
-	}
-	signal := func(key string, p float64) chrepo.ProbabilityRow {
-		return chrepo.ProbabilityRow{SignalID: s.det("sigint-signal-" + key), SignalSlug: key, Probability: p}
+	distribution := [sigintReadingMembers]float64{probability, (1 - probability) * remainderShare, (1 - probability) * (1 - remainderShare)}
+	signal := func(i int, p float64) chrepo.ProbabilityRow {
+		return chrepo.ProbabilityRow{SignalID: s.det("sigint-signal-" + members[i].signal), SignalSlug: members[i].signal, Probability: p}
 	}
 
-	// Short conversations supply fewer messages than a window requests.
-	supplied := uint8(1)
+	// Single-message sensors supply only the target. Short conversations supply
+	// fewer messages than a window requests.
+	requested, supplied := uint8(1), uint8(1)
+	if sensor.inputStrategy == "sliding_window" {
+		window := int(sensor.windowSize)
+		requested, _ = conv.ClampedIntToUint8(window)
+		supplied, _ = conv.ClampedIntToUint8(min(window, 2+n%(window+1)))
+	}
+
 	var (
 		probabilities []chrepo.ProbabilityRow
 		selectedID    *uuid.UUID
@@ -87,40 +100,41 @@ func (s *seeder) sigintReading(n, mode int) chrepo.ReadingRow {
 		expectedIndex *float64
 		confidence    *float64
 	)
-	switch mode {
-	case 0:
+	switch sensor.mode {
+	case "multi_label":
 		probabilities = []chrepo.ProbabilityRow{
-			signal("api", probability),
-			signal("database", 0.2+0.6*(1-probability)),
-			signal("authentication", 0.3+0.2*math.Sin(day*2*math.Pi/7)),
+			signal(0, probability),
+			signal(1, 0.2+0.6*(1-probability)),
+			signal(2, 0.3+0.2*math.Sin(day*2*math.Pi/7)),
 		}
-	case 1:
-		options := [3]string{"api", "database", "worker"}
-		for i, key := range options {
-			probabilities = append(probabilities, signal(key, distribution[i]))
+	case "exclusive":
+		selected := 0
+		for i, value := range distribution {
+			probabilities = append(probabilities, signal(i, value))
+			if value > distribution[selected] {
+				selected = i
+			}
 		}
-		selectedID = new(s.det("sigint-signal-" + options[selected]))
-		selectedSlug = options[selected]
-		supplied, _ = conv.ClampedIntToUint8(min(5, 2+n%5))
-	default:
+		selectedID = new(s.det("sigint-signal-" + members[selected].signal))
+		selectedSlug = members[selected].signal
+	case "ordered_score":
 		probabilities = []chrepo.ProbabilityRow{
-			signal("low", (1-probability)*0.65),
-			signal("medium", (1-probability)*0.35),
-			signal("high", probability),
+			signal(0, (1-probability)*0.65),
+			signal(1, (1-probability)*0.35),
+			signal(2, probability),
 		}
 		expectedIndex = new((1-probability)*0.35 + 2*probability)
-		supplied, _ = conv.ClampedIntToUint8(min(10, 2+n%11))
 	}
 	// Some exclusive and ordered readings carry no classifier confidence.
-	if mode != 0 && n%11 != 0 {
+	if sensor.mode != "multi_label" && n%11 != 0 {
 		confidence = new(0.6 + 0.3*math.Cos(day*2*math.Pi/17))
 	}
 
-	definition := sha256.Sum256([]byte(s.name("sigint-definition-" + strconv.Itoa(mode+1))))
+	definition := sha256.Sum256([]byte(s.name("sigint-definition-" + sensor.key)))
 	departments := [2]string{"engineering", "support"}
 	regions := [2]string{"us-east", "eu-west"}
 	return chrepo.ReadingRow{
-		ID:                         s.det("sigint-reading-" + strconv.Itoa(mode+1) + "-" + strconv.Itoa(n)),
+		ID:                         s.det("sigint-reading-" + sensor.key + "-" + strconv.Itoa(n)),
 		EvaluationAttemptID:        s.det("sigint-attempt-" + strconv.Itoa(n)),
 		OrganizationID:             s.orgID(),
 		ProjectID:                  s.projectID(),
@@ -139,7 +153,7 @@ func (s *seeder) sigintReading(n, mode int) chrepo.ReadingRow {
 		CompilerVersion:            "demo-compiler-v1",
 		Provider:                   "demo",
 		InputStrategy:              sensor.inputStrategy,
-		InputRequestedMessageCount: sensor.requestedMessages,
+		InputRequestedMessageCount: requested,
 		InputMessageCount:          supplied,
 		InputTruncated:             false,
 		EventContextType:           "",
@@ -159,7 +173,7 @@ func (s *seeder) sigintReading(n, mode int) chrepo.ReadingRow {
 		AssistantID:                nil,
 		Replayed:                   new(true),
 		Attributes:                 map[string]string{"department": departments[n%2], "region": regions[n%2], "environment": "production"},
-		ResultType:                 sensor.resultType,
+		ResultType:                 sigintReadingResultTypes[sensor.mode],
 		Probabilities:              probabilities,
 		SelectedSignalID:           selectedID,
 		SelectedSignalSlug:         selectedSlug,

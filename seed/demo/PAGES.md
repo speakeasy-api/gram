@@ -216,7 +216,9 @@ present in a developer's org and deliberately absent from the shared demo org.
    MVs populate on INSERT — never hand-backfill an MV target. Billing meter
    facts follow the same rule: clear both the tenant's raw ledger and daily
    summary target, wait for delete visibility, then let the fresh raw inserts
-   incrementally repopulate UTC-day summaries.
+   incrementally repopulate UTC-day summaries. The one exception is
+   `sigint_readings`: it feeds no MV, so its readings span 400 trailing days
+   to give trend views a full annual cycle.
 4. Every new CH insert target (or new MV) gets a matching scoped DELETE in
    `ch_01_purge_telemetry.go`, or re-runs double the numbers.
 5. Cost/session MVs are provenance-first: usage rows must be Claude OTEL
