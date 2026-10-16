@@ -72,8 +72,7 @@ func newTunneledAccessFixture(t *testing.T, ctx context.Context, database string
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	reads := NewAccessReadService(logger, conn, allowBudget(), "access-tunneled-key")
-	admissionFlags := &roleAdmissionOutsideTransactionFlags{Provider: flags, t: t, db: conn, evaluated: false}
-	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard(admissionFlags, nil))
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard())
 	roles, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-tunneled-key", manager)
 	require.NoError(t, err)
 
