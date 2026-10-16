@@ -62,6 +62,25 @@ func TestLimitEmbeddingInputs_OpenAIPreservesUTF8(t *testing.T) {
 	require.LessOrEqual(t, limitedTokens, maxOpenAIEmbeddingInputTokens)
 }
 
+func TestLimitEmbeddingInputs_OpenAIDoesNotSplitMultiByteRune(t *testing.T) {
+	t.Parallel()
+
+	// cl100k splits 😀 into two tokens. The leading "x" shifts the 8,000-token
+	// cut between them, so a naive decode ends with a partial rune.
+	input := "x" + strings.Repeat("😀😀😀😀 ", 2_000)
+	limited, truncatedCount, err := limitEmbeddingInputs(openAITextEmbedding3Small, []string{input})
+	require.NoError(t, err)
+	require.Equal(t, 1, truncatedCount)
+	require.True(t, utf8.ValidString(limited[0]))
+	require.True(t, strings.HasPrefix(input, limited[0]))
+
+	codec, err := tokenizer.Get(tokenizer.Cl100kBase)
+	require.NoError(t, err)
+	limitedTokens, err := codec.Count(limited[0])
+	require.NoError(t, err)
+	require.LessOrEqual(t, limitedTokens, maxOpenAIEmbeddingInputTokens)
+}
+
 func TestLimitEmbeddingInputs_OtherModelsPreserveLegacyByteLimit(t *testing.T) {
 	t.Parallel()
 
