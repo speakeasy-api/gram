@@ -360,7 +360,28 @@ function ChannelsBoard({
         </div>
       ) : null}
 
-      {data && data.enabled ? (
+      {data && data.enabled && !data.viewer.canConnect ? (
+        <div className="flex flex-1 items-center justify-center p-8">
+          <div className="w-full max-w-xl space-y-4">
+            {notice}
+            <InlineEmptyState
+              icon="lock"
+              heading="You can't take part in Channels"
+              description="An exception in Channels settings stops you from reading and posting here. Remove it to join in."
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Button.Text>Open Channels settings</Button.Text>
+                </Button>
+              }
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {data && data.enabled && data.viewer.canConnect ? (
         <div className="grid min-h-0 flex-1 lg:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[22rem_minmax(0,1fr)_16rem]">
           <ConversationList
             className={cn(

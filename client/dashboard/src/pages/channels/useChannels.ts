@@ -105,14 +105,13 @@ interface ConversationPages {
 
 const NO_PAGES: ConversationPages = { threads: {}, loading: false };
 
-function isAdminResult(
-  result: unknown,
-): result is Pick<ChannelsSnapshot, "enabled" | "grants" | "viewer"> {
+function isSnapshot(result: unknown): result is ChannelsSnapshot {
   return (
     typeof result === "object" &&
     result !== null &&
     "viewer" in result &&
-    "enabled" in result
+    "threads" in result &&
+    "messages" in result
   );
 }
 
@@ -166,6 +165,11 @@ export function useChannelsWorkspace(
   const accessDenied = revoked(snapshot.error) || revoked(readError);
   // A transient refresh failure can use cached data; revoked access cannot.
   const current = accessDenied ? undefined : snapshot.data;
+  // Channels being off, or the viewer's own access withheld, leaves only
+  // configuration to show: nothing read before that point stays on screen.
+  const restricted =
+    current !== undefined && !(current.enabled && current.viewer.canConnect);
+  const withheld = accessDenied || restricted;
   // The snapshot carries the most recently active conversations; pages read
   // past it fill in the rest. The snapshot's own copy of a conversation is
   // the fresher one, so it wins.
@@ -176,9 +180,10 @@ export function useChannelsWorkspace(
   // snapshot's first page is what brings it back. Trusting the pages alone
   // would lose exactly the conversations that just became interesting.
   const data = useMemo(() => {
-    if (!current || Object.keys(pages.threads).length === 0) return current;
+    if (!current || restricted || Object.keys(pages.threads).length === 0)
+      return current;
     return { ...current, threads: { ...pages.threads, ...current.threads } };
-  }, [current, pages.threads]);
+  }, [current, restricted, pages.threads]);
   const limits = useMemo(
     () => ({ ...DEFAULT_LIMITS, ...snapshot.data?.limits }),
     [snapshot.data?.limits],
@@ -188,15 +193,16 @@ export function useChannelsWorkspace(
   // reconciliation: it heals a gap the cursor reads missed, and costs nothing
   // when there is none.
   useEffect(() => {
-    if (snapshot.data) dispatch({ type: "snapshot", snapshot: snapshot.data });
-  }, [snapshot.data]);
+    if (snapshot.data && !withheld)
+      dispatch({ type: "snapshot", snapshot: snapshot.data });
+  }, [snapshot.data, withheld]);
 
   useEffect(() => {
-    if (accessDenied) {
+    if (withheld) {
       dispatch({ type: "forget" });
       setPages(NO_PAGES);
     }
-  }, [accessDenied]);
+  }, [withheld]);
 
   // The snapshot now carries every conversation, so pages read when it did
   // not would only keep conversations alive after they stopped existing.
@@ -231,7 +237,7 @@ export function useChannelsWorkspace(
   }, [store.cursor]);
 
   const refetchSnapshot = snapshot.refetch;
-  const live = data?.enabled === true;
+  const live = current !== undefined && !restricted;
   // The retention floor the last stale read reported. Reacting to the same
   // floor twice cannot produce a different answer, and a snapshot and a read
   // that disagree about it would otherwise chase each other.
@@ -476,19 +482,11 @@ export function useChannelsWorkspace(
     throwOnError: false,
     retry: false,
     onSuccess: (result, { operation }) => {
-      // An administrative change answers with the committed availability and
-      // the caller's own access, so the page reflects it before the refetch.
-      if (operation === "channels_admin" && isAdminResult(result))
-        queryClient.setQueryData<ChannelsSnapshot>(queryKey, (held) =>
-          held
-            ? {
-                ...held,
-                enabled: result.enabled,
-                grants: result.grants,
-                viewer: result.viewer,
-              }
-            : held,
-        );
+      // An administrative change answers with the snapshot as it stands after
+      // the change, so the page reflects it, including any access it
+      // withdrew, before the refetch.
+      if (operation === "channels_admin" && isSnapshot(result))
+        queryClient.setQueryData<ChannelsSnapshot>(queryKey, result);
       return queryClient.invalidateQueries({ queryKey });
     },
   });
@@ -510,7 +508,7 @@ export function useChannelsWorkspace(
 
   return {
     data,
-    store: accessDenied ? emptyStore : store,
+    store: withheld ? emptyStore : store,
     limits,
     isLoading: snapshot.isPending && !data,
     isRefreshing: snapshot.isFetching,
@@ -523,9 +521,7 @@ export function useChannelsWorkspace(
     isActing: action.isPending,
     actionFailed: action.error !== null,
     canAdmin: data?.viewer.canAdmin === true,
-    // Reading can outlast taking part: an administrator whose own exception
-    // withholds it still sees the page, but nothing that speaks as them.
-    canParticipate: live && data?.viewer.canConnect === true,
+    canParticipate: live,
     sessionInstanceId,
     run: async (next) => {
       try {

@@ -102,7 +102,8 @@ describe("conversation list", () => {
       },
     ],
     preferences: { followed: ["busy"], muted: ["dm"] },
-    viewer: { canConnect: true, canReadAll: false, canAdmin: false },
+    // identity-2 observes a private conversation it is not part of.
+    viewer: { canConnect: true, canReadAll: true, canAdmin: false },
   });
 
   it("puts live conversations above idle ones", () => {
