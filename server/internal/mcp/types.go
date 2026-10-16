@@ -80,6 +80,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 			securityKeys:          ot.SecurityKeys,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Token:                 ot.Token,
+			fromCaller:            false,
 		}
 	}
 
