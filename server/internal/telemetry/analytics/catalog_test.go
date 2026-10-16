@@ -176,35 +176,19 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 	})
 }
 
-func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
+func TestSourceQueriesNeverSortTheWindow(t *testing.T) {
 	t.Parallel()
 
 	qc := QueryContext{Tenant: Tenant{OrganizationID: "org", ProjectID: "proj"}, Window: Window{FromUnixNano: 1, ToUnixNano: 2}}
 
-	// What each dataset binds after the tenant and window: the whole list, so
-	// a dropped or reordered predicate fails here rather than passing unseen,
-	// and a new dataset has to declare its binds before it passes at all.
-	toolCallBinds := make([]any, 0, len(toolCallEventTypes)+1)
-	for _, eventType := range toolCallEventTypes {
-		toolCallBinds = append(toolCallBinds, eventType)
-	}
-	toolCallBinds = append(toolCallBinds, "") // event_type IN (...), event_id != ''
-	trailing := map[string][]any{
-		ToolCalls.Name: toolCallBinds,
-		// The same collapse; the skill predicate is a literal on the collapsed row.
-		Skills.Name: toolCallBinds,
-	}
-
-	for _, ds := range Default.Datasets() {
+	for _, ds := range []*Dataset{ToolCalls, Skills} {
 		query, args, err := ds.Source.Rows(qc).ToSql()
 		require.NoError(t, err, ds.Name)
-		require.Contains(t, query, "LIMIT 1 BY organization_id, project_id, record_id", ds.Name)
-		require.Contains(t, query, "GROUP BY organization_id, project_id", ds.Name)
-
-		tail, declared := trailing[ds.Name]
-		require.True(t, declared, "dataset %q declares no expected binds", ds.Name)
-		want := append([]any{"org", "proj", int64(1), int64(2)}, tail...)
-		require.Equal(t, want, args, ds.Name)
+		require.NotContains(t, query, "LIMIT 1 BY", ds.Name)
+		require.Contains(t, query, "FROM tool_calls WHERE", ds.Name)
+		require.Contains(t, query, "GROUP BY organization_id, project_id, event_id HAVING started_at >= ? AND started_at < ?", ds.Name)
+		require.Contains(t, query, "event_id IN (SELECT event_id FROM tool_calls WHERE organization_id = ? AND project_id = ? AND started_at_unix_nano >= ? AND started_at_unix_nano < ?)", ds.Name)
+		require.Equal(t, []any{"org", "proj", "org", "proj", int64(1), int64(2), int64(1), int64(2)}, args, ds.Name)
 	}
 }
 
@@ -278,5 +262,5 @@ func TestDimensionValuesWithoutTypeaheadReadTheRows(t *testing.T) {
 	plan, err := CompileValues(MustCatalog(Lookups, &ds), Tenant{OrganizationID: "org", ProjectID: "proj"}, nil, ValuesRequest{Dataset: ds.Name, Dimension: "tool_name", FromUnixNano: 1, ToUnixNano: 2, Limit: 0})
 	require.NoError(t, err)
 	require.Contains(t, plan.SQL, "SELECT tool_name AS value, count() AS n FROM (")
-	require.Contains(t, plan.SQL, "LIMIT 1 BY")
+	require.Contains(t, plan.SQL, "FROM tool_calls WHERE")
 }
