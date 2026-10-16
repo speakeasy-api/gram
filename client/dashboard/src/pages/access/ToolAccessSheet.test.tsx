@@ -99,8 +99,8 @@ function renderSheet() {
         target={{ kind: "server", entry }}
         limit={{ kind: "tools", tools: ["list_devices"] }}
         initialTab="tools"
-        onChange={vi.fn()}
-        onClose={vi.fn()}
+        onChange={() => {}}
+        onClose={() => {}}
       />
     </MemoryRouter>,
   );
