@@ -2252,6 +2252,53 @@ TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'One row per observed agent occurrence, resolved by the ingest dialects into agent vocabulary rather than the shape it arrived in. Rows sharing a session_id belong to the same agent session. Append-only: every observation is retained so the lineage of a fact stays queryable, and de-duplication is performed at read time. The queryable surface is defined by the semantic layer, not by this table.';
 
+CREATE TABLE IF NOT EXISTS tool_calls (
+    organization_id String COMMENT 'Organization that owns the call.\n@access: confidential' CODEC(ZSTD),
+    project_id String COMMENT 'Project that owns the call.\n@access: confidential' CODEC(ZSTD),
+    event_id String COMMENT 'The tool call id that every observation of the call (decision, call, result) shares.\n@access: confidential' CODEC(ZSTD),
+
+    -- Each column keeps the latest observed non-empty value, which a
+    -- redelivered record cannot change, so no read-time de-duplication is
+    -- needed. Never add a count or sum state here, a duplicate would inflate it.
+    tool_name AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Tool the call ran.\n@access: opaque-confidential',
+    mcp_server_name AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'MCP server the call went to, as reported.\n@access: opaque-confidential',
+    mcp_tool_name AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'MCP tool the call invoked.\n@access: opaque-confidential',
+    skill_name AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Skill the call invoked, empty for a plain tool call.\n@access: opaque-confidential',
+    session_id AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent session the call belongs to.\n@access: confidential',
+    user_email AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Email of the user the call ran for.\n@access: confidential-pii',
+    surface AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Agent surface that made the call.\n@access: confidential',
+    status AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'How the call ended: ok, error, rejected or refused.\n@access: confidential',
+    duration_nano AggregateFunction(argMaxIf, Int64, Int64, UInt8) COMMENT 'How long the call took, in nanoseconds.\n@access: confidential',
+    started_at_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest observation of the call.\n@access: confidential',
+    ended_at_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest observation of the call.\n@access: confidential',
+
+    INDEX idx_tool_calls_started_at started_at_unix_nano TYPE minmax GRANULARITY 1
+) ENGINE = AggregatingMergeTree
+ORDER BY (organization_id, project_id, event_id)
+TTL fromUnixTimestamp64Nano(started_at_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'One row per tool call, folded from agent_events by tool_calls_mv as records arrive. Read with the -Merge combinators and GROUP BY organization_id, project_id, event_id. Filled forward only, from the time the view was created.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS tool_calls_mv TO tool_calls AS
+SELECT
+    organization_id,
+    project_id,
+    event_id,
+    argMaxIfState(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name,
+    argMaxIfState(mcp_server_name, observed_at_unix_nano, mcp_server_name != '') AS mcp_server_name,
+    argMaxIfState(mcp_tool_name, observed_at_unix_nano, mcp_tool_name != '') AS mcp_tool_name,
+    argMaxIfState(skill_name, observed_at_unix_nano, skill_name != '') AS skill_name,
+    argMaxIfState(session_id, observed_at_unix_nano, session_id != '') AS session_id,
+    argMaxIfState(user_email, observed_at_unix_nano, user_email != '') AS user_email,
+    argMaxIfState(toString(surface), observed_at_unix_nano, surface != '') AS surface,
+    argMaxIfState(toString(outcome), observed_at_unix_nano, outcome != '') AS status,
+    argMaxIfState(duration_nano, observed_at_unix_nano, duration_nano != 0) AS duration_nano,
+    min(occurred_at_unix_nano) AS started_at_unix_nano,
+    max(occurred_at_unix_nano) AS ended_at_unix_nano
+FROM agent_events
+WHERE event_type IN ('tool_call', 'tool_call_result', 'tool_decision') AND event_id != ''
+GROUP BY organization_id, project_id, event_id;
+
 -- agent_metrics is ReplacingMergeTree, unlike agent_events, because metric
 -- measures are sums: duplicates corrupt them directly and there is no
 -- count-distinct equivalent to read around them. Fingerprint collisions resolve
