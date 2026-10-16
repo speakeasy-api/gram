@@ -193,7 +193,7 @@ var toolCallsSource = Source{
 		"argMaxIfMerge(session_id) AS session_id",
 		"argMaxIfMerge(user_email) AS user_email",
 		"argMaxIfMerge(surface) AS surface",
-		"argMaxIfMerge(outcome) AS status",
+		"argMaxIfMerge(status) AS status",
 		"argMaxIfMerge(duration_nano) AS duration_nano",
 		"min(started_at_unix_nano) AS started_at",
 		"max(ended_at_unix_nano) AS ended_at",
