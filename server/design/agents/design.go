@@ -135,6 +135,7 @@ var _ = Service("agents", func() {
 	sessionMethods()
 
 	Method("listEligibleOwners", func() {
+		shared.CursorPagination()
 		Description("List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.")
 		Meta("openapi:operationId", "listAgentEligibleOwners")
 		Meta("openapi:extension:x-speakeasy-name-override", "listEligibleOwners")

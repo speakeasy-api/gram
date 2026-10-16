@@ -291,8 +291,7 @@ beforeEach(() => {
     if (mocks.ownersError)
       return Promise.reject(new Error("Owner discovery failed"));
     return Promise.resolve({
-      owners: mocks.owners,
-      nextCursor: mocks.nextCursor,
+      result: { owners: mocks.owners, nextCursor: mocks.nextCursor },
     });
   });
   mocks.list.mockImplementation(async () => mocks.agents);
@@ -618,18 +617,24 @@ describe("Agent creation eligibility", () => {
     mocks.creationOwners = ["user_owner", "user_other", "user_later"];
     mocks.nextCursor = "second";
     mocks.params = new URLSearchParams("create=true");
-    let resolveThird!: (value: { owners: typeof mocks.owners }) => void;
+    let resolveThird!: (value: {
+      result: { owners: typeof mocks.owners };
+    }) => void;
     mocks.ownerQuery.mockImplementation(({ cursor }: { cursor?: string }) => {
       if (cursor === "second")
         return Promise.resolve({
-          owners: [{ userId: "user_later", displayName: "Later Owner" }],
-          nextCursor: "third",
+          result: {
+            owners: [{ userId: "user_later", displayName: "Later Owner" }],
+            nextCursor: "third",
+          },
         });
       if (cursor === "third")
         return new Promise((resolve) => {
           resolveThird = resolve;
         });
-      return Promise.resolve({ owners: mocks.owners, nextCursor: "second" });
+      return Promise.resolve({
+        result: { owners: mocks.owners, nextCursor: "second" },
+      });
     });
     setup();
     fireEvent.click(screen.getByRole("combobox", { name: "Owner" }));
@@ -645,7 +650,7 @@ describe("Agent creation eligibility", () => {
     ).toContain("Later Owner");
     expect(screen.getByRole("option", { name: "Other Owner" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Later Owner" })).toBeTruthy();
-    await act(async () => resolveThird({ owners: [] }));
+    await act(async () => resolveThird({ result: { owners: [] } }));
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Load more" })).toBeNull(),
     );
@@ -661,10 +666,14 @@ describe("Agent creation eligibility", () => {
     let failNextPage = true;
     mocks.ownerQuery.mockImplementation(({ cursor }: { cursor?: string }) => {
       if (!cursor)
-        return Promise.resolve({ owners: mocks.owners, nextCursor: "second" });
+        return Promise.resolve({
+          result: { owners: mocks.owners, nextCursor: "second" },
+        });
       if (failNextPage) return Promise.reject(new Error("Next page failed"));
       return Promise.resolve({
-        owners: [{ userId: "user_later", displayName: "Later Owner" }],
+        result: {
+          owners: [{ userId: "user_later", displayName: "Later Owner" }],
+        },
       });
     });
     setup();
@@ -687,11 +696,12 @@ describe("Agent creation eligibility", () => {
     mocks.ownerQuery.mockImplementation(({ cursor }: { cursor?: string }) => {
       if (cursor)
         return Promise.resolve({
-          owners: [{ userId: "user_later", displayName: "Later Owner" }],
+          result: {
+            owners: [{ userId: "user_later", displayName: "Later Owner" }],
+          },
         });
       return Promise.resolve({
-        owners: mocks.owners,
-        nextCursor: mocks.nextCursor,
+        result: { owners: mocks.owners, nextCursor: mocks.nextCursor },
       });
     });
     const { client } = setup();
@@ -720,9 +730,13 @@ describe("Agent creation eligibility", () => {
     mocks.ownerQuery.mockImplementation(({ cursor }: { cursor?: string }) => {
       if (cursor)
         return Promise.resolve({
-          owners: [{ userId: "user_later", displayName: "Later Owner" }],
+          result: {
+            owners: [{ userId: "user_later", displayName: "Later Owner" }],
+          },
         });
-      return Promise.resolve({ owners: mocks.owners, nextCursor: "second" });
+      return Promise.resolve({
+        result: { owners: mocks.owners, nextCursor: "second" },
+      });
     });
     const view = setup();
     fireEvent.click(screen.getByRole("combobox", { name: "Owner" }));

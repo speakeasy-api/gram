@@ -23,7 +23,6 @@ import { agentsUpdatePolicyGrant } from "../funcs/agentsUpdatePolicyGrant.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
 import { AgentPolicyGrantForm } from "../models/components/agentpolicygrantform.js";
-import { ListEligibleOwnersResponseBody } from "../models/components/listeligibleownersresponsebody.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
   CreateAgentRequest,
@@ -51,6 +50,7 @@ import {
 } from "../models/operations/listagentdelegablegrants.js";
 import {
   ListAgentEligibleOwnersRequest,
+  ListAgentEligibleOwnersResponse,
   ListAgentEligibleOwnersSecurity,
 } from "../models/operations/listagenteligibleowners.js";
 import {
@@ -227,8 +227,10 @@ export class Agents extends ClientSDK {
     request?: ListAgentEligibleOwnersRequest | undefined,
     security?: ListAgentEligibleOwnersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<ListEligibleOwnersResponseBody> {
-    return unwrapAsync(agentsListEligibleOwners(
+  ): Promise<
+    PageIterator<ListAgentEligibleOwnersResponse, { cursor: string }>
+  > {
+    return unwrapResultIterator(agentsListEligibleOwners(
       this,
       request,
       security,

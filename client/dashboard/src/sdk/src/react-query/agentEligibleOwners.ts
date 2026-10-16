@@ -3,10 +3,16 @@
  */
 
 import {
+  InfiniteData,
   InvalidateQueryFilters,
   QueryClient,
+  QueryKey,
+  useInfiniteQuery,
+  UseInfiniteQueryResult,
   useQuery,
   UseQueryResult,
+  useSuspenseInfiniteQuery,
+  UseSuspenseInfiniteQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
@@ -27,21 +33,33 @@ import {
 } from "../models/operations/listagenteligibleowners.js";
 import { useGramContext } from "./_context.js";
 import {
+  InfiniteQueryHookOptions,
   QueryHookOptions,
+  SuspenseInfiniteQueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
 import {
+  AgentEligibleOwnersInfiniteQueryData,
+  AgentEligibleOwnersPageParams,
   AgentEligibleOwnersQueryData,
+  buildAgentEligibleOwnersInfiniteQuery,
   buildAgentEligibleOwnersQuery,
   prefetchAgentEligibleOwners,
+  prefetchAgentEligibleOwnersInfinite,
   queryKeyAgentEligibleOwners,
+  queryKeyAgentEligibleOwnersInfinite,
 } from "./agentEligibleOwners.core.js";
 export {
+  type AgentEligibleOwnersInfiniteQueryData,
+  type AgentEligibleOwnersPageParams,
   type AgentEligibleOwnersQueryData,
+  buildAgentEligibleOwnersInfiniteQuery,
   buildAgentEligibleOwnersQuery,
   prefetchAgentEligibleOwners,
+  prefetchAgentEligibleOwnersInfinite,
   queryKeyAgentEligibleOwners,
+  queryKeyAgentEligibleOwnersInfinite,
 };
 
 export type AgentEligibleOwnersQueryError =
@@ -106,6 +124,92 @@ export function useAgentEligibleOwnersSuspense(
       security,
       options,
     ),
+    ...options,
+  });
+}
+
+/**
+ * listEligibleOwners agents
+ *
+ * @remarks
+ * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.
+ */
+export function useAgentEligibleOwnersInfinite(
+  request?: ListAgentEligibleOwnersRequest | undefined,
+  security?: ListAgentEligibleOwnersSecurity | undefined,
+  options?: InfiniteQueryHookOptions<
+    AgentEligibleOwnersInfiniteQueryData,
+    AgentEligibleOwnersQueryError
+  >,
+): UseInfiniteQueryResult<
+  InfiniteData<
+    AgentEligibleOwnersInfiniteQueryData,
+    AgentEligibleOwnersPageParams
+  >,
+  AgentEligibleOwnersQueryError
+> {
+  const client = useGramContext();
+  return useInfiniteQuery<
+    AgentEligibleOwnersInfiniteQueryData,
+    AgentEligibleOwnersQueryError,
+    InfiniteData<
+      AgentEligibleOwnersInfiniteQueryData,
+      AgentEligibleOwnersPageParams
+    >,
+    QueryKey,
+    AgentEligibleOwnersPageParams
+  >({
+    ...buildAgentEligibleOwnersInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+    ...options,
+  });
+}
+
+/**
+ * listEligibleOwners agents
+ *
+ * @remarks
+ * List only active same-organization owners for whom this ordinary human session may create an agent. Requires live agent:create eligibility, not directory-read access. Creation revalidates eligibility and membership.
+ */
+export function useAgentEligibleOwnersInfiniteSuspense(
+  request?: ListAgentEligibleOwnersRequest | undefined,
+  security?: ListAgentEligibleOwnersSecurity | undefined,
+  options?: SuspenseInfiniteQueryHookOptions<
+    AgentEligibleOwnersInfiniteQueryData,
+    AgentEligibleOwnersQueryError
+  >,
+): UseSuspenseInfiniteQueryResult<
+  InfiniteData<
+    AgentEligibleOwnersInfiniteQueryData,
+    AgentEligibleOwnersPageParams
+  >,
+  AgentEligibleOwnersQueryError
+> {
+  const client = useGramContext();
+  return useSuspenseInfiniteQuery<
+    AgentEligibleOwnersInfiniteQueryData,
+    AgentEligibleOwnersQueryError,
+    InfiniteData<
+      AgentEligibleOwnersInfiniteQueryData,
+      AgentEligibleOwnersPageParams
+    >,
+    QueryKey,
+    AgentEligibleOwnersPageParams
+  >({
+    ...buildAgentEligibleOwnersInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
     ...options,
   });
 }

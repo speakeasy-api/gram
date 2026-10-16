@@ -4,6 +4,13 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import {
+  ListEligibleOwnersResponseBody,
+  ListEligibleOwnersResponseBody$inboundSchema,
+} from "../components/listeligibleownersresponsebody.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListAgentEligibleOwnersSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -26,6 +33,10 @@ export type ListAgentEligibleOwnersRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+};
+
+export type ListAgentEligibleOwnersResponse = {
+  result: ListEligibleOwnersResponseBody;
 };
 
 /** @internal */
@@ -91,5 +102,30 @@ export function listAgentEligibleOwnersRequestToJSON(
     ListAgentEligibleOwnersRequest$outboundSchema.parse(
       listAgentEligibleOwnersRequest,
     ),
+  );
+}
+
+/** @internal */
+export const ListAgentEligibleOwnersResponse$inboundSchema: z.ZodMiniType<
+  ListAgentEligibleOwnersResponse,
+  unknown
+> = z.pipe(
+  z.object({
+    Result: ListEligibleOwnersResponseBody$inboundSchema,
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "Result": "result",
+    });
+  }),
+);
+
+export function listAgentEligibleOwnersResponseFromJSON(
+  jsonString: string,
+): SafeParseResult<ListAgentEligibleOwnersResponse, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListAgentEligibleOwnersResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAgentEligibleOwnersResponse' from JSON`,
   );
 }

@@ -303,12 +303,14 @@ function CreateAgent({
       session,
       grants,
     ],
-    queryFn: ({ pageParam, signal }) =>
-      sdk.agents.listEligibleOwners(
+    queryFn: async ({ pageParam, signal }) => {
+      const page = await sdk.agents.listEligibleOwners(
         { gramSession: session, limit: 50, cursor: pageParam },
         undefined,
         { signal },
-      ),
+      );
+      return page.result;
+    },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor,
     enabled: !disabled && !grantsLoading && hasScope("agent:create"),

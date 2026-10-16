@@ -11,13 +11,25 @@ import { GramCore } from "../core.js";
 import { agentsListEligibleOwners } from "../funcs/agentsListEligibleOwners.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ListEligibleOwnersResponseBody } from "../models/components/listeligibleownersresponsebody.js";
 import {
   ListAgentEligibleOwnersRequest,
+  ListAgentEligibleOwnersResponse,
   ListAgentEligibleOwnersSecurity,
 } from "../models/operations/listagenteligibleowners.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AgentEligibleOwnersQueryData = ListEligibleOwnersResponseBody;
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
+import { pageIteratorToJSON } from "./_types.js";
+export type AgentEligibleOwnersQueryData = ListAgentEligibleOwnersResponse;
+
+export type AgentEligibleOwnersInfiniteQueryData = PageIterator<
+  ListAgentEligibleOwnersResponse,
+  { cursor: string }
+>;
+
+export type AgentEligibleOwnersPageParams = PageIterator<
+  ListAgentEligibleOwnersResponse,
+  { cursor: string }
+>["~next"];
 
 export function prefetchAgentEligibleOwners(
   queryClient: QueryClient,
@@ -33,6 +45,26 @@ export function prefetchAgentEligibleOwners(
       security,
       options,
     ),
+  });
+}
+
+export function prefetchAgentEligibleOwnersInfinite(
+  queryClient: QueryClient,
+  client$: GramCore,
+  request?: ListAgentEligibleOwnersRequest | undefined,
+  security?: ListAgentEligibleOwnersSecurity | undefined,
+  options?: RequestOptions,
+): Promise<void> {
+  return queryClient.prefetchInfiniteQuery({
+    ...buildAgentEligibleOwnersInfiniteQuery(
+      client$,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: undefined as AgentEligibleOwnersPageParams,
+    getNextPageParam: (previousPage: AgentEligibleOwnersInfiniteQueryData) =>
+      previousPage["~next"],
   });
 }
 
@@ -78,6 +110,56 @@ export function buildAgentEligibleOwnersQuery(
   };
 }
 
+export function buildAgentEligibleOwnersInfiniteQuery(
+  client$: GramCore,
+  request?: ListAgentEligibleOwnersRequest | undefined,
+  security?: ListAgentEligibleOwnersSecurity | undefined,
+  options?: RequestOptions,
+): {
+  queryKey: QueryKey;
+  queryFn: (
+    context: QueryFunctionContext<QueryKey, AgentEligibleOwnersPageParams>,
+  ) => Promise<AgentEligibleOwnersInfiniteQueryData>;
+} {
+  return {
+    queryKey: queryKeyAgentEligibleOwnersInfinite({
+      limit: request?.limit,
+      cursor: request?.cursor,
+      search: request?.search,
+      gramSession: request?.gramSession,
+    }),
+    queryFn: async function agentEligibleOwnersQuery(
+      ctx,
+    ): Promise<AgentEligibleOwnersInfiniteQueryData> {
+      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
+      const mergedOptions = {
+        ...options,
+        fetchOptions: { ...options?.fetchOptions, signal: sig },
+      };
+
+      if (!ctx.pageParam) {
+        const pageResult = await unwrapResultIterator(agentsListEligibleOwners(
+          client$,
+          request,
+          security,
+          mergedOptions,
+        ));
+        return pageIteratorToJSON(pageResult);
+      }
+      const pageResult = await unwrapResultIterator(agentsListEligibleOwners(
+        client$,
+        {
+          ...request!,
+          cursor: ctx.pageParam.cursor,
+        },
+        security,
+        mergedOptions,
+      ));
+      return pageIteratorToJSON(pageResult);
+    },
+  };
+}
+
 export function queryKeyAgentEligibleOwners(
   parameters: {
     limit?: number | undefined;
@@ -87,4 +169,21 @@ export function queryKeyAgentEligibleOwners(
   },
 ): QueryKey {
   return ["@gram/client", "agents", "listEligibleOwners", parameters];
+}
+
+export function queryKeyAgentEligibleOwnersInfinite(
+  parameters: {
+    limit?: number | undefined;
+    cursor?: string | undefined;
+    search?: string | undefined;
+    gramSession?: string | undefined;
+  },
+): QueryKey {
+  return [
+    "@gram/client",
+    "agents",
+    "listEligibleOwners",
+    "infinite",
+    parameters,
+  ];
 }

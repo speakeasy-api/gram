@@ -173,7 +173,7 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     agents: {
-      listEligibleOwners: async () => ({ owners: [] }),
+      listEligibleOwners: async () => ({ result: { owners: [] } }),
       list: mocks.list,
       get: mocks.detail,
       listPolicyGrants: mocks.listPolicyGrants,
