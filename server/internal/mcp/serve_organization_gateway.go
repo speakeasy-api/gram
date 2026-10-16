@@ -390,10 +390,11 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 		return clients, nil
 	}
 	// The issuer may bind clients for other servers sharing it. Consent offers
-	// a server only the clients configured for it, and a gateway only those of
-	// the members the subject reaches.
+	// a proxied server only the clients configured for it, and a gateway only
+	// those of the members the subject reaches. A hosted server keeps serving
+	// from every client its issuer binds.
 	switch {
-	case endpoint.McpServerID.Valid:
+	case endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid:
 		associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
 		if err != nil {
 			return nil, err

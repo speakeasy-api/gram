@@ -288,21 +288,38 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	if !ok {
 		return nil
 	}
+	requests := make(map[uuid.UUID][]identitychaining.Request, len(clients))
+	if !tunneled {
+		// A remote backend's request names no issuer, so one answer judges
+		// every card.
+		req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, false, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+		if !ok {
+			return nil
+		}
+		issuer, served := s.identityChainer.Serves(ctx, req)
+		if !served {
+			return nil
+		}
+		for _, c := range clients {
+			if c.RemoteSessionIssuerID == issuer {
+				requests[c.ID] = []identitychaining.Request{req}
+			}
+		}
+		return requests
+	}
 	// A tunneled backend routes, and chains, by the chosen client's own
 	// issuer, so each card is judged with the request its client builds.
-	requests := make(map[uuid.UUID][]identitychaining.Request, len(clients))
 	for _, c := range clients {
-		tunnelIssuer := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		if tunneled {
-			tunnelIssuer = uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true}
-		}
-		req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
+		req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, true, uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true})
 		if !ok {
 			continue
 		}
 		if issuer, served := s.identityChainer.Serves(ctx, req); served && issuer == c.RemoteSessionIssuerID {
 			requests[c.ID] = []identitychaining.Request{req}
 		}
+	}
+	if len(requests) == 0 {
+		return nil
 	}
 	return requests
 }
