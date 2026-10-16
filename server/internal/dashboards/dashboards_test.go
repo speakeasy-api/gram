@@ -20,11 +20,11 @@ import (
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
 )
 
-// A bar chart over sessions, as the widgets service would save it.
+// A bar chart over tool calls, as the widgets service would save it.
 const barQuery = `{"window":"7d","grain":"day","dimensions":["user"],"measures":[{"op":"count","alias":"count"}],"limit":1000}`
 const barChart = `{"type":"bar","options":{}}`
 
-// A number tile over sessions.
+// A number tile over tool calls.
 const numberQuery = `{"window":"7d","grain":"none","measures":[{"op":"count","alias":"count"}]}`
 const numberChart = `{"type":"number","options":{}}`
 
@@ -34,7 +34,7 @@ func insertWidget(t *testing.T, ti *testInstance, name, query, visualization str
 	t.Helper()
 	row, err := widgetsrepo.New(ti.conn).CreateWidget(t.Context(), widgetsrepo.CreateWidgetParams{
 		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
-		Name: name, Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions", Query: []byte(query), Visualization: []byte(visualization),
+		Name: name, Description: pgtype.Text{String: "", Valid: false}, Dataset: "tool_calls", Query: []byte(query), Visualization: []byte(visualization),
 	})
 	require.NoError(t, err)
 	return row
@@ -270,7 +270,7 @@ func TestSaveDashboardLayout(t *testing.T) {
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
 		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-		chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+		chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 		tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 		chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
 
@@ -324,7 +324,7 @@ func TestSaveDashboardLayout(t *testing.T) {
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
 		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-		chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+		chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 		tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 		chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
 		tileAt := func(x, y, w, h int) *gen.PlacementInput { return placement(&tileCard.ID, tile.ID.String(), x, y, w, h) }
@@ -427,8 +427,8 @@ func TestSaveDashboardLayoutIgnoresCardsThatWent(t *testing.T) {
 	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("stale"))
 	require.NoError(t, err)
 	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-	chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
-	other := insertWidget(t, ti, "Sessions by surface", barQuery, barChart)
+	chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
+	other := insertWidget(t, ti, "Tool calls by surface", barQuery, barChart)
 	tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 	chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
 	otherCard := addCard(t, ctx, ti, dashboard.ID, other.ID)
@@ -517,10 +517,10 @@ func TestSaveDashboardFiltersAreBounded(t *testing.T) {
 
 	// A range with nothing in it is no range, and a dimension with no
 	// values, or a null in their place, is no filter.
-	cleaned, err := ti.service.SaveDashboardFilters(ctx, &gen.SaveDashboardFiltersPayload{ID: dashboard.ID, Filters: &gen.DashboardFilters{Range: &gen.DashboardRange{Preset: nil, From: nil, To: nil, Label: nil}, Values: map[string][]string{"user": nil, "surface": {}, "model": {"gpt"}}}, SessionToken: nil, ProjectSlugInput: nil})
+	cleaned, err := ti.service.SaveDashboardFilters(ctx, &gen.SaveDashboardFiltersPayload{ID: dashboard.ID, Filters: &gen.DashboardFilters{Range: &gen.DashboardRange{Preset: nil, From: nil, To: nil, Label: nil}, Values: map[string][]string{"user": nil, "surface": {}, "tool_name": {"Bash"}}}, SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Nil(t, cleaned.Filters.Range)
-	require.Equal(t, map[string][]string{"model": {"gpt"}}, cleaned.Filters.Values)
+	require.Equal(t, map[string][]string{"tool_name": {"Bash"}}, cleaned.Filters.Values)
 
 	// Instants a query cannot represent are refused.
 	early, late := "1600-01-01T00:00:00Z", "2026-10-03T00:00:00Z"
@@ -540,7 +540,7 @@ func TestAddAndRemoveDashboardWidget(t *testing.T) {
 	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("cards"))
 	require.NoError(t, err)
 	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-	chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+	chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 
 	withTile, err := ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: dashboard.ID, WidgetID: tile.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
@@ -645,7 +645,7 @@ func TestDuplicateDashboard(t *testing.T) {
 		source, err := ti.service.CreateDashboard(ctx, createPayload("Weekly review"))
 		require.NoError(t, err)
 		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
-		chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+		chart := insertWidget(t, ti, "Tool calls by user", barQuery, barChart)
 		// The tile twice, so one widget copy serves two cards.
 		first := addCard(t, ctx, ti, source.ID, tile.ID)
 		second := addCard(t, ctx, ti, source.ID, tile.ID)
@@ -723,13 +723,13 @@ func TestDuplicateDashboard(t *testing.T) {
 		ctx, ti := newTestService(t)
 		source, err := ti.service.CreateDashboard(ctx, createPayload("broken"))
 		require.NoError(t, err)
-		broken := insertWidget(t, ti, "Sessions by department", `{"window":"7d","grain":"none","dimensions":["department"],"measures":[{"op":"count","alias":"count"}]}`, `{"type":"table","options":{}}`)
+		broken := insertWidget(t, ti, "Tool calls by department", `{"window":"7d","grain":"none","dimensions":["department"],"measures":[{"op":"count","alias":"count"}]}`, `{"type":"table","options":{}}`)
 		_, err = ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: source.ID, WidgetID: broken.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err, "a broken widget can still sit on a dashboard; its card says why")
 
 		_, err = ti.service.DuplicateDashboard(ctx, &gen.DuplicateDashboardPayload{ID: source.ID, SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeBadRequest)
-		require.ErrorContains(t, err, `"Sessions by department"`)
+		require.ErrorContains(t, err, `"Tool calls by department"`)
 		require.ErrorContains(t, err, "department")
 	})
 

@@ -121,8 +121,8 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 		for _, ds := range output.Datasets {
 			names = append(names, ds.Name)
 		}
-		require.Contains(t, names, "sessions")
 		require.Contains(t, names, "tool_calls")
+		require.Contains(t, names, "skills")
 	})
 
 	t.Run("values lists what the dimension holds, most frequent first", func(t *testing.T) {
