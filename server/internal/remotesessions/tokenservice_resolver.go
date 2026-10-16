@@ -146,11 +146,11 @@ func (m *ChallengeManager) workloadCredentialOwner(ctx context.Context, projectI
 	}
 	admission, err := runtimepolicy.AdmitWorkloadSession(ctx, m.db)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("admit workload credential owner: %w", err)
 	}
-	allowed, err := authz.GrantsAuthorize(admission.Owner, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: projectID.String()})
+	allowed, err := authz.GrantsAuthorize(admission.Owner, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: projectID.String(), ResourceKind: "", Dimensions: nil})
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("authorize workload owner project access: %w", err)
 	}
 	if !allowed {
 		return zero, ErrNoValidToken
