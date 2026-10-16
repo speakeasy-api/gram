@@ -6609,6 +6609,11 @@ SELECT c.ema_provider,
   c.internal_session_issuer_id,
   MAX(c.updated_at)::timestamptz AS last_accepted_at
 FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
   AND t.deleted IS FALSE
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
@@ -6638,7 +6643,9 @@ type ListEMABindingAcceptanceRow struct {
 // Status only: when the vendor last accepted an assertion for one binding
 // target, per provider, attributed as ListEMAVendorAcceptance does. Only
 // credentials that still hold an access token count, so retiring or purging
-// one is never read as an acceptance; the evidence goes when they do.
+// one is never read as an acceptance; the evidence goes when they do. Only
+// credentials of the binding's current generation and client, in a live
+// project, count: unlink and rebind retire older ones lazily.
 func (q *Queries) ListEMABindingAcceptance(ctx context.Context, arg ListEMABindingAcceptanceParams) ([]ListEMABindingAcceptanceRow, error) {
 	rows, err := q.db.Query(ctx, listEMABindingAcceptance,
 		arg.OrganizationID,
@@ -6676,6 +6683,11 @@ SELECT c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.res
   c.internal_session_issuer_id,
   MAX(c.updated_at)::timestamptz AS last_accepted_at
 FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
   AND t.deleted IS FALSE
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
@@ -7223,6 +7235,11 @@ SELECT i.issuer, c.ema_provider,
   c.internal_session_issuer_id,
   MAX(c.updated_at)::timestamptz AS last_accepted_at
 FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
 JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
   AND (i.project_id = c.project_id OR (i.project_id IS NULL AND (i.organization_id = c.organization_id OR i.organization_id IS NULL)))
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
@@ -8723,6 +8740,50 @@ func (q *Queries) ListPrincipalRemoteSessionCandidates(ctx context.Context, arg 
 			&i.SubjectDisplayName,
 			&i.SubjectEmail,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteServerURLsForUserSessionIssuer = `-- name: ListRemoteServerURLsForUserSessionIssuer :many
+SELECT rms.url, COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+LEFT JOIN remote_protected_resources AS rpr ON rpr.project_id = m.project_id AND rpr.resource_identifier = rms.url AND rpr.deleted IS FALSE
+WHERE m.project_id = $1
+  AND m.user_session_issuer_id = $2
+  AND m.deleted IS FALSE
+`
+
+type ListRemoteServerURLsForUserSessionIssuerParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+type ListRemoteServerURLsForUserSessionIssuerRow struct {
+	Url              string
+	DocumentResource string
+}
+
+// The upstream URLs of the project's remote-backed MCP servers that sign in
+// through a user session issuer, each with the resource its cached protected
+// resource document names, or empty. Identity chaining finds a binding's server by
+// either value, then keys the resource row by the URL as logins do.
+func (q *Queries) ListRemoteServerURLsForUserSessionIssuer(ctx context.Context, arg ListRemoteServerURLsForUserSessionIssuerParams) ([]ListRemoteServerURLsForUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteServerURLsForUserSessionIssuer, arg.ProjectID, arg.UserSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteServerURLsForUserSessionIssuerRow
+	for rows.Next() {
+		var i ListRemoteServerURLsForUserSessionIssuerRow
+		if err := rows.Scan(&i.Url, &i.DocumentResource); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -11508,16 +11569,26 @@ func (q *Queries) OktaIdentityProviderConnectionReferencesIssuer(ctx context.Con
 const plantEMACredentialFixture = `-- name: PlantEMACredentialFixture :one
 INSERT INTO remote_session_ema_credentials (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
-  resource, subject_urn, client_selection, ema_provider, internal_session_issuer_id, trusted_issuer_session_id,
+  resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
+  ema_provider, internal_session_issuer_id, trusted_issuer_session_id,
   access_token_encrypted, access_expires_at, updated_at, deleted_at
 )
 VALUES (
   $1, $2, $3, $4, $5,
-  $6, $7, 'binding', $8::text, $9::uuid,
-  $10::uuid,
-  CASE WHEN $11::boolean THEN NULL ELSE 'encrypted-fixture' END,
-  clock_timestamp() + interval '1 hour', $12::timestamptz,
-  CASE WHEN $11::boolean THEN clock_timestamp() ELSE NULL END
+  $6, $7, 'binding',
+  (SELECT b.id FROM remote_session_ema_bindings b
+   WHERE b.organization_id = $1 AND b.project_id = $2
+     AND b.user_session_issuer_id = $3 AND b.remote_session_issuer_id = $4
+     AND b.resource = $6),
+  COALESCE($8::bigint, (SELECT b.generation FROM remote_session_ema_bindings b
+   WHERE b.organization_id = $1 AND b.project_id = $2
+     AND b.user_session_issuer_id = $3 AND b.remote_session_issuer_id = $4
+     AND b.resource = $6)),
+  $9::text, $10::uuid,
+  $11::uuid,
+  CASE WHEN $12::boolean THEN NULL ELSE 'encrypted-fixture' END,
+  clock_timestamp() + interval '1 hour', $13::timestamptz,
+  CASE WHEN $12::boolean THEN clock_timestamp() ELSE NULL END
 )
 RETURNING id
 `
@@ -11530,6 +11601,7 @@ type PlantEMACredentialFixtureParams struct {
 	RemoteSessionClientID   uuid.NullUUID
 	Resource                string
 	SubjectUrn              string
+	BindingGeneration       pgtype.Int8
 	EmaProvider             string
 	InternalSessionIssuerID uuid.NullUUID
 	TrustedIssuerSessionID  uuid.NullUUID
@@ -11538,7 +11610,8 @@ type PlantEMACredentialFixtureParams struct {
 }
 
 // TEST FIXTURE ONLY. A cached credential slot for either provider, live or
-// retired, without the rows a real publish references.
+// retired, without the rows a real publish references. It names the target's
+// binding at its current generation unless binding_generation overrides it.
 func (q *Queries) PlantEMACredentialFixture(ctx context.Context, arg PlantEMACredentialFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, plantEMACredentialFixture,
 		arg.OrganizationID,
@@ -11548,6 +11621,7 @@ func (q *Queries) PlantEMACredentialFixture(ctx context.Context, arg PlantEMACre
 		arg.RemoteSessionClientID,
 		arg.Resource,
 		arg.SubjectUrn,
+		arg.BindingGeneration,
 		arg.EmaProvider,
 		arg.InternalSessionIssuerID,
 		arg.TrustedIssuerSessionID,
@@ -13035,6 +13109,26 @@ type SetRemoteSessionIssuerOrganizationFixtureParams struct {
 // Test-only fixture for a platform issuer subsequently owned by a tenant.
 func (q *Queries) SetRemoteSessionIssuerOrganizationFixture(ctx context.Context, arg SetRemoteSessionIssuerOrganizationFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setRemoteSessionIssuerOrganizationFixture, arg.OrganizationID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setRemoteSessionIssuerURLFixture = `-- name: SetRemoteSessionIssuerURLFixture :execrows
+UPDATE remote_session_issuers SET issuer = $1
+WHERE id = $2 AND project_id = $3::uuid
+`
+
+type SetRemoteSessionIssuerURLFixtureParams struct {
+	Issuer    string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// TEST FIXTURE ONLY. Respells a project issuer's stored URL.
+func (q *Queries) SetRemoteSessionIssuerURLFixture(ctx context.Context, arg SetRemoteSessionIssuerURLFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionIssuerURLFixture, arg.Issuer, arg.ID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}

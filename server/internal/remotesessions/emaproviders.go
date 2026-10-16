@@ -317,12 +317,17 @@ func (a EMAVendorAcceptance) record(provider string, externalIssuer, internalIss
 }
 
 // VendorEMAAcceptance reads one vendor's acceptance across the organization.
+// It reads the whole organization so every stored spelling that normalizes to
+// the vendor counts.
 func VendorEMAAcceptance(ctx context.Context, q *repo.Queries, organizationID, vendorIssuer string) (EMAVendorAcceptance, error) {
 	all, err := ListEMAVendorAcceptance(ctx, q, organizationID)
 	if err != nil {
 		return nil, err
 	}
-	return all[vendorIssuer], nil
+	if accepted, ok := all[vendorIssuer]; ok {
+		return accepted, nil
+	}
+	return EMAVendorAcceptance{}, nil
 }
 
 // StampEMAProviderLastAccepted sets each provider's last acceptance from the

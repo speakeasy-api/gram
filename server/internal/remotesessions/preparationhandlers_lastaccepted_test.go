@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -32,7 +34,7 @@ func plantEMACredential(t *testing.T, ctx context.Context, ti *testInstance, in 
 		UserSessionIssuerID: conv.ToNullUUID(in.UserSessionIssuerID), RemoteSessionIssuerID: conv.ToNullUUID(in.RemoteSessionIssuerID),
 		RemoteSessionClientID: conv.ToNullUUID(in.ClientID), Resource: in.Resource, SubjectUrn: urn.NewUserSubject("user-" + uuid.NewString()[:8]).String(),
 		EmaProvider: string(provider), Retired: retired, UpdatedAt: conv.ToPGTimestamptz(updatedAt),
-		InternalSessionIssuerID: signer,
+		InternalSessionIssuerID: signer, TrustedIssuerSessionID: uuid.NullUUID{}, BindingGeneration: pgtype.Int8{},
 	})
 	require.NoError(t, err)
 }
@@ -116,6 +118,7 @@ func TestEMAAcceptance_IgnoresCredentialsVouchedThroughDeletedDelegations(t *tes
 	require.True(t, ok)
 	org := auth.ActiveOrganizationID
 	q := repo.New(ti.conn)
+	prepareEMABinding(t, ctx, ti, in)
 
 	plantVouched := func() uuid.UUID {
 		t.Helper()
@@ -127,7 +130,7 @@ func TestEMAAcceptance_IgnoresCredentialsVouchedThroughDeletedDelegations(t *tes
 			UserSessionIssuerID: conv.ToNullUUID(in.UserSessionIssuerID), RemoteSessionIssuerID: conv.ToNullUUID(in.RemoteSessionIssuerID),
 			RemoteSessionClientID: conv.ToNullUUID(in.ClientID), Resource: in.Resource, SubjectUrn: subject,
 			EmaProvider: string(remotesessions.EMAProviderExternal), Retired: false, UpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
-			InternalSessionIssuerID: uuid.NullUUID{}, TrustedIssuerSessionID: conv.ToNullUUID(session),
+			InternalSessionIssuerID: uuid.NullUUID{}, TrustedIssuerSessionID: conv.ToNullUUID(session), BindingGeneration: pgtype.Int8{},
 		})
 		require.NoError(t, err)
 		return session
@@ -172,4 +175,67 @@ func TestEMAAcceptance_IgnoresCredentialsVouchedThroughDeletedDelegations(t *tes
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deleted)
 	require.Equal(t, []bool{false, false, false}, attributed(), "a deleted client vouches for nothing")
+}
+
+func TestEMAAcceptance_CountsOnlyTheBindingsCurrentGenerationClientAndLiveProject(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org := auth.ActiveOrganizationID
+	q := repo.New(ti.conn)
+	internalIssuer := seedInternalSessionIssuer(t, ctx, ti, org)
+	prepareEMABinding(t, ctx, ti, in)
+	binding, err := q.GetEMABinding(ctx, repo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource})
+	require.NoError(t, err)
+	vendor, err := remotesessions.NormalizeVendorIssuer("https://idp.example.com")
+	require.NoError(t, err)
+
+	plant := func(client uuid.UUID, generation pgtype.Int8) {
+		t.Helper()
+		_, err := q.PlantEMACredentialFixture(ctx, repo.PlantEMACredentialFixtureParams{
+			OrganizationID: conv.ToPGText(org), ProjectID: conv.ToNullUUID(*auth.ProjectID),
+			UserSessionIssuerID: conv.ToNullUUID(in.UserSessionIssuerID), RemoteSessionIssuerID: conv.ToNullUUID(in.RemoteSessionIssuerID),
+			RemoteSessionClientID: conv.ToNullUUID(client), Resource: in.Resource, SubjectUrn: urn.NewUserSubject("user-" + uuid.NewString()[:8]).String(),
+			BindingGeneration: generation, EmaProvider: string(remotesessions.EMAProviderSpeakeasy),
+			InternalSessionIssuerID: conv.ToNullUUID(internalIssuer), TrustedIssuerSessionID: uuid.NullUUID{},
+			Retired: false, UpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		})
+		require.NoError(t, err)
+	}
+	// counted reports how many acceptance rows each query reads.
+	counted := func() []int {
+		t.Helper()
+		bindingRows, err := q.ListEMABindingAcceptance(ctx, repo.ListEMABindingAcceptanceParams{
+			OrganizationID: org, ProjectID: *auth.ProjectID, UserSessionIssuerID: in.UserSessionIssuerID,
+			RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource,
+		})
+		require.NoError(t, err)
+		organizationRows, err := q.ListEMABindingAcceptanceForOrganization(ctx, org)
+		require.NoError(t, err)
+		vendorRows, err := q.ListEMAVendorAcceptance(ctx, org)
+		require.NoError(t, err)
+		accepted, err := remotesessions.VendorEMAAcceptance(ctx, q, org, vendor)
+		require.NoError(t, err)
+		return []int{len(bindingRows), len(organizationRows), len(vendorRows), len(accepted)}
+	}
+
+	plant(in.ClientID, pgtype.Int8{Int64: binding.Generation - 1, Valid: true})
+	require.Equal(t, []int{0, 0, 0, 0}, counted(), "a credential from an earlier binding generation proves nothing about this one")
+
+	other := preparationManualClient(t, ctx, ti, *auth.ProjectID, in.RemoteSessionIssuerID, "other-client")
+	plant(other, pgtype.Int8{})
+	require.Equal(t, []int{0, 0, 0, 0}, counted(), "a credential obtained through another client proves nothing about the bound one")
+
+	plant(in.ClientID, pgtype.Int8{})
+	require.Equal(t, []int{1, 1, 1, 1}, counted(), "the current generation's credential counts")
+
+	respelled, err := q.SetRemoteSessionIssuerURLFixture(ctx, repo.SetRemoteSessionIssuerURLFixtureParams{Issuer: "https://IDP.Example.com", ID: in.RemoteSessionIssuerID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, respelled)
+	require.Equal(t, []int{1, 1, 1, 1}, counted(), "a host-case spelling of the vendor issuer still counts")
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, *auth.ProjectID)
+	require.NoError(t, err)
+	require.Equal(t, []int{0, 0, 0, 0}, counted(), "a deleted project's credentials count nowhere")
 }
