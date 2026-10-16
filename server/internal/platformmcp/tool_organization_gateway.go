@@ -37,7 +37,7 @@ type GetMyOrganizationGatewayOutput struct {
 	URL string `json:"url,omitempty"`
 
 	// UnavailableReason is no_organization_issuer,
-	// multiple_organization_issuers, custom_domain_only, or
+	// multiple_organization_issuers, custom_domain_only, turned_off, or
 	// organization_disabled, set only when not Available.
 	UnavailableReason string `json:"unavailable_reason,omitempty"`
 
@@ -87,6 +87,8 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to set up an organization-wide authorization server."), nil
 	case orggateway.UnavailabilityMultipleOrganizationIssuers:
 		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to consolidate the organization-wide authorization servers into one."), nil
+	case orggateway.UnavailabilityTurnedOff:
+		return unavailableOrganizationGateway(unavailable, "An organization administrator turned the gateway off. Ask them to turn it on in organization settings under Gateway."), nil
 	case orggateway.UnavailabilityCustomDomainOnly:
 		return unavailableOrganizationGateway(unavailable, "Your organization only allows its MCP servers to be reached through its own custom domain, where the gateway is not offered. Connect to each MCP server's address on that domain."), nil
 	default:

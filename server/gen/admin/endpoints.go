@@ -99,6 +99,9 @@ type Endpoints struct {
 	CloneOnboardingPlaybook               goa.Endpoint
 	GetOrganizationOnboardingPlaybook     goa.Endpoint
 	AssignOrganizationOnboardingPlaybook  goa.Endpoint
+	ListSignupOffers                      goa.Endpoint
+	CreateSignupOffer                     goa.Endpoint
+	UpdateSignupOffer                     goa.Endpoint
 	GetStripeSubscriptionCandidate        goa.Endpoint
 	SetStripeSubscription                 goa.Endpoint
 	ListCustomerUsage                     goa.Endpoint
@@ -209,6 +212,9 @@ func NewEndpoints(s Service) *Endpoints {
 		CloneOnboardingPlaybook:               NewCloneOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
 		GetOrganizationOnboardingPlaybook:     NewGetOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
 		AssignOrganizationOnboardingPlaybook:  NewAssignOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
+		ListSignupOffers:                      NewListSignupOffersEndpoint(s, a.APIKeyAuth),
+		CreateSignupOffer:                     NewCreateSignupOfferEndpoint(s, a.APIKeyAuth),
+		UpdateSignupOffer:                     NewUpdateSignupOfferEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscriptionCandidate:        NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
 		SetStripeSubscription:                 NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ListCustomerUsage:                     NewListCustomerUsageEndpoint(s, a.APIKeyAuth),
@@ -299,6 +305,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CloneOnboardingPlaybook = m(e.CloneOnboardingPlaybook)
 	e.GetOrganizationOnboardingPlaybook = m(e.GetOrganizationOnboardingPlaybook)
 	e.AssignOrganizationOnboardingPlaybook = m(e.AssignOrganizationOnboardingPlaybook)
+	e.ListSignupOffers = m(e.ListSignupOffers)
+	e.CreateSignupOffer = m(e.CreateSignupOffer)
+	e.UpdateSignupOffer = m(e.UpdateSignupOffer)
 	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
 	e.SetStripeSubscription = m(e.SetStripeSubscription)
 	e.ListCustomerUsage = m(e.ListCustomerUsage)
@@ -2149,6 +2158,75 @@ func NewAssignOrganizationOnboardingPlaybookEndpoint(s Service, authAPIKeyFn sec
 			return nil, err
 		}
 		return s.AssignOrganizationOnboardingPlaybook(ctx, p)
+	}
+}
+
+// NewListSignupOffersEndpoint returns an endpoint function that calls the
+// method "listSignupOffers" of service "admin".
+func NewListSignupOffersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSignupOffersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSignupOffers(ctx, p)
+	}
+}
+
+// NewCreateSignupOfferEndpoint returns an endpoint function that calls the
+// method "createSignupOffer" of service "admin".
+func NewCreateSignupOfferEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateSignupOfferPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateSignupOffer(ctx, p)
+	}
+}
+
+// NewUpdateSignupOfferEndpoint returns an endpoint function that calls the
+// method "updateSignupOffer" of service "admin".
+func NewUpdateSignupOfferEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateSignupOfferPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateSignupOffer(ctx, p)
 	}
 }
 

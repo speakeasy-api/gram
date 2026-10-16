@@ -168,6 +168,8 @@ export const AUDIT_ACTIONS = [
   "organization:onboarding_stack_updated",
   "organization:onboarding_playbook_assigned",
   "organization:onboarding_playbook_unassigned",
+  "organization:partner_signup_attributed",
+  "organization:promotion_redeemed",
   "organization:payg_activated",
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
@@ -685,6 +687,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started a new enterprise trial";
     case "organization:enterprise_trial_converted":
       return "converted enterprise trial for";
+    case "organization:partner_signup_attributed":
+      return "attributed a partner signup to";
+    case "organization:promotion_redeemed":
+      return "redeemed a promotion for";
     case "organization:payg_activated":
       return "activated pay-as-you-go billing for";
     case "organization:payg_deactivated":

@@ -28,6 +28,8 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -371,9 +373,10 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 	require.Contains(t, w.Body.String(), `"client_id"`)
 }
 
-// The gateway's consent page lists only the connections behind servers the
-// person can reach: a client whose only servers are hidden from them stays
-// off the page, along with the service behind it.
+// The gateway's consent page lists only the servers the person can reach,
+// and a reachable server's connect page shows the connection behind it: a
+// client whose only servers are hidden from them stays off every page, along
+// with the service behind it.
 func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -415,13 +418,41 @@ func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *tes
 		AutoConnectDone: true,
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/mcp/gateway/"+fx.organizationSlug+"/connect?state="+stateID, nil)
-	w := httptest.NewRecorder()
-	require.NoError(t, ti.service.ServeConsent(w, req, endpoint))
+	render := func(query string) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/mcp/gateway/"+fx.organizationSlug+"/connect?state="+stateID+query, nil)
+		w := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServeConsent(w, req, endpoint))
+		require.Equal(t, http.StatusOK, w.Code)
+		return w.Body.String()
+	}
 
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), reachable)
-	require.NotContains(t, w.Body.String(), hidden)
+	grantedServer := fx.projectSlug + "." + fx.granted
+	page := render("")
+	require.Contains(t, page, `data-gateway-server="`+grantedServer+`"`)
+	require.NotContains(t, page, fx.denied)
+	require.NotContains(t, page, reachable, "the gateway's page lists servers, not services")
+
+	page = render("&server=" + url.QueryEscape(grantedServer))
+	require.Contains(t, page, reachable)
+	require.NotContains(t, page, hidden)
+
+	page = render("&server=" + url.QueryEscape(fx.projectSlug+"."+fx.denied))
+	require.Contains(t, page, "data-gateway-focus-unavailable", "a hidden server has no connect page")
+	require.NotContains(t, page, hidden)
+
+	// A first-party connect opened for a server lands on its page, and the
+	// page's link back to every server leaves it.
+	focused, err := ti.authnChallengeCache.Get(t.Context(), "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	focused.FocusServer = grantedServer
+	require.NoError(t, ti.authnChallengeCache.Store(t.Context(), focused))
+	page = render("")
+	require.Contains(t, page, reachable)
+	require.Contains(t, page, "Go back to your AI client and try again")
+	page = render("&server=")
+	require.NotContains(t, page, reachable)
+	require.Contains(t, page, `data-gateway-server="`+grantedServer+`"`)
 }
 
 // An organization whose custom domain locks its servers to an IP allowlist is
@@ -474,4 +505,43 @@ func TestServeOrganizationGateway_ConnectionStatusLinksItsConnectPage(t *testing
 		slugs = append(slugs, server.Slug)
 	}
 	require.ElementsMatch(t, []string{fx.projectSlug + "." + fx.granted, fx.projectSlug + "." + fx.open}, slugs)
+}
+
+// Turning the gateway off answers 404 on its MCP endpoint and its sign-in
+// routes from the next request, and turning it back on restores both.
+func TestServeOrganizationGateway_TurnedOffIsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+	metadataPath := "/.well-known/oauth-protected-resource/mcp/gateway/" + fx.organizationSlug
+	getMetadata := func() int {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, metadataPath, nil))
+		return w.Code
+	}
+	features := featuresrepo.New(ti.conn)
+	setting := featuresrepo.EnableFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
+	}
+	require.Equal(t, http.StatusOK, getMetadata())
+
+	_, err := features.EnableFeature(ctx, setting)
+	require.NoError(t, err)
+
+	_, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.Equal(t, http.StatusNotFound, getMetadata())
+
+	_, err = features.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(setting))
+	require.NoError(t, err)
+
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, http.StatusOK, getMetadata())
 }

@@ -49,6 +49,10 @@ type UpdateSignalRequestBody struct {
 // CreateSensorRequestBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP request body.
 type CreateSensorRequestBody struct {
+	// Message context strategy; omission defaults to single_message
+	InputStrategy *string `form:"input_strategy,omitempty" json:"input_strategy,omitempty" xml:"input_strategy,omitempty"`
+	// Total sliding window messages including the target; omission defaults to 5
+	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
 	// Whether to enable evaluation; omission defaults to true
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to
@@ -71,6 +75,11 @@ type CreateSensorRequestBody struct {
 // UpdateSensorRequestBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP request body.
 type UpdateSensorRequestBody struct {
+	// Replacement message context strategy; omission preserves it
+	InputStrategy *string `form:"input_strategy,omitempty" json:"input_strategy,omitempty" xml:"input_strategy,omitempty"`
+	// Replacement total sliding window messages, including the target; omission
+	// preserves it
+	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
 	// Enable or disable evaluation; omission preserves the current state.
 	// Evaluations already in progress may finish.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -191,6 +200,11 @@ type DeleteSignalResponseBody struct {
 // CreateSensorResponseBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP response body.
 type CreateSensorResponseBody struct {
+	// Message context strategy; defaults to single_message
+	InputStrategy *string `form:"input_strategy,omitempty" json:"input_strategy,omitempty" xml:"input_strategy,omitempty"`
+	// Sliding window size including the target message, between 2 and 10; defaults
+	// to 5
+	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -222,6 +236,11 @@ type CreateSensorResponseBody struct {
 // GetSensorResponseBody is the type of the "sigint" service "getSensor"
 // endpoint HTTP response body.
 type GetSensorResponseBody struct {
+	// Message context strategy; defaults to single_message
+	InputStrategy *string `form:"input_strategy,omitempty" json:"input_strategy,omitempty" xml:"input_strategy,omitempty"`
+	// Sliding window size including the target message, between 2 and 10; defaults
+	// to 5
+	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -262,6 +281,11 @@ type ListSensorsResponseBody struct {
 // UpdateSensorResponseBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP response body.
 type UpdateSensorResponseBody struct {
+	// Message context strategy; defaults to single_message
+	InputStrategy *string `form:"input_strategy,omitempty" json:"input_strategy,omitempty" xml:"input_strategy,omitempty"`
+	// Sliding window size including the target message, between 2 and 10; defaults
+	// to 5
+	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -293,6 +317,11 @@ type UpdateSensorResponseBody struct {
 // DeleteSensorResponseBody is the type of the "sigint" service "deleteSensor"
 // endpoint HTTP response body.
 type DeleteSensorResponseBody struct {
+	// Message context strategy; defaults to single_message
+	InputStrategy *string `form:"input_strategy,omitempty" json:"input_strategy,omitempty" xml:"input_strategy,omitempty"`
+	// Sliding window size including the target message, between 2 and 10; defaults
+	// to 5
+	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -2151,6 +2180,11 @@ type SigintSignalResponseBody struct {
 
 // SigintSensorResponseBody is used to define fields on response body types.
 type SigintSensorResponseBody struct {
+	// Message context strategy; defaults to single_message
+	InputStrategy *string `form:"input_strategy,omitempty" json:"input_strategy,omitempty" xml:"input_strategy,omitempty"`
+	// Sliding window size including the target message, between 2 and 10; defaults
+	// to 5
+	WindowSize *int `form:"window_size,omitempty" json:"window_size,omitempty" xml:"window_size,omitempty"`
 	// Whether the sensor is eligible for evaluation. Disabled sensors remain
 	// visible and editable.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -2214,12 +2248,17 @@ func NewUpdateSignalRequestBody(p *sigint.UpdateSignalPayload) *UpdateSignalRequ
 // the "createSensor" endpoint of the "sigint" service.
 func NewCreateSensorRequestBody(p *sigint.CreateSensorPayload) *CreateSensorRequestBody {
 	body := &CreateSensorRequestBody{
+		WindowSize:      p.WindowSize,
 		Enabled:         p.Enabled,
 		MatchExpression: p.MatchExpression,
 		Name:            p.Name,
 		Description:     p.Description,
 		Instructions:    p.Instructions,
 		Mode:            string(p.Mode),
+	}
+	if p.InputStrategy != nil {
+		inputStrategy := string(*p.InputStrategy)
+		body.InputStrategy = &inputStrategy
 	}
 	if p.Slug != nil {
 		slug := string(*p.Slug)
@@ -2238,12 +2277,17 @@ func NewCreateSensorRequestBody(p *sigint.CreateSensorPayload) *CreateSensorRequ
 // the "updateSensor" endpoint of the "sigint" service.
 func NewUpdateSensorRequestBody(p *sigint.UpdateSensorPayload) *UpdateSensorRequestBody {
 	body := &UpdateSensorRequestBody{
+		WindowSize:      p.WindowSize,
 		Enabled:         p.Enabled,
 		MatchExpression: p.MatchExpression,
 		ID:              p.ID,
 		Name:            p.Name,
 		Description:     p.Description,
 		Instructions:    p.Instructions,
+	}
+	if p.InputStrategy != nil {
+		inputStrategy := string(*p.InputStrategy)
+		body.InputStrategy = &inputStrategy
 	}
 	if p.Slug != nil {
 		slug := string(*p.Slug)
@@ -3101,6 +3145,8 @@ func NewDeleteSignalGatewayError(body *DeleteSignalGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewCreateSensorSigintSensorOK(body *CreateSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		InputStrategy:   types.SigintInputStrategy(*body.InputStrategy),
+		WindowSize:      *body.WindowSize,
 		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
@@ -3275,6 +3321,8 @@ func NewCreateSensorGatewayError(body *CreateSensorGatewayErrorResponseBody) *go
 // result from a HTTP "OK" response.
 func NewGetSensorSigintSensorOK(body *GetSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		InputStrategy:   types.SigintInputStrategy(*body.InputStrategy),
+		WindowSize:      *body.WindowSize,
 		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
@@ -3616,6 +3664,8 @@ func NewListSensorsGatewayError(body *ListSensorsGatewayErrorResponseBody) *goa.
 // endpoint result from a HTTP "OK" response.
 func NewUpdateSensorSigintSensorOK(body *UpdateSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		InputStrategy:   types.SigintInputStrategy(*body.InputStrategy),
+		WindowSize:      *body.WindowSize,
 		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
@@ -3790,6 +3840,8 @@ func NewUpdateSensorGatewayError(body *UpdateSensorGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewDeleteSensorSigintSensorOK(body *DeleteSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		InputStrategy:   types.SigintInputStrategy(*body.InputStrategy),
+		WindowSize:      *body.WindowSize,
 		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
@@ -4158,6 +4210,12 @@ func ValidateDeleteSignalResponseBody(body *DeleteSignalResponseBody) (err error
 // ValidateCreateSensorResponseBody runs the validations defined on
 // CreateSensorResponseBody
 func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error) {
+	if body.InputStrategy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_strategy", "body"))
+	}
+	if body.WindowSize == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_size", "body"))
+	}
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
@@ -4187,6 +4245,21 @@ func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.InputStrategy != nil {
+		if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
@@ -4222,6 +4295,12 @@ func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error
 // ValidateGetSensorResponseBody runs the validations defined on
 // GetSensorResponseBody
 func ValidateGetSensorResponseBody(body *GetSensorResponseBody) (err error) {
+	if body.InputStrategy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_strategy", "body"))
+	}
+	if body.WindowSize == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_size", "body"))
+	}
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
@@ -4251,6 +4330,21 @@ func ValidateGetSensorResponseBody(body *GetSensorResponseBody) (err error) {
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.InputStrategy != nil {
+		if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
@@ -4305,6 +4399,12 @@ func ValidateListSensorsResponseBody(body *ListSensorsResponseBody) (err error) 
 // ValidateUpdateSensorResponseBody runs the validations defined on
 // UpdateSensorResponseBody
 func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error) {
+	if body.InputStrategy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_strategy", "body"))
+	}
+	if body.WindowSize == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_size", "body"))
+	}
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
@@ -4334,6 +4434,21 @@ func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.InputStrategy != nil {
+		if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
@@ -4369,6 +4484,12 @@ func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error
 // ValidateDeleteSensorResponseBody runs the validations defined on
 // DeleteSensorResponseBody
 func ValidateDeleteSensorResponseBody(body *DeleteSensorResponseBody) (err error) {
+	if body.InputStrategy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_strategy", "body"))
+	}
+	if body.WindowSize == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_size", "body"))
+	}
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
@@ -4398,6 +4519,21 @@ func ValidateDeleteSensorResponseBody(body *DeleteSensorResponseBody) (err error
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.InputStrategy != nil {
+		if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
@@ -6877,6 +7013,12 @@ func ValidateSigintSignalResponseBody(body *SigintSignalResponseBody) (err error
 // ValidateSigintSensorResponseBody runs the validations defined on
 // SigintSensorResponseBody
 func ValidateSigintSensorResponseBody(body *SigintSensorResponseBody) (err error) {
+	if body.InputStrategy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_strategy", "body"))
+	}
+	if body.WindowSize == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_size", "body"))
+	}
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
@@ -6906,6 +7048,21 @@ func ValidateSigintSensorResponseBody(body *SigintSensorResponseBody) (err error
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.InputStrategy != nil {
+		if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))

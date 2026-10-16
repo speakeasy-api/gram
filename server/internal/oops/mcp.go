@@ -74,7 +74,10 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
-		err = json.NewEncoder(w).Encode(payload)
+		bs, err := payload.MarshalJSONFor(rpcCtx.ProtocolVersion)
+		if err == nil {
+			_, err = w.Write(append(bs, '\n'))
+		}
 		if err != nil {
 			logger.ErrorContext(r.Context(), "failed to encode MCP error response", attr.SlogError(err))
 		}
@@ -267,22 +270,47 @@ func (e *MCPError) Error() string {
 }
 
 func (e *MCPError) MarshalJSON() ([]byte, error) {
+	return e.MarshalJSONFor("")
+}
+
+// mcpErrorResponse is the JSON-RPC error envelope shared by MCP revisions.
+type mcpErrorResponse struct {
+	// JSONRPC identifies the JSON-RPC wire version.
+	JSONRPC string `json:"jsonrpc"`
+
+	// ID correlates the error to a request, when available.
+	ID *mcpjsonrpc.ID `json:"id,omitempty"`
+
+	// Error describes the failed operation.
+	Error mcpErrorBody `json:"error"`
+}
+
+// mcpErrorBody is the JSON-RPC error object.
+type mcpErrorBody struct {
+	// Code identifies the error condition.
+	Code MCPCode `json:"code"`
+
+	// Message describes the error for the caller.
+	Message string `json:"message"`
+
+	// Data supplies optional structured error details.
+	Data *MCPErrorData `json:"data,omitempty"`
+}
+
+// MarshalJSONFor encodes the error under revision. Starting with 2026-07-28,
+// an unavailable request ID is omitted; handshake revisions retain id: null.
+func (e *MCPError) MarshalJSONFor(revision string) ([]byte, error) {
 	if e == nil {
 		return nil, nil
 	}
 
-	errorBody := map[string]any{
-		"code":    e.Code,
-		"message": e.message(),
+	payload := mcpErrorResponse{
+		JSONRPC: "2.0",
+		ID:      &e.ID,
+		Error:   mcpErrorBody{Code: e.Code, Message: e.message(), Data: e.Data},
 	}
-	if e.Data != nil {
-		errorBody["data"] = e.Data
-	}
-
-	payload := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      e.ID,
-		"error":   errorBody,
+	if e.ID.IsNull() && mcpversions.AtLeast(revision, mcpversions.Version20260728) {
+		payload.ID = nil
 	}
 
 	bs, err := json.Marshal(payload)

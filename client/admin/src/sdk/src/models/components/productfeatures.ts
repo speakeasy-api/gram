@@ -50,6 +50,10 @@ export type ProductFeatures = {
    */
   networkIngressEnabled: boolean;
   /**
+   * Whether an organization admin turned the organization gateway off, so its routes answer 404
+   */
+  organizationGatewayDisabled: boolean;
+  /**
    * Whether the organization can use the Speakeasy Platform MCP capability
    */
   platformMcpEnabled: boolean;
@@ -111,6 +115,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     network_ingress_enabled: z.boolean(),
+    organization_gateway_disabled: z.boolean(),
     platform_mcp_enabled: z.boolean(),
     remote_session_auto_refresh_enabled: z.boolean(),
     remote_session_auto_refresh_enforced_enabled: z.boolean(),
@@ -137,6 +142,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
       "network_ingress_enabled": "networkIngressEnabled",
+      "organization_gateway_disabled": "organizationGatewayDisabled",
       "platform_mcp_enabled": "platformMcpEnabled",
       "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
       "remote_session_auto_refresh_enforced_enabled":

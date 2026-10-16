@@ -32,6 +32,7 @@ import { useDeleteMetaMcpServerMutation } from "@gram/client/react-query/deleteM
 import { useMetaMcpAuthTarget } from "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { useUpdateMetaMcpServerMutation } from "@gram/client/react-query/updateMetaMcpServer.js";
 
@@ -349,7 +350,8 @@ function GatewayAuthenticationSection({
     endpoints.find((e) => !e.customDomainId)?.slug ??
     endpoints[0]?.slug ??
     "gateway";
-  const target = useMetaMcpAuthTarget(metaMcpServer, slugSeed);
+  const { mcpUrl } = useResolvedMcpServerUrl(endpoints, false);
+  const target = useMetaMcpAuthTarget(metaMcpServer, slugSeed, mcpUrl);
 
   return (
     <SettingsSection id={GATEWAY_AUTHENTICATION_SECTION_ID}>

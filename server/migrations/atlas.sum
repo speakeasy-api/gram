@@ -1,4 +1,4 @@
-h1:KMT76rILFK8w17Fu0OZGmqQe9upiViiojXslIDHx6ig=
+h1:0k/Nhl47axYt+oG99eAQO/yZ57F2q8n9US7FFP8tjfs=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -470,4 +470,6 @@ h1:KMT76rILFK8w17Fu0OZGmqQe9upiViiojXslIDHx6ig=
 20261013211408_sign-ins.sql h1:OeA/u8oJ6xhjzeO9m0VBODm2JMl6TaUOxiJBN4gcXDw=
 20261013211446_ema-credential-provenance.sql h1:2XNqMtQytNV0uZrU8dGQo3baswWpjSMazGhHulbq+rE=
 20261013232309_sign-in-method-evidence.sql h1:0/kWcgfZg6dafD/LopCWUgKrlysf6jq2TFh1sIyfNrg=
-20261016094642_channels.sql h1:E9YpbBIulmcTKfitsgTua34EB563+qvYzwKkqrRaWzI=
+20261015093918_sigint_sliding_windows.sql h1:QNosxelv6yIY4WGy6yiWmCb5wJkOv/0h/MVFItmtXT8=
+20261015185547_promotion_ledger_signup_offers.sql h1:vYR6/rG62LpP+MvSq6oR5Nc69PRGJ4VH4ZvOnCJnzxs=
+20261016094642_channels.sql h1:jyCCNIYoaJ4OJyqpB4Rk0io55zUOI8B57kTKFvEKlSo=

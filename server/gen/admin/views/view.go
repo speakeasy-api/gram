@@ -72,6 +72,9 @@ type ProductFeaturesView struct {
 	NetworkIngressEnabled *bool
 	// Whether the organization can configure signals intelligence
 	SignalsIntelligenceEnabled *bool
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -103,6 +106,7 @@ var (
 			"session_portability_enabled",
 			"network_ingress_enabled",
 			"signals_intelligence_enabled",
+			"organization_gateway_disabled",
 			"device_agent",
 		},
 	}
@@ -182,6 +186,9 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.SignalsIntelligenceEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("signals_intelligence_enabled", "result"))
+	}
+	if result.OrganizationGatewayDisabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_gateway_disabled", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

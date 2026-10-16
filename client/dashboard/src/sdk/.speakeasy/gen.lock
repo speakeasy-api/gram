@@ -441,6 +441,7 @@ trackedFiles:
   src/funcs/organizationUserSessionIssuersDelete.ts: {}
   src/funcs/organizationUserSessionIssuersDeleteCimdClient.ts: {}
   src/funcs/organizationUserSessionIssuersGet.ts: {}
+  src/funcs/organizationUserSessionIssuersGetAuthenticationHostImpact.ts: {}
   src/funcs/organizationUserSessionIssuersGetCimdClient.ts: {}
   src/funcs/organizationUserSessionIssuersGetDeletePreflight.ts: {}
   src/funcs/organizationUserSessionIssuersGetMigratePreflight.ts: {}
@@ -449,6 +450,7 @@ trackedFiles:
   src/funcs/organizationUserSessionIssuersListMcpServers.ts: {}
   src/funcs/organizationUserSessionIssuersMigrate.ts: {}
   src/funcs/organizationUserSessionIssuersMove.ts: {}
+  src/funcs/organizationUserSessionIssuersSetAuthenticationHost.ts: {}
   src/funcs/organizationUserSessionIssuersUpdate.ts: {}
   src/funcs/organizationsCreatePortalSession.ts: {}
   src/funcs/organizationsDisableWebhooks.ts: {}
@@ -798,6 +800,7 @@ trackedFiles:
   src/funcs/userSessionIssuersCreate.ts: {}
   src/funcs/userSessionIssuersDelete.ts: {}
   src/funcs/userSessionIssuersGet.ts: {}
+  src/funcs/userSessionIssuersGetAttachImpact.ts: {}
   src/funcs/userSessionIssuersList.ts: {}
   src/funcs/userSessionIssuersUpdate.ts: {}
   src/funcs/userSessionsList.ts: {}
@@ -1732,6 +1735,7 @@ trackedFiles:
   src/models/components/sessionsummary.ts: {}
   src/models/components/setaitooldecisionrequestbody.ts: {}
   src/models/components/setaitooldecisionresult.ts: {}
+  src/models/components/setauthenticationhostrequestbody.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
   src/models/components/setdirectoryrolemappingform.ts: {}
   src/models/components/setemaprovidersrequestbody.ts: {}
@@ -2001,6 +2005,8 @@ trackedFiles:
   src/models/components/usersessionconsent.ts: {}
   src/models/components/usersessionfacetoption.ts: {}
   src/models/components/usersessionissuer.ts: {}
+  src/models/components/usersessionissuerattachimpact.ts: {}
+  src/models/components/usersessionissuerauthenticationhostimpact.ts: {}
   src/models/components/usersessionissuercimdclient.ts: {}
   src/models/components/usersessionissuerfieldmismatch.ts: {}
   src/models/components/usersessionissuermcpserver.ts: {}
@@ -2328,6 +2334,7 @@ trackedFiles:
   src/models/operations/getorganizationremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuermigratepreflight.ts: {}
   src/models/operations/getorganizationusersessionissuer.ts: {}
+  src/models/operations/getorganizationusersessionissuerauthenticationhostimpact.ts: {}
   src/models/operations/getorganizationusersessionissuercimdclient.ts: {}
   src/models/operations/getorganizationusersessionissuerdeletepreflight.ts: {}
   src/models/operations/getorganizationusersessionissuermigratepreflight.ts: {}
@@ -2394,6 +2401,7 @@ trackedFiles:
   src/models/operations/getusermetricssummary.ts: {}
   src/models/operations/getusersessionclient.ts: {}
   src/models/operations/getusersessionissuer.ts: {}
+  src/models/operations/getusersessionissuerattachimpact.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
   src/models/operations/getwidget.ts: {}
   src/models/operations/getworkloadcustomflows.ts: {}
@@ -2709,6 +2717,7 @@ trackedFiles:
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
   src/models/operations/setmodelproviderkeyenabled.ts: {}
   src/models/operations/setorganizationremotesessionissueremaproviders.ts: {}
+  src/models/operations/setorganizationusersessionissuerauthenticationhost.ts: {}
   src/models/operations/setorganizationwhitelist.ts: {}
   src/models/operations/setpluginassignments.ts: {}
   src/models/operations/setproductfeature.ts: {}
@@ -3482,6 +3491,8 @@ trackedFiles:
   src/react-query/organizationRemoteSessionIssuers.ts: {}
   src/react-query/organizationUserSessionIssuer.core.ts: {}
   src/react-query/organizationUserSessionIssuer.ts: {}
+  src/react-query/organizationUserSessionIssuerAuthenticationHostImpact.core.ts: {}
+  src/react-query/organizationUserSessionIssuerAuthenticationHostImpact.ts: {}
   src/react-query/organizationUserSessionIssuerCimdClient.core.ts: {}
   src/react-query/organizationUserSessionIssuerCimdClient.ts: {}
   src/react-query/organizationUserSessionIssuerCimdClients.core.ts: {}
@@ -3749,6 +3760,7 @@ trackedFiles:
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
   src/react-query/setOrganizationRemoteSessionIssuerEMAProviders.ts: {}
+  src/react-query/setOrganizationUserSessionIssuerAuthenticationHost.ts: {}
   src/react-query/setPluginAssignments.ts: {}
   src/react-query/setProjectLogo.ts: {}
   src/react-query/setRemoteMcpServerScopePin.ts: {}
@@ -3942,6 +3954,8 @@ trackedFiles:
   src/react-query/userSessionFacets.ts: {}
   src/react-query/userSessionIssuer.core.ts: {}
   src/react-query/userSessionIssuer.ts: {}
+  src/react-query/userSessionIssuerAttachImpact.core.ts: {}
+  src/react-query/userSessionIssuerAttachImpact.ts: {}
   src/react-query/userSessionIssuerCimdClient.core.ts: {}
   src/react-query/userSessionIssuerCimdClient.ts: {}
   src/react-query/userSessionIssuerCimdClients.core.ts: {}
@@ -5282,7 +5296,7 @@ examples:
         application/json: {"mode": "ordered_score", "name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2026-11-17T07:55:55.903Z", "enabled": false, "id": "9b0aba32-79a3-453e-aa22-a34624b4f576", "match_expression": "<value>", "mode": "ordered_score", "name": "<value>", "project_id": "abe56e10-dc34-4d84-b95b-2f35529523a0", "signal_ids": ["c027a78e-b0d9-499a-8bd4-0e3c18fec4fe", "776f5e85-92f4-4089-aaf2-04bc346fead1"], "slug": "<value>", "updated_at": "2026-04-20T06:53:45.466Z"}
+          application/json: {"created_at": "2026-11-17T07:55:55.903Z", "enabled": false, "id": "9b0aba32-79a3-453e-aa22-a34624b4f576", "input_strategy": "sliding_window", "match_expression": "<value>", "mode": "ordered_score", "name": "<value>", "project_id": "abe56e10-dc34-4d84-b95b-2f35529523a0", "signal_ids": ["c027a78e-b0d9-499a-8bd4-0e3c18fec4fe", "776f5e85-92f4-4089-aaf2-04bc346fead1"], "slug": "<value>", "updated_at": "2026-04-20T06:53:45.466Z", "window_size": 959244}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -6029,7 +6043,7 @@ examples:
           id: "cb4b46d2-b9eb-402c-9cf5-431c3d7285c2"
       responses:
         "200":
-          application/json: {"created_at": "2025-12-08T14:54:57.251Z", "enabled": false, "id": "1fa69653-45a6-4186-8298-368c3f2315ec", "match_expression": "<value>", "mode": "exclusive", "name": "<value>", "project_id": "50d06624-0605-4472-b70b-8da8d4e7e67d", "signal_ids": ["e4a11fad-f856-4d36-9db0-bfae59f61c0f", "ed9e31be-6e3e-4b67-a2b5-7d0f6249f4ed", "d2d4a503-5247-454b-9d06-0de1f5b8863d"], "slug": "<value>", "updated_at": "2024-12-20T06:52:43.938Z"}
+          application/json: {"created_at": "2025-12-08T14:54:57.251Z", "enabled": false, "id": "1fa69653-45a6-4186-8298-368c3f2315ec", "input_strategy": "sliding_window", "match_expression": "<value>", "mode": "exclusive", "name": "<value>", "project_id": "50d06624-0605-4472-b70b-8da8d4e7e67d", "signal_ids": ["e4a11fad-f856-4d36-9db0-bfae59f61c0f", "ed9e31be-6e3e-4b67-a2b5-7d0f6249f4ed", "d2d4a503-5247-454b-9d06-0de1f5b8863d"], "slug": "<value>", "updated_at": "2024-12-20T06:52:43.938Z", "window_size": 745948}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -6240,15 +6254,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  disableOrganizationEnterpriseIssuer:
-    speakeasy-default-disable-organization-enterprise-issuer:
-      responses:
-        "200":
-          application/json: {"available": true, "enabled": false, "keys": [{"kid": "<id>", "state": "pending"}], "signing_enabled": false}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   disableRBAC:
     speakeasy-default-disable-RBAC:
       responses:
@@ -6485,15 +6490,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  enableOrganizationEnterpriseIssuer:
-    speakeasy-default-enable-organization-enterprise-issuer:
-      responses:
-        "200":
-          application/json: {"available": true, "enabled": false, "keys": [], "signing_enabled": true}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   enableRBAC:
     speakeasy-default-enable-RBAC:
       responses:
@@ -7191,11 +7187,11 @@ examples:
     speakeasy-default-get-internal-session-issuer:
       responses:
         "200":
-          application/json: {"can_enable": false, "keys": [{"kid": "<id>", "state": "pending"}], "kms_cleanup_pending": 738548, "state": "unavailable"}
+          application/json: {"can_enable": false, "keys": [], "kms_cleanup_pending": 164619, "state": "verified_domain_required"}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getJsonWebKeySet:
     speakeasy-default-get-json-web-key-set:
       parameters:
@@ -7429,15 +7425,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  getOrganizationEnterpriseIssuer:
-    speakeasy-default-get-organization-enterprise-issuer:
-      responses:
-        "200":
-          application/json: {"available": false, "enabled": true, "keys": [{"kid": "<id>", "state": "active"}], "signing_enabled": false}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getOrganizationGateway:
     speakeasy-default-get-organization-gateway:
       responses:
@@ -7544,6 +7531,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOrganizationUserSessionIssuerAuthenticationHostImpact:
+    speakeasy-default-get-organization-user-session-issuer-authentication-host-impact:
+      parameters:
+        query:
+          id: "e77f5f51-e378-47c9-9bc3-9e3ba1ce568f"
+          use_authentication_host: false
+      responses:
+        "200":
+          application/json: {"authorization_server_after": "<value>", "authorization_server_before": "<value>", "changes": false, "issuer": {"authn_challenge_mode": "<value>", "authorization_server_mode": "shared", "client_id_metadata_admission_mode": "reporting", "created_at": "2025-11-30T08:26:43.350Z", "id": "099ffbdc-44db-4089-b558-e8b7e68422c4", "issuer_url_pinned": false, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 743340, "slug": "<value>", "updated_at": "2024-01-22T10:13:41.437Z", "use_authentication_host": false}, "mcp_server_count": 666270}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getOrganizationUserSessionIssuerCimdClient:
     speakeasy-default-get-organization-user-session-issuer-cimd-client:
       parameters:
@@ -7654,7 +7654,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "network_ingress_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "signals_intelligence_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "network_ingress_enabled": false, "organization_gateway_disabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "signals_intelligence_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -7951,7 +7951,7 @@ examples:
           id: "72bcb542-d65c-43d0-a556-7a422d22a30d"
       responses:
         "200":
-          application/json: {"created_at": "2026-03-07T13:20:55.414Z", "enabled": true, "id": "de30666c-efc0-4fc7-9b2a-493954432815", "match_expression": "<value>", "mode": "ordered_score", "name": "<value>", "project_id": "3d75568e-fff7-4958-b752-e58ae713ec4e", "signal_ids": ["3945f1d3-5702-4fcc-9e6b-e6ab6ba24520"], "slug": "<value>", "updated_at": "2024-05-05T15:10:41.876Z"}
+          application/json: {"created_at": "2026-03-07T13:20:55.414Z", "enabled": true, "id": "de30666c-efc0-4fc7-9b2a-493954432815", "input_strategy": "single_message", "match_expression": "<value>", "mode": "ordered_score", "name": "<value>", "project_id": "3d75568e-fff7-4958-b752-e58ae713ec4e", "signal_ids": ["3945f1d3-5702-4fcc-9e6b-e6ab6ba24520"], "slug": "<value>", "updated_at": "2024-05-05T15:10:41.876Z", "window_size": 171757}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -8371,6 +8371,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getUserSessionIssuerAttachImpact:
+    speakeasy-default-get-user-session-issuer-attach-impact:
+      responses:
+        "200":
+          application/json: {"authorization_server_changes": true, "reauthorization_required": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getUserSessionIssuerCimdClient:
     speakeasy-default-get-user-session-issuer-cimd-client:
       parameters:
@@ -8818,7 +8827,7 @@ examples:
     speakeasy-default-list-ai-scan-targets:
       responses:
         "200":
-          application/json: {"etag": "<value>", "list_version": 52473, "targets": [{"access": {"decision": "unreviewed", "enforceable": false, "state": "allowed"}, "category": "harness", "customized": true, "display_name": "Antwon_Metz", "gateway_client": {"cimd_vendor_keys": ["<value 1>", "<value 2>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": []}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>", "<value 2>"], "config_dirs": ["<value 1>"], "process_names": ["<value 1>"]}}]}
+          application/json: {"etag": "<value>", "list_version": 52473, "targets": [{"category": "harness", "customized": true, "display_name": "Antwon_Metz", "gateway_client": {"cimd_vendor_keys": ["<value 1>", "<value 2>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": []}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>", "<value 2>"], "config_dirs": ["<value 1>"], "process_names": ["<value 1>"]}}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -11300,17 +11309,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  replaceOrganizationEnterpriseIssuerKey:
-    speakeasy-default-replace-organization-enterprise-issuer-key:
-      requestBody:
-        application/json: {"kid": "<id>"}
-      responses:
-        "200":
-          application/json: {"available": true, "enabled": false, "keys": [{"kid": "<id>", "state": "retired"}], "signing_enabled": true}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   reportAgentAIScan:
     speakeasy-default-report-agent-AI-scan:
       requestBody:
@@ -11592,26 +11590,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  revokeMemberSignIns:
-    speakeasy-default-revoke-member-sign-ins:
-      requestBody:
-        application/json: {"user_id": "<id>"}
-      responses:
-        "200":
-          application/json: {"revoked_sessions": 56167, "revoked_sign_ins": 388169}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  revokeMySignIns:
-    speakeasy-default-revoke-my-sign-ins:
-      responses:
-        "200":
-          application/json: {"revoked_sessions": 756715, "revoked_sign_ins": 667491}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   revokeOrganizationMemberSignIns:
     speakeasy-default-revoke-organization-member-sign-ins:
       requestBody:
@@ -11714,11 +11692,11 @@ examples:
         application/json: {"compromised": false}
       responses:
         "200":
-          application/json: {"can_enable": true, "keys": [], "kms_cleanup_pending": 142679, "state": "disabled"}
+          application/json: {"can_enable": true, "keys": [{"kid": "<id>", "state": "retired"}], "kms_cleanup_pending": 909066, "state": "unavailable"}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   rotateLiteLLMInstanceKey:
     speakeasy-default-rotate-lite-LLM-instance-key:
       requestBody:
@@ -11752,17 +11730,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  rotateOrganizationEnterpriseIssuer:
-    speakeasy-default-rotate-organization-enterprise-issuer:
-      requestBody:
-        application/json: {"active_kid": "<id>"}
-      responses:
-        "200":
-          application/json: {"available": true, "enabled": false, "keys": [{"kid": "<id>", "state": "active"}], "signing_enabled": true}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   rotateOrganizationRemoteSessionClient:
     speakeasy-default-rotate-organization-remote-session-client:
       requestBody:
@@ -12085,11 +12052,11 @@ examples:
         application/json: {"enabled": false}
       responses:
         "200":
-          application/json: {"can_enable": false, "keys": [{"kid": "<id>", "state": "active"}], "kms_cleanup_pending": 808614, "state": "unavailable"}
+          application/json: {"can_enable": false, "keys": [{"kid": "<id>", "state": "pending"}], "kms_cleanup_pending": 873049, "state": "signing_paused"}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   setMcpMetadata:
     speakeasy-default-set-mcp-metadata:
       requestBody:
@@ -12134,17 +12101,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  setOrganizationRemoteSessionIssuerEMAProvider:
-    speakeasy-default-set-organization-remote-session-issuer-EMA-provider:
-      requestBody:
-        application/json: {"remote_session_issuer_id": "698138ff-c58c-43b4-97db-c5a76f5bd08d"}
-      responses:
-        "200":
-          application/json: {"is_default": false, "provider": {"kind": "external"}, "vendor_issuer": "<value>"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   setOrganizationRemoteSessionIssuerEMAProviders:
     speakeasy-default-set-organization-remote-session-issuer-EMA-providers:
       requestBody:
@@ -12156,6 +12112,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setOrganizationUserSessionIssuerAuthenticationHost:
+    speakeasy-default-set-organization-user-session-issuer-authentication-host:
+      requestBody:
+        application/json: {"id": "8856fb77-d9a3-4fdf-8579-188163ead0ee", "use_authentication_host": false}
+      responses:
+        "200":
+          application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "open", "created_at": "2024-06-10T05:10:49.420Z", "id": "35d5d61f-805a-4182-8018-c18cbb5ca583", "issuer_url_pinned": false, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 420219, "slug": "<value>", "updated_at": "2026-03-22T00:34:48.449Z", "use_authentication_host": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   setOrganizationWhitelist:
     speakeasy-default-set-organization-whitelist:
       requestBody:
@@ -13201,7 +13168,7 @@ examples:
         application/json: {"id": "5a4fb2a1-5c08-4df6-bf7b-f9312a0e46e8"}
       responses:
         "200":
-          application/json: {"created_at": "2024-05-03T21:42:07.872Z", "enabled": true, "id": "6e82e2bb-bede-4d68-ab5d-5a7a4665874a", "match_expression": "<value>", "mode": "exclusive", "name": "<value>", "project_id": "31ec639d-3570-4f32-9a44-7df13dc3fab2", "signal_ids": ["e7ba4ee5-80e7-46ce-9189-e3215f144598"], "slug": "<value>", "updated_at": "2025-05-25T21:10:51.226Z"}
+          application/json: {"created_at": "2024-05-03T21:42:07.872Z", "enabled": true, "id": "6e82e2bb-bede-4d68-ab5d-5a7a4665874a", "input_strategy": "single_message", "match_expression": "<value>", "mode": "exclusive", "name": "<value>", "project_id": "31ec639d-3570-4f32-9a44-7df13dc3fab2", "signal_ids": ["e7ba4ee5-80e7-46ce-9189-e3215f144598"], "slug": "<value>", "updated_at": "2025-05-25T21:10:51.226Z", "window_size": 647389}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

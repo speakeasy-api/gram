@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -23,7 +22,7 @@ import (
 func writeMCPError(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, id mcpjsonrpc.ID, revision string, cause error) error {
 	mcpErr := oops.NewMCPErrorFromCause(id, revision, cause)
 
-	bs, err := json.Marshal(mcpErr)
+	bs, err := mcpErr.MarshalJSONFor(revision)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to serialize error response").LogError(ctx, logger)
 	}

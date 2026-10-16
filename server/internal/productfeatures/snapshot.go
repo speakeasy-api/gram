@@ -28,6 +28,7 @@ type ProductFeaturesSnapshot struct {
 	SessionPortabilityEnabled               bool
 	NetworkIngressEnabled                   bool
 	SignalsIntelligenceEnabled              bool
+	OrganizationGatewayDisabled             bool
 	DeviceAgent                             bool
 }
 
@@ -107,6 +108,7 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 		SessionPortabilityEnabled:               isEnabled(FeatureSessionPortability),
 		NetworkIngressEnabled:                   isEnabled(FeatureNetworkIngress),
 		SignalsIntelligenceEnabled:              isEnabled(FeatureSignalsIntelligence),
+		OrganizationGatewayDisabled:             isEnabled(FeatureOrganizationGatewayDisabled),
 		DeviceAgent:                             deviceAgent,
 	}
 	if readErr != nil {

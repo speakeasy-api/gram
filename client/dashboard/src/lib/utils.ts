@@ -175,6 +175,7 @@ export function buildLoginRedirectURL(
   redirectTo: string | null,
   orgName?: string,
   email?: string,
+  partnerCode?: string,
 ): string {
   // The base is only consulted when getServerURL() is relative (empty in
   // tests, per vitest.config.ts) — window.location.origin is always
@@ -199,6 +200,8 @@ export function buildLoginRedirectURL(
   // in AGE-3125, which covers both endpoints — the fixes differ, since this
   // hand-off is a top-level navigation and cannot use a header.
   if (email) url.searchParams.set("email", email);
+  if (partnerCode?.trim())
+    url.searchParams.set("partner_code", partnerCode.trim());
   return url.toString();
 }
 

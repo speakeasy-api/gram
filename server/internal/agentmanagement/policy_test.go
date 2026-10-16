@@ -23,6 +23,7 @@ func TestAgentPolicyCRUDIsExactAllowOnlyAndAudited(t *testing.T) {
 	agent := createAgent(t, conn, "org-policy", "owner", "Policy agent")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-policy", "owner")
+	seedGrant(t, ctx, conn, "org-policy", urn.NewPrincipal(urn.PrincipalTypeUser, "owner"), authz.ScopeProjectWrite, "*")
 
 	created, err := service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{
 		AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectWrite), Effect: "allow",
@@ -123,6 +124,7 @@ func TestAgentPolicyGrantIDsCannotCrossAgentOrTenant(t *testing.T) {
 	second := createAgent(t, conn, "org-one", "owner-org-one", "Second agent")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-one", "owner-org-one")
+	seedGrant(t, ctx, conn, "org-one", urn.NewPrincipal(urn.PrincipalTypeUser, "owner-org-one"), authz.ScopeProjectRead, "*")
 	grant, err := service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{
 		AgentID: first.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow",
 		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"},
@@ -163,9 +165,13 @@ func TestAgentPolicyRequiresExactWriteAuthorityForNonOwner(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	allow(engine, authz.ScopeAgentWrite, agent.ID)
+	skillID := uuid.NewString()
+	for _, userID := range []string{"owner", "operator"} {
+		seedGrant(t, ctx, conn, "org-authority", urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeSkillRead, skillID)
+	}
 	_, err = service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{
 		AgentID: agent.ID.String(), Scope: string(authz.ScopeSkillRead), Effect: "allow",
-		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindSkill, ResourceID: uuid.NewString()},
+		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindSkill, ResourceID: skillID},
 	})
 	require.NoError(t, err)
 }

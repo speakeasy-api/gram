@@ -5,7 +5,9 @@
 //
 // The gateway is not stored. It exists while its organization owns exactly
 // one organization-level user session issuer, so creating, moving, or
-// deleting that issuer is what offers or withdraws it. It is served on the
+// deleting that issuer is what offers or withdraws it. An organization admin
+// can also turn it off, which withdraws it until they turn it back on. It is
+// served on the
 // platform host only, so an organization whose custom domain restricts
 // access to an IP allowlist, which the platform host enforces by refusing
 // the organization's requests, is not served one.
@@ -22,6 +24,8 @@ import (
 
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -57,14 +61,30 @@ const (
 
 	// UnavailabilityOrganizationDisabled means the organization is disabled.
 	UnavailabilityOrganizationDisabled Unavailability = "organization_disabled"
+
+	// UnavailabilityTurnedOff means an organization admin turned the gateway
+	// off.
+	UnavailabilityTurnedOff Unavailability = "turned_off"
 )
 
 // Availability returns the issuer an organization's gateway signs users in
 // through, or why the organization is not served one. Every surface that
 // offers the gateway asks this, so none offers a URL the gateway refuses.
+// Every read is uncached, so turning the gateway off takes effect on the next
+// request.
 func Availability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum) (uuid.UUID, Unavailability, error) {
 	if organization.DisabledAt.Valid {
 		return uuid.Nil, UnavailabilityOrganizationDisabled, nil
+	}
+	turnedOff, err := featuresrepo.New(db).IsFeatureEnabled(ctx, featuresrepo.IsFeatureEnabledParams{
+		OrganizationID: organization.ID,
+		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
+	})
+	if err != nil {
+		return uuid.Nil, UnavailabilityNone, fmt.Errorf("read organization gateway setting: %w", err)
+	}
+	if turnedOff {
+		return uuid.Nil, UnavailabilityTurnedOff, nil
 	}
 	domain, err := customdomainsrepo.New(db).GetCustomDomainByOrganization(ctx, organization.ID)
 	switch {

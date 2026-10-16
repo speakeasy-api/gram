@@ -20,7 +20,7 @@ Create a Pull Request for the current changes and/or branch:
 7. Push the branch to `origin`
 8. Draft the PR description in a uniquely named file under `/tmp`, following [Writing style](#writing-style).
 9. **Scrub the PR metadata**: Check the PR title and the drafted description against the same rules. Fix them in place before opening the PR — once created, they are public.
-10. Create PR with the description file using GitHub CLI, ensuring the title starts with `chore:`, `feat:`, `fix:`, or `mig:` and targets `main`
+10. Create PR as a draft with the description file using GitHub CLI (`gh pr create --draft`), ensuring the title starts with `chore:`, `feat:`, `fix:`, or `mig:` and targets `main`. Open it ready for review only when the user asks.
 11. Add appropriate labels based on change type (enhancement, bug, documentation, etc.). Ensure to query for the available labels beforehand.
 12. Provide a clickable link to the PR in the output
 

@@ -6,11 +6,26 @@ import {
   screen,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { StripeSubscription } from "@gram/client/models/components/stripesubscription.js";
 import type { ProductTier } from "@/hooks/useProductTier";
+
+// Vitest runs test files in isolated fork workers. Set the worker timezone before
+// importing the module-level date formatter, and restore it after this file.
+vi.hoisted(() => {
+  vi.stubEnv("TZ", "America/Los_Angeles");
+});
+afterAll(() => vi.unstubAllEnvs());
 
 const mocks = vi.hoisted(() => ({
   productTier: vi.fn(),
@@ -200,6 +215,94 @@ describe("PaygPlanSection", () => {
 
   afterEach(cleanup);
 
+  describe("live subscription discounts", () => {
+    const discountEndsAt = new Date("2100-01-01T12:00:00Z");
+    const discountDescription =
+      "5 GiB of gateway usage free each month ($100 discount).";
+
+    it("places verified gateway terms and Stripe expiration before unchanged controls", () => {
+      queryState({
+        data: subscription({
+          discountDescription,
+          discountEndsAt,
+          gatewayPromotionApplied: true,
+        }),
+      });
+      render(<PaygPlanSection />);
+      const title = screen.getByText("Partner promotion applied");
+      const detail = screen.getByText(/5 GiB of gateway usage free each month/);
+      expect(detail.textContent).toBe(
+        `${discountDescription} Discount ends January 1, 2100.`,
+      );
+      expect(
+        Boolean(
+          title.compareDocumentPosition(portalButton()!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+      ).toBe(true);
+      expect(portalButton()).not.toBeNull();
+      expect(cancelTrigger()).not.toBeNull();
+    });
+
+    it("keeps a midnight UTC expiration on its UTC calendar date", () => {
+      const midnight = new Date("2100-01-01T00:00:00Z");
+      // Prove the host timezone would render the preceding date without UTC.
+      expect(new Intl.DateTimeFormat("en-US").resolvedOptions().timeZone).toBe(
+        "America/Los_Angeles",
+      );
+      expect(midnight.getDate()).toBe(31);
+      queryState({
+        data: subscription({
+          discountDescription,
+          discountEndsAt: midnight,
+          gatewayPromotionApplied: true,
+        }),
+      });
+      render(<PaygPlanSection />);
+      expect(
+        screen.getByText(/5 GiB of gateway usage free each month/).textContent,
+      ).toBe(`${discountDescription} Discount ends January 1, 2100.`);
+    });
+
+    it("renders fallback terms without implying free gateway volume or inventing an end date", () => {
+      queryState({
+        data: subscription({
+          discountDescription: "25% discount on eligible charges.",
+        }),
+      });
+      render(<PaygPlanSection />);
+      expect(screen.queryByText("Discount applied")).not.toBeNull();
+      expect(
+        screen.queryByText("25% discount on eligible charges."),
+      ).not.toBeNull();
+      expect(
+        screen.queryByText(/GiB|Discount ends|Partner promotion applied/),
+      ).toBeNull();
+    });
+
+    it.each([
+      { discountDescription: undefined },
+      { discountDescription, discountEndsAt: new Date(0) },
+      { discountDescription, discountEndsAt: new Date("invalid") },
+      { discountDescription, status: "canceled" as const },
+      { discountDescription, status: "trialing" as const },
+    ])("hides absent, expired, or inactive discounts: %j", (overrides) => {
+      mocks.session.mockReturnValue({
+        trial: null,
+        activeOrganizationId: "org-1",
+        rawGramAccountType: "payg",
+        acceptedSignupOfferFlow: "tailscale_partner_gateway",
+      });
+      queryState({
+        data: subscription({ gatewayPromotionApplied: true, ...overrides }),
+      });
+      render(<PaygPlanSection />);
+      expect(screen.queryByText("Partner promotion applied")).toBeNull();
+      expect(screen.queryByText(/5 GiB/)).toBeNull();
+      expect(portalButton()).not.toBeNull();
+    });
+  });
+
   describe("while Stripe is trialing", () => {
     beforeEach(() => {
       queryState({
@@ -239,7 +342,7 @@ describe("PaygPlanSection", () => {
   });
 
   describe("while pay as you go is active", () => {
-    it("names the plan and when the period ends", () => {
+    it("names the plan and when a monthly period ends", () => {
       render(<PaygPlanSection />);
 
       expect(screen.getByText("Pay as you go")).toBeTruthy();
@@ -249,6 +352,38 @@ describe("PaygPlanSection", () => {
       expect(cancelTrigger()).not.toBeNull();
       expect(resumeButton()).toBeNull();
     });
+
+    // Right after checkout the period only runs to the next UTC midnight, or
+    // the one after that when checkout is near midnight.
+    it.each([
+      {
+        label: "the next UTC midnight",
+        start: "2026-08-14T15:00:00.000Z",
+        end: "2026-08-15T00:00:00.000Z",
+      },
+      {
+        label: "the midnight after a late checkout",
+        start: "2026-08-14T23:45:00.000Z",
+        end: "2026-08-16T00:00:00.000Z",
+      },
+    ])(
+      "describes monthly usage without an end date when the period only runs to $label",
+      ({ start, end }) => {
+        queryState({
+          data: subscription({
+            currentPeriodStart: new Date(start),
+            currentPeriodEnd: new Date(end),
+          }),
+        });
+
+        render(<PaygPlanSection />);
+
+        expect(
+          screen.getByText(/billed monthly for what you use/i),
+        ).toBeTruthy();
+        expect(screen.queryByText(/current period ends/i)).toBeNull();
+      },
+    );
 
     // Stripe keeps retrying a failed payment, so service continues and the plan
     // is still the plan. Saying so a second time here, below the fold, would
@@ -549,6 +684,30 @@ describe("PaygPlanSection", () => {
       });
     });
 
+    it("preserves enterprise trials even with their subscription flag", () => {
+      mocks.productTier.mockReturnValue("enterprise");
+      mocks.session.mockReturnValue({
+        ...mocks.session(),
+        rawGramAccountType: "enterprise",
+        hasActiveSubscription: true,
+      });
+      render(<PaygPlanSection />);
+      expect(checkoutCta()).not.toBeNull();
+      expect(screen.getByText(/when your trial ends/)).toBeTruthy();
+    });
+
+    it("retains trial timing with partner copy", () => {
+      mocks.session.mockReturnValue({
+        ...mocks.session(),
+        acceptedSignupOfferFlow: "tailscale_partner_gateway",
+      });
+      render(<PaygPlanSection />);
+      expect(screen.getByText(/when your trial ends/)).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Your accepted Tailscale partner promotion will be applied at checkout.",
+      );
+    });
+
     it("offers the checkout CTA and asks Stripe for nothing", () => {
       render(<PaygPlanSection />);
 
@@ -623,20 +782,102 @@ describe("PaygPlanSection", () => {
     });
   });
 
+  describe("unsubscribed Free/Base organizations", () => {
+    beforeEach(() => {
+      mocks.productTier.mockReturnValue("base");
+      mocks.session.mockReturnValue({
+        activeOrganizationId: "org-1",
+        rawGramAccountType: "free",
+        hasActiveSubscription: false,
+        trial: null,
+      });
+      queryState({ isError: true, error: notFound() });
+    });
+
+    it("reuses checkout with generic nontrial copy", () => {
+      render(<PaygPlanSection />);
+      expect(
+        screen.getByText("Add a payment method to start pay as you go."),
+      ).toBeTruthy();
+      fireEvent.click(checkoutCta()!);
+      expect(mocks.checkoutMutate).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([undefined, "unknown_flow", "tailscale_partner_gateway"])(
+      "selects code-owned copy for %s",
+      (flow) => {
+        mocks.session.mockReturnValue({
+          ...mocks.session(),
+          acceptedSignupOfferFlow: flow,
+        });
+        render(<PaygPlanSection />);
+        expect(
+          Boolean(screen.queryByText(/accepted Tailscale partner promotion/)),
+        ).toBe(flow === "tailscale_partner_gateway");
+        expect(checkoutCta()).not.toBeNull();
+      },
+    );
+
+    it.each([
+      { data: subscription() },
+      { isFetching: true },
+      { isError: true, error: new Error("unavailable") },
+    ])("requires confirmed subscription absence: %j", (state) => {
+      queryState(state);
+      render(<PaygPlanSection />);
+      expect(checkoutCta()).toBeNull();
+    });
+
+    it("hides after verified activation, not after clicking checkout", () => {
+      const view = render(<PaygPlanSection />);
+      fireEvent.click(checkoutCta()!);
+      expect(checkoutCta()).not.toBeNull();
+      mocks.session.mockReturnValue({
+        ...mocks.session(),
+        hasActiveSubscription: true,
+      });
+      view.rerender(<PaygPlanSection />);
+      expect(checkoutCta()).toBeNull();
+    });
+
+    it.each(["pro", "payg", "enterprise"])(
+      "does not offer the new prompt for raw tier %s",
+      (tier) => {
+        mocks.session.mockReturnValue({
+          ...mocks.session(),
+          rawGramAccountType: tier,
+        });
+        render(<PaygPlanSection />);
+        expect(checkoutCta()).toBeNull();
+        expect(mocks.query).not.toHaveBeenCalled();
+      },
+    );
+
+    it("requires the rollout flag", () => {
+      mocks.flagResult.mockReturnValue({ status: "disabled" });
+      render(<PaygPlanSection />);
+      expect(checkoutCta()).toBeNull();
+    });
+
+    it("requires organization admin", () => {
+      mocks.hasAnyScope.mockReturnValue(false);
+      render(<PaygPlanSection />);
+      expect(checkoutCta()).toBeNull();
+    });
+  });
+
   // With no active trial (the beforeEach default), every other tier has no
   // payment relationship to report: enterprise bills through its contract,
   // and the legacy tiers bill through Polar.
-  it.each<ProductTier>([
-    "base",
-    "base_PAID",
-    "__deprecated__pro",
-    "enterprise",
-  ])("renders nothing on the %s view", (tier) => {
-    mocks.productTier.mockReturnValue(tier);
+  it.each<ProductTier>(["base_PAID", "__deprecated__pro", "enterprise"])(
+    "renders nothing on the %s view",
+    (tier) => {
+      mocks.productTier.mockReturnValue(tier);
 
-    const { container } = render(<PaygPlanSection />);
+      const { container } = render(<PaygPlanSection />);
 
-    expect(container.innerHTML).toBe("");
-    expect(mocks.query).not.toHaveBeenCalled();
-  });
+      expect(container.innerHTML).toBe("");
+      expect(mocks.query).not.toHaveBeenCalled();
+    },
+  );
 });

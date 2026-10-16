@@ -5,8 +5,10 @@ package demoseed
 import (
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // TestSeedRefusesToDestroyLegacyChannelsContent pins a deletion the seed used
@@ -20,12 +22,16 @@ import (
 func TestSeedRefusesToDestroyLegacyChannelsContent(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+
 	db, err := infra.CloneTestDatabase(t, "channelslegacyseeddb")
 	require.NoError(t, err)
+	blob := assetstest.NewTestBlobStore(t)
 	spec := LocalSpec()
 
 	// A first seed succeeds and leaves no legacy document behind.
-	seedLocalPostgres(ctx, t, db, spec)
+	_, err = seedPostgres(ctx, logger, db, blob, spec)
+	require.NoError(t, err)
 	var documents int64
 	require.NoError(t, db.QueryRow(ctx, "SELECT count(*) FROM channels_state").Scan(&documents)) //nolint:glint // notestingrawsql: drives the superseded channels_state document, which has no production query by design — nothing writes it any more.
 	require.Zero(t, documents)
@@ -40,7 +46,7 @@ func TestSeedRefusesToDestroyLegacyChannelsContent(t *testing.T) {
 			`"preferences":{},"grants":{},"cursor":1}`)
 	require.NoError(t, err)
 
-	err = demoseedtest.ExecPostgresScript(ctx, db, spec.Rewrite(postgresSQL))
+	_, err = seedPostgres(ctx, logger, db, blob, spec)
 	require.Error(t, err, "the seed deleted a legacy document that still held content")
 	require.ErrorContains(t, err, "channels-convert")
 
@@ -56,5 +62,6 @@ func TestSeedRefusesToDestroyLegacyChannelsContent(t *testing.T) {
 		`UPDATE channels_state SET state = '{"enabled":true,"instances":{},"threads":{},"messages":[],"preferences":{},"grants":{},"cursor":0}'::jsonb WHERE organization_id = $1`,
 		spec.OrgID)
 	require.NoError(t, err)
-	seedLocalPostgres(ctx, t, db, spec)
+	_, err = seedPostgres(ctx, logger, db, blob, spec)
+	require.NoError(t, err)
 }

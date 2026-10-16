@@ -6346,6 +6346,228 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/signupOffers:
+        get:
+            tags:
+                - admin
+            summary: listSignupOffers admin
+            description: List staff-managed signup offers. Stripe owns all promotion terms.
+            operationId: adminListSignupOffers
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSignupOffersResponseBody'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/signupOffers.create:
+        post:
+            tags:
+                - admin
+            summary: createSignupOffer admin
+            description: Create a disabled signup offer mapped to an exact Stripe promotion code ID.
+            operationId: adminCreateSignupOffer
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSignupOfferRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSignupOffer'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/signupOffers.update:
+        post:
+            tags:
+                - admin
+            summary: updateSignupOffer admin
+            description: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.
+            operationId: adminUpdateSignupOffer
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSignupOfferRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSignupOffer'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/supportCoverage.get:
         get:
             description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.'
@@ -20305,6 +20527,14 @@ paths:
                   name: org_name
                   schema:
                     description: Optional organization name. When set, the organization is created for a new user during the auth callback.
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional partner signup code.
+                  in: query
+                  name: partner_code
+                  schema:
+                    description: Optional partner signup code.
+                    maxLength: 80
                     type: string
                 - allowEmptyValue: true
                   description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
@@ -46718,6 +46948,104 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuer
+    /rpc/organizationUserSessionIssuers.getAuthenticationHostImpact:
+        get:
+            description: 'Preview moving a user_session_issuer in the caller''s organization onto or off the deployment''s authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.'
+            operationId: getOrganizationUserSessionIssuerAuthenticationHostImpact
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_issuer id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: True to preview moving onto the authentication host, false to preview moving off it.
+                  in: query
+                  name: use_authentication_host
+                  required: true
+                  schema:
+                    description: True to preview moving onto the authentication host, false to preview moving off it.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuerAuthenticationHostImpact'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getAuthenticationHostImpact organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: getAuthenticationHostImpact
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuerAuthenticationHostImpact
     /rpc/organizationUserSessionIssuers.getCimdClient:
         get:
             description: Get a custom CIMD document URL on an organization-owned user_session_issuer. Requires org:read.
@@ -47514,6 +47842,93 @@ paths:
             x-speakeasy-name-override: move
             x-speakeasy-react-hook:
                 name: MoveOrganizationUserSessionIssuer
+    /rpc/organizationUserSessionIssuers.setAuthenticationHost:
+        post:
+            description: Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.
+            operationId: setOrganizationUserSessionIssuerAuthenticationHost
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetAuthenticationHostRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setAuthenticationHost organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: setAuthenticationHost
+            x-speakeasy-react-hook:
+                name: SetOrganizationUserSessionIssuerAuthenticationHost
     /rpc/organizationUserSessionIssuers.update:
         post:
             description: Update an organization-owned user_session_issuer. Requires org:admin.
@@ -48006,7 +48421,7 @@ paths:
                 name: Organization
     /rpc/organizations.getGateway:
         get:
-            description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, and not for a disabled organization. Requires org:read.'
+            description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.'
             operationId: getOrganizationGateway
             parameters:
                 - allowEmptyValue: true
@@ -82559,6 +82974,136 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: UserSessionIssuer
+    /rpc/userSessionIssuers.getAttachImpact:
+        get:
+            description: 'Preview what attaching a user_session_issuer to an existing MCP server, toolset, or meta MCP server changes for its clients, before calling the matching update. Name exactly one of mcp_server_id, toolset_id, or meta_mcp_server_id; omit user_session_issuer_id to preview detaching the current issuer. Clients and sessions belong to an issuer, so any change of issuer requires the server''s clients to authorize again. Advisory only: the update does not require it. Requires the mcp:write access the matching update requires.'
+            operationId: getUserSessionIssuerAttachImpact
+            parameters:
+                - allowEmptyValue: true
+                  description: The MCP server the issuer would be attached to.
+                  in: query
+                  name: mcp_server_id
+                  schema:
+                    description: The MCP server the issuer would be attached to.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The toolset the issuer would be attached to.
+                  in: query
+                  name: toolset_id
+                  schema:
+                    description: The toolset the issuer would be attached to.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The meta MCP server the issuer would be attached to.
+                  in: query
+                  name: meta_mcp_server_id
+                  schema:
+                    description: The meta MCP server the issuer would be attached to.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The issuer to attach. Omit to preview detaching the current issuer.
+                  in: query
+                  name: user_session_issuer_id
+                  schema:
+                    description: The issuer to attach. Omit to preview detaching the current issuer.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuerAttachImpact'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getAttachImpact userSessionIssuers
+            tags:
+                - userSessionIssuers
+            x-speakeasy-name-override: getAttachImpact
+            x-speakeasy-react-hook:
+                name: UserSessionIssuerAttachImpact
     /rpc/userSessionIssuers.list:
         get:
             description: List user_session_issuers in the caller's project.
@@ -88754,6 +89299,36 @@ components:
                     type: string
             required:
                 - email
+        AdminSignupOffer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                enabled:
+                    type: boolean
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                signup_flow:
+                    type: string
+                    enum:
+                        - tailscale_partner_gateway
+                stripe_promotion_code_id:
+                    type: string
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - name
+                - stripe_promotion_code_id
+                - signup_flow
+                - enabled
+                - created_at
+                - updated_at
         AdminSpendBreakdownResponse:
             type: object
             properties:
@@ -93974,6 +94549,12 @@ components:
                 enabled:
                     type: boolean
                     description: Whether to enable evaluation; omission defaults to true
+                input_strategy:
+                    type: string
+                    description: Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+                    enum:
+                        - single_message
+                        - sliding_window
                 instructions:
                     type: string
                     description: Optional classification instructions; empty stores no value
@@ -94001,6 +94582,12 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                window_size:
+                    type: integer
+                    description: Total sliding window messages including the target; omission defaults to 5
+                    format: int64
+                    minimum: 2
+                    maximum: 10
             required:
                 - name
                 - mode
@@ -94076,6 +94663,25 @@ components:
             required:
                 - url
                 - expires_at
+        CreateSignupOfferRequestBody:
+            type: object
+            properties:
+                name:
+                    type: string
+                    minLength: 1
+                    maxLength: 200
+                signup_flow:
+                    type: string
+                    enum:
+                        - tailscale_partner_gateway
+                stripe_promotion_code_id:
+                    type: string
+                    pattern: ^promo_[A-Za-z0-9_]+$
+                    maxLength: 255
+            required:
+                - name
+                - stripe_promotion_code_id
+                - signup_flow
         CreateSkillRequestBody:
             type: object
             properties:
@@ -99742,6 +100348,9 @@ components:
         InfoResponseBody:
             type: object
             properties:
+                accepted_signup_offer_flow:
+                    type: string
+                    description: Display-only signup offer variant for an accepted promotion; not billing eligibility
                 active_organization_dashboard_url:
                     type: string
                     description: Dashboard base URL of the platform host the active organization lives on. Set only for an ordinary session whose request arrived on a different platform host; the dashboard moves there.
@@ -102334,6 +102943,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - log:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -102390,6 +103000,7 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - log:read
                             - agent:read
                             - agent:write
                             - agent:authorize
@@ -102606,6 +103217,15 @@ components:
                     description: Signals in this page
             required:
                 - signals
+        ListSignupOffersResponseBody:
+            type: object
+            properties:
+                offers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminSignupOffer'
+            required:
+                - offers
         ListSkillDistributionsResult:
             type: object
             properties:
@@ -105709,6 +106329,7 @@ components:
                         - multiple_organization_issuers
                         - custom_domain_only
                         - organization_disabled
+                        - turned_off
                 url:
                     type: string
                     description: The gateway's MCP URL. Set only when available.
@@ -107140,6 +107761,9 @@ components:
                 network_ingress_enabled:
                     type: boolean
                     description: Whether the organization has the staff-managed private network ingress entitlement
+                organization_gateway_disabled:
+                    type: boolean
+                    description: Whether an organization admin turned the organization gateway off, so its routes answer 404
                 platform_mcp_enabled:
                     type: boolean
                     description: Whether the organization can use the Speakeasy Platform MCP capability
@@ -107194,6 +107818,7 @@ components:
                 - session_portability_enabled
                 - network_ingress_enabled
                 - signals_intelligence_enabled
+                - organization_gateway_disabled
                 - device_agent
         Project:
             type: object
@@ -108265,6 +108890,10 @@ components:
                 org_name:
                     type: string
                     description: The name of the org to register
+                partner_code:
+                    type: string
+                    description: Optional partner signup code.
+                    maxLength: 80
             required:
                 - org_name
         RegisterWorkloadIssuerForm:
@@ -109241,6 +109870,7 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
+                        - log:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -111354,6 +111984,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - log:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -111752,6 +112383,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - log:read
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -112867,6 +113499,19 @@ components:
             required:
                 - target_id
                 - access
+        SetAuthenticationHostRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The user_session_issuer id.
+                    format: uuid
+                use_authentication_host:
+                    type: boolean
+                    description: True to move onto the authentication host, false to move off it.
+            required:
+                - id
+                - use_authentication_host
         SetBillingMetadataRequestBody:
             type: object
             properties:
@@ -113077,6 +113722,7 @@ components:
                         - session_portability
                         - network_ingress
                         - signals_intelligence
+                        - organization_gateway_disabled
                     maxLength: 60
                 organization_id:
                     type: string
@@ -113191,6 +113837,7 @@ components:
                         - session_portability
                         - network_ingress
                         - signals_intelligence
+                        - organization_gateway_disabled
                     maxLength: 60
                 organization_id:
                     type: string
@@ -113987,6 +114634,12 @@ components:
                     type: string
                     description: Sensor ID
                     format: uuid
+                input_strategy:
+                    type: string
+                    description: Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+                    enum:
+                        - single_message
+                        - sliding_window
                 instructions:
                     type: string
                     description: Optional framing instructions for classification
@@ -114022,8 +114675,16 @@ components:
                     type: string
                     description: Last update time
                     format: date-time
+                window_size:
+                    type: integer
+                    description: Sliding window size including the target message, between 2 and 10; defaults to 5
+                    format: int64
+                    minimum: 2
+                    maximum: 10
             description: A project-scoped sensor with ordered live references to custom signals. signal_ids is always present, including when empty.
             required:
+                - input_strategy
+                - window_size
                 - enabled
                 - match_expression
                 - id
@@ -115851,6 +116512,16 @@ components:
                     type: string
                     description: Start of the current Stripe service period
                     format: date-time
+                discount_description:
+                    type: string
+                    description: Verified terms of a currently applied Stripe subscription discount; absent when unsupported or inactive
+                discount_ends_at:
+                    type: string
+                    description: Discount expiration reported by Stripe, when present
+                    format: date-time
+                gateway_promotion_applied:
+                    type: boolean
+                    description: Whether the live discount and gateway price verify the monthly five GiB promotion
                 payment_failed:
                     type: boolean
                     description: Whether a past-due subscription has an open latest invoice with an unpaid balance
@@ -120533,6 +121204,12 @@ components:
                     type: string
                     description: Sensor ID
                     format: uuid
+                input_strategy:
+                    type: string
+                    description: Message context used for classification. Sliding windows classify the current message with preceding messages ordered by timestamp.
+                    enum:
+                        - single_message
+                        - sliding_window
                 instructions:
                     type: string
                     description: Replacement instructions; empty clears it
@@ -120560,6 +121237,12 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                window_size:
+                    type: integer
+                    description: Replacement total sliding window messages, including the target; omission preserves it
+                    format: int64
+                    minimum: 2
+                    maximum: 10
             required:
                 - id
         UpdateSigintSignalForm:
@@ -120585,6 +121268,32 @@ components:
                     maxLength: 40
             required:
                 - id
+        UpdateSignupOfferRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                    minLength: 1
+                    maxLength: 200
+                signup_flow:
+                    type: string
+                    enum:
+                        - tailscale_partner_gateway
+                stripe_promotion_code_id:
+                    type: string
+                    pattern: ^promo_[A-Za-z0-9_]+$
+                    maxLength: 255
+            required:
+                - name
+                - stripe_promotion_code_id
+                - signup_flow
+                - id
+                - enabled
         UpdateSkillRequestBody:
             type: object
             properties:
@@ -121685,6 +122394,9 @@ components:
         UserSessionIssuer:
             type: object
             properties:
+                authentication_host_available:
+                    type: boolean
+                    description: Whether this deployment has an authentication host the issuer can be moved onto. Present on responses, not audit snapshots.
                 authn_challenge_mode:
                     type: string
                     description: chain | interactive.
@@ -121768,6 +122480,48 @@ components:
                 - issuer_url_pinned
                 - created_at
                 - updated_at
+        UserSessionIssuerAttachImpact:
+            type: object
+            properties:
+                authorization_server_changes:
+                    type: boolean
+                    description: 'True when the authorization server the server advertises to clients changes: its own per-server authorization server, a shared authorization server''s issuer URL, or none. Anything configured with the current authorization server, such as an identity provider or a federated platform, must be updated.'
+                candidate_issuer:
+                    $ref: '#/components/schemas/UserSessionIssuer'
+                current_issuer:
+                    $ref: '#/components/schemas/UserSessionIssuer'
+                reauthorization_required:
+                    type: boolean
+                    description: True when the server has an issuer and the change replaces or removes it. Its clients' registrations and sessions belong to the current issuer, so every client must register and authorize again.
+            description: What attaching a user_session_issuer to an existing MCP server changes for its clients.
+            required:
+                - reauthorization_required
+                - authorization_server_changes
+        UserSessionIssuerAuthenticationHostImpact:
+            type: object
+            properties:
+                authorization_server_after:
+                    type: string
+                    description: Where clients sign in after the move, in the same terms.
+                authorization_server_before:
+                    type: string
+                    description: 'Where clients sign in now: the shared authorization server''s issuer URL, or the origin that announces each MCP server''s own authorization server. Empty for a shared issuer this deployment does not serve.'
+                changes:
+                    type: boolean
+                    description: Whether the move changes where clients sign in. False when the issuer is already where it would move.
+                issuer:
+                    $ref: '#/components/schemas/UserSessionIssuer'
+                mcp_server_count:
+                    type: integer
+                    description: Live MCP servers, toolsets, and meta MCP servers attached to the issuer. Those on a custom domain keep announcing their own authorization servers there.
+                    format: int64
+            description: What moving a user_session_issuer onto or off the authentication host changes for its clients.
+            required:
+                - issuer
+                - authorization_server_before
+                - authorization_server_after
+                - changes
+                - mcp_server_count
         UserSessionIssuerCimdClient:
             type: object
             properties:

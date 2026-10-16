@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 
 import { OrgSidebar } from "./org-sidebar";
 import type { ReactNode } from "react";
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   isPlatformAdmin: false,
   productTier: "enterprise" as ProductTier,
   adminOrganizationId: null as string | null,
+  userSessionIssuersFlag: "disabled" as "enabled" | "disabled",
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () =>
@@ -69,6 +70,9 @@ vi.mock("@/hooks/useProductTier", () => ({
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
 }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: mocks.userSessionIssuersFlag }),
+}));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: mocks.features,
 }));
@@ -114,15 +118,17 @@ vi.mock("@/components/require-scope", () => ({
 }));
 vi.mock("@/components/scope-gated-nav-group", () => ({
   ScopeGatedNavGroup: ({
+    label: groupLabel,
     items,
   }: {
+    label: string;
     items: {
       item: { title: string; href: () => string };
       label?: string;
       scope?: string | string[];
     }[];
   }) => (
-    <>
+    <nav aria-label={groupLabel}>
       {items.map(({ item, label, scope }) => (
         <a
           key={item.title}
@@ -133,7 +139,7 @@ vi.mock("@/components/scope-gated-nav-group", () => ({
           {label ?? item.title}
         </a>
       ))}
-    </>
+    </nav>
   ),
 }));
 vi.mock("./sidebar-user-menu", () => ({ SidebarUserMenu: () => null }));
@@ -145,6 +151,7 @@ afterEach(() => {
   mocks.isPlatformAdmin = false;
   mocks.productTier = "enterprise";
   mocks.adminOrganizationId = null;
+  mocks.userSessionIssuersFlag = "disabled";
 });
 
 it("lists one IDP and SSO entry under Team and no vendor entry", () => {
@@ -177,6 +184,20 @@ it.each([
   expect(screen.getByTestId("selection").getAttribute("data-item")).toBe(
     active === "identity" ? "IDP and SSO" : active,
   );
+});
+
+it("lists Speakeasy authorization servers under Settings only once rolled out", () => {
+  render(<OrgSidebar />);
+  expect(screen.queryByRole("link", { name: "userSessionIssuers" })).toBeNull();
+  cleanup();
+
+  mocks.userSessionIssuersFlag = "enabled";
+  render(<OrgSidebar />);
+  const link = within(
+    screen.getByRole("navigation", { name: "Settings" }),
+  ).getByRole("link", { name: "userSessionIssuers" });
+  expect(link.textContent).toBe("Authorization Servers");
+  expect(link.getAttribute("data-scope")).toBe("org:read org:admin");
 });
 
 it("lists the Access Hub under Secure, gated on the workload scopes", () => {

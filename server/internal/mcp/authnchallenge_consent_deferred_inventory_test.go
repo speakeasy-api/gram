@@ -75,7 +75,7 @@ func requireConsentInventoryConflict(t *testing.T, fx consentActionFixture) {
 func logRecords(t *testing.T, logs *syncBuffer, msg string) []map[string]any {
 	t.Helper()
 	var out []map[string]any
-	for _, line := range strings.Split(logs.String(), "\n") {
+	for line := range strings.SplitSeq(logs.String(), "\n") {
 		if line == "" {
 			continue
 		}
