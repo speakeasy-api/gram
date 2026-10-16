@@ -7292,6 +7292,103 @@ func (q *Queries) ListEMAVendorAcceptance(ctx context.Context, organizationID st
 	return items, nil
 }
 
+const listEMAVendorAcceptanceForIssuers = `-- name: ListEMAVendorAcceptanceForIssuers :many
+SELECT c.ema_provider,
+  rc.remote_session_issuer_id AS external_issuer_id,
+  c.internal_session_issuer_id,
+  MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
+JOIN remote_session_ema_bindings b ON b.id = c.remote_session_ema_binding_id
+  AND b.organization_id = c.organization_id AND b.project_id = c.project_id
+  AND b.generation = c.ema_binding_generation AND b.remote_session_client_id = c.remote_session_client_id
+  AND b.state IS DISTINCT FROM 'unlinked'
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  AND (i.project_id = c.project_id OR (i.project_id IS NULL AND (i.organization_id = c.organization_id OR i.organization_id IS NULL)))
+LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
+WHERE c.organization_id = $1::text
+  AND c.remote_session_issuer_id = ANY($2::uuid[])
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id
+`
+
+type ListEMAVendorAcceptanceForIssuersParams struct {
+	OrganizationID         string
+	RemoteSessionIssuerIds []uuid.UUID
+}
+
+type ListEMAVendorAcceptanceForIssuersRow struct {
+	EmaProvider             string
+	ExternalIssuerID        uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	LastAcceptedAt          pgtype.Timestamptz
+}
+
+// ListEMAVendorAcceptance restricted to credentials naming one of the given
+// issuer records, for one vendor's views.
+func (q *Queries) ListEMAVendorAcceptanceForIssuers(ctx context.Context, arg ListEMAVendorAcceptanceForIssuersParams) ([]ListEMAVendorAcceptanceForIssuersRow, error) {
+	rows, err := q.db.Query(ctx, listEMAVendorAcceptanceForIssuers, arg.OrganizationID, arg.RemoteSessionIssuerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAVendorAcceptanceForIssuersRow
+	for rows.Next() {
+		var i ListEMAVendorAcceptanceForIssuersRow
+		if err := rows.Scan(
+			&i.EmaProvider,
+			&i.ExternalIssuerID,
+			&i.InternalSessionIssuerID,
+			&i.LastAcceptedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAVendorIssuerCandidates = `-- name: ListEMAVendorIssuerCandidates :many
+SELECT i.id, i.issuer
+FROM remote_session_issuers i
+WHERE i.deleted IS FALSE
+  AND (i.organization_id = $1::text
+    OR (i.organization_id IS NULL AND i.project_id IS NULL)
+    OR i.project_id IN (SELECT p.id FROM projects p WHERE p.organization_id = $1::text AND p.deleted IS FALSE))
+`
+
+type ListEMAVendorIssuerCandidatesRow struct {
+	ID     uuid.UUID
+	Issuer string
+}
+
+// Status only: every live issuer record a credential in the organization can
+// name, so callers can pick the spellings that normalize to one vendor.
+func (q *Queries) ListEMAVendorIssuerCandidates(ctx context.Context, organizationID string) ([]ListEMAVendorIssuerCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listEMAVendorIssuerCandidates, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAVendorIssuerCandidatesRow
+	for rows.Next() {
+		var i ListEMAVendorIssuerCandidatesRow
+		if err := rows.Scan(&i.ID, &i.Issuer); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGlobalRemoteSessionClientsByIssuerID = `-- name: ListGlobalRemoteSessionClientsByIssuerID :many
 SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
