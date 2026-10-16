@@ -2,4 +2,4 @@
 // versions:
 //   sqlc v1.31.1
 
-package upstreamclientsbackfill
+package associationbackfill
