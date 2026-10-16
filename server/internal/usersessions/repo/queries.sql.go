@@ -3083,6 +3083,101 @@ func (q *Queries) ListSharedUserSessionIssuersInOrganization(ctx context.Context
 	return items, nil
 }
 
+const listUpstreamClientSelections = `-- name: ListUpstreamClientSelections :many
+SELECT sel.mcp_server_id,
+       sel.remote_session_client_id,
+       chosen.remote_session_issuer_id AS remote_session_issuer_id,
+       sel.no_auth,
+       sel.source,
+       (
+         CASE
+           WHEN sel.no_auth THEN NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.deleted IS FALSE
+           )
+           ELSE EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS a
+             JOIN remote_session_clients AS c
+               ON c.id = a.remote_session_client_id
+              AND c.deleted IS FALSE
+             JOIN remote_session_client_user_session_issuers AS link
+               ON link.remote_session_client_id = a.remote_session_client_id
+              AND link.user_session_issuer_id = $1::uuid
+             WHERE a.mcp_server_id = sel.mcp_server_id
+               AND a.remote_session_client_id = sel.remote_session_client_id
+               AND a.deleted IS FALSE
+           )
+         END
+       )::boolean AS usable
+FROM upstream_client_selections AS sel
+LEFT JOIN remote_session_clients AS chosen
+  ON chosen.id = sel.remote_session_client_id
+WHERE sel.credential_kind = $2::text
+  AND sel.credential_id = $3::uuid
+  AND sel.mcp_server_id = ANY($4::uuid[])
+  AND sel.organization_id = $5::text
+  AND sel.deleted IS FALSE
+`
+
+type ListUpstreamClientSelectionsParams struct {
+	UserSessionIssuerID uuid.UUID
+	CredentialKind      string
+	CredentialID        uuid.UUID
+	McpServerIds        []uuid.UUID
+	OrganizationID      string
+}
+
+type ListUpstreamClientSelectionsRow struct {
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	NoAuth                bool
+	Source                string
+	Usable                bool
+}
+
+// One credential's choices for the given MCP servers, with whether each can
+// still be used: a chosen client must be live, still associated with the server, and
+// still bound to the credential's user session issuer, and a no-auth choice
+// holds only while the server has no associated client.
+// An unusable choice is reported as such rather than replaced, so the caller
+// fails closed instead of switching clients.
+func (q *Queries) ListUpstreamClientSelections(ctx context.Context, arg ListUpstreamClientSelectionsParams) ([]ListUpstreamClientSelectionsRow, error) {
+	rows, err := q.db.Query(ctx, listUpstreamClientSelections,
+		arg.UserSessionIssuerID,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerIds,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUpstreamClientSelectionsRow
+	for rows.Next() {
+		var i ListUpstreamClientSelectionsRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.RemoteSessionClientID,
+			&i.RemoteSessionIssuerID,
+			&i.NoAuth,
+			&i.Source,
+			&i.Usable,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionClientFacets = `-- name: ListUserSessionClientFacets :many
 SELECT c.id::text AS value, c.client_name AS display_name, COUNT(*)::bigint AS count
 FROM user_sessions AS s

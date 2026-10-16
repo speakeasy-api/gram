@@ -141,7 +141,12 @@ func NewTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 var (
 	ErrNoValidToken                 = errors.New("remotesessions: no valid token for subject")
 	ErrNoRemoteSessionClientBinding = errors.New("remotesessions: no client binding for remote issuer")
-	ErrInvalidAuthorizationRequest  = errors.New("remotesessions: invalid authorization request")
+
+	// ErrChosenClientUnbound means the client a credential chose is no longer
+	// bound to its user session issuer, so its credential cannot be resolved
+	// there. It wraps ErrNoValidToken: reconnecting records a fresh choice.
+	ErrChosenClientUnbound         = fmt.Errorf("%w: chosen client is not bound to the user session issuer", ErrNoValidToken)
+	ErrInvalidAuthorizationRequest = errors.New("remotesessions: invalid authorization request")
 
 	// ErrRemoteSessionUnavailable means a required upstream token could not be
 	// refreshed for a reason that clears on its own: the upstream token
@@ -538,7 +543,7 @@ func (m *ChallengeManager) ResolveAvailableAccessTokens(
 // most one entry, keyed by the client's remote session issuer.
 //
 // The client must still be bound to the user session issuer and visible to
-// the project: otherwise it returns ErrNoValidToken, or an empty map when
+// the project: otherwise it returns ErrChosenClientUnbound, even when
 // skipUnusable is set, and never another client's credential.
 func (m *ChallengeManager) ResolveClientAccessTokens(
 	ctx context.Context,
@@ -557,10 +562,7 @@ func (m *ChallengeManager) ResolveClientAccessTokens(
 		return c.ClientID != clientID
 	})
 	if len(chosen) == 0 {
-		if skipUnusable {
-			return map[uuid.UUID]UpstreamToken{}, nil
-		}
-		return nil, ErrNoValidToken
+		return nil, ErrChosenClientUnbound
 	}
 	return m.resolveClientTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, chosen, skipUnusable)
 }

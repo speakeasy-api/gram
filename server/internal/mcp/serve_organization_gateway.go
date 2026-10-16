@@ -316,7 +316,9 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 
 // newOrganizationGatewayTokens resolves upstream credentials for the
 // authenticated subject the way a member's own endpoint would: partially,
-// so a member whose provider is not connected degrades on its own.
+// so a member whose provider is not connected degrades on its own. A stored
+// gateway serving from credential choices uses it too, for its hosted
+// members, so the issuer's clients resolve only when one needs them.
 func (s *Service) newOrganizationGatewayTokens(authentication *issuerGateAuthentication) *projectTokenCache {
 	endpoint := authentication.endpoint
 	return &projectTokenCache{

@@ -81,7 +81,7 @@ func (r consentRouting) unroutable(client remotesessions.Client, resource string
 			return false
 		}
 		for _, m := range members {
-			if grantRoutesToUpstream(resource, m.UpstreamUrl, m.Tunneled) && (m.Tunneled || !r.duplicated(m.ProjectID, m.UpstreamUrl)) {
+			if grantRoutesToUpstream(resource, m.UpstreamUrl, m.Tunneled) && (m.Tunneled || r.chosenClient || !r.duplicated(m.ProjectID, m.UpstreamUrl)) {
 				return false
 			}
 		}
@@ -159,6 +159,7 @@ func (s *Service) resolveConsentRouting(
 			return r, fmt.Errorf("stamp consent subject context: %w", err)
 		}
 		r.backend = consentBackendMeta
+		r.chosenClient = s.upstreamSelectionServing(ctx, endpoint.OrganizationID)
 		r.members = make(map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, len(clients))
 		for _, c := range clients {
 			if st, ok := statuses[c.ID]; !ok || st.Status != remotesessions.RemoteSessionActive {

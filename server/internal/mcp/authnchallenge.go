@@ -956,8 +956,12 @@ type issuerGateAuthentication struct {
 
 	// chosenClient narrows upstream resolution to the one client the
 	// credential chose for the endpoint's server; invalid resolves every
-	// client the issuer binds.
+	// client the issuer binds unless chosenNoAuth is set.
 	chosenClient uuid.NullUUID
+
+	// chosenNoAuth reports that the credential chose no upstream
+	// authentication for the endpoint's server, so nothing is resolved.
+	chosenNoAuth bool
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1090,6 +1094,7 @@ func (s *Service) authenticateIssuerGate(
 
 		refreshableUserSession: refreshableUserSession,
 		chosenClient:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		chosenNoAuth:           false,
 	}, toolSelection, nil
 }
 

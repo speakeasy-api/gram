@@ -137,6 +137,7 @@ type metaMemberCandidate struct {
 func (s *Service) resolveMetaMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
+	organizationID string,
 	metaServerID uuid.UUID,
 	projectID uuid.UUID,
 ) (context.Context, []metaMember, error) {
@@ -184,7 +185,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 	if err != nil {
 		return ctx, nil, err
 	}
-	if err := s.attachAssociatedClients(ctx, members); err != nil {
+	if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
 		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
 	}
 	return ctx, members, nil
@@ -197,7 +198,7 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 	if endpoint.IsOrganizationGateway() {
 		return s.resolveOrganizationMemberSnapshot(ctx, logger, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	}
-	return s.resolveMetaMemberSnapshot(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	return s.resolveMetaMemberSnapshot(ctx, logger, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 }
 
 // resolveOrganizationMemberSnapshot derives a gateway's members from the
@@ -268,7 +269,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	if err != nil {
 		return ctx, nil, err
 	}
-	if err := s.attachAssociatedClients(ctx, members); err != nil {
+	if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
 		return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
 	}
 	var clients []remotesessions.Client

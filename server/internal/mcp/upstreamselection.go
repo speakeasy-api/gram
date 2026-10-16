@@ -132,6 +132,43 @@ func (u *upstreamSelector) forServer(ctx context.Context, serverID uuid.UUID) (u
 	return upstreamChoice{clientID: row.RemoteSessionClientID, remoteSessionIssuerID: row.RemoteSessionIssuerID}, nil
 }
 
+// serverChoices is one credential's recorded choices for a set of servers.
+type serverChoices map[uuid.UUID]usersessions_repo.ListUpstreamClientSelectionsRow
+
+// forServer returns the usable choice for serverID, or
+// errUpstreamSelectionMissing or errUpstreamSelectionUnusable.
+func (c serverChoices) forServer(serverID uuid.UUID) (upstreamChoice, error) {
+	row, ok := c[serverID]
+	switch {
+	case !ok:
+		return upstreamChoice{}, errUpstreamSelectionMissing
+	case !row.Usable:
+		return upstreamChoice{}, errUpstreamSelectionUnusable
+	case row.NoAuth:
+		return upstreamChoice{}, nil
+	}
+	return upstreamChoice{clientID: row.RemoteSessionClientID, remoteSessionIssuerID: row.RemoteSessionIssuerID}, nil
+}
+
+// forServers loads the credential's choices for serverIDs in one read.
+func (u *upstreamSelector) forServers(ctx context.Context, serverIDs []uuid.UUID) (serverChoices, error) {
+	rows, err := usersessions_repo.New(u.service.db).ListUpstreamClientSelections(ctx, usersessions_repo.ListUpstreamClientSelectionsParams{
+		UserSessionIssuerID: u.userSessionIssuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        u.credentialID,
+		McpServerIds:        serverIDs,
+		OrganizationID:      u.organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load upstream client choices: %w", err)
+	}
+	choices := make(serverChoices, len(rows))
+	for _, row := range rows {
+		choices[row.McpServerID] = row
+	}
+	return choices, nil
+}
+
 // directUpstreamChoice applies the credential's choice to a direct proxied
 // endpoint. It reports false when the endpoint keeps the issuer-derived path.
 // Otherwise it narrows authentication to the chosen client and returns the
@@ -159,14 +196,19 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 		return none, true, oops.E(oops.CodeUnexpected, err, "load upstream client choice").LogError(ctx, s.logger)
 	}
 	authentication.chosenClient = choice.clientID
+	authentication.chosenNoAuth = choice.noAuth()
 	return choice, true, nil
 }
 
 // resolveAccessTokens resolves the authenticated caller's upstream
 // credentials: every client the issuer binds, or only the chosen client once
-// directUpstreamChoice has narrowed authentication to one.
+// directUpstreamChoice has narrowed authentication to one, or none for a
+// no-auth choice.
 func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issuerGateAuthentication, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	endpoint := authentication.endpoint
+	if authentication.chosenNoAuth {
+		return map[uuid.UUID]remotesessions.UpstreamToken{}, nil
+	}
 	if authentication.chosenClient.Valid {
 		tokens, err := s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, authentication.chosenClient.UUID, skipUnusable)
 		if err != nil {
@@ -212,7 +254,10 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 		selector: selector,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			tokens, err := s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, member.chosenClientID.UUID, true)
-			if err != nil {
+			switch {
+			case errors.Is(err, remotesessions.ErrChosenClientUnbound):
+				return nil, err
+			case err != nil:
 				return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 			}
 			return tokens, nil
@@ -226,19 +271,29 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 // choice: the chosen client's issuer, none for no-auth, or the reason the
 // member cannot be reached. A member's failure degrades that member alone.
 func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members []metaMember) {
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, member := range members {
+		if member.backend == metaMemberBackendProxied {
+			ids = append(ids, member.serverID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	choices, err := c.selector.forServers(ctx, ids)
 	for i := range members {
 		member := &members[i]
 		if member.backend != metaMemberBackendProxied {
 			continue
 		}
-		choice, err := c.selector.forServer(ctx, member.serverID)
-		switch {
-		case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
-			member.upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
-			continue
-		case err != nil:
-			logger.ErrorContext(ctx, "load gateway member upstream client choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		if err != nil {
+			logger.ErrorContext(ctx, "load gateway member upstream client choices", attr.SlogError(err))
 			member.upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
+			continue
+		}
+		choice, cerr := choices.forServer(member.serverID)
+		if cerr != nil {
+			member.upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
 			continue
 		}
 		member.chosenClientID = choice.clientID
@@ -262,6 +317,9 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 		return tokens, nil
 	}
 	tokens, err := c.resolve(ctx, member)
+	if errors.Is(err, remotesessions.ErrChosenClientUnbound) {
+		return nil, &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
+	}
 	if err != nil {
 		return nil, &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
 	}
@@ -322,22 +380,18 @@ func (s *Service) serverAssociatedClients(ctx context.Context, organizationID st
 }
 
 // attachAssociatedClients records each proxied member's associated clients
-// when the request's organization serves from associations, so consent and
-// gateway eligibility match a client to the members it is configured for
-// rather than to every member sharing its authorization server. Hosted
-// members, and every member while the flag is off, keep the issuer match.
-func (s *Service) attachAssociatedClients(ctx context.Context, members []metaMember) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return nil
-	}
+// when the organization serves from associations, so consent and gateway
+// eligibility match a client to the members it is configured for rather than
+// to every member sharing its authorization server. Hosted members, and every
+// member while the flag is off, keep the issuer match.
+func (s *Service) attachAssociatedClients(ctx context.Context, organizationID string, members []metaMember) error {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
 		if member.backend == metaMemberBackendProxied {
 			ids = append(ids, member.serverID)
 		}
 	}
-	associated, err := s.serverAssociatedClients(ctx, authCtx.ActiveOrganizationID, ids)
+	associated, err := s.serverAssociatedClients(ctx, organizationID, ids)
 	if err != nil || associated == nil {
 		return err
 	}
@@ -365,10 +419,12 @@ func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, cli
 
 // memberNeedsSignIn reports whether a member authenticates upstream through
 // a client: it has associated clients when they are known, otherwise it has a
-// derived authorization server.
+// derived authorization server. A member with no associated client that
+// still derives an authorization server signs in through a client nobody has
+// configured for it, so it needs setup rather than reading as needing none.
 func memberNeedsSignIn(member metaMember) bool {
-	if member.associatedClients != nil {
-		return len(member.associatedClients) > 0
+	if member.associatedClients != nil && len(member.associatedClients) > 0 {
+		return true
 	}
 	return member.remoteSessionIssuerID.Valid
 }

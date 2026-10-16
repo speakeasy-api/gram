@@ -216,16 +216,23 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
-		tokens, err := s.resolveIssuerGateAccessTokens(newCtx, w, authentication)
-		if err != nil {
-			return fmt.Errorf("apply issuer gate: %w", err)
-		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
-		gateTokens = tokens
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
+		}
+		if gateMemberChoices != nil {
+			// Proxied members resolve only their chosen clients, so the
+			// issuer's other clients resolve lazily, for hosted members that
+			// need them, and an unrelated broken one blocks nothing else.
+			gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
+		} else {
+			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
+			if err != nil {
+				return fmt.Errorf("apply issuer gate: %w", err)
+			}
+			gateTokens = tokens
 		}
 		gateToolSelection = toolSelection
 	}
@@ -555,7 +562,7 @@ func (s *Service) callMetaServerTool(
 		}
 		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
 	} else {
-		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
+		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.OrganizationID, metaServer.ID, mcpEndpoint.ProjectID)
 	}
 	if err == nil && gate.memberChoices != nil {
 		gate.memberChoices.apply(ctx, logger, members)

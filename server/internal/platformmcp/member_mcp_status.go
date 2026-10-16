@@ -138,6 +138,21 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		return output, nil
 	}
 	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
+	if target.associatedClients != nil && len(target.associatedClients) == 0 {
+		// Serving from associations, a server with none either needs no
+		// upstream sign-in or signs in through a client nobody configured for
+		// it, which the runtime refuses until an administrator does.
+		if target.remoteSessionIssuerID != uuid.Nil {
+			output.State = MCPConnectionStateSetupRequired
+			output.Reason = "upstream_authorization_not_configured"
+			output.NextAction = "ask_administrator"
+			return output, nil
+		}
+		output.State = MCPConnectionStateNotApplicable
+		output.Reason = "authorization_not_required"
+		output.NextAction = "use_mcp"
+		return output, nil
+	}
 	if !target.signInRequired() {
 		// Direct upstreams select chaining bindings by resource, even without an interactive issuer.
 		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
@@ -299,7 +314,7 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("load member MCP authorization target: %w", err)
 	}
-	associated, err := s.serverAssociatedClients(ctx, principal.OrganizationID, mcpID)
+	associated, err := s.serverAssociatedClients(ctx, principal.OrganizationID, server)
 	if err != nil {
 		return memberMCPStatusTarget{}, err
 	}
@@ -384,9 +399,10 @@ func memberMCPConnectionClients(clients []remotesessions.Client, target memberMC
 
 // serverAssociatedClients returns, when the organization serves proxied MCP
 // servers from associations, the live clients associated with the server; nil
-// otherwise. An unavailable flag keeps the derived match.
-func (s *PluginsService) serverAssociatedClients(ctx context.Context, organizationID string, serverID uuid.UUID) (map[uuid.UUID]bool, error) {
-	if s.mutationFlags == nil {
+// otherwise.
+func (s *PluginsService) serverAssociatedClients(ctx context.Context, organizationID string, server mcpserversrepo.McpServer) (map[uuid.UUID]bool, error) {
+	// Hosted servers keep the derived match, as the runtime keeps them on it.
+	if s.mutationFlags == nil || !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
 		return nil, nil
 	}
 	org, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
@@ -394,11 +410,16 @@ func (s *PluginsService) serverAssociatedClients(ctx context.Context, organizati
 		return nil, fmt.Errorf("load organization: %w", err)
 	}
 	enabled, err := s.mutationFlags.IsFlagEnabled(ctx, feature.FlagUpstreamClientSelectionServing, organizationID, feature.OrgProjectGroups(org.Slug, ""))
-	if err != nil || !enabled {
+	if err != nil {
+		// The status is read-only, so it reports the flag failure rather
+		// than answering from a path serving may not be using.
+		return nil, fmt.Errorf("evaluate upstream client selection flag: %w", err)
+	}
+	if !enabled {
 		return nil, nil
 	}
 	rows, err := upstreamclientsrepo.New(s.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
-		McpServerIds:   []uuid.UUID{serverID},
+		McpServerIds:   []uuid.UUID{server.ID},
 		OrganizationID: organizationID,
 	})
 	if err != nil {

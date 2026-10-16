@@ -139,6 +139,26 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	notionUpstream.requireToolCallAuth(t, "Bearer token-notion")
 	notionUpstream.requireNeverCarried(t, "Bearer token-linear")
 
+	// Two servers deliberately share one client: each forwards the same
+	// connection, and detaching one leaves the other and the client in place.
+	mirrorUpstream := newRecordingUpstream(t, "ping")
+	mirrorSlug := "sel-mirror-" + uuid.NewString()[:8]
+	mirror, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, mirrorUpstream.url, mirrorSlug, "public", sharedIssuerID)
+	f.associate(t, ctx, mirror.ID, linearClient)
+	insertQualifiedRemoteSessionToken(t, ctx, f.ti, sharedIssuerID, linearClient, subject, "token-linear", linearUpstream.url)
+	mirrorBearer := f.issue(t, ctx, mirrorSlug, sharedIssuerID, subject)
+	_, err = upstreamclientsrepo.New(f.ti.conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+		McpServerID:           mirror.ID,
+		RemoteSessionClientID: linearClient,
+		ProjectID:             f.projectID,
+	})
+	require.NoError(t, err)
+	resp, err = callTool(t, f.ti, mirrorSlug, mirrorBearer, "ping")
+	requireReconnect(t, resp, err, mirrorSlug)
+	resp, err = callTool(t, f.ti, linearSlug, linearBearer, "ping")
+	require.NoError(t, err, "the other server keeps the shared client")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
 	// A gated server whose issuer binds no client and that has none
 	// associated records an explicit no-auth choice and calls anonymously.
 	bareIssuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)

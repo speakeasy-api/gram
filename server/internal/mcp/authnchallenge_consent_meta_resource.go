@@ -221,14 +221,23 @@ func (s *Service) gatewayMemberResourceScopes(
 	// to the same member, so each pair is resolved once per render. The
 	// project matters on an organization gateway, where a project's client is
 	// claimed only by that project's members.
+	//
+	// Serving from associations, members claim a client through their own
+	// association, so two clients of one authorization server can belong to
+	// different members and each is resolved on its own.
 	type claimKey struct {
 		remoteSessionIssuerID uuid.UUID
 		projectID             uuid.UUID
+		clientID              uuid.UUID
 	}
+	byAssociation := s.upstreamSelectionServing(ctx, endpoint.OrganizationID)
 	byClaim := make(map[claimKey]memberScopes, len(clients))
 	out := make(map[uuid.UUID]remotesessions.ResourceScopes, len(clients))
 	for _, c := range clients {
-		key := claimKey{remoteSessionIssuerID: c.RemoteSessionIssuerID, projectID: c.ProjectID.UUID}
+		key := claimKey{remoteSessionIssuerID: c.RemoteSessionIssuerID, projectID: c.ProjectID.UUID, clientID: uuid.Nil}
+		if byAssociation {
+			key.clientID = c.ID
+		}
 		resolved, seen := byClaim[key]
 		if !seen {
 			resolved = s.gatewayMemberScopes(ctx, memberCtx, endpoint, c)
