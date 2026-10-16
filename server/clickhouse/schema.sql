@@ -2194,7 +2194,6 @@ COMMENT 'One row per observed agent occurrence, resolved by the ingest dialects 
 CREATE TABLE IF NOT EXISTS tool_calls (
     organization_id String COMMENT 'Organization that owns the call.\n@access: confidential' CODEC(ZSTD),
     project_id String COMMENT 'Project that owns the call.\n@access: confidential' CODEC(ZSTD),
-    call_hour DateTime('UTC') COMMENT 'Hour of the observation that wrote this row. A call can span two hours, so readers group by event_id and widen their window by an hour.\n@access: confidential',
     event_id String COMMENT 'The tool call id that every observation of the call (decision, call, result) shares.\n@access: confidential' CODEC(ZSTD),
 
     -- Each column keeps the latest observed non-empty value, which a
@@ -2212,17 +2211,15 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     started_at_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest observation of the call.\n@access: confidential',
     ended_at_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest observation of the call.\n@access: confidential'
 ) ENGINE = AggregatingMergeTree
-PARTITION BY toYYYYMMDD(call_hour)
-ORDER BY (organization_id, project_id, call_hour, event_id)
-TTL call_hour + INTERVAL 90 DAY
+ORDER BY (organization_id, project_id, event_id)
+TTL fromUnixTimestamp64Nano(started_at_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
-COMMENT 'One row per tool call, folded from agent_events by tool_calls_mv as records arrive. Read with the -Merge combinators and GROUP BY organization_id, project_id, event_id, across call_hour. Filled forward only, from the time the view was created.';
+COMMENT 'One row per tool call, folded from agent_events by tool_calls_mv as records arrive. Read with the -Merge combinators and GROUP BY organization_id, project_id, event_id. Filled forward only, from the time the view was created.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS tool_calls_mv TO tool_calls AS
 SELECT
     organization_id,
     project_id,
-    toStartOfHour(fromUnixTimestamp64Nano(occurred_at_unix_nano, 'UTC')) AS call_hour,
     event_id,
     argMaxIfState(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name,
     argMaxIfState(mcp_server_name, observed_at_unix_nano, mcp_server_name != '') AS mcp_server_name,
@@ -2237,7 +2234,7 @@ SELECT
     max(occurred_at_unix_nano) AS ended_at_unix_nano
 FROM agent_events
 WHERE event_type IN ('tool_call', 'tool_call_result', 'tool_decision') AND event_id != ''
-GROUP BY organization_id, project_id, call_hour, event_id;
+GROUP BY organization_id, project_id, event_id;
 
 -- agent_metrics is ReplacingMergeTree, unlike agent_events, because metric
 -- measures are sums: duplicates corrupt them directly and there is no
