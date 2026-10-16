@@ -405,11 +405,15 @@ function PlatformMCPOnboardingContentInner({
   // sheet-only branch below returns it at the same position, so React keeps
   // the sheet mounted and swaps only its body. A closing sheet keeps its last
   // body so it does not slide out empty.
-  const renderSheet = (body: React.ReactNode | null): JSX.Element => {
+  const renderSheet = (
+    body: React.ReactNode | null,
+    step = "",
+  ): JSX.Element => {
     if (body) lastSheetBodyRef.current = body;
     return (
       <PlatformMCPSheetFrame
         open={body !== null}
+        step={step}
         onOpenChange={(open) => {
           if (!open) closeSetupFlow();
         }}
@@ -433,6 +437,7 @@ function PlatformMCPOnboardingContentInner({
         >
           <PlatformMCPLoading />
         </PlatformMCPStateBody>,
+        "loading",
       )
     ) : (
       <PlatformMCPLoading />
@@ -464,6 +469,7 @@ function PlatformMCPOnboardingContentInner({
         >
           {unavailable}
         </PlatformMCPStateBody>,
+        "unavailable",
       )
     ) : (
       <div className="mx-auto mt-8 max-w-xl">{unavailable}</div>
@@ -490,6 +496,7 @@ function PlatformMCPOnboardingContentInner({
           >
             {unavailable}
           </PlatformMCPStateBody>,
+          "disabled",
         )
       : unavailable;
   }
@@ -633,7 +640,14 @@ function PlatformMCPOnboardingContentInner({
       }}
     />
   ) : null;
-  const setupSheets = renderSheet(sheetBody);
+  const sheetStep = preparingPreselectedClient
+    ? "preparing"
+    : agentPickerOpen
+      ? "agent"
+      : installMethodPickerOpen
+        ? "install-method"
+        : "setup";
+  const setupSheets = renderSheet(sheetBody, sheetStep);
 
   if (sheetOnly) {
     return setupSheets;
@@ -757,16 +771,32 @@ function PlatformMCPOnboardingContentInner({
  */
 function PlatformMCPSheetFrame({
   open,
+  step,
   onOpenChange,
   children,
 }: {
   open: boolean;
+  step: string;
   onOpenChange: (open: boolean) => void;
   children?: React.ReactNode;
 }): JSX.Element {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const shownStepRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previousStep = shownStepRef.current;
+    shownStepRef.current = open ? step : null;
+    // Radix focuses the sheet when it opens. A step change inside an open
+    // sheet only swaps its body, so move focus to the sheet ourselves; it is
+    // labelled by the new step's title, which screen readers then announce.
+    if (open && previousStep !== null && previousStep !== step) {
+      contentRef.current?.focus();
+    }
+  }, [open, step]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        ref={contentRef}
         side="right"
         className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
       >
@@ -1310,7 +1340,11 @@ export function PlatformMCPSetupSheet({
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
   return (
-    <PlatformMCPSheetFrame open={props.open} onOpenChange={onOpenChange}>
+    <PlatformMCPSheetFrame
+      open={props.open}
+      step="setup"
+      onOpenChange={onOpenChange}
+    >
       <PlatformMCPSetupBody {...props} />
     </PlatformMCPSheetFrame>
   );
