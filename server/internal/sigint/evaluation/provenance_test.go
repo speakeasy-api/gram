@@ -116,5 +116,5 @@ func TestReadingPreservesStringAttributeSnapshots(t *testing.T) {
 	require.NoError(t, err)
 	decoded := &sigintv1.Reading{}
 	require.NoError(t, proto.Unmarshal(data, decoded))
-	require.Equal(t, r.GetAttributes(), decoded.GetAttributes())
+	require.Equal(t, map[string]string{"department": "example-team", "empty": ""}, decoded.GetAttributes())
 }
