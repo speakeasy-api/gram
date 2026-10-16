@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 )
 
 // orgStep is one ordered statement of the org phase.
@@ -314,6 +315,12 @@ func (s *seeder) orgProject(ctx context.Context) error {
 	}
 
 	for _, sen := range demoSigintSensors {
+		// Input configuration is an application-enforced enum. Reject an invalid
+		// shared definition so the ClickHouse readings never report a context the
+		// evaluator would not run.
+		if err := evaluation.ValidateInputConfiguration(sen.inputStrategy, int(sen.windowSize)); err != nil {
+			return fmt.Errorf("demo sigint sensor %s: %w", sen.key, err)
+		}
 		if err := s.q.OrgInsertSigintSensor(ctx, repo.OrgInsertSigintSensorParams{
 			ID:            s.det("sigint-sensor-" + sen.key),
 			ProjectID:     proj,

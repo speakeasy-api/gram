@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 )
 
 const (
@@ -61,6 +62,9 @@ func (s *seeder) chSigintReadings(ctx context.Context, ch driver.Conn) error {
 		if _, ok := sigintReadingResultTypes[sensor.mode]; !ok {
 			return fmt.Errorf("demo sigint sensor %s has unsupported mode %s", sensor.key, sensor.mode)
 		}
+		if err := evaluation.ValidateInputConfiguration(sensor.inputStrategy, int(sensor.windowSize)); err != nil {
+			return fmt.Errorf("demo sigint sensor %s: %w", sensor.key, err)
+		}
 		for n := range sigintReadingDays {
 			rows = append(rows, s.sigintReading(sensor, members, n))
 		}
@@ -85,9 +89,10 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 	}
 
 	// Single-message sensors supply only the target. Short conversations supply
-	// fewer messages than a window requests.
+	// fewer messages than a window requests. chSigintReadings rejects any other
+	// strategy before rows are built.
 	requested, supplied := uint8(1), uint8(1)
-	if sensor.inputStrategy == "sliding_window" {
+	if sensor.inputStrategy == evaluation.InputStrategySlidingWindow {
 		window := int(sensor.windowSize)
 		requested, _ = conv.ClampedIntToUint8(window)
 		supplied, _ = conv.ClampedIntToUint8(min(window, 2+n%(window+1)))
