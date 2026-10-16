@@ -296,6 +296,9 @@ export const AUDIT_ACTIONS = [
   "tunneled-mcp:delete",
   "tunneled-mcp:rotate-key",
   "tunneled-mcp:update",
+  "tunneled-mcp-server-header:create",
+  "tunneled-mcp-server-header:delete",
+  "tunneled-mcp-server-header:update",
   "unproxied-mcp:create",
   "unproxied-mcp:delete",
   "user-session-client:cimd-refresh",
@@ -977,6 +980,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "removed tunneled MCP server";
     case "tunneled-mcp:rotate-key":
       return "rotated the key for tunneled MCP server";
+    case "tunneled-mcp-server-header:create":
+      return "added tunneled MCP server header";
+    case "tunneled-mcp-server-header:update":
+      return "updated tunneled MCP server header";
+    case "tunneled-mcp-server-header:delete":
+      return "removed tunneled MCP server header";
     case "unproxied-mcp:create":
       return "added unproxied MCP server";
     case "unproxied-mcp:delete":

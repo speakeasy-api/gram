@@ -58,3 +58,30 @@ type TunneledMcpServer struct {
 	// @access: confidential
 	Deleted bool
 }
+
+type TunneledMcpServerHeader struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	TunneledMcpServerID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: confidential
+	IsRequired bool
+	// @access: confidential
+	IsSecret bool
+	// @access: secret-restricted
+	Value pgtype.Text
+	// @access: confidential
+	ValueFromRequestHeader pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}

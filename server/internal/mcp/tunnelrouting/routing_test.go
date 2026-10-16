@@ -51,9 +51,9 @@ func TestRetryerNoLiveSessionUnpublishesAndFailsOver(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, retry)
 	require.Equal(t, "http://127.0.0.1:1002", retry.RemoteURL)
-	require.Equal(t, "tunnel-1", headerValue(t, retry.Headers, wire.HeaderTunnelID))
-	require.Equal(t, "forward-token", headerValue(t, retry.Headers, wire.HeaderTunnelForwardToken))
-	require.Equal(t, "auth:stable", headerValue(t, retry.Headers, wire.HeaderTunnelConsumerSession))
+	require.Equal(t, "tunnel-1", headerValue(t, retry.RoutingHeaders, wire.HeaderTunnelID))
+	require.Equal(t, "forward-token", headerValue(t, retry.RoutingHeaders, wire.HeaderTunnelForwardToken))
+	require.Equal(t, "auth:stable", headerValue(t, retry.RoutingHeaders, wire.HeaderTunnelConsumerSession))
 
 	candidates, err := routes.Candidates(ctx, "tunnel-1")
 	require.NoError(t, err)

@@ -554,6 +554,18 @@ that URL.
       on purpose, so interactive sign-in through it (GitHub, the organization
       gateway) keeps working.
 
+31. **Tunneled MCP upstream headers** — open the **JAMF Headers** MCP server's
+    settings. Upstream Headers sits after Resource Identifier and shows the
+    always-on notice that the headers are stored on the tunnel and apply to
+    every MCP server on it, public ones included, plus the stdio note. Rows:
+    `X-Jamf-Tenant` (Static value `demo-tenant`, Required) and
+    `X-Jamf-Region` (From request header `X-Region`). The tunnel has never
+    connected and the section still renders from stored rows. In the shared
+    demo the controls are editable (visitor edits revert on the daily reseed);
+    saving a reserved name such as
+    `Gram-Key` is refused. Plugin compatibility for a plugin using JAMF Headers is
+    false because of the request-derived row.
+
 ## On failure
 
 Fix the seed (see rules in `PAGES.md`), then re-run the target that owns

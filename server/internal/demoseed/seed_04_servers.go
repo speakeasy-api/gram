@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
@@ -196,6 +198,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		RemoteMcpServerID: s.det("remotemcp-slack"),
 	}); err != nil {
 		return fmt.Errorf("insert demo slack identity header: %w", err)
+	}
+	if err := s.seedTunneledHeaders(ctx); err != nil {
+		return err
 	}
 
 	if err := s.q.ServersInsertMetaMCPServer(ctx, repo.ServersInsertMetaMCPServerParams{
@@ -538,6 +543,70 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 		RemoteSessionIssuerID: s.det("ema-idp"),
 	}); err != nil {
 		return fmt.Errorf("insert demo ema provider order: %w", err)
+	}
+	return nil
+}
+
+// seedTunneledHeaders: a private MCP server on a never-connected tunnel, with
+// the headers the tunnel adds to every forwarded request — a fixed tenant
+// selector and a value copied from the caller's request. The request-derived
+// row keeps plugins backed by this tunnel from being distributed.
+func (s *seeder) seedTunneledHeaders(ctx context.Context) error {
+	proj := s.projectID()
+	tunnelID := s.det("tunhdr-tunnel")
+	if err := s.q.ServersInsertTunnel(ctx, repo.ServersInsertTunnelParams{
+		ID:        tunnelID,
+		ProjectID: proj,
+		Name:      "JAMF Headers (on-prem)",
+		KeyHash:   "demo-nonfunctional-" + tunnelID.String(),
+	}); err != nil {
+		return fmt.Errorf("insert demo tunhdr tunnel: %w", err)
+	}
+
+	headers := []repo.ServersInsertTunnelHeaderParams{
+		{
+			ID:                     s.det("tunhdr-header-tenant"),
+			TunneledMcpServerID:    tunnelID,
+			Name:                   "X-Jamf-Tenant",
+			Description:            "Inert demo tenant selector",
+			IsRequired:             true,
+			Value:                  pgtype.Text{String: "demo-tenant", Valid: true},
+			ValueFromRequestHeader: pgtype.Text{String: "", Valid: false},
+		},
+		{
+			ID:                     s.det("tunhdr-header-region"),
+			TunneledMcpServerID:    tunnelID,
+			Name:                   "X-Jamf-Region",
+			Description:            "Copied from the caller's X-Region header. A request-derived header keeps plugins backed by this tunnel from being distributed.",
+			IsRequired:             false,
+			Value:                  pgtype.Text{String: "", Valid: false},
+			ValueFromRequestHeader: pgtype.Text{String: "X-Region", Valid: true},
+		},
+	}
+	for _, h := range headers {
+		if err := s.q.ServersInsertTunnelHeader(ctx, h); err != nil {
+			return fmt.Errorf("insert demo tunhdr header %s: %w", h.Name, err)
+		}
+	}
+
+	serverID := s.det("tunhdr-mcpserver")
+	if err := s.q.ServersInsertTunneledMCPServer(ctx, repo.ServersInsertTunneledMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           proj,
+		Name:                "JAMF Headers",
+		Slug:                "jamf-headers",
+		TunneledMcpServerID: tunnelID,
+		UserSessionIssuerID: s.det("issuer-workforce"),
+	}); err != nil {
+		return fmt.Errorf("insert demo tunhdr mcp server: %w", err)
+	}
+	if err := s.q.ServersInsertTunneledMCPEndpoint(ctx, repo.ServersInsertTunneledMCPEndpointParams{
+		ID:          s.det("tunhdr-endpoint"),
+		ProjectID:   proj,
+		McpServerID: serverID,
+		Slug:        s.spec.OrgSlug + "-jamf-headers",
+	}); err != nil {
+		return fmt.Errorf("insert demo tunhdr endpoint: %w", err)
 	}
 	return nil
 }

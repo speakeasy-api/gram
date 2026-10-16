@@ -1775,7 +1775,7 @@ func newStartCommand() *cli.Command {
 				WithDistributionAdmission(distributionAdmission)
 			remotemcp.Attach(mux, remoteMcpService)
 			unproxiedmcp.Attach(mux, unproxiedmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient), redisClient))
+			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, route.NewRedis(redisClient), redisClient))
 			mcpRuntime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{
 				Logger:     logger,
 				DB:         db,

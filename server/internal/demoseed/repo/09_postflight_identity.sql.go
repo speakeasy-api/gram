@@ -1067,6 +1067,29 @@ func (q *Queries) PostflightIDTrustedIssuerSessions(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightIDTunnelHeaders = `-- name: PostflightIDTunnelHeaders :one
+SELECT count(*)
+FROM tunneled_mcp_server_headers header
+JOIN tunneled_mcp_servers tunnel ON tunnel.id = header.tunneled_mcp_server_id
+WHERE tunnel.id = $1::uuid
+  AND tunnel.project_id = $2::uuid AND tunnel.deleted IS FALSE
+  AND header.deleted IS FALSE AND header.is_secret IS FALSE
+`
+
+type PostflightIDTunnelHeadersParams struct {
+	TunnelID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Scoped to one fixture's own tunnel, so other tunneled fixtures in the
+// project never change the count.
+func (q *Queries) PostflightIDTunnelHeaders(ctx context.Context, arg PostflightIDTunnelHeadersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDTunnelHeaders, arg.TunnelID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDUndecidedAITools = `-- name: PostflightIDUndecidedAITools :one
 SELECT count(*) FROM ai_scan_targets
 WHERE organization_id = $1::text AND status NOT IN ('approved', 'blocked')
