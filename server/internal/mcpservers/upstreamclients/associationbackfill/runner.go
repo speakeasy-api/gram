@@ -51,6 +51,48 @@ func (o Outcome) Covered() bool {
 	return o != OutcomeAmbiguous
 }
 
+// GatewayOutcome classifies one server a gateway issuer fronts.
+type GatewayOutcome string
+
+const (
+	// GatewayOutcomeGrant is a server one of the issuer's clients holds
+	// grants for: their recorded resource is the server's upstream, which is
+	// how requests route to it today.
+	GatewayOutcomeGrant GatewayOutcome = "grant"
+
+	// GatewayOutcomeDerived is a server nobody has a grant for yet whose
+	// derived authorization server is that of exactly one of the issuer's
+	// clients, which is how consent claimed it.
+	GatewayOutcomeDerived GatewayOutcome = "derived"
+
+	// GatewayOutcomeConfigured is a server already associated with the
+	// decided client.
+	GatewayOutcomeConfigured GatewayOutcome = "configured"
+
+	// GatewayOutcomeDetached is a server whose decided client was explicitly
+	// detached from it; the detach is kept.
+	GatewayOutcomeDetached GatewayOutcome = "detached"
+
+	// GatewayOutcomeUnserved is a server none of the issuer's clients serve:
+	// it needs no upstream authentication, or one the gateway has no client
+	// for. The gateway serves it no credential today either.
+	GatewayOutcomeUnserved GatewayOutcome = "unserved"
+
+	// GatewayOutcomeAmbiguous is a server several of the issuer's clients
+	// match by the same evidence. It needs explicit configuration.
+	GatewayOutcomeAmbiguous GatewayOutcome = "ambiguous"
+
+	// GatewayOutcomeConflict is a server whose grants name one client while
+	// its derived authorization server names another. It needs explicit
+	// configuration.
+	GatewayOutcomeConflict GatewayOutcome = "conflict"
+)
+
+// Covered reports whether a server with this outcome needs nothing more.
+func (o GatewayOutcome) Covered() bool {
+	return o != GatewayOutcomeAmbiguous && o != GatewayOutcomeConflict
+}
+
 // Options controls one run.
 type Options struct {
 	// OrganizationID limits the run to one organization when non-empty.
@@ -91,6 +133,30 @@ type ServerResult struct {
 	Skipped int `json:"skipped"`
 }
 
+// GatewayResult is one decision for a server a gateway issuer fronts.
+type GatewayResult struct {
+	// UserSessionIssuerID is the gateway issuer.
+	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
+
+	// MCPServerID is the fronted server.
+	MCPServerID uuid.UUID `json:"mcp_server_id"`
+
+	// ProjectID is the server's project.
+	ProjectID uuid.UUID `json:"project_id"`
+
+	// Outcome classifies the pair.
+	Outcome GatewayOutcome `json:"outcome"`
+
+	// Associate is the decided client the server is not yet associated with.
+	Associate uuid.NullUUID `json:"associate"`
+
+	// Written reports that this run wrote the association.
+	Written bool `json:"written"`
+
+	// Skipped reports a decided write whose evidence changed before it.
+	Skipped bool `json:"skipped"`
+}
+
 // Report summarizes a run. Results carry ids only, never names or URLs.
 type Report struct {
 	// Mode is "apply" or "dry_run".
@@ -117,6 +183,12 @@ type Report struct {
 
 	// Results lists every decided server.
 	Results []ServerResult `json:"results"`
+
+	// GatewayOutcomes counts gateway issuer and server pairs per outcome.
+	GatewayOutcomes map[GatewayOutcome]int `json:"gateway_outcomes"`
+
+	// GatewayResults lists every decided gateway issuer and server pair.
+	GatewayResults []GatewayResult `json:"gateway_results"`
 }
 
 // Run decides every server and, with Apply, writes the decisions.
@@ -134,6 +206,9 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		Skipped:  0,
 		Gaps:     0,
 		Results:  []ServerResult{},
+
+		GatewayOutcomes: map[GatewayOutcome]int{},
+		GatewayResults:  []GatewayResult{},
 	}
 	if opts.Apply {
 		report.Mode = "apply"
@@ -150,6 +225,9 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, fmt.Errorf("list backfill candidates after %s: %w", cursor, err)
 		}
 		if len(rows) == 0 {
+			if err := runGateways(ctx, q, opts, &report); err != nil {
+				return report, err
+			}
 			return report, nil
 		}
 		for _, server := range groupByServer(rows) {
@@ -251,6 +329,107 @@ func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 		if !row.PairLive {
 			result.Associate = append(result.Associate, row.RemoteSessionClientID.UUID)
 		}
+	}
+	return result
+}
+
+// runGateways decides every server a gateway issuer fronts and, with Apply,
+// writes the decisions.
+func runGateways(ctx context.Context, q *Queries, opts Options, report *Report) error {
+	rows, err := q.ListGatewayAssociationCandidates(ctx, opts.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("list gateway association candidates: %w", err)
+	}
+	for start := 0; start < len(rows); {
+		end := start + 1
+		for end < len(rows) && rows[end].IssuerID == rows[start].IssuerID && rows[end].McpServerID == rows[start].McpServerID {
+			end++
+		}
+		result := DecideGateway(rows[start:end])
+		if result.Associate.Valid {
+			report.Decided++
+			if opts.Apply {
+				n, err := q.BackfillGatewayAssociation(ctx, BackfillGatewayAssociationParams{
+					UserSessionIssuerID:   result.UserSessionIssuerID,
+					RemoteSessionClientID: result.Associate.UUID,
+					McpServerID:           result.MCPServerID,
+				})
+				if err != nil {
+					return fmt.Errorf("write gateway association for server %s: %w", result.MCPServerID, err)
+				}
+				result.Written, result.Skipped = n > 0, n == 0
+				if result.Written {
+					report.Written++
+				} else {
+					report.Skipped++
+				}
+			}
+		}
+		report.GatewayOutcomes[result.Outcome]++
+		if !result.Outcome.Covered() {
+			report.Gaps++
+		}
+		report.GatewayResults = append(report.GatewayResults, result)
+		start = end
+	}
+	return nil
+}
+
+// DecideGateway classifies one gateway issuer and server pair from its
+// candidate rows, which all belong to that pair. Grants decide first, since
+// requests route by them today; the derived authorization server decides
+// only a server nobody has a grant for. More than one match, or the two
+// disagreeing, is left for explicit configuration.
+func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
+	first := rows[0]
+	result := GatewayResult{
+		UserSessionIssuerID: first.IssuerID,
+		MCPServerID:         first.McpServerID,
+		ProjectID:           first.ProjectID,
+		Outcome:             GatewayOutcomeUnserved,
+		Associate:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Written:             false,
+		Skipped:             false,
+	}
+	var granted, derived []ListGatewayAssociationCandidatesRow
+	for _, row := range rows {
+		if row.GrantMatch {
+			granted = append(granted, row)
+		}
+		if row.DerivedMatch {
+			derived = append(derived, row)
+		}
+	}
+	var decided ListGatewayAssociationCandidatesRow
+	switch {
+	case len(granted) > 1:
+		result.Outcome = GatewayOutcomeAmbiguous
+		return result
+	case len(granted) == 1:
+		decided = granted[0]
+		for _, row := range derived {
+			if row.RemoteSessionClientID != decided.RemoteSessionClientID {
+				result.Outcome = GatewayOutcomeConflict
+				return result
+			}
+		}
+		result.Outcome = GatewayOutcomeGrant
+	case len(derived) > 1:
+		result.Outcome = GatewayOutcomeAmbiguous
+		return result
+	case len(derived) == 1:
+		decided = derived[0]
+		result.Outcome = GatewayOutcomeDerived
+	default:
+		return result
+	}
+	switch {
+	case decided.PairLive:
+		result.Outcome = GatewayOutcomeConfigured
+	case decided.PairRecorded:
+		result.Outcome = GatewayOutcomeDetached
+	default:
+		result.Associate = uuid.NullUUID{UUID: decided.RemoteSessionClientID, Valid: true}
 	}
 	return result
 }
