@@ -19,6 +19,7 @@ func TestValidateGrantSurface(t *testing.T) {
 		// granted at all.
 		{Scope: string(ScopeChatRead)},
 		{Scope: string(ScopeChatWrite)},
+		{Scope: string(ScopeLogRead)},
 		{Scope: string(ScopeAgentRead)},
 		{Scope: string(ScopeAgentWrite)},
 		{Scope: string(ScopeAgentAuthorize)},

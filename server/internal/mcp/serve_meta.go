@@ -68,6 +68,10 @@ type metaGateContext struct {
 	projectTokens *projectTokenCache
 	// userSessionIssuerID is the gated endpoint's issuer; uuid.Nil when ungated.
 	userSessionIssuerID uuid.UUID
+	// connectRoot is the gateway's root URL, under which each member has a
+	// connect page a signed-in person opens to connect it. Empty when nobody
+	// signs in to the gateway in a browser: ungated and agent gateways.
+	connectRoot string
 	// chainUpstream acquires a member's upstream token by identity chaining
 	// when routing finds none. Set only on the tools/call dispatch copy, so
 	// describe and consent probes never exchange; nil otherwise.
@@ -214,13 +218,16 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if err := validateMCPRequestEnvelope(ctx, logger, prepared, oops.CodeRequestTooLarge, "meta mcp request body exceeds 1 MiB"); err != nil {
 		return err
 	}
-	connectURL := ""
+	connectURL, connectRoot := "", ""
 	if metaServer.UserSessionIssuerID.Valid && resolvedEndpoint != nil {
 		root, err := resolvedEndpoint.RootURL(s.BaseURLForRequest(r))
 		if err != nil {
 			logger.WarnContext(ctx, "build gateway connect url", attr.SlogError(err))
 		} else {
 			connectURL = root + "/connect/first-party"
+			if membership.agentID == uuid.Nil {
+				connectRoot = root
+			}
 		}
 	}
 	gate := &metaGateContext{
@@ -235,6 +242,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		projectTokens:       gateProjectTokens,
 		// Uninitialized when ungated, which disables identity chaining.
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
+		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		toolSelection:       gateToolSelection,
 		authenticated:       false,
@@ -523,7 +531,11 @@ func (s *Service) callMetaServerTool(
 		err     error
 	)
 	if gate.agentID != uuid.Nil || gate.organizationGateway {
-		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID)
+		issuer := uuid.Nil
+		if gate.organizationGateway {
+			issuer = gate.userSessionIssuerID
+		}
+		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
 	} else {
 		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
 	}

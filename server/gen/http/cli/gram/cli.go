@@ -202,12 +202,12 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
-		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
-		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
+		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
+		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject)",
@@ -838,6 +838,7 @@ func ParseEndpoint(
 		authLoginFlags              = flag.NewFlagSet("login", flag.ExitOnError)
 		authLoginRedirectFlag       = authLoginFlags.String("redirect", "", "")
 		authLoginOrgNameFlag        = authLoginFlags.String("org-name", "", "")
+		authLoginPartnerCodeFlag    = authLoginFlags.String("partner-code", "", "")
 		authLoginEmailFlag          = authLoginFlags.String("email", "", "")
 		authLoginSupportHandoffFlag = authLoginFlags.String("support-handoff", "", "")
 
@@ -4686,6 +4687,17 @@ func ParseEndpoint(
 		adminAssignOrganizationOnboardingPlaybookBodyFlag              = adminAssignOrganizationOnboardingPlaybookFlags.String("body", "REQUIRED", "")
 		adminAssignOrganizationOnboardingPlaybookAdminSessionTokenFlag = adminAssignOrganizationOnboardingPlaybookFlags.String("admin-session-token", "", "")
 
+		adminListSignupOffersFlags                 = flag.NewFlagSet("list-signup-offers", flag.ExitOnError)
+		adminListSignupOffersAdminSessionTokenFlag = adminListSignupOffersFlags.String("admin-session-token", "", "")
+
+		adminCreateSignupOfferFlags                 = flag.NewFlagSet("create-signup-offer", flag.ExitOnError)
+		adminCreateSignupOfferBodyFlag              = adminCreateSignupOfferFlags.String("body", "REQUIRED", "")
+		adminCreateSignupOfferAdminSessionTokenFlag = adminCreateSignupOfferFlags.String("admin-session-token", "", "")
+
+		adminUpdateSignupOfferFlags                 = flag.NewFlagSet("update-signup-offer", flag.ExitOnError)
+		adminUpdateSignupOfferBodyFlag              = adminUpdateSignupOfferFlags.String("body", "REQUIRED", "")
+		adminUpdateSignupOfferAdminSessionTokenFlag = adminUpdateSignupOfferFlags.String("admin-session-token", "", "")
+
 		adminGetStripeSubscriptionCandidateFlags                    = flag.NewFlagSet("get-stripe-subscription-candidate", flag.ExitOnError)
 		adminGetStripeSubscriptionCandidateOrganizationIDFlag       = adminGetStripeSubscriptionCandidateFlags.String("organization-id", "REQUIRED", "")
 		adminGetStripeSubscriptionCandidateStripeSubscriptionIDFlag = adminGetStripeSubscriptionCandidateFlags.String("stripe-subscription-id", "REQUIRED", "")
@@ -4813,6 +4825,15 @@ func ParseEndpoint(
 		userSessionIssuersGetUserSessionIssuerApikeyTokenFlag      = userSessionIssuersGetUserSessionIssuerFlags.String("apikey-token", "", "")
 		userSessionIssuersGetUserSessionIssuerProjectSlugInputFlag = userSessionIssuersGetUserSessionIssuerFlags.String("project-slug-input", "", "")
 
+		userSessionIssuersGetAttachImpactFlags                   = flag.NewFlagSet("get-attach-impact", flag.ExitOnError)
+		userSessionIssuersGetAttachImpactMcpServerIDFlag         = userSessionIssuersGetAttachImpactFlags.String("mcp-server-id", "", "")
+		userSessionIssuersGetAttachImpactToolsetIDFlag           = userSessionIssuersGetAttachImpactFlags.String("toolset-id", "", "")
+		userSessionIssuersGetAttachImpactMetaMcpServerIDFlag     = userSessionIssuersGetAttachImpactFlags.String("meta-mcp-server-id", "", "")
+		userSessionIssuersGetAttachImpactUserSessionIssuerIDFlag = userSessionIssuersGetAttachImpactFlags.String("user-session-issuer-id", "", "")
+		userSessionIssuersGetAttachImpactSessionTokenFlag        = userSessionIssuersGetAttachImpactFlags.String("session-token", "", "")
+		userSessionIssuersGetAttachImpactApikeyTokenFlag         = userSessionIssuersGetAttachImpactFlags.String("apikey-token", "", "")
+		userSessionIssuersGetAttachImpactProjectSlugInputFlag    = userSessionIssuersGetAttachImpactFlags.String("project-slug-input", "", "")
+
 		userSessionIssuersDeleteUserSessionIssuerFlags                = flag.NewFlagSet("delete-user-session-issuer", flag.ExitOnError)
 		userSessionIssuersDeleteUserSessionIssuerIDFlag               = userSessionIssuersDeleteUserSessionIssuerFlags.String("id", "REQUIRED", "")
 		userSessionIssuersDeleteUserSessionIssuerSessionTokenFlag     = userSessionIssuersDeleteUserSessionIssuerFlags.String("session-token", "", "")
@@ -4844,6 +4865,15 @@ func ParseEndpoint(
 		organizationUserSessionIssuersListMcpServersCursorFlag              = organizationUserSessionIssuersListMcpServersFlags.String("cursor", "", "")
 		organizationUserSessionIssuersListMcpServersLimitFlag               = organizationUserSessionIssuersListMcpServersFlags.String("limit", "", "")
 		organizationUserSessionIssuersListMcpServersSessionTokenFlag        = organizationUserSessionIssuersListMcpServersFlags.String("session-token", "", "")
+
+		organizationUserSessionIssuersGetAuthenticationHostImpactFlags                     = flag.NewFlagSet("get-authentication-host-impact", flag.ExitOnError)
+		organizationUserSessionIssuersGetAuthenticationHostImpactIDFlag                    = organizationUserSessionIssuersGetAuthenticationHostImpactFlags.String("id", "REQUIRED", "")
+		organizationUserSessionIssuersGetAuthenticationHostImpactUseAuthenticationHostFlag = organizationUserSessionIssuersGetAuthenticationHostImpactFlags.String("use-authentication-host", "REQUIRED", "")
+		organizationUserSessionIssuersGetAuthenticationHostImpactSessionTokenFlag          = organizationUserSessionIssuersGetAuthenticationHostImpactFlags.String("session-token", "", "")
+
+		organizationUserSessionIssuersSetAuthenticationHostFlags            = flag.NewFlagSet("set-authentication-host", flag.ExitOnError)
+		organizationUserSessionIssuersSetAuthenticationHostBodyFlag         = organizationUserSessionIssuersSetAuthenticationHostFlags.String("body", "REQUIRED", "")
+		organizationUserSessionIssuersSetAuthenticationHostSessionTokenFlag = organizationUserSessionIssuersSetAuthenticationHostFlags.String("session-token", "", "")
 
 		organizationUserSessionIssuersGetIssuerDeletePreflightFlags            = flag.NewFlagSet("get-issuer-delete-preflight", flag.ExitOnError)
 		organizationUserSessionIssuersGetIssuerDeletePreflightIDFlag           = organizationUserSessionIssuersGetIssuerDeletePreflightFlags.String("id", "REQUIRED", "")
@@ -6022,6 +6052,9 @@ func ParseEndpoint(
 	adminCloneOnboardingPlaybookFlags.Usage = adminCloneOnboardingPlaybookUsage
 	adminGetOrganizationOnboardingPlaybookFlags.Usage = adminGetOrganizationOnboardingPlaybookUsage
 	adminAssignOrganizationOnboardingPlaybookFlags.Usage = adminAssignOrganizationOnboardingPlaybookUsage
+	adminListSignupOffersFlags.Usage = adminListSignupOffersUsage
+	adminCreateSignupOfferFlags.Usage = adminCreateSignupOfferUsage
+	adminUpdateSignupOfferFlags.Usage = adminUpdateSignupOfferUsage
 	adminGetStripeSubscriptionCandidateFlags.Usage = adminGetStripeSubscriptionCandidateUsage
 	adminSetStripeSubscriptionFlags.Usage = adminSetStripeSubscriptionUsage
 	adminListCustomerUsageFlags.Usage = adminListCustomerUsageUsage
@@ -6049,6 +6082,7 @@ func ParseEndpoint(
 	userSessionIssuersUpdateUserSessionIssuerFlags.Usage = userSessionIssuersUpdateUserSessionIssuerUsage
 	userSessionIssuersListUserSessionIssuersFlags.Usage = userSessionIssuersListUserSessionIssuersUsage
 	userSessionIssuersGetUserSessionIssuerFlags.Usage = userSessionIssuersGetUserSessionIssuerUsage
+	userSessionIssuersGetAttachImpactFlags.Usage = userSessionIssuersGetAttachImpactUsage
 	userSessionIssuersDeleteUserSessionIssuerFlags.Usage = userSessionIssuersDeleteUserSessionIssuerUsage
 
 	organizationUserSessionIssuersFlags.Usage = organizationUserSessionIssuersUsage
@@ -6057,6 +6091,8 @@ func ParseEndpoint(
 	organizationUserSessionIssuersGetIssuerFlags.Usage = organizationUserSessionIssuersGetIssuerUsage
 	organizationUserSessionIssuersUpdateIssuerFlags.Usage = organizationUserSessionIssuersUpdateIssuerUsage
 	organizationUserSessionIssuersListMcpServersFlags.Usage = organizationUserSessionIssuersListMcpServersUsage
+	organizationUserSessionIssuersGetAuthenticationHostImpactFlags.Usage = organizationUserSessionIssuersGetAuthenticationHostImpactUsage
+	organizationUserSessionIssuersSetAuthenticationHostFlags.Usage = organizationUserSessionIssuersSetAuthenticationHostUsage
 	organizationUserSessionIssuersGetIssuerDeletePreflightFlags.Usage = organizationUserSessionIssuersGetIssuerDeletePreflightUsage
 	organizationUserSessionIssuersDeleteIssuerFlags.Usage = organizationUserSessionIssuersDeleteIssuerUsage
 	organizationUserSessionIssuersMoveIssuerFlags.Usage = organizationUserSessionIssuersMoveIssuerUsage
@@ -9122,6 +9158,15 @@ func ParseEndpoint(
 			case "assign-organization-onboarding-playbook":
 				epf = adminAssignOrganizationOnboardingPlaybookFlags
 
+			case "list-signup-offers":
+				epf = adminListSignupOffersFlags
+
+			case "create-signup-offer":
+				epf = adminCreateSignupOfferFlags
+
+			case "update-signup-offer":
+				epf = adminUpdateSignupOfferFlags
+
 			case "get-stripe-subscription-candidate":
 				epf = adminGetStripeSubscriptionCandidateFlags
 
@@ -9195,6 +9240,9 @@ func ParseEndpoint(
 			case "get-user-session-issuer":
 				epf = userSessionIssuersGetUserSessionIssuerFlags
 
+			case "get-attach-impact":
+				epf = userSessionIssuersGetAttachImpactFlags
+
 			case "delete-user-session-issuer":
 				epf = userSessionIssuersDeleteUserSessionIssuerFlags
 
@@ -9216,6 +9264,12 @@ func ParseEndpoint(
 
 			case "list-mcp-servers":
 				epf = organizationUserSessionIssuersListMcpServersFlags
+
+			case "get-authentication-host-impact":
+				epf = organizationUserSessionIssuersGetAuthenticationHostImpactFlags
+
+			case "set-authentication-host":
+				epf = organizationUserSessionIssuersSetAuthenticationHostFlags
 
 			case "get-issuer-delete-preflight":
 				epf = organizationUserSessionIssuersGetIssuerDeletePreflightFlags
@@ -9770,7 +9824,7 @@ func ParseEndpoint(
 				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
-				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag)
+				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginPartnerCodeFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag)
 			case "switch-scopes":
 				endpoint = c.SwitchScopes()
 				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesSessionTokenFlag)
@@ -12191,6 +12245,15 @@ func ParseEndpoint(
 			case "assign-organization-onboarding-playbook":
 				endpoint = c.AssignOrganizationOnboardingPlaybook()
 				data, err = adminc.BuildAssignOrganizationOnboardingPlaybookPayload(*adminAssignOrganizationOnboardingPlaybookBodyFlag, *adminAssignOrganizationOnboardingPlaybookAdminSessionTokenFlag)
+			case "list-signup-offers":
+				endpoint = c.ListSignupOffers()
+				data, err = adminc.BuildListSignupOffersPayload(*adminListSignupOffersAdminSessionTokenFlag)
+			case "create-signup-offer":
+				endpoint = c.CreateSignupOffer()
+				data, err = adminc.BuildCreateSignupOfferPayload(*adminCreateSignupOfferBodyFlag, *adminCreateSignupOfferAdminSessionTokenFlag)
+			case "update-signup-offer":
+				endpoint = c.UpdateSignupOffer()
+				data, err = adminc.BuildUpdateSignupOfferPayload(*adminUpdateSignupOfferBodyFlag, *adminUpdateSignupOfferAdminSessionTokenFlag)
 			case "get-stripe-subscription-candidate":
 				endpoint = c.GetStripeSubscriptionCandidate()
 				data, err = adminc.BuildGetStripeSubscriptionCandidatePayload(*adminGetStripeSubscriptionCandidateOrganizationIDFlag, *adminGetStripeSubscriptionCandidateStripeSubscriptionIDFlag, *adminGetStripeSubscriptionCandidateAdminSessionTokenFlag)
@@ -12264,6 +12327,9 @@ func ParseEndpoint(
 			case "get-user-session-issuer":
 				endpoint = c.GetUserSessionIssuer()
 				data, err = usersessionissuersc.BuildGetUserSessionIssuerPayload(*userSessionIssuersGetUserSessionIssuerIDFlag, *userSessionIssuersGetUserSessionIssuerSlugFlag, *userSessionIssuersGetUserSessionIssuerSessionTokenFlag, *userSessionIssuersGetUserSessionIssuerApikeyTokenFlag, *userSessionIssuersGetUserSessionIssuerProjectSlugInputFlag)
+			case "get-attach-impact":
+				endpoint = c.GetAttachImpact()
+				data, err = usersessionissuersc.BuildGetAttachImpactPayload(*userSessionIssuersGetAttachImpactMcpServerIDFlag, *userSessionIssuersGetAttachImpactToolsetIDFlag, *userSessionIssuersGetAttachImpactMetaMcpServerIDFlag, *userSessionIssuersGetAttachImpactUserSessionIssuerIDFlag, *userSessionIssuersGetAttachImpactSessionTokenFlag, *userSessionIssuersGetAttachImpactApikeyTokenFlag, *userSessionIssuersGetAttachImpactProjectSlugInputFlag)
 			case "delete-user-session-issuer":
 				endpoint = c.DeleteUserSessionIssuer()
 				data, err = usersessionissuersc.BuildDeleteUserSessionIssuerPayload(*userSessionIssuersDeleteUserSessionIssuerIDFlag, *userSessionIssuersDeleteUserSessionIssuerSessionTokenFlag, *userSessionIssuersDeleteUserSessionIssuerApikeyTokenFlag, *userSessionIssuersDeleteUserSessionIssuerProjectSlugInputFlag)
@@ -12286,6 +12352,12 @@ func ParseEndpoint(
 			case "list-mcp-servers":
 				endpoint = c.ListMcpServers()
 				data, err = organizationusersessionissuersc.BuildListMcpServersPayload(*organizationUserSessionIssuersListMcpServersUserSessionIssuerIDFlag, *organizationUserSessionIssuersListMcpServersCursorFlag, *organizationUserSessionIssuersListMcpServersLimitFlag, *organizationUserSessionIssuersListMcpServersSessionTokenFlag)
+			case "get-authentication-host-impact":
+				endpoint = c.GetAuthenticationHostImpact()
+				data, err = organizationusersessionissuersc.BuildGetAuthenticationHostImpactPayload(*organizationUserSessionIssuersGetAuthenticationHostImpactIDFlag, *organizationUserSessionIssuersGetAuthenticationHostImpactUseAuthenticationHostFlag, *organizationUserSessionIssuersGetAuthenticationHostImpactSessionTokenFlag)
+			case "set-authentication-host":
+				endpoint = c.SetAuthenticationHost()
+				data, err = organizationusersessionissuersc.BuildSetAuthenticationHostPayload(*organizationUserSessionIssuersSetAuthenticationHostBodyFlag, *organizationUserSessionIssuersSetAuthenticationHostSessionTokenFlag)
 			case "get-issuer-delete-preflight":
 				endpoint = c.GetIssuerDeletePreflight()
 				data, err = organizationusersessionissuersc.BuildGetIssuerDeletePreflightPayload(*organizationUserSessionIssuersGetIssuerDeletePreflightIDFlag, *organizationUserSessionIssuersGetIssuerDeletePreflightSessionTokenFlag)
@@ -15174,6 +15246,7 @@ func authLoginUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] auth login", os.Args[0])
 	fmt.Fprint(os.Stderr, " -redirect STRING")
 	fmt.Fprint(os.Stderr, " -org-name STRING")
+	fmt.Fprint(os.Stderr, " -partner-code STRING")
 	fmt.Fprint(os.Stderr, " -email STRING")
 	fmt.Fprint(os.Stderr, " -support-handoff STRING")
 	fmt.Fprintln(os.Stderr)
@@ -15185,12 +15258,13 @@ func authLoginUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
 	fmt.Fprintln(os.Stderr, `    -org-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -partner-code STRING: `)
 	fmt.Fprintln(os.Stderr, `    -email STRING: `)
 	fmt.Fprintln(os.Stderr, `    -support-handoff STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --org-name \"abc123\" --email \"abc123\" --support-handoff \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --org-name \"abc123\" --partner-code \"aaa\" --email \"abc123\" --support-handoff \"abc123\"")
 }
 
 func authSwitchScopesUsage() {
@@ -15286,7 +15360,7 @@ func authRegisterUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth register --body '{\n      \"org_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth register --body '{\n      \"org_name\": \"abc123\",\n      \"partner_code\": \"aaa\"\n   }' --session-token \"abc123\"")
 }
 
 func authInfoUsage() {
@@ -20901,7 +20975,7 @@ func organizationsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organizations COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get: Get the active organization from the session.`)
-	fmt.Fprintln(os.Stderr, `    get-gateway: Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, and not for a disabled organization. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-gateway: Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    send-invite: Send a WorkOS invitation for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    revoke-invite: Revoke a pending WorkOS invitation.`)
 	fmt.Fprintln(os.Stderr, `    update-invite-role: Change the role assigned to a pending WorkOS invitation.`)
@@ -20949,7 +21023,7 @@ func organizationsGetGatewayUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, and not for a disabled organization. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -27022,7 +27096,7 @@ func sigintCreateSensorUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint create-sensor --body '{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint create-sensor --body '{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"input_strategy\": \"sliding_window\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\",\n      \"window_size\": 3\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func sigintGetSensorUsage() {
@@ -27096,7 +27170,7 @@ func sigintUpdateSensorUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint update-sensor --body '{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint update-sensor --body '{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"input_strategy\": \"sliding_window\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\",\n      \"window_size\": 3\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func sigintDeleteSensorUsage() {
@@ -30797,6 +30871,9 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    clone-onboarding-playbook: Copy a playbook into a custom one for an organization, so staff can edit it for that organization alone.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-onboarding-playbook: Read the playbook assigned to an organization and how each of its steps fares against the recorded stack.`)
 	fmt.Fprintln(os.Stderr, `    assign-organization-onboarding-playbook: Assign a playbook to an organization, or clear it. Rejected when a step's methods do not apply to the recorded stack; the error names the steps.`)
+	fmt.Fprintln(os.Stderr, `    list-signup-offers: List staff-managed signup offers. Stripe owns all promotion terms.`)
+	fmt.Fprintln(os.Stderr, `    create-signup-offer: Create a disabled signup offer mapped to an exact Stripe promotion code ID.`)
+	fmt.Fprintln(os.Stderr, `    update-signup-offer: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
 	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
 	fmt.Fprintln(os.Stderr, `    list-customer-usage: Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.`)
@@ -32518,6 +32595,64 @@ func adminAssignOrganizationOnboardingPlaybookUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin assign-organization-onboarding-playbook --body '{\n      \"organization_id\": \"abc123\",\n      \"playbook_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
+func adminListSignupOffersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-signup-offers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List staff-managed signup offers. Stripe owns all promotion terms.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-signup-offers --admin-session-token \"abc123\"")
+}
+
+func adminCreateSignupOfferUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin create-signup-offer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a disabled signup offer mapped to an exact Stripe promotion code ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-signup-offer --body '{\n      \"name\": \"aa\",\n      \"signup_flow\": \"tailscale_partner_gateway\",\n      \"stripe_promotion_code_id\": \"aaa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminUpdateSignupOfferUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin update-signup-offer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-signup-offer --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"signup_flow\": \"tailscale_partner_gateway\",\n      \"stripe_promotion_code_id\": \"aaa\"\n   }' --admin-session-token \"abc123\"")
+}
+
 func adminGetStripeSubscriptionCandidateUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin get-stripe-subscription-candidate", os.Args[0])
@@ -32934,6 +33069,7 @@ func userSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    update-user-session-issuer: Update fields on an existing user_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    list-user-session-issuers: List user_session_issuers in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-issuer: Get a user_session_issuer by id or by slug. Provide exactly one.`)
+	fmt.Fprintln(os.Stderr, `    get-attach-impact: Preview what attaching a user_session_issuer to an existing MCP server, toolset, or meta MCP server changes for its clients, before calling the matching update. Name exactly one of mcp_server_id, toolset_id, or meta_mcp_server_id; omit user_session_issuer_id to preview detaching the current issuer. Clients and sessions belong to an issuer, so any change of issuer requires the server's clients to authorize again. Advisory only: the update does not require it. Requires the mcp:write access the matching update requires.`)
 	fmt.Fprintln(os.Stderr, `    delete-user-session-issuer: Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -33041,6 +33177,36 @@ func userSessionIssuersGetUserSessionIssuerUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers get-user-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func userSessionIssuersGetAttachImpactUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers get-attach-impact", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -toolset-id STRING")
+	fmt.Fprint(os.Stderr, " -meta-mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Preview what attaching a user_session_issuer to an existing MCP server, toolset, or meta MCP server changes for its clients, before calling the matching update. Name exactly one of mcp_server_id, toolset_id, or meta_mcp_server_id; omit user_session_issuer_id to preview detaching the current issuer. Clients and sessions belong to an issuer, so any change of issuer requires the server's clients to authorize again. Advisory only: the update does not require it. Requires the mcp:write access the matching update requires.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -toolset-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -meta-mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers get-attach-impact --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func userSessionIssuersDeleteUserSessionIssuerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers delete-user-session-issuer", os.Args[0])
@@ -33076,6 +33242,8 @@ func organizationUserSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    get-issuer: Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Update an organization-owned user_session_issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-authentication-host-impact: Preview moving a user_session_issuer in the caller's organization onto or off the deployment's authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    set-authentication-host: Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-delete-preflight: Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuer: Soft-delete an organization-owned user_session_issuer. Refuses while a live MCP server or toolset references it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a user_session_issuer in the caller's organization. Provide a project_id to make it project-specific, or omit it to make it organization-owned. Existing clients and sessions move with the issuer. Requires org:admin.`)
@@ -33195,6 +33363,48 @@ func organizationUserSessionIssuersListMcpServersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers list-mcp-servers --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\"")
+}
+
+func organizationUserSessionIssuersGetAuthenticationHostImpactUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-user-session-issuers get-authentication-host-impact", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -use-authentication-host BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Preview moving a user_session_issuer in the caller's organization onto or off the deployment's authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -use-authentication-host BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers get-authentication-host-impact --id \"550e8400-e29b-41d4-a716-446655440000\" --use-authentication-host false --session-token \"abc123\"")
+}
+
+func organizationUserSessionIssuersSetAuthenticationHostUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-user-session-issuers set-authentication-host", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers set-authentication-host --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"use_authentication_host\": false\n   }' --session-token \"abc123\"")
 }
 
 func organizationUserSessionIssuersGetIssuerDeletePreflightUsage() {

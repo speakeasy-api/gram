@@ -39,6 +39,7 @@ func TestProductFeatureNameContract(t *testing.T) {
 		productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureSessionPortability,
 		productfeatures.FeatureNetworkIngress,
 		productfeatures.FeatureSignalsIntelligence,
+		productfeatures.FeatureOrganizationGatewayDisabled,
 	}, document.Components.Schemas["SetOrganizationFeatureRequestBody"].Properties["feature_name"].Enum)
 }
 

@@ -1360,6 +1360,7 @@ var _ = Service("admin", func() {
 	registryDesign()
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
+	signupOfferMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
 		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")

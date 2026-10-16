@@ -394,6 +394,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			CreatedAt:                now,
 			FirstParty:               true,
 			AutoConnectDone:          false,
+			FocusServer:              "",
 		}
 		clients, err := s.listEndpointClients(ctx, endpoint, state)
 		if err != nil {
@@ -447,6 +448,7 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 		RouteBase:       "mcp",
 
 		SharedAuthorizationServer: false,
+		UseAuthenticationHost:     nil,
 	}
 	if placement.OrganizationGateway {
 		// Addressed by organization slug; the synthetic id is what the

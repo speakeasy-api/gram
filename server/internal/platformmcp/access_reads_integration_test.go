@@ -154,6 +154,16 @@ func TestGetMemberMCPAccessEvaluatesLiveRoleGrantsAcrossInventory(t *testing.T) 
 	require.NotEmpty(t, rows)
 	target := rows[0]
 
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, principal.UserID, "self-access@example.test")
+	selfAccess, err := service.ListMyMCPAccess(ctx, principal)
+	require.NoError(t, err)
+	selfReference, err := service.references.Encode(principal, subjectKindAccessMember, principal.UserID, service.now())
+	require.NoError(t, err)
+	referencedSelfAccess, err := service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: selfReference})
+	require.NoError(t, err)
+	require.Equal(t, referencedSelfAccess, selfAccess, "self access must use the caller directly without changing evaluation semantics")
+	require.NotEmpty(t, selfAccess.Servers)
+
 	memberID := "member-access-table"
 	seedAccessMember(t, ctx, conn, principal.OrganizationID, memberID, "member-access@example.test")
 	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "table-readers", "Table readers")

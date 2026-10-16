@@ -405,6 +405,14 @@ type SpendProduct struct {
 // StripeSubscription is the result type of the usage service
 // getStripeSubscription method.
 type StripeSubscription struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool
 	// The live Stripe subscription status
 	Status string
 	// Start of the current Stripe service period

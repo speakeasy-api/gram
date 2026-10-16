@@ -6254,6 +6254,225 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getSession
+  /admin/signupOffers:
+    get:
+      tags:
+        - admin
+      summary: listSignupOffers admin
+      description: List staff-managed signup offers. Stripe owns all promotion terms.
+      operationId: adminListSignupOffers
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSignupOffersResponseBody'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listSignupOffers
+  /admin/signupOffers.create:
+    post:
+      tags:
+        - admin
+      summary: createSignupOffer admin
+      description: Create a disabled signup offer mapped to an exact Stripe promotion code ID.
+      operationId: adminCreateSignupOffer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSignupOfferRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSignupOffer'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: createSignupOffer
+  /admin/signupOffers.update:
+    post:
+      tags:
+        - admin
+      summary: updateSignupOffer admin
+      description: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.
+      operationId: adminUpdateSignupOffer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSignupOfferRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSignupOffer'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: updateSignupOffer
   /admin/supportCoverage.get:
     get:
       description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.'
@@ -8677,6 +8896,36 @@ components:
           type: string
       required:
         - email
+    AdminSignupOffer:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        signup_flow:
+          type: string
+          enum:
+            - tailscale_partner_gateway
+        stripe_promotion_code_id:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - stripe_promotion_code_id
+        - signup_flow
+        - enabled
+        - created_at
+        - updated_at
     AdminSpendBreakdownResponse:
       type: object
       properties:
@@ -9174,6 +9423,25 @@ components:
       required:
         - slug
         - issuer
+    CreateSignupOfferRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        signup_flow:
+          type: string
+          enum:
+            - tailscale_partner_gateway
+        stripe_promotion_code_id:
+          type: string
+          pattern: ^promo_[A-Za-z0-9_]+$
+          maxLength: 255
+      required:
+        - name
+        - stripe_promotion_code_id
+        - signup_flow
     DeleteOnboardingPlaybookRequestBody:
       type: object
       properties:
@@ -9481,6 +9749,15 @@ components:
       description: Result type for the platform-administrator convergence-candidate listing.
       required:
         - items
+    ListSignupOffersResponseBody:
+      type: object
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSignupOffer'
+      required:
+        - offers
     MarkEnterpriseTrialConvertedRequestBody:
       type: object
       properties:
@@ -9582,6 +9859,9 @@ components:
         network_ingress_enabled:
           type: boolean
           description: Whether the organization has the staff-managed private network ingress entitlement
+        organization_gateway_disabled:
+          type: boolean
+          description: Whether an organization admin turned the organization gateway off, so its routes answer 404
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization can use the Speakeasy Platform MCP capability
@@ -9636,6 +9916,7 @@ components:
         - session_portability_enabled
         - network_ingress_enabled
         - signals_intelligence_enabled
+        - organization_gateway_disabled
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -10131,6 +10412,7 @@ components:
             - session_portability
             - network_ingress
             - signals_intelligence
+            - organization_gateway_disabled
           maxLength: 60
         organization_id:
           type: string
@@ -10685,6 +10967,32 @@ components:
       description: Form for updating a remote_session_issuer. All non-id fields are optional patches.
       required:
         - id
+    UpdateSignupOfferRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        signup_flow:
+          type: string
+          enum:
+            - tailscale_partner_gateway
+        stripe_promotion_code_id:
+          type: string
+          pattern: ^promo_[A-Za-z0-9_]+$
+          maxLength: 255
+      required:
+        - name
+        - stripe_promotion_code_id
+        - signup_flow
+        - id
+        - enabled
     UpdateSupportMatrixRequestBody:
       type: object
       properties:

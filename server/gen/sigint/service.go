@@ -90,6 +90,10 @@ type CreateSensorPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Message context strategy; omission defaults to single_message
+	InputStrategy *types.SigintInputStrategy
+	// Total sliding window messages including the target; omission defaults to 5
+	WindowSize *int
 	// Whether to enable evaluation; omission defaults to true
 	Enabled *bool
 	// Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to
@@ -212,6 +216,11 @@ type UpdateSensorPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Replacement message context strategy; omission preserves it
+	InputStrategy *types.SigintInputStrategy
+	// Replacement total sliding window messages, including the target; omission
+	// preserves it
+	WindowSize *int
 	// Enable or disable evaluation; omission preserves the current state.
 	// Evaluations already in progress may finish.
 	Enabled *bool

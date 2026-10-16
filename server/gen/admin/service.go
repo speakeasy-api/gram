@@ -287,6 +287,13 @@ type Service interface {
 	// Assign a playbook to an organization, or clear it. Rejected when a step's
 	// methods do not apply to the recorded stack; the error names the steps.
 	AssignOrganizationOnboardingPlaybook(context.Context, *AssignOrganizationOnboardingPlaybookPayload) (res *AdminOrganizationOnboardingPlaybook, err error)
+	// List staff-managed signup offers. Stripe owns all promotion terms.
+	ListSignupOffers(context.Context, *ListSignupOffersPayload) (res *ListSignupOffersResult, err error)
+	// Create a disabled signup offer mapped to an exact Stripe promotion code ID.
+	CreateSignupOffer(context.Context, *CreateSignupOfferPayload) (res *AdminSignupOffer, err error)
+	// Edit, enable or disable a signup offer. Existing accepted promotion
+	// applications are unchanged.
+	UpdateSignupOffer(context.Context, *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error)
 	// Returns live Stripe subscription details for confirmation before recording
 	// the subscription on a PAYG organization that has a customer and no
 	// subscription.
@@ -321,7 +328,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [85]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
+var MethodNames = [88]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -1148,6 +1155,18 @@ type AdminSession struct {
 	Name  *string
 }
 
+// AdminSignupOffer is the result type of the admin service createSignupOffer
+// method.
+type AdminSignupOffer struct {
+	ID                    string
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+	Enabled               bool
+	CreatedAt             string
+	UpdatedAt             string
+}
+
 // AdminSpendBreakdownResponse is the result type of the admin service
 // getSpendBreakdown method.
 type AdminSpendBreakdownResponse struct {
@@ -1476,6 +1495,15 @@ type CreateRegistryEntryPayload struct {
 	// Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced
 	// by the server on incoming writes. Stored records remain readable for repair.
 	DataJSON string
+}
+
+// CreateSignupOfferPayload is the payload type of the admin service
+// createSignupOffer method.
+type CreateSignupOfferPayload struct {
+	AdminSessionToken     *string
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
 }
 
 // DeleteGlobalIssuerPayload is the payload type of the admin service
@@ -2031,6 +2059,18 @@ type ListRegistryOktaUnmappedPayload struct {
 	AdminSessionToken *string
 }
 
+// ListSignupOffersPayload is the payload type of the admin service
+// listSignupOffers method.
+type ListSignupOffersPayload struct {
+	AdminSessionToken *string
+}
+
+// ListSignupOffersResult is the result type of the admin service
+// listSignupOffers method.
+type ListSignupOffersResult struct {
+	Offers []*AdminSignupOffer
+}
+
 // ListUserOrganizationsPayload is the payload type of the admin service
 // listUserOrganizations method.
 type ListUserOrganizationsPayload struct {
@@ -2183,6 +2223,9 @@ type ProductFeatures struct {
 	NetworkIngressEnabled bool
 	// Whether the organization can configure signals intelligence
 	SignalsIntelligenceEnabled bool
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -2582,6 +2625,17 @@ type UpdateOrganizationPayload struct {
 	Whitelisted *bool
 }
 
+// UpdateSignupOfferPayload is the payload type of the admin service
+// updateSignupOffer method.
+type UpdateSignupOfferPayload struct {
+	AdminSessionToken     *string
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+	ID                    string
+	Enabled               bool
+}
+
 // UpdateSupportMatrixPayload is the payload type of the admin service
 // updateSupportMatrix method.
 type UpdateSupportMatrixPayload struct {
@@ -2736,6 +2790,9 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	if vres.SignalsIntelligenceEnabled != nil {
 		res.SignalsIntelligenceEnabled = *vres.SignalsIntelligenceEnabled
 	}
+	if vres.OrganizationGatewayDisabled != nil {
+		res.OrganizationGatewayDisabled = *vres.OrganizationGatewayDisabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -2766,6 +2823,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

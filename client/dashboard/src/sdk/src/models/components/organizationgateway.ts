@@ -17,6 +17,7 @@ export const OrganizationGatewayUnavailableReason = {
   MultipleOrganizationIssuers: "multiple_organization_issuers",
   CustomDomainOnly: "custom_domain_only",
   OrganizationDisabled: "organization_disabled",
+  TurnedOff: "turned_off",
 } as const;
 /**
  * Why the gateway is not served. Set only when not available.

@@ -288,7 +288,8 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		CustomerManagedEncryptionKeysEnabled: snapshot.CustomerManagedEncryptionKeysEnabled, RemoteSessionAutoRefreshEnabled: snapshot.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled, ConsentToolFilteringEnabled: snapshot.ConsentToolFilteringEnabled,
 		NetworkIngressEnabled: snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
-		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, DeviceAgent: snapshot.DeviceAgent,
+		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
+		DeviceAgent: snapshot.DeviceAgent,
 	}
 }
 
@@ -467,6 +468,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
+	server.CreateSignupOffer = service.strictAdminJSON(server.CreateSignupOffer, func() any { return new(adminserver.CreateSignupOfferRequestBody) })
+	server.UpdateSignupOffer = service.strictAdminJSON(server.UpdateSignupOffer, func() any { return new(adminserver.UpdateSignupOfferRequestBody) })
 	adminserver.Mount(mux, server)
 
 }
