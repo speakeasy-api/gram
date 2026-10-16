@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1310,6 +1311,10 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
+	}
+
+	if _, err := upstreamclientsrepo.New(dbtx).RemoveGlobalClientAssociations(ctx, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

@@ -56,6 +56,21 @@ type Service interface {
 	// otherwise project:write. Servers the caller cannot read are counted in
 	// hidden_server_count and never named.
 	GetServerIdentityImpact(context.Context, *GetServerIdentityImpactPayload) (res *ServerIdentityImpactResult, err error)
+	// List the upstream OAuth clients an MCP server is associated with. An
+	// association is a per-server configuration fact: one client can serve several
+	// servers, and server_count reports how many live servers share each client,
+	// since editing or rotating a shared client changes every one of them.
+	// Associations are recorded ahead of the serving path that will read them;
+	// until then the server keeps signing in through its user session issuer's
+	// bindings. Requires mcp:read on the server.
+	ListServerClientAssociations(context.Context, *ListServerClientAssociationsPayload) (res *ListServerClientAssociationsResult, err error)
+	// Remove one MCP server's association with an upstream OAuth client. The
+	// client and its associations with other servers are untouched. When the
+	// server is the only consumer of its user session issuer, the association
+	// follows the issuer's client binding and is refused here with a conflict:
+	// turn off User Identity on the server instead. Requires mcp:write on the
+	// server.
+	DetachServerClientAssociation(context.Context, *DetachServerClientAssociationPayload) (err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
 	// and user_session_issuer_id instead lists only the ordinary human caller's
 	// eligible sessions for an agent they own, without requiring project read
@@ -94,7 +109,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [10]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "getServerIdentityImpact", "listServerClientAssociations", "detachServerClientAssociation", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -289,6 +304,18 @@ type DetachBindingPayload struct {
 	ProjectSlugInput    *string
 }
 
+// DetachServerClientAssociationPayload is the payload type of the
+// remoteSessions service detachServerClientAssociation method.
+type DetachServerClientAssociationPayload struct {
+	// The MCP server.
+	McpServerID string
+	// The associated remote session client.
+	RemoteSessionClientID string
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+}
+
 // GetServerIdentityImpactPayload is the payload type of the remoteSessions
 // service getServerIdentityImpact method.
 type GetServerIdentityImpactPayload struct {
@@ -351,6 +378,23 @@ type ListRemoteSessionsResult struct {
 	NextCursor *string
 }
 
+// ListServerClientAssociationsPayload is the payload type of the
+// remoteSessions service listServerClientAssociations method.
+type ListServerClientAssociationsPayload struct {
+	// The MCP server.
+	McpServerID      string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListServerClientAssociationsResult is the result type of the remoteSessions
+// service listServerClientAssociations method.
+type ListServerClientAssociationsResult struct {
+	// The server's associated upstream OAuth clients, oldest first.
+	Associations []*ServerClientAssociation
+}
+
 // PrincipalRemoteSessionBinding is the result type of the remoteSessions
 // service attachBinding method.
 type PrincipalRemoteSessionBinding struct {
@@ -373,6 +417,31 @@ type RevokeRemoteSessionPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// One upstream OAuth client an MCP server is associated with. Client secrets
+// are never returned.
+type ServerClientAssociation struct {
+	// The associated remote session client.
+	RemoteSessionClientID string
+	// The provider-issued client_id.
+	ClientID string
+	// The client's remote session issuer: the upstream authorization server it
+	// signs in with.
+	RemoteSessionIssuerID string
+	// Display name of the remote session issuer, if set.
+	IssuerName *string
+	// Slug of the remote session issuer.
+	IssuerSlug string
+	// The remote session issuer's issuer identifier.
+	IssuerURL string
+	// Who owns the client.
+	Scope string
+	// How many live MCP servers are associated with this client, including this
+	// one.
+	ServerCount int64
+	// When the association was recorded.
+	AssociatedAt string
 }
 
 // Configuration for a newly-created project remote-session client. Manual mode

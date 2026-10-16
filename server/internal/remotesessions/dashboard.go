@@ -275,6 +275,7 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 			ActorIsPlatformAdmin: authCtx.IsAdmin,
 		},
 		UserSessionIssuerID: target.UserSessionIssuerID.UUID,
+		MCPServerID:         target.ID,
 		Provider:            provider,
 		Client:              client,
 		Bound:               ReplaceBound,

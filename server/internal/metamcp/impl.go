@@ -906,7 +906,6 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	// the gateway an issuer, the member a stamped upstream AS with a client —
 	// bind that client to the gateway's issuer so consent offers the member's
 	// provider without a manual attach ceremony.
-	wiredGatewayIssuer := false
 	if meta.UserSessionIssuerID.Valid && server.RemoteSessionIssuerID.Valid && server.UserSessionIssuerID.Valid {
 		// No DB constraint enforces one client per (issuer, upstream); every
 		// client-binding writer serializes on this advisory lock instead.
@@ -934,7 +933,6 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 				attr.SlogMetaMcpServerID(meta.ID.String()),
 				attr.SlogMcpServerID(server.ID.String()))
 		}
-		wiredGatewayIssuer = true
 	}
 
 	if err := s.audit.LogMetaMcpMemberAdd(ctx, dbtx, audit.LogMetaMcpMemberEvent{
@@ -961,8 +959,9 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 
 	// Every client-binding writer follows its commit with this resync so the
 	// denormalized mcp_servers.remote_session_issuer_id cannot go stale when
-	// the gateway issuer is shared with a server row.
-	if wiredGatewayIssuer {
+	// the gateway issuer is shared with a server row. A new member also needs
+	// its upstream client association with the gateway's issuer.
+	if meta.UserSessionIssuerID.Valid {
 		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, metaID, false)
@@ -1131,7 +1130,6 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	// screen. The member row is already soft-deleted above, so the detach's
 	// "last member" guard sees the post-removal set. Mirrors the add path's
 	// lock + post-commit resync.
-	wiredGatewayIssuer := false
 	if meta.UserSessionIssuerID.Valid {
 		server, serr := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 			ID:        deleted.McpServerID,
@@ -1160,7 +1158,6 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 					attr.SlogMetaMcpServerID(meta.ID.String()),
 					attr.SlogMcpServerID(server.ID.String()))
 			}
-			wiredGatewayIssuer = true
 		}
 	}
 
@@ -1187,8 +1184,9 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	}
 
 	// Keep the denormalized mcp_servers.remote_session_issuer_id in sync after a
-	// binding change, matching the add path's post-commit resync.
-	if wiredGatewayIssuer {
+	// binding change, matching the add path's post-commit resync, and prune
+	// the removed member's association with the gateway's issuer.
+	if meta.UserSessionIssuerID.Valid {
 		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, meta.ID, false)

@@ -7,6 +7,9 @@
 // misses, the grant stays unqualified, and routing fails closed — and the next
 // binding change or a backfill heals it. A WRONG value would misroute a bearer
 // token, which is why the statement carries its own tenancy predicates.
+//
+// The same pass reconciles the MCP server upstream client associations
+// derived from these bindings, so every binding write keeps both in step.
 
 package remotesessions
 
@@ -20,28 +23,31 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 )
 
 const issuerResyncTimeout = 10 * time.Second
 
 // ResyncMCPServerRemoteSessionIssuers recomputes the denormalised issuer for
-// every MCP server in projectID carrying one of userIssuerIDs. Safe with
-// issuers no server uses; only rows whose value differs are written. Ids
-// outside the project derive nothing and write nothing.
+// every MCP server in projectID carrying one of userIssuerIDs, then reconciles
+// the project's upstream client associations. Safe with issuers no server
+// uses, and with none at all, which only prunes associations; only rows whose
+// value differs are written. Ids outside the project derive nothing and write
+// nothing.
 func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
-	// Ahead of the empty-set shortcut, so the guarantee does not depend on data.
 	if organizationID == "" || projectID == uuid.Nil {
 		return fmt.Errorf("resync mcp server remote session issuers: no tenant scope")
 	}
-	if len(userIssuerIDs) == 0 {
-		return nil
+	if len(userIssuerIDs) > 0 {
+		if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
+			UserSessionIssuerIds: userIssuerIDs,
+			OrganizationID:       organizationID,
+			ProjectID:            projectID,
+		}); err != nil {
+			return fmt.Errorf("resync mcp server remote session issuers: %w", err)
+		}
 	}
-
-	if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
-		UserSessionIssuerIds: userIssuerIDs,
-		OrganizationID:       organizationID,
-		ProjectID:            projectID,
-	}); err != nil {
+	if err := upstreamclients.Reconcile(ctx, dbtx, organizationID, projectID, userIssuerIDs); err != nil {
 		return fmt.Errorf("resync mcp server remote session issuers: %w", err)
 	}
 	return nil

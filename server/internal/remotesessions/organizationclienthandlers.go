@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -930,6 +931,13 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
 	}
 
+	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
+		RemoteSessionClientID: deleted.ID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
+	}
+
 	if err := s.auditLogger.LogRemoteSessionClientDelete(ctx, dbtx, audit.LogRemoteSessionClientDeleteEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              orgProjectID(deleted.ProjectID),
@@ -1042,6 +1050,15 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 
 	if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, uuid.Nil, clientID, server.UserSessionIssuerID.UUID); err != nil {
 		return err
+	}
+
+	// The binding is removed for every server on the issuer, in any project,
+	// so their associations with this client go with it.
+	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove mcp server associations for detached client").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{
