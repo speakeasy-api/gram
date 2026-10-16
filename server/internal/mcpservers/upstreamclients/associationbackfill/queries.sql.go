@@ -10,7 +10,75 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+const backfillGatewayAssociation = `-- name: BackfillGatewayAssociation :execrows
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.user_session_issuer_id = $1::uuid
+ AND link.remote_session_client_id = $2::uuid
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+ AND (c.project_id = p.id
+      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+WHERE s.id = $3::uuid
+  AND s.deleted IS FALSE
+  AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS g
+      JOIN meta_mcp_server_members AS m
+        ON m.meta_mcp_server_id = g.id
+       AND m.project_id = g.project_id
+       AND m.deleted IS FALSE
+      WHERE g.user_session_issuer_id = link.user_session_issuer_id
+        AND g.deleted IS FALSE
+        AND m.mcp_server_id = s.id
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM user_session_issuers AS oi
+      WHERE oi.id = link.user_session_issuer_id
+        AND oi.project_id IS NULL
+        AND oi.organization_id = p.organization_id
+        AND oi.deleted IS FALSE
+    )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS recorded
+    WHERE recorded.mcp_server_id = s.id
+      AND recorded.remote_session_client_id = c.id
+  )
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
+`
+
+type BackfillGatewayAssociationParams struct {
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	McpServerID           uuid.UUID
+}
+
+// Writes one decided gateway association, conditional on the evidence still
+// holding: the server is live and proxied, the issuer still fronts it, the
+// client is still bound to the issuer and in the server's tenant, and no row
+// was recorded for the pair meanwhile, so an explicit detach is never undone.
+func (q *Queries) BackfillGatewayAssociation(ctx context.Context, arg BackfillGatewayAssociationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillGatewayAssociation, arg.UserSessionIssuerID, arg.RemoteSessionClientID, arg.McpServerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
 
 const backfillUpstreamClientAssociation = `-- name: BackfillUpstreamClientAssociation :execrows
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
@@ -103,6 +171,154 @@ DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_clie
 func (q *Queries) DeleteClientBindingsFixture(ctx context.Context, remoteSessionClientID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteClientBindingsFixture, remoteSessionClientID)
 	return err
+}
+
+const listGatewayAssociationCandidates = `-- name: ListGatewayAssociationCandidates :many
+WITH fronted AS (
+    SELECT g.user_session_issuer_id AS issuer_id, s.id AS server_id
+    FROM meta_mcp_servers AS g
+    JOIN projects AS gp
+      ON gp.id = g.project_id
+     AND gp.deleted IS FALSE
+    JOIN meta_mcp_server_members AS m
+      ON m.meta_mcp_server_id = g.id
+     AND m.project_id = g.project_id
+     AND m.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = m.mcp_server_id
+     AND s.project_id = m.project_id
+     AND s.deleted IS FALSE
+    WHERE g.deleted IS FALSE
+      AND g.user_session_issuer_id IS NOT NULL
+      AND ($1::text = '' OR g.organization_id = $1::text)
+    UNION
+    SELECT oi.id AS issuer_id, s.id AS server_id
+    FROM user_session_issuers AS oi
+    JOIN projects AS p
+      ON p.organization_id = oi.organization_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.project_id = p.id
+     AND s.deleted IS FALSE
+    WHERE oi.project_id IS NULL
+      AND oi.deleted IS FALSE
+      AND ($1::text = '' OR oi.organization_id = $1::text)
+      AND (
+        SELECT count(*)
+        FROM user_session_issuers AS sibling
+        WHERE sibling.organization_id = oi.organization_id
+          AND sibling.project_id IS NULL
+          AND sibling.deleted IS FALSE
+      ) = 1
+)
+SELECT f.issuer_id::uuid AS issuer_id,
+       s.id AS mcp_server_id,
+       s.project_id,
+       p.organization_id,
+       (t.id IS NOT NULL)::boolean AS tunneled,
+       c.id AS remote_session_client_id,
+       EXISTS (
+         SELECT 1
+         FROM remote_sessions AS rs
+         WHERE rs.user_session_issuer_id = f.issuer_id
+           AND rs.remote_session_client_id = c.id
+           AND rs.deleted IS FALSE
+           AND COALESCE(r.url, t.resource_identifier, '') <> ''
+           AND rtrim(rs.resource, '/') = rtrim(COALESCE(r.url, t.resource_identifier), '/')
+       )::boolean AS grant_match,
+       (s.remote_session_issuer_id IS NOT NULL AND c.remote_session_issuer_id = s.remote_session_issuer_id)::boolean AS derived_match,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_remote_session_clients AS recorded
+         WHERE recorded.mcp_server_id = s.id
+           AND recorded.remote_session_client_id = c.id
+           AND recorded.deleted IS FALSE
+       )::boolean AS pair_live,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_remote_session_clients AS recorded
+         WHERE recorded.mcp_server_id = s.id
+           AND recorded.remote_session_client_id = c.id
+       )::boolean AS pair_recorded
+FROM fronted AS f
+JOIN mcp_servers AS s
+  ON s.id = f.server_id
+JOIN projects AS p
+  ON p.id = s.project_id
+LEFT JOIN remote_mcp_servers AS r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers AS t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.user_session_issuer_id = f.issuer_id
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+ AND (c.project_id = s.project_id
+      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+WHERE s.slug IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
+ORDER BY f.issuer_id, s.id, c.id
+`
+
+type ListGatewayAssociationCandidatesRow struct {
+	IssuerID              uuid.UUID
+	McpServerID           uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	Tunneled              bool
+	RemoteSessionClientID uuid.UUID
+	GrantMatch            bool
+	DerivedMatch          bool
+	PairLive              bool
+	PairRecorded          bool
+}
+
+// One row per proxied MCP server a gateway issuer fronts and each live client
+// bound to that issuer, in one organization or every organization. A gateway
+// issuer fronts the members of a live gateway that signs in through it, and
+// an organization's only organization-level issuer fronts every server of
+// the organization, as the organization gateway does.
+//
+// grant_match reports that the client holds a live grant under the issuer
+// whose RFC 8707 resource is the server's upstream, the comparison request
+// routing makes. derived_match reports that the client's authorization
+// server is the one derived for the server, the comparison consent claimed
+// members by.
+func (q *Queries) ListGatewayAssociationCandidates(ctx context.Context, organizationID string) ([]ListGatewayAssociationCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listGatewayAssociationCandidates, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGatewayAssociationCandidatesRow
+	for rows.Next() {
+		var i ListGatewayAssociationCandidatesRow
+		if err := rows.Scan(
+			&i.IssuerID,
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Tunneled,
+			&i.RemoteSessionClientID,
+			&i.GrantMatch,
+			&i.DerivedMatch,
+			&i.PairLive,
+			&i.PairRecorded,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLiveAssociationsFixture = `-- name: ListLiveAssociationsFixture :many
@@ -348,6 +564,66 @@ func (q *Queries) SeedClientBindingFixture(ctx context.Context, arg SeedClientBi
 	return err
 }
 
+const seedGatewayFixture = `-- name: SeedGatewayFixture :exec
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, user_session_issuer_id, name)
+VALUES ($1, $2, $3, $4, 'gateway')
+`
+
+type SeedGatewayFixtureParams struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+func (q *Queries) SeedGatewayFixture(ctx context.Context, arg SeedGatewayFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedGatewayFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+	)
+	return err
+}
+
+const seedGatewayMemberFixture = `-- name: SeedGatewayMemberFixture :exec
+INSERT INTO meta_mcp_server_members (project_id, meta_mcp_server_id, mcp_server_id)
+VALUES ($1, $2, $3)
+`
+
+type SeedGatewayMemberFixtureParams struct {
+	ProjectID       uuid.UUID
+	MetaMcpServerID uuid.UUID
+	McpServerID     uuid.UUID
+}
+
+func (q *Queries) SeedGatewayMemberFixture(ctx context.Context, arg SeedGatewayMemberFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedGatewayMemberFixture, arg.ProjectID, arg.MetaMcpServerID, arg.McpServerID)
+	return err
+}
+
+const seedGrantFixture = `-- name: SeedGrantFixture :exec
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, resource)
+VALUES ($1, $2, $3, 'encrypted', $4)
+`
+
+type SeedGrantFixtureParams struct {
+	SubjectUrn            urn.SessionSubject
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	Resource              pgtype.Text
+}
+
+func (q *Queries) SeedGrantFixture(ctx context.Context, arg SeedGrantFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedGrantFixture,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+	)
+	return err
+}
+
 const seedMCPServerFixture = `-- name: SeedMCPServerFixture :exec
 INSERT INTO mcp_servers (id, project_id, slug, remote_mcp_server_id, user_session_issuer_id, visibility)
 VALUES ($1, $2, $3, $4, $5, 'private')
@@ -380,6 +656,22 @@ INSERT INTO organization_metadata (id, name, slug) VALUES ($1, $1, $1)
 // Test fixtures. Each seeds the one row its name says; nothing else uses them.
 func (q *Queries) SeedOrganizationFixture(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, seedOrganizationFixture, id)
+	return err
+}
+
+const seedOrganizationIssuerFixture = `-- name: SeedOrganizationIssuerFixture :exec
+INSERT INTO user_session_issuers (id, organization_id, slug, authn_challenge_mode, session_duration)
+VALUES ($1, $2, $3, 'interactive', interval '1 hour')
+`
+
+type SeedOrganizationIssuerFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	Slug           string
+}
+
+func (q *Queries) SeedOrganizationIssuerFixture(ctx context.Context, arg SeedOrganizationIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOrganizationIssuerFixture, arg.ID, arg.OrganizationID, arg.Slug)
 	return err
 }
 
@@ -493,5 +785,19 @@ type SeedUserSessionIssuerFixtureParams struct {
 
 func (q *Queries) SeedUserSessionIssuerFixture(ctx context.Context, arg SeedUserSessionIssuerFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedUserSessionIssuerFixture, arg.ID, arg.ProjectID, arg.Slug)
+	return err
+}
+
+const setDerivedIssuerFixture = `-- name: SetDerivedIssuerFixture :exec
+UPDATE mcp_servers SET remote_session_issuer_id = $1 WHERE id = $2
+`
+
+type SetDerivedIssuerFixtureParams struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	ID                    uuid.UUID
+}
+
+func (q *Queries) SetDerivedIssuerFixture(ctx context.Context, arg SetDerivedIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDerivedIssuerFixture, arg.RemoteSessionIssuerID, arg.ID)
 	return err
 }

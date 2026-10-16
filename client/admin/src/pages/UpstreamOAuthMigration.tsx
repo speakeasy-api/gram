@@ -54,13 +54,17 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
       )
     : all;
 
-  // Statuses already in the cache open the window for the next ones; every
-  // settled query re-renders the page, which moves the window on.
+  // Settled statuses open the window for the next ones; every settled query
+  // re-renders the page, which moves the window on. A cached status that is
+  // refetching counts as unsettled, so a revisit refetches a few at a time.
   const settled = all.filter((org) => {
     const state = client.getQueryState(
       upstreamOAuthMigrationStatusQuery(org.id).queryKey,
     );
-    return state?.status === "success" || state?.status === "error";
+    return (
+      state?.fetchStatus === "idle" &&
+      (state.status === "success" || state.status === "error")
+    );
   }).length;
   const statuses = useQueries({
     queries: all.map((org, index) => ({
@@ -110,9 +114,10 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   }
 
   async function migrateAllPending() {
-    const pending = all.filter(
-      (org) => !statusByID.get(org.id)?.data?.migrated,
-    );
+    const pending = all.filter((org) => {
+      const status = statusByID.get(org.id)?.data;
+      return status !== undefined && !status.migrated;
+    });
     if (pending.length === 0) return;
     const ok = await confirm({
       title: `Migrate ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}?`,
@@ -123,9 +128,11 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     if (!ok) return;
     setBulk({ done: 0, total: pending.length });
     let failed = 0;
+    let incomplete = 0;
     for (const org of pending) {
       try {
-        await migrate(org);
+        const run = await migrate(org);
+        if (!run.status.migrated) incomplete++;
       } catch (e) {
         failed++;
         toast.error(`${org.name}: ${errorMessage(e)}`);
@@ -135,7 +142,11 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
       );
     }
     setBulk(null);
-    if (failed === 0) {
+    if (incomplete > 0) {
+      toast.warning(
+        `${incomplete} ${incomplete === 1 ? "organization still needs" : "organizations still need"} attention`,
+      );
+    } else if (failed === 0) {
       toast.success(
         `Migrated ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}`,
       );
@@ -157,7 +168,10 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
         <Button
           onClick={() => void migrateAllPending()}
           disabled={
-            bulk !== null || all.length === 0 || migrated === all.length
+            bulk !== null ||
+            all.length === 0 ||
+            settled < all.length ||
+            migrated === all.length
           }
         >
           {bulk
@@ -232,7 +246,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
                         size="sm"
                         variant="outline"
                         onClick={() => void migrateOne(org)}
-                        disabled={busy || bulk !== null || !status?.data}
+                        disabled={busy || bulk !== null}
                       >
                         {status?.data?.migrated ? "Run again" : "Migrate"}
                       </Button>

@@ -20,12 +20,14 @@ import (
 )
 
 // Reconcile brings the project's associations in line with its issuer
-// bindings after a binding or server change: it associates each client bound
-// to one of userIssuerIDs with that issuer's server when the server is the
-// issuer's only consumer, then drops associations whose client is no longer
-// bound to the server's user session issuer. Associations on an issuer shared
+// bindings after a binding, server or gateway membership change: it
+// associates each client bound to one of userIssuerIDs with that issuer's
+// server when the server is the issuer's only consumer, associates each
+// gateway-fronted server with the one client its gateway issuer binds for
+// the server's derived authorization server, then drops associations no
+// issuer reaching the server still binds. Associations on an issuer shared
 // by several servers are only ever added by explicit configuration or the
-// offline backfill.
+// backfill.
 //
 // Each statement decides from the bindings as they are when it runs, and the
 // prune runs last, so a reconcile that races a binding change and captures a
@@ -42,6 +44,13 @@ func Reconcile(ctx context.Context, dbtx repo.DBTX, organizationID string, proje
 			UserSessionIssuerIds: userIssuerIDs,
 		}); err != nil {
 			return fmt.Errorf("capture mcp server upstream clients: %w", err)
+		}
+		if _, err := q.CaptureGatewayDerivedAssociations(ctx, repo.CaptureGatewayDerivedAssociationsParams{
+			ProjectID:            projectID,
+			OrganizationID:       organizationID,
+			UserSessionIssuerIds: userIssuerIDs,
+		}); err != nil {
+			return fmt.Errorf("capture gateway upstream clients: %w", err)
 		}
 	}
 	if _, err := q.PruneUnservableAssociations(ctx, repo.PruneUnservableAssociationsParams{

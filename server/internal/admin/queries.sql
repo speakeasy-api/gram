@@ -1186,20 +1186,61 @@ UPDATE signup_offers SET name = @name, stripe_promotion_code_id = @stripe_promot
 WHERE id = @id RETURNING *;
 
 -- name: AdminListUpstreamOAuthMigrationOrganizations :many
--- The organizations with a live MCP server signed in through a user session
--- issuer, which are the only ones the upstream OAuth migration writes for.
+-- The organizations the upstream OAuth migration writes for: those with a
+-- live proxied MCP server that a live issuer of its own tenant signs in
+-- through, either the server's own user session issuer or the issuer of a
+-- gateway fronting it. servers counts those servers.
+WITH reached AS (
+    SELECT p.organization_id, s.id AS server_id
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+     AND p.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = s.user_session_issuer_id
+     AND usi.deleted IS FALSE
+     AND (usi.project_id = p.id
+          OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+    WHERE s.deleted IS FALSE
+      AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    UNION
+    SELECT g.organization_id, m.mcp_server_id AS server_id
+    FROM meta_mcp_servers AS g
+    JOIN projects AS gp
+      ON gp.id = g.project_id
+     AND gp.deleted IS FALSE
+    JOIN user_session_issuers AS usi
+      ON usi.id = g.user_session_issuer_id
+     AND usi.deleted IS FALSE
+    JOIN meta_mcp_server_members AS m
+      ON m.meta_mcp_server_id = g.id
+     AND m.project_id = g.project_id
+     AND m.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = m.mcp_server_id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE g.deleted IS FALSE
+    UNION
+    SELECT oi.organization_id, s.id AS server_id
+    FROM user_session_issuers AS oi
+    JOIN projects AS p
+      ON p.organization_id = oi.organization_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.project_id = p.id
+     AND s.deleted IS FALSE
+     AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+    WHERE oi.project_id IS NULL
+      AND oi.deleted IS FALSE
+)
 SELECT
     om.id,
     om.name,
     om.slug,
-    count(s.id)::bigint AS servers
+    count(DISTINCT reached.server_id)::bigint AS servers
 FROM organization_metadata AS om
-JOIN projects AS p
-  ON p.organization_id = om.id
- AND p.deleted IS FALSE
-JOIN mcp_servers AS s
-  ON s.project_id = p.id
- AND s.deleted IS FALSE
- AND s.user_session_issuer_id IS NOT NULL
+JOIN reached
+  ON reached.organization_id = om.id
 GROUP BY om.id, om.name, om.slug
 ORDER BY om.name, om.id;

@@ -1,0 +1,228 @@
+package associationbackfill
+
+import (
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// gatewayClient creates a project client bound to userIssuerID and returns it
+// with its remote session issuer.
+func (f *fixture) gatewayClient(userIssuerID uuid.UUID) (clientID, remoteIssuerID uuid.UUID) {
+	f.t.Helper()
+	ctx := f.t.Context()
+	remoteIssuerID, clientID = uuid.New(), uuid.New()
+	require.NoError(f.t, f.q.SeedRemoteSessionIssuerFixture(ctx, SeedRemoteSessionIssuerFixtureParams{
+		ID:        remoteIssuerID,
+		ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true},
+		Slug:      "rsi-" + remoteIssuerID.String()[:8],
+		Issuer:    "https://" + remoteIssuerID.String()[:8] + ".example.com",
+	}))
+	require.NoError(f.t, f.q.SeedRemoteSessionClientFixture(ctx, SeedRemoteSessionClientFixtureParams{
+		ID:                    clientID,
+		ProjectID:             uuid.NullUUID{UUID: f.projectID, Valid: true},
+		OrganizationID:        pgtype.Text{String: f.orgID, Valid: true},
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              "cid-" + clientID.String()[:8],
+	}))
+	require.NoError(f.t, f.q.SeedClientBindingFixture(ctx, SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
+	return clientID, remoteIssuerID
+}
+
+func (f *fixture) gateway(userIssuerID uuid.UUID, memberIDs ...uuid.UUID) {
+	f.t.Helper()
+	ctx := f.t.Context()
+	gatewayID := uuid.New()
+	require.NoError(f.t, f.q.SeedGatewayFixture(ctx, SeedGatewayFixtureParams{
+		ID:                  gatewayID,
+		OrganizationID:      f.orgID,
+		ProjectID:           f.projectID,
+		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: true},
+	}))
+	for _, memberID := range memberIDs {
+		require.NoError(f.t, f.q.SeedGatewayMemberFixture(ctx, SeedGatewayMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: memberID}))
+	}
+}
+
+func (f *fixture) organizationIssuer() uuid.UUID {
+	f.t.Helper()
+	id := uuid.New()
+	require.NoError(f.t, f.q.SeedOrganizationIssuerFixture(f.t.Context(), SeedOrganizationIssuerFixtureParams{
+		ID:             id,
+		OrganizationID: pgtype.Text{String: f.orgID, Valid: true},
+		Slug:           "org-usi-" + id.String()[:8],
+	}))
+	return id
+}
+
+// grant records a subject's live grant for clientID under userIssuerID.
+func (f *fixture) grant(userIssuerID, clientID uuid.UUID, resource string) {
+	f.t.Helper()
+	require.NoError(f.t, f.q.SeedGrantFixture(f.t.Context(), SeedGrantFixtureParams{
+		SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
+		UserSessionIssuerID:   userIssuerID,
+		RemoteSessionClientID: clientID,
+		Resource:              pgtype.Text{String: resource, Valid: resource != ""},
+	}))
+}
+
+func (f *fixture) derive(serverID, remoteIssuerID uuid.UUID) {
+	f.t.Helper()
+	require.NoError(f.t, f.q.SetDerivedIssuerFixture(f.t.Context(), SetDerivedIssuerFixtureParams{
+		ID:                    serverID,
+		RemoteSessionIssuerID: uuid.NullUUID{UUID: remoteIssuerID, Valid: true},
+	}))
+}
+
+func gatewayResultFor(t *testing.T, report Report, serverID uuid.UUID) GatewayResult {
+	t.Helper()
+	for _, result := range report.GatewayResults {
+		if result.MCPServerID == serverID {
+			return result
+		}
+	}
+	require.FailNow(t, "gateway pair not decided", serverID.String())
+	return GatewayResult{}
+}
+
+func TestRunAssociatesGatewayMembersFromGrantsThenDerivedIssuers(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+
+	granted := f.server(f.userIssuer(), "https://granted.example.com/mcp")
+	grantedClient, _ := f.gatewayClient(gatewayIssuer)
+	f.grant(gatewayIssuer, grantedClient, "https://granted.example.com/mcp/")
+
+	derived := f.server(f.userIssuer(), "https://derived.example.com/mcp")
+	derivedClient, derivedIssuer := f.gatewayClient(gatewayIssuer)
+	f.derive(derived, derivedIssuer)
+
+	// A grant decides over a derived issuer that agrees with it.
+	agreeing := f.server(f.userIssuer(), "https://agreeing.example.com/mcp")
+	agreeingClient, agreeingIssuer := f.gatewayClient(gatewayIssuer)
+	f.grant(gatewayIssuer, agreeingClient, "https://agreeing.example.com/mcp")
+	f.derive(agreeing, agreeingIssuer)
+
+	conflicting := f.server(f.userIssuer(), "https://conflicting.example.com/mcp")
+	conflictGrant, _ := f.gatewayClient(gatewayIssuer)
+	_, conflictIssuer := f.gatewayClient(gatewayIssuer)
+	f.grant(gatewayIssuer, conflictGrant, "https://conflicting.example.com/mcp")
+	f.derive(conflicting, conflictIssuer)
+
+	unserved := f.server(f.userIssuer(), "https://public.example.com/mcp")
+
+	detached := f.server(f.userIssuer(), "https://detached.example.com/mcp")
+	detachedClient, _ := f.gatewayClient(gatewayIssuer)
+	f.grant(gatewayIssuer, detachedClient, "https://detached.example.com/mcp")
+	f.associate(detached, detachedClient, true)
+
+	f.gateway(gatewayIssuer, granted, derived, agreeing, conflicting, unserved, detached)
+
+	dry := f.run(false)
+	require.Equal(t, GatewayOutcomeGrant, gatewayResultFor(t, dry, granted).Outcome)
+	require.Equal(t, GatewayOutcomeDerived, gatewayResultFor(t, dry, derived).Outcome)
+	require.Equal(t, GatewayOutcomeGrant, gatewayResultFor(t, dry, agreeing).Outcome)
+	require.Equal(t, GatewayOutcomeConflict, gatewayResultFor(t, dry, conflicting).Outcome)
+	require.Equal(t, GatewayOutcomeUnserved, gatewayResultFor(t, dry, unserved).Outcome)
+	require.Equal(t, GatewayOutcomeDetached, gatewayResultFor(t, dry, detached).Outcome)
+	require.Equal(t, 1, dry.Gaps, "only the conflict needs configuration")
+	require.Empty(t, f.associations(granted), "a dry run writes nothing")
+
+	applied := f.run(true)
+	require.Equal(t, 3, applied.Written)
+	require.Equal(t, []uuid.UUID{grantedClient}, f.associations(granted))
+	require.Equal(t, []uuid.UUID{derivedClient}, f.associations(derived))
+	require.Equal(t, []uuid.UUID{agreeingClient}, f.associations(agreeing))
+	require.Empty(t, f.associations(conflicting))
+	require.Empty(t, f.associations(unserved))
+	require.Empty(t, f.associations(detached), "an explicit detach is kept")
+
+	again := f.run(true)
+	require.Zero(t, again.Written)
+	require.Equal(t, GatewayOutcomeConfigured, gatewayResultFor(t, again, granted).Outcome)
+}
+
+func TestRunLeavesAGatewayMemberSeveralClientsMatchForConfiguration(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	member := f.server(f.userIssuer(), "https://shared.example.com/mcp")
+	first, _ := f.gatewayClient(gatewayIssuer)
+	second, _ := f.gatewayClient(gatewayIssuer)
+	f.grant(gatewayIssuer, first, "https://shared.example.com/mcp")
+	f.grant(gatewayIssuer, second, "https://shared.example.com/mcp")
+	f.gateway(gatewayIssuer, member)
+
+	report := f.run(true)
+	require.Equal(t, GatewayOutcomeAmbiguous, gatewayResultFor(t, report, member).Outcome)
+	require.Empty(t, f.associations(member))
+}
+
+func TestRunAssociatesOrganizationGatewayServers(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	organizationIssuer := f.organizationIssuer()
+	server := f.server(f.userIssuer(), "https://org-gateway.example.com/mcp")
+	client, _ := f.gatewayClient(organizationIssuer)
+	f.grant(organizationIssuer, client, "https://org-gateway.example.com/mcp")
+
+	f.run(true)
+	require.Equal(t, []uuid.UUID{client}, f.associations(server))
+}
+
+func TestRunIgnoresAnOrganizationIssuerThatIsNotTheOnlyOne(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	organizationIssuer := f.organizationIssuer()
+	f.organizationIssuer()
+	server := f.server(f.userIssuer(), "https://org-gateway.example.com/mcp")
+	client, _ := f.gatewayClient(organizationIssuer)
+	f.grant(organizationIssuer, client, "https://org-gateway.example.com/mcp")
+
+	report := f.run(true)
+	require.Empty(t, report.GatewayResults, "with several organization issuers there is no organization gateway")
+	require.Empty(t, f.associations(server))
+}
+
+func TestReconcileCapturesAndKeepsGatewayAssociations(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
+	client, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	f.derive(member, remoteIssuer)
+	f.gateway(gatewayIssuer, member)
+
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
+	require.Equal(t, []uuid.UUID{client}, f.associations(member), "a binding change on the gateway issuer captures the member")
+
+	// The client is bound only to the gateway's issuer, not the member's own,
+	// and the association survives the prune that follows every binding change.
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, nil))
+	require.Equal(t, []uuid.UUID{client}, f.associations(member))
+
+	require.NoError(t, f.q.DeleteClientBindingsFixture(t.Context(), client))
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, nil))
+	require.Empty(t, f.associations(member), "no issuer reaching the member binds the client any more")
+}
+
+func TestReconcileDoesNotCaptureAGatewayMemberAGrantRoutesElsewhere(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
+	_, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	granted, _ := f.gatewayClient(gatewayIssuer)
+	f.grant(gatewayIssuer, granted, "https://member.example.com/mcp")
+	f.derive(member, remoteIssuer)
+	f.gateway(gatewayIssuer, member)
+
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
+	require.Empty(t, f.associations(member), "the grant names another client, so the derived match proves nothing")
+}

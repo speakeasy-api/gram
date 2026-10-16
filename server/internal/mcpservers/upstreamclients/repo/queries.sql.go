@@ -59,6 +59,113 @@ func (q *Queries) AssociateMCPServerRemoteSessionClient(ctx context.Context, arg
 	return result.RowsAffected(), nil
 }
 
+const captureGatewayDerivedAssociations = `-- name: CaptureGatewayDerivedAssociations :execrows
+WITH fronted AS (
+    SELECT gateway.user_session_issuer_id AS issuer_id, member.mcp_server_id AS server_id
+    FROM meta_mcp_servers AS gateway
+    JOIN meta_mcp_server_members AS member
+      ON member.meta_mcp_server_id = gateway.id
+     AND member.project_id = gateway.project_id
+     AND member.deleted IS FALSE
+    WHERE gateway.project_id = $1::uuid
+      AND gateway.organization_id = $2::text
+      AND gateway.deleted IS FALSE
+      AND gateway.user_session_issuer_id IS NOT NULL
+    UNION
+    SELECT organization_issuer.id AS issuer_id, s.id AS server_id
+    FROM user_session_issuers AS organization_issuer
+    JOIN mcp_servers AS s
+      ON s.project_id = $1::uuid
+    WHERE organization_issuer.project_id IS NULL
+      AND organization_issuer.organization_id = $2::text
+      AND organization_issuer.deleted IS FALSE
+      AND (
+        SELECT count(*)
+        FROM user_session_issuers AS sibling
+        WHERE sibling.organization_id = organization_issuer.organization_id
+          AND sibling.project_id IS NULL
+          AND sibling.deleted IS FALSE
+      ) = 1
+)
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
+FROM fronted AS f
+JOIN mcp_servers AS s
+  ON s.id = f.server_id
+ AND s.project_id = $1::uuid
+ AND s.deleted IS FALSE
+ AND s.remote_session_issuer_id IS NOT NULL
+ AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = $2::text
+ AND p.deleted IS FALSE
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.user_session_issuer_id = f.issuer_id
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+ AND c.remote_session_issuer_id = s.remote_session_issuer_id
+ AND (c.project_id = p.id
+      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+LEFT JOIN remote_mcp_servers AS r
+  ON r.id = s.remote_mcp_server_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers AS t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.deleted IS FALSE
+WHERE (f.issuer_id = ANY($3::uuid[]) OR s.user_session_issuer_id = ANY($3::uuid[]))
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS other_link
+    JOIN remote_session_clients AS other
+      ON other.id = other_link.remote_session_client_id
+     AND other.deleted IS FALSE
+    WHERE other_link.user_session_issuer_id = f.issuer_id
+      AND other.id <> c.id
+      AND other.remote_session_issuer_id = s.remote_session_issuer_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_sessions AS rs
+    WHERE rs.user_session_issuer_id = f.issuer_id
+      AND rs.remote_session_client_id <> c.id
+      AND rs.deleted IS FALSE
+      AND COALESCE(r.url, t.resource_identifier, '') <> ''
+      AND rtrim(rs.resource, '/') = rtrim(COALESCE(r.url, t.resource_identifier), '/')
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS recorded
+    WHERE recorded.mcp_server_id = s.id
+      AND recorded.remote_session_client_id = c.id
+  )
+ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
+`
+
+type CaptureGatewayDerivedAssociationsParams struct {
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	UserSessionIssuerIds []uuid.UUID
+}
+
+// Associates a gateway-fronted server in the project with the one client its
+// gateway issuer binds for the server's derived authorization server, which
+// is how consent claims a member for a gateway client. Runs for a gateway
+// issuer named in user_session_issuer_ids, or for a server whose own issuer
+// is named there, since that issuer derives the server's authorization
+// server. It writes nothing when several of the issuer's clients match, when
+// a grant under the issuer routes the server to another client, or when a
+// row was ever recorded for the pair, so an explicit detach is kept.
+func (q *Queries) CaptureGatewayDerivedAssociations(ctx context.Context, arg CaptureGatewayDerivedAssociationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, captureGatewayDerivedAssociations, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const captureSoleConsumerAssociations = `-- name: CaptureSoleConsumerAssociations :execrows
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
 SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
@@ -351,15 +458,35 @@ WHERE a.mcp_server_id = s.id
   AND a.deleted IS FALSE
   AND (
     s.deleted IS TRUE
-    OR s.user_session_issuer_id IS NULL
     OR NOT EXISTS (
       SELECT 1
       FROM remote_session_client_user_session_issuers AS link
       JOIN remote_session_clients AS c
         ON c.id = link.remote_session_client_id
        AND c.deleted IS FALSE
-      WHERE link.user_session_issuer_id = s.user_session_issuer_id
-        AND link.remote_session_client_id = a.remote_session_client_id
+      WHERE link.remote_session_client_id = a.remote_session_client_id
+        AND (
+          link.user_session_issuer_id = s.user_session_issuer_id
+          OR EXISTS (
+            SELECT 1
+            FROM meta_mcp_servers AS gateway
+            JOIN meta_mcp_server_members AS member
+              ON member.meta_mcp_server_id = gateway.id
+             AND member.project_id = gateway.project_id
+             AND member.deleted IS FALSE
+            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
+              AND gateway.deleted IS FALSE
+              AND member.mcp_server_id = s.id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM user_session_issuers AS organization_issuer
+            WHERE organization_issuer.id = link.user_session_issuer_id
+              AND organization_issuer.project_id IS NULL
+              AND organization_issuer.organization_id = a.organization_id
+              AND organization_issuer.deleted IS FALSE
+          )
+        )
     )
   )
 `
@@ -392,15 +519,35 @@ WHERE a.mcp_server_id = s.id
   AND a.deleted IS FALSE
   AND (
     s.deleted IS TRUE
-    OR s.user_session_issuer_id IS NULL
     OR NOT EXISTS (
       SELECT 1
       FROM remote_session_client_user_session_issuers AS link
       JOIN remote_session_clients AS c
         ON c.id = link.remote_session_client_id
        AND c.deleted IS FALSE
-      WHERE link.user_session_issuer_id = s.user_session_issuer_id
-        AND link.remote_session_client_id = a.remote_session_client_id
+      WHERE link.remote_session_client_id = a.remote_session_client_id
+        AND (
+          link.user_session_issuer_id = s.user_session_issuer_id
+          OR EXISTS (
+            SELECT 1
+            FROM meta_mcp_servers AS gateway
+            JOIN meta_mcp_server_members AS member
+              ON member.meta_mcp_server_id = gateway.id
+             AND member.project_id = gateway.project_id
+             AND member.deleted IS FALSE
+            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
+              AND gateway.deleted IS FALSE
+              AND member.mcp_server_id = s.id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM user_session_issuers AS organization_issuer
+            WHERE organization_issuer.id = link.user_session_issuer_id
+              AND organization_issuer.project_id IS NULL
+              AND organization_issuer.organization_id = a.organization_id
+              AND organization_issuer.deleted IS FALSE
+          )
+        )
     )
   )
 `
@@ -410,11 +557,11 @@ type PruneUnservableAssociationsParams struct {
 	OrganizationID string
 }
 
-// Removes the project's associations the current serving path can no longer
-// honor: the server is gone or has no user session issuer, the client is
-// deleted, or the client is no longer bound to the server's issuer. Until
-// serving reads associations, an association is only kept while that binding
-// would also serve it.
+// Removes the project's associations no issuer can serve: the server is gone,
+// the client is deleted, or the client is bound neither to the server's own
+// user session issuer nor to the issuer of a gateway fronting the server (a
+// gateway it is a member of, or its organization's issuer for the
+// organization gateway).
 func (q *Queries) PruneUnservableAssociations(ctx context.Context, arg PruneUnservableAssociationsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, pruneUnservableAssociations, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
