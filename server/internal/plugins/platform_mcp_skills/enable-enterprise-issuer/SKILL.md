@@ -21,9 +21,14 @@ read-only; it cannot enable, disable, rotate, or replace an issuer.
    specified; otherwise ask the user to confirm the returned organization.
    Never guess an organization name or construct an issuer URI.
 3. Live membership, external organization-admin access, verified domains and
-   deployment availability remain authoritative. For `unavailable` or
-   `verified_domain_required`, explain the returned limitation and stop. Do not
-   change domains, sign-in providers, or deployment settings to bypass it.
+   deployment availability remain authoritative. For `unavailable`, explain the
+   returned limitation and stop. For `verified_domain_required`, explain that
+   the organization needs a verified company domain first, and ask an
+   organization administrator to verify one in the dashboard under
+   **Organization** → **IDP and SSO** → **Single sign-on**, then read the issuer
+   again. This workflow has no domain tool: do not verify domains yourself or
+   change sign-in providers or deployment settings to bypass it. The same
+   handoff applies when `get_xaa_readiness` reports `verified_domain_required`.
 
 ## Guide setup and retrieve the issuer
 
