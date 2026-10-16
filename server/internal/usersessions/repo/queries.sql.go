@@ -3139,12 +3139,8 @@ type ListUpstreamClientSelectionsRow struct {
 	Usable                bool
 }
 
-// One credential's choices for the given MCP servers, with whether each can
-// still be used: a chosen client must be live, still associated with the server, and
-// still bound to the credential's user session issuer, and a no-auth choice
-// holds only while the server has no associated client.
-// An unusable choice is reported as such rather than replaced, so the caller
-// fails closed instead of switching clients.
+// GetUpstreamClientSelection for several MCP servers at once, as a gateway
+// reads its members' choices. Servers without a choice have no row.
 func (q *Queries) ListUpstreamClientSelections(ctx context.Context, arg ListUpstreamClientSelectionsParams) ([]ListUpstreamClientSelectionsRow, error) {
 	rows, err := q.db.Query(ctx, listUpstreamClientSelections,
 		arg.UserSessionIssuerID,
