@@ -186,6 +186,7 @@ function PlatformMCPOnboardingContentInner({
     useState<PlatformMCPInstallMethod>("marketplace");
   const [setupSheetOpen, setSetupSheetOpen] = useState(false);
   const preselectedClientStartedRef = useRef(false);
+  const lastSheetBodyRef = useRef<React.ReactNode>(null);
   const [sourceSurface] = useState<SourceSurfaceValue>(
     initialSourceSurface ?? SourceSurface.PlatformMcpSettings,
   );
@@ -400,23 +401,39 @@ function PlatformMCPOnboardingContentInner({
     sheetOnly,
   ]);
 
+  // Every sheet the flow shows goes through this one frame, and every
+  // sheet-only branch below returns it at the same position, so React keeps
+  // the sheet mounted and swaps only its body. A closing sheet keeps its last
+  // body so it does not slide out empty.
+  const renderSheet = (body: React.ReactNode | null): JSX.Element => {
+    if (body) lastSheetBodyRef.current = body;
+    return (
+      <PlatformMCPSheetFrame
+        open={body !== null}
+        onOpenChange={(open) => {
+          if (!open) closeSetupFlow();
+        }}
+      >
+        {body ?? lastSheetBodyRef.current}
+      </PlatformMCPSheetFrame>
+    );
+  };
+
   if (sheetOnly && !setupOpen) {
-    return <></>;
+    return renderSheet(null);
   }
 
   if (onboarding.isLoading || rbacLoading) {
     return sheetOnly ? (
-      <PlatformMCPStateSheet
-        open={setupOpen}
-        onOpenChange={(open) => {
-          if (!open) onSetupOpenChange?.(false);
-        }}
-        eyebrow="Platform MCP"
-        title="Loading setup"
-        description="Loading your organization’s current setup progress."
-      >
-        <PlatformMCPLoading />
-      </PlatformMCPStateSheet>
+      renderSheet(
+        <PlatformMCPStateBody
+          eyebrow="Platform MCP"
+          title="Loading setup"
+          description="Loading your organization’s current setup progress."
+        >
+          <PlatformMCPLoading />
+        </PlatformMCPStateBody>,
+      )
     ) : (
       <PlatformMCPLoading />
     );
@@ -439,17 +456,15 @@ function PlatformMCPOnboardingContentInner({
       </div>
     );
     return sheetOnly ? (
-      <PlatformMCPStateSheet
-        open={setupOpen}
-        onOpenChange={(open) => {
-          if (!open) onSetupOpenChange?.(false);
-        }}
-        eyebrow="Platform MCP"
-        title="Setup unavailable"
-        description="The setup state could not be loaded."
-      >
-        {unavailable}
-      </PlatformMCPStateSheet>
+      renderSheet(
+        <PlatformMCPStateBody
+          eyebrow="Platform MCP"
+          title="Setup unavailable"
+          description="The setup state could not be loaded."
+        >
+          {unavailable}
+        </PlatformMCPStateBody>,
+      )
     ) : (
       <div className="mx-auto mt-8 max-w-xl">{unavailable}</div>
     );
@@ -466,21 +481,17 @@ function PlatformMCPOnboardingContentInner({
         onEnable={() => setPlatformMCPAccess(true)}
       />
     );
-    return sheetOnly ? (
-      <PlatformMCPStateSheet
-        open={setupOpen}
-        onOpenChange={(open) => {
-          if (!open) onSetupOpenChange?.(false);
-        }}
-        eyebrow="Organization access"
-        title="Turn on Platform MCP"
-        description="Existing connections and project distributions are kept — they stay unavailable until an organization administrator enables access."
-      >
-        {unavailable}
-      </PlatformMCPStateSheet>
-    ) : (
-      unavailable
-    );
+    return sheetOnly
+      ? renderSheet(
+          <PlatformMCPStateBody
+            eyebrow="Organization access"
+            title="Turn on Platform MCP"
+            description="Existing connections and project distributions are kept — they stay unavailable until an organization administrator enables access."
+          >
+            {unavailable}
+          </PlatformMCPStateBody>,
+        )
+      : unavailable;
   }
 
   const activeClient =
@@ -560,90 +571,72 @@ function PlatformMCPOnboardingContentInner({
     !agentPickerOpen &&
     !installMethodPickerOpen &&
     !setupSheetOpen;
-  const setupSheets = (
-    <>
-      {preparingPreselectedClient ? (
-        <PlatformMCPStateSheet
-          open
-          onOpenChange={(open) => {
-            if (!open) closeSetupFlow();
-          }}
-          eyebrow="Platform MCP"
-          title={`Preparing ${activeClient.label}`}
-          description="Saving your agent choice and loading its setup steps."
-        >
-          <PlatformMCPLoading />
-        </PlatformMCPStateSheet>
-      ) : null}
-      <PlatformMCPAgentPickerSheet
-        open={agentPickerOpen}
-        onOpenChange={(open) => {
-          if (!open) closeSetupFlow();
-        }}
-        isMutating={isMutating}
-        totalStepCount={setupTotalStepCount}
-        onSelect={selectAgentForSetup}
-      />
-
-      <PlatformMCPInstallMethodSheet
-        open={installMethodPickerOpen}
-        onOpenChange={(open) => {
-          if (!open) closeSetupFlow();
-        }}
-        client={activeClient}
-        canAdminister={canAdminister}
-        totalStepCount={setupTotalStepCount}
-        onBack={() => {
-          setInstallMethodPickerOpen(false);
+  const sheetBody = preparingPreselectedClient ? (
+    <PlatformMCPStateBody
+      eyebrow="Platform MCP"
+      title={`Preparing ${activeClient.label}`}
+      description="Saving your agent choice and loading its setup steps."
+    >
+      <PlatformMCPLoading />
+    </PlatformMCPStateBody>
+  ) : agentPickerOpen ? (
+    <PlatformMCPAgentPickerBody
+      isMutating={isMutating}
+      totalStepCount={setupTotalStepCount}
+      onSelect={selectAgentForSetup}
+    />
+  ) : installMethodPickerOpen ? (
+    <PlatformMCPInstallMethodBody
+      client={activeClient}
+      canAdminister={canAdminister}
+      totalStepCount={setupTotalStepCount}
+      onBack={() => {
+        setInstallMethodPickerOpen(false);
+        setAgentPickerOpen(true);
+      }}
+      onSelect={selectInstallMethod}
+    />
+  ) : setupSheetOpen ? (
+    <PlatformMCPSetupBody
+      open
+      state={state}
+      canAdminister={canAdminister}
+      currentProjectSlug={currentProjectSlug}
+      activeClient={activeClient}
+      installMethod={selectedInstallMethod}
+      isMutating={isMutating}
+      setupError={setupError}
+      onBackToInstallMethod={() => {
+        setSetupSheetOpen(false);
+        if (activeClient.id === "other") {
           setAgentPickerOpen(true);
-        }}
-        onSelect={selectInstallMethod}
-      />
-
-      <PlatformMCPSetupSheet
-        open={setupSheetOpen}
-        onOpenChange={(open) => {
-          setSetupSheetOpen(open);
-          if (!open) closeSetupFlow();
-        }}
-        state={state}
-        canAdminister={canAdminister}
-        currentProjectSlug={currentProjectSlug}
-        activeClient={activeClient}
-        installMethod={selectedInstallMethod}
-        isMutating={isMutating}
-        setupError={setupError}
-        onBackToInstallMethod={() => {
-          setSetupSheetOpen(false);
-          if (activeClient.id === "other") {
-            setAgentPickerOpen(true);
-            return;
-          }
-          setInstallMethodPickerOpen(true);
-        }}
-        onConfigurationCopied={() => {
-          setSetupSheetOpen(true);
-          recordConfigurationCopied.mutate({
-            security: { sessionHeaderGramSession: "" },
-          });
-        }}
-        onContinueSecureSetup={() => void continueSecureSetup()}
-        onDismiss={() =>
-          dismiss.mutate(
-            { security: { sessionHeaderGramSession: "" } },
-            { onSuccess: closeSetupFlow },
-          )
+          return;
         }
-        onDone={() => {
-          closeSetupFlow();
-          onSetupComplete?.();
-        }}
-      />
-    </>
-  );
+        setInstallMethodPickerOpen(true);
+      }}
+      onConfigurationCopied={() => {
+        setSetupSheetOpen(true);
+        recordConfigurationCopied.mutate({
+          security: { sessionHeaderGramSession: "" },
+        });
+      }}
+      onContinueSecureSetup={() => void continueSecureSetup()}
+      onDismiss={() =>
+        dismiss.mutate(
+          { security: { sessionHeaderGramSession: "" } },
+          { onSuccess: closeSetupFlow },
+        )
+      }
+      onDone={() => {
+        closeSetupFlow();
+        onSetupComplete?.();
+      }}
+    />
+  ) : null;
+  const setupSheets = renderSheet(sheetBody);
 
   if (sheetOnly) {
-    return <>{setupSheets}</>;
+    return setupSheets;
   }
 
   return (
@@ -756,17 +749,40 @@ function PlatformMCPOnboardingContentInner({
   );
 }
 
-function PlatformMCPStateSheet({
+/**
+ * The one sheet the whole setup flow renders into. Loading, agent, install
+ * method and setup steps swap its body rather than each opening a sheet of
+ * their own, so moving between them does not replay the slide-in and the
+ * overlay fade.
+ */
+function PlatformMCPSheetFrame({
   open,
   onOpenChange,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children?: React.ReactNode;
+}): JSX.Element {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
+      >
+        {children}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function PlatformMCPStateBody({
   eyebrow,
   title,
   description,
   footer,
   children,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   eyebrow: string;
   title: string;
   description: string;
@@ -778,34 +794,29 @@ function PlatformMCPStateSheet({
   // eyebrow → heading → one line of context, and actions sit in a footer bar
   // divided by a hairline.
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>{description}</SheetDescription>
-        </SheetHeader>
-        <div className="w-full min-w-0 flex-1 space-y-4 overflow-y-auto px-6 pt-6 pr-14 pb-6">
-          <div>
-            <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-              {eyebrow}
-            </p>
-            <h3 className="text-foreground mt-1 text-lg font-semibold">
-              {title}
-            </h3>
-            <p className="text-muted-foreground mt-1 text-sm">{description}</p>
-          </div>
-          {children}
+    <>
+      <SheetHeader className="sr-only">
+        <SheetTitle>{title}</SheetTitle>
+        <SheetDescription>{description}</SheetDescription>
+      </SheetHeader>
+      <div className="w-full min-w-0 flex-1 space-y-4 overflow-y-auto px-6 pt-6 pr-14 pb-6">
+        <div>
+          <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+            {eyebrow}
+          </p>
+          <h3 className="text-foreground mt-1 text-lg font-semibold">
+            {title}
+          </h3>
+          <p className="text-muted-foreground mt-1 text-sm">{description}</p>
         </div>
-        {footer && (
-          <div className="border-border flex items-center justify-end border-t px-6 py-4">
-            {footer}
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
+        {children}
+      </div>
+      {footer && (
+        <div className="border-border flex items-center justify-end border-t px-6 py-4">
+          {footer}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1122,70 +1133,57 @@ function PlatformMCPProgress({
   );
 }
 
-function PlatformMCPAgentPickerSheet({
-  open,
-  onOpenChange,
+function PlatformMCPAgentPickerBody({
   isMutating,
   totalStepCount,
   onSelect,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   isMutating: boolean;
   totalStepCount: number;
   onSelect: (client: PlatformMCPClient) => void;
 }): JSX.Element {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>Choose an agent</SheetTitle>
-          <SheetDescription>
-            Choose the coding agent where you want to install Platform MCP.
-          </SheetDescription>
-        </SheetHeader>
-        <PlatformMCPProgress step={1} totalStepCount={totalStepCount} />
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 pt-6 pb-10">
-            <p className="text-eyebrow">Step 1</p>
-            <h2 className="text-display-xs mt-1 font-thin">Choose an agent</h2>
-            <p className="text-muted-foreground mt-2 text-sm">
-              Pick the coding agent you&apos;re setting up. The next step will
-              show the installation methods available for that agent.
-            </p>
-            <div className="mt-5 space-y-2">
-              {clients.map((client) => (
-                <AgentPlatformPickerItem
-                  key={client.id}
-                  platformId={client.id.replaceAll("_", "-")}
-                  name={client.label}
-                  description={client.description}
-                  disabled={isMutating}
-                  onClick={() => onSelect(client)}
-                />
-              ))}
-            </div>
+    <>
+      <SheetHeader className="sr-only">
+        <SheetTitle>Choose an agent</SheetTitle>
+        <SheetDescription>
+          Choose the coding agent where you want to install Platform MCP.
+        </SheetDescription>
+      </SheetHeader>
+      <PlatformMCPProgress step={1} totalStepCount={totalStepCount} />
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-6 pt-6 pb-10">
+          <p className="text-eyebrow">Step 1</p>
+          <h2 className="text-display-xs mt-1 font-thin">Choose an agent</h2>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Pick the coding agent you&apos;re setting up. The next step will
+            show the installation methods available for that agent.
+          </p>
+          <div className="mt-5 space-y-2">
+            {clients.map((client) => (
+              <AgentPlatformPickerItem
+                key={client.id}
+                platformId={client.id.replaceAll("_", "-")}
+                name={client.label}
+                description={client.description}
+                disabled={isMutating}
+                onClick={() => onSelect(client)}
+              />
+            ))}
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </div>
+    </>
   );
 }
 
-function PlatformMCPInstallMethodSheet({
-  open,
-  onOpenChange,
+function PlatformMCPInstallMethodBody({
   client,
   canAdminister,
   totalStepCount,
   onBack,
   onSelect,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   client: PlatformMCPClient;
   canAdminister: boolean;
   totalStepCount: number;
@@ -1230,61 +1228,56 @@ function PlatformMCPInstallMethodSheet({
       ];
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>Choose an install method</SheetTitle>
-          <SheetDescription>
-            Choose how to install Platform MCP for {client.label}.
-          </SheetDescription>
-        </SheetHeader>
-        <PlatformMCPProgress step={2} totalStepCount={totalStepCount} />
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 pt-6 pb-10">
-            <p className="text-eyebrow">Step 2</p>
-            <h2 className="text-display-xs mt-1 font-thin">
-              Choose an install method
-            </h2>
-            <p className="text-muted-foreground mt-2 text-sm">
-              Install Platform MCP for your {client.label} account. Installation
-              never grants access by itself; you&apos;ll authorize in the
-              following step.
-            </p>
-            <div className="mt-5 space-y-2">
-              {methods.map((method) => (
-                <button
-                  key={method.id}
-                  type="button"
-                  onClick={() => onSelect(method.id)}
-                  className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
-                >
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <p className="text-foreground text-sm font-medium">
-                      {method.title}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      {method.description}
-                    </p>
-                  </div>
-                  <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
-                </button>
-              ))}
-            </div>
+    <>
+      <SheetHeader className="sr-only">
+        <SheetTitle>Choose an install method</SheetTitle>
+        <SheetDescription>
+          Choose how to install Platform MCP for {client.label}.
+        </SheetDescription>
+      </SheetHeader>
+      <PlatformMCPProgress step={2} totalStepCount={totalStepCount} />
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-6 pt-6 pb-10">
+          <p className="text-eyebrow">Step 2</p>
+          <h2 className="text-display-xs mt-1 font-thin">
+            Choose an install method
+          </h2>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Install Platform MCP for your {client.label} account. Installation
+            never grants access by itself; you&apos;ll authorize in the
+            following step.
+          </p>
+          <div className="mt-5 space-y-2">
+            {methods.map((method) => (
+              <button
+                key={method.id}
+                type="button"
+                onClick={() => onSelect(method.id)}
+                className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-foreground text-sm font-medium">
+                    {method.title}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    {method.description}
+                  </p>
+                </div>
+                <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+              </button>
+            ))}
           </div>
         </div>
-        <SheetFooter className="border-border border-t px-6 py-4">
-          <Button variant="tertiary" onClick={onBack}>
-            <Button.LeftIcon>
-              <ArrowLeft className="h-3 w-3" />
-            </Button.LeftIcon>
-            <Button.Text>Back</Button.Text>
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+      </div>
+      <SheetFooter className="border-border border-t px-6 py-4">
+        <Button variant="tertiary" onClick={onBack}>
+          <Button.LeftIcon>
+            <ArrowLeft className="h-3 w-3" />
+          </Button.LeftIcon>
+          <Button.Text>Back</Button.Text>
+        </Button>
+      </SheetFooter>
+    </>
   );
 }
 
@@ -1293,24 +1286,8 @@ type PlatformMCPStep = {
   complete: boolean;
 };
 
-export function PlatformMCPSetupSheet({
-  open,
-  onOpenChange,
-  state,
-  canAdminister,
-  currentProjectSlug,
-  activeClient,
-  installMethod,
-  isMutating,
-  setupError,
-  onBackToInstallMethod,
-  onConfigurationCopied,
-  onContinueSecureSetup,
-  onDismiss,
-  onDone,
-}: {
+type PlatformMCPSetupBodyProps = {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
   state: PlatformMCPOnboardingState;
   canAdminister: boolean;
   currentProjectSlug?: string;
@@ -1323,7 +1300,37 @@ export function PlatformMCPSetupSheet({
   onContinueSecureSetup: () => void;
   onDismiss: () => void;
   onDone: () => void;
+};
+
+/** The setup steps in a sheet of their own, outside the shared setup flow. */
+export function PlatformMCPSetupSheet({
+  onOpenChange,
+  ...props
+}: PlatformMCPSetupBodyProps & {
+  onOpenChange: (open: boolean) => void;
 }): JSX.Element {
+  return (
+    <PlatformMCPSheetFrame open={props.open} onOpenChange={onOpenChange}>
+      <PlatformMCPSetupBody {...props} />
+    </PlatformMCPSheetFrame>
+  );
+}
+
+function PlatformMCPSetupBody({
+  open,
+  state,
+  canAdminister,
+  currentProjectSlug,
+  activeClient,
+  installMethod,
+  isMutating,
+  setupError,
+  onBackToInstallMethod,
+  onConfigurationCopied,
+  onContinueSecureSetup,
+  onDismiss,
+  onDone,
+}: PlatformMCPSetupBodyProps): JSX.Element {
   const steps: PlatformMCPStep[] = canAdminister
     ? [
         {
@@ -1618,155 +1625,146 @@ export function PlatformMCPSetupSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>Set up Platform MCP</SheetTitle>
-          <SheetDescription>
-            Complete Platform MCP setup one lifecycle step at a time, or skip
-            steps you do not need.
-          </SheetDescription>
-        </SheetHeader>
-        <div className="flex items-center gap-1.5 px-6 pt-6 pr-14">
-          {Array.from({ length: totalStepCount }, (_, index) => {
-            const lifecycleIndex = index - SETUP_PRIMER_STEP_COUNT;
-            const isCurrent = lifecycleIndex === currentStepIndex;
-            const isComplete =
-              index < SETUP_PRIMER_STEP_COUNT ||
-              (lifecycleIndex >= 0 && steps[lifecycleIndex]?.complete);
-            const canNavigate =
-              lifecycleIndex >= 0 && lifecycleIndex <= currentStepIndex;
+    <>
+      <SheetHeader className="sr-only">
+        <SheetTitle>Set up Platform MCP</SheetTitle>
+        <SheetDescription>
+          Complete Platform MCP setup one lifecycle step at a time, or skip
+          steps you do not need.
+        </SheetDescription>
+      </SheetHeader>
+      <div className="flex items-center gap-1.5 px-6 pt-6 pr-14">
+        {Array.from({ length: totalStepCount }, (_, index) => {
+          const lifecycleIndex = index - SETUP_PRIMER_STEP_COUNT;
+          const isCurrent = lifecycleIndex === currentStepIndex;
+          const isComplete =
+            index < SETUP_PRIMER_STEP_COUNT ||
+            (lifecycleIndex >= 0 && steps[lifecycleIndex]?.complete);
+          const canNavigate =
+            lifecycleIndex >= 0 && lifecycleIndex <= currentStepIndex;
 
-            return (
-              <button
-                key={index}
-                type="button"
-                disabled={isAcknowledgingCompletion || !canNavigate}
-                onClick={() => setCurrentStepIndex(lifecycleIndex)}
-                className={cn(
-                  "h-1 rounded-full transition-all",
-                  isCurrent
-                    ? "bg-foreground w-6"
-                    : isComplete || lifecycleIndex < currentStepIndex
-                      ? canNavigate
-                        ? "bg-foreground/40 hover:bg-foreground/60 w-4 cursor-pointer"
-                        : "bg-foreground/40 w-4 cursor-not-allowed"
-                      : "bg-border w-4 cursor-not-allowed",
-                )}
-                aria-label={`Step ${index + 1}${lifecycleIndex >= 0 ? `: ${steps[lifecycleIndex]?.title}` : ""}${isComplete ? ", complete" : skippedSteps.has(lifecycleIndex) ? ", skipped" : ""}`}
-              />
-            );
-          })}
-          <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
-            {currentStepIndex + SETUP_PRIMER_STEP_COUNT + 1}/{totalStepCount}
-          </span>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 pt-6 pb-10">
-            <p className="text-eyebrow">
-              Step {currentStepIndex + SETUP_PRIMER_STEP_COUNT + 1}
-            </p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h2 className="text-display-xs font-thin">{currentStep.title}</h2>
-              {currentStep.complete ? (
-                <Badge variant="success" size="sm">
-                  Complete
-                </Badge>
-              ) : currentStepSkipped ? (
-                <Badge variant="neutral" size="sm">
-                  Skipped
-                </Badge>
-              ) : null}
-            </div>
-            <div className="mt-5 space-y-5">
-              {currentStepSkipped && !currentStep.complete && (
-                <Text muted small>
-                  Skipped for this guide. This does not record a connection, MCP
-                  registration, or distribution. You can still complete this
-                  step later.
-                </Text>
+          return (
+            <button
+              key={index}
+              type="button"
+              disabled={isAcknowledgingCompletion || !canNavigate}
+              onClick={() => setCurrentStepIndex(lifecycleIndex)}
+              className={cn(
+                "h-1 rounded-full transition-all",
+                isCurrent
+                  ? "bg-foreground w-6"
+                  : isComplete || lifecycleIndex < currentStepIndex
+                    ? canNavigate
+                      ? "bg-foreground/40 hover:bg-foreground/60 w-4 cursor-pointer"
+                      : "bg-foreground/40 w-4 cursor-not-allowed"
+                    : "bg-border w-4 cursor-not-allowed",
               )}
-              {showStep()}
-            </div>
+              aria-label={`Step ${index + 1}${lifecycleIndex >= 0 ? `: ${steps[lifecycleIndex]?.title}` : ""}${isComplete ? ", complete" : skippedSteps.has(lifecycleIndex) ? ", skipped" : ""}`}
+            />
+          );
+        })}
+        <span className="text-muted-foreground ml-auto text-[11px] tabular-nums">
+          {currentStepIndex + SETUP_PRIMER_STEP_COUNT + 1}/{totalStepCount}
+        </span>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-6 pt-6 pb-10">
+          <p className="text-eyebrow">
+            Step {currentStepIndex + SETUP_PRIMER_STEP_COUNT + 1}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h2 className="text-display-xs font-thin">{currentStep.title}</h2>
+            {currentStep.complete ? (
+              <Badge variant="success" size="sm">
+                Complete
+              </Badge>
+            ) : currentStepSkipped ? (
+              <Badge variant="neutral" size="sm">
+                Skipped
+              </Badge>
+            ) : null}
+          </div>
+          <div className="mt-5 space-y-5">
+            {currentStepSkipped && !currentStep.complete && (
+              <Text muted small>
+                Skipped for this guide. This does not record a connection, MCP
+                registration, or distribution. You can still complete this step
+                later.
+              </Text>
+            )}
+            {showStep()}
           </div>
         </div>
-        <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
-          <Button
-            variant="tertiary"
-            disabled={isMutating || isAcknowledgingCompletion}
-            onClick={() => {
-              if (currentStepIndex === 0) {
-                onBackToInstallMethod();
-              } else {
-                setCurrentStepIndex((index) => index - 1);
-              }
-            }}
-          >
-            <Button.LeftIcon>
-              <ArrowLeft className="h-3 w-3" />
-            </Button.LeftIcon>
-            <Button.Text>Back</Button.Text>
+      </div>
+      <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
+        <Button
+          variant="tertiary"
+          disabled={isMutating || isAcknowledgingCompletion}
+          onClick={() => {
+            if (currentStepIndex === 0) {
+              onBackToInstallMethod();
+            } else {
+              setCurrentStepIndex((index) => index - 1);
+            }
+          }}
+        >
+          <Button.LeftIcon>
+            <ArrowLeft className="h-3 w-3" />
+          </Button.LeftIcon>
+          <Button.Text>Back</Button.Text>
+        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="tertiary" disabled={isMutating} onClick={onDismiss}>
+            <Button.Text>Dismiss</Button.Text>
           </Button>
-          <div className="flex items-center gap-2">
+          {!currentStep.complete && !currentStepSkipped && (
             <Button
               variant="tertiary"
-              disabled={isMutating}
-              onClick={onDismiss}
-            >
-              <Button.Text>Dismiss</Button.Text>
-            </Button>
-            {!currentStep.complete && !currentStepSkipped && (
-              <Button
-                variant="tertiary"
-                disabled={isMutating || isAcknowledgingCompletion}
-                onClick={() => {
-                  setSkippedSteps((previous) =>
-                    new Set(previous).add(currentStepIndex),
-                  );
-                  if (currentStepIndex === steps.length - 1) {
-                    onDone();
-                  } else {
-                    setCurrentStepIndex((index) => index + 1);
-                  }
-                }}
-              >
-                <Button.Text>
-                  {currentStepIndex === steps.length - 1
-                    ? "Skip and finish guide"
-                    : "Skip this step"}
-                </Button.Text>
-              </Button>
-            )}
-            {currentStepIndex === steps.length - 1 &&
-            (currentStep.complete || currentStepSkipped) ? (
-              <Button
-                disabled={isMutating || isAcknowledgingCompletion}
-                onClick={onDone}
-              >
-                <Button.Text>
-                  {hasUnfinishedSkips ? "Finish guide" : "Done"}
-                </Button.Text>
-              </Button>
-            ) : (
-              <Button
-                disabled={
-                  isMutating ||
-                  isAcknowledgingCompletion ||
-                  (!currentStep.complete && !currentStepSkipped) ||
-                  currentStepIndex === steps.length - 1
+              disabled={isMutating || isAcknowledgingCompletion}
+              onClick={() => {
+                setSkippedSteps((previous) =>
+                  new Set(previous).add(currentStepIndex),
+                );
+                if (currentStepIndex === steps.length - 1) {
+                  onDone();
+                } else {
+                  setCurrentStepIndex((index) => index + 1);
                 }
-                onClick={() => setCurrentStepIndex((index) => index + 1)}
-              >
-                <Button.Text>Next</Button.Text>
-              </Button>
-            )}
-          </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+              }}
+            >
+              <Button.Text>
+                {currentStepIndex === steps.length - 1
+                  ? "Skip and finish guide"
+                  : "Skip this step"}
+              </Button.Text>
+            </Button>
+          )}
+          {currentStepIndex === steps.length - 1 &&
+          (currentStep.complete || currentStepSkipped) ? (
+            <Button
+              disabled={isMutating || isAcknowledgingCompletion}
+              onClick={onDone}
+            >
+              <Button.Text>
+                {hasUnfinishedSkips ? "Finish guide" : "Done"}
+              </Button.Text>
+            </Button>
+          ) : (
+            <Button
+              disabled={
+                isMutating ||
+                isAcknowledgingCompletion ||
+                (!currentStep.complete && !currentStepSkipped) ||
+                currentStepIndex === steps.length - 1
+              }
+              onClick={() => setCurrentStepIndex((index) => index + 1)}
+            >
+              <Button.Text>Next</Button.Text>
+            </Button>
+          )}
+        </div>
+      </SheetFooter>
+    </>
   );
 }
 
