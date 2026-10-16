@@ -65,9 +65,9 @@ func (s *Service) PrepareEMA(ctx context.Context, p *gen.PrepareEMAPayload) (*ge
 	if err != nil {
 		return nil, err
 	}
-	if err := s.reportConnectionScopes(ctx, in.UserSessionIssuerID, result); err != nil {
-		return nil, err
-	}
+	// The binding is already committed; report it without connection_scopes
+	// (the error is logged) rather than failing a write that succeeded.
+	_ = s.reportConnectionScopes(ctx, in.UserSessionIssuerID, result)
 	return preparationAPIView(result), nil
 }
 
