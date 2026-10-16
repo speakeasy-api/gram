@@ -650,6 +650,8 @@ const (
 	OktaReconcileRunIDKey             = attribute.Key("gram.okta_applications.run_id")
 	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
+	DirectoryMembershipsOpenedKey     = attribute.Key("gram.directory_group.memberships_opened")
+	DirectoryMembershipsClosedKey     = attribute.Key("gram.directory_group.memberships_closed")
 	OutcomeKey                        = attribute.Key("gram.outcome")
 	PackageNameKey                    = attribute.Key("gram.package.name")
 	PackageVersionKey                 = attribute.Key("gram.package.version")
@@ -2541,6 +2543,14 @@ func SlogWorkOSDirectoryUserID(v string) slog.Attr {
 func WorkOSDirectoryGroupID(v string) attribute.KeyValue { return WorkOSDirectoryGroupIDKey.String(v) }
 func SlogWorkOSDirectoryGroupID(v string) slog.Attr {
 	return slog.String(string(WorkOSDirectoryGroupIDKey), v)
+}
+
+func SlogDirectoryMembershipsOpened(v int) slog.Attr {
+	return slog.Int(string(DirectoryMembershipsOpenedKey), v)
+}
+
+func SlogDirectoryMembershipsClosed(v int) slog.Attr {
+	return slog.Int(string(DirectoryMembershipsClosedKey), v)
 }
 
 func SlogOutboxID(v int64) slog.Attr { return slog.Int64(string(OutboxIDKey), v) }
