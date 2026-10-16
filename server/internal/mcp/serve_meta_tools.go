@@ -294,6 +294,12 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 					deepest = innerShareable
 				}
 			}
+			// An unknown tool or invalid call refused before dispatch is one
+			// the program can correct.
+			if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && !invocation.dispatched &&
+				(shareable.Code == oops.CodeNotFound || shareable.Code == oops.CodeInvalid) {
+				invocation.rejected = true
+			}
 			return marshalMetaToolError(ctx, logger, req.ID,
 				fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error()))
 		}
@@ -625,6 +631,7 @@ func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpj
 // result rather than a protocol error.
 func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string) (json.RawMessage, error) {
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		invocation.message = message
 		return nil, invocation.failure()
 	}
 	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{

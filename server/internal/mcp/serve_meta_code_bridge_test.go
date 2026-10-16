@@ -14,9 +14,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -24,6 +26,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -113,6 +116,11 @@ func TestCodeBridgeDiscoversHostedRemoteAndTunnelMembers(t *testing.T) {
 	require.False(t, result.OK)
 	require.Equal(t, "unknown", result.Outcome)
 	require.Equal(t, "tool_call_outcome_unknown", result.Error)
+	result, err = host.Call(ctx, hosted.slug+"--missing", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.Equal(t, "completed", result.Outcome)
+	require.Equal(t, "tool_call_rejected", result.Error)
+	require.Contains(t, string(result.Content), "tool not found")
 }
 
 func TestCodeBridgeObservesEndpointAndGrantRevocation(t *testing.T) {
@@ -133,8 +141,10 @@ func TestCodeBridgeObservesEndpointAndGrantRevocation(t *testing.T) {
 				require.NoError(t, err)
 			}
 			host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, nil)
-			_, err := host.Describe(ctx, "remote--ping")
+			// The call reads no catalog, so authorization alone gates it.
+			result, err := host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
 			require.NoError(t, err)
+			require.True(t, result.OK, "%+v", result)
 			switch change {
 			case "endpoint":
 				_, err = endpointrepo.New(ti.conn).SoftDeleteMCPEndpointsByMetaMCPServerID(ctx, endpointrepo.SoftDeleteMCPEndpointsByMetaMCPServerIDParams{MetaMcpServerID: gateway.ID, ProjectID: gateway.ProjectID})
@@ -221,11 +231,11 @@ func TestCodeBridgeOmitsMembersWithNoPermittedTools(t *testing.T) {
 	require.Len(t, servers, 2, "an unrestricted session keeps every member")
 }
 
-// TestCodeBridgeRefusesChangedDefinitionOrDestination pins the fingerprint
-// check at dispatch: a call reads the member's catalog once and dispatches
-// through that read, and a member now served by a different backend is
-// refused before any call.
-func TestCodeBridgeRefusesChangedDefinitionOrDestination(t *testing.T) {
+// TestCodeBridgeCallsWithoutListingAndDropsSwappedDestination pins the call
+// path: a call dispatches without reading the member's catalog, the member's
+// own refusal reaches the program as a completed failure, and a member now
+// served by a different backend is dropped before any call.
+func TestCodeBridgeCallsWithoutListingAndDropsSwappedDestination(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
@@ -244,14 +254,20 @@ func TestCodeBridgeRefusesChangedDefinitionOrDestination(t *testing.T) {
 		return n
 	}
 
-	_, err := host.Describe(ctx, "remote--ping")
+	for range 2 {
+		result, err := host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
+		require.NoError(t, err)
+		require.True(t, result.OK, "%+v", result)
+	}
+	require.Equal(t, 2, count(original, "tools/call"))
+	require.Zero(t, count(original, "tools/list"), "a call never reads the member catalog")
+
+	result, err := host.Call(ctx, "remote--missing", json.RawMessage(`{}`))
 	require.NoError(t, err)
-	listsBefore := count(original, "tools/list")
-	result, err := host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
-	require.NoError(t, err)
-	require.True(t, result.OK, "%+v", result)
-	require.Equal(t, 1, count(original, "tools/call"))
-	require.Equal(t, listsBefore+1, count(original, "tools/list"), "a call reads the member catalog once")
+	require.Equal(t, "completed", result.Outcome)
+	require.False(t, result.OK)
+	require.Equal(t, "tool_call_rejected", result.Error)
+	require.Contains(t, string(result.Content), "missing")
 
 	replacement := newRecordingUpstream(t, "ping")
 	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: *auth.ProjectID, TransportType: "streamable-http", Url: replacement.url})
@@ -260,8 +276,42 @@ func TestCodeBridgeRefusesChangedDefinitionOrDestination(t *testing.T) {
 	_, err = serverrepo.New(ti.conn).UpdateMCPServer(ctx, serverrepo.UpdateMCPServerParams{Name: row.Name, Slug: row.Slug, EnvironmentID: row.EnvironmentID, UserSessionIssuerID: row.UserSessionIssuerID, RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, TunneledMcpServerID: row.TunneledMcpServerID, ToolsetID: row.ToolsetID, UnproxiedMcpServerID: row.UnproxiedMcpServerID, ToolVariationsGroupID: row.ToolVariationsGroupID, Visibility: row.Visibility, ID: row.ID, ProjectID: row.ProjectID})
 	require.NoError(t, err)
 
+	calls := count(original, "tools/call")
 	_, err = host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
-	require.ErrorContains(t, err, "tool_changed")
-	require.Equal(t, 1, count(original, "tools/call"))
-	require.Zero(t, count(replacement, "tools/call"), "a swapped backend must not receive the call")
+	require.Error(t, err)
+	require.Equal(t, calls, count(original, "tools/call"))
+	require.Empty(t, replacement.journal(), "a swapped backend must not be dialed")
+}
+
+// TestCodeBridgeLiveAnnotationGrantWithoutDescribe: a call that skipped
+// discovery is still held to a live annotation grant, which lists on the
+// call's own session; the refused tool never runs.
+func TestCodeBridgeLiveAnnotationGrantWithoutDescribe(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, []testmcp.Tool{
+		{Name: "read_docs", Annotations: &mcpsdk.ToolAnnotations{ReadOnlyHint: true}, InputSchema: map[string]any{"type": "object"}, Response: testmcp.ToolResponse{Content: []map[string]any{{"type": "text", "text": "read ok"}}}},
+		{Name: "delete_docs", InputSchema: map[string]any{"type": "object"}, Response: testmcp.ToolResponse{Content: []map[string]any{{"type": "text", "text": "delete ok"}}}},
+	})
+	t.Cleanup(upstream.Close)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Docs", "docs", 0, upstream.URL)
+	live := toolfilter.AnnotationModeLive
+	selection, err := toolfilter.NewSessionSelection("meta_mcp_server:"+gateway.ID.String(), uuid.New(), []toolfilter.AllowEntry{
+		{Type: toolfilter.AllowTypeAnnotation, Name: toolfilter.AnnotationReadOnly, Mode: &live, Tools: nil},
+	})
+	require.NoError(t, err)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service, gateway.ID, selection)
+
+	result, err := host.Call(ctx, "docs--read_docs", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.True(t, result.OK, "%+v", result)
+	require.Contains(t, string(result.Content), "read ok")
+
+	_, err = host.Call(ctx, "docs--delete_docs", json.RawMessage(`{}`))
+	var refusal *codemode.DispatchError
+	require.ErrorAs(t, err, &refusal)
+	require.True(t, refusal.BeforeInvoke, "the gateway refused the call before the member saw it")
 }

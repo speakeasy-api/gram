@@ -287,7 +287,11 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt *memberRou
 	}
 	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok {
 		// The member proxy's own selection refusal, not the upstream's.
+		invocation, _ := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation)
 		if rpcErr.Code == proxy.RejectCodeInvalidRequest && rpcErr.Message == remotemcp.ToolNotApprovedMessage {
+			if invocation != nil {
+				invocation.notApproved = true
+			}
 			return &metaMemberError{message: remotemcp.ToolNotApprovedMessage}
 		}
 		return &metaMemberError{message: fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message)}
@@ -332,6 +336,10 @@ type memberToolResult struct {
 	// context after an input_required answer, and CallTool returns only the
 	// last attempt, so later exchanges replace earlier ones.
 	raw json.RawMessage
+	// refusal is the member's own JSON-RPC error. It runs last, so an error a
+	// proxy interceptor synthesized, including a withheld response after the
+	// tool ran, never reaches it.
+	refusal *jsonrpc.Error
 }
 
 func (*memberToolResult) Name() string { return "meta_member_result" }
@@ -341,7 +349,7 @@ func (c *memberToolResult) InterceptToolsCallResponse(_ context.Context, call *p
 		return nil
 	}
 	response, ok := call.RemoteMessage.Message.(*jsonrpc.Response)
-	if !ok || response.Error != nil {
+	if !ok {
 		return nil
 	}
 	request, ok := call.Request.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request)
@@ -350,7 +358,12 @@ func (c *memberToolResult) InterceptToolsCallResponse(_ context.Context, call *p
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if response.Error != nil {
+		c.refusal, _ = errors.AsType[*jsonrpc.Error](response.Error)
+		return nil
+	}
 	c.raw = bytes.Clone(response.Result)
+	c.refusal = nil
 	return nil
 }
 
@@ -360,9 +373,17 @@ func callMemberTool(ctx context.Context, session *mcp.ClientSession, params *mcp
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
 		invocation.dispatched = true
 	}
-	capture := &memberToolResult{mu: sync.Mutex{}, raw: nil}
+	capture := &memberToolResult{mu: sync.Mutex{}, raw: nil, refusal: nil}
 	_, err := session.CallTool(context.WithValue(ctx, memberToolResultKey{}, capture), params)
 	if err != nil {
+		capture.mu.Lock()
+		refusal := capture.refusal
+		capture.mu.Unlock()
+		// A member reporting an unknown tool or invalid arguments did not run it.
+		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && refusal != nil &&
+			(refusal.Code == jsonrpc.CodeInvalidParams || refusal.Code == jsonrpc.CodeMethodNotFound) {
+			invocation.rejected = true
+		}
 		return nil, fmt.Errorf("call member tool: %w", err)
 	}
 	capture.mu.Lock()

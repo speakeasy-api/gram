@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -31,7 +33,7 @@ import (
 type metaCodeBackend struct {
 	service  *Service
 	gate     metaGateContext
-	admitted map[string]uuid.UUID
+	admitted map[string]string
 	meta     *mcprequests.WireMeta
 	boundary authz.AdmissionBoundary
 	refresh  metaCodeGateRefresher
@@ -49,9 +51,9 @@ type metaCodeGateRefresher func(context.Context, *metamcprepo.MetaMcpServer) (co
 var _ codemode.Backend = (*metaCodeBackend)(nil)
 
 func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateContext, members []metaMember, endpoint endpointrepo.McpEndpoint, issuer uuid.NullUUID, meta *mcprequests.WireMeta, refresh metaCodeGateRefresher) (*metaCodeBackend, error) {
-	admitted := make(map[string]uuid.UUID, len(members))
+	admitted := make(map[string]string, len(members))
 	for _, member := range members {
-		admitted[member.slug] = member.serverID
+		admitted[member.slug] = codeMemberDestination(member)
 	}
 	var boundary authz.AdmissionBoundary
 	// Public gateway callers have no RBAC identity. Their authority is the
@@ -131,7 +133,9 @@ func (b *metaCodeBackend) current(ctx context.Context) (context.Context, *metaGa
 	ctx = freshCtx
 	permitted := make([]metaMember, 0, len(members))
 	for _, member := range members {
-		if b.admitted[member.slug] != member.serverID {
+		// Calls no longer re-read a member's catalog, so a member that now
+		// routes elsewhere is dropped here rather than at a fingerprint check.
+		if b.admitted[member.slug] != codeMemberDestination(member) {
 			continue
 		}
 		permitted = append(permitted, member)
@@ -214,55 +218,63 @@ func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, me
 	return result, nil
 }
 
-func (b *metaCodeBackend) Resolve(ctx context.Context, path string) (*codemode.Tool, codemode.Dispatch, error) {
+func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.Tool, error) {
 	ctx, gate, members, err := b.current(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	slug, name, err := metamcp.SplitQualifiedName(path)
 	if err != nil {
-		return nil, nil, codemode.ErrToolUnavailable
+		return nil, codemode.ErrToolUnavailable
 	}
 	member, ok := findMetaMember(members, slug)
 	if !ok {
-		return nil, nil, codemode.ErrToolUnavailable
+		return nil, codemode.ErrToolUnavailable
 	}
 	catalog, err := b.service.describeMetaMember(ctx, b.service.logger, gate, member)
 	if err != nil {
-		return nil, nil, codemode.ErrToolUnavailable
+		return nil, codemode.ErrToolUnavailable
 	}
 	entry, ok := catalog.byName[name]
 	if !ok {
-		return nil, nil, codemode.ErrToolUnavailable
+		return nil, codemode.ErrToolUnavailable
 	}
 	definition, err := json.Marshal(entry)
 	if err != nil {
-		return nil, nil, codemode.ErrToolUnavailable
+		return nil, codemode.ErrToolUnavailable
 	}
-	tool := &codemode.Tool{Path: path, Name: entry.Name, Description: entry.Description, Definition: definition, Fingerprint: codeToolFingerprint(member, definition)}
-	dispatch := func(arguments json.RawMessage) (json.RawMessage, error) {
-		return b.dispatch(ctx, gate, members, path, arguments)
-	}
-	return tool, dispatch, nil
+	return &codemode.Tool{Path: path, Name: entry.Name, Description: entry.Description, Definition: definition, Fingerprint: codeToolFingerprint(member, definition)}, nil
 }
 
-func (b *metaCodeBackend) dispatch(ctx context.Context, gate *metaGateContext, members []metaMember, path string, arguments json.RawMessage) (json.RawMessage, error) {
+func (b *metaCodeBackend) Call(ctx context.Context, path string, arguments json.RawMessage) (json.RawMessage, error) {
+	ctx, gate, members, err := b.current(ctx)
+	if err != nil {
+		return nil, err
+	}
 	callGate := *gate
 	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID(uuid.NewString()), Method: "tools/call", Params: nil}
-	invocation := &metaCodeInvocation{dispatched: false}
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, notApproved: false, message: ""}
 	ctx = context.WithValue(ctx, metaCodeInvocationKey{}, invocation)
 	raw, err := b.service.executeMetaMemberTool(ctx, b.service.logger, &callGate, members, req, path, arguments, b.meta)
 	if err != nil {
+		failure := invocation.failure()
 		if refusal, ok := errors.AsType[*codemode.DispatchError](err); ok {
-			return nil, refusal
+			failure = refusal
 		}
-		return nil, invocation.failure()
+		if invocation.message != "" {
+			level := slog.LevelInfo
+			if refusal, ok := errors.AsType[*codemode.DispatchError](failure); ok && !refusal.BeforeInvoke && refusal.Rejection == "" {
+				level = slog.LevelWarn
+			}
+			b.service.logger.Log(ctx, level, "code mode tool call failed", attr.SlogToolName(path), attr.SlogReason(invocation.message))
+		}
+		return nil, failure
 	}
 	var envelope struct {
 		Result json.RawMessage `json:"result"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil || len(envelope.Result) == 0 {
-		return nil, fmt.Errorf("invalid member execution result")
+		return nil, invocation.failure()
 	}
 	return envelope.Result, nil
 }
@@ -272,19 +284,39 @@ type metaCodeInvocationKey struct{}
 // One invocation owns this state; it is never shared across parallel callbacks.
 type metaCodeInvocation struct {
 	dispatched bool
+	// rejected marks a call refused unexecuted for a reason the program can
+	// fix: the member's own unknown-tool or invalid-params error, or a hosted
+	// lookup refusal before dispatch.
+	rejected bool
+	// notApproved marks the member proxy's refusal of a tool outside the
+	// session's selection, which never reaches the member.
+	notApproved bool
+	// message is the member-scoped failure the program would otherwise lose.
+	message string
 }
 
 func (i *metaCodeInvocation) failure() error {
-	if !i.dispatched {
-		return &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
+	switch {
+	case i.notApproved:
+		return &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable", Rejection: ""}
+	case i.rejected:
+		return &codemode.DispatchError{BeforeInvoke: false, Code: "tool_call_rejected", Rejection: i.message}
+	case !i.dispatched:
+		return &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable", Rejection: ""}
+	default:
+		return &codemode.DispatchError{BeforeInvoke: false, Code: "tool_call_outcome_unknown", Rejection: ""}
 	}
-	return &codemode.DispatchError{BeforeInvoke: false, Code: "tool_call_outcome_unknown"}
 }
 
 // codeToolFingerprint binds a member tool's complete definition to its member
-// and dispatch destination, so a run detects a definition or backend that
-// changes between catalog reads.
+// and dispatch destination, so search cursors detect a changed catalog.
 func codeToolFingerprint(member metaMember, definition json.RawMessage) string {
+	sum := sha256.Sum256(append(append([]byte(codeMemberDestination(member)), 0), definition...))
+	return hex.EncodeToString(sum[:])
+}
+
+// codeMemberDestination identifies where a member's calls are routed.
+func codeMemberDestination(member metaMember) string {
 	destination, _ := json.Marshal([]any{
 		member.serverID,
 		member.projectID,
@@ -296,6 +328,5 @@ func codeToolFingerprint(member metaMember, definition json.RawMessage) string {
 		member.environmentID,
 		member.toolVariationsGroupID,
 	})
-	sum := sha256.Sum256(append(append(destination, 0), definition...))
-	return hex.EncodeToString(sum[:])
+	return string(destination)
 }

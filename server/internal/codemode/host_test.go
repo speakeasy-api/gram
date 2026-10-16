@@ -19,6 +19,8 @@ type fixtureBackend struct {
 	listed    []string
 	calls     []string
 	result    json.RawMessage
+	callErr   error
+	revoked   bool
 	refreshes int
 }
 
@@ -53,30 +55,39 @@ func (b *fixtureBackend) catalog(ctx context.Context, server string) (*Catalog, 
 	return catalog, nil
 }
 
-func (b *fixtureBackend) Resolve(ctx context.Context, path string) (*Tool, Dispatch, error) {
+func (b *fixtureBackend) Describe(ctx context.Context, path string) (*Tool, error) {
 	b.mu.Lock()
 	b.refreshes++
 	b.mu.Unlock()
 	server, _, err := splitPath(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	catalog, err := b.catalog(ctx, server)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	for _, tool := range catalog.Tools {
 		if tool.Path == path {
-			dispatch := func(json.RawMessage) (json.RawMessage, error) {
-				b.mu.Lock()
-				defer b.mu.Unlock()
-				b.calls = append(b.calls, path)
-				return b.result, nil
-			}
-			return &tool, dispatch, nil
+			return &tool, nil
 		}
 	}
-	return nil, nil, ErrToolUnavailable
+	return nil, ErrToolUnavailable
+}
+
+// Call never lists: like a member, it answers an unknown tool itself.
+func (b *fixtureBackend) Call(_ context.Context, path string, _ json.RawMessage) (json.RawMessage, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.refreshes++
+	if b.revoked {
+		return nil, ErrExecutionRevoked
+	}
+	b.calls = append(b.calls, path)
+	if b.callErr != nil {
+		return nil, b.callErr
+	}
+	return b.result, nil
 }
 
 func (b *fixtureBackend) refreshCount() int {
@@ -145,7 +156,7 @@ func TestEmptyRestrictionNeedsNoToolEnumeration(t *testing.T) {
 	require.Empty(t, backend.listed)
 }
 
-func TestDescribePinsExactDefinitionAndStripsMetadata(t *testing.T) {
+func TestDescribeReturnsExactDefinitionAndStripsMetadata(t *testing.T) {
 	t.Parallel()
 	tool := fixtureTool("crm--orders.list")
 	backend := &fixtureBackend{catalogs: map[string]*Catalog{"crm": {Tools: []Tool{tool, fixtureTool("crm--orders-list")}}}}
@@ -159,32 +170,100 @@ func TestDescribePinsExactDefinitionAndStripsMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, described.Path, other.Path)
 	backend.catalogs["crm"].Tools[0].Fingerprint = "new-destination"
-	_, err = host.Call(t.Context(), tool.Path, json.RawMessage(`{"customer_id":"c1"}`))
-	require.ErrorContains(t, err, "tool_changed")
+	again, err := host.Describe(t.Context(), tool.Path)
+	require.NoError(t, err, "a run may rediscover a changed tool and correct itself")
+	require.Equal(t, "new-destination", again.Fingerprint)
 	require.Empty(t, backend.calls)
 }
 
-func TestCallObservesRevocationAfterDescription(t *testing.T) {
+func TestCallObservesRevocationWithoutListing(t *testing.T) {
 	t.Parallel()
-	backend := &fixtureBackend{catalogs: map[string]*Catalog{"crm": {Tools: []Tool{fixtureTool("crm--list")}}}}
+	backend := &fixtureBackend{catalogs: map[string]*Catalog{"crm": {Tools: []Tool{fixtureTool("crm--list")}}}, revoked: true}
 	host, err := NewHost(t.Context(), backend, "scope", nil)
 	require.NoError(t, err)
-	_, err = host.Describe(t.Context(), "crm--list")
-	require.NoError(t, err)
-	backend.catalogs["crm"].Tools = nil
 	_, err = host.Call(t.Context(), "crm--list", json.RawMessage(`{"customer_id":"c1"}`))
-	require.ErrorIs(t, err, ErrToolUnavailable)
+	require.ErrorIs(t, err, ErrExecutionRevoked)
 	require.Empty(t, backend.calls)
+	require.Empty(t, backend.listed)
 }
 
-func TestInvalidArgumentsNeverDispatch(t *testing.T) {
+// TestCallNeverListsTheMember pins one dispatch and no catalog read per call,
+// whether or not the run described the tool first.
+func TestCallNeverListsTheMember(t *testing.T) {
+	t.Parallel()
+	backend := &fixtureBackend{catalogs: map[string]*Catalog{"crm": {Tools: []Tool{fixtureTool("crm--list")}}}, result: json.RawMessage(`{"structuredContent":{"n":1},"content":[]}`)}
+	host, err := NewHost(t.Context(), backend, "scope", nil)
+	require.NoError(t, err)
+	for range 2 {
+		result, err := host.Call(t.Context(), "crm--list", json.RawMessage(`{"customer_id":"c1"}`))
+		require.NoError(t, err)
+		require.True(t, result.OK)
+	}
+	require.Empty(t, backend.listed)
+	require.Equal(t, []string{"crm--list", "crm--list"}, backend.calls)
+}
+
+func TestArgumentsMustBeABoundedObjectBeforeDispatch(t *testing.T) {
 	t.Parallel()
 	backend := &fixtureBackend{catalogs: map[string]*Catalog{"crm": {Tools: []Tool{fixtureTool("crm--list")}}}}
 	host, err := NewHost(t.Context(), backend, "scope", nil)
 	require.NoError(t, err)
-	_, err = host.Call(t.Context(), "crm--list", json.RawMessage(`{"customer_id":123}`))
-	require.Error(t, err)
+	for _, arguments := range []string{`[]`, `null`, `"x"`, `{`, `{"a":"` + strings.Repeat("x", MaxResultBytes) + `"}`} {
+		_, err = host.Call(t.Context(), "crm--list", json.RawMessage(arguments))
+		require.ErrorContains(t, err, "bounded JSON object")
+	}
 	require.Empty(t, backend.calls)
+}
+
+// TestMemberRejectionIsACompletedFailure: schema checks are the member's, and
+// its refusal reaches the program as a fixable failed call, not an unknown outcome.
+func TestMemberRejectionIsACompletedFailure(t *testing.T) {
+	t.Parallel()
+	backend := &fixtureBackend{callErr: &DispatchError{BeforeInvoke: false, Code: "tool_call_rejected", Rejection: `server "crm" rejected the call: invalid params: customer_id must be a string`}}
+	host, err := NewHost(t.Context(), backend, "scope", nil)
+	require.NoError(t, err)
+	result, err := host.Call(t.Context(), "crm--list", json.RawMessage(`{"customer_id":123}`))
+	require.NoError(t, err)
+	require.Equal(t, "completed", result.Outcome)
+	require.False(t, result.OK)
+	require.Equal(t, "tool_call_rejected", result.Error)
+	require.Contains(t, string(result.Content), "customer_id must be a string")
+
+	backend.callErr = &DispatchError{BeforeInvoke: false, Code: "tool_call_rejected", Rejection: strings.Repeat("é", maxRejectionBytes)}
+	result, err = host.Call(t.Context(), "crm--list", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	var content []map[string]string
+	require.NoError(t, json.Unmarshal(result.Content, &content))
+	require.LessOrEqual(t, len(content[0]["text"]), maxRejectionBytes)
+
+	backend.callErr = &DispatchError{BeforeInvoke: false, Code: "tool_call_outcome_unknown", Rejection: ""}
+	result, err = host.Call(t.Context(), "crm--list", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.Equal(t, "unknown", result.Outcome)
+
+	backend.callErr = &DispatchError{BeforeInvoke: true, Code: "tool_unavailable", Rejection: ""}
+	_, err = host.Call(t.Context(), "crm--list", json.RawMessage(`{}`))
+	var refusal *DispatchError
+	require.ErrorAs(t, err, &refusal)
+	require.True(t, refusal.BeforeInvoke)
+}
+
+func TestAllowlistAdmissionReadsNoCatalogs(t *testing.T) {
+	t.Parallel()
+	backend := &fixtureBackend{servers: []Server{{Slug: "crm", Name: "CRM"}}, result: json.RawMessage(`{"content":[]}`)}
+	host, err := NewHost(t.Context(), backend, "scope", []string{"crm--list", "erp--sync"})
+	require.NoError(t, err)
+	require.Empty(t, backend.listed)
+	require.Zero(t, backend.refreshCount())
+	_, err = NewHost(t.Context(), backend, "scope", []string{"crm--list", "crm--list"})
+	require.Error(t, err)
+	_, err = NewHost(t.Context(), backend, "scope", []string{"no-separator"})
+	require.Error(t, err)
+	_, err = host.Call(t.Context(), "crm--other", json.RawMessage(`{}`))
+	require.ErrorIs(t, err, ErrToolUnavailable)
+	_, err = host.Call(t.Context(), "crm--list", json.RawMessage(`{}`))
+	require.NoError(t, err)
+	require.Equal(t, []string{"crm--list"}, backend.calls)
 }
 
 func TestSearchCursorRejectsScopeCatalogAndFailureChanges(t *testing.T) {
@@ -218,18 +297,6 @@ func TestRankPrefersExactNamesAndTokenizedToolNames(t *testing.T) {
 	require.Equal(t, "crm--other", page.Items[0].Path)
 }
 
-func TestSchemaLocalReferencesAndExternalReferenceRejection(t *testing.T) {
-	t.Parallel()
-	definition := json.RawMessage(`{"inputSchema":{"type":"object","properties":{"id":{"$ref":"#/$defs/id"}},"required":["id"],"$defs":{"id":{"type":"string"}}}}`)
-	require.NoError(t, ValidateArguments(definition, json.RawMessage(`{"id":"one"}`)))
-	require.Error(t, ValidateArguments(definition, json.RawMessage(`{"id":1}`)))
-	for _, ref := range []string{"https://example.invalid/schema", "file:///etc/passwd"} {
-		raw, err := json.Marshal(map[string]any{"inputSchema": map[string]string{"$ref": ref}})
-		require.NoError(t, err)
-		require.ErrorContains(t, ValidateArguments(raw, json.RawMessage(`{}`)), "no URLLoader")
-	}
-}
-
 func TestNormalizePreservesStructuredContentAndContent(t *testing.T) {
 	t.Parallel()
 	result, err := NormalizeResult(json.RawMessage(`{"structuredContent":{},"content":[{"type":"text","text":"not json","_meta":{"secret":true}},{"type":"image","data":"AA==","mimeType":"image/png"}],"_meta":{"secret":true}}`))
@@ -257,7 +324,7 @@ func TestOversizedResultPreservesCompletedDispatch(t *testing.T) {
 	require.Equal(t, []string{"crm--write"}, backend.calls)
 }
 
-func TestOutputSchemaMismatchDoesNotDiscardExecutedResult(t *testing.T) {
+func TestStructuredOutputPassesThroughUnchanged(t *testing.T) {
 	t.Parallel()
 	backend := &fixtureBackend{catalogs: map[string]*Catalog{"crm": {Tools: []Tool{fixtureTool("crm--write")}}}, result: json.RawMessage(`{"structuredContent":[1,2],"content":[]}`)}
 	host, err := NewHost(t.Context(), backend, "scope", nil)
@@ -267,7 +334,7 @@ func TestOutputSchemaMismatchDoesNotDiscardExecutedResult(t *testing.T) {
 	require.True(t, result.OK)
 	require.Equal(t, "completed", result.Outcome)
 	require.JSONEq(t, `[1,2]`, string(result.Data))
-	require.Len(t, result.Warnings, 1)
+	require.Empty(t, result.Warnings)
 }
 
 func TestEmbeddedResourceMetadataStaysHostSide(t *testing.T) {
@@ -298,8 +365,7 @@ func TestRepeatedQueryTermsDoNotAmplifyRanking(t *testing.T) {
 }
 
 // TestCallbacksRefreshAuthorizationOnce pins one authorization refresh per
-// callback: search shares it across members, and a call dispatches from the
-// read that produced its definition instead of reading it again.
+// callback: search shares it across members, and a call reads no catalog.
 func TestCallbacksRefreshAuthorizationOnce(t *testing.T) {
 	t.Parallel()
 	servers := []Server{{Slug: "a", Name: "A"}, {Slug: "b", Name: "B"}, {Slug: "c", Name: "C"}}
@@ -321,6 +387,6 @@ func TestCallbacksRefreshAuthorizationOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.OK)
 	require.Equal(t, 2, backend.refreshCount())
-	require.Len(t, backend.listed, 4)
+	require.Len(t, backend.listed, 3)
 	require.Equal(t, []string{"a--list"}, backend.calls)
 }

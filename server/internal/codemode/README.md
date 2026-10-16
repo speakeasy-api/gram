@@ -1,9 +1,9 @@
 # Gateway Python host API
 
 This package supplies the discovery and invocation contract for ephemeral code
-executions. `CatalogHost` holds a run's optional tool restriction and the identity
-of definitions it resolves. It fetches current catalogs through `Backend`; it
-does not retain a reusable discovery cache.
+executions. `CatalogHost` holds a run's optional tool restriction. It fetches
+current catalogs through `Backend` only for discovery; it does not retain a
+reusable discovery cache.
 
 `Search` loads authorized members with bounded concurrency, reports incomplete
 members, and ranks exact paths, tokenized tool names and descriptions. Cursors
@@ -11,9 +11,13 @@ bind the caller scope, query, full definition identities and failed members.
 Following a cursor repeats discovery and rejects a changed catalog. `Describe`
 preserves schemas and produces an escaped Python call template.
 
-`Call` validates arguments before invoking the backend. The backend must compare
-the expected fingerprint against the actual definition and destination at its
-authoritative dispatch point. Discovery is never authorization to execute.
+`Call` checks the path against the run's restrictions and that arguments are a
+bounded JSON object, then invokes the backend without reading the member's
+catalog. Authorization is refreshed on every call; the member enforces its own
+input schema and rejects unknown tools, and that refusal reaches the program as
+a completed `tool_call_rejected` result it can correct. Discovery is never
+authorization to execute. The bridge drops a member whose routing destination
+changed since admission.
 
 The MCP package's bridge uses the existing hosted, remote and tunneled member
 dispatchers and the connection's consent tool selection. It refreshes grants, preserves the
@@ -114,17 +118,14 @@ on the result, content blocks and embedded resources stays on the host side.
 
 An upstream reply has outcome `completed`, including a tool-level error. A
 transport failure after admission has outcome `unknown`; it must not trigger an
-automatic replay. A result too large or malformed to expose produces a completed
-`tool_result_unavailable` result. An output-schema mismatch preserves the result
-with a warning. These outcomes describe dispatch, not whether a remote service
+automatic replay. A member's own unknown-tool or invalid-params error, or a
+hosted lookup refusal before dispatch, produces a completed `tool_call_rejected`
+result carrying a bounded copy of its message. An error the gateway's proxy
+synthesizes, including a response withheld after the tool ran, stays `unknown`. A result too
+large or malformed to expose produces a completed `tool_result_unavailable`
+result. These outcomes describe dispatch, not whether a remote service
 made a side effect. Pre-dispatch guard refusals are `DispatchError` values with
 `BeforeInvoke` set.
-
-Input validation fails closed for missing, malformed, oversized or unsupported
-schemas. External `$ref` loading is disabled. Tools using unsupported regular
-expressions or schemas need a supported schema before code mode can call them;
-Direct and Progressive behavior is unchanged. The initial schema ceiling is
-128 KiB, independently of the aggregate catalog and callback limits.
 
 ## Validation and product surfaces
 
