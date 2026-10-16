@@ -595,7 +595,8 @@ function PluginDetailContent({
           : "Remote";
       const slug = toolset?.slug ?? mcpServer?.slug;
       // Mirrors AddPluginServer: a hosted server needs MCP on and an MCP slug.
-      const mcpOff = !!toolset && (!toolset.mcpEnabled || !toolset.mcpSlug);
+      const mcpOff = !!toolset && !toolset.mcpEnabled;
+      const noMcpAddress = !!toolset && !mcpOff && !toolset.mcpSlug;
       return {
         value: serverOptionKey(o.kind, o.id),
         label: o.name,
@@ -613,11 +614,13 @@ function PluginDetailContent({
         ),
         slug,
         kindLabel,
-        badge: mcpOff ? "MCP off" : undefined,
+        badge: mcpOff ? "MCP off" : noMcpAddress ? "No MCP address" : undefined,
         description: mcpOff
           ? "Turn on MCP for this server before adding it to a plugin."
-          : `${slug ?? "No slug"} · ${kindLabel}`,
-        disabled: mcpOff,
+          : noMcpAddress
+            ? "Set an MCP address for this server before adding it to a plugin."
+            : `${slug ?? "No slug"} · ${kindLabel}`,
+        disabled: mcpOff || noMcpAddress,
       };
     });
 

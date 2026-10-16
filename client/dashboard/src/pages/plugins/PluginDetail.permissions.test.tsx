@@ -285,6 +285,13 @@ describe("plugin detail permission boundary", () => {
           mcpEnabled: false,
           tools: [],
         },
+        {
+          id: "toolset-d",
+          name: "Expenses",
+          slug: "expenses",
+          mcpEnabled: true,
+          tools: [],
+        },
       ],
     };
     serverData.mcpServers = {
@@ -327,6 +334,11 @@ describe("plugin detail permission boundary", () => {
       (screen.getByRole("checkbox", { name: "Payroll" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+    expect(
+      screen.getByText(
+        "Set an MCP address for this server before adding it to a plugin.",
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     await act(async () => {
       fireEvent.click(
