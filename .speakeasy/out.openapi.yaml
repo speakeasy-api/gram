@@ -81561,7 +81561,7 @@ components:
         grain:
           type: string
           description: What one row represents, as a noun
-          example: session
+          example: tool call
         kind:
           type: string
           enum:
@@ -81569,7 +81569,7 @@ components:
             - metric
         name:
           type: string
-          example: sessions
+          example: tool_calls
       description: A dataset and the fields it exposes. The builder is generated from this.
       required:
         - name
@@ -81654,7 +81654,7 @@ components:
         unit:
           type: string
           description: Unit of a measure, when it has one
-          example: s
+          example: ms
       description: One queryable field on a dataset.
       required:
         - name
@@ -81699,11 +81699,11 @@ components:
         alias:
           type: string
           description: Result column name. Defaults to the op, or op_field.
-          example: tool_calls
+          example: total_ms
         field:
           type: string
           description: 'Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.'
-          example: tool_call_count
+          example: duration_ms
         op:
           type: string
           description: Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.
@@ -81733,7 +81733,7 @@ components:
         measure:
           type: string
           description: Alias of a requested measure
-          example: tool_calls
+          example: total_ms
       description: Sort a grouped result by one of its measures.
       required:
         - measure
@@ -81743,7 +81743,7 @@ components:
         dataset:
           type: string
           description: Dataset to query, per describe
-          example: sessions
+          example: tool_calls
         dimensions:
           type: array
           items:
@@ -87194,11 +87194,11 @@ components:
         dataset:
           type: string
           description: Dataset to look in
-          example: sessions
+          example: tool_calls
         dimension:
           type: string
           description: Dimension to list values of
-          example: model
+          example: tool_name
         from:
           type: string
           description: Start of the half-open window [from, to), ISO 8601
@@ -112583,7 +112583,7 @@ components:
         dataset:
           type: string
           description: The catalog dataset the widget asks
-          example: sessions
+          example: tool_calls
         description:
           type: string
           description: What the widget is for, when its creator said

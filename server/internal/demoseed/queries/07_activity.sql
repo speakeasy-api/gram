@@ -169,7 +169,7 @@ VALUES
 
 -- Explore widgets: the questions the team keeps, each with the chart that
 -- draws it and saved by a demo user, so the Widgets tab shows who made each.
--- Names repeat on purpose: two people saving "Sessions by surface" is normal.
+-- Names repeat on purpose: two people saving "Tool calls by surface" is normal.
 -- Each row is the shape the dashboard saves (widgetSpec.ts), and the widgets
 -- service plans it against the analytics catalog and checks the chart against
 -- it, so the list reads them as valid. Rows cascade with the demo project,
@@ -180,7 +180,7 @@ INSERT INTO widgets (id, project_id, organization_id, created_by_user_id,
                      created_at, updated_at)
 VALUES
   (@widget1_id::uuid, @project_id::uuid, @organization_id::text, @amara_id::text,
-   'Sessions by surface', 'Which agents people reach for, day by day', 'sessions',
+   'Tool calls by surface', 'Which agents people reach for, day by day', 'tool_calls',
    '{"window":"7d","grain":"day","ungrouped":false,"dimensions":["surface"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":1000}',
    '{"type":"bar","options":{}}',
    now() - interval '9 days', now() - interval '2 hours'),
@@ -195,12 +195,12 @@ VALUES
    '{"type":"line","options":{}}',
    now() - interval '5 days', now() - interval '3 days'),
   (@widget4_id::uuid, @project_id::uuid, @organization_id::text, @mateo_id::text,
-   'Turns per session by model', NULL, 'sessions',
-   '{"window":"30d","grain":"none","ungrouped":false,"dimensions":["model"],"measures":[{"op":"avg","field":"turn_count","alias":"avg_turn_count"}],"filters":[],"order_by":[{"measure":"avg_turn_count","direction":"desc"}],"limit":0}',
+   'Average call time by tool', NULL, 'tool_calls',
+   '{"window":"30d","grain":"none","ungrouped":false,"dimensions":["tool_name"],"measures":[{"op":"avg","field":"duration_ms","alias":"avg_duration_ms"}],"filters":[],"order_by":[{"measure":"avg_duration_ms","direction":"desc"}],"limit":0}',
    '{"type":"ranked","options":{}}',
    now() - interval '8 days', now() - interval '4 days'),
   (@widget5_id::uuid, @project_id::uuid, @organization_id::text, @hana_id::text,
-   'Sessions by surface', NULL, 'sessions',
+   'Tool calls by surface', NULL, 'tool_calls',
    '{"window":"30d","grain":"day","ungrouped":false,"dimensions":["surface"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":1000}',
    '{"type":"area","options":{}}',
    now() - interval '11 days', now() - interval '6 days'),
