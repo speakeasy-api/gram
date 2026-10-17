@@ -721,9 +721,11 @@ func TestStdioBridgeReportsServerExitDuringInitialize(t *testing.T) {
 	t.Parallel()
 	srv, _ := newStdioTestServerWithCommand(t, `echo boom >&2; exit 3`, 0)
 
-	// Whether the write or the wait for an answer notices first, the server is gone, not slow.
 	resp := mcpRequest(t, srv, http.MethodPost, "", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
 	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), "exited during initialize")
 }
 
 func TestStdioSessionRateLimitsStderr(t *testing.T) {
@@ -822,6 +824,20 @@ func TestStdioBridgeEvictsIdlestSessionAtCapacity(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, mcpRequest(t, srv, http.MethodPost, first, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`).StatusCode,
 		"the evicted client gets 404 and starts over")
 	require.Equal(t, http.StatusOK, mcpRequest(t, srv, http.MethodPost, second, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`).StatusCode)
+}
+
+func TestStdioBridgeWaitsForClosingSessionBeforeEvicting(t *testing.T) {
+	t.Parallel()
+	// Ignores stdin closing, so a deleted session holds its slot until SIGTERM.
+	srv, a := newStdioTestServerWithCommand(t, stdioTestInitializes+`sleep 300`, 2)
+	a.stdio.evictIdleAfter = time.Millisecond
+	idle := initializeSession(t, srv)
+	deleted := initializeSession(t, srv)
+	time.Sleep(10 * time.Millisecond)
+
+	require.Equal(t, http.StatusNoContent, mcpRequest(t, srv, http.MethodDelete, deleted, "").StatusCode)
+	initializeSession(t, srv)
+	require.NotNil(t, a.stdio.session(idle), "a slot about to free is waited for rather than evicting a live session")
 }
 
 func TestStdioBridgeDoesNotEvictBusySessionAtCapacity(t *testing.T) {
