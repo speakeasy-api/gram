@@ -131,8 +131,8 @@ LEFT JOIN mcp_servers AS wrapper
 ORDER BY o.name, p.name, t.name, t.id;
 
 -- name: ListRemoteServersOnIssuers :many
--- Live remote-backed MCP servers that share one of the given user session
--- issuers, the servers a migration may merge into instead of creating one.
+-- Live remote-backed MCP servers in the candidates' projects that share one of
+-- the given user session issuers, the servers a migration may merge into.
 SELECT
   ms.id,
   ms.project_id,
@@ -145,6 +145,7 @@ SELECT
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
 WHERE ms.deleted IS FALSE
+  AND ms.project_id = ANY(@project_ids::uuid[])
   AND ms.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
 ORDER BY ms.project_id, ms.name, ms.id;
 
@@ -174,7 +175,7 @@ FOR UPDATE;
 SELECT DISTINCT rms.url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
-JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = @organization_id
+JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 WHERE ms.deleted IS FALSE
   AND ms.user_session_issuer_id = @user_session_issuer_id
   AND ms.id <> @excluded_mcp_server_id;
@@ -185,6 +186,7 @@ WHERE ms.deleted IS FALSE
 SELECT EXISTS (
   SELECT 1
   FROM toolsets AS t
+  JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
   WHERE t.organization_id = @organization_id
     AND t.user_session_issuer_id = @user_session_issuer_id
     AND t.id <> @excluded_toolset_id

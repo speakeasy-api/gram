@@ -54,7 +54,7 @@ func (d dependentMove) run(ctx context.Context, outcome *Outcome) (bool, error) 
 		return false, fmt.Errorf("remove duplicate collection attachments: %w", err)
 	}
 	if duplicates > 0 {
-		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Remove %d organization collection entries the replacement already covers", duplicates))
+		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Remove %d duplicate organization collection entries for the old server", duplicates))
 	}
 	collections, err := queries.RekeyCollectionAttachments(ctx, repo.RekeyCollectionAttachmentsParams{
 		McpServerID: uuid.NullUUID{UUID: d.targetID, Valid: true}, OrganizationID: d.organizationID,

@@ -734,9 +734,15 @@ SELECT
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
 WHERE ms.deleted IS FALSE
-  AND ms.user_session_issuer_id = ANY($1::uuid[])
+  AND ms.project_id = ANY($1::uuid[])
+  AND ms.user_session_issuer_id = ANY($2::uuid[])
 ORDER BY ms.project_id, ms.name, ms.id
 `
+
+type ListRemoteServersOnIssuersParams struct {
+	ProjectIds           []uuid.UUID
+	UserSessionIssuerIds []uuid.UUID
+}
 
 type ListRemoteServersOnIssuersRow struct {
 	ID                  uuid.UUID
@@ -749,10 +755,10 @@ type ListRemoteServersOnIssuersRow struct {
 	Url                 string
 }
 
-// Live remote-backed MCP servers that share one of the given user session
-// issuers, the servers a migration may merge into instead of creating one.
-func (q *Queries) ListRemoteServersOnIssuers(ctx context.Context, userSessionIssuerIds []uuid.UUID) ([]ListRemoteServersOnIssuersRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteServersOnIssuers, userSessionIssuerIds)
+// Live remote-backed MCP servers in the candidates' projects that share one of
+// the given user session issuers, the servers a migration may merge into.
+func (q *Queries) ListRemoteServersOnIssuers(ctx context.Context, arg ListRemoteServersOnIssuersParams) ([]ListRemoteServersOnIssuersRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteServersOnIssuers, arg.ProjectIds, arg.UserSessionIssuerIds)
 	if err != nil {
 		return nil, err
 	}
@@ -784,7 +790,7 @@ const listRemoteURLsOnIssuer = `-- name: ListRemoteURLsOnIssuer :many
 SELECT DISTINCT rms.url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
-JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = $1
+JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
 WHERE ms.deleted IS FALSE
   AND ms.user_session_issuer_id = $2
   AND ms.id <> $3
@@ -908,6 +914,7 @@ const otherToolsetsOnIssuer = `-- name: OtherToolsetsOnIssuer :one
 SELECT EXISTS (
   SELECT 1
   FROM toolsets AS t
+  JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
   WHERE t.organization_id = $1
     AND t.user_session_issuer_id = $2
     AND t.id <> $3

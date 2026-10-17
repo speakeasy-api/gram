@@ -322,12 +322,6 @@ func (m *Migrator) moveEndpoints(ctx context.Context, tx pgx.Tx, principal urn.P
 		return fmt.Errorf("check slug availability: %w", err)
 	}
 	if !available.Valid || !available.Bool {
-		// With endpoints already moved, the legacy slug is a secondary
-		// address, so losing it is reported rather than blocking.
-		if len(endpoints) > 0 {
-			outcome.Warnings = append(outcome.Warnings, fmt.Sprintf("The legacy address /mcp/%s is held by another server and was not kept", slug))
-			return nil
-		}
 		return fail("the address /mcp/%s is held by another server", slug)
 	}
 	created, err := endpointRepo.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{

@@ -100,14 +100,18 @@ func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 
 func buildCandidates(ctx context.Context, db repo.DBTX, rows []repo.ListCandidatesRow) ([]Candidate, error) {
 	issuers := make([]uuid.UUID, 0, len(rows))
+	projects := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
 		if row.UserSessionIssuerID.Valid && !slices.Contains(issuers, row.UserSessionIssuerID.UUID) {
 			issuers = append(issuers, row.UserSessionIssuerID.UUID)
 		}
+		if !slices.Contains(projects, row.ProjectID) {
+			projects = append(projects, row.ProjectID)
+		}
 	}
 	targets := map[uuid.UUID][]repo.ListRemoteServersOnIssuersRow{}
 	if len(issuers) > 0 {
-		servers, err := repo.New(db).ListRemoteServersOnIssuers(ctx, issuers)
+		servers, err := repo.New(db).ListRemoteServersOnIssuers(ctx, repo.ListRemoteServersOnIssuersParams{UserSessionIssuerIds: issuers, ProjectIds: projects})
 		if err != nil {
 			return nil, fmt.Errorf("list remote servers sharing candidate issuers: %w", err)
 		}
@@ -177,14 +181,15 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	return candidate
 }
 
-// sourceVisibility is who can reach the candidate today: its canonical
-// wrapper's visibility, or the toolset's when it has no wrapper.
+// sourceVisibility is who can reach the candidate today. A disabled toolset
+// stays disabled whatever its wrapper says; otherwise the canonical wrapper's
+// visibility wins over the toolset's.
 func sourceVisibility(row repo.ListCandidatesRow) string {
 	switch {
-	case row.WrapperVisibility.Valid:
-		return row.WrapperVisibility.String
 	case !row.McpEnabled:
 		return visibility.Disabled
+	case row.WrapperVisibility.Valid:
+		return row.WrapperVisibility.String
 	case row.McpIsPublic:
 		return visibility.Public
 	default:

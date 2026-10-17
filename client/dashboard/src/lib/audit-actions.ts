@@ -953,7 +953,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "toolset:detach_oauth_proxy":
       return "detached an OAuth proxy from";
     case "toolset:migrate_to_remote_mcp":
-      return "migrated to a remote MCP server";
+      return "migrated the external MCP server";
 
     case "trigger-instance:create":
       return "created trigger";
