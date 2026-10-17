@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/identity"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
@@ -88,6 +89,30 @@ type ExternalMessageWrite struct {
 
 	// BillingMode is the AI account billing mode declared for the import.
 	BillingMode string
+}
+
+// StampAttribution records a matched actor on the persisted identity columns
+// and on the provenance the meter and the publication read, so every producer
+// writes the same four facts the same way. Usage is billed to the actor unless
+// the producer allocated it elsewhere first.
+func (w *MessageWrite) StampAttribution(attribution identity.Attribution) {
+	w.Params.UserID = conv.ToPGTextEmpty(attribution.UserID)
+	w.Params.ExternalUserID = conv.ToPGTextEmpty(attribution.ExternalUserID)
+	w.UserEmail = attribution.Email
+	if w.BillingUserID == "" {
+		w.BillingUserID = attribution.UserID
+	}
+}
+
+// StampAttribution records a matched actor on an imported message the same
+// way MessageWrite.StampAttribution does for a native one.
+func (w *ExternalMessageWrite) StampAttribution(attribution identity.Attribution) {
+	w.Params.UserID = conv.ToPGTextEmpty(attribution.UserID)
+	w.Params.ExternalUserID = conv.ToPGTextEmpty(attribution.ExternalUserID)
+	w.UserEmail = attribution.Email
+	if w.BillingUserID == "" {
+		w.BillingUserID = attribution.UserID
+	}
 }
 
 // ChatMessageWriter is the only sanctioned way to persist chat messages.

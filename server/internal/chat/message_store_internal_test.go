@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/identity"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 )
 
@@ -98,4 +99,38 @@ func TestStoredMessageContentRejectsNonStringArguments(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, parts)
+}
+
+// The writer is the one place every producer stamps actor identity, so the
+// four fields it stamps must move together: the two persisted columns, the
+// email the meter and publication read, and the billing user.
+func TestMessageWrite_StampAttribution(t *testing.T) {
+	t.Parallel()
+
+	attribution := identity.Attribution{UserID: "user_1", Email: "dev@example.com", ExternalUserID: "end-user-7", Basis: identity.BasisCredential}
+
+	write := MessageWrite{}
+	write.StampAttribution(attribution)
+	require.Equal(t, "user_1", write.Params.UserID.String)
+	require.True(t, write.Params.UserID.Valid)
+	require.Equal(t, "end-user-7", write.Params.ExternalUserID.String)
+	require.Equal(t, "dev@example.com", write.UserEmail)
+	require.Equal(t, "user_1", write.BillingUserID)
+
+	billedElsewhere := MessageWrite{BillingUserID: "user_billing"}
+	billedElsewhere.StampAttribution(attribution)
+	require.Equal(t, "user_billing", billedElsewhere.BillingUserID)
+
+	unattributed := MessageWrite{}
+	unattributed.StampAttribution(identity.Attribution{Basis: identity.BasisUnattributed})
+	require.False(t, unattributed.Params.UserID.Valid)
+	require.False(t, unattributed.Params.ExternalUserID.Valid)
+	require.Empty(t, unattributed.BillingUserID)
+
+	external := ExternalMessageWrite{}
+	external.StampAttribution(attribution)
+	require.Equal(t, "user_1", external.Params.UserID.String)
+	require.Equal(t, "end-user-7", external.Params.ExternalUserID.String)
+	require.Equal(t, "dev@example.com", external.UserEmail)
+	require.Equal(t, "user_1", external.BillingUserID)
 }
