@@ -43,6 +43,9 @@ type authenticatedIngestOptionsKey struct{}
 
 // AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
 type AuthenticatedIngestOptions struct {
+	// BoundaryScans distinguishes content boundaries from canonical events:
+	// nil uses canonical enforcement; an empty non-nil slice still checks quarantine.
+	BoundaryScans []ahpBoundaryScan
 	// ObserveOnly records the event without evaluating enforcement, for
 	// events the sender cannot block.
 	ObserveOnly                  bool
@@ -68,6 +71,7 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
+		BoundaryScans:                nil,
 		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
@@ -578,13 +582,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
 	defer span.End()
 
-	if authenticatedIngestOptions(ctx).ObserveOnly {
+	opts := authenticatedIngestOptions(ctx)
+	if opts.ObserveOnly {
 		return "", ""
 	}
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
-	if eventType == "prompt.submitted" || eventType == "tool.requested" || ctx.Value(ahpBoundaryKey{}) != nil {
+	if eventType == "prompt.submitted" || eventType == "tool.requested" || opts.BoundaryScans != nil {
 		if quarantine := s.checkQuarantineGate(ctx, event); quarantine != nil {
 			reason := sessionquarantine.DenyReason(quarantine)
 			return reason, reason
@@ -621,8 +626,8 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 
 	// AHP content boundaries carry typed evidence without fabricating user or
 	// assistant transcript messages from model context snapshots.
-	if scans, ok := ctx.Value(ahpBoundaryKey{}).([]ahpBoundaryScan); ok && len(scans) > 0 {
-		return s.evaluateAHPBoundary(ctx, event, scans)
+	if opts.BoundaryScans != nil {
+		return s.evaluateAHPBoundary(ctx, event, opts.BoundaryScans)
 	}
 
 	switch eventType {
@@ -636,7 +641,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
 				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 			}
-			if scanResult.IsWarnChallenge() && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
+			if scanResult.IsWarnChallenge() && opts.AllowWarnAcknowledgement {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}

@@ -6,24 +6,29 @@ import (
 	"strings"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
-	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/message"
 )
 
-type ahpBoundaryKey struct{}
 type ahpBoundaryScan struct {
 	text string
 	kind message.Type
 	tool string
 }
 
-func (s *Service) ingestAHPBoundary(ctx context.Context, payload *gen.IngestPayload, observe bool, scans []ahpBoundaryScan) (string, error) {
+func mergeAHPScans(scans []ahpBoundaryScan) []ahpBoundaryScan {
+	if scans == nil {
+		return nil
+	}
 	// One scan per policy type/tool keeps the full boundary together and gives
 	// each scan a distinct risk operation identity rather than per-part aliases.
 	merged := make([]ahpBoundaryScan, 0, len(scans))
 	positions := make(map[string]int)
 	for _, scan := range scans {
+		// Named tools still need tool-scoped policy checks without text.
+		if scan.text == "" && scan.tool == "" {
+			continue
+		}
 		key := scan.kind + "\x00" + scan.tool
 		if i, ok := positions[key]; ok {
 			merged[i].text += "\n" + scan.text
@@ -32,13 +37,13 @@ func (s *Service) ingestAHPBoundary(ctx context.Context, payload *gen.IngestPayl
 			merged = append(merged, scan)
 		}
 	}
-	return s.ingestAHP(context.WithValue(ctx, ahpBoundaryKey{}, merged), payload, observe)
+	return merged
 }
 
 // Context snapshots are evidence, not additional transcript messages. Keep
 // their roles intact, especially tool results, which are untrusted output.
 func ahpItemScans(items []*ahp.ModelVisibleItem) []ahpBoundaryScan {
-	var scans []ahpBoundaryScan
+	scans := make([]ahpBoundaryScan, 0)
 	for _, item := range items {
 		if item == nil {
 			continue
@@ -64,7 +69,11 @@ func ahpItemScans(items []*ahp.ModelVisibleItem) []ahpBoundaryScan {
 func ahpPartScans(parts []*ahp.ContentItem, kind message.Type) []ahpBoundaryScan {
 	var scans []ahpBoundaryScan
 	for _, part := range parts {
-		if part == nil || !part.TextBodyPart.Present || part.TextBodyPart.Value == nil {
+		if part == nil {
+			continue
+		}
+		text, ok := ahpBodyText(part.TextBodyPart)
+		if !ok {
 			continue
 		}
 		body := part.TextBodyPart.Value
@@ -72,7 +81,7 @@ func ahpPartScans(parts []*ahp.ContentItem, kind message.Type) []ahpBoundaryScan
 		if kind == message.Assistant && body.Category.Value == "tool-call" {
 			partKind = message.ToolRequest
 		}
-		scans = append(scans, ahpBoundaryScan{text: body.Text, kind: partKind, tool: ""})
+		scans = append(scans, ahpBoundaryScan{text: text, kind: partKind, tool: ""})
 	}
 	return scans
 }
@@ -83,8 +92,11 @@ func ahpTextParts(parts *ahp.TextParts) string {
 	}
 	var texts []string
 	for _, part := range *parts {
-		if part != nil && part.TextBodyPart.Present && part.TextBodyPart.Value != nil {
-			texts = append(texts, part.TextBodyPart.Value.Text)
+		if part == nil {
+			continue
+		}
+		if text, ok := ahpBodyText(part.TextBodyPart); ok {
+			texts = append(texts, text)
 		}
 	}
 	return strings.Join(texts, "\n")
@@ -94,10 +106,10 @@ func (s *Service) evaluateAHPBoundary(ctx context.Context, event hookevents.Even
 	for _, scan := range scans {
 		if result := s.scanHookEventForEnforcement(ctx, event, scan.text, scan.kind, scan.tool); result != nil {
 			action := "withheld content"
-			if event.RawEventType == "context.compact.before" {
+			switch event.RawEventType {
+			case "context.compact.before":
 				action = "blocked compaction"
-			}
-			if event.RawEventType == "model.request.before" {
+			case "model.request.before":
 				action = "blocked the model request"
 			}
 			reason := fmt.Sprintf("Speakeasy %s: matched policy %q (%s)", action, result.PolicyName, result.Description)

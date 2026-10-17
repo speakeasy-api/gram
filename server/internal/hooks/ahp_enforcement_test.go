@@ -280,27 +280,90 @@ func TestAHPLaterOutputItemReplacesWholeOutput(t *testing.T) {
 
 func TestAHPQuarantineBlocksEmptyBoundary(t *testing.T) {
 	t.Parallel()
+	for _, kind := range []string{"tool.after", "model.request.before", "model.response.after", "user.message.outbound", "context.compact.before", "context.compact.after", "tool.permission.request"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			auth := hookAuthContext(t, ctx)
+			ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+			scanner := &ahpEvidenceScanner{}
+			ti.service.riskScanner = scanner
+			h, err := ti.service.ahpHandler()
+			require.NoError(t, err)
+			event := ahpBoundaryEvent(kind)
+			event["items"] = []any{}
+			if kind == "user.message.outbound" {
+				event["message"] = map[string]any{"channel": "cli", "messages": []any{ahpTestMessage("assistant", "")}}
+			}
+			if kind == "context.compact.after" {
+				event["summary"] = []any{ahpTestPart("")}
+			}
+			caps := map[string]any{"effects": []string{"deny"}}
+			target := ""
+			switch kind {
+			case "tool.after":
+				target = "output"
+			case "model.response.after":
+				target = "response"
+			case "context.compact.after":
+				target = "summary"
+			}
+			if target != "" {
+				caps = map[string]any{"effects": []string{"modify"}, "modify": map[string]any{target: map[string]any{"replace": true, "merge": false}}}
+			}
+			sessionEnvelope, ok := event["session"].(map[string]any)
+			require.True(t, ok)
+			session, ok := sessionEnvelope["id"].(string)
+			require.True(t, ok)
+			require.NotNil(t, ti.service.cache)
+			require.NoError(t, sessionquarantine.Write(ctx, ti.service.cache, sessionquarantine.Quarantine{
+				OrganizationID: auth.ActiveOrganizationID, ProjectID: auth.ProjectID.String(), SessionID: session,
+				RiskPolicyID: "", RiskPolicyName: "Example quarantine policy", Reason: "test quarantine", CreatedAt: time.Now().UTC(),
+			}))
+			effects := ahpBoundaryRequest(t, h, event, caps)
+			require.Len(t, effects, 1)
+			if target == "" {
+				require.Equal(t, "deny", effects[0]["type"])
+				require.Contains(t, effects[0]["reason"], "quarantined")
+			} else {
+				require.Equal(t, "modify", effects[0]["type"])
+				require.Equal(t, target, effects[0]["target"])
+				require.Empty(t, effects[0]["value"])
+			}
+			require.Empty(t, scanner.requests, "quarantine must run even without scannable evidence")
+		})
+	}
+}
+
+func TestAHPMergeBoundaryScans(t *testing.T) {
+	t.Parallel()
+	require.Nil(t, mergeAHPScans(nil), "canonical ingestion has no content boundary")
+	require.NotNil(t, mergeAHPScans([]ahpBoundaryScan{}), "empty boundaries still check quarantine")
+	scans := mergeAHPScans([]ahpBoundaryScan{
+		{text: "", kind: message.User, tool: ""},
+		{text: "first", kind: message.User, tool: ""},
+		{text: "", kind: message.User, tool: ""},
+		{text: "second", kind: message.User, tool: ""},
+		{text: "", kind: message.ToolResponse, tool: "read_file"},
+	})
+	require.Equal(t, []ahpBoundaryScan{
+		{text: "first\nsecond", kind: message.User, tool: ""},
+		{text: "", kind: message.ToolResponse, tool: "read_file"},
+	}, scans)
+}
+
+func TestAHPCompactionAbsentInstructions(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	auth := hookAuthContext(t, ctx)
-	ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+	ti.service.auth = &ahpTestAuthorizer{authCtx: hookAuthContext(t, ctx)}
 	scanner := &ahpEvidenceScanner{}
 	ti.service.riskScanner = scanner
 	h, err := ti.service.ahpHandler()
 	require.NoError(t, err)
-	event := ahpBoundaryEvent("model.request.before")
-	event["items"] = []any{}
-	sessionEnvelope, ok := event["session"].(map[string]any)
-	require.True(t, ok)
-	session, ok := sessionEnvelope["id"].(string)
-	require.True(t, ok)
-	require.NotNil(t, ti.service.cache)
-	require.NoError(t, sessionquarantine.Write(ctx, ti.service.cache, sessionquarantine.Quarantine{
-		OrganizationID: auth.ActiveOrganizationID, ProjectID: auth.ProjectID.String(), SessionID: session,
-		RiskPolicyID: "", RiskPolicyName: "Example quarantine policy", Reason: "test quarantine", CreatedAt: time.Now().UTC(),
-	}))
-	effects := ahpBoundaryRequest(t, h, event, map[string]any{"effects": []string{"deny"}})
-	require.Len(t, effects, 1)
-	require.Equal(t, "deny", effects[0]["type"])
-	require.Contains(t, effects[0]["reason"], "quarantined")
-	require.Empty(t, scanner.requests, "quarantine must run even without scannable evidence")
+	event := ahpBoundaryEvent("context.compact.before")
+	event["items"] = []any{ahpTestMessage("user", "context evidence")}
+	require.Empty(t, ahpBoundaryRequest(t, h, event, map[string]any{"effects": []string{"deny"}}))
+	require.Len(t, scanner.requests, 1)
+	require.Equal(t, "context evidence", scanner.requests[0].Text)
+	require.Equal(t, message.User, scanner.requests[0].MessageType)
 }
