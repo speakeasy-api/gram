@@ -43,6 +43,9 @@ type authenticatedIngestOptionsKey struct{}
 
 // AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
 type AuthenticatedIngestOptions struct {
+	// ObserveOnly records the event without evaluating enforcement, for
+	// events the sender cannot block.
+	ObserveOnly                  bool
 	AllowWarnAcknowledgement     bool
 	AllowSessionIdentityFallback bool
 	SourceAttributes             map[attr.Key]any
@@ -65,6 +68,7 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
@@ -574,6 +578,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
 	defer span.End()
 
+	if authenticatedIngestOptions(ctx).ObserveOnly {
+		return "", ""
+	}
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
