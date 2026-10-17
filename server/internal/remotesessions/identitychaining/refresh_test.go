@@ -110,6 +110,7 @@ func TestGovernor_RefreshDecisionSpeakeasyUnavailability(t *testing.T) {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
 			f := newChainStoreFixture(t)
+			useSpeakeasySignIn(t, f.db, f.req)
 			f.saveOrder(t, speakeasy(f.seedSpeakeasyIssuer(t)))
 			g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 			speakeasyAnswers(g, unavailableBecause(tc.reason))
@@ -132,13 +133,13 @@ func TestGovernor_RefreshDecisionFollowsTheProviderOrder(t *testing.T) {
 		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 		require.Equal(t, RefreshVerdict{Decision: RefreshServed, RemoteSessionIssuerID: f.sel.remoteIssuerID, Provider: externalKind, Reason: ReasonSuccess}, g.RefreshDecision(t.Context(), f.req))
 	})
-	t.Run("serving speakeasy before a trusted external", func(t *testing.T) {
+	t.Run("serving speakeasy on a federated sign-in", func(t *testing.T) {
 		t.Parallel()
 		f := newChainStoreFixture(t)
 		f.saveOrder(t, speakeasy(f.seedSpeakeasyIssuer(t)), policyRow{remoteIssuer: f.sel.trustedIssuerID, internalIssuer: uuid.Nil})
 		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 		speakeasyAnswers(g, success)
-		require.Equal(t, speakeasyKind, g.RefreshDecision(t.Context(), f.req).Provider, "the first provider that serves decides")
+		require.Equal(t, externalKind, g.RefreshDecision(t.Context(), f.req).Provider, "Speakeasy never vouches for a federated sign-in")
 	})
 	t.Run("trusted external before a serving speakeasy", func(t *testing.T) {
 		t.Parallel()
@@ -149,9 +150,20 @@ func TestGovernor_RefreshDecisionFollowsTheProviderOrder(t *testing.T) {
 		speakeasyAnswers(g, success)
 		require.Equal(t, externalKind, g.RefreshDecision(t.Context(), f.req).Provider, "the first provider that serves decides")
 	})
-	t.Run("external needing a sign-in falls through to speakeasy", func(t *testing.T) {
+	t.Run("external needing a sign-in never falls through to speakeasy", func(t *testing.T) {
 		t.Parallel()
 		f := newChainStoreFixture(t)
+		f.saveOrder(t, policyRow{remoteIssuer: f.sel.trustedIssuerID, internalIssuer: uuid.Nil}, speakeasy(f.seedSpeakeasyIssuer(t)))
+		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+		speakeasyAnswers(g, success)
+		verdict := g.RefreshDecision(t.Context(), f.req)
+		require.Equal(t, RefreshReauthenticate, verdict.Decision)
+		require.Equal(t, externalKind, verdict.Provider)
+	})
+	t.Run("speakeasy serves a speakeasy sign-in behind an external", func(t *testing.T) {
+		t.Parallel()
+		f := newChainStoreFixture(t)
+		useSpeakeasySignIn(t, f.db, f.req)
 		f.saveOrder(t, policyRow{remoteIssuer: f.sel.trustedIssuerID, internalIssuer: uuid.Nil}, speakeasy(f.seedSpeakeasyIssuer(t)))
 		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 		speakeasyAnswers(g, success)
