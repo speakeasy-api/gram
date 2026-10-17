@@ -1,7 +1,8 @@
 # Hooks Service
 
-The hooks service supports two hook generations:
+The hooks service supports three hook entry points:
 
+- Agent Hooks Protocol: `/ahp` accepts native events from arbitrary harnesses through the typed AHP Go SDK.
 - Legacy provider endpoints: `/rpc/hooks.claude`, `/rpc/hooks.cursor`, `/rpc/hooks.codex`, and Claude OTEL ingestion. These keep existing installed hooks working.
 - Unified ingest: `/rpc/hooks.ingest`. Latest generated hooks use this endpoint and translate provider-native events into Speakeasy feature events before sending.
 
@@ -55,8 +56,6 @@ project authorization. Harness names remain the reported source adapter names.
   behavior. Tool output is not subject to the assistant text category filter.
 
 Content references are not fetched, and this adapter does not implement uploads.
-This is a data-plane capture correction, not a new member or administrator
-management outcome; no Platform MCP tool or authorization contract changes.
 
 ## Legacy Compatibility
 

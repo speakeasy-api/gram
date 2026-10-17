@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
@@ -293,8 +294,51 @@ func ahpTokenCount(value ahp.Optional[json.Number]) *int {
 	if !value.Present {
 		return nil
 	}
-	count, err := value.Value.Int64()
-	if err != nil || count < 0 || int64(int(count)) != count {
+	raw := value.Value.String()
+	// Validate the JSON number grammar even for callers constructing numbers
+	// directly. Do not use floating point: large counts must remain exact.
+	if raw == "" || (raw[0] != '-' && (raw[0] < '0' || raw[0] > '9')) || !json.Valid([]byte(raw)) {
+		return nil
+	}
+	mantissa, exponent := raw, "0"
+	if i := strings.IndexAny(raw, "eE"); i >= 0 {
+		mantissa, exponent = raw[:i], raw[i+1:]
+	}
+	negative := strings.HasPrefix(mantissa, "-")
+	mantissa = strings.TrimPrefix(mantissa, "-")
+	fractional := 0
+	if i := strings.IndexByte(mantissa, '.'); i >= 0 {
+		fractional = len(mantissa) - i - 1
+		mantissa = mantissa[:i] + mantissa[i+1:]
+	}
+	digits := strings.TrimLeft(mantissa, "0")
+	if digits == "" {
+		return new(0)
+	}
+	if negative {
+		return nil
+	}
+	exp, err := strconv.Atoi(exponent)
+	// Bound the decimal shift before arithmetic or allocation. No int has
+	// more than 19 decimal digits, regardless of the exponent's spelling.
+	if err != nil || exp > fractional+19 || exp < fractional-len(digits) {
+		return nil
+	}
+	shift := exp - fractional
+	if shift < 0 {
+		cut := len(digits) + shift
+		if strings.Trim(digits[cut:], "0") != "" {
+			return nil
+		}
+		digits = digits[:cut]
+	} else {
+		if len(digits) > 19-shift {
+			return nil
+		}
+		digits += strings.Repeat("0", shift)
+	}
+	count, err := strconv.ParseInt(digits, 10, strconv.IntSize)
+	if err != nil {
 		return nil
 	}
 	return new(int(count))

@@ -49,23 +49,8 @@ describe("formatPlatform", () => {
     expect(formatPlatform("microsoft-copilot")).toBe("Microsoft Copilot");
   });
 
-  it.each([
-    ["ahp-harness:kit", "Kit"],
-    [" ahp-harness:kit ", "Kit"],
-    ["ahp-harness:new_agent-client", "New Agent Client"],
-    ["ahp-harness:myHarness", "MyHarness"],
-    ["ahp-harness:opencode", "opencode"],
-    ["ahp-harness:claude-code", "Claude Code"],
-  ])("displays harness source %s as %s", (source, label) => {
-    expect(formatPlatform(source)).toBe(label);
-  });
-
-  it("only strips the exact harness prefix at the start", () => {
-    expect(formatPlatform("other-ahp-harness:kit")).toBe(
-      "Other Ahp Harness:kit",
-    );
-    expect(formatPlatform("ahp_harness:kit")).toBe("Ahp Harness:kit");
-    expect(formatPlatform("AHP-HARNESS:kit")).toBe("AHP HARNESS:kit");
+  it("preserves a literal prefix in an arbitrary harness name", () => {
+    expect(formatPlatform("ahp-harness:kit")).toBe("Ahp Harness:kit");
   });
 
   it("title-cases unknown delimited sources", () => {

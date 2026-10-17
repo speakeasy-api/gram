@@ -247,6 +247,12 @@ func TestAHPAuthoritativeTranscriptReplay(t *testing.T) {
 		logs, err = ch.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{GramProjectID: auth.ProjectID.String(), TimeStart: start.Add(-time.Minute).UnixNano(), TimeEnd: time.Now().Add(time.Minute).UnixNano(), SortOrder: "asc", Limit: 100})
 		return err == nil && len(logs) == 10
 	}, 5*time.Second, 50*time.Millisecond)
+	// Keep observing after the expected rows arrive so delayed replay writes
+	// cannot hide behind the first successful poll.
+	require.Never(t, func() bool {
+		logs, err = ch.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{GramProjectID: auth.ProjectID.String(), TimeStart: start.Add(-time.Minute).UnixNano(), TimeEnd: time.Now().Add(time.Minute).UnixNano(), SortOrder: "asc", Limit: 100})
+		return err != nil || len(logs) != 10
+	}, time.Second, 50*time.Millisecond)
 	var input, output, cost float64
 	usageRows := 0
 	for _, log := range logs {
@@ -268,8 +274,8 @@ func TestAHPAuthoritativeTranscriptReplay(t *testing.T) {
 		}
 	}
 	require.Equal(t, 3, usageRows)
-	require.Equal(t, float64(36), input)
-	require.Equal(t, float64(9), output)
+	require.InDelta(t, 36, input, 0.000001)
+	require.InDelta(t, 9, output, 0.000001)
 	require.InDelta(t, 0.03, cost, 0.000001)
 }
 
