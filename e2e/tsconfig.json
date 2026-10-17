@@ -9,6 +9,7 @@
     "moduleResolution": "nodenext",
     "types": ["node"],
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true
   }
 }

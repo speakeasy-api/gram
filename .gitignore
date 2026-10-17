@@ -105,6 +105,7 @@ __pycache__/
 
 # Traces, videos and screenshots from the e2e suite (mise run test:wake-stack)
 e2e/.playwright
+e2e/.ui-fuzz
 
 # Riptide artifacts (cloud-synced)
 .humanlayer/tasks/
