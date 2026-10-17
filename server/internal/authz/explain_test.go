@@ -240,8 +240,9 @@ func TestExplainGrantCheckDispositionDirectGrantDoesNotReachUnannotatedTool(t *t
 
 	explanation := requireConsistentExplanation(t, grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "unannotated", Disposition: "", ProjectID: "project-1"}))
 	require.False(t, explanation.Allowed)
+	// The read-only grant does not match an unclassified tool at all, so it is
+	// not listed as a blocked allow: only the role's block applies.
 	require.Equal(t, []explainedGrant{
-		{principal: precedenceUser, scope: ScopeMCPConnect, effect: GrantEffectBlocked, reason: BlockedReasonNarrowerDirectGrant},
 		{principal: precedenceRole, scope: ScopeMCPBlockedConnect, effect: GrantEffectBlocks, reason: BlockedReasonNone},
 	}, explainedGrants(explanation))
 }

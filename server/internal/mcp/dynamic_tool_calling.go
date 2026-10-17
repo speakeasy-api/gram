@@ -21,6 +21,15 @@ const searchToolsToolName = "search_tools"
 var errToolSearchIndexUnavailable = errors.New("tool search index is unavailable")
 
 func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
+	tagsDescription := "Tags to filter the results by. If not provided, all tools will be returned."
+	if len(availableTags) > 0 {
+		tagsDescription += " Available tags: " + strings.Join(availableTags, ", ")
+	}
+	encodedTagsDescription, err := json.Marshal(tagsDescription)
+	if err != nil {
+		panic(fmt.Sprintf("encode search tools tag description: %v", err))
+	}
+
 	return json.RawMessage(fmt.Sprintf(`{
 		"type": "object",
 		"properties": {
@@ -34,7 +43,7 @@ func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
 					"type": "string",
 					"description": "Tag to filter the results by."
 				},
-				"description": "Tags to filter the results by. If not provided, all tools will be returned. Available tags: %s"
+				"description": %s
 			},
 			"match_mode": {
 				"type": "string",
@@ -51,7 +60,7 @@ func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
 		},
 		"required": ["query"],
 		"additionalProperties": false
-	}`, strings.Join(availableTags, ", ")))
+	}`, encodedTagsDescription))
 }
 
 func buildDynamicSessionTools(
@@ -59,6 +68,7 @@ func buildDynamicSessionTools(
 	logger *slog.Logger,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
+	includeTags bool,
 ) ([]*toolListEntry, error) {
 	if err := requireToolSearchIndex(ctx, toolset, vectorToolStore); err != nil {
 		return nil, fmt.Errorf("check tool search index: %w", err)
@@ -67,7 +77,14 @@ func buildDynamicSessionTools(
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
 	executeDescription := "Execute one tool. Pass its exact name as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`. Do not call a tool without first describing it to get the input schema."
 
-	availableTags, _ := vectorToolStore.GetToolsetAvailableTags(ctx, *toolset)
+	// Tags are read from the whole toolset's index, not from toolset.Tools.
+	// Callers subject to per-tool checks whose catalog was narrowed pass
+	// includeTags=false and get no tag suggestions rather than tags of tools
+	// withheld from them.
+	var availableTags []string
+	if includeTags {
+		availableTags, _ = vectorToolStore.GetToolsetAvailableTags(ctx, *toolset)
+	}
 	if len(availableTags) > 0 {
 		findDescription += fmt.Sprintf(" The available tools fall under the following categories: %s.", strings.Join(availableTags, ", "))
 	}

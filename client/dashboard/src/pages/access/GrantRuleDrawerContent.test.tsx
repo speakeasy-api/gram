@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
+import { annotationRuleDescription } from "./mcpAccessModel";
 import type { ServerGroup } from "./serverMerge";
 import type { AssistantGroup } from "./useOrgAssistants";
 
@@ -178,5 +179,15 @@ describe("grant rule assistant list", () => {
     expect(onChangeSelectors).toHaveBeenCalledWith([
       { resourceKind: "assistant", resourceId: "assistant_one" },
     ]);
+  });
+});
+
+describe("annotation rule description", () => {
+  it("tells an exclusion to name unannotated tools to exclude them", () => {
+    expect(annotationRuleDescription(true)).toContain("exclude them by name");
+    expect(annotationRuleDescription(true)).not.toContain("grant them");
+  });
+  it("tells an allow rule to name unannotated tools to grant them", () => {
+    expect(annotationRuleDescription(false)).toContain("grant them by name");
   });
 });
