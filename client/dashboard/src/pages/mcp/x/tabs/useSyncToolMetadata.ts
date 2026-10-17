@@ -49,7 +49,10 @@ interface AutoRecordState {
   /** The request in flight, if any; nothing else is sent until it settles. */
   inFlight: number | undefined;
 
-  /** The batch last sent (newline-joined tool names; empty in mirror mode). */
+  /**
+   * The batch last sent, as the JSON of its sorted tool names so no name can
+   * blur two batches together; empty in mirror mode.
+   */
   sent: string | undefined;
 
   /** The batch that last failed, and the listing it was sent from. */
@@ -179,7 +182,7 @@ export function useSyncToolMetadata({
     const serverKey = `${project?.slug ?? ""}:${mcpServerId}`;
     const batch =
       mode === "additive"
-        ? (tools ?? []).map((tool) => tool.toolName).join("\n")
+        ? JSON.stringify((tools ?? []).map((tool) => tool.toolName).sort())
         : "";
     const state = autoState.current.get(serverKey) ?? {
       inFlight: undefined,

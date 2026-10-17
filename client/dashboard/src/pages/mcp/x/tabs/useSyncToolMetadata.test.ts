@@ -157,7 +157,7 @@ describe("useSyncToolMetadata additive mode", () => {
     expect(mocks.deleteOne).not.toHaveBeenCalled();
   });
 
-  it("records a tool that appears in a later listing of the same view", () => {
+  it("records a tool that appears in a later listing of the same view", async () => {
     const { rerender } = renderAdditive({
       live: live("list_devices"),
       stored: stored("list_devices"),
@@ -168,6 +168,8 @@ describe("useSyncToolMetadata additive mode", () => {
       live: live("list_devices", "lock_device"),
       stored: stored("list_devices"),
     });
+    // Let the write settle inside act before asserting.
+    await act(async () => {});
 
     expect(mocks.autoAdd).toHaveBeenCalledOnce();
     expect(recordedNames(mocks.autoAdd.mock.calls[0]!)).toEqual([
