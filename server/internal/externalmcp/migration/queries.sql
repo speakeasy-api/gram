@@ -162,26 +162,52 @@ SELECT
   COALESCE((
     SELECT array_agg(DISTINCT rsi.id)
     FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_clients AS rsc
+      ON rsc.id = link.remote_session_client_id
+     AND rsc.deleted IS FALSE
+     -- The serve-time credential resolver's tenancy: the project's own
+     -- clients and its organization's organization-level clients.
+     AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
     WHERE link.user_session_issuer_id = t.user_session_issuer_id
   ), ARRAY[]::uuid[])::uuid[] AS remote_session_issuer_ids,
   COALESCE((
     SELECT array_agg(DISTINCT COALESCE(rsi.name, rsi.issuer) ORDER BY COALESCE(rsi.name, rsi.issuer))
     FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_clients AS rsc
+      ON rsc.id = link.remote_session_client_id
+     AND rsc.deleted IS FALSE
+     -- The serve-time credential resolver's tenancy: the project's own
+     -- clients and its organization's organization-level clients.
+     AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
     WHERE link.user_session_issuer_id = t.user_session_issuer_id
   ), ARRAY[]::text[])::text[] AS remote_issuer_names,
   EXISTS (
     SELECT 1
     FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_clients AS rsc
+      ON rsc.id = link.remote_session_client_id
+     AND rsc.deleted IS FALSE
+     -- The serve-time credential resolver's tenancy: the project's own
+     -- clients and its organization's organization-level clients.
+     AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     WHERE link.user_session_issuer_id = t.user_session_issuer_id AND rsc.credential_owner = 'self'
   )::boolean AS has_self_owned_clients,
   EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b WHERE b.user_session_issuer_id = t.user_session_issuer_id
   )::boolean AS has_ema_bindings,
+  -- Another enabled toolset on the issuer still reads its sessions, so
+  -- stamping a resource on them could cut it off.
+  (
+    SELECT count(*)
+    FROM toolsets AS other
+    JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
+    WHERE other.user_session_issuer_id = t.user_session_issuer_id
+      AND other.id <> t.id
+      AND other.deleted IS FALSE
+      AND other.mcp_enabled
+  )::bigint AS other_toolsets_on_issuer,
   COALESCE((
     SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))
     FROM remote_sessions AS rs
@@ -268,11 +294,11 @@ WHERE toolset_id = @toolset_id AND project_id = @project_id AND deleted IS FALSE
 
 -- name: SwitchServerToRemote :execrows
 -- Swaps the backend in one statement, as mcp_servers_backend_exclusivity_check
--- requires, keeping the row's id, slug, visibility and network access.
+-- requires, keeping the row's id, slug, visibility and network access. The
+-- upstream issuer is then derived by the shared resync, as for any server.
 UPDATE mcp_servers
 SET toolset_id = NULL,
   remote_mcp_server_id = @remote_mcp_server_id,
-  remote_session_issuer_id = @remote_session_issuer_id,
   user_session_issuer_id = COALESCE(user_session_issuer_id, @user_session_issuer_id),
   updated_at = clock_timestamp()
 WHERE id = @id
@@ -288,16 +314,15 @@ SET mcp_enabled = FALSE, updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: RekeyToolsetMetadata :execrows
--- The server keeps the toolset's id, so its metadata row moves from the
--- toolset key to the server key without changing which server it describes,
--- unless the server already has one.
+-- Moves the toolset's metadata row onto the server it now describes, unless
+-- the server already has one.
 UPDATE mcp_metadata AS md
-SET toolset_id = NULL, mcp_server_id = @id, updated_at = clock_timestamp()
+SET toolset_id = NULL, mcp_server_id = @mcp_server_id, updated_at = clock_timestamp()
 WHERE md.project_id = @project_id
-  AND md.toolset_id = @id
+  AND md.toolset_id = @toolset_id
   AND NOT EXISTS (
     SELECT 1 FROM mcp_metadata AS existing
-    WHERE existing.project_id = @project_id AND existing.mcp_server_id = @id
+    WHERE existing.project_id = @project_id AND existing.mcp_server_id = @mcp_server_id
   );
 
 -- name: CountServerPluginEntries :one
@@ -324,7 +349,9 @@ WHERE rs.user_session_issuer_id = @user_session_issuer_id
   AND rs.remote_session_client_id IN (
     SELECT link.remote_session_client_id
     FROM remote_session_client_user_session_issuers AS link
+    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id
     WHERE link.user_session_issuer_id = @user_session_issuer_id
+      AND (rsc.project_id = @project_id::uuid OR (rsc.project_id IS NULL AND rsc.organization_id = @organization_id::text))
   );
 
 -- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.

@@ -19,6 +19,7 @@ import (
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -132,12 +133,12 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		return outcome, err
 	}
 
-	if _, err := queries.RekeyToolsetMetadata(ctx, repo.RekeyToolsetMetadataParams{ID: conv.ToNullUUID(serverID), ProjectID: projectID}); err != nil {
+	if _, err := queries.RekeyToolsetMetadata(ctx, repo.RekeyToolsetMetadataParams{McpServerID: conv.ToNullUUID(serverID), ProjectID: projectID, ToolsetID: conv.ToNullUUID(toolset.ID)}); err != nil {
 		return outcome, fmt.Errorf("rekey server metadata: %w", err)
 	}
 
 	filled, err := queries.FillRemoteSessionResources(ctx, repo.FillRemoteSessionResourcesParams{
-		Resource: conv.ToPGText(remote.Url), UserSessionIssuerID: issuerID, OrganizationID: organizationID,
+		Resource: conv.ToPGText(remote.Url), UserSessionIssuerID: issuerID, ProjectID: projectID, OrganizationID: organizationID,
 	})
 	if err != nil {
 		return outcome, fmt.Errorf("fill remote session resources: %w", err)
@@ -189,12 +190,11 @@ func (m *Migrator) switchServer(ctx context.Context, tx pgx.Tx, principal urn.Pr
 		return fmt.Errorf("read server before switch: %w", err)
 	}
 	switched, err := repo.New(tx).SwitchServerToRemote(ctx, repo.SwitchServerToRemoteParams{
-		RemoteMcpServerID:     conv.ToNullUUID(remoteID),
-		RemoteSessionIssuerID: conv.ToNullUUID(candidate.Row.RemoteSessionIssuerIds[0]),
-		UserSessionIssuerID:   candidate.Row.UserSessionIssuerID,
-		ID:                    serverID,
-		ProjectID:             toolset.ProjectID,
-		ToolsetID:             conv.ToNullUUID(toolset.ID),
+		RemoteMcpServerID:   conv.ToNullUUID(remoteID),
+		UserSessionIssuerID: candidate.Row.UserSessionIssuerID,
+		ID:                  serverID,
+		ProjectID:           toolset.ProjectID,
+		ToolsetID:           conv.ToNullUUID(toolset.ID),
 	})
 	if err != nil {
 		return fmt.Errorf("switch server to remote source: %w", err)
@@ -202,9 +202,15 @@ func (m *Migrator) switchServer(ctx context.Context, tx pgx.Tx, principal urn.Pr
 	if switched != 1 {
 		return errNotCandidate
 	}
+	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{candidate.Row.UserSessionIssuerID.UUID}); err != nil {
+		return fmt.Errorf("resync upstream issuer: %w", err)
+	}
 	after, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: toolset.ProjectID})
 	if err != nil {
 		return fmt.Errorf("read server after switch: %w", err)
+	}
+	if !after.RemoteSessionIssuerID.Valid {
+		return fail("the sign-in provider's upstream authorization server could not be resolved for this project")
 	}
 	if err := m.audit.LogMcpServerUpdate(ctx, tx, audit.LogMcpServerUpdateEvent{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID,

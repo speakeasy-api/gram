@@ -69,6 +69,7 @@ const (
 	blockerEMABindings        = "its sign-in provider has enterprise-managed authorization bindings"
 	blockerManyResources      = "its signed-in sessions record more than one upstream resource"
 	blockerSharedNonRemote    = "another server signs in through the same provider and is not a remote MCP server"
+	blockerSharedToolset      = "another enabled toolset signs in through the same provider"
 	blockerSharedOtherURL     = "another remote MCP server on the same sign-in provider dials a different upstream"
 )
 
@@ -179,6 +180,9 @@ func assess(row repo.ListCandidatesRow) Candidate {
 		}
 		if row.OtherNonRemoteServersOnIssuer > 0 {
 			block(blockerSharedNonRemote)
+		}
+		if row.OtherToolsetsOnIssuer > 0 {
+			block(blockerSharedToolset)
 		}
 	}
 

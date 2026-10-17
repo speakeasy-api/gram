@@ -473,9 +473,11 @@ type AdminExternalMcpMigrationOutcome struct {
 	McpSlug *string
 	// The server, which keeps its ID.
 	McpServerID *string
-	// The remote MCP source the server now proxies.
+	// The remote MCP source the server proxies once migrated. Absent when the
+	// server failed; a preview's source is rolled back.
 	RemoteMcpServerID *string
-	// The upstream URL the server now dials.
+	// The upstream URL the server dials once migrated. Absent when the server
+	// failed.
 	RemoteURL *string
 	// Each change, in order.
 	Actions []string
