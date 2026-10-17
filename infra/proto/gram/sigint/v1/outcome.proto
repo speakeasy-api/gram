@@ -151,6 +151,7 @@ message Outcome {
   // Required evaluation trigger: "stream" or "manual". Immutable across attempts.
   string trigger_kind = 25;
   // Nonzero UUID for a manual run. Absent for streaming evaluations.
+  // Request retries reuse the run ID and intentional new runs allocate another.
   string run_id = 26;
   // Required immutable UTC RFC3339Nano logical request time, shared with Reading.
   // Preserved across attempts so both topics replace rows in the same partition.

@@ -298,9 +298,9 @@ resolution also record the supplied input, and failures after inference record
 the classifier model metadata. One attempt ID covers every reading and outcome of
 an event evaluation. Retryable failures publish nothing and nack the delivery, so
 redelivery decides them later. Event-level failures before sensors load (invalid
-identity, timestamp or event) have no sensor to attribute and publish no outcome;
-a message census must account for those. The failure and skip counters are
-unchanged.
+identity, timestamp, event, or evaluation context) have no sensor to attribute and
+publish no outcome; a message census must account for those, including
+`invalid_evaluation_context`. The failure and skip counters are unchanged.
 Readings exceeding 9 MiB of serialized protobuf are rejected before publication,
 leaving headroom under Pub/Sub's 10 MiB limit. They are permanent failures with
 reason `reading_too_large`; other successful readings are still published.

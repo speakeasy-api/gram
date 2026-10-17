@@ -890,6 +890,7 @@ type Outcome_builder struct {
 	// Required evaluation trigger: "stream" or "manual". Immutable across attempts.
 	TriggerKind *string
 	// Nonzero UUID for a manual run. Absent for streaming evaluations.
+	// Request retries reuse the run ID and intentional new runs allocate another.
 	RunId *string
 	// Required immutable UTC RFC3339Nano logical request time, shared with Reading.
 	// Preserved across attempts so both topics replace rows in the same partition.
