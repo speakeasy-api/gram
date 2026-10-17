@@ -143,8 +143,14 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// story than the one they were seeded to tell.
 		// One issuer per Connections credential story (acme-partner-gateway),
 		// three project MCP issuers, and the organization-wide workforce issuer
-		// used by GitHub.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 4, "demo seed postflight: expected 4 project user session issuers, found %d"},
+		// used by GitHub. The JAMF tool-permission example's issuer is checked
+		// by id in the first postflight half.
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDProjectUserSessionIssuers(ctx, repo.PostflightIDProjectUserSessionIssuersParams{
+				ProjectID:             proj,
+				TunneledExampleIssuer: s.det("tunrbac-issuer"),
+			})
+		}, 4, "demo seed postflight: expected 4 project user session issuers, found %d"},
 		{byOrg(s.q.PostflightIDOrgUserSessionIssuers), 1, "demo seed postflight: expected 1 organization user session issuer, found %d"},
 		// The workforce issuer shows a shared authorization server.
 		{func(ctx context.Context) (int64, error) {

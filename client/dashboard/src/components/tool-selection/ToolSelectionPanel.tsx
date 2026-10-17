@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ANNOTATION_OPTIONS, type ToolAnnotation } from "./annotations";
+import { unavailableTooltip } from "./unavailableTooltip";
 
 export type { ToolAnnotation };
 
@@ -33,6 +34,10 @@ export interface ToolSelectionServer {
   emptyLabel?: string;
   /** Expanded body when ready with zero tools. */
   emptyContent?: React.ReactNode;
+  /**
+   * Defaults to the unproxied-server copy, as does the tooltip. A caller with
+   * its own label gets no tooltip unless it passes one.
+   */
   unavailableLabel?: string;
   unavailableTooltip?: React.ReactNode;
   onRetry?: () => void;
@@ -214,28 +219,36 @@ export function ToolSelectionPanel({
 
   const filteredServers = useMemo(() => {
     if (!q) return servers;
-    return servers
-      .map((server) => {
-        // A server-name/prefix match keeps the full tool list — the user
-        // found the server, not a subset of its tools.
-        if (
-          server.name.toLowerCase().includes(q) ||
-          (server.namePrefix ?? "").toLowerCase().includes(q)
-        ) {
-          return server;
-        }
-        return {
-          ...server,
-          tools: server.tools.filter((t) => t.name.toLowerCase().includes(q)),
-        };
-      })
-      .filter((s) => s.tools.length > 0);
+    return servers.flatMap((server) => {
+      // A server-name/prefix match keeps the server and its full tool list —
+      // the user found the server, not a subset of its tools. That includes a
+      // server whose tools load only once it is expanded.
+      if (
+        server.name.toLowerCase().includes(q) ||
+        (server.namePrefix ?? "").toLowerCase().includes(q)
+      ) {
+        return [server];
+      }
+      const tools = server.tools.filter((t) =>
+        t.name.toLowerCase().includes(q),
+      );
+      return tools.length > 0 ? [{ ...server, tools }] : [];
+    });
   }, [servers, q]);
 
   useEffect(() => {
-    if (q) {
-      setExpandedServers(new Set(filteredServers.map((s) => s.id)));
-    }
+    if (!q) return;
+    // Open the matches that have tools to show. A server whose tools load on
+    // expand stays as the user left it, so a search doesn't start a load for
+    // every server it names.
+    setExpandedServers((prev) => {
+      const next = filteredServers
+        .filter((s) => s.tools.length > 0 || prev.has(s.id))
+        .map((s) => s.id);
+      return next.length === prev.size && next.every((id) => prev.has(id))
+        ? prev
+        : new Set(next);
+    });
   }, [q, filteredServers]);
 
   // Flattened to one server, every tool is already on screen unexpanded, so
@@ -561,16 +574,17 @@ function ServerRow({
           />
         </span>
         <span className="text-muted-foreground shrink-0 text-xs">
-          {server.unavailableLabel ?? "dynamic tools"}
+          {server.unavailableLabel ?? "not proxied"}
         </span>
       </div>
     );
-    if (!server.unavailableTooltip) return row;
+    const tooltip = unavailableTooltip(server);
+    if (!tooltip) return row;
     return (
       <Tooltip>
         <TooltipTrigger asChild>{row}</TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
-          {server.unavailableTooltip}
+          {tooltip}
         </TooltipContent>
       </Tooltip>
     );
