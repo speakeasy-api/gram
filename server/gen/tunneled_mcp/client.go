@@ -20,18 +20,20 @@ type Client struct {
 	ListServersEndpoint           goa.Endpoint
 	GetServerEndpoint             goa.Endpoint
 	ListServerConnectionsEndpoint goa.Endpoint
+	GetServerMetricsEndpoint      goa.Endpoint
 	UpdateServerEndpoint          goa.Endpoint
 	RotateServerKeyEndpoint       goa.Endpoint
 	DeleteServerEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "tunneledMcp" service client given the endpoints.
-func NewClient(createServer, listServers, getServer, listServerConnections, updateServer, rotateServerKey, deleteServer goa.Endpoint) *Client {
+func NewClient(createServer, listServers, getServer, listServerConnections, getServerMetrics, updateServer, rotateServerKey, deleteServer goa.Endpoint) *Client {
 	return &Client{
 		CreateServerEndpoint:          createServer,
 		ListServersEndpoint:           listServers,
 		GetServerEndpoint:             getServer,
 		ListServerConnectionsEndpoint: listServerConnections,
+		GetServerMetricsEndpoint:      getServerMetrics,
 		UpdateServerEndpoint:          updateServer,
 		RotateServerKeyEndpoint:       rotateServerKey,
 		DeleteServerEndpoint:          deleteServer,
@@ -125,6 +127,29 @@ func (c *Client) ListServerConnections(ctx context.Context, p *ListServerConnect
 		return
 	}
 	return ires.(*types.TunneledMcpServerConnections), nil
+}
+
+// GetServerMetrics calls the "getServerMetrics" endpoint of the "tunneledMcp"
+// service.
+// GetServerMetrics may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetServerMetrics(ctx context.Context, p *GetServerMetricsPayload) (res *types.TunnelMetrics, err error) {
+	var ires any
+	ires, err = c.GetServerMetricsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.TunnelMetrics), nil
 }
 
 // UpdateServer calls the "updateServer" endpoint of the "tunneledMcp" service.

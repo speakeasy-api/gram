@@ -982,6 +982,248 @@ func DecodeListServerConnectionsResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetServerMetricsRequest instantiates a HTTP request object with method
+// and path set to call the "tunneledMcp" service "getServerMetrics" endpoint
+func (c *Client) BuildGetServerMetricsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetServerMetricsTunneledMcpPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("tunneledMcp", "getServerMetrics", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetServerMetricsRequest returns an encoder for requests sent to the
+// tunneledMcp getServerMetrics server.
+func EncodeGetServerMetricsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*tunneledmcp.GetServerMetricsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("tunneledMcp", "getServerMetrics", "*tunneledmcp.GetServerMetricsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		values.Add("window", p.Window)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetServerMetricsResponse returns a decoder for responses returned by
+// the tunneledMcp getServerMetrics endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetServerMetricsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetServerMetricsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetServerMetricsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+			}
+			err = ValidateGetServerMetricsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+			}
+			res := NewGetServerMetricsTunnelMetricsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetServerMetricsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+			}
+			err = ValidateGetServerMetricsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+			}
+			return nil, NewGetServerMetricsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetServerMetricsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+			}
+			err = ValidateGetServerMetricsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+			}
+			return nil, NewGetServerMetricsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetServerMetricsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+			}
+			err = ValidateGetServerMetricsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+			}
+			return nil, NewGetServerMetricsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetServerMetricsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+			}
+			err = ValidateGetServerMetricsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+			}
+			return nil, NewGetServerMetricsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetServerMetricsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+			}
+			err = ValidateGetServerMetricsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+			}
+			return nil, NewGetServerMetricsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetServerMetricsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+			}
+			err = ValidateGetServerMetricsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+			}
+			return nil, NewGetServerMetricsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetServerMetricsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+			}
+			err = ValidateGetServerMetricsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+			}
+			return nil, NewGetServerMetricsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetServerMetricsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+				}
+				err = ValidateGetServerMetricsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+				}
+				return nil, NewGetServerMetricsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetServerMetricsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+				}
+				err = ValidateGetServerMetricsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+				}
+				return nil, NewGetServerMetricsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("tunneledMcp", "getServerMetrics", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetServerMetricsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("tunneledMcp", "getServerMetrics", err)
+			}
+			err = ValidateGetServerMetricsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("tunneledMcp", "getServerMetrics", err)
+			}
+			return nil, NewGetServerMetricsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("tunneledMcp", "getServerMetrics", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildUpdateServerRequest instantiates a HTTP request object with method and
 // path set to call the "tunneledMcp" service "updateServer" endpoint
 func (c *Client) BuildUpdateServerRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1727,6 +1969,7 @@ func unmarshalTunneledMcpServerResponseBodyToTypesTunneledMcpServer(v *TunneledM
 // *TunneledMcpConnectionResponseBody.
 func unmarshalTunneledMcpConnectionResponseBodyToTypesTunneledMcpConnection(v *TunneledMcpConnectionResponseBody) *types.TunneledMcpConnection {
 	res := &types.TunneledMcpConnection{
+		TargetDisplay:          v.TargetDisplay,
 		GatewaySessionID:       *v.GatewaySessionID,
 		ServiceVersion:         *v.ServiceVersion,
 		AgentVersion:           v.AgentVersion,
@@ -1736,11 +1979,120 @@ func unmarshalTunneledMcpConnectionResponseBodyToTypesTunneledMcpConnection(v *T
 		ActiveSubstreams:       *v.ActiveSubstreams,
 		ActiveConsumerSessions: *v.ActiveConsumerSessions,
 	}
+	if v.Diagnostics != nil {
+		res.Diagnostics = unmarshalTunnelDiagnosticsResponseBodyToTypesTunnelDiagnostics(v.Diagnostics)
+	}
 	res.Metadata = make(map[string]string, len(v.Metadata))
 	for key, val := range v.Metadata {
 		tk := key
 		tv := val
 		res.Metadata[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalTunnelDiagnosticsResponseBodyToTypesTunnelDiagnostics builds a
+// value of type *types.TunnelDiagnostics from a value of type
+// *TunnelDiagnosticsResponseBody.
+func unmarshalTunnelDiagnosticsResponseBodyToTypesTunnelDiagnostics(v *TunnelDiagnosticsResponseBody) *types.TunnelDiagnostics {
+	if v == nil {
+		return nil
+	}
+	res := &types.TunnelDiagnostics{
+		State:                   *v.State,
+		ReceivedAt:              v.ReceivedAt,
+		SampleAgeMs:             v.SampleAgeMs,
+		TargetState:             v.TargetState,
+		ConsecutiveFailures:     v.ConsecutiveFailures,
+		RequestsTotal:           v.RequestsTotal,
+		TransportErrorsTotal:    v.TransportErrorsTotal,
+		LastHTTPStatus:          v.LastHTTPStatus,
+		LastHTTPResponseAgeMs:   v.LastHTTPResponseAgeMs,
+		LastTransportError:      v.LastTransportError,
+		LastTransportErrorAgeMs: v.LastTransportErrorAgeMs,
+	}
+	if v.DNS != nil {
+		res.DNS = unmarshalTunnelDiagnosticStepResponseBodyToTypesTunnelDiagnosticStep(v.DNS)
+	}
+	if v.TCP != nil {
+		res.TCP = unmarshalTunnelDiagnosticStepResponseBodyToTypesTunnelDiagnosticStep(v.TCP)
+	}
+	if v.TLS != nil {
+		res.TLS = unmarshalTunnelDiagnosticStepResponseBodyToTypesTunnelDiagnosticStep(v.TLS)
+	}
+	if v.HTTPProgress != nil {
+		res.HTTPProgress = unmarshalTunnelHTTPProgressResponseBodyToTypesTunnelHTTPProgress(v.HTTPProgress)
+	}
+
+	return res
+}
+
+// unmarshalTunnelDiagnosticStepResponseBodyToTypesTunnelDiagnosticStep builds
+// a value of type *types.TunnelDiagnosticStep from a value of type
+// *TunnelDiagnosticStepResponseBody.
+func unmarshalTunnelDiagnosticStepResponseBodyToTypesTunnelDiagnosticStep(v *TunnelDiagnosticStepResponseBody) *types.TunnelDiagnosticStep {
+	if v == nil {
+		return nil
+	}
+	res := &types.TunnelDiagnosticStep{
+		State:      *v.State,
+		DurationMs: *v.DurationMs,
+		Failure:    *v.Failure,
+	}
+
+	return res
+}
+
+// unmarshalTunnelHTTPProgressResponseBodyToTypesTunnelHTTPProgress builds a
+// value of type *types.TunnelHTTPProgress from a value of type
+// *TunnelHTTPProgressResponseBody.
+func unmarshalTunnelHTTPProgressResponseBodyToTypesTunnelHTTPProgress(v *TunnelHTTPProgressResponseBody) *types.TunnelHTTPProgress {
+	if v == nil {
+		return nil
+	}
+	res := &types.TunnelHTTPProgress{
+		WaitingHeaders: *v.WaitingHeaders,
+		OpenResponses:  *v.OpenResponses,
+	}
+
+	return res
+}
+
+// unmarshalTunnelMetricPointResponseBodyToTypesTunnelMetricPoint builds a
+// value of type *types.TunnelMetricPoint from a value of type
+// *TunnelMetricPointResponseBody.
+func unmarshalTunnelMetricPointResponseBodyToTypesTunnelMetricPoint(v *TunnelMetricPointResponseBody) *types.TunnelMetricPoint {
+	res := &types.TunnelMetricPoint{
+		Time:                   *v.Time,
+		ToolCalls:              v.ToolCalls,
+		ToolsList:              v.ToolsList,
+		OtherRequests:          v.OtherRequests,
+		Successes:              v.Successes,
+		Errors:                 v.Errors,
+		Canceled:               v.Canceled,
+		Incomplete:             v.Incomplete,
+		P50Ms:                  v.P50Ms,
+		P95Ms:                  v.P95Ms,
+		Connections:            v.Connections,
+		ConsumerSessions:       v.ConsumerSessions,
+		ActiveRequests:         v.ActiveRequests,
+		ConnectionsOpened:      v.ConnectionsOpened,
+		RequestCoverageSamples: *v.RequestCoverageSamples,
+		CollectionPartial:      *v.CollectionPartial,
+		CoverageSamples:        *v.CoverageSamples,
+	}
+
+	return res
+}
+
+// unmarshalTunnelClientCountResponseBodyToTypesTunnelClientCount builds a
+// value of type *types.TunnelClientCount from a value of type
+// *TunnelClientCountResponseBody.
+func unmarshalTunnelClientCountResponseBodyToTypesTunnelClientCount(v *TunnelClientCountResponseBody) *types.TunnelClientCount {
+	res := &types.TunnelClientCount{
+		Family:   *v.Family,
+		Requests: *v.Requests,
 	}
 
 	return res

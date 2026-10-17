@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  TunnelDiagnostics,
+  TunnelDiagnostics$inboundSchema,
+} from "./tunneldiagnostics.js";
 
 export type TunneledMcpConnection = {
   /**
@@ -25,6 +29,7 @@ export type TunneledMcpConnection = {
    * When this tunnel session connected
    */
   connectedAt: Date;
+  diagnostics?: TunnelDiagnostics | undefined;
   /**
    * Gateway session ID for a live tunnel connection
    */
@@ -45,6 +50,10 @@ export type TunneledMcpConnection = {
    * Customer-declared version of the MCP service behind this tunnel connection
    */
   serviceVersion: string;
+  /**
+   * Agent target scheme, hostname, port and path, without credentials, query or fragment
+   */
+  targetDisplay?: string | undefined;
 };
 
 /** @internal */
@@ -60,6 +69,7 @@ export const TunneledMcpConnection$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    diagnostics: z.optional(TunnelDiagnostics$inboundSchema),
     gateway_session_id: z.string(),
     last_heartbeat_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -68,6 +78,7 @@ export const TunneledMcpConnection$inboundSchema: z.ZodMiniType<
     metadata: z.record(z.string(), z.string()),
     remote_addr: z.optional(z.string()),
     service_version: z.string(),
+    target_display: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -79,6 +90,7 @@ export const TunneledMcpConnection$inboundSchema: z.ZodMiniType<
       "last_heartbeat_at": "lastHeartbeatAt",
       "remote_addr": "remoteAddr",
       "service_version": "serviceVersion",
+      "target_display": "targetDisplay",
     });
   }),
 );

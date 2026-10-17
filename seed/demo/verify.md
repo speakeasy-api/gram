@@ -603,3 +603,7 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 4. Do not run workloads using the illustrative issuer/JWKS URLs: these fixtures
    are display-only, not usable credentials. Leave the page marked `[~]` until
    the browser checks above are performed.
+
+## Tunnel observability
+
+With `gram-tunnel-observability` enabled, open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected agents" with a View agent setup action. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.

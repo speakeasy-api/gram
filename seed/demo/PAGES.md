@@ -183,6 +183,10 @@ Like the attachment above, every row has invalid ciphertext, no refresh token
 and auto-refresh disabled; they are display-only. IDs derive from
 `Spec.NameSeed` (`gram-demo-validated-session-<n>`).
 
+## Tunnel source observability
+
+The Private inventory tunnel source has one linked private MCP server and deterministic 24-hour request/connection history with a recent gap. It has no connected agent. Live HTTP progress is never seeded as fresh evidence. Open its Overview with `gram-tunnel-observability` enabled and verify charts, the gap, and the no-agent diagnostic state.
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are
@@ -327,3 +331,5 @@ and verified discount/price terms, not seeded signup attribution. The enterprise
 demo intentionally shows no box; component and Stripe transport fixtures cover
 verified gateway terms, safe monetary/percentage fallback, expiration, and absence.
 No Stripe subscription, promotion, or local billing settings are seeded for it.
+
+Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, and no-agent state.
