@@ -70,7 +70,7 @@ func (c *Chainer) tryProviders(ctx context.Context, logger *slog.Logger, path st
 		cancel()
 		outcome.Provider = p.Kind
 		c.recordAttempt(ctx, path, outcome, fallback, retries)
-		if outcome.Succeeded() || outcome.Reason == ReasonConsentRequired {
+		if outcome.Succeeded() {
 			if fallback {
 				providerLogger.InfoContext(ctx, "identity chaining served by a fallback ema provider",
 					attr.SlogIdentityChainingFallback(true),

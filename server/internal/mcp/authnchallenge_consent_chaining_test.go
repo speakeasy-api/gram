@@ -251,3 +251,7 @@ func (g *consentGovernor) CheckConsent(ctx context.Context, req identitychaining
 	_, outcome := g.Acquire(ctx, req)
 	return outcome
 }
+
+func (g *consentGovernor) RetireConsentCredentials(context.Context, string, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
+	return nil
+}

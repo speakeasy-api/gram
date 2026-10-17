@@ -145,10 +145,10 @@ setTimeout(() => {
   assert.equal(summary.textContent, '2 of 5 connected');
 
   const ready = cards.ready;
-  assert.equal(ready.status.getAttribute('data-chain-check'), 'ready');
-  assert.equal(ready.status.textContent, 'Automatically connects when you give access');
-  assert.equal(ready.fallback.className, fallbackClass, 'readiness keeps separate OAuth optional');
-  assert.equal(summary.textContent, '2 of 5 connected', 'readiness does not claim a downstream token');
+  assert.equal(ready.status.getAttribute('data-chain-check'), 'unknown', 'an unrecognized status reads neutral');
+  assert.equal(ready.status.textContent, 'Managed by your identity provider');
+  assert.equal(ready.fallback.className, fallbackClass, 'a neutral card keeps separate OAuth optional');
+  assert.equal(summary.textContent, '2 of 5 connected', 'a neutral card does not claim a downstream token');
 
   const no = cards.rejected;
   assert.equal(no.status.getAttribute('data-chain-check'), 'rejected');

@@ -79,6 +79,14 @@ const (
 	// an unknown kid until the vendor refetches.
 	recentKeyWindow = internalsessionissuers.ActivationDelay + internalsessionissuers.CacheTTL
 
+	// consentAcceptedTTL is how long a consent page reports a vendor's
+	// acceptance it could not store, because the subject's one credential
+	// slot is held, instead of redeeming again on every reload. Within it,
+	// "connected" means a recent vendor acceptance, not a stored token, and
+	// can outlive a vendor-side refusal; local sign-in, issuer and provider
+	// checks still run on every load.
+	consentAcceptedTTL = 5 * time.Minute
+
 	// releaseTimeout bounds the detached single-flight release.
 	releaseTimeout = 2 * time.Second
 
@@ -198,7 +206,14 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	var none Token
 	src := c.source(p)
 	sel.provider = p
-	release := func(token Token) (Token, Outcome) { return c.release(ctx, logger, req, sel, src, token) }
+	// release logs a credential's source only once release lets it out.
+	release := func(token Token, source credentialSource) (Token, Outcome) {
+		token, outcome := c.release(ctx, logger, req, sel, src, token)
+		if outcome.Succeeded() && source != credentialNone {
+			logCredentialSource(ctx, logger, sel, source)
+		}
+		return token, outcome
+	}
 	if outcome := src.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
 		return none, outcome
 	}
@@ -213,7 +228,13 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	// Stored credentials are checked against their issuing provider and exact
 	// provenance.
 	if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-		return release(token)
+		return release(token, credentialCached)
+	}
+	if token, source, ok := c.adoptConsentCredential(ctx, logger, req, sel); ok {
+		return release(token, source)
+	}
+	if c.consentAccepted(ctx, req, sel) {
+		return release(none, credentialNone)
 	}
 	failureKey := cacheKey("identityChainingFailure", req, sel)
 	if cached, ok := c.recentFailure(ctx, req, sel); ok {
@@ -232,7 +253,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		if !outcome.Succeeded() {
 			return none, outcome
 		}
-		return release(token)
+		return release(token, credentialNone)
 	default:
 		lockedAt := c.now()
 		defer o11y.LogDefer(ctx, logger, "release identity chaining lock", func() error {
@@ -247,7 +268,10 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		// A holder that finished while this request waited for the lock
 		// already published its credential.
 		if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-			return release(token)
+			return release(token, credentialCached)
+		}
+		if c.consentAccepted(ctx, req, sel) {
+			return release(none, credentialNone)
 		}
 	}
 
@@ -257,6 +281,11 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	token, outcome, grantValidated := c.acquire(attemptCtx, logger, req, sel, src)
 	outcome.Provider = src.kind()
 	if !outcome.Succeeded() {
+		// A consent page has no later retry, so a vendor that may not have
+		// fetched a new key yet reads as unknown there, never as a refusal.
+		if req.consent() && c.signedWithRecentKey(sel, outcome, grantValidated) {
+			outcome.Retryable = true
+		}
 		logAcquisitionFailure(ctx, logger, outcome, sel)
 		outcome.providerDescription = ""
 		// Requests waiting on this attempt adopt its failure instead of timing out.
@@ -264,11 +293,14 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		if err := c.locks.Set(context.WithoutCancel(ctx), attemptKey, attemptResult{Outcome: outcome, FinishedAt: c.now()}, attemptResultTTL); err != nil {
 			logger.WarnContext(ctx, "record identity chaining attempt", attr.SlogCacheKey(attemptKey), attr.SlogError(err))
 		}
-		if outcome.cacheable() && !c.signedWithRecentKey(sel, outcome) {
+		if outcome.cacheable() && !c.signedWithRecentKey(sel, outcome, grantValidated) {
 			if err := c.locks.Set(context.WithoutCancel(ctx), failureKey, outcome, failureTTL); err != nil {
 				logger.WarnContext(ctx, "record identity chaining failure", attr.SlogCacheKey(failureKey), attr.SlogError(err))
 			}
 		}
+	} else if !req.consent() {
+		// The consent page only records the outcome; nothing is released there.
+		logCredentialSource(ctx, logger, sel, credentialMinted)
 	}
 	// After publishing to waiters; the caller waits at most observeTimeout.
 	c.observe(ctx, logger, Observation{
@@ -286,8 +318,8 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	return token, outcome
 }
 
-// awaitConcurrentAcquisition adopts a concurrent holder's credential, or its
-// failure, instead of spending another assertion on the same identity. A
+// awaitConcurrentAcquisition adopts a concurrent holder's credential, its
+// consent acceptance, or its failure, instead of spending another assertion on the same identity. A
 // holder that finishes neither within the wait budget is reported transient.
 func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, Outcome) {
 	var none Token
@@ -307,6 +339,9 @@ func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.L
 		case <-tick.C:
 			if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
 				return token, success
+			}
+			if c.consentAccepted(ctx, req, sel) {
+				return none, success
 			}
 			var result attemptResult
 			if err := c.locks.Get(ctx, attemptKey, &result); err == nil && result.Outcome.Reason != "" && !result.FinishedAt.Before(startedAt) {
@@ -337,12 +372,45 @@ func cacheKey(prefix string, req Request, sel selection) string {
 	return prefix + ":" + hex.EncodeToString(digest[:])
 }
 
+// consentAccepted reports a vendor acceptance a consent check recorded
+// because it could not store the credential. No token comes with it: callers
+// still run release's authority checks.
+func (c *Chainer) consentAccepted(ctx context.Context, req Request, sel selection) bool {
+	if !req.consent() {
+		return false
+	}
+	var accepted bool
+	err := c.locks.Get(ctx, cacheKey("identityChainingConsentAccepted", req, sel), &accepted)
+	return err == nil && accepted
+}
+
 // signedWithRecentKey reports a Speakeasy redemption rejection of an assertion
-// signed by a key the vendor may not have fetched yet. It is not cached, so
-// the next request retries as soon as the vendor sees the key.
-func (c *Chainer) signedWithRecentKey(sel selection, outcome Outcome) bool {
-	return sel.provider.Kind == remotesessions.EMAProviderSpeakeasy && outcome.Stage == StageRedemption &&
-		!sel.internalKeyPublishedAt.IsZero() && c.now().Sub(sel.internalKeyPublishedAt) < recentKeyWindow
+// signed by a key the vendor may not have fetched yet. Only the ambiguous
+// rejections an unknown signing key draws qualify, and only once an assertion
+// was signed; local configuration, client and scope refusals stay definitive.
+// It is not cached, so the next request retries as soon as the vendor sees
+// the key.
+func (c *Chainer) signedWithRecentKey(sel selection, outcome Outcome, signed bool) bool {
+	if !signed || sel.provider.Kind != remotesessions.EMAProviderSpeakeasy || outcome.Stage != StageRedemption {
+		return false
+	}
+	if outcome.Reason != ReasonInvalidGrant && outcome.Reason != ReasonUnknownRejection {
+		return false
+	}
+	return !sel.internalKeyPublishedAt.IsZero() && c.now().Sub(sel.internalKeyPublishedAt) < recentKeyWindow
+}
+
+// logCredentialSource records where a Speakeasy credential released to a tool
+// call came from. Reuse is logged at debug: it happens on every proxied call.
+func logCredentialSource(ctx context.Context, logger *slog.Logger, sel selection, source credentialSource) {
+	if sel.provider.Kind != remotesessions.EMAProviderSpeakeasy {
+		return
+	}
+	level := slog.LevelInfo
+	if source == credentialCached {
+		level = slog.LevelDebug
+	}
+	logger.Log(ctx, level, "identity chaining credential released", attr.SlogIdentityChainingCredentialSource(source))
 }
 
 // logAcquisitionFailure logs a failed attempt with the provider's error text
