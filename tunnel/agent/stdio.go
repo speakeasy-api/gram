@@ -587,26 +587,30 @@ func (b *stdioBridge) start(ctx context.Context, cred *admittedCredential, owner
 		return nil, err
 	}
 	for {
-		sess, evicted, err := b.startOrEvict(id, cred, owner)
+		sess, freeing, evicted, err := b.startOrEvict(id, cred, owner)
 		if sess != nil || err != nil {
 			return sess, err
 		}
-		evicted.logger.Info("tunnel stdio session evicted for a new session; stopping server")
-		// Waits for any admitted write, so it runs apart from this wait.
-		go evicted.terminate()
+		if evicted {
+			freeing.logger.Info("tunnel stdio session evicted for a new session; stopping server")
+			// Waits for any admitted write, so it runs apart from this wait.
+			go freeing.terminate()
+		}
 		select {
-		case <-evicted.done:
+		case <-freeing.done:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 		// Its own removal races this retry, which could otherwise still count it and evict another session.
-		b.remove(evicted.id)
+		b.remove(freeing.id)
 	}
 }
 
-// startOrEvict starts a session if there is room. At capacity it claims the
-// session idle longest, if idle past evictIdleAfter, for the caller to stop.
-func (b *stdioBridge) startOrEvict(id string, cred *admittedCredential, owner principal) (*stdioSession, *stdioSession, error) {
+// startOrEvict starts a session if there is room. At capacity it returns a
+// session whose slot will free for the caller to wait on: one already
+// closing, else the session idle longest, if idle past evictIdleAfter, which
+// it claims for the caller to stop.
+func (b *stdioBridge) startOrEvict(id string, cred *admittedCredential, owner principal) (sess, freeing *stdioSession, evicted bool, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -634,29 +638,29 @@ func (b *stdioBridge) startOrEvict(id string, cred *admittedCredential, owner pr
 
 	logger := b.logger.With(slog.String("stdio_session", logSessionID(id)))
 	if b.creds == nil {
-		sess, err := startStdioSession(id, b.command, b.env, b.stdinStallTimeout, nil, logger)
+		sess, err = startStdioSession(id, b.command, b.env, b.stdinStallTimeout, nil, logger)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 		b.sessions[id] = sess
 		go func() {
 			<-sess.done
 			b.remove(id)
 		}()
-		return sess, nil, nil
+		return sess, nil, false, nil
 	}
 
 	dir, err := b.creds.store.createSession()
 	if err != nil {
-		return nil, nil, fmt.Errorf("create session credentials: %w", err)
+		return nil, nil, false, fmt.Errorf("create session credentials: %w", err)
 	}
 	creds := newSessionCredentials(owner, cred.context, dir, b.creds.maxAge, b.creds.expiryGrace, b.creds.now)
-	sess, err := startCredentialedSession(id, b.command, credentialChildEnv(b.env, dir.tokenPath(), dir.homePath()), b.stdinStallTimeout, creds, *cred, logger)
+	sess, err = startCredentialedSession(id, b.command, credentialChildEnv(b.env, dir.tokenPath(), dir.homePath()), b.stdinStallTimeout, creds, *cred, logger)
 	if err != nil {
 		if rerr := dir.remove(); rerr != nil {
 			logger.Warn("tunnel stdio session credentials could not be removed", slog.Any("error", rerr))
 		}
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	b.sessions[id] = sess
 	b.creds.cleanups.Go(func() {
