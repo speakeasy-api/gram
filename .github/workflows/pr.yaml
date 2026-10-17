@@ -599,7 +599,7 @@ jobs:
 
       - name: Setup Rust
         # Same cache scoping as Setup Mise above.
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v1.17.0 # zizmor: ignore[cache-poisoning]
         with:
           target: ${{ env.RUNNER_TARGET }}
           rust-src-dir: agents/runner
