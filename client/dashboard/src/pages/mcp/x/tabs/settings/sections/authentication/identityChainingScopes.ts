@@ -24,7 +24,7 @@ function withoutOIDCScopes(scopes: string[] | undefined | null): string[] {
 }
 
 /** The client's scopes a chained token can request; undefined when the client sets none. */
-export function chainableClientScopes(
+function chainableClientScopes(
   clientScope: string[] | undefined | null,
 ): string[] | undefined {
   return clientScope == null ? undefined : withoutOIDCScopes(clientScope);
@@ -35,45 +35,6 @@ export function defaultChainingScopes(
   clientScope: string[] | undefined | null,
 ): string[] {
   return chainableClientScopes(clientScope) ?? [];
-}
-
-export type ChainingScopeOption = {
-  value: string;
-  label: string;
-  disabled?: boolean;
-  description?: string;
-};
-
-/**
- * Options for the requested scopes control. prepareEMA only accepts a subset
- * of the client's scope, so a resource scope outside it is shown but disabled.
- */
-export function chainingScopeOptions(
-  clientScope: string[] | undefined | null,
-  resourceScopes: string[] | undefined | null,
-  selected: string[],
-): ChainingScopeOption[] {
-  const allowed = chainableClientScopes(clientScope);
-  const advertised = withoutOIDCScopes(resourceScopes);
-  const values = normalizeScopes([
-    ...(allowed ?? []),
-    ...advertised,
-    ...selected,
-  ]);
-  return values.map((value) => {
-    const outsideClient = allowed !== undefined && !allowed.includes(value);
-    if (outsideClient) {
-      return {
-        value,
-        label: value,
-        disabled: true,
-        description: "Add to the client's scope first",
-      };
-    }
-    return advertised.includes(value)
-      ? { value, label: value, description: "Advertised by this server" }
-      : { value, label: value };
-  });
 }
 
 /** Whether prepareEMA accepts these scopes for the client. */
@@ -91,7 +52,7 @@ export function sanitizeChainingScopes(scopes: string[]): string[] {
   return withoutOIDCScopes(scopes);
 }
 
-export function sameScopes(a: string[], b: string[]): boolean {
+function sameScopes(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const set = new Set(a);
   return b.every((scope) => set.has(scope));

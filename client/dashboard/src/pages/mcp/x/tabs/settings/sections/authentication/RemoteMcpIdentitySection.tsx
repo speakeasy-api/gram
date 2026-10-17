@@ -9,15 +9,12 @@ import {
 } from "@/components/ui/HoverCard";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
-import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
@@ -54,7 +51,6 @@ import { useAgentCredentialDraft } from "@/lib/remote-identity";
 import { RequestedScopesSummary } from "./RequestedScopesSummary";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
-import { IdentityChainingField } from "./IdentityChainingField";
 import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -125,11 +121,6 @@ export function RemoteMcpIdentitySectionBody({
   const orgSharedClient = organizationIssuer
     ? clients.find((linked) => linked.projectId === "")
     : undefined;
-  const chainingFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
-  const chainingIssuer =
-    chainingFlag.status === "enabled"
-      ? identityChainingIssuer(userSessionIssuer)
-      : undefined;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -845,15 +836,6 @@ export function RemoteMcpIdentitySectionBody({
             </div>
           ) : null}
 
-          {identityResolved && chainingIssuer && sourceQuery.data?.url ? (
-            <IdentityChainingField
-              userSessionIssuer={chainingIssuer}
-              linkedClients={clients}
-              resource={sourceQuery.data.url}
-              remoteMcpServerId={remoteMcpServerId}
-            />
-          ) : null}
-
           {identityResolved && selectedMode === "agent" ? (
             <div className="px-6 py-5">
               <ServiceAccountPanel
@@ -1049,16 +1031,6 @@ export function RemoteMcpIdentitySectionBody({
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
-}
-
-/** Identity chaining needs an organization issuer that trusts an identity provider sign-in client. */
-function identityChainingIssuer(
-  issuer: UserSessionIssuer | undefined,
-): UserSessionIssuer | undefined {
-  if (issuer?.projectId !== "") return undefined;
-  if (!issuer.trustedRemoteSessionIssuerId) return undefined;
-  if (!issuer.trustedRemoteSessionClientId) return undefined;
-  return issuer;
 }
 
 const UNLINK_PROVIDER_CONSEQUENCE =

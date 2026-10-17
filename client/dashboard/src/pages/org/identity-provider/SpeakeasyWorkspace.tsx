@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import { invalidateAllInternalSessionIssuer } from "@gram/client/react-query/internalSessionIssuer.js";
+import { invalidateAllOrganizationRemoteSessionIssuerEMAServices } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js";
 import { useRotateInternalSessionIssuerMutation } from "@gram/client/react-query/rotateInternalSessionIssuer.js";
 import { useSetInternalSessionIssuerEnabledMutation } from "@gram/client/react-query/setInternalSessionIssuerEnabled.js";
 import {
@@ -20,6 +21,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Heading } from "@/components/ui/Heading";
 import { SkeletonParagraph } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { TrustedByServices } from "./services/TrustedByServices";
 import { IssuerUri } from "./SpeakeasyProviderCard";
 import { ISSUER_STATE_BADGE, KEY_STATE_BADGE } from "./speakeasyIssuerView";
 import { identityProvidersHref } from "./tabs";
@@ -53,6 +55,11 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
   const update = (data: InternalSessionIssuer) => {
     queryClient.setQueryData(enterpriseIssuerQueryKey(organization.id), data);
     void invalidateAllInternalSessionIssuer(queryClient);
+    // Speakeasy's readiness shows on every service that accepts it.
+    void invalidateAllOrganizationRemoteSessionIssuerEMAServices(queryClient);
+    void queryClient.invalidateQueries({
+      queryKey: ["identityChaining", "readEMA"],
+    });
     setAction(null);
   };
   const enable = useSetInternalSessionIssuerEnabledMutation({
@@ -213,8 +220,10 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                     RFC 7523
                   </a>
                   . It never changes, even when signing keys are replaced.
-                  Registering it alone changes nothing: add Speakeasy to the
-                  service's EMA provider order too.
+                  Speakeasy vouches only on MCP servers whose sign-in has no
+                  identity provider, at services that accept it. Registering the
+                  URI alone changes nothing: also turn on Enterprise Managed
+                  Authorization in the MCP server's Settings.
                 </SettingsSection.Description>
               </SettingsSection.Header>
               <SettingsSection.Panel>
@@ -224,6 +233,8 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
               </SettingsSection.Panel>
             </SettingsSection>
           )}
+
+          {issuer.issuer && <TrustedByServices />}
 
           {issuer.issuer && (
             <SettingsSection id="signing-keys">
@@ -497,7 +508,7 @@ function IssuerStatus({
   switch (issuer.state) {
     case "enabled":
       message =
-        "The issuer is ready. Speakeasy vouches for your team only to services whose EMA provider order includes it; other services keep their current identity provider.";
+        "The issuer is ready. Speakeasy vouches for your team on MCP servers that use Speakeasy’s own sign-in, at services that accept it.";
       break;
     case "setup_required":
       message = issuer.canEnable

@@ -25,6 +25,7 @@ export function useAllRemoteSessionClients(
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
+  refetch: () => void;
 } {
   const query = useRemoteSessionClientsInfinite(filters, undefined, {
     enabled: options?.enabled,
@@ -48,5 +49,11 @@ export function useAllRemoteSessionClients(
   // consumer make decisions from a stale partial list.
   const isLoading = query.isFetching || hasNextPage;
 
-  return { items, isLoading, isError: query.isError, error: query.error };
+  return {
+    items,
+    isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: () => void query.refetch(),
+  };
 }

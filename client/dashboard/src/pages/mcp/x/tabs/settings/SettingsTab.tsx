@@ -21,6 +21,10 @@ import {
   MCP_AGENT_SETUP_SECTION_ID,
 } from "./sections/AgentSetupSection";
 import { CallerIdentitySection } from "./sections/CallerIdentitySection";
+import {
+  IDENTITY_CHAINING_SECTION_ID,
+  IdentityChainingSection,
+} from "./sections/authentication/IdentityChainingSection";
 import { GeneralSection } from "./sections/GeneralSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
@@ -34,7 +38,10 @@ import {
   ResourceIdentifierSection,
 } from "./sections/ResourceIdentifierSection";
 import type { SourceBackedDeleteTarget } from "./sections/sourceDelete";
-import { RemoteMcpSessionsSection } from "./sections/RemoteMcpSessionsSection";
+import {
+  MCP_SESSIONS_SECTION_ID,
+  RemoteMcpSessionsSection,
+} from "./sections/RemoteMcpSessionsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 import {
   MCP_TUNNEL_KEY_SECTION_ID,
@@ -50,6 +57,8 @@ const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_PUBLIC_ACCESS_SECTION_ID,
   MCP_TUNNEL_KEY_SECTION_ID,
   MCP_AGENT_SETUP_SECTION_ID,
+  IDENTITY_CHAINING_SECTION_ID,
+  MCP_SESSIONS_SECTION_ID,
 ];
 
 // `ready` flips once the source-backed sections can be on the page: they
@@ -147,6 +156,7 @@ export function SettingsTab({
             Headers disclosure; they are governed by the identity choice, not
             a peer of it. */}
         <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+        <IdentityChainingSection mcpServer={mcpServer} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
           endpoints={endpoints}

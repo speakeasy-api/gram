@@ -39,8 +39,23 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.admin }),
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ setQueryData: mocks.setData }),
+  useQueryClient: () => ({
+    setQueryData: mocks.setData,
+    invalidateQueries: () => Promise.resolve(),
+  }),
 }));
+vi.mock("./services/TrustedByServices", () => ({
+  TrustedByServices: () => (
+    <div>Services that use Speakeasy as their identity provider</div>
+  ),
+}));
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js",
+  () => ({
+    invalidateAllOrganizationRemoteSessionIssuerEMAServices: () =>
+      Promise.resolve(),
+  }),
+);
 vi.mock("./useEnterpriseIssuer", () => ({
   enterpriseIssuerQueryKey: (organizationId: string) => [
     "@gram/client",
@@ -515,6 +530,16 @@ describe("Speakeasy identity provider page", () => {
     expect(keys.getByText("Active")).toBeTruthy();
     expect(keys.getByText("Pending")).toBeTruthy();
     expect(screen.getByText(/2 withdrawn keys/)).toBeTruthy();
+  });
+
+  it("shows which services trust the issuer once it exists", () => {
+    mocks.issuer = enabledIssuer;
+    show();
+    expect(
+      screen.getByText(
+        "Services that use Speakeasy as their identity provider",
+      ),
+    ).toBeTruthy();
   });
 
   it("links back to all identity providers", () => {
