@@ -13,8 +13,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -79,6 +81,10 @@ func runStdioFixture() {
 			switch msg.Params.Name {
 			case "crash":
 				os.Exit(3)
+			case "block":
+				// A synchronous server busy with a slow tool: it reads no stdin meanwhile.
+				time.Sleep(2 * time.Second)
+				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": "done"}}})
 			case "elicit":
 				pendingElicit = msg.ID
 				_ = out.Encode(map[string]any{"jsonrpc": "2.0", "id": "srv-1", "method": "elicitation/create", "params": map[string]any{"message": "name?"}})
@@ -438,6 +444,8 @@ func newRoutingSession() *stdioSession {
 		cmd:          nil,
 		stdin:        nil,
 		logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		stdinStall:   stdioStdinStallTimeout,
+		closing:      atomic.Bool{},
 		writeSem:     make(chan struct{}, 1),
 		exited:       make(chan struct{}),
 		terminated:   make(chan struct{}),
@@ -634,4 +642,202 @@ func TestStdioReapTickerToleratesTinyIdleTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	require.NotPanics(t, func() { b.reap(ctx) })
+}
+
+// stdioTestInitializes is a shell command prefix that answers initialize.
+const stdioTestInitializes = `read l; printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{},"serverInfo":{"name":"x","version":"1"}}}'; `
+
+func TestStdioBridgeCancelledWriteKeepsSession(t *testing.T) {
+	t.Parallel()
+	srv, _ := newStdioTestServer(t, 0)
+	sid := initializeSession(t, srv)
+
+	blocked := mcpRequest(t, srv, http.MethodPost, sid, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"block"}}`)
+	require.Equal(t, http.StatusOK, blocked.StatusCode)
+
+	// Larger than a pipe buffer, so the write waits on the busy server; the client gives up first.
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	body := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"text":"` + strings.Repeat("x", 1<<20) + `"}}}`
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set(headerMCPSessionID, sid)
+	if resp, err := srv.Client().Do(req); err == nil {
+		_ = resp.Body.Close()
+	}
+
+	done, err := io.ReadAll(blocked.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(done), `"text":"done"`)
+	list := mcpRequest(t, srv, http.MethodPost, sid, `{"jsonrpc":"2.0","id":4,"method":"tools/list"}`)
+	require.Equal(t, http.StatusOK, list.StatusCode, "a client giving up on its request must not end the session")
+	// The echo's notification may land on this stream too; the stream ends after the answer.
+	answered, err := io.ReadAll(list.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(answered), `"id":4`)
+}
+
+func TestStdioBridgeBackloggedMessagesDoNotKeepSessionAlive(t *testing.T) {
+	t.Parallel()
+	srv, a := newStdioTestServerWithCommand(t, stdioTestInitializes+`while :; do printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/message","params":{"data":"tick"}}'; sleep 0.05; done`, 0)
+	a.stdio.idleTimeout = 300 * time.Millisecond
+	go a.stdio.reap(t.Context())
+	sid := initializeSession(t, srv)
+
+	require.Eventually(t, func() bool {
+		return a.stdio.session(sid) == nil
+	}, 20*time.Second, 50*time.Millisecond, "notifications nobody receives must not count as activity")
+}
+
+func TestStdioSessionLogsStderrAfterLongLine(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	sess := newRoutingSession()
+	sess.logger = slog.New(slog.NewJSONHandler(&out, nil))
+	sess.logStderr(strings.NewReader("before\n" + strings.Repeat("y", 70<<10) + "\nafter\n"))
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	require.Len(t, lines, 3)
+	require.Contains(t, lines[0], `"line":"before"`)
+	require.Contains(t, lines[1], `"truncated":true`)
+	require.Less(t, len(lines[1]), 16<<10, "a long line is truncated in the log")
+	require.Contains(t, lines[2], `"line":"after"`, "logging continues after a long line")
+}
+
+func TestStdioBridgeRefusesRequestsDuringTeardown(t *testing.T) {
+	t.Parallel()
+	// Ignores stdin closing, so teardown takes until SIGTERM.
+	srv, _ := newStdioTestServerWithCommand(t, stdioTestInitializes+`sleep 300`, 0)
+	sid := initializeSession(t, srv)
+
+	require.Equal(t, http.StatusNoContent, mcpRequest(t, srv, http.MethodDelete, sid, "").StatusCode)
+	require.Equal(t, http.StatusNotFound, mcpRequest(t, srv, http.MethodGet, sid, "").StatusCode)
+	require.Equal(t, http.StatusNotFound, mcpRequest(t, srv, http.MethodPost, sid, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`).StatusCode)
+	require.Equal(t, http.StatusNotFound, mcpRequest(t, srv, http.MethodDelete, sid, "").StatusCode)
+}
+
+func TestStdioBridgeReportsServerExitDuringInitialize(t *testing.T) {
+	t.Parallel()
+	srv, _ := newStdioTestServerWithCommand(t, `echo boom >&2; exit 3`, 0)
+
+	resp := mcpRequest(t, srv, http.MethodPost, "", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
+	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), "exited during initialize")
+}
+
+func TestStdioSessionRateLimitsStderr(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	sess := newRoutingSession()
+	sess.logger = slog.New(slog.NewJSONHandler(&out, nil))
+	sess.logStderr(strings.NewReader(strings.Repeat("noise\n", stdioStderrLinesPerMinute+50)))
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	require.Len(t, lines, stdioStderrLinesPerMinute+1)
+	require.Contains(t, lines[len(lines)-1], `"lines":50`, "lines over the limit are counted, not logged")
+}
+
+func TestStdioSessionClaimIdleExcludesAdmittedRequests(t *testing.T) {
+	t.Parallel()
+	sess := newRoutingSession()
+	later := time.Now().Add(time.Hour)
+
+	release, ok := sess.acquire()
+	require.True(t, ok)
+	require.False(t, sess.claimIdle(later, time.Minute), "a session with a request in flight is not idle")
+	release()
+
+	require.True(t, sess.claimIdle(later, time.Minute))
+	_, ok = sess.acquire()
+	require.False(t, ok, "a request after the session was claimed is refused")
+	require.False(t, sess.claimIdle(later, time.Minute), "a session is claimed once")
+}
+
+func TestStdioRouteCutOffFreesQueueAndAbortsWriter(t *testing.T) {
+	t.Parallel()
+	sess := newRoutingSession()
+	listener, err := sess.attachListener()
+	require.NoError(t, err)
+	listener.limit = 256
+	aborts := 0
+	listener.setAbort(func() { aborts++ })
+
+	notification := `{"jsonrpc":"2.0","method":"notifications/message","params":{"data":"` + strings.Repeat("x", 100) + `"}}`
+	for range 10 {
+		sess.route(mustParseRPC(t, notification))
+	}
+	require.Equal(t, 1, aborts, "a cut-off stream fails its handler's write at once")
+	_, ok := listener.pop()
+	require.False(t, ok, "a cut-off stream frees what it queued")
+}
+
+func TestStdioBridgeStalledReaderReleasesSession(t *testing.T) {
+	t.Parallel()
+	// 32 MiB of notifications: more than socket buffers hold, under the stream's cut-off.
+	notification := filepath.Join(t.TempDir(), "notification")
+	require.NoError(t, os.WriteFile(notification, []byte(`{"jsonrpc":"2.0","method":"notifications/message","params":{"data":"`+strings.Repeat("z", 1<<20)+`"}}`+"\n"), 0o600))
+	command := stdioTestInitializes + `read l; read l; i=0; while [ $i -lt 32 ]; do cat '` + notification + `'; i=$((i+1)); done; sleep 300`
+	srv, a := newStdioTestServerWithCommand(t, command, 0)
+	a.stdio.responseWriteTimeout = 200 * time.Millisecond
+	sid := initializeSession(t, srv)
+	sess := a.stdio.session(sid)
+	require.NotNil(t, sess)
+
+	// The client never reads the stream.
+	call := mcpRequest(t, srv, http.MethodPost, sid, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"x"}}`)
+	require.Equal(t, http.StatusOK, call.StatusCode)
+
+	require.Eventually(t, func() bool {
+		sess.mu.Lock()
+		defer sess.mu.Unlock()
+		return sess.inflight == 0 && len(sess.streams) == 0
+	}, 30*time.Second, 50*time.Millisecond, "a stalled reader must not hold the request, and the session, open")
+}
+
+func TestStdioBridgeStopsServerThatStopsReadingStdin(t *testing.T) {
+	t.Parallel()
+	srv, a := newStdioTestServerWithCommand(t, stdioTestInitializes+`read l; sleep 300`, 0)
+	a.stdio.stdinStallTimeout = 200 * time.Millisecond
+	sid := initializeSession(t, srv)
+
+	// Larger than a pipe buffer, so the write stalls on a server that no longer reads.
+	resp := mcpRequest(t, srv, http.MethodPost, sid, `{"jsonrpc":"2.0","method":"notifications/message","params":{"data":"`+strings.Repeat("x", 1<<20)+`"}}`)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	require.Eventually(t, func() bool {
+		return a.stdio.session(sid) == nil
+	}, 10*time.Second, 50*time.Millisecond, "a server that stops reading stdin is stopped")
+}
+
+func TestStdioBridgeEvictsIdlestSessionAtCapacity(t *testing.T) {
+	t.Parallel()
+	srv, a := newStdioTestServer(t, 1)
+	a.stdio.evictIdleAfter = 100 * time.Millisecond
+	first := initializeSession(t, srv)
+	time.Sleep(200 * time.Millisecond)
+
+	second := initializeSession(t, srv)
+	require.NotEqual(t, first, second)
+	require.Equal(t, http.StatusNotFound, mcpRequest(t, srv, http.MethodPost, first, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`).StatusCode,
+		"the evicted client gets 404 and starts over")
+	require.Equal(t, http.StatusOK, mcpRequest(t, srv, http.MethodPost, second, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`).StatusCode)
+}
+
+func TestStdioBridgeDoesNotEvictBusySessionAtCapacity(t *testing.T) {
+	t.Parallel()
+	srv, a := newStdioTestServer(t, 1)
+	a.stdio.evictIdleAfter = 100 * time.Millisecond
+	sid := initializeSession(t, srv)
+
+	// Stays in flight: the elicitation waits on an answer this test never sends.
+	call := mcpRequest(t, srv, http.MethodPost, sid, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"elicit"}}`)
+	require.Equal(t, http.StatusOK, call.StatusCode)
+	time.Sleep(200 * time.Millisecond)
+
+	resp := mcpRequest(t, srv, http.MethodPost, "", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
+	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	require.Equal(t, "5", resp.Header.Get("Retry-After"))
+	require.NotNil(t, a.stdio.session(sid))
 }

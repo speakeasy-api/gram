@@ -62,25 +62,42 @@ The agent runs the command with `/bin/sh -c` and bridges Streamable HTTP onto
 it:
 
 - Each MCP session gets its own server process, started by `initialize` and
-  addressed by an agent-minted `Mcp-Session-Id`.
+  addressed by an agent-minted `Mcp-Session-Id`. A server that exits before
+  answering `initialize` gets HTTP 502.
 - Messages are relayed verbatim. Server-initiated requests and notifications go
   to the session's GET stream when one is open, otherwise to an open POST
   stream, otherwise to a bounded backlog drained by the next GET stream.
 - DELETE, `TUNNEL_STDIO_IDLE_TIMEOUT` (default `30m`), and agent shutdown stop
   the process: stdin closes, then SIGTERM, then SIGKILL to its process group.
-  The idle timer counts MCP messages in either direction; an open GET stream
-  with nothing on it does not keep a session alive.
-- `TUNNEL_STDIO_MAX_SESSIONS` (default `16`) caps concurrent processes; an
-  `initialize` past the cap gets HTTP 503.
+  The idle timer counts client requests and server messages that reach an
+  open stream. Server messages held in the backlog, and an open GET stream
+  with nothing on it, do not keep a session alive. A session that is shutting
+  down answers 404.
+- `TUNNEL_STDIO_MAX_SESSIONS` (default `16`) caps concurrent processes. An
+  `initialize` past the cap stops the session that has gone longest without a
+  request, provided that is over two minutes and none of its requests is in
+  flight; its client gets 404 on its next request and starts a new session.
+  When no session qualifies, the `initialize` gets HTTP 503.
 - A single message over 32 MiB in either direction is refused; from the server
-  it ends the session. A stream whose client falls 64 MiB behind is cut off
-  rather than stalling the session.
-- A server that stops reading stdin while a request is being written to it is
-  stopped, so a stuck server cannot hold a session slot.
+  it ends the session. A stream whose client falls 64 MiB behind, or accepts
+  nothing for 30 seconds, is cut off rather than stalling the session.
+- A client that gives up on a request does not end the session; its message
+  is still delivered. A server that accepts no stdin for two minutes while a
+  message is being written to it is stopped, so a stuck server cannot hold a
+  session slot.
+- The server's stderr is logged line by line, truncated to 8 KiB a line and
+  capped at 120 lines a minute; the number of lines left out is logged.
 - The agent answers a server's `ping` sent before `initialize` completes, since
   the client has no way to answer it yet.
 - The process inherits the agent's environment minus every `TUNNEL_*`
-  variable, so credentials for the server go in the agent's environment.
+  variable, so credentials for the server go in the agent's environment. On
+  Linux the agent also marks itself non-dumpable, so a server running as the
+  same user cannot read the agent's environment, `TUNNEL_KEY` included,
+  through `/proc`. Treat this as defense in depth: for a hard boundary, run
+  the server as a different user.
+- As PID 1 in a container, the agent reaps exited processes from a server's
+  process group, but not other orphans. Run it under an init such as `tini`
+  or `docker run --init`.
 - Processes outlive gateway reconnects, but sessions are local to one agent.
   Run a single agent replica per stdio tunnel.
 
