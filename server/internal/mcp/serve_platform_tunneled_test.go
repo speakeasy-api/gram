@@ -66,7 +66,7 @@ func seedTunneledWrapper(t *testing.T, ti *testInstance, projectID uuid.UUID, sl
 // the same organization. adminGrants adds the live org:admin and read grants.
 func newTunneledAssistantFixture(t *testing.T, adminGrants bool) tunneledAssistantFixture {
 	t.Helper()
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
