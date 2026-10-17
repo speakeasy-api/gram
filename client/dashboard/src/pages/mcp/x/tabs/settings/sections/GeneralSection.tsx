@@ -144,7 +144,7 @@ function GeneralSectionContent({
     nameTooLong ||
     saving ||
     (metadataUnresolved && metadataForm.brandingDirty) ||
-    (!!upstream?.dirty && upstream.invalid);
+    (!!upstream?.dirty && (upstream.invalid || upstream.lockedReason !== null));
 
   const handleSave = async () => {
     try {
@@ -291,7 +291,11 @@ function GeneralSectionContent({
                 <VerifyRemoteMcpUrlButton
                   state={upstream.verify}
                   url={upstream.draft}
-                  disabled={upstream.pending || upstream.invalid}
+                  disabled={
+                    upstream.pending ||
+                    upstream.invalid ||
+                    upstream.lockedReason !== null
+                  }
                 />
               ) : null}
               <FooterSaveButton

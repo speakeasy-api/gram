@@ -3872,14 +3872,16 @@ func DecodeDeleteServerHeaderResponse(decoder func(*http.Response) goahttp.Decod
 // *RemoteMcpServerResponseBody.
 func unmarshalRemoteMcpServerResponseBodyToTypesRemoteMcpServer(v *RemoteMcpServerResponseBody) *types.RemoteMcpServer {
 	res := &types.RemoteMcpServer{
-		ID:            *v.ID,
-		ProjectID:     *v.ProjectID,
-		Name:          v.Name,
-		Slug:          v.Slug,
-		URL:           *v.URL,
-		TransportType: *v.TransportType,
-		CreatedAt:     *v.CreatedAt,
-		UpdatedAt:     *v.UpdatedAt,
+		ID:                        *v.ID,
+		ProjectID:                 *v.ProjectID,
+		Name:                      v.Name,
+		Slug:                      v.Slug,
+		URL:                       *v.URL,
+		TransportType:             *v.TransportType,
+		EnvironmentLinked:         v.EnvironmentLinked,
+		EnvironmentLinkAuthorized: v.EnvironmentLinkAuthorized,
+		CreatedAt:                 *v.CreatedAt,
+		UpdatedAt:                 *v.UpdatedAt,
 	}
 
 	return res
