@@ -22,7 +22,7 @@ export const EMAProviderKind = {
 export type EMAProviderKind = ClosedEnum<typeof EMAProviderKind>;
 
 /**
- * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+ * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's sign-in doesn't go through this provider, so it can't vouch for people there: an external issuer other than the sign-in's trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
  */
 export const UnavailableReason = {
   Deleted: "deleted",
@@ -38,12 +38,12 @@ export const UnavailableReason = {
   ReadinessUnknown: "readiness_unknown",
 } as const;
 /**
- * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+ * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's sign-in doesn't go through this provider, so it can't vouch for people there: an external issuer other than the sign-in's trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
  */
 export type UnavailableReason = ClosedEnum<typeof UnavailableReason>;
 
 /**
- * One EMA provider in a vendor's order.
+ * One EMA provider a vendor accepts.
  */
 export type EMAProvider = {
   /**
@@ -55,11 +55,15 @@ export type EMAProvider = {
    */
   kind: EMAProviderKind;
   /**
-   * The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
+   * When the vendor last accepted an assertion from this provider anywhere in the organization, so the vendor already trusts it, from cached credentials that still hold an access token. Attributed to the exact issuer that vouched; the organization-wide default's external entry takes the newest acceptance of any external issuer. Set on every response that returns an order; omitted when the vendor has never accepted it, when acceptance could not be read, or on readEMA when the caller lacks org:read.
+   */
+  lastAcceptedAt?: Date | undefined;
+  /**
+   * The external provider's remote session issuer. Omitted for speakeasy, and in the organization-wide default order, where an external entry stands for each endpoint's own trusted issuer.
    */
   remoteSessionIssuerId?: string | undefined;
   /**
-   * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+   * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's sign-in doesn't go through this provider, so it can't vouch for people there: an external issuer other than the sign-in's trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
    */
   unavailableReason?: UnavailableReason | undefined;
 };
@@ -80,12 +84,16 @@ export const EMAProvider$inboundSchema: z.ZodMiniType<EMAProvider, unknown> = z
     z.object({
       internal_session_issuer_id: z.optional(z.string()),
       kind: EMAProviderKind$inboundSchema,
+      last_accepted_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       remote_session_issuer_id: z.optional(z.string()),
       unavailable_reason: z.optional(UnavailableReason$inboundSchema),
     }),
     z.transform((v) => {
       return remap$(v, {
         "internal_session_issuer_id": "internalSessionIssuerId",
+        "last_accepted_at": "lastAcceptedAt",
         "remote_session_issuer_id": "remoteSessionIssuerId",
         "unavailable_reason": "unavailableReason",
       });

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -20,6 +21,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
@@ -167,7 +169,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 // an organization gateway's derived members.
 func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
 	if endpoint.IsOrganizationGateway() {
-		return s.resolveOrganizationMemberSnapshot(ctx, logger, endpoint.OrganizationID)
+		return s.resolveOrganizationMemberSnapshot(ctx, logger, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	}
 	return s.resolveMetaMemberSnapshot(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 }
@@ -180,10 +182,21 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 // the signed-in user). Nothing is persisted, so a grant revoked in the
 // dashboard stops appearing on the caller's very next request with nothing to
 // redistribute or re-install.
+//
+// userSessionIssuerID is the organization gateway's issuer, whose clients are
+// the only way a person connects a member that signs in upstream. uuid.Nil
+// (the agent gateway) skips that check.
+//
+// The organization gateway also drops servers backed by a toolset with
+// Platform tools, mirroring automatic plugin delivery: those toolsets serve
+// assistants and explicit MCP consumers, never a broad distribution surface.
+// The agent gateway keeps them: its members are what an agent key was
+// explicitly granted.
 func (s *Service) resolveOrganizationMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
 	organizationID string,
+	userSessionIssuerID uuid.UUID,
 ) (context.Context, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
 	ctx, err := s.authz.PrepareContext(ctx)
@@ -207,6 +220,9 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
 		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
+			continue
+		}
+		if userSessionIssuerID != uuid.Nil && row.HasPlatformTool {
 			continue
 		}
 		candidates = append(candidates, metaMemberCandidate{
@@ -235,7 +251,30 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	if err != nil {
 		return ctx, nil, err
 	}
-	return ctx, qualifyMemberSlugsByProject(members), nil
+	var clients []remotesessions.Client
+	if userSessionIssuerID != uuid.Nil {
+		clients, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
+		}
+	}
+	eligible := make([]metaMember, 0, len(members))
+	for _, member := range members {
+		supported, needsOAuth, err := s.derivedMemberAuth(ctx, member)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
+		}
+		if !supported {
+			continue
+		}
+		if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+			return clientServesAnyMember(client, []metaMember{member})
+		}) {
+			continue
+		}
+		eligible = append(eligible, member)
+	}
+	return ctx, qualifyMemberSlugsByProject(eligible), nil
 }
 
 // requestNetworkSurface is the ingress surface the request arrived on.

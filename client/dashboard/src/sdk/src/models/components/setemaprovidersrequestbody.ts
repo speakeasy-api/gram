@@ -12,7 +12,11 @@ import {
 
 export type SetEMAProvidersRequestBody = {
   /**
-   * Providers in the order they are tried, at most 10; each at most once. An empty list restores the external default.
+   * The saved list the caller started from, in its stored order, empty for the default. When given and the saved list no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Send the list you last read when updating; on conflict, re-read and reconcile the list before retrying. Omit only to replace the list unconditionally.
+   */
+  expectedProviders?: Array<EMAProviderInput> | undefined;
+  /**
+   * The accepted providers, at most 10; each at most once. Stored in the given order, though each endpoint uses only the one its sign-in goes through. An empty list restores the derived default.
    */
   providers: Array<EMAProviderInput>;
   /**
@@ -23,6 +27,7 @@ export type SetEMAProvidersRequestBody = {
 
 /** @internal */
 export type SetEMAProvidersRequestBody$Outbound = {
+  expected_providers?: Array<EMAProviderInput$Outbound> | undefined;
   providers: Array<EMAProviderInput$Outbound>;
   remote_session_issuer_id: string;
 };
@@ -33,11 +38,13 @@ export const SetEMAProvidersRequestBody$outboundSchema: z.ZodMiniType<
   SetEMAProvidersRequestBody
 > = z.pipe(
   z.object({
+    expectedProviders: z.optional(z.array(EMAProviderInput$outboundSchema)),
     providers: z.array(EMAProviderInput$outboundSchema),
     remoteSessionIssuerId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      expectedProviders: "expected_providers",
       remoteSessionIssuerId: "remote_session_issuer_id",
     });
   }),

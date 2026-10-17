@@ -116,6 +116,33 @@ COMMENT ON COLUMN organization_metadata.disabled_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
+-- Signup records a pending application; activation fills both redemption fields.
+-- Organization-level billing history intentionally survives organization deletion.
+CREATE TABLE IF NOT EXISTS organization_promotion_applications (
+  redeemed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  organization_id TEXT REFERENCES organization_metadata(id) ON DELETE SET NULL,
+  stripe_promotion_code_id TEXT NOT NULL,
+  stripe_subscription_id TEXT,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  CONSTRAINT organization_promotion_applications_redemption_pair CHECK ((redeemed_at IS NULL) = (stripe_subscription_id IS NULL))
+);
+
+COMMENT ON COLUMN organization_promotion_applications.redeemed_at IS '@access: confidential';
+COMMENT ON COLUMN organization_promotion_applications.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_promotion_applications.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_promotion_applications.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_promotion_applications.stripe_promotion_code_id IS '@access: restricted';
+COMMENT ON COLUMN organization_promotion_applications.stripe_subscription_id IS '@access: restricted';
+COMMENT ON COLUMN organization_promotion_applications.id IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_promotion_applications_org_promo_uidx
+  ON organization_promotion_applications (organization_id, stripe_promotion_code_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_promotion_applications_pending_org_uidx
+  ON organization_promotion_applications (organization_id) WHERE redeemed_at IS NULL;
+
 -- One enterprise-trial lifecycle per organization. Lifecycle operations update
 -- the row in place. Unrelated to organization_metadata.free_trial_*, another
 -- concept.
@@ -4287,6 +4314,53 @@ ON user_session_consents (organization_id);
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
 ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
 WHERE deleted IS FALSE;
+
+-- Approval evidence is specific to a resource; the parent consent supplies
+-- the subject, OAuth client and issuer tenancy. Parent liveness is required
+-- when reading evidence, including after issuer moves or deletion.
+CREATE TABLE IF NOT EXISTS user_session_consent_resources (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid,
+  user_session_consent_id uuid,
+  resource text NOT NULL,
+  inventory_hash text NOT NULL,
+  remote_set_hash text NOT NULL,
+  tool_selection jsonb,
+  session_duration_hours integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+  CONSTRAINT user_session_consent_resources_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_consent_resources_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT user_session_consent_resources_user_session_consent_id_fkey FOREIGN KEY (user_session_consent_id) REFERENCES user_session_consents (id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN user_session_consent_resources.id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.project_id IS 'Target resource project, independent of issuer tenancy.
+@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.user_session_consent_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.resource IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.inventory_hash IS 'Versioned fingerprint of the complete approved tool inventory.
+@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.remote_set_hash IS 'Fingerprint of the approved upstream clients, resources and requested permissions.
+@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.tool_selection IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_session_consent_resources.session_duration_hours IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consent_resources.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_consent_resources_consent_resource_key
+ON user_session_consent_resources (user_session_consent_id, resource)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS user_session_consent_resources_project_id_idx
+ON user_session_consent_resources (project_id);
+
+CREATE INDEX IF NOT EXISTS user_session_consent_resources_user_session_consent_id_idx
+ON user_session_consent_resources (user_session_consent_id);
 
 -- One row per WorkOS session established by a Speakeasy sign-in, from the
 -- dashboard login or an MCP authorization. MCP grants (user_sessions) record
@@ -14219,6 +14293,28 @@ COMMENT ON COLUMN onboarding_playbooks.deleted_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS onboarding_playbooks_default_key ON onboarding_playbooks (use_case_id) WHERE is_default AND organization_id IS NULL AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS onboarding_playbooks_use_case_id_idx ON onboarding_playbooks (use_case_id);
 CREATE INDEX IF NOT EXISTS onboarding_playbooks_organization_id_idx ON onboarding_playbooks (organization_id) WHERE organization_id IS NOT NULL;
+
+-- Shared staff configuration for explicitly supported signup promotions.
+CREATE TABLE IF NOT EXISTS signup_offers (
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  name TEXT NOT NULL,
+  stripe_promotion_code_id TEXT NOT NULL,
+  signup_flow TEXT NOT NULL,
+  id UUID PRIMARY KEY DEFAULT generate_uuidv7(),
+  enabled BOOLEAN NOT NULL DEFAULT false
+);
+
+COMMENT ON COLUMN signup_offers.created_at IS '@access: confidential';
+COMMENT ON COLUMN signup_offers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN signup_offers.name IS '@access: opaque-confidential';
+COMMENT ON COLUMN signup_offers.stripe_promotion_code_id IS '@access: restricted';
+COMMENT ON COLUMN signup_offers.signup_flow IS '@access: confidential';
+COMMENT ON COLUMN signup_offers.id IS '@access: confidential';
+COMMENT ON COLUMN signup_offers.enabled IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS signup_offers_stripe_promotion_code_id_uidx
+  ON signup_offers (stripe_promotion_code_id);
 
 -- The top-level steps of a playbook in walking order. Cards under a group
 -- come with the group and are never listed on their own.

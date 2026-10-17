@@ -42,6 +42,7 @@ trackedFiles:
   src/funcs/adminCreateOnboardingUseCase.ts: {}
   src/funcs/adminCreateOrganization.ts: {}
   src/funcs/adminCreateRegistryEntry.ts: {}
+  src/funcs/adminCreateSignupOffer.ts: {}
   src/funcs/adminDeleteGlobalIssuer.ts: {}
   src/funcs/adminDeleteOnboardingPlaybook.ts: {}
   src/funcs/adminDeleteOnboardingUseCase.ts: {}
@@ -88,6 +89,7 @@ trackedFiles:
   src/funcs/adminListProjectMcpServers.ts: {}
   src/funcs/adminListRegistryEntries.ts: {}
   src/funcs/adminListRegistryOktaUnmapped.ts: {}
+  src/funcs/adminListSignupOffers.ts: {}
   src/funcs/adminListUserOrganizations.ts: {}
   src/funcs/adminListUsers.ts: {}
   src/funcs/adminLogout.ts: {}
@@ -112,6 +114,7 @@ trackedFiles:
   src/funcs/adminUpdateOnboardingPlaybook.ts: {}
   src/funcs/adminUpdateOnboardingUseCase.ts: {}
   src/funcs/adminUpdateOrganization.ts: {}
+  src/funcs/adminUpdateSignupOffer.ts: {}
   src/funcs/adminUpdateSupportMatrix.ts: {}
   src/funcs/adminUploadPlatformImage.ts: {}
   src/hooks/hooks.ts: {}
@@ -197,6 +200,7 @@ trackedFiles:
   src/models/components/adminregistrypage.ts: {}
   src/models/components/adminregistrysummary.ts: {}
   src/models/components/adminsession.ts: {}
+  src/models/components/adminsignupoffer.ts: {}
   src/models/components/adminspendbreakdownresponse.ts: {}
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
@@ -215,6 +219,7 @@ trackedFiles:
   src/models/components/createorganizationrequestbody.ts: {}
   src/models/components/createregistryentryrequestbody.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
+  src/models/components/createsignupofferrequestbody.ts: {}
   src/models/components/deleteonboardingplaybookrequestbody.ts: {}
   src/models/components/deleteonboardingusecaserequestbody.ts: {}
   src/models/components/disableorganizationrequestbody.ts: {}
@@ -229,6 +234,7 @@ trackedFiles:
   src/models/components/issuermigratepreflight.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
+  src/models/components/listsignupoffersresponsebody.ts: {}
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
   src/models/components/meterusagewindow.ts: {}
@@ -270,6 +276,7 @@ trackedFiles:
   src/models/components/updateonboardingusecaserequestbody.ts: {}
   src/models/components/updateorganizationrequestbody.ts: {}
   src/models/components/updateremotesessionissuerform.ts: {}
+  src/models/components/updatesignupofferrequestbody.ts: {}
   src/models/components/updatesupportmatrixrequestbody.ts: {}
   src/models/components/uploadimageresult.ts: {}
   src/models/errors/apierror.ts: {}
@@ -322,6 +329,7 @@ trackedFiles:
   src/react-query/adminCreateGlobalIssuer.ts: {}
   src/react-query/adminCreateOrganization.ts: {}
   src/react-query/adminCreateRegistryEntry.ts: {}
+  src/react-query/adminCreateSignupOffer.ts: {}
   src/react-query/adminDeleteGlobalIssuer.ts: {}
   src/react-query/adminDescribeMcpServerHealth.core.ts: {}
   src/react-query/adminDescribeMcpServerHealth.ts: {}
@@ -391,6 +399,8 @@ trackedFiles:
   src/react-query/adminListRegistryEntries.ts: {}
   src/react-query/adminListRegistryOktaUnmapped.core.ts: {}
   src/react-query/adminListRegistryOktaUnmapped.ts: {}
+  src/react-query/adminListSignupOffers.core.ts: {}
+  src/react-query/adminListSignupOffers.ts: {}
   src/react-query/adminListUserOrganizations.core.ts: {}
   src/react-query/adminListUserOrganizations.ts: {}
   src/react-query/adminListUsers.core.ts: {}
@@ -428,6 +438,7 @@ trackedFiles:
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
   src/react-query/adminUpdateGlobalIssuer.ts: {}
   src/react-query/adminUpdateOrganization.ts: {}
+  src/react-query/adminUpdateSignupOffer.ts: {}
   src/react-query/adminUpdateSupportMatrix.ts: {}
   src/react-query/adminUploadPlatformImage.ts: {}
   src/react-query/assignAdminOrganizationOnboardingPlaybook.ts: {}
@@ -594,6 +605,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminCreateSignupOffer:
+    speakeasy-default-admin-create-signup-offer:
+      requestBody:
+        application/json: {"name": "<value>", "signup_flow": "tailscale_partner_gateway", "stripe_promotion_code_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-11-29T09:10:28.718Z", "enabled": true, "id": "d69fb4fe-73ee-47d4-9d94-18ebabc9a93b", "name": "<value>", "signup_flow": "tailscale_partner_gateway", "stripe_promotion_code_id": "<id>", "updated_at": "2024-08-02T10:34:18.167Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminDeleteGlobalIssuer:
     speakeasy-default-admin-delete-global-issuer:
       parameters:
@@ -866,7 +888,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": true, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": true, "device_agent": true, "hooks_browser_login_enabled": true, "hooks_fail_open_enabled": true, "logs_enabled": true, "network_ingress_enabled": false, "organization_gateway_disabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": false, "session_portability_enabled": false, "signals_intelligence_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": true, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": true, "device_agent": true, "hooks_browser_login_enabled": true, "hooks_fail_open_enabled": true, "logs_enabled": true, "network_ingress_enabled": false, "organization_gateway_disabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": false, "session_portability_enabled": false, "signals_intelligence_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": true, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1202,6 +1224,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminListSignupOffers:
+    speakeasy-default-admin-list-signup-offers:
+      responses:
+        "200":
+          application/json: {"offers": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminListUserOrganizations:
     speakeasy-default-admin-list-user-organizations:
       parameters:
@@ -1366,10 +1397,10 @@ examples:
   adminSetOrganizationFeature:
     speakeasy-default-admin-set-organization-feature:
       requestBody:
-        application/json: {"enabled": false, "feature_name": "consent_tool_filtering", "organization_id": "<id>"}
+        application/json: {"enabled": false, "feature_name": "signals_intelligence", "organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": true, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": true, "logs_enabled": true, "network_ingress_enabled": false, "organization_gateway_disabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": true, "scim_enabled": true, "session_capture_enabled": true, "session_portability_enabled": true, "signals_intelligence_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": true, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": true, "logs_enabled": true, "network_ingress_enabled": false, "organization_gateway_disabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": true, "scim_enabled": true, "session_capture_enabled": true, "session_portability_enabled": true, "signals_intelligence_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1502,6 +1533,17 @@ examples:
       responses:
         "200":
           application/json: {"account_type": "<value>", "created_at": "2025-09-23T01:12:49.084Z", "id": "<id>", "member_count": 997342, "name": "<value>", "slug": "<value>", "updated_at": "2026-04-10T17:39:44.868Z", "whitelisted": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminUpdateSignupOffer:
+    speakeasy-default-admin-update-signup-offer:
+      requestBody:
+        application/json: {"enabled": false, "id": "3e7555c4-2e3c-4cc4-b838-0473d01839a4", "name": "<value>", "signup_flow": "tailscale_partner_gateway", "stripe_promotion_code_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-02-04T22:37:36.461Z", "enabled": true, "id": "3b0d465f-f114-4765-a51c-410d35305a29", "name": "<value>", "signup_flow": "tailscale_partner_gateway", "stripe_promotion_code_id": "<id>", "updated_at": "2025-09-11T08:35:33.608Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

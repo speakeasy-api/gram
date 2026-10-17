@@ -172,6 +172,29 @@ func TestAdminOriginCheck_NativeMCPWithoutOriginOnly(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
 
+func TestAdminOriginCheck_ImageUploadWithoutOriginOnly(t *testing.T) {
+	t.Parallel()
+	handler := AdminOriginCheck(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPut, "https://staff.example.test/admin/assets.uploadImage", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusNoContent, rec.Code, "a shell upload sends neither Origin nor Referer")
+
+	for _, method := range []string{http.MethodPost, http.MethodDelete} {
+		req := httptest.NewRequest(method, "https://staff.example.test/admin/assets.uploadImage", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code, method)
+	}
+	req = httptest.NewRequest(http.MethodPut, "https://staff.example.test/admin/assets.uploadImage", nil)
+	req.Header.Set("Origin", "https://other.example.test")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code, "a browser request from another site is still refused")
+}
+
 func TestAdminOriginCheck_RejectsMissingOriginAndReferer(t *testing.T) {
 	t.Parallel()
 

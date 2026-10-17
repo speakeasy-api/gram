@@ -484,8 +484,8 @@ that URL.
     in destructive red under the field and **Allow machine** stays disabled.
 
 26. **Explore widgets** — open `/<org>/projects/default/explore` and click
-    the **Widgets** tab, which shows a count of 5. Five widgets, most
-    recently updated first, starting with Amara Okafor's "Sessions by
+    the **Widgets** tab, which shows a count of 6. Six widgets, most
+    recently updated first, starting with Amara Okafor's "Tool calls by
     surface" with its description beneath; Hana Sato's widget of the same
     name sits further down with her name beside it. Each row shows its
     dataset and chart type, and none carries the broken-widget warning.
@@ -540,18 +540,31 @@ that URL.
       is an invalid ciphertext, so any request would fail with the
       administrator misconfiguration error.
 
-30. **Fleet and agent restriction recovery**
+30. **Enterprise Managed Authorization**
+    - Open **Team → IDP and SSO → Identity providers**. The Services table
+      lists Acme Tracker (default order, "Each server's own identity
+      provider", Not accepted yet) and Acme Wiki (saved order: Acme
+      Identity, Not accepted yet), one server each.
+    - Open Acme Wiki's page. It shows Acme Identity's issuer URL
+      `https://login.acme-identity.example` to copy, and the saved order with
+      **Use default**.
+    - **MCP → Acme Tracker → Settings** has no Enterprise Managed
+      Authorization section: `acme-workforce` does not trust Acme Identity,
+      on purpose, so interactive sign-in through it (GitHub, the organization
+      gateway) keeps working.
+
+31. **Fleet and agent restriction recovery**
 
 Run `mise run seed` twice locally: it populates both the writable local org and
 actual demo org. Open plain `/explore-demo`, wait for the organization switch, then navigate
-to `/acme-demo/projects/default/fleet` for the real non-member demo audience. `gram-fleet` must be enabled for Fleet;
-`agent-management` and `assistants` independently enable those inventories.
+to `/acme-demo/projects/default/fleet` for the real non-member demo audience. `gram-fleet` must be enabled for Fleet.
+Registered agents are always listed; `assistants` enables the assistant inventory.
 Production flags are an external configuration dependency, not set by seeding.
 
 - Fresh seed: expect eight registered agents, three assistants and recent captures
   from the matrix in `PAGES.md`. Both List and Directory omit Legacy invoice
   exporter (4d old) and Nightly report agent (no use), while management still
-  lists all ten identities. Confirm four departments and project/org scope.
+  lists all eleven identities, including the Identity-bound assistant agent. Confirm four departments and project/org scope.
 - Inspect support, deployment and billing transcripts. Each has four meaningful
   turns. Creator and captured user are distinct; the deployment review has one
   synthetic email-address finding visible through Security. External contractor and
@@ -582,11 +595,11 @@ Do not run remote seed or remote mutations for this verification.
 
 ## On failure
 
-Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
+Fix the seed (see rules in `PAGES.md`), then re-run the target that owns
 the failed check: `mise run seed` for the local-only Killswitch, managed-agent,
 exact remote-session attachment, and Fleet restriction checks, or
 `mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
-and commit the SQL change once green.
+and commit the seed change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
 

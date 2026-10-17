@@ -263,8 +263,7 @@ scanners.PublishFindings ─► Finding topic ─► FindingCHWriter ─► Clic
 ```
 
 - Findings are **ClickHouse-only**. No `risk_results` rows are written for
-  covered sources, so the org must also have `risk-overview-from-clickhouse`
-  enabled.
+  covered sources.
 - The handler bypasses `AsyncShadowGate` (requests only reach the lane for
   orgs in the `llm` or `shadow` mode). It acks analyzer failures with nothing
   published and nacks only when the findings publish fails. A batch whose LLM
@@ -448,8 +447,6 @@ model) fails streams startup with `create risk llm client: …`.
   Evaluated in the API server (sync) and the worker (async) through
   `policyflags.ProjectFlagMode`; reads as `off` when the flag is off, absent,
   unrecognized or the provider errors.
-- The org must also have `risk-overview-from-clickhouse` on, or async
-  findings are missing from the overview.
 - The `gram-risk-v1-llm-*` topics and subscriptions must exist in the
   environment (`infra/gen/kcc.yaml`, see `docs/pubsub-topology.md`).
 
@@ -565,9 +562,8 @@ lives in streams. All three need the same environment.
 2. **Flag.** Local flags come from a CSV named by
    `GRAM_LOCAL_FEATURE_FLAGS_CSV` (unset by default, so no local flag is on).
    `server/flags.csv` already carries `gram-risk-llm-analyzer` with the
-   `shadow` variant (fourth column) plus `risk-overview-from-clickhouse` for
-   the local dev org (the id the other risk flag rows use) and the demo org;
-   change the variant to `llm` to exercise the replacing mode. To use it, add
+   `shadow` variant (fourth column) for the local dev org (the id the other
+   risk flag rows use) and the demo org; change the variant to `llm` to exercise the replacing mode. To use it, add
    to `mise.local.toml`:
 
    ```toml
@@ -578,8 +574,7 @@ lives in streams. All three need the same environment.
    For a custom set, copy `server/flags.local.csv.example` to
    `server/flags.local.csv`, uncomment the `gram-risk-llm-analyzer` row with
    your organization id (`select id, slug from organization_metadata;`) and
-   the variant you want, add a `risk-overview-from-clickhouse` row, and point
-   the env var at that file.
+   the variant you want, and point the env var at that file.
    The path must stay under `server/`. A row without the fourth column keeps
    the boolean contract and resolves to `llm` (the transition rule).
 

@@ -507,6 +507,24 @@ type AssignOrganizationOnboardingPlaybookRequestBody struct {
 	PlaybookID *string `form:"playbook_id,omitempty" json:"playbook_id,omitempty" xml:"playbook_id,omitempty"`
 }
 
+// CreateSignupOfferRequestBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP request body.
+type CreateSignupOfferRequestBody struct {
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+}
+
+// UpdateSignupOfferRequestBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP request body.
+type UpdateSignupOfferRequestBody struct {
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+	ID                    *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
 // SetStripeSubscriptionRequestBody is the type of the "admin" service
 // "setStripeSubscription" endpoint HTTP request body.
 type SetStripeSubscriptionRequestBody struct {
@@ -563,9 +581,6 @@ type GetOrganizationFeaturesResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled bool `form:"remote_session_auto_refresh_enforced_enabled" json:"remote_session_auto_refresh_enforced_enabled" xml:"remote_session_auto_refresh_enforced_enabled"`
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled bool `form:"consent_tool_filtering_enabled" json:"consent_tool_filtering_enabled" xml:"consent_tool_filtering_enabled"`
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -626,9 +641,6 @@ type SetOrganizationFeatureResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled bool `form:"remote_session_auto_refresh_enforced_enabled" json:"remote_session_auto_refresh_enforced_enabled" xml:"remote_session_auto_refresh_enforced_enabled"`
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled bool `form:"consent_tool_filtering_enabled" json:"consent_tool_filtering_enabled" xml:"consent_tool_filtering_enabled"`
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -727,6 +739,14 @@ type UpdateOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -785,6 +805,14 @@ type DisableOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -832,6 +860,14 @@ type EnableOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -879,6 +915,14 @@ type GetOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -985,6 +1029,14 @@ type ExtendTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1032,6 +1084,14 @@ type CreateOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1079,6 +1139,14 @@ type RearmTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1191,6 +1259,14 @@ type SetStripeCustomerResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1695,6 +1771,14 @@ type StartTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -1742,6 +1826,14 @@ type ChangeTrialEndDateResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -2106,6 +2198,36 @@ type AssignOrganizationOnboardingPlaybookResponseBody struct {
 	Applicability []*AdminOnboardingStepApplicabilityResponseBody `form:"applicability" json:"applicability" xml:"applicability"`
 }
 
+// ListSignupOffersResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body.
+type ListSignupOffersResponseBody struct {
+	Offers []*AdminSignupOfferResponseBody `form:"offers" json:"offers" xml:"offers"`
+}
+
+// CreateSignupOfferResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body.
+type CreateSignupOfferResponseBody struct {
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateSignupOfferResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body.
+type UpdateSignupOfferResponseBody struct {
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // GetStripeSubscriptionCandidateResponseBody is the type of the "admin"
 // service "getStripeSubscriptionCandidate" endpoint HTTP response body.
 type GetStripeSubscriptionCandidateResponseBody struct {
@@ -2138,6 +2260,14 @@ type SetStripeSubscriptionResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -17852,6 +17982,554 @@ type AssignOrganizationOnboardingPlaybookGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListSignupOffersUnauthorizedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unauthorized" error.
+type ListSignupOffersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersForbiddenResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "forbidden" error.
+type ListSignupOffersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersBadRequestResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "bad_request" error.
+type ListSignupOffersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersNotFoundResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "not_found" error.
+type ListSignupOffersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersConflictResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "conflict" error.
+type ListSignupOffersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersUnsupportedMediaResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSignupOffersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersInvalidResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "invalid" error.
+type ListSignupOffersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersInvariantViolationResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSignupOffersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersUnexpectedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unexpected" error.
+type ListSignupOffersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSignupOffersGatewayErrorResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "gateway_error" error.
+type ListSignupOffersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type CreateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type CreateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type CreateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "not_found" error.
+type CreateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferConflictResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "conflict" error.
+type CreateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "invalid" error.
+type CreateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type CreateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type CreateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type UpdateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type UpdateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type UpdateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "not_found" error.
+type UpdateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferConflictResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "conflict" error.
+type UpdateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "invalid" error.
+type UpdateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type UpdateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type UpdateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetStripeSubscriptionCandidateUnavailableResponseBody is the type of the
 // "admin" service "getStripeSubscriptionCandidate" endpoint HTTP response body
 // for the "unavailable" error.
@@ -18584,6 +19262,14 @@ type AdminOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
@@ -18667,9 +19353,12 @@ type AdminInferenceSpendMonthResponse struct {
 type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved, so the endpoint uses its configured external issuer.
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The saved providers in order, or the external default.
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
@@ -18677,17 +19366,28 @@ type EMAProviderOrderResponseBody struct {
 type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind string `form:"kind" json:"kind" xml:"kind"`
-	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default order with none.
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
 	// Why the provider cannot serve now; omitted when it can. Identity chaining
 	// skips it and tries the next provider. not_trusted_by_endpoint means the
-	// endpoint's authorization server does not accept this issuer.
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
 	// readiness_unknown means the Speakeasy issuer's state could not be read just
 	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -19386,6 +20086,17 @@ type AdminOnboardingStepApplicabilityResponseBody struct {
 	Reason string `form:"reason" json:"reason" xml:"reason"`
 }
 
+// AdminSignupOfferResponseBody is used to define fields on response body types.
+type AdminSignupOfferResponseBody struct {
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // AdminCustomerUsageResponseBody is used to define fields on response body
 // types.
 type AdminCustomerUsageResponseBody struct {
@@ -19480,7 +20191,6 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		CustomerManagedEncryptionKeysEnabled:    *res.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         *res.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: *res.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             *res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
@@ -19510,7 +20220,6 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		CustomerManagedEncryptionKeysEnabled:    *res.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         *res.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: *res.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             *res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
@@ -19586,25 +20295,27 @@ func NewGetProjectResponseBody(res *admin.AdminProjectDetail) *GetProjectRespons
 // result of the "updateOrganization" endpoint of the "admin" service.
 func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrganizationResponseBody {
 	body := &UpdateOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19636,25 +20347,27 @@ func NewBulkUpdateAccountTypeResponseBody(res *admin.AdminBulkUpdateAccountTypeR
 // result of the "disableOrganization" endpoint of the "admin" service.
 func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOrganizationResponseBody {
 	body := &DisableOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19663,25 +20376,27 @@ func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOr
 // result of the "enableOrganization" endpoint of the "admin" service.
 func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrganizationResponseBody {
 	body := &EnableOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19690,25 +20405,27 @@ func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrga
 // of the "getOrganization" endpoint of the "admin" service.
 func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizationResponseBody {
 	body := &GetOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19863,25 +20580,27 @@ func NewListOrganizationsResponseBody(res *admin.AdminListOrganizationsResult) *
 // the "extendTrial" endpoint of the "admin" service.
 func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialResponseBody {
 	body := &ExtendTrialResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19890,25 +20609,27 @@ func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialRespon
 // result of the "createOrganization" endpoint of the "admin" service.
 func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrganizationResponseBody {
 	body := &CreateOrganizationResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -19917,25 +20638,27 @@ func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrga
 // the "rearmTrial" endpoint of the "admin" service.
 func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponseBody {
 	body := &RearmTrialResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -20039,25 +20762,27 @@ func NewGetStripeCustomerResponseBody(res *admin.AdminStripeCustomer) *GetStripe
 // result of the "setStripeCustomer" endpoint of the "admin" service.
 func NewSetStripeCustomerResponseBody(res *admin.AdminOrganization) *SetStripeCustomerResponseBody {
 	body := &SetStripeCustomerResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -20598,25 +21323,27 @@ func NewUploadPlatformImageResponseBody(res *admin.UploadImageResult) *UploadPla
 // the "startTrial" endpoint of the "admin" service.
 func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponseBody {
 	body := &StartTrialResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -20625,25 +21352,27 @@ func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponse
 // result of the "changeTrialEndDate" endpoint of the "admin" service.
 func NewChangeTrialEndDateResponseBody(res *admin.AdminOrganization) *ChangeTrialEndDateResponseBody {
 	body := &ChangeTrialEndDateResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -21400,6 +22129,55 @@ func NewAssignOrganizationOnboardingPlaybookResponseBody(res *admin.AdminOrganiz
 	return body
 }
 
+// NewListSignupOffersResponseBody builds the HTTP response body from the
+// result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersResponseBody(res *admin.ListSignupOffersResult) *ListSignupOffersResponseBody {
+	body := &ListSignupOffersResponseBody{}
+	if res.Offers != nil {
+		body.Offers = make([]*AdminSignupOfferResponseBody, len(res.Offers))
+		for i, val := range res.Offers {
+			if val == nil {
+				body.Offers[i] = nil
+				continue
+			}
+			body.Offers[i] = marshalAdminAdminSignupOfferToAdminSignupOfferResponseBody(val)
+		}
+	} else {
+		body.Offers = []*AdminSignupOfferResponseBody{}
+	}
+	return body
+}
+
+// NewCreateSignupOfferResponseBody builds the HTTP response body from the
+// result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferResponseBody(res *admin.AdminSignupOffer) *CreateSignupOfferResponseBody {
+	body := &CreateSignupOfferResponseBody{
+		ID:                    res.ID,
+		Name:                  res.Name,
+		StripePromotionCodeID: res.StripePromotionCodeID,
+		SignupFlow:            res.SignupFlow,
+		Enabled:               res.Enabled,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferResponseBody builds the HTTP response body from the
+// result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferResponseBody(res *admin.AdminSignupOffer) *UpdateSignupOfferResponseBody {
+	body := &UpdateSignupOfferResponseBody{
+		ID:                    res.ID,
+		Name:                  res.Name,
+		StripePromotionCodeID: res.StripePromotionCodeID,
+		SignupFlow:            res.SignupFlow,
+		Enabled:               res.Enabled,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	return body
+}
+
 // NewGetStripeSubscriptionCandidateResponseBody builds the HTTP response body
 // from the result of the "getStripeSubscriptionCandidate" endpoint of the
 // "admin" service.
@@ -21416,25 +22194,27 @@ func NewGetStripeSubscriptionCandidateResponseBody(res *admin.AdminStripeSubscri
 // result of the "setStripeSubscription" endpoint of the "admin" service.
 func NewSetStripeSubscriptionResponseBody(res *admin.AdminOrganization) *SetStripeSubscriptionResponseBody {
 	body := &SetStripeSubscriptionResponseBody{
-		ID:                   res.ID,
-		Name:                 res.Name,
-		Slug:                 res.Slug,
-		AccountType:          res.AccountType,
-		WorkosID:             res.WorkosID,
-		WorkosDashboardURL:   res.WorkosDashboardURL,
-		StripeCustomerID:     res.StripeCustomerID,
-		StripeSubscriptionID: res.StripeSubscriptionID,
-		Whitelisted:          res.Whitelisted,
-		DisabledAt:           res.DisabledAt,
-		TrialState:           res.TrialState,
-		TrialTier:            res.TrialTier,
-		TrialEndsAt:          res.TrialEndsAt,
-		TrialConvertedAt:     res.TrialConvertedAt,
-		TrialDemotedAt:       res.TrialDemotedAt,
-		MemberCount:          res.MemberCount,
-		CreationSource:       res.CreationSource,
-		CreatedAt:            res.CreatedAt,
-		UpdatedAt:            res.UpdatedAt,
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
 	}
 	return body
 }
@@ -33747,6 +34527,432 @@ func NewAssignOrganizationOnboardingPlaybookGatewayErrorResponseBody(res *goa.Se
 	return body
 }
 
+// NewListSignupOffersUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersUnauthorizedResponseBody(res *goa.ServiceError) *ListSignupOffersUnauthorizedResponseBody {
+	body := &ListSignupOffersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersForbiddenResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersForbiddenResponseBody(res *goa.ServiceError) *ListSignupOffersForbiddenResponseBody {
+	body := &ListSignupOffersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersBadRequestResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersBadRequestResponseBody(res *goa.ServiceError) *ListSignupOffersBadRequestResponseBody {
+	body := &ListSignupOffersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersNotFoundResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersNotFoundResponseBody(res *goa.ServiceError) *ListSignupOffersNotFoundResponseBody {
+	body := &ListSignupOffersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersConflictResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersConflictResponseBody(res *goa.ServiceError) *ListSignupOffersConflictResponseBody {
+	body := &ListSignupOffersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listSignupOffers" endpoint of the "admin"
+// service.
+func NewListSignupOffersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSignupOffersUnsupportedMediaResponseBody {
+	body := &ListSignupOffersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersInvalidResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersInvalidResponseBody(res *goa.ServiceError) *ListSignupOffersInvalidResponseBody {
+	body := &ListSignupOffersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listSignupOffers" endpoint of the "admin"
+// service.
+func NewListSignupOffersInvariantViolationResponseBody(res *goa.ServiceError) *ListSignupOffersInvariantViolationResponseBody {
+	body := &ListSignupOffersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersUnexpectedResponseBody(res *goa.ServiceError) *ListSignupOffersUnexpectedResponseBody {
+	body := &ListSignupOffersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSignupOffersGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listSignupOffers" endpoint of the "admin" service.
+func NewListSignupOffersGatewayErrorResponseBody(res *goa.ServiceError) *ListSignupOffersGatewayErrorResponseBody {
+	body := &ListSignupOffersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferUnauthorizedResponseBody(res *goa.ServiceError) *CreateSignupOfferUnauthorizedResponseBody {
+	body := &CreateSignupOfferUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferForbiddenResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferForbiddenResponseBody(res *goa.ServiceError) *CreateSignupOfferForbiddenResponseBody {
+	body := &CreateSignupOfferForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferBadRequestResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferBadRequestResponseBody(res *goa.ServiceError) *CreateSignupOfferBadRequestResponseBody {
+	body := &CreateSignupOfferBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferNotFoundResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferNotFoundResponseBody(res *goa.ServiceError) *CreateSignupOfferNotFoundResponseBody {
+	body := &CreateSignupOfferNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferConflictResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferConflictResponseBody(res *goa.ServiceError) *CreateSignupOfferConflictResponseBody {
+	body := &CreateSignupOfferConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createSignupOffer" endpoint of the "admin"
+// service.
+func NewCreateSignupOfferUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateSignupOfferUnsupportedMediaResponseBody {
+	body := &CreateSignupOfferUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferInvalidResponseBody builds the HTTP response body from
+// the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferInvalidResponseBody(res *goa.ServiceError) *CreateSignupOfferInvalidResponseBody {
+	body := &CreateSignupOfferInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createSignupOffer" endpoint of the "admin"
+// service.
+func NewCreateSignupOfferInvariantViolationResponseBody(res *goa.ServiceError) *CreateSignupOfferInvariantViolationResponseBody {
+	body := &CreateSignupOfferInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferUnexpectedResponseBody(res *goa.ServiceError) *CreateSignupOfferUnexpectedResponseBody {
+	body := &CreateSignupOfferUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSignupOfferGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferGatewayErrorResponseBody(res *goa.ServiceError) *CreateSignupOfferGatewayErrorResponseBody {
+	body := &CreateSignupOfferGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferUnauthorizedResponseBody(res *goa.ServiceError) *UpdateSignupOfferUnauthorizedResponseBody {
+	body := &UpdateSignupOfferUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferForbiddenResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferForbiddenResponseBody(res *goa.ServiceError) *UpdateSignupOfferForbiddenResponseBody {
+	body := &UpdateSignupOfferForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferBadRequestResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferBadRequestResponseBody(res *goa.ServiceError) *UpdateSignupOfferBadRequestResponseBody {
+	body := &UpdateSignupOfferBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferNotFoundResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferNotFoundResponseBody(res *goa.ServiceError) *UpdateSignupOfferNotFoundResponseBody {
+	body := &UpdateSignupOfferNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferConflictResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferConflictResponseBody(res *goa.ServiceError) *UpdateSignupOfferConflictResponseBody {
+	body := &UpdateSignupOfferConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateSignupOffer" endpoint of the "admin"
+// service.
+func NewUpdateSignupOfferUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateSignupOfferUnsupportedMediaResponseBody {
+	body := &UpdateSignupOfferUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferInvalidResponseBody builds the HTTP response body from
+// the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferInvalidResponseBody(res *goa.ServiceError) *UpdateSignupOfferInvalidResponseBody {
+	body := &UpdateSignupOfferInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updateSignupOffer" endpoint of the "admin"
+// service.
+func NewUpdateSignupOfferInvariantViolationResponseBody(res *goa.ServiceError) *UpdateSignupOfferInvariantViolationResponseBody {
+	body := &UpdateSignupOfferInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferUnexpectedResponseBody(res *goa.ServiceError) *UpdateSignupOfferUnexpectedResponseBody {
+	body := &UpdateSignupOfferUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSignupOfferGatewayErrorResponseBody {
+	body := &UpdateSignupOfferGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetStripeSubscriptionCandidateUnavailableResponseBody builds the HTTP
 // response body from the result of the "getStripeSubscriptionCandidate"
 // endpoint of the "admin" service.
@@ -35342,6 +36548,43 @@ func NewAssignOrganizationOnboardingPlaybookPayload(body *AssignOrganizationOnbo
 	return v
 }
 
+// NewListSignupOffersPayload builds a admin service listSignupOffers endpoint
+// payload.
+func NewListSignupOffersPayload(adminSessionToken *string) *admin.ListSignupOffersPayload {
+	v := &admin.ListSignupOffersPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewCreateSignupOfferPayload builds a admin service createSignupOffer
+// endpoint payload.
+func NewCreateSignupOfferPayload(body *CreateSignupOfferRequestBody, adminSessionToken *string) *admin.CreateSignupOfferPayload {
+	v := &admin.CreateSignupOfferPayload{
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewUpdateSignupOfferPayload builds a admin service updateSignupOffer
+// endpoint payload.
+func NewUpdateSignupOfferPayload(body *UpdateSignupOfferRequestBody, adminSessionToken *string) *admin.UpdateSignupOfferPayload {
+	v := &admin.UpdateSignupOfferPayload{
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+		ID:                    *body.ID,
+		Enabled:               *body.Enabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetStripeSubscriptionCandidatePayload builds a admin service
 // getStripeSubscriptionCandidate endpoint payload.
 func NewGetStripeSubscriptionCandidatePayload(organizationID string, stripeSubscriptionID string, adminSessionToken *string) *admin.GetStripeSubscriptionCandidatePayload {
@@ -35388,8 +36631,8 @@ func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureReque
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "consent_tool_filtering" || *body.FeatureName == "session_portability" || *body.FeatureName == "network_ingress" || *body.FeatureName == "signals_intelligence" || *body.FeatureName == "organization_gateway_disabled") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress", "signals_intelligence", "organization_gateway_disabled"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "session_portability" || *body.FeatureName == "network_ingress" || *body.FeatureName == "signals_intelligence" || *body.FeatureName == "organization_gateway_disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "session_portability", "network_ingress", "signals_intelligence", "organization_gateway_disabled"}))
 		}
 	}
 	if body.FeatureName != nil {
@@ -36008,6 +37251,91 @@ func ValidateCloneOnboardingPlaybookRequestBody(body *CloneOnboardingPlaybookReq
 func ValidateAssignOrganizationOnboardingPlaybookRequestBody(body *AssignOrganizationOnboardingPlaybookRequestBody) (err error) {
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferRequestBody runs the validations defined on
+// CreateSignupOfferRequestBody
+func ValidateCreateSignupOfferRequestBody(body *CreateSignupOfferRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 200, false))
+		}
+	}
+	if body.StripePromotionCodeID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_promotion_code_id", *body.StripePromotionCodeID, "^promo_[A-Za-z0-9_]+$"))
+	}
+	if body.StripePromotionCodeID != nil {
+		if utf8.RuneCountInString(*body.StripePromotionCodeID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_promotion_code_id", *body.StripePromotionCodeID, utf8.RuneCountInString(*body.StripePromotionCodeID), 255, false))
+		}
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferRequestBody runs the validations defined on
+// UpdateSignupOfferRequestBody
+func ValidateUpdateSignupOfferRequestBody(body *UpdateSignupOfferRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 200, false))
+		}
+	}
+	if body.StripePromotionCodeID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_promotion_code_id", *body.StripePromotionCodeID, "^promo_[A-Za-z0-9_]+$"))
+	}
+	if body.StripePromotionCodeID != nil {
+		if utf8.RuneCountInString(*body.StripePromotionCodeID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_promotion_code_id", *body.StripePromotionCodeID, utf8.RuneCountInString(*body.StripePromotionCodeID), 255, false))
+		}
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

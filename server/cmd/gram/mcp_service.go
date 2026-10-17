@@ -132,6 +132,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	}
 	service.SetCallbackOrigins(d.CallbackOrigins)
 	service.SetPlatformHosts(d.PlatformHosts)
+	service.SetOpenAIAppsChallengeToken(c.String("openai-apps-challenge-token"))
 	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
 	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
 	chainer, err := newIdentityChainer(d.Logger, d.Meter, d.DB, d.Redis, d.Encryption, d.Guardian, d.Challenges, delegation, d.Audit)
@@ -152,6 +153,7 @@ func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgx
 	}
 	chainer := identitychaining.New(logger, db, enc, challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
 	chainer.SetResourceResolver(challenges.ResolveEMAResource)
+	chainer.SetCachedResourceResolver(challenges.CachedEMAResource)
 	chainer.SetMeterProvider(meter)
 	chainer.SetObserver(oktaresourceconnections.NewObserver(logger, meter, db, auditLogger))
 	return chainer, nil

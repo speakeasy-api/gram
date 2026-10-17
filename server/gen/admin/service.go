@@ -287,6 +287,13 @@ type Service interface {
 	// Assign a playbook to an organization, or clear it. Rejected when a step's
 	// methods do not apply to the recorded stack; the error names the steps.
 	AssignOrganizationOnboardingPlaybook(context.Context, *AssignOrganizationOnboardingPlaybookPayload) (res *AdminOrganizationOnboardingPlaybook, err error)
+	// List staff-managed signup offers. Stripe owns all promotion terms.
+	ListSignupOffers(context.Context, *ListSignupOffersPayload) (res *ListSignupOffersResult, err error)
+	// Create a disabled signup offer mapped to an exact Stripe promotion code ID.
+	CreateSignupOffer(context.Context, *CreateSignupOfferPayload) (res *AdminSignupOffer, err error)
+	// Edit, enable or disable a signup offer. Existing accepted promotion
+	// applications are unchanged.
+	UpdateSignupOffer(context.Context, *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error)
 	// Returns live Stripe subscription details for confirmation before recording
 	// the subscription on a PAYG organization that has a customer and no
 	// subscription.
@@ -321,7 +328,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [85]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
+var MethodNames = [88]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -930,6 +937,14 @@ type AdminOrganization struct {
 	StripeCustomerID *string
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool
 	// The time at which the organization was disabled, if any.
@@ -1146,6 +1161,18 @@ type AdminRegistrySummary struct {
 type AdminSession struct {
 	Email string
 	Name  *string
+}
+
+// AdminSignupOffer is the result type of the admin service createSignupOffer
+// method.
+type AdminSignupOffer struct {
+	ID                    string
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+	Enabled               bool
+	CreatedAt             string
+	UpdatedAt             string
 }
 
 // AdminSpendBreakdownResponse is the result type of the admin service
@@ -1476,6 +1503,15 @@ type CreateRegistryEntryPayload struct {
 	// Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced
 	// by the server on incoming writes. Stored records remain readable for repair.
 	DataJSON string
+}
+
+// CreateSignupOfferPayload is the payload type of the admin service
+// createSignupOffer method.
+type CreateSignupOfferPayload struct {
+	AdminSessionToken     *string
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
 }
 
 // DeleteGlobalIssuerPayload is the payload type of the admin service
@@ -2031,6 +2067,18 @@ type ListRegistryOktaUnmappedPayload struct {
 	AdminSessionToken *string
 }
 
+// ListSignupOffersPayload is the payload type of the admin service
+// listSignupOffers method.
+type ListSignupOffersPayload struct {
+	AdminSessionToken *string
+}
+
+// ListSignupOffersResult is the result type of the admin service
+// listSignupOffers method.
+type ListSignupOffersResult struct {
+	Offers []*AdminSignupOffer
+}
+
 // ListUserOrganizationsPayload is the payload type of the admin service
 // listUserOrganizations method.
 type ListUserOrganizationsPayload struct {
@@ -2171,9 +2219,6 @@ type ProductFeatures struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled bool
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled bool
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -2585,6 +2630,17 @@ type UpdateOrganizationPayload struct {
 	Whitelisted *bool
 }
 
+// UpdateSignupOfferPayload is the payload type of the admin service
+// updateSignupOffer method.
+type UpdateSignupOfferPayload struct {
+	AdminSessionToken     *string
+	Name                  string
+	StripePromotionCodeID string
+	SignupFlow            string
+	ID                    string
+	Enabled               bool
+}
+
 // UpdateSupportMatrixPayload is the payload type of the admin service
 // updateSupportMatrix method.
 type UpdateSupportMatrixPayload struct {
@@ -2727,9 +2783,6 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	if vres.RemoteSessionAutoRefreshEnforcedEnabled != nil {
 		res.RemoteSessionAutoRefreshEnforcedEnabled = *vres.RemoteSessionAutoRefreshEnforcedEnabled
 	}
-	if vres.ConsentToolFilteringEnabled != nil {
-		res.ConsentToolFilteringEnabled = *vres.ConsentToolFilteringEnabled
-	}
 	if vres.SessionPortabilityEnabled != nil {
 		res.SessionPortabilityEnabled = *vres.SessionPortabilityEnabled
 	}
@@ -2768,7 +2821,6 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		CustomerManagedEncryptionKeysEnabled:    &res.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         &res.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: &res.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,

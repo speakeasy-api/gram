@@ -3,6 +3,7 @@ package identitychaining
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"slices"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
-	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -59,27 +59,24 @@ type selection struct {
 	audience string
 }
 
-// GrantScopes drops OIDC-reserved scopes, which Okta rejects in ID-JAG
-// requests. An empty result requests no scope.
-func GrantScopes(scopes []string) []string {
-	var out []string
-	for _, scope := range scopes {
-		if !oauthwire.IsOIDCReservedScope(scope) {
-			out = append(out, scope)
-		}
-	}
-	return out
-}
-
 // selectBinding applies explicit binding selection: exactly one ready binding
 // must name the endpoint's upstream and still pass readiness. Implicit
 // selection is not supported, so an upstream without a ready binding keeps the
 // interactive path.
 func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req Request) (selection, Outcome) {
+	sel, outcome, _ := g.selectBindingWith(ctx, logger, req, g.ResolveResource)
+	return sel, outcome
+}
+
+// selectBindingWith is selectBinding over resolve, which names the endpoint's
+// authorization resource. A failed configuration read also returns its error
+// beside the outcome the runtime gives it, so a caller that must not mistake
+// unknown configuration for absent configuration can tell them apart.
+func (g *Governor) selectBindingWith(ctx context.Context, logger *slog.Logger, req Request, resolve func(context.Context, Request) (protectedresource.EndpointResource, error)) (selection, Outcome, error) {
 	var none selection
 	// Every caller has already authenticated the human or management
 	// principal. Unconfigured endpoints perform no discovery at all.
-	resource, err := g.ResolveResource(ctx, req)
+	resource, err := resolve(ctx, req)
 	if err != nil {
 		logger.WarnContext(ctx, "resolve identity chaining resource", attr.SlogError(err))
 		// Failed discovery is never read as "no metadata". It governs only an
@@ -94,15 +91,15 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		if readErr != nil {
 			// Unknown configuration keeps the upstream on the interactive path.
 			logger.ErrorContext(ctx, "list identity chaining diagnostic candidates", attr.SlogError(readErr))
-			return none, notApplicable
+			return none, notApplicable, fmt.Errorf("list identity chaining diagnostic candidates: %w", readErr)
 		}
 		if !slices.ContainsFunc(resources, func(resource string) bool { return MatchesDiagnosticOrigin(req.UpstreamResource, resource) }) {
-			return none, notApplicable
+			return none, notApplicable, nil
 		}
 		if errors.Is(err, protectedresource.ErrEndpointResourceInvalid) {
-			return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
+			return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false), nil
 		}
-		return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceUnknown, true)
+		return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceUnknown, true), nil
 	}
 	bindings, err := repo.New(g.db).ListEMAChainingBindings(ctx, repo.ListEMAChainingBindingsParams{
 		ProjectID:             req.ProjectID,
@@ -114,14 +111,14 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 	if err != nil {
 		// Unknown configuration keeps the upstream on the interactive path.
 		logger.ErrorContext(ctx, "list identity chaining bindings", attr.SlogError(err))
-		return none, notApplicable
+		return none, notApplicable, fmt.Errorf("list identity chaining bindings: %w", err)
 	}
 	switch len(bindings) {
 	case 0:
-		return none, notApplicable
+		return none, notApplicable, nil
 	case 1:
 	default:
-		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
+		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false), nil
 	}
 	b := bindings[0]
 
@@ -140,14 +137,14 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "read identity chaining binding readiness", attr.SlogError(err))
-		return none, bindingNotReady
+		return none, bindingNotReady, fmt.Errorf("read identity chaining binding readiness: %w", err)
 	case result.State != remotesessions.PreparationStateReady || result.BindingID != b.ID || result.ClientID == uuid.Nil || result.ExternalClientID == "":
-		return none, bindingNotReady
+		return none, bindingNotReady, nil
 	}
 	if resource.Discovered && !slices.ContainsFunc(resource.AuthorizationServers, func(server string) bool { return sameIssuer(server, result.Issuer) }) {
-		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
+		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false), nil
 	}
-	scopes := GrantScopes(result.Scopes)
+	scopes := remotesessions.GrantScopes(result.Scopes)
 	if len(scopes) == 0 && len(result.Scopes) > 0 {
 		logger.DebugContext(ctx, "identity chaining dropped every configured scope as OIDC reserved", attr.SlogOAuthScope(strings.Join(result.Scopes, " ")))
 	}
@@ -163,10 +160,35 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		configuredScopes:      result.Scopes,
 		trustedIssuerID:       uuid.Nil,
 		trustedClientID:       uuid.Nil,
-		provider:              remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
+		provider:              remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil},
 		audience:              "",
 		internalIssuerVersion: time.Time{}, internalKeyID: uuid.Nil, internalKeyPublishedAt: time.Time{}, userSessionID: uuid.Nil, signInID: uuid.Nil, email: "",
-	}, success
+	}, success, nil
+}
+
+// errResourceUncached means no stored state names the endpoint's
+// authorization resource without discovery.
+var errResourceUncached = errors.New("identitychaining: endpoint resource is not cached")
+
+// storedResource is ResolveResource from stored state alone, for the token
+// endpoint, which never probes an upstream. A tunneled resource is explicit
+// configuration and a cached discovery answers exactly as ResolveResource
+// would, including a cached answer that the endpoint publishes no metadata.
+// Any other miss is errResourceUncached, even when a binding names the
+// transport URL itself: the runtime selects by the resource discovery
+// returns, which may be a different binding, so selection reads the miss as
+// transient when a binding sits on the upstream's origin.
+func (g *Governor) storedResource(ctx context.Context, req Request) (protectedresource.EndpointResource, error) {
+	var none protectedresource.EndpointResource
+	if g.resolveResource == nil || req.RemoteSessionIssuerID.Valid {
+		return protectedresource.EndpointResource{Resource: req.UpstreamResource, AuthorizationServers: nil, Discovered: false}, nil
+	}
+	if g.cachedResource != nil {
+		if resource, ok, err := g.cachedResource(ctx, req.OrganizationID, req.ProjectID, req.UpstreamResource); ok {
+			return resource, err
+		}
+	}
+	return none, errResourceUncached
 }
 
 // sameIssuer compares issuer identifiers in canonical form, so a trailing

@@ -340,6 +340,11 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_GOOGLE_USERINFO_URL"},
 		},
 		&cli.StringFlag{
+			Name:    "openai-apps-challenge-token",
+			Usage:   "Token served at /.well-known/openai-apps-challenge on the platform hosts, for OpenAI's app directory domain verification. Empty serves not found.",
+			EnvVars: []string{"GRAM_OPENAI_APPS_CHALLENGE_TOKEN"},
+		},
+		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
@@ -1540,12 +1545,13 @@ func newStartCommand() *cli.Command {
 				sessionManager,
 				identityResolver,
 				auth.AuthConfigurations{
-					IDPBaseURL:                 c.String("idp-base-url"),
-					GramServerURL:              c.String("server-url"),
-					SignInRedirectURL:          auth.FormSignInRedirectURL(c.String("site-url")),
-					Environment:                c.String("environment"),
-					NewOrganizationDefaultHost: orgHosts.NewOrganizationDefaultHost(),
-					OrgHosts:                   orgHosts,
+					PartnerPromotionCodeResolver: stripeClient,
+					IDPBaseURL:                   c.String("idp-base-url"),
+					GramServerURL:                c.String("server-url"),
+					SignInRedirectURL:            auth.FormSignInRedirectURL(c.String("site-url")),
+					Environment:                  c.String("environment"),
+					NewOrganizationDefaultHost:   orgHosts.NewOrganizationDefaultHost(),
+					OrgHosts:                     orgHosts,
 				},
 				authzEngine,
 				billingRepo,
@@ -1736,7 +1742,7 @@ func newStartCommand() *cli.Command {
 			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).
-				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithHostedServerWriter(toolsetsSvc)
+				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithHostedServerWriter(toolsetsSvc).WithServerURL(serverURL)
 			mcpservers.Attach(mux, mcpServersService)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithHostedAddressWriter(toolsetsSvc))
@@ -1765,7 +1771,7 @@ func newStartCommand() *cli.Command {
 			})
 			mcpService.SetConsentBindingService(remoteSessionsService)
 			remotesessions.Attach(mux, remoteSessionsService)
-			remoteMcpService := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService, featureFlags).
+			remoteMcpService := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService, featureFlags).WithServerURL(serverURL).
 				WithDistributionAdmission(distributionAdmission)
 			remotemcp.Attach(mux, remoteMcpService)
 			unproxiedmcp.Attach(mux, unproxiedmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

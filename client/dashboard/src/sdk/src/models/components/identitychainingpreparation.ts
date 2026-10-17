@@ -55,7 +55,11 @@ export type IdentityChainingPreparation = {
    */
   clientId?: string | undefined;
   /**
-   * The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
+   * Scopes preparing identity chaining again would record now, sorted: what an interactive sign-in through the selected client requests for this server, or the recorded scopes when the binding has no server connection to follow or the connection names only OpenID Connect scopes while the recorded ones name others. Returned by readEMA and prepareEMA when a client is selected.
+   */
+  connectionScopes?: Array<string> | undefined;
+  /**
+   * The EMA providers one vendor authorization server accepts, saved or default. They are stored as an ordered list that identity chaining tries in turn, but each endpoint can use only the provider its sign-in goes through, so the list acts as the set of accepted providers.
    */
   emaProviders?: EMAProviderOrder | undefined;
   /**
@@ -73,12 +77,23 @@ export type IdentityChainingPreparation = {
   grantTypes: Array<string> | null;
   issuer?: string | undefined;
   /**
+   * When the vendor last accepted an assertion for this binding from a provider that can serve it now, so chaining has worked for it. Omitted when none is recorded for a usable provider or acceptance could not be read. Returned by readEMA only.
+   */
+  lastAcceptedAt?: Date | undefined;
+  /**
    * Safe next action without provider bodies or credentials.
    */
   remediation: string;
   resource: string;
   retryable: boolean;
+  /**
+   * Scopes recorded on the binding when identity chaining was turned on. Identity chaining requests exactly these, without OpenID Connect scopes; when that leaves none, an ID-JAG naming a scope outside these is rejected. Changes to the server connection apply only when identity chaining is prepared again.
+   */
   scopes: Array<string>;
+  /**
+   * True when connection_scopes differs from scopes; prepareEMA with the current expected_generation applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.
+   */
+  scopesOutOfDate?: boolean | undefined;
   stage: IdentityChainingPreparationStage;
   /**
    * Preparation state; readiness never proves user access.
@@ -104,16 +119,21 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
   z.object({
     binding_id: z.optional(z.string()),
     client_id: z.optional(z.string()),
+    connection_scopes: z.optional(z.array(z.string())),
     ema_providers: z.optional(EMAProviderOrder$inboundSchema),
     external_client_id: z.optional(z.string()),
     generation: z.int(),
     grant_source: z.string(),
     grant_types: z.nullable(z.array(z.string())),
     issuer: z.optional(z.string()),
+    last_accepted_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     remediation: z.string(),
     resource: z.string(),
     retryable: z.boolean(),
     scopes: z.array(z.string()),
+    scopes_out_of_date: z.optional(z.boolean()),
     stage: IdentityChainingPreparationStage$inboundSchema,
     state: IdentityChainingPreparationState$inboundSchema,
   }),
@@ -121,10 +141,13 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "binding_id": "bindingId",
       "client_id": "clientId",
+      "connection_scopes": "connectionScopes",
       "ema_providers": "emaProviders",
       "external_client_id": "externalClientId",
       "grant_source": "grantSource",
       "grant_types": "grantTypes",
+      "last_accepted_at": "lastAcceptedAt",
+      "scopes_out_of_date": "scopesOutOfDate",
     });
   }),
 );

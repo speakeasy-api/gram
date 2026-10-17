@@ -46,6 +46,15 @@ const (
 
 	// ScopeSourceNone: nothing named a scope, so none is sent.
 	ScopeSourceNone ScopeSource = "none"
+
+	// ScopeSourcePreparationRequest: the scopes an identity chaining
+	// preparation request names, recorded when the binding has no server
+	// connection to follow or the connection names no grantable scope.
+	ScopeSourcePreparationRequest ScopeSource = "preparation_request"
+
+	// ScopeSourceEMABinding: the scopes recorded on an identity chaining
+	// binding, which every chained token request uses.
+	ScopeSourceEMABinding ScopeSource = "ema_binding"
 )
 
 // ScopeResolution counts how logins decide their scope request, by the

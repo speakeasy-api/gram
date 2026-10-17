@@ -524,6 +524,7 @@ func newAdminCommand() *cli.Command {
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
+			adminService.SetStripeDashboardMode(c.String("stripe-api-key"))
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err
@@ -533,6 +534,7 @@ func newAdminCommand() *cli.Command {
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
 			}
+			var platformAssets *assets.Service
 			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))
 			if err != nil {
 				logger.WarnContext(ctx, "Admin logos unavailable; continuing without asset storage", attr.SlogError(err))
@@ -542,7 +544,8 @@ func newAdminCommand() *cli.Command {
 					return fmt.Errorf("initialize admin asset storage: %w", err)
 				}
 				defer o11y.LogDefer(ctx, logger, "shut down admin asset storage", func() error { return assetShutdown(ctx) })
-				adminService.SetAssetService(assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage))
+				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
+				adminService.SetAssetService(platformAssets)
 			}
 			admin.Attach(mux, adminService)
 			if c.Bool("admin-mcp-enabled") {
@@ -556,14 +559,24 @@ func newAdminCommand() *cli.Command {
 				}
 				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled"), Operations: writeOperations}
 				signer := sessiontokens.NewSigner(key)
-				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer, writes, logger)
+				staffCache := cache.NewRedisCacheAdapter(redisClient)
+				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, staffCache, adminService.Verifier(), adminEncryption, signer, writes, logger)
 				if err != nil {
 					return fmt.Errorf("initialize staff Admin MCP OAuth: %w", err)
 				}
 				staffOAuth.Attach(mux)
 				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
+				writeDeps := adminmcp.WriteDependencies{Features: productFeatures, Registry: registryService, ImageUploads: nil}
+				if platformAssets != nil {
+					imageUploads, err := assets.NewPlatformImageUploads(platformAssets, staffCache, adminServerURL, siteURL, logger)
+					if err != nil {
+						return fmt.Errorf("configure staff Admin MCP image uploads: %w", err)
+					}
+					writeDeps.ImageUploads = imageUploads
+					mux.Handle(http.MethodPut, assets.PlatformImageUploadPath, imageUploads.Handler().ServeHTTP)
+				}
 				staffRuntime := adminmcp.NewRuntime(staffAuth, staffOAuth.ProtectedResourceURL(), adminService)
-				if err := adminmcp.AttachWrites(staffRuntime, staffOAuth, productFeatures, writes); err != nil {
+				if err := adminmcp.AttachWrites(staffRuntime, staffOAuth, writeDeps, writes); err != nil {
 					return fmt.Errorf("configure staff Admin MCP write tools: %w", err)
 				}
 				mux.Handle(http.MethodPost, adminmcp.Path, staffRuntime.Handler().ServeHTTP)

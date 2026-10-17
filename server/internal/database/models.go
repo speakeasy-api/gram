@@ -3691,6 +3691,23 @@ type OrganizationOnboardingVendor struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type OrganizationPromotionApplication struct {
+	// @access: confidential
+	RedeemedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: restricted
+	StripePromotionCodeID string
+	// @access: restricted
+	StripeSubscriptionID pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+}
+
 type OrganizationRole struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -5703,6 +5720,23 @@ type SignInRevocationDelivery struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type SignupOffer struct {
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: opaque-confidential
+	Name string
+	// @access: restricted
+	StripePromotionCodeID string
+	// @access: confidential
+	SignupFlow string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Enabled bool
+}
+
 type Skill struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -7336,6 +7370,36 @@ type UserSessionConsent struct {
 	RemoteSetHash string
 	// @access: confidential
 	ConsentedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type UserSessionConsentResource struct {
+	// @access: confidential
+	ID uuid.UUID
+	// Target resource project, independent of issuer tenancy.
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	UserSessionConsentID uuid.NullUUID
+	// @access: confidential
+	Resource string
+	// Versioned fingerprint of the complete approved tool inventory.
+	// @access: confidential
+	InventoryHash string
+	// Fingerprint of the approved upstream clients, resources and requested permissions.
+	// @access: confidential
+	RemoteSetHash string
+	// @access: opaque-restricted
+	ToolSelection []byte
+	// @access: confidential
+	SessionDurationHours int32
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

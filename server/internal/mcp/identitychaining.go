@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -36,6 +37,8 @@ type identityChainer interface {
 	Serves(ctx context.Context, req identitychaining.Request) (uuid.UUID, bool)
 	Configured(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID) bool
 	HasUsableCredential(ctx context.Context, req identitychaining.Request) bool
+	RetireConsentCredentials(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, userID string, signInID uuid.UUID) error
+	RefreshDecision(ctx context.Context, req identitychaining.Request) identitychaining.RefreshVerdict
 }
 
 // SetIdentityChainer enables identity chaining on proxied upstreams. Without
@@ -141,6 +144,17 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		// Reauthorizing signs the human in again, which retains a fresh
 		// delegation, so the challenge matches a missing upstream session.
 		return none, writeRemoteSessionReconnectChallenge(w, authentication)
+	case unusable && outcome.ProviderRefusal():
+		// The provider refused for good, which refresh also sees, so the
+		// client lands here again only after reauthorizing. Reauthorizing
+		// reaches the consent page, whose separate sign-in reconnects the
+		// linked upstream.
+		endpoint.LogWith(logger).WarnContext(ctx, "identity chaining refused; challenging the linked upstream session",
+			attr.SlogOutcome(string(outcome.Reason)),
+			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
+			attr.SlogMcpURL(authentication.mcpURL),
+		)
+		return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 	}
 	return none, identityChainingError(outcome)
 }
@@ -269,12 +283,8 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	if endpoint.MetaMcpServerID.Valid {
 		return s.consentChainedMetaClients(ctx, endpoint, challengeState, clients, routing)
 	}
-	tunneled, tunnelIssuer, ok := s.consentDirectBackend(ctx, endpoint, routing)
-	if !ok {
-		return nil
-	}
-	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
-	if !ok {
+	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing)
+	if err != nil || !ok {
 		return nil
 	}
 	issuer, served := s.identityChainer.Serves(ctx, req)
@@ -290,35 +300,53 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	return requests
 }
 
+// directChainingRequest builds the request the runtime makes for userID on a
+// direct endpoint's upstream, reusing resolved routing when present. Consent
+// and refresh both judge chaining with it, so they ask what the runtime asks.
+// A failed backend read is an error, so a caller can tell an endpoint chaining
+// cannot apply to from one it could not judge.
+func (s *Service) directChainingRequest(ctx context.Context, endpoint *ResolvedMcpEndpoint, userID string, routing consentRouting) (identitychaining.Request, bool, error) {
+	var none identitychaining.Request
+	tunneled, tunnelIssuer, ok, err := s.consentDirectBackend(ctx, endpoint, routing)
+	if err != nil || !ok {
+		return none, false, err
+	}
+	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, userID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
+	return req, ok, nil
+}
+
 // consentDirectBackend reports whether a direct endpoint's backend is
 // tunneled and its derived issuer, reusing resolved routing when present.
-func (s *Service) consentDirectBackend(ctx context.Context, endpoint *ResolvedMcpEndpoint, routing consentRouting) (bool, uuid.NullUUID, bool) {
+func (s *Service) consentDirectBackend(ctx context.Context, endpoint *ResolvedMcpEndpoint, routing consentRouting) (bool, uuid.NullUUID, bool, error) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if !endpoint.McpServerID.Valid || strings.TrimRight(endpoint.UpstreamResource, "/") == "" {
-		return false, none, false
+		return false, none, false, nil
 	}
 	switch routing.backend {
 	case consentBackendRemote:
-		return false, none, true
+		return false, none, true, nil
 	case consentBackendTunneled:
-		return true, routing.issuer, true
+		return true, routing.issuer, true, nil
 	case consentBackendNone, consentBackendMeta:
 	}
 	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        endpoint.McpServerID.UUID,
 		ProjectID: endpoint.ProjectID,
 	})
-	if err != nil {
-		s.logger.WarnContext(ctx, "load mcp server for consent identity chaining", attr.SlogError(err))
-		return false, none, false
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, none, false, nil
+	case err != nil:
+		s.logger.WarnContext(ctx, "load mcp server for identity chaining", attr.SlogError(err))
+		return false, none, false, fmt.Errorf("load mcp server for identity chaining: %w", err)
 	}
 	switch {
 	case server.RemoteMcpServerID.Valid:
-		return false, none, true
+		return false, none, true, nil
 	case server.TunneledMcpServerID.Valid:
-		return true, tunneledBackendIssuer(&server), true
+		return true, tunneledBackendIssuer(&server), true, nil
 	}
-	return false, none, false
+	return false, none, false, nil
 }
 
 // consentChainedMetaClients marks a gateway card chained only when chaining

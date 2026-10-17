@@ -507,6 +507,24 @@ type AssignOrganizationOnboardingPlaybookRequestBody struct {
 	PlaybookID *string `form:"playbook_id,omitempty" json:"playbook_id,omitempty" xml:"playbook_id,omitempty"`
 }
 
+// CreateSignupOfferRequestBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP request body.
+type CreateSignupOfferRequestBody struct {
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+}
+
+// UpdateSignupOfferRequestBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP request body.
+type UpdateSignupOfferRequestBody struct {
+	Name                  string `form:"name" json:"name" xml:"name"`
+	StripePromotionCodeID string `form:"stripe_promotion_code_id" json:"stripe_promotion_code_id" xml:"stripe_promotion_code_id"`
+	SignupFlow            string `form:"signup_flow" json:"signup_flow" xml:"signup_flow"`
+	ID                    string `form:"id" json:"id" xml:"id"`
+	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
 // SetStripeSubscriptionRequestBody is the type of the "admin" service
 // "setStripeSubscription" endpoint HTTP request body.
 type SetStripeSubscriptionRequestBody struct {
@@ -563,9 +581,6 @@ type GetOrganizationFeaturesResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool `form:"remote_session_auto_refresh_enforced_enabled,omitempty" json:"remote_session_auto_refresh_enforced_enabled,omitempty" xml:"remote_session_auto_refresh_enforced_enabled,omitempty"`
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled *bool `form:"consent_tool_filtering_enabled,omitempty" json:"consent_tool_filtering_enabled,omitempty" xml:"consent_tool_filtering_enabled,omitempty"`
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -626,9 +641,6 @@ type SetOrganizationFeatureResponseBody struct {
 	// default: forced on for every user, shown locked on consent screens, and
 	// applied by the keepalive regardless of per-session preference
 	RemoteSessionAutoRefreshEnforcedEnabled *bool `form:"remote_session_auto_refresh_enforced_enabled,omitempty" json:"remote_session_auto_refresh_enforced_enabled,omitempty" xml:"remote_session_auto_refresh_enforced_enabled,omitempty"`
-	// Whether MCP consent screens offer the tool filtering picker for the
-	// organization
-	ConsentToolFilteringEnabled *bool `form:"consent_tool_filtering_enabled,omitempty" json:"consent_tool_filtering_enabled,omitempty" xml:"consent_tool_filtering_enabled,omitempty"`
 	// Whether agent session portability is enabled for the organization: session
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
@@ -727,6 +739,14 @@ type UpdateOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -785,6 +805,14 @@ type DisableOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -832,6 +860,14 @@ type EnableOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -879,6 +915,14 @@ type GetOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -985,6 +1029,14 @@ type ExtendTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1032,6 +1084,14 @@ type CreateOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1079,6 +1139,14 @@ type RearmTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1183,6 +1251,14 @@ type SetStripeCustomerResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1687,6 +1763,14 @@ type StartTrialResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -1734,6 +1818,14 @@ type ChangeTrialEndDateResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -2098,6 +2190,36 @@ type AssignOrganizationOnboardingPlaybookResponseBody struct {
 	Applicability []*AdminOnboardingStepApplicabilityResponseBody `form:"applicability,omitempty" json:"applicability,omitempty" xml:"applicability,omitempty"`
 }
 
+// ListSignupOffersResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body.
+type ListSignupOffersResponseBody struct {
+	Offers []*AdminSignupOfferResponseBody `form:"offers,omitempty" json:"offers,omitempty" xml:"offers,omitempty"`
+}
+
+// CreateSignupOfferResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body.
+type CreateSignupOfferResponseBody struct {
+	ID                    *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// UpdateSignupOfferResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body.
+type UpdateSignupOfferResponseBody struct {
+	ID                    *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // GetStripeSubscriptionCandidateResponseBody is the type of the "admin"
 // service "getStripeSubscriptionCandidate" endpoint HTTP response body.
 type GetStripeSubscriptionCandidateResponseBody struct {
@@ -2130,6 +2252,14 @@ type SetStripeSubscriptionResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -17844,6 +17974,554 @@ type AssignOrganizationOnboardingPlaybookGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListSignupOffersUnauthorizedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unauthorized" error.
+type ListSignupOffersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersForbiddenResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "forbidden" error.
+type ListSignupOffersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersBadRequestResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "bad_request" error.
+type ListSignupOffersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersNotFoundResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "not_found" error.
+type ListSignupOffersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersConflictResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "conflict" error.
+type ListSignupOffersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersUnsupportedMediaResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSignupOffersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersInvalidResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "invalid" error.
+type ListSignupOffersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersInvariantViolationResponseBody is the type of the "admin"
+// service "listSignupOffers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSignupOffersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersUnexpectedResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "unexpected" error.
+type ListSignupOffersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSignupOffersGatewayErrorResponseBody is the type of the "admin" service
+// "listSignupOffers" endpoint HTTP response body for the "gateway_error" error.
+type ListSignupOffersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type CreateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type CreateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type CreateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "not_found" error.
+type CreateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferConflictResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "conflict" error.
+type CreateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "invalid" error.
+type CreateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "createSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type CreateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "createSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type CreateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferUnauthorizedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unauthorized" error.
+type UpdateSignupOfferUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferForbiddenResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "forbidden" error.
+type UpdateSignupOfferForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferBadRequestResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "bad_request" error.
+type UpdateSignupOfferBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferNotFoundResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "not_found" error.
+type UpdateSignupOfferNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferConflictResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "conflict" error.
+type UpdateSignupOfferConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferUnsupportedMediaResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateSignupOfferUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferInvalidResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "invalid" error.
+type UpdateSignupOfferInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferInvariantViolationResponseBody is the type of the "admin"
+// service "updateSignupOffer" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateSignupOfferInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferUnexpectedResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "unexpected" error.
+type UpdateSignupOfferUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateSignupOfferGatewayErrorResponseBody is the type of the "admin" service
+// "updateSignupOffer" endpoint HTTP response body for the "gateway_error"
+// error.
+type UpdateSignupOfferGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetStripeSubscriptionCandidateUnavailableResponseBody is the type of the
 // "admin" service "getStripeSubscriptionCandidate" endpoint HTTP response body
 // for the "unavailable" error.
@@ -18576,6 +19254,14 @@ type AdminOrganizationResponseBody struct {
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
 	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	// The time at which the organization was disabled, if any.
@@ -18659,9 +19345,12 @@ type AdminInferenceSpendMonthResponse struct {
 type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
-	// No order is saved, so the endpoint uses its configured external issuer.
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	// The saved providers in order, or the external default.
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
@@ -18669,17 +19358,28 @@ type EMAProviderOrderResponseBody struct {
 type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
-	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default order with none.
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
 	// Why the provider cannot serve now; omitted when it can. Identity chaining
 	// skips it and tries the next provider. not_trusted_by_endpoint means the
-	// endpoint's authorization server does not accept this issuer.
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
 	// readiness_unknown means the Speakeasy issuer's state could not be read just
 	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -19407,6 +20107,17 @@ type AdminOnboardingStepApplicabilityResponseBody struct {
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
+// AdminSignupOfferResponseBody is used to define fields on response body types.
+type AdminSignupOfferResponseBody struct {
+	ID                    *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name                  *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	StripePromotionCodeID *string `form:"stripe_promotion_code_id,omitempty" json:"stripe_promotion_code_id,omitempty" xml:"stripe_promotion_code_id,omitempty"`
+	SignupFlow            *string `form:"signup_flow,omitempty" json:"signup_flow,omitempty" xml:"signup_flow,omitempty"`
+	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // AdminCustomerUsageResponseBody is used to define fields on response body
 // types.
 type AdminCustomerUsageResponseBody struct {
@@ -20022,6 +20733,30 @@ func NewAssignOrganizationOnboardingPlaybookRequestBody(p *admin.AssignOrganizat
 	body := &AssignOrganizationOnboardingPlaybookRequestBody{
 		OrganizationID: p.OrganizationID,
 		PlaybookID:     p.PlaybookID,
+	}
+	return body
+}
+
+// NewCreateSignupOfferRequestBody builds the HTTP request body from the
+// payload of the "createSignupOffer" endpoint of the "admin" service.
+func NewCreateSignupOfferRequestBody(p *admin.CreateSignupOfferPayload) *CreateSignupOfferRequestBody {
+	body := &CreateSignupOfferRequestBody{
+		Name:                  p.Name,
+		StripePromotionCodeID: p.StripePromotionCodeID,
+		SignupFlow:            p.SignupFlow,
+	}
+	return body
+}
+
+// NewUpdateSignupOfferRequestBody builds the HTTP request body from the
+// payload of the "updateSignupOffer" endpoint of the "admin" service.
+func NewUpdateSignupOfferRequestBody(p *admin.UpdateSignupOfferPayload) *UpdateSignupOfferRequestBody {
+	body := &UpdateSignupOfferRequestBody{
+		Name:                  p.Name,
+		StripePromotionCodeID: p.StripePromotionCodeID,
+		SignupFlow:            p.SignupFlow,
+		ID:                    p.ID,
+		Enabled:               p.Enabled,
 	}
 	return body
 }
@@ -20672,7 +21407,6 @@ func NewGetOrganizationFeaturesProductFeaturesOK(body *GetOrganizationFeaturesRe
 		CustomerManagedEncryptionKeysEnabled:    body.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         body.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: body.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
@@ -20853,7 +21587,6 @@ func NewSetOrganizationFeatureProductFeaturesOK(body *SetOrganizationFeatureResp
 		CustomerManagedEncryptionKeysEnabled:    body.CustomerManagedEncryptionKeysEnabled,
 		RemoteSessionAutoRefreshEnabled:         body.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: body.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
@@ -21847,25 +22580,27 @@ func NewGetProjectGatewayError(body *GetProjectGatewayErrorResponseBody) *goa.Se
 // "updateOrganization" endpoint result from a HTTP "OK" response.
 func NewUpdateOrganizationAdminOrganizationOK(body *UpdateOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -22191,25 +22926,27 @@ func NewBulkUpdateAccountTypeGatewayError(body *BulkUpdateAccountTypeGatewayErro
 // "disableOrganization" endpoint result from a HTTP "OK" response.
 func NewDisableOrganizationAdminOrganizationOK(body *DisableOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -22369,25 +23106,27 @@ func NewDisableOrganizationGatewayError(body *DisableOrganizationGatewayErrorRes
 // "enableOrganization" endpoint result from a HTTP "OK" response.
 func NewEnableOrganizationAdminOrganizationOK(body *EnableOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -22547,25 +23286,27 @@ func NewEnableOrganizationGatewayError(body *EnableOrganizationGatewayErrorRespo
 // "getOrganization" endpoint result from a HTTP "OK" response.
 func NewGetOrganizationAdminOrganizationOK(body *GetOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -23902,25 +24643,27 @@ func NewListOrganizationsGatewayError(body *ListOrganizationsGatewayErrorRespons
 // endpoint result from a HTTP "OK" response.
 func NewExtendTrialAdminOrganizationOK(body *ExtendTrialResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -24080,25 +24823,27 @@ func NewExtendTrialGatewayError(body *ExtendTrialGatewayErrorResponseBody) *goa.
 // "createOrganization" endpoint result from a HTTP "OK" response.
 func NewCreateOrganizationAdminOrganizationOK(body *CreateOrganizationResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -24258,25 +25003,27 @@ func NewCreateOrganizationGatewayError(body *CreateOrganizationGatewayErrorRespo
 // endpoint result from a HTTP "OK" response.
 func NewRearmTrialAdminOrganizationOK(body *RearmTrialResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -25616,25 +26363,27 @@ func NewGetStripeCustomerGatewayError(body *GetStripeCustomerGatewayErrorRespons
 // "setStripeCustomer" endpoint result from a HTTP "OK" response.
 func NewSetStripeCustomerAdminOrganizationOK(body *SetStripeCustomerResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -29116,25 +29865,27 @@ func NewServeImageGatewayError(body *ServeImageGatewayErrorResponseBody) *goa.Se
 // endpoint result from a HTTP "OK" response.
 func NewStartTrialAdminOrganizationOK(body *StartTrialResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -29294,25 +30045,27 @@ func NewStartTrialGatewayError(body *StartTrialGatewayErrorResponseBody) *goa.Se
 // "changeTrialEndDate" endpoint result from a HTTP "OK" response.
 func NewChangeTrialEndDateAdminOrganizationOK(body *ChangeTrialEndDateResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -34486,6 +35239,504 @@ func NewAssignOrganizationOnboardingPlaybookGatewayError(body *AssignOrganizatio
 	return v
 }
 
+// NewListSignupOffersResultOK builds a "admin" service "listSignupOffers"
+// endpoint result from a HTTP "OK" response.
+func NewListSignupOffersResultOK(body *ListSignupOffersResponseBody) *admin.ListSignupOffersResult {
+	v := &admin.ListSignupOffersResult{}
+	v.Offers = make([]*admin.AdminSignupOffer, len(body.Offers))
+	for i, val := range body.Offers {
+		if val == nil {
+			v.Offers[i] = nil
+			continue
+		}
+		v.Offers[i] = unmarshalAdminSignupOfferResponseBodyToAdminAdminSignupOffer(val)
+	}
+
+	return v
+}
+
+// NewListSignupOffersUnauthorized builds a admin service listSignupOffers
+// endpoint unauthorized error.
+func NewListSignupOffersUnauthorized(body *ListSignupOffersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersForbidden builds a admin service listSignupOffers
+// endpoint forbidden error.
+func NewListSignupOffersForbidden(body *ListSignupOffersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersBadRequest builds a admin service listSignupOffers
+// endpoint bad_request error.
+func NewListSignupOffersBadRequest(body *ListSignupOffersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersNotFound builds a admin service listSignupOffers endpoint
+// not_found error.
+func NewListSignupOffersNotFound(body *ListSignupOffersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersConflict builds a admin service listSignupOffers endpoint
+// conflict error.
+func NewListSignupOffersConflict(body *ListSignupOffersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersUnsupportedMedia builds a admin service listSignupOffers
+// endpoint unsupported_media error.
+func NewListSignupOffersUnsupportedMedia(body *ListSignupOffersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersInvalid builds a admin service listSignupOffers endpoint
+// invalid error.
+func NewListSignupOffersInvalid(body *ListSignupOffersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersInvariantViolation builds a admin service
+// listSignupOffers endpoint invariant_violation error.
+func NewListSignupOffersInvariantViolation(body *ListSignupOffersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersUnexpected builds a admin service listSignupOffers
+// endpoint unexpected error.
+func NewListSignupOffersUnexpected(body *ListSignupOffersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSignupOffersGatewayError builds a admin service listSignupOffers
+// endpoint gateway_error error.
+func NewListSignupOffersGatewayError(body *ListSignupOffersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferAdminSignupOfferOK builds a "admin" service
+// "createSignupOffer" endpoint result from a HTTP "OK" response.
+func NewCreateSignupOfferAdminSignupOfferOK(body *CreateSignupOfferResponseBody) *admin.AdminSignupOffer {
+	v := &admin.AdminSignupOffer{
+		ID:                    *body.ID,
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+		Enabled:               *body.Enabled,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferUnauthorized builds a admin service createSignupOffer
+// endpoint unauthorized error.
+func NewCreateSignupOfferUnauthorized(body *CreateSignupOfferUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferForbidden builds a admin service createSignupOffer
+// endpoint forbidden error.
+func NewCreateSignupOfferForbidden(body *CreateSignupOfferForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferBadRequest builds a admin service createSignupOffer
+// endpoint bad_request error.
+func NewCreateSignupOfferBadRequest(body *CreateSignupOfferBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferNotFound builds a admin service createSignupOffer
+// endpoint not_found error.
+func NewCreateSignupOfferNotFound(body *CreateSignupOfferNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferConflict builds a admin service createSignupOffer
+// endpoint conflict error.
+func NewCreateSignupOfferConflict(body *CreateSignupOfferConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferUnsupportedMedia builds a admin service
+// createSignupOffer endpoint unsupported_media error.
+func NewCreateSignupOfferUnsupportedMedia(body *CreateSignupOfferUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferInvalid builds a admin service createSignupOffer
+// endpoint invalid error.
+func NewCreateSignupOfferInvalid(body *CreateSignupOfferInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferInvariantViolation builds a admin service
+// createSignupOffer endpoint invariant_violation error.
+func NewCreateSignupOfferInvariantViolation(body *CreateSignupOfferInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferUnexpected builds a admin service createSignupOffer
+// endpoint unexpected error.
+func NewCreateSignupOfferUnexpected(body *CreateSignupOfferUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateSignupOfferGatewayError builds a admin service createSignupOffer
+// endpoint gateway_error error.
+func NewCreateSignupOfferGatewayError(body *CreateSignupOfferGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferAdminSignupOfferOK builds a "admin" service
+// "updateSignupOffer" endpoint result from a HTTP "OK" response.
+func NewUpdateSignupOfferAdminSignupOfferOK(body *UpdateSignupOfferResponseBody) *admin.AdminSignupOffer {
+	v := &admin.AdminSignupOffer{
+		ID:                    *body.ID,
+		Name:                  *body.Name,
+		StripePromotionCodeID: *body.StripePromotionCodeID,
+		SignupFlow:            *body.SignupFlow,
+		Enabled:               *body.Enabled,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferUnauthorized builds a admin service updateSignupOffer
+// endpoint unauthorized error.
+func NewUpdateSignupOfferUnauthorized(body *UpdateSignupOfferUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferForbidden builds a admin service updateSignupOffer
+// endpoint forbidden error.
+func NewUpdateSignupOfferForbidden(body *UpdateSignupOfferForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferBadRequest builds a admin service updateSignupOffer
+// endpoint bad_request error.
+func NewUpdateSignupOfferBadRequest(body *UpdateSignupOfferBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferNotFound builds a admin service updateSignupOffer
+// endpoint not_found error.
+func NewUpdateSignupOfferNotFound(body *UpdateSignupOfferNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferConflict builds a admin service updateSignupOffer
+// endpoint conflict error.
+func NewUpdateSignupOfferConflict(body *UpdateSignupOfferConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferUnsupportedMedia builds a admin service
+// updateSignupOffer endpoint unsupported_media error.
+func NewUpdateSignupOfferUnsupportedMedia(body *UpdateSignupOfferUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferInvalid builds a admin service updateSignupOffer
+// endpoint invalid error.
+func NewUpdateSignupOfferInvalid(body *UpdateSignupOfferInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferInvariantViolation builds a admin service
+// updateSignupOffer endpoint invariant_violation error.
+func NewUpdateSignupOfferInvariantViolation(body *UpdateSignupOfferInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferUnexpected builds a admin service updateSignupOffer
+// endpoint unexpected error.
+func NewUpdateSignupOfferUnexpected(body *UpdateSignupOfferUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSignupOfferGatewayError builds a admin service updateSignupOffer
+// endpoint gateway_error error.
+func NewUpdateSignupOfferGatewayError(body *UpdateSignupOfferGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetStripeSubscriptionCandidateAdminStripeSubscriptionCandidateOK builds a
 // "admin" service "getStripeSubscriptionCandidate" endpoint result from a HTTP
 // "OK" response.
@@ -34668,25 +35919,27 @@ func NewGetStripeSubscriptionCandidateGatewayError(body *GetStripeSubscriptionCa
 // "setStripeSubscription" endpoint result from a HTTP "OK" response.
 func NewSetStripeSubscriptionAdminOrganizationOK(body *SetStripeSubscriptionResponseBody) *admin.AdminOrganization {
 	v := &admin.AdminOrganization{
-		ID:                   *body.ID,
-		Name:                 *body.Name,
-		Slug:                 *body.Slug,
-		AccountType:          *body.AccountType,
-		WorkosID:             body.WorkosID,
-		WorkosDashboardURL:   body.WorkosDashboardURL,
-		StripeCustomerID:     body.StripeCustomerID,
-		StripeSubscriptionID: body.StripeSubscriptionID,
-		Whitelisted:          *body.Whitelisted,
-		DisabledAt:           body.DisabledAt,
-		TrialState:           body.TrialState,
-		TrialTier:            body.TrialTier,
-		TrialEndsAt:          body.TrialEndsAt,
-		TrialConvertedAt:     body.TrialConvertedAt,
-		TrialDemotedAt:       body.TrialDemotedAt,
-		MemberCount:          *body.MemberCount,
-		CreationSource:       body.CreationSource,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                             *body.ID,
+		Name:                           *body.Name,
+		Slug:                           *body.Slug,
+		AccountType:                    *body.AccountType,
+		WorkosID:                       body.WorkosID,
+		WorkosDashboardURL:             body.WorkosDashboardURL,
+		StripeCustomerID:               body.StripeCustomerID,
+		StripeSubscriptionID:           body.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
+		Whitelisted:                    *body.Whitelisted,
+		DisabledAt:                     body.DisabledAt,
+		TrialState:                     body.TrialState,
+		TrialTier:                      body.TrialTier,
+		TrialEndsAt:                    body.TrialEndsAt,
+		TrialConvertedAt:               body.TrialConvertedAt,
+		TrialDemotedAt:                 body.TrialDemotedAt,
+		MemberCount:                    *body.MemberCount,
+		CreationSource:                 body.CreationSource,
+		CreatedAt:                      *body.CreatedAt,
+		UpdatedAt:                      *body.UpdatedAt,
 	}
 
 	return v
@@ -35187,6 +36440,12 @@ func ValidateUpdateOrganizationResponseBody(body *UpdateOrganizationResponseBody
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35255,6 +36514,12 @@ func ValidateDisableOrganizationResponseBody(body *DisableOrganizationResponseBo
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35311,6 +36576,12 @@ func ValidateEnableOrganizationResponseBody(body *EnableOrganizationResponseBody
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35366,6 +36637,12 @@ func ValidateGetOrganizationResponseBody(body *GetOrganizationResponseBody) (err
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -35556,6 +36833,12 @@ func ValidateExtendTrialResponseBody(body *ExtendTrialResponseBody) (err error) 
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35612,6 +36895,12 @@ func ValidateCreateOrganizationResponseBody(body *CreateOrganizationResponseBody
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -35667,6 +36956,12 @@ func ValidateRearmTrialResponseBody(body *RearmTrialResponseBody) (err error) {
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -35827,6 +37122,12 @@ func ValidateSetStripeCustomerResponseBody(body *SetStripeCustomerResponseBody) 
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -36351,6 +37652,12 @@ func ValidateStartTrialResponseBody(body *StartTrialResponseBody) (err error) {
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -36406,6 +37713,12 @@ func ValidateChangeTrialEndDateResponseBody(body *ChangeTrialEndDateResponseBody
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -37229,6 +38542,104 @@ func ValidateAssignOrganizationOnboardingPlaybookResponseBody(body *AssignOrgani
 	return
 }
 
+// ValidateListSignupOffersResponseBody runs the validations defined on
+// ListSignupOffersResponseBody
+func ValidateListSignupOffersResponseBody(body *ListSignupOffersResponseBody) (err error) {
+	if body.Offers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("offers", "body"))
+	}
+	for _, e := range body.Offers {
+		if e != nil {
+			if err2 := ValidateAdminSignupOfferResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCreateSignupOfferResponseBody runs the validations defined on
+// CreateSignupOfferResponseBody
+func ValidateCreateSignupOfferResponseBody(body *CreateSignupOfferResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferResponseBody runs the validations defined on
+// UpdateSignupOfferResponseBody
+func ValidateUpdateSignupOfferResponseBody(body *UpdateSignupOfferResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateGetStripeSubscriptionCandidateResponseBody runs the validations
 // defined on GetStripeSubscriptionCandidateResponseBody
 func ValidateGetStripeSubscriptionCandidateResponseBody(body *GetStripeSubscriptionCandidateResponseBody) (err error) {
@@ -37273,6 +38684,12 @@ func ValidateSetStripeSubscriptionResponseBody(body *SetStripeSubscriptionRespon
 	}
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
+	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
 	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
@@ -57685,6 +59102,726 @@ func ValidateAssignOrganizationOnboardingPlaybookGatewayErrorResponseBody(body *
 	return
 }
 
+// ValidateListSignupOffersUnauthorizedResponseBody runs the validations
+// defined on listSignupOffers_unauthorized_response_body
+func ValidateListSignupOffersUnauthorizedResponseBody(body *ListSignupOffersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersForbiddenResponseBody runs the validations defined
+// on listSignupOffers_forbidden_response_body
+func ValidateListSignupOffersForbiddenResponseBody(body *ListSignupOffersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersBadRequestResponseBody runs the validations defined
+// on listSignupOffers_bad_request_response_body
+func ValidateListSignupOffersBadRequestResponseBody(body *ListSignupOffersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersNotFoundResponseBody runs the validations defined on
+// listSignupOffers_not_found_response_body
+func ValidateListSignupOffersNotFoundResponseBody(body *ListSignupOffersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersConflictResponseBody runs the validations defined on
+// listSignupOffers_conflict_response_body
+func ValidateListSignupOffersConflictResponseBody(body *ListSignupOffersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersUnsupportedMediaResponseBody runs the validations
+// defined on listSignupOffers_unsupported_media_response_body
+func ValidateListSignupOffersUnsupportedMediaResponseBody(body *ListSignupOffersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersInvalidResponseBody runs the validations defined on
+// listSignupOffers_invalid_response_body
+func ValidateListSignupOffersInvalidResponseBody(body *ListSignupOffersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersInvariantViolationResponseBody runs the validations
+// defined on listSignupOffers_invariant_violation_response_body
+func ValidateListSignupOffersInvariantViolationResponseBody(body *ListSignupOffersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersUnexpectedResponseBody runs the validations defined
+// on listSignupOffers_unexpected_response_body
+func ValidateListSignupOffersUnexpectedResponseBody(body *ListSignupOffersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSignupOffersGatewayErrorResponseBody runs the validations
+// defined on listSignupOffers_gateway_error_response_body
+func ValidateListSignupOffersGatewayErrorResponseBody(body *ListSignupOffersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferUnauthorizedResponseBody runs the validations
+// defined on createSignupOffer_unauthorized_response_body
+func ValidateCreateSignupOfferUnauthorizedResponseBody(body *CreateSignupOfferUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferForbiddenResponseBody runs the validations defined
+// on createSignupOffer_forbidden_response_body
+func ValidateCreateSignupOfferForbiddenResponseBody(body *CreateSignupOfferForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferBadRequestResponseBody runs the validations defined
+// on createSignupOffer_bad_request_response_body
+func ValidateCreateSignupOfferBadRequestResponseBody(body *CreateSignupOfferBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferNotFoundResponseBody runs the validations defined
+// on createSignupOffer_not_found_response_body
+func ValidateCreateSignupOfferNotFoundResponseBody(body *CreateSignupOfferNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferConflictResponseBody runs the validations defined
+// on createSignupOffer_conflict_response_body
+func ValidateCreateSignupOfferConflictResponseBody(body *CreateSignupOfferConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferUnsupportedMediaResponseBody runs the validations
+// defined on createSignupOffer_unsupported_media_response_body
+func ValidateCreateSignupOfferUnsupportedMediaResponseBody(body *CreateSignupOfferUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferInvalidResponseBody runs the validations defined on
+// createSignupOffer_invalid_response_body
+func ValidateCreateSignupOfferInvalidResponseBody(body *CreateSignupOfferInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferInvariantViolationResponseBody runs the validations
+// defined on createSignupOffer_invariant_violation_response_body
+func ValidateCreateSignupOfferInvariantViolationResponseBody(body *CreateSignupOfferInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferUnexpectedResponseBody runs the validations defined
+// on createSignupOffer_unexpected_response_body
+func ValidateCreateSignupOfferUnexpectedResponseBody(body *CreateSignupOfferUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateSignupOfferGatewayErrorResponseBody runs the validations
+// defined on createSignupOffer_gateway_error_response_body
+func ValidateCreateSignupOfferGatewayErrorResponseBody(body *CreateSignupOfferGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferUnauthorizedResponseBody runs the validations
+// defined on updateSignupOffer_unauthorized_response_body
+func ValidateUpdateSignupOfferUnauthorizedResponseBody(body *UpdateSignupOfferUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferForbiddenResponseBody runs the validations defined
+// on updateSignupOffer_forbidden_response_body
+func ValidateUpdateSignupOfferForbiddenResponseBody(body *UpdateSignupOfferForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferBadRequestResponseBody runs the validations defined
+// on updateSignupOffer_bad_request_response_body
+func ValidateUpdateSignupOfferBadRequestResponseBody(body *UpdateSignupOfferBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferNotFoundResponseBody runs the validations defined
+// on updateSignupOffer_not_found_response_body
+func ValidateUpdateSignupOfferNotFoundResponseBody(body *UpdateSignupOfferNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferConflictResponseBody runs the validations defined
+// on updateSignupOffer_conflict_response_body
+func ValidateUpdateSignupOfferConflictResponseBody(body *UpdateSignupOfferConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferUnsupportedMediaResponseBody runs the validations
+// defined on updateSignupOffer_unsupported_media_response_body
+func ValidateUpdateSignupOfferUnsupportedMediaResponseBody(body *UpdateSignupOfferUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferInvalidResponseBody runs the validations defined on
+// updateSignupOffer_invalid_response_body
+func ValidateUpdateSignupOfferInvalidResponseBody(body *UpdateSignupOfferInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferInvariantViolationResponseBody runs the validations
+// defined on updateSignupOffer_invariant_violation_response_body
+func ValidateUpdateSignupOfferInvariantViolationResponseBody(body *UpdateSignupOfferInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferUnexpectedResponseBody runs the validations defined
+// on updateSignupOffer_unexpected_response_body
+func ValidateUpdateSignupOfferUnexpectedResponseBody(body *UpdateSignupOfferUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateSignupOfferGatewayErrorResponseBody runs the validations
+// defined on updateSignupOffer_gateway_error_response_body
+func ValidateUpdateSignupOfferGatewayErrorResponseBody(body *UpdateSignupOfferGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetStripeSubscriptionCandidateUnavailableResponseBody runs the
 // validations defined on
 // getStripeSubscriptionCandidate_unavailable_response_body
@@ -58691,6 +60828,12 @@ func ValidateAdminOrganizationResponseBody(body *AdminOrganizationResponseBody) 
 	if body.WorkosDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.workos_dashboard_url", *body.WorkosDashboardURL, goa.FormatURI))
 	}
+	if body.StripeCustomerDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_customer_dashboard_url", *body.StripeCustomerDashboardURL, goa.FormatURI))
+	}
+	if body.StripeSubscriptionDashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.stripe_subscription_dashboard_url", *body.StripeSubscriptionDashboardURL, goa.FormatURI))
+	}
 	if body.DisabledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
 	}
@@ -58870,6 +61013,9 @@ func ValidateEMAProviderResponseBody(body *EMAProviderResponseBody) (err error) 
 		if !(*body.UnavailableReason == "deleted" || *body.UnavailableReason == "disabled" || *body.UnavailableReason == "not_trusted_by_endpoint" || *body.UnavailableReason == "signing_unavailable" || *body.UnavailableReason == "not_rolled_out" || *body.UnavailableReason == "verified_domain_required" || *body.UnavailableReason == "setup_required" || *body.UnavailableReason == "keyless" || *body.UnavailableReason == "signing_paused" || *body.UnavailableReason == "sign_in_enforcement_required" || *body.UnavailableReason == "readiness_unknown") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.unavailable_reason", *body.UnavailableReason, []any{"deleted", "disabled", "not_trusted_by_endpoint", "signing_unavailable", "not_rolled_out", "verified_domain_required", "setup_required", "keyless", "signing_paused", "sign_in_enforcement_required", "readiness_unknown"}))
 		}
+	}
+	if body.LastAcceptedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accepted_at", *body.LastAcceptedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -60074,6 +62220,47 @@ func ValidateAdminOnboardingStepApplicabilityResponseBody(body *AdminOnboardingS
 	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	return
+}
+
+// ValidateAdminSignupOfferResponseBody runs the validations defined on
+// AdminSignupOfferResponseBody
+func ValidateAdminSignupOfferResponseBody(body *AdminSignupOfferResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.StripePromotionCodeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stripe_promotion_code_id", "body"))
+	}
+	if body.SignupFlow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signup_flow", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SignupFlow != nil {
+		if !(*body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", *body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }

@@ -16,7 +16,7 @@ func TestLimitEmbeddingInputs_OpenAIUsesTokenBoundary(t *testing.T) {
 	codec, err := tokenizer.Get(tokenizer.Cl100kBase)
 	require.NoError(t, err)
 
-	dense := strings.Repeat("{}", maxOpenAIEmbeddingInputTokens+500)
+	dense := strings.Repeat("{ ", maxOpenAIEmbeddingInputTokens+500)
 	denseTokens, err := codec.Count(dense)
 	require.NoError(t, err)
 	require.Greater(t, denseTokens, maxOpenAIEmbeddingInputTokens)
@@ -43,11 +43,36 @@ func TestLimitEmbeddingInputs_OpenAIUsesTokenBoundary(t *testing.T) {
 func TestLimitEmbeddingInputs_OpenAIPreservesUTF8(t *testing.T) {
 	t.Parallel()
 
-	input := strings.Repeat("😀", maxOpenAIEmbeddingInputTokens)
+	codec, err := tokenizer.Get(tokenizer.Cl100kBase)
+	require.NoError(t, err)
+
+	input := strings.Repeat("😀a", maxOpenAIEmbeddingInputTokens/2)
+	_, tokens, err := codec.Encode(input)
+	require.NoError(t, err)
+	require.Greater(t, len(tokens), maxOpenAIEmbeddingInputTokens)
+	require.False(t, utf8.ValidString(tokens[maxOpenAIEmbeddingInputTokens-1]), "fixture must split a multi-byte character across tokens at the cut")
+
 	limited, truncatedCount, err := limitEmbeddingInputs(openAITextEmbedding3Small, []string{input})
 	require.NoError(t, err)
 	require.Equal(t, 1, truncatedCount)
 	require.True(t, utf8.ValidString(limited[0]))
+
+	limitedTokens, err := codec.Count(limited[0])
+	require.NoError(t, err)
+	require.LessOrEqual(t, limitedTokens, maxOpenAIEmbeddingInputTokens)
+}
+
+func TestLimitEmbeddingInputs_OpenAIDoesNotSplitMultiByteRune(t *testing.T) {
+	t.Parallel()
+
+	// cl100k splits 😀 into two tokens. The leading "x" shifts the 8,000-token
+	// cut between them, so a naive decode ends with a partial rune.
+	input := "x" + strings.Repeat("😀😀😀😀 ", 2_000)
+	limited, truncatedCount, err := limitEmbeddingInputs(openAITextEmbedding3Small, []string{input})
+	require.NoError(t, err)
+	require.Equal(t, 1, truncatedCount)
+	require.True(t, utf8.ValidString(limited[0]))
+	require.True(t, strings.HasPrefix(input, limited[0]))
 
 	codec, err := tokenizer.Get(tokenizer.Cl100kBase)
 	require.NoError(t, err)
@@ -78,7 +103,7 @@ func TestLimitEmbeddingInputs_OtherModelsPreserveLegacyByteLimit(t *testing.T) {
 func TestLimitEmbeddingInputs_OpenAIDecodesConcurrently(t *testing.T) {
 	t.Parallel()
 
-	input := strings.Repeat("😀", maxOpenAIEmbeddingInputTokens)
+	input := strings.Repeat("😀a", maxOpenAIEmbeddingInputTokens/2)
 	type result struct {
 		output         string
 		truncatedCount int
@@ -111,7 +136,7 @@ func TestLimitEmbeddingInputs_OpenAIDecodesConcurrently(t *testing.T) {
 func TestSelectEmbeddingInputFallbacks_OpenAIUsesOrderedFallbacks(t *testing.T) {
 	t.Parallel()
 
-	dense := strings.Repeat("{}", maxOpenAIEmbeddingInputTokens+500)
+	dense := strings.Repeat("{ ", maxOpenAIEmbeddingInputTokens+500)
 	compact := "create_record\nCreate a record.\nparameters:\n- id: Record identifier."
 	minimal := "create_record\nCreate a record."
 

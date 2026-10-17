@@ -19,7 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -112,6 +114,11 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		checkoutState, checkoutEligible, err = s.currentCheckoutSession(ctx, event)
 		if err != nil {
 			return err
+		}
+	}
+	if event.Type == "checkout.session.completed" && checkoutEligible {
+		if err := s.acceptManualPartnerCheckout(ctx, event, checkoutState); err != nil {
+			return oops.E(oops.CodeUnavailable, err, "failed to accept partner Checkout").LogWarn(ctx, logger)
 		}
 	}
 	if event.Type == "invoice.created" {
@@ -587,13 +594,17 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	if !identity.StripeCustomerID.Valid || identity.StripeCustomerID.String != event.CustomerID {
 		return false, errors.New("stripe invoice customer does not belong to the organization")
 	}
-	if identity.GramAccountType != "payg" {
+	partner, err := q.IsRedeemedPartnerSubscription(ctx, repo.IsRedeemedPartnerSubscriptionParams{OrganizationID: pgtype.Text{String: organizationID, Valid: true}, StripeSubscriptionID: pgtype.Text{String: invoice.SubscriptionID, Valid: true}})
+	if err != nil {
+		return false, fmt.Errorf("verify partner invoice subscription: %w", err)
+	}
+	if identity.GramAccountType != "payg" && !partner {
 		if identity.StripeCheckoutSessionID.Valid {
 			return false, errors.New("PAYG Checkout activation has not committed")
 		}
 		return false, nil
 	}
-	if !identity.StripeSubscriptionID.Valid || identity.StripeSubscriptionID.String != invoice.SubscriptionID || !identity.StripeBillingCycleAnchor.Valid {
+	if (!identity.StripeSubscriptionID.Valid && !partner) || (identity.StripeSubscriptionID.Valid && identity.StripeSubscriptionID.String != invoice.SubscriptionID) || !identity.StripeBillingCycleAnchor.Valid {
 		return false, errors.New("stripe invoice does not belong to active PAYG billing")
 	}
 	if invoice.BillingReason == "subscription_create" && !invoice.ServicePeriodEnd.After(invoice.ServicePeriodStart) {
@@ -609,7 +620,12 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	if invoice.Currency != "usd" {
 		return false, fmt.Errorf("unsupported Stripe invoice currency %q", invoice.Currency)
 	}
-	if !invoice.ServicePeriodStart.Equal(invoice.ServicePeriodStart.Truncate(24*time.Hour)) || !invoice.ServicePeriodEnd.Equal(invoice.ServicePeriodEnd.Truncate(24*time.Hour)) {
+	anchor := identity.StripeBillingCycleAnchor.Time.UTC()
+	if partner && !anchor.Equal(anchor.Truncate(24*time.Hour)) {
+		if !partnerMonthlyPeriod(anchor, invoice.ServicePeriodStart, invoice.ServicePeriodEnd) {
+			return false, errors.New("partner invoice period does not match the immutable monthly billing anchor")
+		}
+	} else if !invoice.ServicePeriodStart.Equal(invoice.ServicePeriodStart.Truncate(24*time.Hour)) || !invoice.ServicePeriodEnd.Equal(invoice.ServicePeriodEnd.Truncate(24*time.Hour)) {
 		return false, errors.New("stripe invoice service period is not UTC-day aligned")
 	}
 
@@ -657,6 +673,11 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		return stripeWebhookResult{}, errors.New("stripe subscription already belongs to another organization")
 	}
 
+	checkout, err = s.verifiedPartnerCheckoutTx(ctx, tx, organizationID, event, state, checkout)
+	if err != nil {
+		return stripeWebhookResult{}, err
+	}
+
 	newlyEnabled := []productfeatures.Feature(nil)
 	convertedDemotedTrial := false
 	convertedTrial := false
@@ -688,6 +709,79 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 			return stripeWebhookResult{}, fmt.Errorf("restore demoted trial runtime features: %w", err)
 		}
 		newlyEnabled = append(newlyEnabled, productfeatures.TrialRuntimeFeatures...)
+	}
+
+	// Partner access is granted only after Stripe confirms PAYG activation,
+	// never just for entering a signup code. Preserve explicit staff disables.
+	organization, err := orgrepo.New(tx).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("load partner signup attribution: %w", err)
+	}
+	application, err := orgrepo.New(tx).GetOrganizationPromotionApplication(ctx, organizationID)
+	partnerSignup := err == nil
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return stripeWebhookResult{}, fmt.Errorf("read promotion application: %w", err)
+	}
+	if partnerSignup {
+		switch {
+		case application.RedeemedAt.Valid:
+			if application.StripeSubscriptionID.String != event.SubscriptionID {
+				return stripeWebhookResult{}, errors.New("organization promotion was already redeemed by another subscription")
+			}
+		default:
+			// Fail closed until our application-created checkout is persisted. A
+			// webhook arriving before finalization can retry without consuming the intent.
+			if !state.StripeCheckoutSessionID.Valid || state.StripeCheckoutSessionID.String != checkout.ID ||
+				!state.StripeCheckoutIdempotencyKey.Valid || state.StripeCheckoutIdempotencyKey.String == "" {
+				return stripeWebhookResult{}, errors.New("partner checkout does not match a persisted checkout intent; retry after checkout finalization")
+			}
+			rows, err := q.RecordOrganizationPromotionRedemption(ctx, repo.RecordOrganizationPromotionRedemptionParams{
+				OrganizationID: pgtype.Text{String: organizationID, Valid: true}, StripePromotionCodeID: application.StripePromotionCodeID, StripeSubscriptionID: pgtype.Text{String: event.SubscriptionID, Valid: true},
+			})
+			if err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("record promotion redemption: %w", err)
+			}
+			if rows != 1 {
+				return stripeWebhookResult{}, errors.New("promotion redemption changed during activation")
+			}
+			if s.auditLogger == nil {
+				return stripeWebhookResult{}, errors.New("audit logger is unavailable")
+			}
+			if err := s.auditLogger.LogOrganizationPromotionRedeemed(ctx, tx, audit.LogOrganizationPromotionRedeemedEvent{
+				OrganizationID: organizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, "system"), ActorDisplayName: nil,
+				OrganizationName: organization.Name, OrganizationSlug: organization.Slug,
+				Redemption: audit.OrganizationPromotionRedemptionSnapshot{StripePromotionCodeID: application.StripePromotionCodeID, StripeSubscriptionID: event.SubscriptionID},
+			}); err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("audit promotion redemption: %w", err)
+			}
+		}
+	}
+	if partnerSignup {
+		inserted, err := featurerepo.New(tx).EnableFeatureIfNeverConfigured(ctx, featurerepo.EnableFeatureIfNeverConfiguredParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(productfeatures.FeatureNetworkIngress),
+		})
+		if err != nil {
+			return stripeWebhookResult{}, fmt.Errorf("enable partner private networking: %w", err)
+		}
+		if inserted > 0 {
+			if s.auditLogger == nil {
+				return stripeWebhookResult{}, errors.New("audit logger is unavailable")
+			}
+			if err := s.auditLogger.LogOrganizationProductFeatureToggled(ctx, tx, audit.LogOrganizationProductFeatureToggledEvent{
+				OrganizationID:   organizationID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+				ActorDisplayName: nil,
+				ActorSlug:        nil,
+				OrganizationName: organization.Name,
+				OrganizationSlug: organization.Slug,
+				FeatureName:      string(productfeatures.FeatureNetworkIngress),
+				FeatureEnabled:   true,
+			}); err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("audit partner private networking: %w", err)
+			}
+			newlyEnabled = append(newlyEnabled, productfeatures.FeatureNetworkIngress)
+		}
 	}
 
 	reconcileKeyTypes := []openrouter.KeyType(nil)

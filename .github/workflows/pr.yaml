@@ -1686,6 +1686,27 @@ jobs:
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
+          # Alongside junit-report.xml, gotestsum writes only the pass, skip,
+          # and fail events of 'go test -json' (no output lines) to this file,
+          # relative to server/. Each event carries its time and elapsed.
+          GOTESTSUM_JSONFILE_TIMING_EVENTS: test-timings.json
+
+      - name: Upload test timings
+        # Uploaded even when tests fail or the job is cancelled, so slow and
+        # failing runs can be ranked too. Re-running a job replaces its shard's
+        # artifact. Read with 'gotestsum tool slowest --jsonfile
+        # test-timings.json'; 'mise run ci:shard-timings' turns the JUnit
+        # reports of recent main runs into ci/cmd/shard/timings.txt.
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-test-timings-shard-${{ matrix.shard }}
+          path: |
+            server/junit-report.xml
+            server/test-timings.json
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 30
 
       - name: Let tracked flaky tests through
         # Passes only when every failure is an open flaky-test ticket (see
