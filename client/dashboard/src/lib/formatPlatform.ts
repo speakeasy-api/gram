@@ -53,7 +53,8 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
  * Unknown sources fall back to delimiter-aware title casing.
  */
 export function formatPlatform(value: string): string {
-  const trimmed = value.trim();
+  // The ingestion protocol is not part of the harness's display name.
+  const trimmed = value.trim().replace(/^ahp-harness:/, "");
   const normalized = trimmed.toLowerCase().replace(/[\s_]+/g, "-");
   const known = PRODUCT_SURFACE_LABELS[normalized];
   if (known) return known;

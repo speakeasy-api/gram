@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,18 +48,23 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				reply.Effects = []*ahp.ToolBeforeEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
 				return reply, nil
 			},
-			TurnStart: func(ctx context.Context, c ahpserver.InterceptContext[ahp.TurnStartEvent, ahp.TurnStartCapabilities]) (ahpserver.TurnStartReply, error) {
-				var reply ahpserver.TurnStartReply
-				payload := ahpTurnStartPayload(c.Event)
+			UserMessageInbound: func(ctx context.Context, c ahpserver.InterceptContext[ahp.UserMessageInboundEvent, ahp.UserMessageInboundCapabilities]) (ahpserver.UserMessageInboundReply, error) {
+				var reply ahpserver.UserMessageInboundReply
+				payload := ahpUserMessageInboundPayload(c.Event)
 				if payload == nil {
 					return reply, nil
 				}
-				canDeny := slices.Contains(c.Capabilities.Effects, ahp.TurnStartCapabilitiesEffectsValueItemDeny)
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageInboundCapabilitiesEffectsValueItemDeny)
 				reason, err := s.ingestAHP(ctx, payload, !canDeny)
 				if err != nil || reason == "" {
 					return reply, err
 				}
-				reply.Effects = []*ahp.TurnStartEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
+				reply.Effects = []*ahp.UserMessageInboundEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
+				return reply, nil
+			},
+			// Lifecycle notifications are not authoritative user input.
+			TurnStart: func(context.Context, ahpserver.InterceptContext[ahp.TurnStartEvent, ahp.TurnStartCapabilities]) (ahpserver.TurnStartReply, error) {
+				var reply ahpserver.TurnStartReply
 				return reply, nil
 			},
 		},
@@ -69,13 +75,23 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				_, err := s.ingestAHP(ctx, ahpToolBeforePayload(c.Event), true)
 				return err
 			},
-			TurnStart: func(ctx context.Context, c ahpserver.ObserveContext[ahp.TurnStartEvent]) error {
-				payload := ahpTurnStartPayload(c.Event)
+			UserMessageInbound: func(ctx context.Context, c ahpserver.ObserveContext[ahp.UserMessageInboundEvent]) error {
+				payload := ahpUserMessageInboundPayload(c.Event)
 				if payload == nil {
 					return nil
 				}
 				_, err := s.ingestAHP(ctx, payload, true)
 				return err
+			},
+			ModelResponseAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ModelResponseAfterEvent]) error {
+				// Sequential ingestion preserves envelope order. Only the original
+				// response carries usage; transcript fanout has distinct replay keys.
+				for _, payload := range ahpModelResponsePayloads(c.Event) {
+					if _, err := s.ingestAHP(ctx, payload, true); err != nil {
+						return err
+					}
+				}
+				return nil
 			},
 			ToolAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ToolAfterEvent]) error {
 				payload := ahpToolAfterPayload(c.Event)
@@ -217,18 +233,71 @@ func ahpToolAfterPayload(e *ahp.ToolAfterEvent) *gen.IngestPayload {
 	return payload
 }
 
-// ahpTurnStartPayload maps user-initiated turns to prompt submissions. Other
-// triggers carry no user prompt and are not recorded.
-func ahpTurnStartPayload(e *ahp.TurnStartEvent) *gen.IngestPayload {
-	if e.Trigger != ahp.TurnStartEventTriggerUser {
+// Only inbound user envelopes own prompt policy and transcript capture.
+func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent) *gen.IngestPayload {
+	var texts []string
+	for _, message := range e.Message.Messages {
+		if message.Role == "user" {
+			if text := ahpPartsText(message.Parts, false); text != "" {
+				texts = append(texts, text)
+			}
+		}
+	}
+	if len(texts) == 0 {
 		return nil
 	}
-	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "prompt.submitted", e.Session, e.Turn.ID)
-	userItems := slices.DeleteFunc(slices.Clone(e.Items), func(item *ahp.ModelVisibleItem) bool {
-		return item == nil || item.Role != ahp.ModelVisibleItemRoleUser
-	})
-	payload.Data.Prompt = &gen.HookPromptData{Text: new(ahpText(userItems))}
+	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "prompt.submitted", e.Session, e.Turn.Value.ID)
+	payload.Data.Prompt = &gen.HookPromptData{Text: new(strings.Join(texts, "\n"))}
 	return payload
+}
+
+// Fanout remains adapter-local, leaving canonical ingest unchanged.
+func ahpModelResponsePayloads(e *ahp.ModelResponseAfterEvent) []*gen.IngestPayload {
+	original := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "usage.reported", e.Session, e.Turn.Value.ID)
+	if e.Usage.Present && e.Usage.Value != nil {
+		u := e.Usage.Value
+		// Cumulative snapshots must not be added to per-attempt usage.
+		if u.Kind == "amount" && u.Scope == "attempt" {
+			original.Data.Usage = &gen.HookUsageData{
+				InputTokens: ahpTokenCount(u.InputTokens), OutputTokens: ahpTokenCount(u.OutputTokens),
+				CacheReadTokens: ahpTokenCount(u.CacheReadTokens), CacheWriteTokens: ahpTokenCount(u.CacheWriteTokens),
+				Cost: nil, LoopCount: nil, Status: nil,
+			}
+			if u.Cost.Present && u.Cost.Value.Currency == "USD" {
+				if cost, err := u.Cost.Value.Amount.Float64(); err == nil {
+					original.Data.Usage.Cost = &cost
+				}
+			}
+		}
+	}
+	payloads := []*gen.IngestPayload{original}
+	for ordinal, item := range e.Items {
+		if item == nil || item.Role != ahp.ModelVisibleItemRoleAssistant {
+			continue
+		}
+		text := ahpPartsText(item.Parts, true)
+		if text == "" {
+			continue
+		}
+		payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "assistant.responded", e.Session, e.Turn.Value.ID)
+		// Encode boundaries so source IDs and message IDs cannot collide.
+		identity, _ := json.Marshal([]any{e.Source, e.ID, canonicalSessionID(payload), ordinal, item.ID})
+		payload.IdempotencyKey = new(fmt.Sprintf("response-text:%x", sha256.Sum256(identity)))
+		payload.Data.Message = &gen.HookMessageData{Text: &text, Role: new("assistant"), DurationMs: nil}
+		payloads = append(payloads, payload)
+	}
+	return payloads
+}
+
+func ahpTokenCount(value ahp.Optional[json.Number]) *int {
+	if !value.Present {
+		return nil
+	}
+	count, err := value.Value.Int64()
+	if err != nil || count < 0 || int64(int(count)) != count {
+		return nil
+	}
+	return new(int(count))
 }
 
 func ahpToolCall(callID string, tool *ahp.ExecutionEventTool) *gen.HookToolCallData {
@@ -271,6 +340,24 @@ func ahpText(items []*ahp.ModelVisibleItem) string {
 				texts = append(texts, part.TextBodyPart.Value.Text)
 			}
 		}
+	}
+	return strings.Join(texts, "\n")
+}
+
+// Category is independent of representation: tool calls and reasoning can
+// both be text. Only assistant transcript text uses this category allowlist;
+// tool results remain evidence regardless of their category.
+func ahpPartsText(parts []*ahp.ContentItem, assistant bool) string {
+	var texts []string
+	for _, part := range parts {
+		if part == nil || !part.TextBodyPart.Present || part.TextBodyPart.Value == nil {
+			continue
+		}
+		body := part.TextBodyPart.Value
+		if assistant && body.Category.Present && body.Category.Value != "text" {
+			continue
+		}
+		texts = append(texts, body.Text)
 	}
 	return strings.Join(texts, "\n")
 }
