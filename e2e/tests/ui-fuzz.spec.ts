@@ -1,36 +1,40 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { type Page, type Route } from "@playwright/test";
 
+import { expect, test } from "../ui-fuzz/fixtures.ts";
 import { JevClient, JevError } from "../ui-fuzz/jev.ts";
-import { mcpListMutations, type Mutation } from "../ui-fuzz/mutations.ts";
+import {
+  BASELINE_EXPECTED,
+  mutators,
+  type Mutator,
+} from "../ui-fuzz/mutations.ts";
 import {
   QUESTION_BROKEN,
   QUESTION_STATE,
   buildStateDocument,
   screenQuestions,
   type ScreenDescription,
+  type ScreenState,
 } from "../ui-fuzz/questions.ts";
+import { judge, sha256, toLine, type CaseRecord } from "../ui-fuzz/record.ts";
 import {
-  judge,
-  sha256,
-  summarize,
-  toLine,
-  type CaseRecord,
-} from "../ui-fuzz/record.ts";
+  commit,
+  ensureRunDir,
+  frameRpcs,
+  readDeps,
+  runDir,
+  runId,
+  type RouteDeps,
+} from "../ui-fuzz/run.ts";
 
-// Adversarial UI states, judged by Jev. Each case rewrites one API response
-// the screen depends on, snapshots the accessibility tree of the main region,
-// and asks Jev which state the screen is in and whether anything looks
-// broken. The verdict compares that against the states the mutation allows.
-// Every case is recorded to e2e/.ui-fuzz/<run>/cases.jsonl, including the
-// ones that pass, so runs can be diffed; see e2e/ui-fuzz/README.md.
-//
-// Runs against whatever stack GRAM_SITE_URL points at, through
-// `mise run test:ui-fuzz`, which wakes the worktree's stack first.
-
-const repoRoot = path.resolve(import.meta.dirname, "..", "..");
+// Step two: adversarial UI states, judged by Jev. For every static route the
+// recorder saw, one unmutated baseline case, then one case per (rpc the
+// route depends on × mutator). Each case rewrites that one response, snapshots
+// the accessibility tree of the main region, and asks Jev which state the
+// screen is in and whether anything looks broken. Every case is recorded to
+// e2e/.ui-fuzz/<run>/, passing ones included, so runs can be diffed; see
+// e2e/ui-fuzz/README.md.
 
 const apiKey = process.env["OPENROUTER_DEV_KEY"] ?? "";
 if (!apiKey || apiKey === "unset") {
@@ -39,57 +43,46 @@ if (!apiKey || apiKey === "unset") {
   );
 }
 
-const commit =
-  process.env["GITHUB_SHA"] ??
-  execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  }).trim();
-
-const runId =
-  process.env["UI_FUZZ_RUN_ID"] ??
-  `${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}-${commit.slice(0, 8)}`;
-const runDir = path.join(repoRoot, "e2e", ".ui-fuzz", runId);
-fs.mkdirSync(path.join(runDir, "snapshots"), { recursive: true });
+const deps = readDeps();
+if (!deps) {
+  throw new Error(
+    "No recording found. Run the recorder first: `mise run test:ui-fuzz` does both steps.",
+  );
+}
+const frame = frameRpcs(deps);
 
 const jev = new JevClient({ apiKey });
 const records: CaseRecord[] = [];
 
-const screens: { screen: ScreenDescription; mutations: Mutation[] }[] = [
-  {
-    screen: {
-      route: "/mcp",
-      purpose:
-        "Lists the MCP servers in the current project and lets the user add, open, or manage one.",
-    },
-    mutations: mcpListMutations,
-  },
-];
+type Case = {
+  route: RouteDeps;
+  rpc?: string;
+  mutator?: Mutator;
+  expected: ReadonlySet<ScreenState>;
+};
 
-// Dev-idp is credential-less: one click on Log in provisions a user and lands
-// on a project. The project route prefix is read back from the URL rather
-// than assumed, so the suite works in any seeded worktree.
-async function loginAndFindProject(page: Page): Promise<string> {
-  await page.goto("/");
-  const login = page.getByRole("button", { name: "Log in" });
-  if (await login.isVisible({ timeout: 10_000 }).catch(() => false)) {
-    await login.click();
+const cases: Case[] = [];
+for (const route of Object.values(deps.routes)) {
+  cases.push({ route, expected: BASELINE_EXPECTED });
+  for (const rpc of route.rpcs.filter((r) => !frame.has(r))) {
+    for (const mutator of mutators)
+      cases.push({ route, rpc, mutator, expected: mutator.expected });
   }
-  await page.waitForURL(/\/[^/]+\/projects\/[^/]+/, { timeout: 2 * 60_000 });
-  const match = new URL(page.url()).pathname.match(/^\/[^/]+\/projects\/[^/]+/);
-  if (!match)
-    throw new Error(`landed on ${page.url()}, which is not a project route`);
-  return match[0];
 }
 
 async function installMutation(
   page: Page,
-  m: Mutation,
+  rpc: string,
+  m: Mutator,
 ): Promise<{ skipped: () => string | undefined }> {
   let skipReason: string | undefined;
   await page.route(
-    (url) => url.pathname === m.rpcPath,
+    (url) => url.pathname === rpc,
     async (route: Route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
       let original: string | undefined;
       let upstream: Awaited<ReturnType<Route["fetch"]>> | undefined;
       if (m.needsOriginal) {
@@ -113,109 +106,123 @@ async function installMutation(
   return { skipped: () => skipReason };
 }
 
-for (const { screen, mutations } of screens) {
-  for (const m of mutations) {
-    test(`${screen.route} × ${m.name}`, async ({ page }) => {
-      const base: CaseRecord = {
-        run_id: runId,
-        commit,
-        at: new Date().toISOString(),
-        screen: screen.route,
-        mutation: m.name,
-        expected: [...m.expected],
-        verdict: "skipped",
-        reason: "",
-      };
+function caseName(c: Case): string {
+  const dep = c.rpc
+    ? ` ${c.rpc.replace("/rpc/", "")} × ${c.mutator!.name}`
+    : " baseline";
+  return `${c.route.key}${dep}`;
+}
 
-      const projectBase = await loginAndFindProject(page);
-      const mutation = await installMutation(page, m);
+for (const c of cases) {
+  test(caseName(c), async ({ page, session }) => {
+    const base: CaseRecord = {
+      run_id: runId,
+      commit,
+      at: new Date().toISOString(),
+      screen: c.route.key,
+      mutation: c.rpc ? `${c.rpc}#${c.mutator!.name}` : "baseline",
+      expected: [...c.expected],
+      verdict: "skipped",
+      reason: "",
+    };
+    const target = c.route.path
+      .replace(":orgSlug", session.orgSlug)
+      .replace(":projectSlug", session.projectSlug);
 
-      const hit = page.waitForResponse(
-        (r) => new URL(r.url()).pathname === m.rpcPath,
-        {
+    if (c.route.final_path !== target) {
+      const reason = `route redirected to ${c.route.final_path} when recorded`;
+      records.push({ ...base, reason });
+      test.skip(true, reason);
+      return;
+    }
+
+    const mutation =
+      c.rpc && c.mutator
+        ? await installMutation(page, c.rpc, c.mutator)
+        : undefined;
+    const hit = c.rpc
+      ? page.waitForResponse((r) => new URL(r.url()).pathname === c.rpc, {
           timeout: 60_000,
-        },
-      );
-      await page.goto(`${projectBase}${screen.route}`);
-      await hit;
-      // Let react-query settle and any error boundary render. networkidle
-      // can hang on long-polling pages, so it is bounded and best effort.
-      await page
-        .waitForLoadState("networkidle", { timeout: 15_000 })
-        .catch(() => undefined);
-      await page.waitForTimeout(1_000);
+        })
+      : Promise.resolve();
+    await page.goto(target);
+    await hit;
+    // Let react-query settle and any error boundary render. networkidle
+    // can hang on long-polling pages, so it is bounded and best effort.
+    await page
+      .waitForLoadState("networkidle", { timeout: 15_000 })
+      .catch(() => undefined);
+    await page.waitForTimeout(1_000);
 
-      const skipReason = mutation.skipped();
-      if (skipReason) {
-        records.push({ ...base, reason: skipReason });
-        test.skip(true, skipReason);
-        return;
-      }
+    const skipReason = mutation?.skipped();
+    if (skipReason) {
+      records.push({ ...base, reason: skipReason });
+      test.skip(true, skipReason);
+      return;
+    }
 
-      const region =
-        (await page.locator("main").count()) > 0
-          ? page.locator("main").first()
-          : page.locator("body");
-      const snapshot = await region.ariaSnapshot();
-      const snapshotFile = path.join(
-        runDir,
-        "snapshots",
-        `${screen.route.replace(/\//g, "_")}-${m.name}.yaml`,
-      );
-      fs.writeFileSync(snapshotFile, snapshot);
+    const region =
+      (await page.locator("main").count()) > 0
+        ? page.locator("main").first()
+        : page.locator("body");
+    const snapshot = await region.ariaSnapshot();
+    const snapshotFile = path.join(
+      ensureRunDir(),
+      "snapshots",
+      `${base.screen}-${base.mutation.replace(/[/#]/g, "_")}.yaml`,
+    );
+    fs.writeFileSync(snapshotFile, snapshot);
 
-      const doc = buildStateDocument(screen, snapshot);
-      const questions = screenQuestions();
-      let record: CaseRecord;
-      try {
-        const { response, latencyMs } = await jev.ask(doc, questions);
-        const verdict = judge(m.expected, response.answers);
-        const state = response.answers[QUESTION_STATE];
-        record = {
-          ...base,
-          ...verdict,
-          state_choice: state?.choice,
-          state_probabilities: state?.probabilities,
-          broken: response.answers[QUESTION_BROKEN]?.noul,
-          model: response.model,
-          input_tokens: response.usage.input_tokens,
-          output_tokens: response.usage.output_tokens,
-          latency_ms: latencyMs,
-          snapshot_chars: snapshot.length,
-          snapshot_sha256: sha256(snapshot),
-          snapshot_truncated: doc.snapshot_truncated,
-        };
-      } catch (err) {
-        // A judge outage is not a UI regression. Record it as uncertain so
-        // the run's summary shows the gap, and fail the case so nobody reads
-        // an empty run as green.
-        const reason = err instanceof JevError ? err.message : String(err);
-        record = { ...base, verdict: "uncertain", reason: `jev: ${reason}` };
-        records.push(record);
-        throw err;
-      }
-      records.push(record);
+    const screen: ScreenDescription = {
+      route:
+        c.route.path.replace(/^\/:orgSlug(\/projects\/:projectSlug)?/, "") ||
+        "/",
+      purpose: `The "${c.route.title}" page of the dashboard.`,
+    };
+    const doc = buildStateDocument(screen, snapshot);
+    const questions = screenQuestions();
+    let record: CaseRecord;
+    try {
+      const { response, latencyMs } = await jev.ask(doc, questions);
+      const verdict = judge(c.expected, response.answers);
+      const state = response.answers[QUESTION_STATE];
+      record = {
+        ...base,
+        ...verdict,
+        state_choice: state?.choice,
+        state_probabilities: state?.probabilities,
+        broken: response.answers[QUESTION_BROKEN]?.noul,
+        model: response.model,
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+        latency_ms: latencyMs,
+        snapshot_chars: snapshot.length,
+        snapshot_sha256: sha256(snapshot),
+        snapshot_truncated: doc.snapshot_truncated,
+      };
+    } catch (err) {
+      // A judge outage is not a UI regression. Record it as uncertain so the
+      // summary shows the gap, and fail the case so nobody reads an empty
+      // run as green.
+      const reason = err instanceof JevError ? err.message : String(err);
+      records.push({ ...base, verdict: "uncertain", reason: `jev: ${reason}` });
+      throw err;
+    }
+    records.push(record);
 
-      test.info().annotations.push({
-        type: "jev",
-        description: `${record.verdict}: ${record.reason}`,
-      });
-      expect(record.verdict, record.reason).not.toBe("fail");
+    test.info().annotations.push({
+      type: "jev",
+      description: `${record.verdict}: ${record.reason}`,
     });
-  }
+    expect(record.verdict, record.reason).not.toBe("fail");
+  });
 }
 
 test.afterAll(() => {
-  fs.writeFileSync(
-    path.join(runDir, "cases.jsonl"),
-    records.map(toLine).join(""),
+  // One file per worker; `summarize.ts` merges them.
+  const file = path.join(
+    ensureRunDir(),
+    `cases-w${test.info().workerIndex}.jsonl`,
   );
-  const summary = { run_id: runId, commit, counts: summarize(records) };
-  fs.writeFileSync(
-    path.join(runDir, "summary.json"),
-    JSON.stringify(summary, null, 2) + "\n",
-  );
-  console.log(
-    `ui-fuzz ${runId}: ${JSON.stringify(summary.counts)} -> ${path.relative(repoRoot, runDir)}`,
-  );
+  fs.writeFileSync(file, records.map(toLine).join(""));
 });

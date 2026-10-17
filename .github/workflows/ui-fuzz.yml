@@ -24,7 +24,10 @@ jobs:
   ui-fuzz:
     name: ui-fuzz
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 60
+    # A cold boot is up to half an hour; the matrix (every static route, each
+    # of its rpc dependencies, each mutator) is about as long again on four
+    # workers.
+    timeout-minutes: 90
     env:
       GOMAXPROCS: 8
       # `mise db:migrate` shells out to `atlas migrate apply`, and the

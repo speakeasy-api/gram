@@ -1,8 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-// Jev-judged adversarial UI states against a running stack. Serial and
-// single-worker: every case logs in and navigates the same stack, and the
-// per-run record directory is shared state.
+// Jev-judged adversarial UI states against a running stack.
 
 const siteURL = process.env["GRAM_SITE_URL"];
 if (!siteURL) {
@@ -14,10 +12,16 @@ if (!siteURL) {
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "ui-fuzz.spec.ts",
-  workers: 1,
-  fullyParallel: false,
-  timeout: 5 * 60 * 1000,
+  // The recorder and the fuzz step are separate invocations (see
+  // .mise-tasks/test/ui-fuzz.sh): the fuzz spec generates its cases from the
+  // recording at load time, so it cannot run in the same process.
+  testMatch: ["ui-fuzz-record.spec.ts", "ui-fuzz.spec.ts"],
+  // Each worker logs in once and every case is one page load plus one
+  // judgement, so a few workers cut the wall clock without crowding the
+  // stack or the judge.
+  workers: process.env["CI"] ? 4 : 2,
+  fullyParallel: true,
+  timeout: 3 * 60 * 1000,
   expect: { timeout: 20_000 },
   // A retry would ask Jev again and record the case twice.
   retries: 0,

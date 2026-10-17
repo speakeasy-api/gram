@@ -1,11 +1,12 @@
 import type { ScreenState } from "./questions.ts";
 
-// A mutation rewrites one API response the screen depends on. The pure part
-// lives here so it can be unit tested; the spec wires it into
-// `page.route`. `expected` is the set of states a correct UI may land in.
-// A mutation that cannot be applied to the real payload (for example cloning
-// a row when the list is empty) returns `skip` with a reason, so the case is
-// recorded as skipped rather than silently measured against the wrong input.
+// Shape-agnostic mutators. Each rewrites one recorded API response the
+// screen depends on, without knowing the endpoint: arrays are arrays and
+// names are names whatever the service. The pure part lives here so it is
+// unit tested; the spec wires it into `page.route`. `expected` is the set of
+// states a correct UI may land in. A mutator that finds nothing to change in
+// a payload returns `skip`, so the case is recorded as skipped rather than
+// judged against an unmutated screen.
 
 export type MockedResponse = {
   status: number;
@@ -17,13 +18,10 @@ export type Applied =
   | { kind: "respond"; response: MockedResponse }
   | { kind: "skip"; reason: string };
 
-export type Mutation = {
+export type Mutator = {
   name: string;
-  // Which rpc path this mutation intercepts, compared against URL.pathname.
-  rpcPath: string;
   expected: ReadonlySet<ScreenState>;
-  // `original` is the real response body the stack returned; undefined when
-  // the mutation never needs it (the spec then fulfils without fetching).
+  // Whether `apply` needs the real response; the spec fetches it first.
   needsOriginal: boolean;
   apply(original: string | undefined): Applied;
 };
@@ -38,89 +36,130 @@ const json = (status: number, value: unknown): Applied => ({
 });
 
 // A name long enough to overflow any column, with no spaces so the browser
-// cannot wrap it. Realistic for a toolset slug pasted from a script.
-export const LONG_NAME = "mcp-" + "x".repeat(4996);
+// cannot wrap it. Realistic for a slug pasted from a script.
+export const LONG_NAME = "name-" + "x".repeat(4995);
 
-type ListBody = { mcp_servers?: unknown[] };
+// Keys whose string values a person reads as a label. Identifiers, slugs,
+// URLs and enums are left alone: stretching those breaks links and routing,
+// which is a different bug from a label that does not fit.
+export const NAME_KEYS = new Set([
+  "name",
+  "title",
+  "description",
+  "summary",
+  "label",
+  "display_name",
+  "displayName",
+]);
 
-function parseList(original: string | undefined): ListBody | undefined {
-  if (original === undefined) return undefined;
-  try {
-    const v: unknown = JSON.parse(original);
-    if (
-      typeof v === "object" &&
-      v !== null &&
-      Array.isArray((v as ListBody).mcp_servers)
-    ) {
-      return v as ListBody;
+type Walk = { value: unknown; changed: number };
+
+function emptyArrays(v: unknown): Walk {
+  let changed = 0;
+  const walk = (x: unknown): unknown => {
+    if (Array.isArray(x)) {
+      changed += 1;
+      return [];
     }
-  } catch {
-    // fall through
-  }
-  return undefined;
+    if (typeof x === "object" && x !== null) {
+      return Object.fromEntries(
+        Object.entries(x).map(([k, y]) => [k, walk(y)]),
+      );
+    }
+    return x;
+  };
+  return { value: walk(v), changed };
 }
 
-export const MCP_LIST_RPC = "/rpc/mcpServers.list";
+function longNames(v: unknown): Walk {
+  let changed = 0;
+  const walk = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(walk);
+    if (typeof x === "object" && x !== null) {
+      return Object.fromEntries(
+        Object.entries(x).map(([k, y]) => {
+          if (NAME_KEYS.has(k) && typeof y === "string" && y !== "") {
+            changed += 1;
+            return [k, LONG_NAME];
+          }
+          return [k, walk(y)];
+        }),
+      );
+    }
+    return x;
+  };
+  return { value: walk(v), changed };
+}
 
-export const mcpListMutations: Mutation[] = [
+function parse(original: string | undefined): unknown {
+  if (original === undefined) return undefined;
+  try {
+    return JSON.parse(original) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function rewrite(
+  name: string,
+  original: string | undefined,
+  fn: (v: unknown) => Walk,
+): Applied {
+  const parsed = parse(original);
+  if (parsed === undefined)
+    return { kind: "skip", reason: `${name}: response is not JSON` };
+  const { value, changed } = fn(parsed);
+  if (changed === 0)
+    return { kind: "skip", reason: `${name}: nothing to change` };
+  return json(200, value);
+}
+
+// Goa's error envelope, so the SDK decodes it the way it decodes a real one.
+const goaError = (name: string, message: string) => ({
+  name,
+  id: "ui-fuzz",
+  message,
+  temporary: false,
+  timeout: false,
+  fault: name === "unexpected",
+});
+
+export const mutators: Mutator[] = [
   {
-    name: "baseline",
-    rpcPath: MCP_LIST_RPC,
-    // The seed may or may not provision servers; both are correct renders of
-    // an untouched response. What baseline guards is `broken`.
-    expected: new Set(["loaded", "empty"]),
+    name: "empty-arrays",
+    // A page whose lists are all empty is an empty state; a page that also
+    // shows scalar data is still loaded. Both are correct.
+    expected: new Set(["empty", "loaded"]),
     needsOriginal: true,
-    apply(original) {
-      if (original === undefined)
-        return { kind: "skip", reason: "no original response" };
-      return {
-        kind: "respond",
-        response: {
-          status: 200,
-          contentType: "application/json",
-          body: original,
-        },
-      };
-    },
+    apply: (o) => rewrite("empty-arrays", o, emptyArrays),
   },
   {
-    name: "empty",
-    rpcPath: MCP_LIST_RPC,
-    expected: new Set(["empty"]),
-    needsOriginal: false,
-    apply: () => json(200, { mcp_servers: [] }),
+    name: "long-names",
+    expected: new Set(["loaded", "empty"]),
+    needsOriginal: true,
+    apply: (o) => rewrite("long-names", o, longNames),
   },
   {
     name: "server-error",
-    rpcPath: MCP_LIST_RPC,
+    expected: new Set(["error"]),
+    needsOriginal: false,
+    apply: () => json(500, goaError("unexpected", "internal server error")),
+  },
+  {
+    name: "forbidden",
     expected: new Set(["error"]),
     needsOriginal: false,
     apply: () =>
-      json(500, {
-        name: "unexpected",
-        id: "ui-fuzz",
-        message: "internal server error",
-        temporary: false,
-        timeout: false,
-        fault: true,
-      }),
-  },
-  {
-    name: "long-name",
-    rpcPath: MCP_LIST_RPC,
-    expected: new Set(["loaded"]),
-    needsOriginal: true,
-    apply(original) {
-      const list = parseList(original);
-      const first = list?.mcp_servers?.[0];
-      if (!list || typeof first !== "object" || first === null) {
-        return { kind: "skip", reason: "seed has no MCP server to clone" };
-      }
-      const clone = { ...(first as Record<string, unknown>), name: LONG_NAME };
-      return json(200, {
-        ...list,
-        mcp_servers: [clone, ...(list.mcp_servers ?? [])],
-      });
-    },
+      json(
+        403,
+        goaError("forbidden", "you do not have access to this resource"),
+      ),
   },
 ];
+
+// The unmutated visit. Not a mutator: it runs once per route rather than
+// once per dependency, and its records are the calibration set.
+export const BASELINE_EXPECTED: ReadonlySet<ScreenState> = new Set([
+  "loaded",
+  "empty",
+]);
