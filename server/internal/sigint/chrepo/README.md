@@ -79,11 +79,11 @@ request preserves them, while an intentional new run receives a new ID.
 ### Identity and replacement
 
 The cutover producer must derive reading IDs with the existing UUIDv5 namespace and these
-versioned JSON tuples:
+JSON tuples:
 
 ```text
-["sigint-reading-v2", organization_id, project_id, "stream", event_kind, event_id, sensor_id]
-["sigint-reading-v2", organization_id, project_id, "manual", run_id, event_kind, event_id, sensor_id]
+["sigint-reading", organization_id, project_id, "stream", event_kind, event_id, sensor_id]
+["sigint-reading", organization_id, project_id, "manual", run_id, event_kind, event_id, sensor_id]
 ```
 
 The manual run ID uses its canonical UUID string. A reading and an outcome for
