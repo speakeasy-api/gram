@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -69,16 +70,16 @@ func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 	t.Parallel()
 	oauth := &StaffOAuth{Approval: &StaffProposalApproval{}}
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCreateGlobalIssuer: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	err := AttachWrites(&Runtime{}, oauth, &productfeatures.Client{}, writes)
+	err := AttachWrites(&Runtime{}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, writes)
 	require.ErrorContains(t, err, "not implemented")
 	require.Nil(t, oauth.Approval.operations, "nothing becomes approvable after a configuration error")
 
-	require.NoError(t, AttachWrites(&Runtime{}, oauth, &productfeatures.Client{}, WriteConfig{}))
+	require.NoError(t, AttachWrites(&Runtime{}, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
 	require.Contains(t, oauth.Approval.operations, OperationSetOrganizationFeature)
 	require.Contains(t, oauth.Approval.operations, OperationAssignOrganizationOnboardingPlaybook)
 	require.Contains(t, oauth.Approval.operations, OperationExtendOrganizationTrial)
 	for _, op := range AllWriteOperations {
-		require.Equal(t, op.implemented(), oauth.Approval.operations[op] != nil, op)
+		require.Equal(t, op.implemented() && !op.direct(), oauth.Approval.operations[op] != nil, op)
 	}
 }
 
@@ -88,7 +89,7 @@ func TestAttachedChatAnalysisWriterPrepares(t *testing.T) {
 	runtime := NewRuntime(nil, "")
 	oauth := &StaffOAuth{Approval: &StaffProposalApproval{store: f.store}}
 	config := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // Test the production wiring for the analysis operation.
-	require.NoError(t, AttachWrites(runtime, oauth, &productfeatures.Client{}, config))
+	require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
 	writer, ok := runtime.writes.writers[OperationSetChatAnalysisSettings].(*chatAnalysisWriter)
 	require.True(t, ok)
 	out, err := writer.prepare(writeContext(t, f), PrepareChatAnalysisInput{OrganizationID: f.orgA, Judge: "work_units", Enabled: true, DailyCap: 10, RetryKey: "attached-analysis"})
@@ -117,7 +118,7 @@ func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
 			if tc.attached {
 				oauth := &StaffOAuth{Approval: &StaffProposalApproval{}}
 				config := WriteConfig{Enabled: tc.enabled, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // One operation tests registration and discovery.
-				require.NoError(t, AttachWrites(runtime, oauth, &productfeatures.Client{}, config))
+				require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
 			}
 			request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_admin_context","arguments":{}}}`))
 			request.Header.Set("Authorization", "Bearer test-token")
