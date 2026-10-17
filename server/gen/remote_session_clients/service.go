@@ -260,7 +260,22 @@ type IdentityChainingPreparation struct {
 	Resource         string
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	Scopes     []string
+	// Scopes recorded on the binding when identity chaining was turned on.
+	// Identity chaining requests exactly these, without OpenID Connect scopes;
+	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
+	Scopes []string
+	// Scopes preparing identity chaining again would record now, sorted: what an
+	// interactive sign-in through the selected client requests for this server, or
+	// the recorded scopes when the binding has no server connection to follow or
+	// the connection names only OpenID Connect scopes while the recorded ones name
+	// others. Returned by readEMA and prepareEMA when a client is selected.
+	ConnectionScopes []string
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
+	ScopesOutOfDate *bool
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string
 	// The EMA providers the vendor accepts, resolved for this endpoint. A provider
@@ -318,7 +333,16 @@ type PrepareEMAPayload struct {
 	Resource string
 	// Explicit selected client row ID; never inferred.
 	ClientID *string
-	// Requested scope tokens.
+	// The scopes this preparation request supplies, which a DCR registration
+	// always asks for. Turning identity chaining on records the server
+	// connection's scopes (what an interactive sign-in through the selected client
+	// requests) and ignores these, unless the client is not linked to the user
+	// session issuer, no single remote MCP server signing in directly through it
+	// serves the resource (a gateway member qualified through another sign-in
+	// issuer is not resolved), or the connection names only OpenID Connect scopes
+	// while these name others; then these are recorded, and a scope outside the
+	// client's registered scope reports manual_setup_required. With neither naming
+	// a scope, nothing is recorded and identity chaining requests no scope.
 	Scopes    []string
 	Mechanism string
 	// Explicit DCR authentication method.

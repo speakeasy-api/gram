@@ -8850,6 +8850,50 @@ func (q *Queries) ListPrincipalRemoteSessionCandidates(ctx context.Context, arg 
 	return items, nil
 }
 
+const listRemoteServerURLsForUserSessionIssuer = `-- name: ListRemoteServerURLsForUserSessionIssuer :many
+SELECT rms.url, COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+LEFT JOIN remote_protected_resources AS rpr ON rpr.project_id = m.project_id AND rpr.resource_identifier = rms.url AND rpr.deleted IS FALSE
+WHERE m.project_id = $1
+  AND m.user_session_issuer_id = $2
+  AND m.deleted IS FALSE
+`
+
+type ListRemoteServerURLsForUserSessionIssuerParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+type ListRemoteServerURLsForUserSessionIssuerRow struct {
+	Url              string
+	DocumentResource string
+}
+
+// The upstream URLs of the project's remote-backed MCP servers that sign in
+// through a user session issuer, each with the resource its cached protected
+// resource document names, or empty. Identity chaining finds a binding's server by
+// either value, then keys the resource row by the URL as logins do.
+func (q *Queries) ListRemoteServerURLsForUserSessionIssuer(ctx context.Context, arg ListRemoteServerURLsForUserSessionIssuerParams) ([]ListRemoteServerURLsForUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteServerURLsForUserSessionIssuer, arg.ProjectID, arg.UserSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteServerURLsForUserSessionIssuerRow
+	for rows.Next() {
+		var i ListRemoteServerURLsForUserSessionIssuerRow
+		if err := rows.Scan(&i.Url, &i.DocumentResource); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionClientIDsForUserSessionIssuer = `-- name: ListRemoteSessionClientIDsForUserSessionIssuer :many
 SELECT c.id
 FROM remote_session_client_user_session_issuers AS link
