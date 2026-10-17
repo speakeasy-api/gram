@@ -43,6 +43,10 @@ type authenticatedIngestOptionsKey struct{}
 
 // AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
 type AuthenticatedIngestOptions struct {
+	// contentBoundary applies the quarantine gate and boundaryScans instead of
+	// the policies for the event type. It applies also when boundaryScans is empty.
+	contentBoundary bool
+	boundaryScans   []ahpBoundaryScan
 	// ObserveOnly records the event without evaluating enforcement, for
 	// events the sender cannot block.
 	ObserveOnly                  bool
@@ -68,6 +72,8 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
+		contentBoundary:              false,
+		boundaryScans:                nil,
 		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
@@ -578,13 +584,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
 	defer span.End()
 
-	if authenticatedIngestOptions(ctx).ObserveOnly {
+	opts := authenticatedIngestOptions(ctx)
+	if opts.ObserveOnly {
 		return "", ""
 	}
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
-	if eventType == "prompt.submitted" || eventType == "tool.requested" {
+	if eventType == "prompt.submitted" || eventType == "tool.requested" || opts.contentBoundary {
 		if quarantine := s.checkQuarantineGate(ctx, event); quarantine != nil {
 			reason := sessionquarantine.DenyReason(quarantine)
 			return reason, reason
@@ -619,6 +626,12 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		}
 	}
 
+	// AHP content boundaries scan their content directly. They do not create
+	// transcript messages from the model context.
+	if opts.contentBoundary {
+		return s.evaluateAHPBoundary(ctx, event, opts.boundaryScans)
+	}
+
 	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
@@ -630,7 +643,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
 				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 			}
-			if scanResult.IsWarnChallenge() && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
+			if scanResult.IsWarnChallenge() && opts.AllowWarnAcknowledgement {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}

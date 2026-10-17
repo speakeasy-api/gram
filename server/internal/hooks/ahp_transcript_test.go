@@ -171,6 +171,9 @@ func TestAHPAuthoritativeTranscriptReplay(t *testing.T) {
 	turn["trigger"] = "user"
 	turn["items"] = []any{ahpTestMessage("user", "incoming prompt")}
 	events = append(events, turn)
+	request := ahpBoundaryEvent("model.request.before")
+	request["items"] = []any{ahpTestMessage("user", "incoming prompt"), ahpTestMessage("assistant", "same text")}
+	events = append(events, request)
 	commentary := ahpTestResponse()
 	rich := ahpTestMessage("assistant", "")
 	text := ahpTestPart("second commentary")
@@ -219,8 +222,12 @@ func TestAHPAuthoritativeTranscriptReplay(t *testing.T) {
 		parsed := ahp.ParseObserveNotification(frame)
 		require.True(t, parsed.OK, "%s: %v", e["type"], parsed.Diagnostics)
 	}
-	for range 2 {
+	for delivery := range 2 {
 		for _, e := range events {
+			if delivery == 0 && (e["type"] == "model.response.after" || e["type"] == "tool.after") {
+				ahpBoundaryRequest(t, h, e, map[string]any{"effects": []string{}})
+				continue
+			}
 			w := ahpRequest(t, h, "hooks/observe", e, nil, ahpAuthHeaders)
 			require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 		}
@@ -240,18 +247,18 @@ func TestAHPAuthoritativeTranscriptReplay(t *testing.T) {
 	require.Equal(t, "tool", rows[4].Role)
 	require.Contains(t, string(rows[3].ToolCalls), "read_file")
 	require.NotEmpty(t, rows[4].ToolCallID.String)
-	// Six original ingested events plus four assistant envelopes; lifecycle
-	// notifications and the replay contribute neither transcript nor usage.
+	// Six original events, four assistant envelopes and three boundary audits.
+	// The outbound and turn-end events and the replay add no transcript or usage.
 	var logs []telemetryrepo.TelemetryLog
 	require.Eventually(t, func() bool {
 		logs, err = ch.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{GramProjectID: auth.ProjectID.String(), TimeStart: start.Add(-time.Minute).UnixNano(), TimeEnd: time.Now().Add(time.Minute).UnixNano(), SortOrder: "asc", Limit: 100})
-		return err == nil && len(logs) == 10
+		return err == nil && len(logs) == 13
 	}, 5*time.Second, 50*time.Millisecond)
 	// Keep observing after the expected rows arrive so delayed replay writes
 	// cannot hide behind the first successful poll.
 	require.Never(t, func() bool {
 		logs, err = ch.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{GramProjectID: auth.ProjectID.String(), TimeStart: start.Add(-time.Minute).UnixNano(), TimeEnd: time.Now().Add(time.Minute).UnixNano(), SortOrder: "asc", Limit: 100})
-		return err != nil || len(logs) != 10
+		return err != nil || len(logs) != 13
 	}, time.Second, 50*time.Millisecond)
 	var input, output, cost float64
 	usageRows := 0
