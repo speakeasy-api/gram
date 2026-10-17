@@ -334,6 +334,8 @@ describe("plugin detail permission boundary", () => {
       (screen.getByRole("checkbox", { name: "Payroll" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+    expect(screen.getByText("MCP off")).toBeTruthy();
+    expect(screen.getByText("No MCP address")).toBeTruthy();
     expect(
       screen.getByText(
         "Set an MCP address for this server before adding it to a plugin.",
