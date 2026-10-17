@@ -288,8 +288,8 @@ func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload, obs
 func (s *Service) ingestAHPBoundary(ctx context.Context, payload *gen.IngestPayload, observeOnly bool, scans ...ahpBoundaryScan) (string, error) {
 	options := defaultAuthenticatedIngestOptions()
 	options.ObserveOnly = observeOnly
-	options.ContentBoundary = true
-	options.BoundaryScans = mergeAHPScans(scans)
+	options.contentBoundary = true
+	options.boundaryScans = mergeAHPScans(scans)
 	return s.ingestAHPWithOptions(ctx, payload, options)
 }
 

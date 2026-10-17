@@ -43,10 +43,10 @@ type authenticatedIngestOptionsKey struct{}
 
 // AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
 type AuthenticatedIngestOptions struct {
-	// ContentBoundary checks quarantine and typed evidence instead of canonical
-	// event policies, even when BoundaryScans contains no evidence.
-	ContentBoundary bool
-	BoundaryScans   []ahpBoundaryScan
+	// contentBoundary checks quarantine and typed evidence instead of canonical
+	// event policies, even when boundaryScans contains no evidence.
+	contentBoundary bool
+	boundaryScans   []ahpBoundaryScan
 	// ObserveOnly records the event without evaluating enforcement, for
 	// events the sender cannot block.
 	ObserveOnly                  bool
@@ -72,9 +72,8 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
-		ContentBoundary:              false,
-		BoundaryScans:                nil,
-		ObserveOnly:                  false,
+		contentBoundary: false,
+		boundaryScans:   nil, ObserveOnly: false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
@@ -591,7 +590,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
-	if eventType == "prompt.submitted" || eventType == "tool.requested" || opts.ContentBoundary {
+	if eventType == "prompt.submitted" || eventType == "tool.requested" || opts.contentBoundary {
 		if quarantine := s.checkQuarantineGate(ctx, event); quarantine != nil {
 			reason := sessionquarantine.DenyReason(quarantine)
 			return reason, reason
@@ -628,8 +627,8 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 
 	// AHP content boundaries carry typed evidence without fabricating user or
 	// assistant transcript messages from model context snapshots.
-	if opts.ContentBoundary {
-		return s.evaluateAHPBoundary(ctx, event, opts.BoundaryScans)
+	if opts.contentBoundary {
+		return s.evaluateAHPBoundary(ctx, event, opts.boundaryScans)
 	}
 
 	switch eventType {
