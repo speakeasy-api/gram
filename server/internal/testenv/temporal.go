@@ -2,8 +2,10 @@ package testenv
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
@@ -39,8 +42,28 @@ const (
 	devServerMaxProcs = "2"
 )
 
+// A package's tests start in parallel, and each registers a namespace, so
+// registrations arrive at the dev server in a burst. The server can throttle
+// that burst; these bound how NewTemporalEnvironment retries a throttled
+// registration.
+const (
+	// throttledAttempts is the most times a throttled request is tried. With
+	// the jittered backoff below the attempts span six to eleven seconds,
+	// longer than a package's burst of test setups lasts.
+	throttledAttempts = 10
+
+	// throttledInitialBackoff is the wait before the first retry. Each later
+	// wait doubles, up to throttledMaxBackoff.
+	throttledInitialBackoff = 100 * time.Millisecond
+
+	// throttledMaxBackoff caps the wait between attempts, so a test is not
+	// held long once the burst has passed.
+	throttledMaxBackoff = 2 * time.Second
+)
+
 // devServerArgs bounds the dev server's caches by size rather than by entry
-// count, which is what the defaults do.
+// count, which is what the defaults do, and lifts the rate limit on namespace
+// registration.
 var devServerArgs = []string{
 	// The history cache is count-bounded by default (128k mutable state
 	// entries host-wide), which puts no ceiling on bytes. Switching it to a
@@ -63,6 +86,14 @@ var devServerArgs = []string{
 	// cuts the per-test matching overhead fourfold.
 	"--dynamic-config-value", "matching.numTaskqueueReadPartitions=1",
 	"--dynamic-config-value", "matching.numTaskqueueWritePartitions=1",
+	// Registering a namespace is one of the frontend's namespace replication
+	// inducing APIs, which it admits service-wide at
+	// frontend.rps.namespaceReplicationInducingAPIs. At the default, this dev
+	// server version (temporal CLI 1.8.2, server 1.31.2) rejected 44 of 100
+	// concurrent registrations with "service rate limit exceeded", which fails
+	// test setup in large packages. 1000 per second is far above any
+	// package's burst.
+	"--dynamic-config-value", "frontend.rps.namespaceReplicationInducingAPIs=1000",
 }
 
 func nextRandom() string {
@@ -160,9 +191,14 @@ func NewTemporalEnvironment(t *testing.T, devserver *testsuite.DevServer) (*serv
 	request.Namespace = namespace
 	request.WorkflowExecutionRetentionPeriod = durationpb.New(24 * time.Hour)
 
-	_, err := devserver.Client().WorkflowService().RegisterNamespace(t.Context(), request)
+	err := retryThrottled(t.Context(), func(ctx context.Context) error {
+		if _, err := devserver.Client().WorkflowService().RegisterNamespace(ctx, request); err != nil {
+			return fmt.Errorf("register temporal namespace: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("register temporal namespace: %w", err)
+		return nil, err
 	}
 
 	clientOptions := client.Options{}
@@ -180,4 +216,34 @@ func NewTemporalEnvironment(t *testing.T, devserver *testsuite.DevServer) (*serv
 	})
 
 	return servertemporal.NewEnvironment(temporalClient, servertemporal.NamespaceName(namespace), servertemporal.TaskQueueName(queue)), nil
+}
+
+// retryThrottled runs attempt until it succeeds, fails with an error other
+// than the server's resource-exhausted throttling, has run throttledAttempts
+// times, or ctx ends. A throttled request was rejected before it ran, so
+// repeating it is safe. Waits double from throttledInitialBackoff up to
+// throttledMaxBackoff, each jittered between half and all of its length so
+// tests throttled together do not all retry at the same moment.
+func retryThrottled(ctx context.Context, attempt func(context.Context) error) error {
+	backoff := throttledInitialBackoff
+	for attempts := 1; ; attempts++ {
+		err := attempt(ctx)
+
+		var throttled *serviceerror.ResourceExhausted
+		if err == nil || !errors.As(err, &throttled) {
+			return err
+		}
+		if attempts == throttledAttempts {
+			return fmt.Errorf("still throttled after %d attempts: %w", attempts, err)
+		}
+
+		wait := backoff/2 + rand.N(backoff/2) // #nosec G404 -- jitter, not security-sensitive
+		select {
+		case <-ctx.Done():
+			return errors.Join(err, ctx.Err())
+		case <-time.After(wait):
+		}
+
+		backoff = min(backoff*2, throttledMaxBackoff)
+	}
 }
