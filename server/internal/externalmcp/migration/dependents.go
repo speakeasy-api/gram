@@ -2,6 +2,7 @@ package migration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -45,6 +46,16 @@ func (d dependentMove) run(ctx context.Context, outcome *Outcome) (bool, error) 
 	}
 
 	queries := repo.New(d.tx)
+	duplicates, err := queries.RemoveDuplicateCollectionAttachments(ctx, repo.RemoveDuplicateCollectionAttachmentsParams{
+		OrganizationID: d.organizationID, BackendID: uuid.NullUUID{UUID: d.backendID, Valid: true},
+		McpServerID: uuid.NullUUID{UUID: d.targetID, Valid: true},
+	})
+	if err != nil {
+		return false, fmt.Errorf("remove duplicate collection attachments: %w", err)
+	}
+	if duplicates > 0 {
+		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Remove %d organization collection entries the replacement already covers", duplicates))
+	}
 	collections, err := queries.RekeyCollectionAttachments(ctx, repo.RekeyCollectionAttachmentsParams{
 		McpServerID: uuid.NullUUID{UUID: d.targetID, Valid: true}, OrganizationID: d.organizationID,
 		BackendID: uuid.NullUUID{UUID: d.backendID, Valid: true},
@@ -72,6 +83,7 @@ func (d dependentMove) run(ctx context.Context, outcome *Outcome) (bool, error) 
 // removes the rest. A plugin that already carries the replacement keeps that
 // entry. Otherwise the entry kept is the one a Platform MCP distribution
 // references, then the wrapper-keyed one, then the toolset-keyed one.
+// Distributions of a removed entry move to the kept one.
 func (d dependentMove) movePluginServers(ctx context.Context, outcome *Outcome) (bool, error) {
 	queries := repo.New(d.tx)
 	rows, err := queries.ListPluginServersForBackend(ctx, repo.ListPluginServersForBackendParams{
@@ -96,15 +108,16 @@ func (d dependentMove) movePluginServers(ctx context.Context, outcome *Outcome) 
 	targetURN := urn.NewMcpServer(d.targetID)
 	for _, pluginID := range plugins {
 		entries := byPlugin[pluginID]
-		present, err := queries.PluginHasServer(ctx, repo.PluginHasServerParams{
+		keep := -1
+		retainedID, err := queries.GetPluginServerForServer(ctx, repo.GetPluginServerForServerParams{
 			PluginID: pluginID, ProjectID: d.projectID, McpServerID: uuid.NullUUID{UUID: d.targetID, Valid: true},
 		})
-		if err != nil {
-			return false, fmt.Errorf("check plugin entry: %w", err)
-		}
-		keep := -1
-		if !present {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
 			keep = keptPluginEntry(entries)
+			retainedID = entries[keep].ID
+		case err != nil:
+			return false, fmt.Errorf("check plugin entry: %w", err)
 		}
 		for i, entry := range entries {
 			if i == keep {
@@ -153,7 +166,13 @@ func (d dependentMove) movePluginServers(ctx context.Context, outcome *Outcome) 
 				return false, fmt.Errorf("audit duplicate plugin entry removal: %w", err)
 			}
 			if entry.Distributed {
-				outcome.Warnings = append(outcome.Warnings, fmt.Sprintf("Removed a distributed plugin entry in %q because the plugin already carries the replacement", entry.PluginName))
+				if _, err := queries.RepointDistributionsToPluginServer(ctx, repo.RepointDistributionsToPluginServerParams{
+					RetainedPluginServerID: uuid.NullUUID{UUID: retainedID, Valid: true}, ProjectID: d.projectID,
+					RemovedPluginServerID: uuid.NullUUID{UUID: entry.ID, Valid: true},
+				}); err != nil {
+					return false, fmt.Errorf("move plugin entry distributions: %w", err)
+				}
+				outcome.Actions = append(outcome.Actions, fmt.Sprintf("Move the distributions of a removed plugin entry in %q to the kept entry", entry.PluginName))
 			}
 		}
 	}

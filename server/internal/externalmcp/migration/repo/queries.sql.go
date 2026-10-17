@@ -86,31 +86,6 @@ func (q *Queries) CountIssuersAndClientsFixture(ctx context.Context, organizatio
 	return i, err
 }
 
-const countRemoteSessionsToRewrite = `-- name: CountRemoteSessionsToRewrite :one
-SELECT count(*)::bigint AS sessions
-FROM remote_sessions AS rs
-WHERE rs.user_session_issuer_id = $1
-  AND rs.deleted IS FALSE
-  AND (rs.resource IS NULL OR rs.resource = '' OR rtrim(rs.resource, '/') = rtrim($2::text, '/'))
-  AND rs.remote_session_client_id IN (
-    SELECT link.remote_session_client_id
-    FROM remote_session_client_user_session_issuers AS link
-    WHERE link.user_session_issuer_id = $1
-  )
-`
-
-type CountRemoteSessionsToRewriteParams struct {
-	UserSessionIssuerID uuid.UUID
-	PreviousResource    string
-}
-
-func (q *Queries) CountRemoteSessionsToRewrite(ctx context.Context, arg CountRemoteSessionsToRewriteParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countRemoteSessionsToRewrite, arg.UserSessionIssuerID, arg.PreviousResource)
-	var sessions int64
-	err := row.Scan(&sessions)
-	return sessions, err
-}
-
 const deleteAssistantMcpServer = `-- name: DeleteAssistantMcpServer :execrows
 DELETE FROM assistant_mcp_servers
 WHERE id = $1 AND project_id = $2
@@ -204,6 +179,32 @@ func (q *Queries) GetCanonicalWrapper(ctx context.Context, arg GetCanonicalWrapp
 	return i, err
 }
 
+const getDistributionPluginServerFixture = `-- name: GetDistributionPluginServerFixture :one
+SELECT plugin_server_id
+FROM platform_mcp_distributions
+WHERE id = $1
+`
+
+func (q *Queries) GetDistributionPluginServerFixture(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error) {
+	row := q.db.QueryRow(ctx, getDistributionPluginServerFixture, id)
+	var plugin_server_id uuid.NullUUID
+	err := row.Scan(&plugin_server_id)
+	return plugin_server_id, err
+}
+
+const getPluginIDFixture = `-- name: GetPluginIDFixture :one
+SELECT plugin_id
+FROM plugin_servers
+WHERE id = $1
+`
+
+func (q *Queries) GetPluginIDFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPluginIDFixture, id)
+	var plugin_id uuid.UUID
+	err := row.Scan(&plugin_id)
+	return plugin_id, err
+}
+
 const getPluginServerFixture = `-- name: GetPluginServerFixture :one
 SELECT toolset_id, mcp_server_id, deleted
 FROM plugin_servers
@@ -221,6 +222,32 @@ func (q *Queries) GetPluginServerFixture(ctx context.Context, id uuid.UUID) (Get
 	var i GetPluginServerFixtureRow
 	err := row.Scan(&i.ToolsetID, &i.McpServerID, &i.Deleted)
 	return i, err
+}
+
+const getPluginServerForServer = `-- name: GetPluginServerForServer :one
+SELECT ps.id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.plugin_id = $1
+  AND pl.project_id = $2
+  AND ps.mcp_server_id = $3
+  AND ps.deleted IS FALSE
+ORDER BY ps.id
+LIMIT 1
+`
+
+type GetPluginServerForServerParams struct {
+	PluginID    uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.NullUUID
+}
+
+// The plugin's live entry for a server, if it already carries one.
+func (q *Queries) GetPluginServerForServer(ctx context.Context, arg GetPluginServerForServerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPluginServerForServer, arg.PluginID, arg.ProjectID, arg.McpServerID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getRemoteSessionResourceFixture = `-- name: GetRemoteSessionResourceFixture :one
@@ -399,38 +426,42 @@ SELECT
   ), ARRAY[]::text[])::text[] AS remote_issuer_names,
   g.remote_urls,
   g.transport_types,
-  g.declares_headers
+  g.declares_headers,
+  wrapper.network_access_mode AS wrapper_network_access_mode
 FROM grouped AS g
 JOIN live_toolsets AS t ON t.id = g.toolset_id
 JOIN projects AS p ON p.id = t.project_id
 JOIN organization_metadata AS o ON o.id = t.organization_id
 LEFT JOIN user_session_issuers AS usi ON usi.id = t.user_session_issuer_id AND usi.deleted IS FALSE
+LEFT JOIN mcp_servers AS wrapper
+  ON wrapper.id = t.id AND wrapper.toolset_id = t.id AND wrapper.project_id = t.project_id AND wrapper.deleted IS FALSE
 ORDER BY o.name, p.name, t.name, t.id
 `
 
 type ListCandidatesRow struct {
-	ToolsetID              uuid.UUID
-	OrganizationID         string
-	OrganizationName       string
-	OrganizationSlug       string
-	ProjectID              uuid.UUID
-	ProjectName            string
-	ProjectSlug            string
-	ToolsetName            string
-	ToolsetSlug            string
-	McpSlug                pgtype.Text
-	McpEnabled             bool
-	McpIsPublic            bool
-	CustomDomainID         uuid.NullUUID
-	UserSessionIssuerID    uuid.NullUUID
-	ExternalOauthServerID  uuid.NullUUID
-	OauthProxyServerID     uuid.NullUUID
-	DefaultEnvironmentSlug pgtype.Text
-	UserSessionIssuerSlug  pgtype.Text
-	RemoteIssuerNames      []string
-	RemoteUrls             []string
-	TransportTypes         []string
-	DeclaresHeaders        bool
+	ToolsetID                uuid.UUID
+	OrganizationID           string
+	OrganizationName         string
+	OrganizationSlug         string
+	ProjectID                uuid.UUID
+	ProjectName              string
+	ProjectSlug              string
+	ToolsetName              string
+	ToolsetSlug              string
+	McpSlug                  pgtype.Text
+	McpEnabled               bool
+	McpIsPublic              bool
+	CustomDomainID           uuid.NullUUID
+	UserSessionIssuerID      uuid.NullUUID
+	ExternalOauthServerID    uuid.NullUUID
+	OauthProxyServerID       uuid.NullUUID
+	DefaultEnvironmentSlug   pgtype.Text
+	UserSessionIssuerSlug    pgtype.Text
+	RemoteIssuerNames        []string
+	RemoteUrls               []string
+	TransportTypes           []string
+	DeclaresHeaders          bool
+	WrapperNetworkAccessMode pgtype.Text
 }
 
 // Live servers whose latest toolset version references a proxy tool from an
@@ -469,6 +500,46 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.RemoteUrls,
 			&i.TransportTypes,
 			&i.DeclaresHeaders,
+			&i.WrapperNetworkAccessMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCollectionAttachmentsFixture = `-- name: ListCollectionAttachmentsFixture :many
+SELECT id, toolset_id, mcp_server_id, deleted
+FROM organization_mcp_collection_server_attachments
+WHERE collection_id = $1
+ORDER BY id
+`
+
+type ListCollectionAttachmentsFixtureRow struct {
+	ID          uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	Deleted     bool
+}
+
+func (q *Queries) ListCollectionAttachmentsFixture(ctx context.Context, collectionID uuid.UUID) ([]ListCollectionAttachmentsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listCollectionAttachmentsFixture, collectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCollectionAttachmentsFixtureRow
+	for rows.Next() {
+		var i ListCollectionAttachmentsFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -636,6 +707,7 @@ SELECT
   ms.name,
   ms.slug,
   ms.user_session_issuer_id,
+  ms.network_access_mode,
   rms.url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
@@ -650,6 +722,7 @@ type ListRemoteServersOnIssuersRow struct {
 	Name                pgtype.Text
 	Slug                pgtype.Text
 	UserSessionIssuerID uuid.NullUUID
+	NetworkAccessMode   pgtype.Text
 	Url                 string
 }
 
@@ -670,6 +743,7 @@ func (q *Queries) ListRemoteServersOnIssuers(ctx context.Context, userSessionIss
 			&i.Name,
 			&i.Slug,
 			&i.UserSessionIssuerID,
+			&i.NetworkAccessMode,
 			&i.Url,
 		); err != nil {
 			return nil, err
@@ -686,20 +760,22 @@ const listRemoteURLsOnIssuer = `-- name: ListRemoteURLsOnIssuer :many
 SELECT DISTINCT rms.url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
+JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = $1
 WHERE ms.deleted IS FALSE
-  AND ms.user_session_issuer_id = $1
-  AND ms.id <> $2
+  AND ms.user_session_issuer_id = $2
+  AND ms.id <> $3
 `
 
 type ListRemoteURLsOnIssuerParams struct {
+	OrganizationID      string
 	UserSessionIssuerID uuid.NullUUID
 	ExcludedMcpServerID uuid.UUID
 }
 
 // Upstream URLs of the live remote servers signed in through an issuer,
-// other than the one being migrated onto.
+// other than the one being migrated onto, across the issuer's organization.
 func (q *Queries) ListRemoteURLsOnIssuer(ctx context.Context, arg ListRemoteURLsOnIssuerParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listRemoteURLsOnIssuer, arg.UserSessionIssuerID, arg.ExcludedMcpServerID)
+	rows, err := q.db.Query(ctx, listRemoteURLsOnIssuer, arg.OrganizationID, arg.UserSessionIssuerID, arg.ExcludedMcpServerID)
 	if err != nil {
 		return nil, err
 	}
@@ -719,7 +795,7 @@ func (q *Queries) ListRemoteURLsOnIssuer(ctx context.Context, arg ListRemoteURLs
 }
 
 const lockTargetServer = `-- name: LockTargetServer :one
-SELECT ms.id, ms.name, ms.slug, ms.user_session_issuer_id, rms.url AS remote_url
+SELECT ms.id, ms.name, ms.slug, ms.user_session_issuer_id, ms.remote_mcp_server_id, ms.network_access_mode, rms.url AS remote_url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
 WHERE ms.id = $1 AND ms.project_id = $2 AND ms.deleted IS FALSE
@@ -736,6 +812,8 @@ type LockTargetServerRow struct {
 	Name                pgtype.Text
 	Slug                pgtype.Text
 	UserSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID   uuid.NullUUID
+	NetworkAccessMode   pgtype.Text
 	RemoteUrl           string
 }
 
@@ -748,6 +826,8 @@ func (q *Queries) LockTargetServer(ctx context.Context, arg LockTargetServerPara
 		&i.Name,
 		&i.Slug,
 		&i.UserSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.NetworkAccessMode,
 		&i.RemoteUrl,
 	)
 	return i, err
@@ -798,31 +878,6 @@ func (q *Queries) MoveAssistantToolsetToServer(ctx context.Context, arg MoveAssi
 	return result.RowsAffected(), nil
 }
 
-const pluginHasServer = `-- name: PluginHasServer :one
-SELECT EXISTS (
-  SELECT 1
-  FROM plugin_servers AS ps
-  JOIN plugins AS pl ON pl.id = ps.plugin_id
-  WHERE ps.plugin_id = $1
-    AND pl.project_id = $2
-    AND ps.mcp_server_id = $3
-    AND ps.deleted IS FALSE
-) AS present
-`
-
-type PluginHasServerParams struct {
-	PluginID    uuid.UUID
-	ProjectID   uuid.UUID
-	McpServerID uuid.NullUUID
-}
-
-func (q *Queries) PluginHasServer(ctx context.Context, arg PluginHasServerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, pluginHasServer, arg.PluginID, arg.ProjectID, arg.McpServerID)
-	var present bool
-	err := row.Scan(&present)
-	return present, err
-}
-
 const rekeyCollectionAttachments = `-- name: RekeyCollectionAttachments :execrows
 UPDATE organization_mcp_collection_server_attachments AS a
 SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
@@ -846,8 +901,8 @@ type RekeyCollectionAttachmentsParams struct {
 	BackendID      uuid.NullUUID
 }
 
-// Moves organization collection attachments to the new server unless the
-// collection already carries it.
+// Moves the old server's remaining collection attachments to the new server,
+// after RemoveDuplicateCollectionAttachments left at most one per collection.
 func (q *Queries) RekeyCollectionAttachments(ctx context.Context, arg RekeyCollectionAttachmentsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, rekeyCollectionAttachments, arg.McpServerID, arg.OrganizationID, arg.BackendID)
 	if err != nil {
@@ -901,6 +956,54 @@ func (q *Queries) RekeyPluginServer(ctx context.Context, arg RekeyPluginServerPa
 	return result.RowsAffected(), nil
 }
 
+const removeDuplicateCollectionAttachments = `-- name: RemoveDuplicateCollectionAttachments :execrows
+UPDATE organization_mcp_collection_server_attachments AS a
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM organization_mcp_collections AS c
+WHERE c.id = a.collection_id
+  AND c.organization_id = $1
+  AND a.deleted IS FALSE
+  AND (a.toolset_id = $2 OR a.mcp_server_id = $2)
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM organization_mcp_collection_server_attachments AS existing
+      WHERE existing.collection_id = a.collection_id
+        AND existing.mcp_server_id = $3
+        AND existing.deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM organization_mcp_collection_server_attachments AS twin
+      WHERE twin.collection_id = a.collection_id
+        AND twin.id <> a.id
+        AND twin.deleted IS FALSE
+        AND (twin.toolset_id = $2 OR twin.mcp_server_id = $2)
+        AND (
+          (twin.mcp_server_id IS NOT NULL AND a.mcp_server_id IS NULL)
+          OR ((twin.mcp_server_id IS NULL) = (a.mcp_server_id IS NULL) AND twin.id < a.id)
+        )
+    )
+  )
+`
+
+type RemoveDuplicateCollectionAttachmentsParams struct {
+	OrganizationID string
+	BackendID      uuid.NullUUID
+	McpServerID    uuid.NullUUID
+}
+
+// Removes the old server's collection attachments that cannot move: those in
+// a collection that already carries the new server, and all but one of a
+// collection's twins, keeping the wrapper-keyed one, then the oldest.
+func (q *Queries) RemoveDuplicateCollectionAttachments(ctx context.Context, arg RemoveDuplicateCollectionAttachmentsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeDuplicateCollectionAttachments, arg.OrganizationID, arg.BackendID, arg.McpServerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const repointAssistantMcpServer = `-- name: RepointAssistantMcpServer :execrows
 UPDATE assistant_mcp_servers
 SET mcp_server_id = $1, updated_at = clock_timestamp()
@@ -915,6 +1018,29 @@ type RepointAssistantMcpServerParams struct {
 
 func (q *Queries) RepointAssistantMcpServer(ctx context.Context, arg RepointAssistantMcpServerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, repointAssistantMcpServer, arg.McpServerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const repointDistributionsToPluginServer = `-- name: RepointDistributionsToPluginServer :execrows
+UPDATE platform_mcp_distributions
+SET plugin_server_id = $1, version = version + 1, updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND plugin_server_id = $3
+`
+
+type RepointDistributionsToPluginServerParams struct {
+	RetainedPluginServerID uuid.NullUUID
+	ProjectID              uuid.UUID
+	RemovedPluginServerID  uuid.NullUUID
+}
+
+// Moves Platform MCP distributions off a plugin entry being removed onto the
+// entry the plugin keeps, which sits in the same plugin.
+func (q *Queries) RepointDistributionsToPluginServer(ctx context.Context, arg RepointDistributionsToPluginServerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, repointDistributionsToPluginServer, arg.RetainedPluginServerID, arg.ProjectID, arg.RemovedPluginServerID)
 	if err != nil {
 		return 0, err
 	}
@@ -986,6 +1112,12 @@ SET resource = $1
 WHERE rs.user_session_issuer_id = $2
   AND rs.deleted IS FALSE
   AND (rs.resource IS NULL OR rs.resource = '' OR rtrim(rs.resource, '/') = rtrim($3::text, '/'))
+  AND rs.user_session_issuer_id IN (
+    SELECT usi.id
+    FROM user_session_issuers AS usi
+    WHERE usi.id = $2
+      AND (usi.organization_id = $4::text OR usi.project_id IN (SELECT p.id FROM projects AS p WHERE p.organization_id = $4::text))
+  )
   AND rs.remote_session_client_id IN (
     SELECT link.remote_session_client_id
     FROM remote_session_client_user_session_issuers AS link
@@ -997,16 +1129,59 @@ type RewriteRemoteSessionResourcesParams struct {
 	Resource            pgtype.Text
 	UserSessionIssuerID uuid.UUID
 	PreviousResource    string
+	OrganizationID      string
 }
 
 // Stamps the new upstream URL on the issuer's sessions that recorded no
 // resource or the old one, the same stamp a refresh would apply.
 func (q *Queries) RewriteRemoteSessionResources(ctx context.Context, arg RewriteRemoteSessionResourcesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rewriteRemoteSessionResources, arg.Resource, arg.UserSessionIssuerID, arg.PreviousResource)
+	result, err := q.db.Exec(ctx, rewriteRemoteSessionResources,
+		arg.Resource,
+		arg.UserSessionIssuerID,
+		arg.PreviousResource,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const seedCollectionAttachmentFixture = `-- name: SeedCollectionAttachmentFixture :one
+INSERT INTO organization_mcp_collection_server_attachments (collection_id, toolset_id, mcp_server_id)
+VALUES ($1, $2, $3)
+RETURNING id
+`
+
+type SeedCollectionAttachmentFixtureParams struct {
+	CollectionID uuid.UUID
+	ToolsetID    uuid.NullUUID
+	McpServerID  uuid.NullUUID
+}
+
+func (q *Queries) SeedCollectionAttachmentFixture(ctx context.Context, arg SeedCollectionAttachmentFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedCollectionAttachmentFixture, arg.CollectionID, arg.ToolsetID, arg.McpServerID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedCollectionFixture = `-- name: SeedCollectionFixture :one
+INSERT INTO organization_mcp_collections (organization_id, name, slug, visibility)
+VALUES ($1, $2, $2, 'private')
+RETURNING id
+`
+
+type SeedCollectionFixtureParams struct {
+	OrganizationID string
+	Slug           string
+}
+
+func (q *Queries) SeedCollectionFixture(ctx context.Context, arg SeedCollectionFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedCollectionFixture, arg.OrganizationID, arg.Slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const seedCompletedDeploymentFixture = `-- name: SeedCompletedDeploymentFixture :one
@@ -1032,6 +1207,43 @@ type SeedCompletedDeploymentFixtureParams struct {
 // TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
 func (q *Queries) SeedCompletedDeploymentFixture(ctx context.Context, arg SeedCompletedDeploymentFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedCompletedDeploymentFixture, arg.ProjectID, arg.OrganizationID, arg.IdempotencyKey)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedDistributionFixture = `-- name: SeedDistributionFixture :one
+WITH registration AS (
+  INSERT INTO platform_mcp_catalog_registrations (organization_id, project_id, source_kind, catalog_provider, catalog_reference)
+  VALUES ($1, $2, 'remote', 'fixture', $5)
+  RETURNING id
+)
+INSERT INTO platform_mcp_distributions (
+  organization_id, project_id, registration_id, default_plugin_id, plugin_id, plugin_server_id,
+  state, version, attachment_was_created, user_id, acting_surface
+)
+SELECT $1, $2, registration.id, $3, $3, $4,
+  'active', 1, FALSE, 'fixture-user', 'dashboard'
+FROM registration
+RETURNING id
+`
+
+type SeedDistributionFixtureParams struct {
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	PluginID         uuid.UUID
+	PluginServerID   uuid.NullUUID
+	CatalogReference string
+}
+
+func (q *Queries) SeedDistributionFixture(ctx context.Context, arg SeedDistributionFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedDistributionFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.PluginID,
+		arg.PluginServerID,
+		arg.CatalogReference,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -1091,6 +1303,31 @@ func (q *Queries) SeedPluginServerFixture(ctx context.Context, arg SeedPluginSer
 		arg.ToolsetID,
 		arg.Name,
 		arg.OrganizationID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedPluginServerForServerFixture = `-- name: SeedPluginServerForServerFixture :one
+INSERT INTO plugin_servers (plugin_id, project_id, mcp_server_id, display_name)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type SeedPluginServerForServerFixtureParams struct {
+	PluginID    uuid.UUID
+	ProjectID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+}
+
+func (q *Queries) SeedPluginServerForServerFixture(ctx context.Context, arg SeedPluginServerForServerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedPluginServerForServerFixture,
+		arg.PluginID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.DisplayName,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -1181,6 +1418,22 @@ func (q *Queries) ServerHasMetadata(ctx context.Context, arg ServerHasMetadataPa
 	var present bool
 	err := row.Scan(&present)
 	return present, err
+}
+
+const setNetworkAccessModeFixture = `-- name: SetNetworkAccessModeFixture :exec
+UPDATE mcp_servers
+SET network_access_mode = $1
+WHERE id = $2
+`
+
+type SetNetworkAccessModeFixtureParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+}
+
+func (q *Queries) SetNetworkAccessModeFixture(ctx context.Context, arg SetNetworkAccessModeFixtureParams) error {
+	_, err := q.db.Exec(ctx, setNetworkAccessModeFixture, arg.NetworkAccessMode, arg.ID)
+	return err
 }
 
 const softDeletePluginServer = `-- name: SoftDeletePluginServer :execrows

@@ -1,6 +1,8 @@
 package migration_test
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -126,21 +128,7 @@ func TestRunMergesIntoExistingServerOnTheSameIssuer(t *testing.T) {
 	ctx, ti := newTestMigrator(t)
 	server := seedServer(t, ctx, ti, serverOptions{slug: "merged", remoteURL: "https://mcp.example.com/mcp", headers: nil, noIssuer: false, noWrapper: false})
 
-	tx := testenv.BeginTx(t, ctx, ti.conn)
-	remote, err := remotemcp.CreateRemoteMCPSourceInTransaction(ctx, tx, audit.NewLogger(), remotemcp.RemoteMCPSourceTransactionInput{
-		OrganizationID: ti.organizationID, ProjectID: ti.projectID, ActorUserID: "seed", ActorEmail: nil,
-		Name: new("Existing"), URL: "https://mcp.example.com/mcp", TransportType: "streamable-http",
-	})
-	require.NoError(t, err)
-	existing, err := mcpservers.CreateProjectMCPServerInTransaction(ctx, tx, audit.NewLogger(), mcpservers.MCPServerTransactionInput{
-		OrganizationID: ti.organizationID, ProjectID: ti.projectID, ActorUserID: "seed", ActorEmail: nil,
-		Name: "Existing", Visibility: mcpservers.VisibilityPrivate, NetworkAccessMode: networkaccess.ModePublicOnly,
-		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: conv.ToNullUUID(server.issuerID),
-		RemoteMCPServerID: conv.ToNullUUID(remote.ID), TunneledMCPServerID: uuid.NullUUID{}, ToolsetID: uuid.NullUUID{},
-		UnproxiedMCPServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
-	})
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
+	existing, remoteID := seedRemoteServer(t, ctx, ti, server.issuerID)
 
 	candidates, err := ti.migrator.ListCandidates(ctx)
 	require.NoError(t, err)
@@ -152,6 +140,7 @@ func TestRunMergesIntoExistingServerOnTheSameIssuer(t *testing.T) {
 	require.Equal(t, migration.StatusMigrated, outcomes[0].Status, outcomes[0].Reason)
 	require.True(t, outcomes[0].MergedIntoExisting)
 	require.Equal(t, existing.ID, outcomes[0].McpServerID)
+	require.Equal(t, remoteID, outcomes[0].RemoteMcpServerID)
 
 	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: ti.projectID, McpServerID: existing.ID})
 	require.NoError(t, err)
@@ -230,4 +219,152 @@ func TestRunStopsAtFirstFailure(t *testing.T) {
 
 	_, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: ready.toolset.ID, ProjectID: ti.projectID})
 	require.NoError(t, err)
+}
+
+func TestRunRefusesMergeIntoPrivateTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMigrator(t)
+	server := seedServer(t, ctx, ti, serverOptions{slug: "private-target", remoteURL: "https://mcp.example.com/mcp", headers: nil, noIssuer: false, noWrapper: false})
+	existing, _ := seedRemoteServer(t, ctx, ti, server.issuerID)
+	require.NoError(t, repo.New(ti.conn).SetNetworkAccessModeFixture(ctx, repo.SetNetworkAccessModeFixtureParams{
+		NetworkAccessMode: conv.ToPGText(string(networkaccess.ModePrivateOnly)), ID: existing.ID,
+	}))
+
+	candidates, err := ti.migrator.ListCandidates(ctx)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Empty(t, candidates[0].Targets)
+
+	outcomes := ti.migrator.Run(ctx, testActor, []migration.Request{{ToolsetID: server.toolset.ID, TargetMcpServerID: conv.ToNullUUID(existing.ID)}}, false)
+	require.Equal(t, migration.StatusFailed, outcomes[0].Status)
+	require.Contains(t, outcomes[0].Reason, "public-only")
+}
+
+func TestListCandidatesBlocksPrivateWrapper(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMigrator(t)
+	server := seedServer(t, ctx, ti, serverOptions{slug: "private-wrapper", remoteURL: "https://mcp.example.com/mcp", headers: nil, noIssuer: false, noWrapper: false})
+	require.NoError(t, repo.New(ti.conn).SetNetworkAccessModeFixture(ctx, repo.SetNetworkAccessModeFixtureParams{
+		NetworkAccessMode: conv.ToPGText(string(networkaccess.ModePrivateOnly)), ID: server.toolset.ID,
+	}))
+
+	candidates, err := ti.migrator.ListCandidates(ctx)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Contains(t, strings.Join(candidates[0].Blockers, "; "), "private network")
+}
+
+func TestListCandidatesBlocksInvalidURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMigrator(t)
+	seedServer(t, ctx, ti, serverOptions{slug: "hostless", remoteURL: "https:///mcp", headers: nil, noIssuer: false, noWrapper: false})
+
+	candidates, err := ti.migrator.ListCandidates(ctx)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Contains(t, candidates[0].Blockers, migration.ErrInvalidURL.Error())
+}
+
+func TestRunDeduplicatesCollectionAttachments(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMigrator(t)
+	server := seedServer(t, ctx, ti, serverOptions{slug: "collections", remoteURL: "https://mcp.example.com/mcp", headers: nil, noIssuer: false, noWrapper: false})
+	existing, _ := seedRemoteServer(t, ctx, ti, server.issuerID)
+	queries := repo.New(ti.conn)
+
+	// One collection holds both the toolset-keyed and the wrapper-keyed
+	// attachment; another already carries the merge target.
+	twins, err := queries.SeedCollectionFixture(ctx, repo.SeedCollectionFixtureParams{OrganizationID: ti.organizationID, Slug: "twins"})
+	require.NoError(t, err)
+	carrying, err := queries.SeedCollectionFixture(ctx, repo.SeedCollectionFixtureParams{OrganizationID: ti.organizationID, Slug: "carrying"})
+	require.NoError(t, err)
+	for _, seed := range []repo.SeedCollectionAttachmentFixtureParams{
+		{CollectionID: twins, ToolsetID: conv.ToNullUUID(server.toolset.ID), McpServerID: uuid.NullUUID{}},
+		{CollectionID: twins, ToolsetID: uuid.NullUUID{}, McpServerID: conv.ToNullUUID(server.toolset.ID)},
+		{CollectionID: carrying, ToolsetID: conv.ToNullUUID(server.toolset.ID), McpServerID: uuid.NullUUID{}},
+		{CollectionID: carrying, ToolsetID: uuid.NullUUID{}, McpServerID: conv.ToNullUUID(existing.ID)},
+	} {
+		_, err := queries.SeedCollectionAttachmentFixture(ctx, seed)
+		require.NoError(t, err)
+	}
+
+	outcomes := ti.migrator.Run(ctx, testActor, []migration.Request{{ToolsetID: server.toolset.ID, TargetMcpServerID: conv.ToNullUUID(existing.ID)}}, false)
+	require.Equal(t, migration.StatusMigrated, outcomes[0].Status, outcomes[0].Reason)
+
+	for _, collectionID := range []uuid.UUID{twins, carrying} {
+		attachments, err := queries.ListCollectionAttachmentsFixture(ctx, collectionID)
+		require.NoError(t, err)
+		live := make([]repo.ListCollectionAttachmentsFixtureRow, 0, len(attachments))
+		for _, attachment := range attachments {
+			if !attachment.Deleted {
+				live = append(live, attachment)
+			}
+		}
+		require.Len(t, live, 1)
+		require.Equal(t, conv.ToNullUUID(existing.ID), live[0].McpServerID)
+	}
+}
+
+func TestRunMovesDistributionOffRemovedPluginEntry(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMigrator(t)
+	server := seedServer(t, ctx, ti, serverOptions{slug: "distributed", remoteURL: "https://mcp.example.com/mcp", headers: nil, noIssuer: false, noWrapper: false})
+	existing, _ := seedRemoteServer(t, ctx, ti, server.issuerID)
+	queries := repo.New(ti.conn)
+
+	// The plugin already carries the merge target, so the old server's
+	// distributed entry is removed and its distribution must follow.
+	oldEntry, err := queries.SeedPluginServerFixture(ctx, repo.SeedPluginServerFixtureParams{
+		ProjectID: conv.ToNullUUID(ti.projectID), ToolsetID: conv.ToNullUUID(server.toolset.ID), Name: "support-tools", OrganizationID: ti.organizationID,
+	})
+	require.NoError(t, err)
+	pluginID, err := queries.GetPluginIDFixture(ctx, oldEntry)
+	require.NoError(t, err)
+	keptEntry, err := queries.SeedPluginServerForServerFixture(ctx, repo.SeedPluginServerForServerFixtureParams{
+		PluginID: pluginID, ProjectID: conv.ToNullUUID(ti.projectID), McpServerID: conv.ToNullUUID(existing.ID), DisplayName: "Existing",
+	})
+	require.NoError(t, err)
+	distributionID, err := queries.SeedDistributionFixture(ctx, repo.SeedDistributionFixtureParams{
+		OrganizationID: ti.organizationID, ProjectID: ti.projectID, PluginID: pluginID,
+		PluginServerID: conv.ToNullUUID(oldEntry), CatalogReference: "distributed",
+	})
+	require.NoError(t, err)
+
+	outcomes := ti.migrator.Run(ctx, testActor, []migration.Request{{ToolsetID: server.toolset.ID, TargetMcpServerID: conv.ToNullUUID(existing.ID)}}, false)
+	require.Equal(t, migration.StatusMigrated, outcomes[0].Status, outcomes[0].Reason)
+
+	removed, err := queries.GetPluginServerFixture(ctx, oldEntry)
+	require.NoError(t, err)
+	require.True(t, removed.Deleted)
+	pluginServerID, err := queries.GetDistributionPluginServerFixture(ctx, distributionID)
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(keptEntry), pluginServerID)
+}
+
+// seedRemoteServer creates a public-only remote-backed server on the issuer,
+// returning it and its remote source id.
+func seedRemoteServer(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID) (mcpserversrepo.McpServer, uuid.UUID) {
+	t.Helper()
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	remote, err := remotemcp.CreateRemoteMCPSourceInTransaction(ctx, tx, audit.NewLogger(), remotemcp.RemoteMCPSourceTransactionInput{
+		OrganizationID: ti.organizationID, ProjectID: ti.projectID, ActorUserID: "seed", ActorEmail: nil,
+		Name: new("Existing"), URL: "https://mcp.example.com/mcp", TransportType: "streamable-http",
+	})
+	require.NoError(t, err)
+	existing, err := mcpservers.CreateProjectMCPServerInTransaction(ctx, tx, audit.NewLogger(), mcpservers.MCPServerTransactionInput{
+		OrganizationID: ti.organizationID, ProjectID: ti.projectID, ActorUserID: "seed", ActorEmail: nil,
+		Name: "Existing", Visibility: mcpservers.VisibilityPrivate, NetworkAccessMode: networkaccess.ModePublicOnly,
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: conv.ToNullUUID(issuerID),
+		RemoteMCPServerID: conv.ToNullUUID(remote.ID), TunneledMCPServerID: uuid.NullUUID{}, ToolsetID: uuid.NullUUID{},
+		UnproxiedMCPServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	return existing, remote.ID
 }

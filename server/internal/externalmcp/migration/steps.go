@@ -109,12 +109,8 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	case err != nil:
 		return outcome, fmt.Errorf("lock canonical wrapper: %w", err)
 	default:
-		mode, err := networkaccess.Effective(wrapper.NetworkAccessMode)
-		if err != nil {
-			return outcome, fmt.Errorf("read wrapper network access: %w", err)
-		}
-		if !mode.IsPublicOnly() {
-			return outcome, fail("uses private network access, which the migration does not carry over")
+		if !publicOnly(wrapper.NetworkAccessMode) {
+			return outcome, fail("%s", blockerPrivateNetwork)
 		}
 	}
 
@@ -154,7 +150,7 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, organizationID, projectID, []uuid.UUID{issuerID}); err != nil {
 		return outcome, fmt.Errorf("resync remote session issuer: %w", err)
 	}
-	if err := rewriteSessionResources(ctx, tx, issuerID, target, candidate.RemoteURL, &outcome); err != nil {
+	if err := rewriteSessionResources(ctx, tx, organizationID, issuerID, target, candidate.RemoteURL, &outcome); err != nil {
 		return outcome, err
 	}
 
@@ -209,7 +205,10 @@ func (m *Migrator) resolveReplacement(ctx context.Context, tx pgx.Tx, actor Acto
 		if existing.UserSessionIssuerID != issuerID {
 			return replacement{}, fail("the selected server signs in through a different provider")
 		}
-		return replacement{id: existing.ID, remoteID: uuid.Nil, url: existing.RemoteUrl, merged: true}, nil
+		if !publicOnly(existing.NetworkAccessMode) {
+			return replacement{}, fail("the selected server is not public-only, so the moved address would change who can reach it")
+		}
+		return replacement{id: existing.ID, remoteID: existing.RemoteMcpServerID.UUID, url: existing.RemoteUrl, merged: true}, nil
 	}
 
 	if _, err := proxy.ValidateRemoteMCPURL(ctx, m.policy, candidate.CleanedURL); err != nil {
@@ -327,10 +326,10 @@ func (m *Migrator) moveEndpoints(ctx context.Context, tx pgx.Tx, principal urn.P
 // sessions, so upstream tokens route to it at once instead of after their
 // next refresh. It is skipped when the issuer also fronts a remote server at
 // another URL, where the resource would be ambiguous.
-func rewriteSessionResources(ctx context.Context, tx pgx.Tx, issuerID uuid.UUID, target replacement, previousURL string, outcome *Outcome) error {
+func rewriteSessionResources(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, target replacement, previousURL string, outcome *Outcome) error {
 	queries := repo.New(tx)
 	urls, err := queries.ListRemoteURLsOnIssuer(ctx, repo.ListRemoteURLsOnIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, ExcludedMcpServerID: target.id,
+		OrganizationID: organizationID, UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, ExcludedMcpServerID: target.id,
 	})
 	if err != nil {
 		return fmt.Errorf("list remote URLs on issuer: %w", err)
@@ -342,7 +341,7 @@ func rewriteSessionResources(ctx context.Context, tx pgx.Tx, issuerID uuid.UUID,
 		}
 	}
 	rewritten, err := queries.RewriteRemoteSessionResources(ctx, repo.RewriteRemoteSessionResourcesParams{
-		Resource: conv.ToPGText(target.url), UserSessionIssuerID: issuerID, PreviousResource: previousURL,
+		Resource: conv.ToPGText(target.url), UserSessionIssuerID: issuerID, PreviousResource: previousURL, OrganizationID: organizationID,
 	})
 	if err != nil {
 		return fmt.Errorf("rewrite remote session resources: %w", err)

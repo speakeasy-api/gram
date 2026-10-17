@@ -13,10 +13,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 )
 
 // Candidate is a live server backed by an external MCP attachment.
@@ -35,8 +36,9 @@ type Candidate struct {
 	// Blockers explain why the server cannot be migrated; empty when it can.
 	Blockers []string
 
-	// Targets are existing remote-backed servers in the same project that use
-	// the same user session issuer, which the migration may merge into.
+	// Targets are existing public-only remote-backed servers in the same
+	// project that use the same user session issuer, which the migration may
+	// merge into.
 	Targets []Target
 
 	// ToolCalls counts the server's tool calls over the reporting window; nil
@@ -66,6 +68,7 @@ const (
 	blockerHeaders        = "declares upstream headers, which have no stored values to copy"
 	blockerManyURLs       = "proxies more than one upstream URL"
 	blockerManyTransports = "proxies upstreams over more than one transport"
+	blockerPrivateNetwork = "uses private network access, which the migration does not carry over"
 )
 
 // ListCandidates returns every live external-MCP-backed server across all
@@ -116,7 +119,9 @@ func buildCandidates(ctx context.Context, db repo.DBTX, rows []repo.ListCandidat
 		candidate := assess(row)
 		if row.UserSessionIssuerID.Valid {
 			for _, server := range targets[row.UserSessionIssuerID.UUID] {
-				if server.ProjectID != row.ProjectID {
+				// A merge moves the address onto the target, so only a
+				// public-only target keeps it reachable the same way.
+				if server.ProjectID != row.ProjectID || !publicOnly(server.NetworkAccessMode) {
 					continue
 				}
 				candidate.Targets = append(candidate.Targets, Target{
@@ -147,6 +152,9 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if row.DeclaresHeaders {
 		candidate.Blockers = append(candidate.Blockers, blockerHeaders)
 	}
+	if !publicOnly(row.WrapperNetworkAccessMode) {
+		candidate.Blockers = append(candidate.Blockers, blockerPrivateNetwork)
+	}
 	if len(row.TransportTypes) != 1 || !supportedTransport(row.TransportTypes[0]) {
 		candidate.Blockers = append(candidate.Blockers, blockerManyTransports)
 	}
@@ -162,6 +170,13 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	}
 	candidate.CleanedURL = cleaned
 	return candidate
+}
+
+// publicOnly reports whether a stored network access mode serves only public
+// traffic. An unreadable mode counts as not public-only, so it blocks.
+func publicOnly(stored pgtype.Text) bool {
+	mode, err := networkaccess.Effective(stored)
+	return err == nil && mode.IsPublicOnly()
 }
 
 func supportedTransport(transport string) bool {

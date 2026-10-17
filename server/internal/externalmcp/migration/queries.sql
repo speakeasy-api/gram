@@ -102,12 +102,15 @@ SELECT
   ), ARRAY[]::text[])::text[] AS remote_issuer_names,
   g.remote_urls,
   g.transport_types,
-  g.declares_headers
+  g.declares_headers,
+  wrapper.network_access_mode AS wrapper_network_access_mode
 FROM grouped AS g
 JOIN live_toolsets AS t ON t.id = g.toolset_id
 JOIN projects AS p ON p.id = t.project_id
 JOIN organization_metadata AS o ON o.id = t.organization_id
 LEFT JOIN user_session_issuers AS usi ON usi.id = t.user_session_issuer_id AND usi.deleted IS FALSE
+LEFT JOIN mcp_servers AS wrapper
+  ON wrapper.id = t.id AND wrapper.toolset_id = t.id AND wrapper.project_id = t.project_id AND wrapper.deleted IS FALSE
 ORDER BY o.name, p.name, t.name, t.id;
 
 -- name: ListRemoteServersOnIssuers :many
@@ -119,6 +122,7 @@ SELECT
   ms.name,
   ms.slug,
   ms.user_session_issuer_id,
+  ms.network_access_mode,
   rms.url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
@@ -134,7 +138,7 @@ FOR UPDATE;
 
 -- name: LockTargetServer :one
 -- The existing remote-backed server a migration merges into.
-SELECT ms.id, ms.name, ms.slug, ms.user_session_issuer_id, rms.url AS remote_url
+SELECT ms.id, ms.name, ms.slug, ms.user_session_issuer_id, ms.remote_mcp_server_id, ms.network_access_mode, rms.url AS remote_url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
 WHERE ms.id = @id AND ms.project_id = @project_id AND ms.deleted IS FALSE
@@ -148,10 +152,11 @@ FOR UPDATE;
 
 -- name: ListRemoteURLsOnIssuer :many
 -- Upstream URLs of the live remote servers signed in through an issuer,
--- other than the one being migrated onto.
+-- other than the one being migrated onto, across the issuer's organization.
 SELECT DISTINCT rms.url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
+JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = @organization_id
 WHERE ms.deleted IS FALSE
   AND ms.user_session_issuer_id = @user_session_issuer_id
   AND ms.id <> @excluded_mcp_server_id;
@@ -182,16 +187,25 @@ WHERE pl.project_id = @project_id
 ORDER BY ps.plugin_id, ps.id
 FOR UPDATE OF ps;
 
--- name: PluginHasServer :one
-SELECT EXISTS (
-  SELECT 1
-  FROM plugin_servers AS ps
-  JOIN plugins AS pl ON pl.id = ps.plugin_id
-  WHERE ps.plugin_id = @plugin_id
-    AND pl.project_id = @project_id
-    AND ps.mcp_server_id = @mcp_server_id
-    AND ps.deleted IS FALSE
-) AS present;
+-- name: GetPluginServerForServer :one
+-- The plugin's live entry for a server, if it already carries one.
+SELECT ps.id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.plugin_id = @plugin_id
+  AND pl.project_id = @project_id
+  AND ps.mcp_server_id = @mcp_server_id
+  AND ps.deleted IS FALSE
+ORDER BY ps.id
+LIMIT 1;
+
+-- name: RepointDistributionsToPluginServer :execrows
+-- Moves Platform MCP distributions off a plugin entry being removed onto the
+-- entry the plugin keeps, which sits in the same plugin.
+UPDATE platform_mcp_distributions
+SET plugin_server_id = @retained_plugin_server_id, version = version + 1, updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND plugin_server_id = @removed_plugin_server_id;
 
 -- name: RekeyPluginServer :execrows
 UPDATE plugin_servers AS ps
@@ -314,9 +328,42 @@ WHERE m.project_id = @project_id
   )
 RETURNING m.id, m.meta_mcp_server_id, meta.name AS meta_mcp_server_name, m.sort_order;
 
+-- name: RemoveDuplicateCollectionAttachments :execrows
+-- Removes the old server's collection attachments that cannot move: those in
+-- a collection that already carries the new server, and all but one of a
+-- collection's twins, keeping the wrapper-keyed one, then the oldest.
+UPDATE organization_mcp_collection_server_attachments AS a
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM organization_mcp_collections AS c
+WHERE c.id = a.collection_id
+  AND c.organization_id = @organization_id
+  AND a.deleted IS FALSE
+  AND (a.toolset_id = @backend_id OR a.mcp_server_id = @backend_id)
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM organization_mcp_collection_server_attachments AS existing
+      WHERE existing.collection_id = a.collection_id
+        AND existing.mcp_server_id = @mcp_server_id
+        AND existing.deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM organization_mcp_collection_server_attachments AS twin
+      WHERE twin.collection_id = a.collection_id
+        AND twin.id <> a.id
+        AND twin.deleted IS FALSE
+        AND (twin.toolset_id = @backend_id OR twin.mcp_server_id = @backend_id)
+        AND (
+          (twin.mcp_server_id IS NOT NULL AND a.mcp_server_id IS NULL)
+          OR ((twin.mcp_server_id IS NULL) = (a.mcp_server_id IS NULL) AND twin.id < a.id)
+        )
+    )
+  );
+
 -- name: RekeyCollectionAttachments :execrows
--- Moves organization collection attachments to the new server unless the
--- collection already carries it.
+-- Moves the old server's remaining collection attachments to the new server,
+-- after RemoveDuplicateCollectionAttachments left at most one per collection.
 UPDATE organization_mcp_collection_server_attachments AS a
 SET toolset_id = NULL, mcp_server_id = @mcp_server_id, updated_at = clock_timestamp()
 FROM organization_mcp_collections AS c
@@ -357,18 +404,12 @@ SET resource = @resource
 WHERE rs.user_session_issuer_id = @user_session_issuer_id
   AND rs.deleted IS FALSE
   AND (rs.resource IS NULL OR rs.resource = '' OR rtrim(rs.resource, '/') = rtrim(@previous_resource::text, '/'))
-  AND rs.remote_session_client_id IN (
-    SELECT link.remote_session_client_id
-    FROM remote_session_client_user_session_issuers AS link
-    WHERE link.user_session_issuer_id = @user_session_issuer_id
-  );
-
--- name: CountRemoteSessionsToRewrite :one
-SELECT count(*)::bigint AS sessions
-FROM remote_sessions AS rs
-WHERE rs.user_session_issuer_id = @user_session_issuer_id
-  AND rs.deleted IS FALSE
-  AND (rs.resource IS NULL OR rs.resource = '' OR rtrim(rs.resource, '/') = rtrim(@previous_resource::text, '/'))
+  AND rs.user_session_issuer_id IN (
+    SELECT usi.id
+    FROM user_session_issuers AS usi
+    WHERE usi.id = @user_session_issuer_id
+      AND (usi.organization_id = @organization_id::text OR usi.project_id IN (SELECT p.id FROM projects AS p WHERE p.organization_id = @organization_id::text))
+  )
   AND rs.remote_session_client_id IN (
     SELECT link.remote_session_client_id
     FROM remote_session_client_user_session_issuers AS link
@@ -454,3 +495,54 @@ SELECT (selectors->>'resource_id')::text AS resource_id, scope
 FROM principal_grants
 WHERE organization_id = @organization_id AND scope LIKE 'mcp:%'
 ORDER BY 1, 2;
+
+-- name: SeedPluginServerForServerFixture :one
+INSERT INTO plugin_servers (plugin_id, project_id, mcp_server_id, display_name)
+VALUES (@plugin_id, @project_id, @mcp_server_id, @display_name)
+RETURNING id;
+
+-- name: SeedDistributionFixture :one
+WITH registration AS (
+  INSERT INTO platform_mcp_catalog_registrations (organization_id, project_id, source_kind, catalog_provider, catalog_reference)
+  VALUES (@organization_id, @project_id, 'remote', 'fixture', @catalog_reference)
+  RETURNING id
+)
+INSERT INTO platform_mcp_distributions (
+  organization_id, project_id, registration_id, default_plugin_id, plugin_id, plugin_server_id,
+  state, version, attachment_was_created, user_id, acting_surface
+)
+SELECT @organization_id, @project_id, registration.id, @plugin_id, @plugin_id, @plugin_server_id,
+  'active', 1, FALSE, 'fixture-user', 'dashboard'
+FROM registration
+RETURNING id;
+
+-- name: GetDistributionPluginServerFixture :one
+SELECT plugin_server_id
+FROM platform_mcp_distributions
+WHERE id = @id;
+
+-- name: SeedCollectionFixture :one
+INSERT INTO organization_mcp_collections (organization_id, name, slug, visibility)
+VALUES (@organization_id, @slug, @slug, 'private')
+RETURNING id;
+
+-- name: SeedCollectionAttachmentFixture :one
+INSERT INTO organization_mcp_collection_server_attachments (collection_id, toolset_id, mcp_server_id)
+VALUES (@collection_id, sqlc.narg('toolset_id'), sqlc.narg('mcp_server_id'))
+RETURNING id;
+
+-- name: ListCollectionAttachmentsFixture :many
+SELECT id, toolset_id, mcp_server_id, deleted
+FROM organization_mcp_collection_server_attachments
+WHERE collection_id = @collection_id
+ORDER BY id;
+
+-- name: SetNetworkAccessModeFixture :exec
+UPDATE mcp_servers
+SET network_access_mode = @network_access_mode
+WHERE id = @id;
+
+-- name: GetPluginIDFixture :one
+SELECT plugin_id
+FROM plugin_servers
+WHERE id = @id;
