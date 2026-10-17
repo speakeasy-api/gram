@@ -76,6 +76,13 @@ describe("ToolMetadataDriftPanel per-tool removal", () => {
     expect(
       screen.queryByRole("button", { name: "Remove metadata" }),
     ).toBeNull();
+
+    // Coming back must not reopen it: the confirmation was dropped, not hidden.
+    rerender(panel("srv-1", first));
+
+    expect(
+      screen.queryByRole("button", { name: "Remove metadata" }),
+    ).toBeNull();
     expect(first.remove).not.toHaveBeenCalled();
     expect(second.remove).not.toHaveBeenCalled();
   });

@@ -90,12 +90,16 @@ export function ToolMetadataDriftPanel({
   isSyncing: boolean;
   toolActions?: ToolMetadataActions;
 }): JSX.Element | null {
-  // The confirmation names the server it was opened for, so it never applies
-  // to another server this panel is later reused for.
+  // The confirmation names the server it was opened for and is dropped once
+  // the panel moves to another one, so it never applies there or reopens on
+  // the way back.
   const [removing, setRemoving] = useState<{
     mcpServerId: string | undefined;
     toolName: string;
   } | null>(null);
+  if (removing !== null && removing.mcpServerId !== mcpServerId) {
+    setRemoving(null);
+  }
   if (drift.length === 0) return null;
 
   if (toolActions) {
@@ -130,7 +134,6 @@ export function ToolMetadataDriftPanel({
           ))}
         </ul>
         {removing !== null &&
-        removing.mcpServerId === mcpServerId &&
         drift.some(
           (entry) =>
             entry.kind === "removed" && entry.toolName === removing.toolName,
