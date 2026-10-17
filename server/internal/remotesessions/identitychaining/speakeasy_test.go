@@ -207,6 +207,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	governor := NewGovernor(logger, f.db, f.chainer.enc, nil)
 	governor.SetSpeakeasyIssuer(gate, signer, flags)
 	governor.SetResourceResolver(challenges.ResolveEMAResource)
+	governor.SetCachedResourceResolver(challenges.CachedEMAResource)
 	served, ready := governor.Serves(ctx, f.req)
 	require.True(t, ready)
 	require.Equal(t, remoteID, served)
@@ -230,8 +231,11 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	wrongConsent.UserID = "another-user"
 	require.Equal(t, ReasonReauthenticationRequired, chainer.CheckConsent(ctx, wrongConsent, signIn.ID.UUID).Reason)
 	require.Equal(t, ReasonReauthenticationRequired, chainer.CheckConsent(ctx, preGrant, uuid.Nil).Reason)
+	require.Equal(t, RefreshReauthenticate, governor.RefreshDecision(ctx, f.req).Decision, "no grant carries the session id yet")
 	_, err = usersessionsrepo.New(f.db).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{UserSessionIssuerID: f.req.UserSessionIssuerID, SubjectUrn: urn.NewUserSubject(f.req.UserID), Jti: f.req.UserSessionJTI, RefreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), ExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), SignInID: signIn.ID, SignInUserID: conv.ToPGText(f.req.UserID)})
 	require.NoError(t, err)
+	require.Equal(t, RefreshVerdict{Decision: RefreshServed, RemoteSessionIssuerID: remoteID, Provider: remotesessions.EMAProviderSpeakeasy, Reason: ReasonSuccess}, governor.RefreshDecision(ctx, f.req), "a live grant with an eligible sign-in chains without a new sign-in, judged from cached discovery")
+	require.Equal(t, RefreshReauthenticate, governor.RefreshDecision(ctx, preGrant).Decision, "without the grant's session id the human must sign in again")
 	token, outcome := chainer.Acquire(ctx, f.req)
 	checkExchange()
 	require.True(t, outcome.Succeeded(), "%+v", outcome)
@@ -335,6 +339,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	wrong.UserID = otherUser
 	_, outcome = chainer.Acquire(ctx, wrong)
 	require.Equal(t, ReasonReauthenticationRequired, outcome.Reason)
+	require.Equal(t, RefreshReauthenticate, governor.RefreshDecision(ctx, wrong).Decision, "another member's request never borrows this grant")
 	wrong = f.req
 	wrong.ProjectID = uuid.New()
 	require.False(t, chainer.HasUsableCredential(ctx, wrong))
@@ -358,5 +363,6 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.False(t, chainer.HasUsableCredential(ctx, preGrant), "status cannot revive a revoked retained grant")
 	require.EqualValues(t, 4, calls.Load())
 	require.Equal(t, ReasonReauthenticationRequired, chainer.CheckConsent(ctx, preGrant, signIn.ID.UUID).Reason, "revoked consent is not eligible")
+	require.Equal(t, RefreshReauthenticate, governor.RefreshDecision(ctx, f.req).Decision, "a revoked sign-in needs a fresh sign-in before refresh skips reconnect")
 
 }
