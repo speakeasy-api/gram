@@ -109,51 +109,18 @@ func TestTriggerToolsetIndexAsksWhetherAnIndexIsNeededBeforeWhetherItCanSchedule
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 
-	// Never dialed: every case below returns before the pool is used. It only
-	// has to be non-nil to clear the argument guard.
+	// Never dialed: an empty version returns before the pool is used. It only
+	// has to be non-nil to clear the argument guard. A version with tools is
+	// checked against the database, so its cases need a real one.
 	cfg, err := pgxpool.ParseConfig("postgres://unused:unused@127.0.0.1:1/unused")
 	require.NoError(t, err)
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
-	enabled, disabled := true, false
-	toolset := func(mcpEnabled *bool, tools []*types.Tool) *types.Toolset {
-		return &types.Toolset{ID: uuid.NewString(), ProjectID: uuid.NewString(), McpEnabled: mcpEnabled, Tools: tools}
-	}
-	oneTool := []*types.Tool{{}}
-
-	tests := []struct {
-		name    string
-		toolset *types.Toolset
-		want    error
-		why     string
-	}{
-		{
-			name:    "mcp-enabled toolset with no tools needs no index",
-			toolset: toolset(&enabled, nil),
-			want:    ErrToolsetIndexNotRequired,
-			why:     "dynamic mode serves an empty version without an index, so nothing was lost by not scheduling",
-		},
-		{
-			name:    "toolset that is not mcp-enabled needs no index",
-			toolset: toolset(&disabled, oneTool),
-			want:    ErrToolsetIndexNotRequired,
-			why:     "nothing serves it, so no index is needed regardless of temporal",
-		},
-		{
-			name:    "mcp-enabled toolset with tools genuinely cannot be scheduled",
-			toolset: toolset(&enabled, oneTool),
-			want:    ErrToolsetIndexUnavailable,
-			why:     "this one really does need an index and really cannot get one; the alarm is correct here",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			// temporalEnv is nil throughout: that is the whole point.
-			require.ErrorIs(t, TriggerToolsetIndex(ctx, logger, pool, nil, tt.toolset), tt.want, tt.why)
-		})
-	}
+	enabled := true
+	empty := &types.Toolset{ID: uuid.NewString(), ProjectID: uuid.NewString(), McpEnabled: &enabled, Tools: nil}
+	// temporalEnv is nil: that is the whole point.
+	require.ErrorIs(t, TriggerToolsetIndex(ctx, logger, pool, nil, empty), ErrToolsetIndexNotRequired,
+		"dynamic mode serves an empty version without an index, so nothing was lost by not scheduling")
 }
