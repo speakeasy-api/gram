@@ -123,7 +123,8 @@ message Reading {
     double confidence = 3;
   }
 
-  // UUIDv5 identity of tenant, event kind, immutable event ID, and sensor ID.
+  // UUIDv5 identity of tenant, trigger, manual run when present, event kind,
+  // immutable event ID and sensor ID.
   // Configuration changes between attempts do not change this identity.
   string id = 1;
   // Fresh UUID for a logical event evaluation, shared by its sensor readings.
@@ -199,6 +200,16 @@ message Reading {
     bool truncated = 4;
   }
   Input input = 24;
+
+  // Required evaluation trigger: "stream" or "manual". Immutable across attempts.
+  string trigger_kind = 25;
+  // Nonzero UUID for a manual run. Absent for streaming evaluations.
+  // Request retries reuse the run ID and intentional new runs allocate another.
+  string run_id = 26;
+  // Required immutable UTC RFC3339Nano logical request time for partitioning
+  // and retention. Streaming uses the creation mutation's occurred_at, while
+  // manual evaluations use the accepted run's creation time. Never attempt time.
+  string evaluation_requested_at = 27;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: { seconds: 345600 /* 4 days */ }

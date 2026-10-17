@@ -20,6 +20,7 @@ func testReading(t *testing.T, at time.Time) *sigintv1.Reading {
 	}
 	return sigintv1.Reading_builder{
 		Id: new(uuid.NewString()), EvaluationAttemptId: new(uuid.NewString()),
+		TriggerKind: new("stream"), EvaluationRequestedAt: new(at.Format(time.RFC3339Nano)),
 		OrganizationId: new("org-test-" + uuid.NewString()), ProjectId: new(uuid.NewString()),
 		Event: event, SensorId: new(uuid.NewString()), SensorSlug: new("example-sensor"),
 		EvaluatedAt: new(at.Add(time.Second).Format(time.RFC3339Nano)), DefinitionHash: new("example-definition-v1"),
@@ -39,6 +40,9 @@ func TestParseReadingPreservesAttributionAndOrderedProbabilities(t *testing.T) {
 	row, err := ParseReading(m, at.Add(2*time.Second))
 	require.NoError(t, err)
 	require.Equal(t, at, row.EventOccurredAt)
+	require.Equal(t, "stream", row.TriggerKind)
+	require.Equal(t, uuid.Nil, row.RunID)
+	require.Equal(t, at, row.EvaluationRequestedAt)
 	require.Nil(t, row.Confidence)
 	require.Nil(t, row.ExpectedIndex)
 	require.Nil(t, row.SelectedSignalID)
@@ -52,7 +56,7 @@ func TestParseReadingPreservesAttributionAndOrderedProbabilities(t *testing.T) {
 	require.Equal(t, "engineering", row.Attributes["department"])
 	require.Equal(t, StatusAnswered, row.Status)
 	require.Empty(t, row.FailureReason)
-	require.Empty(t, row.InputStrategy, "readings published before input context remain unrecorded")
+	require.Empty(t, row.InputStrategy, "absent input context remains unrecorded")
 	require.Zero(t, row.InputMessageCount)
 }
 
@@ -82,6 +86,13 @@ func TestParseReadingRejectsMalformedMeasurements(t *testing.T) {
 		}},
 		{name: "it rejects missing result", mutate: func(m *sigintv1.Reading) { m.ClearMultiLabel() }},
 		{name: "it rejects unsupported timestamp", mutate: func(m *sigintv1.Reading) { m.GetEvent().SetOccurredAt("9999-01-01T00:00:00Z") }},
+		{name: "it rejects missing trigger", mutate: func(m *sigintv1.Reading) { m.ClearTriggerKind() }},
+		{name: "it rejects unknown trigger", mutate: func(m *sigintv1.Reading) { m.SetTriggerKind("scheduled") }},
+		{name: "it rejects streaming run", mutate: func(m *sigintv1.Reading) { m.SetRunId(uuid.NewString()) }},
+		{name: "it rejects missing manual run", mutate: func(m *sigintv1.Reading) { m.SetTriggerKind("manual") }},
+		{name: "it rejects zero manual run", mutate: func(m *sigintv1.Reading) { m.SetTriggerKind("manual"); m.SetRunId(uuid.Nil.String()) }},
+		{name: "it rejects missing request time", mutate: func(m *sigintv1.Reading) { m.ClearEvaluationRequestedAt() }},
+		{name: "it rejects invalid request time", mutate: func(m *sigintv1.Reading) { m.SetEvaluationRequestedAt("yesterday") }},
 		{name: "it rejects more supplied than requested messages", mutate: func(m *sigintv1.Reading) {
 			m.SetInput(sigintv1.Reading_Input_builder{Strategy: new("sliding_window"), RequestedMessageCount: new(int32(2)), MessageCount: new(int32(3))}.Build())
 		}},

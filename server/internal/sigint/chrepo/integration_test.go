@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
+	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 )
 
 func TestLandingReplacesCompleteAttemptsByEvaluationTime(t *testing.T) {
@@ -43,7 +44,7 @@ func TestLandingReplacesCompleteAttemptsByEvaluationTime(t *testing.T) {
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT count() OVER (), toUInt64(length(probabilities)), sensor_slug, definition_hash, status,
 			input_message_count, input_truncated, attributes
-		FROM sigint_readings FINAL
+		FROM sigint_readings_v2 FINAL
 		WHERE organization_id = ? AND project_id = ? AND sensor_id = ? AND id = ?
 		LIMIT 1 SETTINGS max_execution_time = 10, max_rows_to_read = 100000
 	`, newRow.OrganizationID, newRow.ProjectID, newRow.SensorID, newRow.ID).Scan(&rows, &length, &slug, &definition, &status, &supplied, &truncated, &labels))
@@ -79,7 +80,7 @@ func TestLandingKeepsAbsentAndZeroConfidenceDistinct(t *testing.T) {
 	var nulls, zeroes uint64
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT countIf(confidence IS NULL), countIf(confidence = 0)
-		FROM sigint_readings FINAL
+		FROM sigint_readings_v2 FINAL
 		WHERE organization_id = ? AND project_id = ? AND sensor_id = ?
 		SETTINGS max_execution_time = 10, max_rows_to_read = 100000
 	`, first.OrganizationID, first.ProjectID, first.SensorID).Scan(&nulls, &zeroes))
@@ -92,7 +93,7 @@ func landedStatus(t *testing.T, queries *Queries, row ReadingRow) (rows uint64, 
 	t.Helper()
 	require.NoError(t, queries.conn.QueryRow(t.Context(), `
 		SELECT count() OVER (), status, failure_reason, result_type, toUInt64(length(probabilities))
-		FROM sigint_readings FINAL
+		FROM sigint_readings_v2 FINAL
 		WHERE organization_id = ? AND project_id = ? AND sensor_id = ? AND id = ?
 		LIMIT 1 SETTINGS max_execution_time = 10, max_rows_to_read = 100000
 	`, row.OrganizationID, row.ProjectID, row.SensorID, row.ID).Scan(&rows, &status, &reason, &resultType, &probabilities))
@@ -171,5 +172,65 @@ func TestLandingAcceptsEveryOutcomeStatus(t *testing.T) {
 		landed, status, _, _, _ := landedStatus(t, queries, row)
 		require.Equal(t, uint64(1), landed)
 		require.Equal(t, row.Status, status)
+	}
+}
+
+func TestLandingKeepsManualRunsIndependentOfStreaming(t *testing.T) {
+	t.Parallel()
+	conn := testConnection(t)
+	queries := New(conn)
+	now := time.Now().UTC()
+	base := testReading(t, now.AddDate(-3, 0, 0))
+	runA, runB := uuid.New(), uuid.New()
+	var messages []*sigintv1.Reading
+	var attempts []ReadingRow
+	for _, execution := range []readings.Context{
+		{TriggerKind: readings.TriggerStream, RequestedAt: now.Add(-3 * time.Hour)},
+		{TriggerKind: readings.TriggerManual, RunID: runA, RequestedAt: now.Add(-2 * time.Hour)},
+		{TriggerKind: readings.TriggerManual, RunID: runB, RequestedAt: now.Add(-time.Hour)},
+	} {
+		m := proto.CloneOf(base)
+		m.SetId(execution.ReadingID(m.GetOrganizationId(), m.GetProjectId(), m.GetEvent().GetKind(), m.GetEvent().GetId(), m.GetSensorId()).String())
+		m.SetTriggerKind(string(execution.TriggerKind))
+		m.SetEvaluationRequestedAt(execution.RequestedAt.Format(time.RFC3339Nano))
+		m.SetEvaluatedAt(execution.RequestedAt.Add(time.Second).Format(time.RFC3339Nano))
+		if execution.RunID != uuid.Nil {
+			m.SetRunId(execution.RunID.String())
+		}
+		row, err := ParseReading(m, now)
+		require.NoError(t, err)
+		require.Equal(t, string(execution.TriggerKind), row.TriggerKind)
+		require.Equal(t, execution.RunID, row.RunID)
+		require.Equal(t, execution.RequestedAt, row.EvaluationRequestedAt)
+		messages = append(messages, m)
+		attempts = append(attempts, row)
+	}
+	failure := testOutcome(t, messages[1], now, sigintv1.Outcome_STATUS_FAILED, "classifier_rejected")
+	failed, err := ParseOutcome(failure, now)
+	require.NoError(t, err)
+	require.Equal(t, attempts[1].RunID, failed.RunID)
+	require.Equal(t, attempts[1].EvaluationRequestedAt, failed.EvaluationRequestedAt)
+	// A later manual failure arrives first, followed by duplicate/stale answers.
+	require.NoError(t, queries.InsertReadings(t.Context(), []ReadingRow{failed, failed}))
+	require.NoError(t, queries.InsertReadings(t.Context(), append(attempts, attempts[1])))
+	for i, row := range attempts {
+		rows, status, _, _, _ := landedStatus(t, queries, row)
+		require.Equal(t, uint64(1), rows)
+		if i == 1 {
+			require.Equal(t, StatusFailed, status)
+		} else {
+			require.Equal(t, StatusAnswered, status)
+		}
+		var trigger string
+		var run uuid.UUID
+		var requested time.Time
+		require.NoError(t, conn.QueryRow(t.Context(), `
+			SELECT trigger_kind, run_id, evaluation_requested_at FROM sigint_readings_v2 FINAL
+			WHERE organization_id = ? AND project_id = ? AND trigger_kind = ? AND run_id = ? AND sensor_id = ? AND id = ?
+			LIMIT 1 SETTINGS max_execution_time = 10, max_rows_to_read = 100000
+		`, row.OrganizationID, row.ProjectID, row.TriggerKind, row.RunID, row.SensorID, row.ID).Scan(&trigger, &run, &requested))
+		require.Equal(t, row.TriggerKind, trigger)
+		require.Equal(t, row.RunID, run)
+		require.Equal(t, row.EvaluationRequestedAt, requested)
 	}
 }

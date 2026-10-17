@@ -92,7 +92,8 @@ message Outcome {
     STATUS_FAILED = 3;
   }
 
-  // UUIDv5 identity of tenant, event kind, immutable event ID, and sensor ID.
+  // UUIDv5 identity of tenant, trigger, manual run when present, event kind,
+  // immutable event ID and sensor ID.
   // Equal to the Reading.id of an answered attempt for the same sensor and event.
   string id = 1;
   // Fresh UUID for a logical event evaluation, shared by its readings and outcomes.
@@ -146,6 +147,15 @@ message Outcome {
   // Classifier input supplied for this sensor in this attempt. Absent when the
   // decision came before input was resolved.
   Input input = 24;
+
+  // Required evaluation trigger: "stream" or "manual". Immutable across attempts.
+  string trigger_kind = 25;
+  // Nonzero UUID for a manual run. Absent for streaming evaluations.
+  // Request retries reuse the run ID and intentional new runs allocate another.
+  string run_id = 26;
+  // Required immutable UTC RFC3339Nano logical request time, shared with Reading.
+  // Preserved across attempts so both topics replace rows in the same partition.
+  string evaluation_requested_at = 27;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: { seconds: 345600 /* 4 days */ }

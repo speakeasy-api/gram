@@ -126,34 +126,37 @@ func (x Outcome_ConversationMessage_Role) Number() protoreflect.EnumNumber {
 // Topic schemas are self-contained, so the nested context messages mirror
 // Reading's field for field. Field numbers match Reading where fields correspond.
 type Outcome struct {
-	state                          protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_Id                  *string                `protobuf:"bytes,1,opt,name=id"`
-	xxx_hidden_EvaluationAttemptId *string                `protobuf:"bytes,2,opt,name=evaluation_attempt_id,json=evaluationAttemptId"`
-	xxx_hidden_OrganizationId      *string                `protobuf:"bytes,3,opt,name=organization_id,json=organizationId"`
-	xxx_hidden_ProjectId           *string                `protobuf:"bytes,4,opt,name=project_id,json=projectId"`
-	xxx_hidden_Event               *Outcome_Event         `protobuf:"bytes,5,opt,name=event"`
-	xxx_hidden_SensorId            *string                `protobuf:"bytes,6,opt,name=sensor_id,json=sensorId"`
-	xxx_hidden_SensorSlug          *string                `protobuf:"bytes,7,opt,name=sensor_slug,json=sensorSlug"`
-	xxx_hidden_EvaluatedAt         *string                `protobuf:"bytes,8,opt,name=evaluated_at,json=evaluatedAt"`
-	xxx_hidden_DefinitionHash      *string                `protobuf:"bytes,9,opt,name=definition_hash,json=definitionHash"`
-	xxx_hidden_ConfiguredModel     *string                `protobuf:"bytes,10,opt,name=configured_model,json=configuredModel"`
-	xxx_hidden_Models              []string               `protobuf:"bytes,11,rep,name=models"`
-	xxx_hidden_CompilerVersion     *string                `protobuf:"bytes,12,opt,name=compiler_version,json=compilerVersion"`
-	xxx_hidden_Actor               *Outcome_Actor         `protobuf:"bytes,13,opt,name=actor"`
-	xxx_hidden_BillingUserId       *string                `protobuf:"bytes,14,opt,name=billing_user_id,json=billingUserId"`
-	xxx_hidden_Source              *string                `protobuf:"bytes,15,opt,name=source"`
-	xxx_hidden_Account             *Outcome_Account       `protobuf:"bytes,16,opt,name=account"`
-	xxx_hidden_AssistantId         *string                `protobuf:"bytes,17,opt,name=assistant_id,json=assistantId"`
-	xxx_hidden_Replayed            bool                   `protobuf:"varint,18,opt,name=replayed"`
-	xxx_hidden_Status              Outcome_Status         `protobuf:"varint,19,opt,name=status,enum=gram.sigint.v1.Outcome_Status"`
-	xxx_hidden_FailureReason       *string                `protobuf:"bytes,20,opt,name=failure_reason,json=failureReason"`
-	xxx_hidden_Provider            *string                `protobuf:"bytes,22,opt,name=provider"`
-	xxx_hidden_Attributes          map[string]string      `protobuf:"bytes,23,rep,name=attributes" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	xxx_hidden_Input               *Outcome_Input         `protobuf:"bytes,24,opt,name=input"`
-	XXX_raceDetectHookData         protoimpl.RaceDetectHookData
-	XXX_presence                   [1]uint32
-	unknownFields                  protoimpl.UnknownFields
-	sizeCache                      protoimpl.SizeCache
+	state                            protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Id                    *string                `protobuf:"bytes,1,opt,name=id"`
+	xxx_hidden_EvaluationAttemptId   *string                `protobuf:"bytes,2,opt,name=evaluation_attempt_id,json=evaluationAttemptId"`
+	xxx_hidden_OrganizationId        *string                `protobuf:"bytes,3,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_ProjectId             *string                `protobuf:"bytes,4,opt,name=project_id,json=projectId"`
+	xxx_hidden_Event                 *Outcome_Event         `protobuf:"bytes,5,opt,name=event"`
+	xxx_hidden_SensorId              *string                `protobuf:"bytes,6,opt,name=sensor_id,json=sensorId"`
+	xxx_hidden_SensorSlug            *string                `protobuf:"bytes,7,opt,name=sensor_slug,json=sensorSlug"`
+	xxx_hidden_EvaluatedAt           *string                `protobuf:"bytes,8,opt,name=evaluated_at,json=evaluatedAt"`
+	xxx_hidden_DefinitionHash        *string                `protobuf:"bytes,9,opt,name=definition_hash,json=definitionHash"`
+	xxx_hidden_ConfiguredModel       *string                `protobuf:"bytes,10,opt,name=configured_model,json=configuredModel"`
+	xxx_hidden_Models                []string               `protobuf:"bytes,11,rep,name=models"`
+	xxx_hidden_CompilerVersion       *string                `protobuf:"bytes,12,opt,name=compiler_version,json=compilerVersion"`
+	xxx_hidden_Actor                 *Outcome_Actor         `protobuf:"bytes,13,opt,name=actor"`
+	xxx_hidden_BillingUserId         *string                `protobuf:"bytes,14,opt,name=billing_user_id,json=billingUserId"`
+	xxx_hidden_Source                *string                `protobuf:"bytes,15,opt,name=source"`
+	xxx_hidden_Account               *Outcome_Account       `protobuf:"bytes,16,opt,name=account"`
+	xxx_hidden_AssistantId           *string                `protobuf:"bytes,17,opt,name=assistant_id,json=assistantId"`
+	xxx_hidden_Replayed              bool                   `protobuf:"varint,18,opt,name=replayed"`
+	xxx_hidden_Status                Outcome_Status         `protobuf:"varint,19,opt,name=status,enum=gram.sigint.v1.Outcome_Status"`
+	xxx_hidden_FailureReason         *string                `protobuf:"bytes,20,opt,name=failure_reason,json=failureReason"`
+	xxx_hidden_Provider              *string                `protobuf:"bytes,22,opt,name=provider"`
+	xxx_hidden_Attributes            map[string]string      `protobuf:"bytes,23,rep,name=attributes" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_Input                 *Outcome_Input         `protobuf:"bytes,24,opt,name=input"`
+	xxx_hidden_TriggerKind           *string                `protobuf:"bytes,25,opt,name=trigger_kind,json=triggerKind"`
+	xxx_hidden_RunId                 *string                `protobuf:"bytes,26,opt,name=run_id,json=runId"`
+	xxx_hidden_EvaluationRequestedAt *string                `protobuf:"bytes,27,opt,name=evaluation_requested_at,json=evaluationRequestedAt"`
+	XXX_raceDetectHookData           protoimpl.RaceDetectHookData
+	XXX_presence                     [1]uint32
+	unknownFields                    protoimpl.UnknownFields
+	sizeCache                        protoimpl.SizeCache
 }
 
 func (x *Outcome) Reset() {
@@ -389,24 +392,54 @@ func (x *Outcome) GetInput() *Outcome_Input {
 	return nil
 }
 
+func (x *Outcome) GetTriggerKind() string {
+	if x != nil {
+		if x.xxx_hidden_TriggerKind != nil {
+			return *x.xxx_hidden_TriggerKind
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Outcome) GetRunId() string {
+	if x != nil {
+		if x.xxx_hidden_RunId != nil {
+			return *x.xxx_hidden_RunId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Outcome) GetEvaluationRequestedAt() string {
+	if x != nil {
+		if x.xxx_hidden_EvaluationRequestedAt != nil {
+			return *x.xxx_hidden_EvaluationRequestedAt
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Outcome) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 26)
 }
 
 func (x *Outcome) SetEvaluationAttemptId(v string) {
 	x.xxx_hidden_EvaluationAttemptId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 26)
 }
 
 func (x *Outcome) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 26)
 }
 
 func (x *Outcome) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 26)
 }
 
 func (x *Outcome) SetEvent(v *Outcome_Event) {
@@ -415,27 +448,27 @@ func (x *Outcome) SetEvent(v *Outcome_Event) {
 
 func (x *Outcome) SetSensorId(v string) {
 	x.xxx_hidden_SensorId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 26)
 }
 
 func (x *Outcome) SetSensorSlug(v string) {
 	x.xxx_hidden_SensorSlug = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 26)
 }
 
 func (x *Outcome) SetEvaluatedAt(v string) {
 	x.xxx_hidden_EvaluatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 26)
 }
 
 func (x *Outcome) SetDefinitionHash(v string) {
 	x.xxx_hidden_DefinitionHash = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 26)
 }
 
 func (x *Outcome) SetConfiguredModel(v string) {
 	x.xxx_hidden_ConfiguredModel = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 26)
 }
 
 func (x *Outcome) SetModels(v []string) {
@@ -444,7 +477,7 @@ func (x *Outcome) SetModels(v []string) {
 
 func (x *Outcome) SetCompilerVersion(v string) {
 	x.xxx_hidden_CompilerVersion = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 26)
 }
 
 func (x *Outcome) SetActor(v *Outcome_Actor) {
@@ -453,12 +486,12 @@ func (x *Outcome) SetActor(v *Outcome_Actor) {
 
 func (x *Outcome) SetBillingUserId(v string) {
 	x.xxx_hidden_BillingUserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 26)
 }
 
 func (x *Outcome) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 26)
 }
 
 func (x *Outcome) SetAccount(v *Outcome_Account) {
@@ -467,27 +500,27 @@ func (x *Outcome) SetAccount(v *Outcome_Account) {
 
 func (x *Outcome) SetAssistantId(v string) {
 	x.xxx_hidden_AssistantId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 26)
 }
 
 func (x *Outcome) SetReplayed(v bool) {
 	x.xxx_hidden_Replayed = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 26)
 }
 
 func (x *Outcome) SetStatus(v Outcome_Status) {
 	x.xxx_hidden_Status = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 26)
 }
 
 func (x *Outcome) SetFailureReason(v string) {
 	x.xxx_hidden_FailureReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 26)
 }
 
 func (x *Outcome) SetProvider(v string) {
 	x.xxx_hidden_Provider = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 23)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 26)
 }
 
 func (x *Outcome) SetAttributes(v map[string]string) {
@@ -496,6 +529,21 @@ func (x *Outcome) SetAttributes(v map[string]string) {
 
 func (x *Outcome) SetInput(v *Outcome_Input) {
 	x.xxx_hidden_Input = v
+}
+
+func (x *Outcome) SetTriggerKind(v string) {
+	x.xxx_hidden_TriggerKind = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 26)
+}
+
+func (x *Outcome) SetRunId(v string) {
+	x.xxx_hidden_RunId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 26)
+}
+
+func (x *Outcome) SetEvaluationRequestedAt(v string) {
+	x.xxx_hidden_EvaluationRequestedAt = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 26)
 }
 
 func (x *Outcome) HasId() bool {
@@ -645,6 +693,27 @@ func (x *Outcome) HasInput() bool {
 	return x.xxx_hidden_Input != nil
 }
 
+func (x *Outcome) HasTriggerKind() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 23)
+}
+
+func (x *Outcome) HasRunId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 24)
+}
+
+func (x *Outcome) HasEvaluationRequestedAt() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 25)
+}
+
 func (x *Outcome) ClearId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Id = nil
@@ -746,10 +815,26 @@ func (x *Outcome) ClearInput() {
 	x.xxx_hidden_Input = nil
 }
 
+func (x *Outcome) ClearTriggerKind() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 23)
+	x.xxx_hidden_TriggerKind = nil
+}
+
+func (x *Outcome) ClearRunId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 24)
+	x.xxx_hidden_RunId = nil
+}
+
+func (x *Outcome) ClearEvaluationRequestedAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 25)
+	x.xxx_hidden_EvaluationRequestedAt = nil
+}
+
 type Outcome_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// UUIDv5 identity of tenant, event kind, immutable event ID, and sensor ID.
+	// UUIDv5 identity of tenant, trigger, manual run when present, event kind,
+	// immutable event ID and sensor ID.
 	// Equal to the Reading.id of an answered attempt for the same sensor and event.
 	Id *string
 	// Fresh UUID for a logical event evaluation, shared by its readings and outcomes.
@@ -802,6 +887,14 @@ type Outcome_builder struct {
 	// Classifier input supplied for this sensor in this attempt. Absent when the
 	// decision came before input was resolved.
 	Input *Outcome_Input
+	// Required evaluation trigger: "stream" or "manual". Immutable across attempts.
+	TriggerKind *string
+	// Nonzero UUID for a manual run. Absent for streaming evaluations.
+	// Request retries reuse the run ID and intentional new runs allocate another.
+	RunId *string
+	// Required immutable UTC RFC3339Nano logical request time, shared with Reading.
+	// Preserved across attempts so both topics replace rows in the same partition.
+	EvaluationRequestedAt *string
 }
 
 func (b0 Outcome_builder) Build() *Outcome {
@@ -809,79 +902,91 @@ func (b0 Outcome_builder) Build() *Outcome {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 26)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.EvaluationAttemptId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 26)
 		x.xxx_hidden_EvaluationAttemptId = b.EvaluationAttemptId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 26)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 26)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	x.xxx_hidden_Event = b.Event
 	if b.SensorId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 26)
 		x.xxx_hidden_SensorId = b.SensorId
 	}
 	if b.SensorSlug != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 26)
 		x.xxx_hidden_SensorSlug = b.SensorSlug
 	}
 	if b.EvaluatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 26)
 		x.xxx_hidden_EvaluatedAt = b.EvaluatedAt
 	}
 	if b.DefinitionHash != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 26)
 		x.xxx_hidden_DefinitionHash = b.DefinitionHash
 	}
 	if b.ConfiguredModel != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 26)
 		x.xxx_hidden_ConfiguredModel = b.ConfiguredModel
 	}
 	x.xxx_hidden_Models = b.Models
 	if b.CompilerVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 26)
 		x.xxx_hidden_CompilerVersion = b.CompilerVersion
 	}
 	x.xxx_hidden_Actor = b.Actor
 	if b.BillingUserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 26)
 		x.xxx_hidden_BillingUserId = b.BillingUserId
 	}
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 26)
 		x.xxx_hidden_Source = b.Source
 	}
 	x.xxx_hidden_Account = b.Account
 	if b.AssistantId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 26)
 		x.xxx_hidden_AssistantId = b.AssistantId
 	}
 	if b.Replayed != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 26)
 		x.xxx_hidden_Replayed = *b.Replayed
 	}
 	if b.Status != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 26)
 		x.xxx_hidden_Status = *b.Status
 	}
 	if b.FailureReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 26)
 		x.xxx_hidden_FailureReason = b.FailureReason
 	}
 	if b.Provider != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 23)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 26)
 		x.xxx_hidden_Provider = b.Provider
 	}
 	x.xxx_hidden_Attributes = b.Attributes
 	x.xxx_hidden_Input = b.Input
+	if b.TriggerKind != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 26)
+		x.xxx_hidden_TriggerKind = b.TriggerKind
+	}
+	if b.RunId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 26)
+		x.xxx_hidden_RunId = b.RunId
+	}
+	if b.EvaluationRequestedAt != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 26)
+		x.xxx_hidden_EvaluationRequestedAt = b.EvaluationRequestedAt
+	}
 	return m0
 }
 
@@ -1896,7 +2001,7 @@ var File_gram_sigint_v1_outcome_proto protoreflect.FileDescriptor
 
 const file_gram_sigint_v1_outcome_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/sigint/v1/outcome.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x96\x10\n" +
+	"\x1cgram/sigint/v1/outcome.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x88\x11\n" +
 	"\aOutcome\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
 	"\x15evaluation_attempt_id\x18\x02 \x01(\tR\x13evaluationAttemptId\x12'\n" +
@@ -1925,7 +2030,10 @@ const file_gram_sigint_v1_outcome_proto_rawDesc = "" +
 	"\n" +
 	"attributes\x18\x17 \x03(\v2'.gram.sigint.v1.Outcome.AttributesEntryR\n" +
 	"attributes\x123\n" +
-	"\x05input\x18\x18 \x01(\v2\x1d.gram.sigint.v1.Outcome.InputR\x05input\x1ai\n" +
+	"\x05input\x18\x18 \x01(\v2\x1d.gram.sigint.v1.Outcome.InputR\x05input\x12!\n" +
+	"\ftrigger_kind\x18\x19 \x01(\tR\vtriggerKind\x12\x15\n" +
+	"\x06run_id\x18\x1a \x01(\tR\x05runId\x126\n" +
+	"\x17evaluation_requested_at\x18\x1b \x01(\tR\x15evaluationRequestedAt\x1ai\n" +
 	"\x05Actor\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12(\n" +
 	"\x10external_user_id\x18\x02 \x01(\tR\x0eexternalUserId\x12\x1d\n" +

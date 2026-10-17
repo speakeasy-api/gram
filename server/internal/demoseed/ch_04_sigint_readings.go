@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
+	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 )
 
 const (
@@ -27,6 +28,12 @@ const (
 	// sigintReadingMembers is the member count the reading formulas below are
 	// written for: three signals or levels per enabled sensor.
 	sigintReadingMembers = 3
+
+	// sigintManualRuns supplies independent evaluations of the same selection.
+	sigintManualRuns = 2
+
+	// sigintManualMessages keeps each example run bounded to two historical targets.
+	sigintManualMessages = 2
 )
 
 // sigintReadingResultTypes maps a sensor mode to its stored result variant.
@@ -50,9 +57,9 @@ func (s *seeder) chSigintReadings(ctx context.Context, ch driver.Conn) error {
 		return fmt.Errorf("insert demo sensor readings: %w", err)
 	}
 	return s.chRunChecks(ctx, ch, []chCheck{{
-		cond:     `(SELECT count() FROM sigint_readings FINAL WHERE organization_id = @org) != ` + strconv.Itoa(len(rows)),
+		cond:     `(SELECT count() FROM sigint_readings_v2 FINAL WHERE organization_id = @org) != ` + strconv.Itoa(len(rows)),
 		settings: chFinalSettings,
-		msg:      "demo seed postflight: expected 400 retrospective readings for each enabled sensor",
+		msg:      "demo seed postflight: expected streaming history and manual-run readings for each enabled sensor",
 	}})
 }
 
@@ -84,6 +91,21 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 		}
 		for n := range sigintReadingDays {
 			rows = append(rows, s.sigintReading(sensor, members, n))
+		}
+		for run := range sigintManualRuns {
+			request := readings.Context{
+				TriggerKind: readings.TriggerManual,
+				RunID:       s.det("sigint-manual-run-" + strconv.Itoa(run)),
+				RequestedAt: s.now.UTC().Add(-time.Duration(sigintManualRuns-run) * time.Hour),
+			}
+			for target := range sigintManualMessages {
+				row := s.sigintReading(sensor, members, sigintReadingDays-sigintManualMessages+target)
+				row.TriggerKind, row.RunID, row.EvaluationRequestedAt = string(request.TriggerKind), request.RunID, request.RequestedAt
+				row.ID = request.ReadingID(row.OrganizationID, row.ProjectID.String(), row.EventKind, row.EventID, row.SensorID.String())
+				row.EvaluationAttemptID = s.det("sigint-manual-attempt-" + strconv.Itoa(run) + "-" + strconv.Itoa(target))
+				row.EvaluatedAt = request.RequestedAt.Add(time.Second)
+				rows = append(rows, row)
+			}
 		}
 	}
 	return rows, nil
@@ -148,17 +170,24 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 	definition := sha256.Sum256([]byte(s.name("sigint-definition-" + sensor.key)))
 	departments := [2]string{"engineering", "support"}
 	regions := [2]string{"us-east", "eu-west"}
+	sourceTime := s.now.UTC().AddDate(0, 0, -n).Add(-time.Hour)
+	request := readings.Context{TriggerKind: readings.TriggerStream, RunID: uuid.Nil, RequestedAt: sourceTime.Add(time.Second)}
+	eventID := s.name("sigint-source-" + strconv.Itoa(n))
+	sensorID := s.det("sigint-sensor-" + sensor.key)
 	return chrepo.ReadingRow{
-		ID:                         s.det("sigint-reading-" + sensor.key + "-" + strconv.Itoa(n)),
+		ID:                         request.ReadingID(s.orgID(), s.projectID().String(), "demo.event", eventID, sensorID.String()),
 		EvaluationAttemptID:        s.det("sigint-attempt-" + strconv.Itoa(n)),
 		OrganizationID:             s.orgID(),
 		ProjectID:                  s.projectID(),
-		SensorID:                   s.det("sigint-sensor-" + sensor.key),
+		TriggerKind:                string(request.TriggerKind),
+		RunID:                      request.RunID,
+		EvaluationRequestedAt:      request.RequestedAt,
+		SensorID:                   sensorID,
 		SensorSlug:                 sensor.slug,
 		EventKind:                  "demo.event",
-		EventID:                    s.name("sigint-source-" + strconv.Itoa(n)),
-		EventOccurredAt:            s.now.UTC().AddDate(0, 0, -n).Add(-time.Hour),
-		EvaluatedAt:                s.now.UTC(),
+		EventID:                    eventID,
+		EventOccurredAt:            sourceTime,
+		EvaluatedAt:                request.RequestedAt.Add(time.Second),
 		InsertedAt:                 s.now.UTC(),
 		Status:                     chrepo.StatusAnswered,
 		FailureReason:              "",
