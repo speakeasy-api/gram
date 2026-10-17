@@ -195,9 +195,22 @@ func (m *ChallengeManager) resolveClientCredential(ctx context.Context, req Clie
 		RemoteSessionID:                    uuid.Nil,
 		RemoteSessionUpdatedAt:             time.Time{},
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
+		GrantGeneration:                    0,
+		AccessExpiresAt:                    clientCredentialExpiry(cred),
 		ClientCredentialErr:                nil,
 		renewal:                            &clientCredentialRenewal{credential: cred, request: req},
 	}, nil
+}
+
+// clientCredentialExpiry is Speakeasy's serving cutoff for cred: when it stops
+// presenting the credential. Its source sets one even when the token endpoint
+// stated no expiry, so unlike a subject grant's expiry it is present whenever
+// the source reports one, and it can be earlier than the upstream's.
+func clientCredentialExpiry(cred ClientCredential) *time.Time {
+	if cred.ExpiresAt().IsZero() {
+		return nil
+	}
+	return new(cred.ExpiresAt())
 }
 
 // RenewClientCredential replaces a self client's credential after the

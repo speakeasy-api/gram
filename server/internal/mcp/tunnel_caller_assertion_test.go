@@ -34,6 +34,7 @@ import (
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"github.com/speakeasy-api/gram/tunnel/identity"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -76,6 +77,24 @@ var sharedCallerIssuer = sync.OnceValues(func() (*mcpauthz.Issuer, error) {
 	return issuer, err
 })
 
+// upstreamCredentialClaim returns the verified assertion's
+// upstream_credential claim, failing when it is absent.
+func upstreamCredentialClaim(t *testing.T, claims jwt.MapClaims) map[string]any {
+	t.Helper()
+	require.Contains(t, claims, identity.ClaimUpstreamCredential)
+	cred, ok := claims[identity.ClaimUpstreamCredential].(map[string]any)
+	require.True(t, ok)
+	return cred
+}
+
+// bearerSHA256 hashes the bearer token a forwarded request presented upstream.
+func bearerSHA256(t *testing.T, header http.Header) string {
+	t.Helper()
+	bearer, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer ")
+	require.True(t, ok)
+	return identity.TokenSHA256(bearer)
+}
+
 func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 	t.Parallel()
 	issuer, key := callerIssuerForTest(t)
@@ -110,23 +129,30 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 	oldResource := "https://mcp.internal.example.com/a%2Fb?tenant=example/"
 	exactResource := "https://mcp.internal.example.com/a%2Fb/?tenant=example/"
 	seenIDs := map[string]bool{}
-	for _, tc := range []struct{ resource, grantResource, authorization string }{
-		{resource: oldResource, grantResource: oldResource, authorization: "Bearer upstream-oauth"},
-		{resource: exactResource, grantResource: oldResource, authorization: ""},
-		{resource: exactResource, grantResource: exactResource, authorization: "Bearer upstream-oauth"},
-		{resource: "https://mcp.internal.example.com/another/", grantResource: exactResource, authorization: ""},
-		{resource: "", grantResource: "", authorization: "Bearer upstream-oauth"},
+	expiresAt := time.Now().Add(time.Hour)
+	generations := map[int64]bool{}
+	for _, tc := range []struct {
+		resource, grantResource, authorization string
+		accessExpiresAt                        *time.Time
+	}{
+		{resource: oldResource, grantResource: oldResource, authorization: "Bearer upstream-oauth", accessExpiresAt: &expiresAt},
+		{resource: exactResource, grantResource: oldResource, authorization: "", accessExpiresAt: &expiresAt},
+		{resource: exactResource, grantResource: exactResource, authorization: "Bearer upstream-oauth", accessExpiresAt: nil},
+		{resource: "https://mcp.internal.example.com/another/", grantResource: exactResource, authorization: "", accessExpiresAt: &expiresAt},
+		{resource: "", grantResource: "", authorization: "Bearer upstream-oauth", accessExpiresAt: &expiresAt},
 	} {
 		_, err := tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
 			ID: tunnelID, ProjectID: projectID, ResourceIdentifier: conv.ToPGText(tc.resource),
 		})
 		require.NoError(t, err)
-		insertQualifiedRemoteSessionToken(t, ctx, ti, sessionIssuer, remoteClient, subject, "upstream-oauth", tc.grantResource)
+		grant := upsertRemoteSessionToken(t, ctx, ti, sessionIssuer, remoteClient, subject, "upstream-oauth", tc.grantResource, tc.accessExpiresAt)
+		require.False(t, generations[grant.GrantGeneration], "each authorization advances the grant generation")
+		generations[grant.GrantGeneration] = true
 		request := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"?resource=https%3A%2F%2Fclient.example%2Fmcp", bytes.NewReader(makeInitializeBody()))
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("Authorization", "Bearer "+bearer)
-		request.Header.Set(mcpauthz.Header, "client-forged-assertion")
+		request.Header.Set(identity.Header, "client-forged-assertion")
 		request.Header.Set("X_Speakeasy_Identity", "client-forged-alias")
 		request.Header.Set("X-Forwarded-Host", "client.example")
 		route := chi.NewRouteContext()
@@ -139,13 +165,29 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 		forwarded := headers[len(headers)-1]
 		require.Equal(t, tc.authorization, forwarded.Get("Authorization"), "resource=%q grant=%q", tc.resource, tc.grantResource)
 		expected := conv.Default(tc.resource, urn.NewTunneledMcpServer(tunnelID).String())
-		token, err := jwt.Parse(forwarded.Get(mcpauthz.Header), func(*jwt.Token) (any, error) { return key, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer("https://gram.example"), jwt.WithAudience(expected), jwt.WithExpirationRequired())
+		token, err := jwt.Parse(forwarded.Get(identity.Header), func(*jwt.Token) (any, error) { return key, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer("https://gram.example"), jwt.WithAudience(expected), jwt.WithExpirationRequired())
 		require.NoError(t, err)
 		claims, ok := token.Claims.(jwt.MapClaims)
 		require.True(t, ok)
 		require.Equal(t, expected, claims["aud"])
 		require.Equal(t, subject.String(), claims["sub"])
 		require.Equal(t, profile.Email, claims["email"])
+		require.Equal(t, serverID.String(), claims[identity.ClaimMCPServerID])
+		if tc.authorization == "" {
+			require.NotContains(t, claims, identity.ClaimUpstreamCredential, "an unrouted request carries no upstream credential")
+		} else {
+			cred := upstreamCredentialClaim(t, claims)
+			require.Equal(t, identity.OwnerSubject, cred["owner"])
+			require.Equal(t, remoteClient.String(), cred["client_id"])
+			require.Equal(t, grant.ID.String(), cred["grant_id"])
+			require.InDelta(t, grant.GrantGeneration, cred["grant_generation"], 0)
+			require.Equal(t, bearerSHA256(t, forwarded), cred["token_sha256"])
+			if tc.accessExpiresAt == nil {
+				require.NotContains(t, cred, "token_expires_at")
+			} else {
+				require.InDelta(t, tc.accessExpiresAt.Unix(), cred["token_expires_at"], 0)
+			}
+		}
 		require.Empty(t, forwarded.Get("X_Speakeasy_Identity"))
 		id, err := claims.GetSubject()
 		require.NoError(t, err)
@@ -198,11 +240,18 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	seedMetaMemberConnectGrant(t, ctx, ti.conn, sessionIssuer.OrganizationID.String, serverID)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "x/mcp")
 	require.NoError(t, err)
+	// Enumeration and validation both forward the subject's routed grant, so
+	// each request's assertion must attest it.
+	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, endpoint.OrganizationID, "assertion-upstream", "", []uuid.UUID{sessionIssuer.ID})
+	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, endpoint.OrganizationID, remoteClient)))
+	grant := upsertRemoteSessionToken(t, ctx, ti, sessionIssuer.ID, remoteClient, *state.Subject, "upstream-oauth", resource, new(time.Now().Add(time.Hour)))
 	gateway := &fakeTunnelGateway{t: t, agentSessionID: "test-agent", backendSessionID: "test-backend-session", mu: sync.Mutex{}}
+	var attestedMu sync.Mutex
+	var attested []bool
 	var accepted atomic.Int32
 	var cleanups atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw := r.Header.Get(mcpauthz.Header)
+		raw := r.Header.Get(identity.Header)
 		token, err := jwt.Parse(raw, func(*jwt.Token) (any, error) { return key, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithAudience(audience), jwt.WithIssuer("https://gram.example"), jwt.WithExpirationRequired())
 		if err != nil {
 			http.Error(w, "assertion required", http.StatusUnauthorized)
@@ -213,6 +262,17 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 			http.Error(w, "invalid claims", http.StatusUnauthorized)
 			return
 		}
+		cred, _ := claims[identity.ClaimUpstreamCredential].(map[string]any)
+		bearer, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		attestedMu.Lock()
+		attested = append(attested, cred != nil && bearer != "" &&
+			cred["token_sha256"] == identity.TokenSHA256(bearer) &&
+			cred["owner"] == identity.OwnerSubject &&
+			cred["client_id"] == remoteClient.String() &&
+			cred["grant_id"] == grant.ID.String() &&
+			cred["grant_generation"] == float64(grant.GrantGeneration) &&
+			claims[identity.ClaimMCPServerID] == serverID.String())
+		attestedMu.Unlock()
 		if claims["allowed_methods"] == nil || claims["sub"] != "user:"+state.Subject.ID {
 			http.Error(w, "wrong binding", http.StatusForbidden)
 			return
@@ -256,7 +316,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 		if r.Method == http.MethodDelete {
 			cleanups.Add(1)
 		}
-		w.Header().Set(mcpauthz.Header, raw) // An upstream echo must not reach the client.
+		w.Header().Set(identity.Header, raw) // An upstream echo must not reach the client.
 		gateway.ServeHTTP(w, r)
 	}))
 	t.Cleanup(upstream.Close)
@@ -264,7 +324,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	attempt := uuid.NewString()
 	init := serveConsentMCPRequest(t, ctx, ti, endpoint, stateID, csrf, attempt, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`, nil)
 	require.Contains(t, init.Body.String(), "serverInfo")
-	require.Empty(t, init.Header().Get(mcpauthz.Header))
+	require.Empty(t, init.Header().Get(identity.Header))
 	headers := map[string]string{"Mcp-Session-Id": init.Header().Get("Mcp-Session-Id"), mcpversions.HTTPHeader: "2025-06-18"}
 	list := serveConsentMCPRequest(t, ctx, ti, endpoint, stateID, csrf, attempt, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`, headers)
 	require.Contains(t, list.Body.String(), "tools")
@@ -284,9 +344,6 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	require.EqualValues(t, 2, accepted.Load(), "a consent credential must never forward tools/call")
 	// Manual connection verification exercises the SDK discovery, handshake,
 	// list, and detached DELETE paths with the same live consent proof.
-	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, endpoint.OrganizationID, "assertion-upstream", "", []uuid.UUID{sessionIssuer.ID})
-	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, endpoint.OrganizationID, remoteClient)))
-	insertQualifiedRemoteSessionToken(t, ctx, ti, sessionIssuer.ID, remoteClient, *state.Subject, "upstream-oauth", resource)
 	state.CSRFToken = "csrf-token"
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 	fx := validationFixture{ti: ti, endpoint: endpoint, stateID: stateID, subject: *state.Subject, clientID: remoteClient, name: slug}
@@ -294,7 +351,12 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	require.NoError(t, err)
 	require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
 	require.EqualValues(t, 1, cleanups.Load(), "SDK session cleanup must retain discovery provenance")
-
+	attestedMu.Lock()
+	defer attestedMu.Unlock()
+	require.Greater(t, len(attested), 2)
+	for i, ok := range attested {
+		require.True(t, ok, "request %d must attest the routed grant", i)
+	}
 }
 
 func TestPrivateTunnelKeepaliveProbesWithoutCallerAssertion(t *testing.T) {
@@ -316,7 +378,7 @@ func TestPrivateTunnelKeepaliveProbesWithoutCallerAssertion(t *testing.T) {
 	headers, bodies := tunnelForwards(gateway)
 	requireTunnelProbe(t, headers, bodies, "token-assertion-keepalive")
 	for _, header := range headers {
-		require.Empty(t, header.Get(mcpauthz.Header), "a background probe has no authenticated caller")
+		require.Empty(t, header.Get(identity.Header), "a background probe has no authenticated caller")
 	}
 	after := storedSession(t, ctx, fx)
 	require.Equal(t, "valid", after.ValidationStatus.String)
@@ -339,7 +401,7 @@ func TestPublicTunnelPinnedSessionNeverReceivesCallerAssertion(t *testing.T) {
 	headers, _ := tunnelForwards(gateway)
 	require.GreaterOrEqual(t, len(headers), 2)
 	for _, header := range headers {
-		require.Empty(t, header.Get(mcpauthz.Header))
+		require.Empty(t, header.Get(identity.Header))
 		require.Empty(t, header.Get("X_Speakeasy_Identity"))
 	}
 }
@@ -367,6 +429,9 @@ func TestMetaDispatchAssertionBindsPrivateTunnelMember(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), upstream.URL, time.Hour))
 	subject := urn.NewUserSubject(auth.UserID)
+	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "assertion-meta-member", "", []uuid.UUID{shared})
+	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, memberID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, remoteClient)))
+	grant := upsertRemoteSessionToken(t, ctx, ti, shared, remoteClient, subject, "member-upstream-oauth", resource, new(time.Now().Add(time.Hour)))
 	bearer := mintMetaIssuerBearer(t, ti, slug, shared, subject)
 	rpc := executeMetaTool(t, ti, slug, bearer, "assertion-member--ping")
 	text, isError := metaToolResultText(t, rpc)
@@ -375,7 +440,7 @@ func TestMetaDispatchAssertionBindsPrivateTunnelMember(t *testing.T) {
 	headers, _ := tunnelForwards(gateway)
 	require.GreaterOrEqual(t, len(headers), 3)
 	for _, header := range headers {
-		token, err := jwt.Parse(header.Get(mcpauthz.Header), func(*jwt.Token) (any, error) { return key, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithAudience(resource), jwt.WithIssuer("https://gram.example"))
+		token, err := jwt.Parse(header.Get(identity.Header), func(*jwt.Token) (any, error) { return key, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithAudience(resource), jwt.WithIssuer("https://gram.example"))
 		require.NoError(t, err)
 		claims, ok := token.Claims.(jwt.MapClaims)
 		require.True(t, ok)
@@ -383,6 +448,14 @@ func TestMetaDispatchAssertionBindsPrivateTunnelMember(t *testing.T) {
 		require.NotContains(t, claims, "allowed_methods")
 		require.Equal(t, profile.Email, claims["email"])
 		require.NotContains(t, claims, "email_verified")
+		// The member's own wrapper, never the meta gateway's.
+		require.Equal(t, memberID.String(), claims[identity.ClaimMCPServerID])
+		require.NotEqual(t, meta.ID.String(), claims[identity.ClaimMCPServerID])
+		cred := upstreamCredentialClaim(t, claims)
+		require.Equal(t, identity.TokenSHA256("member-upstream-oauth"), bearerSHA256(t, header))
+		require.Equal(t, bearerSHA256(t, header), cred["token_sha256"])
+		require.Equal(t, remoteClient.String(), cred["client_id"])
+		require.Equal(t, grant.ID.String(), cred["grant_id"])
 	}
 }
 

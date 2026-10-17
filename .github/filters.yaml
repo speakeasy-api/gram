@@ -6,6 +6,7 @@ server:
   - "agents/**"
   - "ci/**"
   - "server/**"
+  - "internal/jwk/**"
   - "infra/**"
   - ".mise-tasks/test/ci.sh"
   - ".mise-tasks/test/server.sh"
@@ -161,6 +162,8 @@ deprecated-paths:
 
 tunnel:
   - ".github/**"
+  - ".mise-tasks/test/tunnel.sh"
   - "go.mod"
   - "go.sum"
   - "tunnel/**"
+  - "internal/jwk/**"

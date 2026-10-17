@@ -871,7 +871,7 @@ func (s *Service) serveTunneledBackend(
 		OrganizationID:     organizationID,
 		MCPServer:          mcpServer,
 		ResourceIdentifier: resourceIdentifier,
-		UpstreamAuth:       upstream.Token,
+		Upstream:           routedUpstreamBearer(upstream),
 		WWWAuthenticate:    wwwAuthenticate,
 		Selection:          selection,
 		EnvironmentHeaders: nil,

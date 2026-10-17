@@ -117,6 +117,21 @@ function currentWorktree(): string {
   return root ? path.basename(root) : "";
 }
 
+// Release images are tagged with tunnel/package.json's version.
+function tunnelAgentVersion(): string {
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(
+        path.resolve(import.meta.dirname, "../../tunnel/package.json"),
+        "utf8",
+      ),
+    ) as { version?: unknown };
+    return typeof manifest.version === "string" ? manifest.version : "latest";
+  } catch {
+    return "latest";
+  }
+}
+
 // Keeps the readout honest across `git checkout` instead of going stale until
 // the next dev-server restart. Vite's own watcher ignores **/.git/**, so watch
 // the git directory with fs.watch. Watching the directory rather than HEAD
@@ -327,6 +342,7 @@ export default defineConfig(async (env) => {
       // Default Speakeasy API URL baked into the inlined elements code
       // (src/elements/lib/api.ts); config.api.url overrides it at runtime.
       __GRAM_API_URL__: JSON.stringify(process.env["GRAM_API_URL"] || ""),
+      __GRAM_TUNNEL_AGENT_VERSION__: JSON.stringify(tunnelAgentVersion()),
       __GRAM_DEV_WORKTREE__: JSON.stringify(isDev ? currentWorktree() : ""),
       __GRAM_DEV_BRANCH__: JSON.stringify(isDev ? currentBranch() : ""),
       __GRAM_DEV_BRANCH_EVENT__: JSON.stringify(isDev ? DEV_BRANCH_EVENT : ""),

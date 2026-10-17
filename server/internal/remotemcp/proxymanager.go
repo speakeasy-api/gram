@@ -412,6 +412,7 @@ func (f *ProxyManager) BuildTarget(
 		RoutingHeaders:              options.routingHeaders,
 		HeaderPolicy:                options.headerPolicy,
 		AuthorizationOverride:       upstreamAuth,
+		UpstreamCredential:          nil,
 		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,

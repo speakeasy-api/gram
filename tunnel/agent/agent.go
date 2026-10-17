@@ -1,4 +1,4 @@
-// Package agent reverse-proxies a pinned local MCP server over one outbound yamux/WebSocket tunnel.
+// Package agent serves a pinned local MCP server, over HTTP or stdio, through one outbound yamux/WebSocket tunnel.
 package agent
 
 import (
@@ -14,6 +14,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -49,18 +50,25 @@ type Config struct {
 	GatewayURL string
 	APIKey     string
 	// LocalMCPURL is pinned at startup; the gateway cannot redirect agent traffic.
-	LocalMCPURL    string
-	ServiceVersion string
-	Metadata       map[string]string
-	MinBackoff     time.Duration
-	MaxBackoff     time.Duration
+	LocalMCPURL      string
+	LocalMCPCommand  string
+	StdioMaxSessions int
+	StdioIdleTimeout time.Duration
+	// StdioCredentials enables per-user upstream credentials for the stdio
+	// server; nil leaves them off.
+	StdioCredentials *CredentialsConfig
+	ServiceVersion   string
+	Metadata         map[string]string
+	MinBackoff       time.Duration
+	MaxBackoff       time.Duration
 }
 
 type Agent struct {
 	cfg     Config
-	target  *url.URL
 	handler http.Handler
-	logger  *slog.Logger
+	// Outlives gateway connections so MCP sessions survive a reconnect.
+	stdio  *stdioBridge
+	logger *slog.Logger
 }
 
 func New(cfg Config, logger *slog.Logger) (*Agent, error) {
@@ -72,9 +80,19 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 		return nil, err
 	}
 	cfg.GatewayURL = gatewayURL
-	target, err := url.Parse(cfg.LocalMCPURL)
-	if err != nil {
-		return nil, err
+	hasURL := strings.TrimSpace(cfg.LocalMCPURL) != ""
+	hasCommand := strings.TrimSpace(cfg.LocalMCPCommand) != ""
+	if hasURL == hasCommand {
+		return nil, errors.New("exactly one of a local MCP URL or a local MCP command is required")
+	}
+	if hasCommand && !stdioSupported {
+		return nil, errors.New("a local MCP command requires a Unix tunnel agent")
+	}
+	if cfg.StdioCredentials != nil && !hasCommand {
+		return nil, errors.New("stdio credentials mode requires a local MCP command")
+	}
+	if cfg.StdioCredentials != nil && !credentialsSupported {
+		return nil, errors.New("stdio credentials mode requires a Linux tunnel agent")
 	}
 	if cfg.MinBackoff <= 0 {
 		cfg.MinBackoff = defaultMinBackoff
@@ -83,12 +101,58 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 		cfg.MaxBackoff = defaultMaxBackoff
 	}
 
-	a := &Agent{cfg: cfg, target: target, logger: logger}
-	a.handler = a.buildHandler(target)
+	a := &Agent{cfg: cfg, handler: nil, stdio: nil, logger: logger}
+	var upstream http.Handler
+	if hasCommand {
+		if err := hideFromStdioServer(); err != nil {
+			logger.Warn("tunnel agent could not hide its environment from the stdio server", slog.Any("error", err))
+		}
+		creds, err := newCredentialBroker(cfg.StdioCredentials, logger)
+		if err != nil {
+			return nil, err
+		}
+		a.stdio = newStdioBridge(cfg.LocalMCPCommand, cfg.StdioMaxSessions, cfg.StdioIdleTimeout, creds, logger)
+		upstream = a.stdio
+	} else {
+		target, err := url.Parse(cfg.LocalMCPURL)
+		if err != nil {
+			return nil, err
+		}
+		upstream = a.buildProxy(target)
+	}
+	a.handler = a.buildHandler(upstream)
 	return a, nil
 }
 
+// newCredentialBroker validates credentials mode and claims its storage; nil
+// when the mode is off.
+func newCredentialBroker(cfg *CredentialsConfig, logger *slog.Logger) (*credentialBroker, error) {
+	if cfg == nil {
+		return nil, nil
+	}
+	normalized, err := cfg.normalize()
+	if err != nil {
+		return nil, err
+	}
+	store, err := openCredentialStore(context.Background(), normalized.Root, logger)
+	if err != nil {
+		return nil, err
+	}
+	return &credentialBroker{
+		verifier:    newAssertionVerifier(normalized, jwksHTTPClient(), time.Now),
+		store:       store,
+		maxAge:      normalized.MaxAge,
+		expiryGrace: credentialExpiryGrace,
+		now:         time.Now,
+		cleanups:    sync.WaitGroup{},
+	}, nil
+}
+
 func (a *Agent) Run(ctx context.Context) error {
+	if a.stdio != nil {
+		go a.stdio.reap(ctx)
+		defer a.stdio.Close()
+	}
 	backoff := a.cfg.MinBackoff
 	for {
 		if ctx.Err() != nil {
@@ -203,22 +267,27 @@ func normalizeGatewayURL(raw string) (string, error) {
 		if isLocalGatewayHost(u.Hostname()) {
 			return u.String(), nil
 		}
-		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// unless it targets localhost or host.docker.internal")
+		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// unless it targets localhost, a .localhost name, a loopback address or host.docker.internal")
 	default:
 		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// or https://")
 	}
 }
 
 func isLocalGatewayHost(host string) bool {
-	switch strings.ToLower(strings.TrimSpace(host)) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	switch host {
 	case "localhost", "host.docker.internal":
+		return true
+	}
+	// RFC 6761 reserves .localhost names for the loopback interface.
+	if strings.HasSuffix(host, ".localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
 }
 
-func (a *Agent) buildHandler(target *url.URL) http.Handler {
+func (a *Agent) buildProxy(target *url.URL) http.Handler {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1 // stream SSE immediately
 	baseDirector := proxy.Director
@@ -248,7 +317,10 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 		a.logger.Warn("tunnel agent upstream error", slog.Any("error", err))
 		w.WriteHeader(http.StatusBadGateway)
 	}
+	return proxy
+}
 
+func (a *Agent) buildHandler(upstream http.Handler) http.Handler {
 	// Control paths terminate on the agent; all other requests hit the pinned MCP upstream.
 	mux := http.NewServeMux()
 	mux.HandleFunc(wire.ControlHelloPath, func(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +335,7 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		proxy.ServeHTTP(w, r)
+		upstream.ServeHTTP(w, r)
 	})
 	return mux
 }

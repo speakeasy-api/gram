@@ -82,3 +82,13 @@ func TestNeedsRegistrationRotation_SkipsSelfClient(t *testing.T) {
 	require.True(t, needed)
 	require.Equal(t, RotationTriggerUpstreamRejected, trigger)
 }
+
+func TestClientCredentialExpiryIsTheServingCutoff(t *testing.T) {
+	t.Parallel()
+
+	cutoff := time.Now().Add(4 * time.Minute)
+	expiry := clientCredentialExpiry(NewClientCredential("token", ClientCredentialSchemeBearer, cutoff, nil))
+	require.NotNil(t, expiry)
+	require.True(t, cutoff.Equal(*expiry))
+	require.Nil(t, clientCredentialExpiry(NewClientCredential("token", ClientCredentialSchemeBearer, time.Time{}, nil)), "a source that sets no cutoff reports none")
+}
