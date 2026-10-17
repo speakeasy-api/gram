@@ -18,6 +18,7 @@ import (
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 )
 
 const (
@@ -40,7 +41,7 @@ const (
 	lastTimestampYear = 2104
 )
 
-// Status values of sigint_readings rows.
+// Status values of sigint_readings_v2 rows.
 const (
 	// StatusAnswered marks a reading that carries a classifier result.
 	StatusAnswered = "answered"
@@ -74,7 +75,7 @@ type ProbabilityRow struct {
 	Probability float64 `ch:"probability"`
 }
 
-// ReadingRow is the complete attempt snapshot inserted into sigint_readings.
+// ReadingRow is the complete attempt snapshot inserted into sigint_readings_v2.
 type ReadingRow struct {
 	// ID is the logical reading identity shared by attempts.
 	ID uuid.UUID `ch:"id"`
@@ -87,6 +88,15 @@ type ReadingRow struct {
 
 	// ProjectID owns the source event and configuration.
 	ProjectID uuid.UUID `ch:"project_id"`
+
+	// TriggerKind distinguishes streaming evaluations from manual runs.
+	TriggerKind string `ch:"trigger_kind"`
+
+	// RunID is zero for streaming and the stable request UUID for manual runs.
+	RunID uuid.UUID `ch:"run_id"`
+
+	// EvaluationRequestedAt is immutable across attempts and anchors partitioning and retention.
+	EvaluationRequestedAt time.Time `ch:"evaluation_requested_at"`
 
 	// SensorID is the stable configuration resource.
 	SensorID uuid.UUID `ch:"sensor_id"`
@@ -313,6 +323,13 @@ func parseAttempt(m *sigintv1.Reading, insertedAt time.Time, requireDefinition b
 	if proto.Size(m) > maxReadingBytes {
 		return invalid("reading exceeds transport budget")
 	}
+	evaluation, err := readings.ParseContext(m.GetTriggerKind(), m.GetRunId(), m.GetEvaluationRequestedAt())
+	if err != nil {
+		return invalid("invalid evaluation context")
+	}
+	row.TriggerKind = string(evaluation.TriggerKind)
+	row.RunID = evaluation.RunID
+	row.EvaluationRequestedAt = evaluation.RequestedAt
 	for _, identity := range []struct {
 		value  string
 		target *uuid.UUID
@@ -342,7 +359,6 @@ func parseAttempt(m *sigintv1.Reading, insertedAt time.Time, requireDefinition b
 			return invalid("missing required metadata")
 		}
 	}
-	var err error
 	row.EventOccurredAt, err = parseTimestamp(m.GetEvent().GetOccurredAt())
 	if err != nil {
 		return invalid("invalid occurrence time")
@@ -458,8 +474,9 @@ func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 		return nil
 	}
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 0}))
-	batch, err := q.conn.PrepareBatch(ctx, `INSERT INTO sigint_readings (
+	batch, err := q.conn.PrepareBatch(ctx, `INSERT INTO sigint_readings_v2 (
 		id, evaluation_attempt_id, organization_id, project_id, sensor_id, sensor_slug,
+		trigger_kind, run_id, evaluation_requested_at,
 		event_kind, event_id, event_occurred_at, evaluated_at, inserted_at, definition_hash,
 		status, failure_reason, configured_model, models, compiler_version, provider,
 		input_strategy, input_requested_message_count, input_message_count, input_truncated,

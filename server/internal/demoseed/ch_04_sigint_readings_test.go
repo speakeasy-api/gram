@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 )
 
 func validProbability(p float64) bool {
@@ -22,9 +23,11 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 	s := &seeder{spec: DefaultSpec(), q: nil, logger: nil, now: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)}
 	rows, err := s.sigintReadingRows()
 	require.NoError(t, err)
-	require.Len(t, rows, sigintReadingDays*3)
+	require.Len(t, rows, (sigintReadingDays+sigintManualRuns*sigintManualMessages)*3)
 
 	ids := make(map[uuid.UUID]struct{}, len(rows))
+	manualRuns := make(map[uuid.UUID]int)
+	streaming := 0
 	for _, row := range rows {
 		ids[row.ID] = struct{}{}
 		for _, id := range []uuid.UUID{row.ID, row.EvaluationAttemptID, row.ProjectID, row.SensorID} {
@@ -39,6 +42,15 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		require.GreaterOrEqual(t, row.InputMessageCount, uint8(1))
 		require.LessOrEqual(t, row.InputMessageCount, row.InputRequestedMessageCount)
 		require.False(t, row.EventOccurredAt.After(row.EvaluatedAt))
+		request := readings.Context{TriggerKind: readings.TriggerKind(row.TriggerKind), RunID: row.RunID, RequestedAt: row.EvaluationRequestedAt}
+		require.NoError(t, request.Validate())
+		require.Equal(t, request.ReadingID(row.OrganizationID, row.ProjectID.String(), row.EventKind, row.EventID, row.SensorID.String()), row.ID)
+		require.False(t, row.EvaluationRequestedAt.After(row.EvaluatedAt))
+		if row.TriggerKind == string(readings.TriggerManual) {
+			manualRuns[row.RunID]++
+		} else {
+			streaming++
+		}
 
 		signals := make(map[uuid.UUID]string, len(row.Probabilities))
 		for _, p := range row.Probabilities {
@@ -67,4 +79,9 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		}
 	}
 	require.Len(t, ids, len(rows), "reading ids must be unique")
+	require.Equal(t, sigintReadingDays*3, streaming)
+	require.Len(t, manualRuns, sigintManualRuns)
+	for _, count := range manualRuns {
+		require.Equal(t, sigintManualMessages*3, count)
+	}
 }

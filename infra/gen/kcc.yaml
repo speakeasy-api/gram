@@ -1430,6 +1430,9 @@ pubsub:
           string provider = 22;
           map<string, string> attributes = 23;
           Input input = 24;
+          string trigger_kind = 25;
+          string run_id = 26;
+          string evaluation_requested_at = 27;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1524,6 +1527,9 @@ pubsub:
             bool truncated = 4;
           }
           Input input = 24;
+          string trigger_kind = 25;
+          string run_id = 26;
+          string evaluation_requested_at = 27;
         }
       type: PROTOCOL_BUFFER
   - labels:
