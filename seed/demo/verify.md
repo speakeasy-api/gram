@@ -549,7 +549,7 @@ that URL.
     `get_device` (read-only), `lock_device` (idempotent), `wipe_device`
     (destructive), and `device_status` (no annotation).
 
-30. **Enterprise Managed Authorization**
+31. **Enterprise Managed Authorization**
     - Open **Team → IDP and SSO → Identity providers**. The Services table
       lists Acme Tracker (default order, "Each server's own identity
       provider", Not accepted yet) and Acme Wiki (saved order: Acme
