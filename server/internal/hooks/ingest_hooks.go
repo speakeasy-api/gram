@@ -72,8 +72,9 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
-		contentBoundary: false,
-		boundaryScans:   nil, ObserveOnly: false,
+		contentBoundary:              false,
+		boundaryScans:                nil,
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
