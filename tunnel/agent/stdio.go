@@ -301,10 +301,14 @@ func (b *stdioBridge) handleInitialize(w *responseWriter, r *http.Request, msgs 
 	}
 	defer sess.closeStream(stream)
 	if err := sess.send(ctx, msgs); err != nil {
-		if r.Context().Err() != nil {
-			return
+		switch {
+		case r.Context().Err() != nil:
+		case ctx.Err() != nil:
+			writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server did not accept initialize")
+		default:
+			// A write that fails rather than times out means the server is gone.
+			exited()
 		}
-		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server did not accept initialize")
 		return
 	}
 
@@ -414,31 +418,40 @@ func (b *stdioBridge) start(ctx context.Context) (*stdioSession, error) {
 		return nil, err
 	}
 	for {
-		sess, evicted, err := b.startOrEvict(id)
+		sess, freeing, evicted, err := b.startOrEvict(id)
 		if sess != nil || err != nil {
 			return sess, err
 		}
-		evicted.logger.Info("tunnel stdio session evicted for a new session; stopping server")
-		evicted.close()
+		if evicted {
+			freeing.logger.Info("tunnel stdio session evicted for a new session; stopping server")
+			freeing.close()
+		}
 		select {
-		case <-evicted.done:
+		case <-freeing.done:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 		// Its own removal races this retry, which could otherwise still count it and evict another session.
-		b.remove(evicted.id)
+		b.remove(freeing.id)
 	}
 }
 
-// startOrEvict starts a session if there is room. At capacity it claims the
-// session idle longest, if idle past evictIdleAfter, for the caller to stop.
-func (b *stdioBridge) startOrEvict(id string) (*stdioSession, *stdioSession, error) {
+// startOrEvict starts a session if there is room. At capacity it returns a
+// session whose slot will free for the caller to wait on: one already
+// closing, else the session idle longest, if idle past evictIdleAfter, which
+// it claims for the caller to stop.
+func (b *stdioBridge) startOrEvict(id string) (sess, freeing *stdioSession, evicted bool, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
-		return nil, nil, errStdioBridgeClosed
+		return nil, nil, false, errStdioBridgeClosed
 	}
 	if len(b.sessions) >= b.maxSessions {
+		for _, other := range b.sessions {
+			if other.closing.Load() {
+				return nil, other, false, nil
+			}
+		}
 		now := time.Now()
 		var idlest *stdioSession
 		longest := time.Duration(0)
@@ -448,21 +461,21 @@ func (b *stdioBridge) startOrEvict(id string) (*stdioSession, *stdioSession, err
 			}
 		}
 		if idlest == nil || !idlest.claimIdle(now, b.evictIdleAfter) {
-			return nil, nil, errStdioAtCapacity
+			return nil, nil, false, errStdioAtCapacity
 		}
-		return nil, idlest, nil
+		return nil, idlest, true, nil
 	}
 
-	sess, err := startStdioSession(id, b.command, b.env, b.stdinStallTimeout, b.logger.With(slog.String("stdio_session", logSessionID(id))))
+	sess, err = startStdioSession(id, b.command, b.env, b.stdinStallTimeout, b.logger.With(slog.String("stdio_session", logSessionID(id))))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	b.sessions[id] = sess
 	go func() {
 		<-sess.done
 		b.remove(id)
 	}()
-	return sess, nil, nil
+	return sess, nil, false, nil
 }
 
 func (b *stdioBridge) reap(ctx context.Context) {
