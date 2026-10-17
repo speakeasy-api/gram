@@ -1,5 +1,0 @@
----
-"server": patch
----
-
-Adds `organizationRemoteSessionIssuers.listEMAServices`, which lists every service Enterprise Managed Authorization reaches in an organization. Each entry has the identity providers the service accepts, when it last accepted each one, and the MCP servers that reach it with their status and sign-in identity provider. Servers the caller can't read are counted, never named. `readEMA`, `getIssuer` and `setEMAProviders` report when the service last accepted each provider. `setEMAProviders` takes an optional `expected_providers` and fails with conflict when the saved list has changed. Speakeasy now vouches only for servers on Speakeasy's own sign-in; on a server whose sign-in goes through an external identity provider it is skipped as `not_trusted_by_endpoint`. Platform MCP guidance describes which identity providers a service accepts. With no saved list, a vendor reached from a server on Speakeasy's own sign-in now defaults to the Speakeasy issuer, where before only a saved list naming it did; the `internal-session-issuer` rollout gates this default, and `ema-providers` gates only saving a list.

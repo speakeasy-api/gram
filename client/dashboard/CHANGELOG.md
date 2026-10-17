@@ -1,5 +1,22 @@
 # dashboard
 
+## 0.140.0
+
+### Minor Changes
+
+- 5298d58: Add servers to a plugin from a side sheet instead of a dropdown. Search by name or slug, see each server's logo and kind, and pick several at once. If some fail, the sheet stays open with the failed servers still selected and the reason shown on each row. The sheet is shared with the organization gateway's add-servers sheet.
+- af8d5e3: The consent screen tool picker is now available to every organization, so the "Tool filtering on consent screens" setting and the `consent_tool_filtering` product feature are removed. Stored tool selections are still enforced.
+
+### Patch Changes
+
+- a539ae0: MCP servers returned by `mcpServers.get`, `mcpServers.list`, `mcpServers.listForOrg`, `mcpServers.create`, `mcpServers.update` and `remoteMcp.createServerAndMcpServer` now carry a `toolset` summary for hosted servers (id, slug, name, configured tool count excluding external MCP proxy tools, tool selection mode, external MCP slugs, whether the server is proxy-only, external OAuth server, and registry specifier), the `primary_endpoint_id` and `primary_endpoint_url` of the address that stands for the server, and the `platform_endpoint_slug` of its oldest platform endpoint. Custom-domain endpoints count only on a verified, activated domain. List endpoints load these in two batched queries regardless of page size, and `listForOrg` fills them only for servers the caller can read. If these details cannot be loaded, reads still succeed without them.
+- d20964a: Clarify pay-as-you-go billing copy right after activation so a short first period is not described as the monthly renewal.
+- 532503e: A dashboard card whose query fails now shows the error on that card instead of taking the whole page down with it.
+- 4f9d31e: A filter whose values fail to load no longer takes the whole dashboard page down; its dropdown just shows no values.
+- d910a2d: The Platform MCP install for Claude Code starts with the `/plugin marketplace add` and `/plugin install` commands again. The next step shows how to turn on auto-update: with `/plugin` → Marketplaces → Enable auto-update for yourself, or with a managed settings snippet for your whole organization. The Headless walkthrough and the public marketplace README both use this order.
+- 3296cfc: Platform MCP setup no longer flashes when you pick an agent or move between steps. The agent picker, install method, and setup steps now share one sheet instead of closing one and opening the next.
+- f06dde6: Retire the Risk Overview page. Old links to it now open Watchdog.
+
 ## 0.139.0
 
 ### Minor Changes
