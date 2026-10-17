@@ -8,6 +8,18 @@ import { Input } from "@/components/ui/Input";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+export type SaveConfirmationProps = {
+  value: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  isPending: boolean;
+  errorMessage: string | undefined;
+};
+
+export const STORED_VALUE_CHANGED_MESSAGE =
+  "This setting changed since you opened the confirmation, so nothing was saved. Review the current value and save again.";
+
 // One settings section editing a single text field of the source behind an
 // MCP server. Owns its own draft, error, and pending state so sibling sections
 // never reflect each other's activity. Ported from the retired tunneled source
@@ -25,6 +37,7 @@ export function EditableSourceFieldSection({
   save,
   toastMessage,
   fallbackError,
+  confirmSave,
 }: {
   id: string;
   title: string;
@@ -40,10 +53,21 @@ export function EditableSourceFieldSection({
   save: (value: string) => Promise<string>;
   toastMessage: (cleared: boolean) => string;
   fallbackError: string;
+  /**
+   * Renders a confirmation step between Save and the write, for fields whose
+   * change reaches beyond this server. It receives the value frozen at the
+   * moment Save was pressed.
+   */
+  confirmSave?: (props: SaveConfirmationProps) => ReactNode;
 }): JSX.Element {
   const [draft, setDraft] = useState(stored);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // The value awaiting confirmation and the stored value it was requested
+  // against. Kept after the confirmation closes so it does not change while
+  // the dialog animates out.
+  const [pending, setPending] = useState({ value: "", base: "" });
 
   // Re-sync when the upstream value changes so a stale draft doesn't survive
   // an edit from another tab or a refetch.
@@ -55,8 +79,7 @@ export function EditableSourceFieldSection({
   const saveDisabled =
     !dirty || (requireValue && draft.trim() === "") || saving;
 
-  const handleSave = async () => {
-    const value = draft.trim();
+  const handleSave = async (value: string): Promise<boolean> => {
     setSaving(true);
     setError(undefined);
     try {
@@ -64,13 +87,26 @@ export function EditableSourceFieldSection({
       // leaves the draft dirty whenever normalization is a no-op server-side.
       setDraft(await save(value));
       toast.success(toastMessage(value === ""));
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : fallbackError;
       setError(message);
       toast.error(message);
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  const requestSave = () => {
+    const value = draft.trim();
+    if (confirmSave) {
+      setError(undefined);
+      setPending({ value, base: stored });
+      setConfirmOpen(true);
+      return;
+    }
+    void handleSave(value);
   };
 
   return (
@@ -103,17 +139,43 @@ export function EditableSourceFieldSection({
             <RequireScope
               scope="mcp:write"
               resourceId={projectId}
+              projectId={projectId}
               level="component"
             >
               <FooterSaveButton
                 pending={saving}
                 disabled={saveDisabled}
-                onClick={() => void handleSave()}
+                onClick={requestSave}
               />
             </RequireScope>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>
       </SettingsSection.Panel>
+      {confirmSave
+        ? confirmSave({
+            value: pending.value,
+            open: confirmOpen,
+            onOpenChange: (open) => {
+              if (!open && !saving) setConfirmOpen(false);
+            },
+            onConfirm: () => {
+              // Dismissed: the dialog may still be animating out.
+              if (!confirmOpen) return;
+              // The setting changed underneath the confirmation, e.g. from
+              // another tab: saving now would overwrite a value never shown.
+              if (stored !== pending.base) {
+                setConfirmOpen(false);
+                setError(STORED_VALUE_CHANGED_MESSAGE);
+                return;
+              }
+              void handleSave(pending.value).then((saved) => {
+                if (saved) setConfirmOpen(false);
+              });
+            },
+            isPending: saving,
+            errorMessage: error,
+          })
+        : null}
     </SettingsSection>
   );
 }

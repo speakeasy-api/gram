@@ -1,10 +1,13 @@
 import { SettingsSection } from "@/components/detail/settings-section";
+import { SharedTunnelImpact } from "@/components/mcp/shared-tunnel-impact";
+import { useSharedTunnelImpact } from "@/components/mcp/use-shared-tunnel-impact";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
+import { formatTunneledMcpDisplay } from "@/lib/sources";
 import {
   useRotateTunneledMcpServerKey,
   type RotateTunneledMcpServerKeyData,
@@ -63,8 +66,11 @@ function RotatedKeyDialogBody({
 // source, so its rotation is managed from the MCP server that fronts it.
 export function TunnelKeySection({
   tunneledMcpServer,
+  mcpServerId,
 }: {
   tunneledMcpServer: TunneledMcpServer;
+  /** The MCP server whose settings page renders this section. */
+  mcpServerId: string;
 }): JSX.Element {
   const [rotateDialogOpen, setRotateDialogOpen] = useState(false);
   // The plaintext key is held here, and only while the dialog is open. The
@@ -77,6 +83,9 @@ export function TunnelKeySection({
   // Tracks the open dialog so a rotation that resolves after Cancel is
   // dropped instead of repopulating the cleared state.
   const dialogOpenRef = useRef(false);
+  const impact = useSharedTunnelImpact(tunneledMcpServer.id, {
+    active: rotateDialogOpen && !rotatedKey,
+  });
 
   const handleOpenChange = (open: boolean) => {
     dialogOpenRef.current = open;
@@ -112,9 +121,10 @@ export function TunnelKeySection({
       <SettingsSection.Header>
         <SettingsSection.Title>Tunnel Key</SettingsSection.Title>
         <SettingsSection.Description>
-          Tunnel agents authenticate to this source with its key. Rotation
-          replaces the key; running agents must be restarted with the
-          replacement.
+          Tunnel agents authenticate to this tunnel with its key. Rotation
+          replaces the key for the whole tunnel; running agents must be
+          restarted with the replacement, and every MCP server on the tunnel is
+          unreachable until they are.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -137,6 +147,7 @@ export function TunnelKeySection({
             <RequireScope
               scope="mcp:write"
               resourceId={tunneledMcpServer.projectId}
+              projectId={tunneledMcpServer.projectId}
               level="component"
             >
               <Button
@@ -173,6 +184,13 @@ export function TunnelKeySection({
                 Running agents using the old key will be disconnected shortly
                 and must be restarted with the replacement key.
               </Alert>
+              <SharedTunnelImpact
+                impact={impact}
+                tunnelName={formatTunneledMcpDisplay(tunneledMcpServer)}
+                currentMcpServerId={mcpServerId}
+                effect="Every one of them stops serving until the agents reconnect with the new key."
+                publicWarning={tunneledMcpServer.allowPublic}
+              />
               {rotateError !== undefined && (
                 <Alert variant="error" dismissible={false}>
                   {rotateError}
@@ -189,7 +207,7 @@ export function TunnelKeySection({
                 <Button
                   variant="destructive-primary"
                   onClick={() => void handleRotate()}
-                  disabled={rotate.isPending}
+                  disabled={!impact.isReady || rotate.isPending}
                 >
                   {rotate.isPending ? (
                     <Button.LeftIcon>
