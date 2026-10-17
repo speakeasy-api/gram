@@ -512,9 +512,14 @@ func classifyFederatedExchangeError(err error) error {
 	if errors.As(err, &endpoint) && (endpoint.statusCode >= 500 || endpoint.statusCode == http.StatusTooManyRequests || endpoint.statusCode == http.StatusRequestTimeout) {
 		return ErrFederatedUnavailable
 	}
-	var oauth oautherr.RFC6749Error
-	if errors.As(err, &oauth) && (oauth.Code == oautherr.CodeInvalidClient || oauth.Code == "unauthorized_client") {
-		return ErrFederatedConfiguration
+	if oauth, ok := errors.AsType[oautherr.RFC6749Error](err); ok {
+		switch oauth.Code {
+		// A provider may report an outage in an OAuth error body under any status, 200 included.
+		case oautherr.CodeTemporarilyUnavailable, oautherr.CodeServerError:
+			return ErrFederatedUnavailable
+		case oautherr.CodeInvalidClient, oautherr.CodeUnauthorizedClient:
+			return ErrFederatedConfiguration
+		}
 	}
 	return ErrFederatedIdentity
 }

@@ -71,7 +71,7 @@ func TestTokenResponseScopeTypeRejectedAtExchangeAndRefresh(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","scope":` + malformed + `}`))
 			})
-			require.ErrorContains(t, err, "upstream token exchange failed")
+			require.ErrorContains(t, err, "token exchange with the identity provider failed")
 			_, loadErr := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 			require.Error(t, loadErr)
 		})
