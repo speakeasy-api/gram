@@ -21,6 +21,15 @@ const servers: ToolSelectionServer[] = [
     status: "loading",
     collapsedLabel: "Expand to load tools",
   },
+  // Loaded, but nothing has been recorded for it yet.
+  {
+    id: "empty",
+    name: "Badge readers",
+    tools: [],
+    status: "ready",
+    collapsedLabel: "Expand to load tools",
+    emptyContent: <p>Record this server&apos;s tools first.</p>,
+  },
 ];
 
 function renderPanel() {
@@ -74,5 +83,15 @@ describe("ToolSelectionPanel search", () => {
 
     expect(screen.getByRole("button", { name: /Inventory/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Device fleet/ })).toBeNull();
+  });
+
+  it("opens a loaded server with no tools so its guidance shows", () => {
+    renderPanel();
+
+    search("badge");
+
+    const row = screen.getByRole("button", { name: /Badge readers/ });
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Record this server's tools first.")).toBeTruthy();
   });
 });

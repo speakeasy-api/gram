@@ -238,12 +238,15 @@ export function ToolSelectionPanel({
 
   useEffect(() => {
     if (!q) return;
-    // Open the matches that have tools to show. A server whose tools load on
-    // expand stays as the user left it, so a search doesn't start a load for
-    // every server it names.
+    // Open the matches that have something to show: their tools, or a loaded
+    // server's empty-state guidance. A server whose tools haven't loaded stays
+    // as the user left it, so a search doesn't start a load for every server
+    // it names.
     setExpandedServers((prev) => {
       const next = filteredServers
-        .filter((s) => s.tools.length > 0 || prev.has(s.id))
+        .filter(
+          (s) => s.tools.length > 0 || s.status === "ready" || prev.has(s.id),
+        )
         .map((s) => s.id);
       return next.length === prev.size && next.every((id) => prev.has(id))
         ? prev
