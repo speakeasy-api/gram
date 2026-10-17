@@ -584,7 +584,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
-	if eventType == "prompt.submitted" || eventType == "tool.requested" {
+	if eventType == "prompt.submitted" || eventType == "tool.requested" || ctx.Value(ahpBoundaryKey{}) != nil {
 		if quarantine := s.checkQuarantineGate(ctx, event); quarantine != nil {
 			reason := sessionquarantine.DenyReason(quarantine)
 			return reason, reason
@@ -617,6 +617,12 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			auditReason := spendBlockReason("prompt", block)
 			return auditReason, auditReason
 		}
+	}
+
+	// AHP content boundaries carry typed evidence without fabricating user or
+	// assistant transcript messages from model context snapshots.
+	if scans, ok := ctx.Value(ahpBoundaryKey{}).([]ahpBoundaryScan); ok && len(scans) > 0 {
+		return s.evaluateAHPBoundary(ctx, event, scans)
 	}
 
 	switch eventType {
