@@ -68,8 +68,8 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				var reply ahpserver.ToolAfterReply
 				payload := ahpToolAfterPayload(c.Event)
 				if payload == nil {
-					// Supplied results can exist even when execution was skipped.
-					// Audit the boundary without inventing a tool completion.
+					// A hook can supply a result without executing the tool.
+					// Record a notification instead of a tool execution event.
 					payload = ahpPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, "notification.reported", c.Event.Session, c.Event.Turn.Value.ID)
 				}
 				canReplace := slices.Contains(c.Capabilities.Effects, ahp.ToolAfterCapabilitiesEffectsValueItemModify) && c.Capabilities.Modify.Present && c.Capabilities.Modify.Value.Output.Present && c.Capabilities.Modify.Value.Output.Value.Replace
