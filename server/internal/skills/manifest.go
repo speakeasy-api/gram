@@ -799,6 +799,18 @@ func frontmatterFields(fields map[string]*yaml.Node) map[string]any {
 	return frontmatter
 }
 
+// SkillFrontmatter parses SKILL.md content and returns its YAML frontmatter
+// as JSON-compatible values, every field the author wrote included. It is a
+// pure parse: no validation beyond what reading the frontmatter requires, so a
+// manifest that fails spec validation still yields its frontmatter.
+func SkillFrontmatter(content string) (map[string]any, error) {
+	parsed, err := parseSkillManifest(content)
+	if err != nil {
+		return nil, err
+	}
+	return parsed.Frontmatter, nil
+}
+
 // manifestFrontmatter re-derives the top-level frontmatter fields from stored
 // manifest content, which is guaranteed to have parsed at write time.
 func manifestFrontmatter(content string) map[string]any {

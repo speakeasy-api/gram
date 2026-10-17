@@ -403,6 +403,9 @@ type DistributeResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the distribution configuration last changed.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Loads are counted per skill, not per distribution.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // ShareResponseBody is the type of the "skills" service "share" endpoint HTTP
@@ -4956,6 +4959,9 @@ type PluginSkillDistributionResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the distribution configuration last changed.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Loads are counted per skill, not per distribution.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // NewCreateResponseBody builds the HTTP response body from the result of the
@@ -5316,21 +5322,22 @@ func NewListVersionsResponseBody(res *skills.ListSkillVersionsResult) *ListVersi
 // the "distribute" endpoint of the "skills" service.
 func NewDistributeResponseBody(res *types.SkillDistribution) *DistributeResponseBody {
 	body := &DistributeResponseBody{
-		ID:                res.ID,
-		ProjectID:         res.ProjectID,
-		SkillID:           res.SkillID,
-		SkillName:         res.SkillName,
-		SkillDisplayName:  res.SkillDisplayName,
-		PluginID:          res.PluginID,
-		PluginName:        res.PluginName,
-		AssistantID:       res.AssistantID,
-		AssistantName:     res.AssistantName,
-		PinnedVersionID:   res.PinnedVersionID,
-		ResolvedVersionID: res.ResolvedVersionID,
-		Channel:           res.Channel,
-		CreatedByUserID:   res.CreatedByUserID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                  res.ID,
+		ProjectID:           res.ProjectID,
+		SkillID:             res.SkillID,
+		SkillName:           res.SkillName,
+		SkillDisplayName:    res.SkillDisplayName,
+		PluginID:            res.PluginID,
+		PluginName:          res.PluginName,
+		AssistantID:         res.AssistantID,
+		AssistantName:       res.AssistantName,
+		PinnedVersionID:     res.PinnedVersionID,
+		ResolvedVersionID:   res.ResolvedVersionID,
+		Channel:             res.Channel,
+		CreatedByUserID:     res.CreatedByUserID,
+		CreatedAt:           res.CreatedAt,
+		UpdatedAt:           res.UpdatedAt,
+		LastLoadedOverMcpAt: res.LastLoadedOverMcpAt,
 	}
 	return body
 }
