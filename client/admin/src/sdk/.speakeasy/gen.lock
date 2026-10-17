@@ -147,7 +147,6 @@ trackedFiles:
   src/models/components/adminexternalmcpmigrationoutcome.ts: {}
   src/models/components/adminexternalmcpmigrationrequest.ts: {}
   src/models/components/adminexternalmcpmigrationresult.ts: {}
-  src/models/components/adminexternalmcpmigrationtarget.ts: {}
   src/models/components/admininferencekey.ts: {}
   src/models/components/admininferencekeycause.ts: {}
   src/models/components/admininferencekeylimit.ts: {}
@@ -1302,7 +1301,7 @@ examples:
         application/json: {"servers": [{"toolset_id": "d0567f52-612d-4f52-b3a6-0bb2278127c4"}]}
       responses:
         "200":
-          application/json: {"outcomes": [{"actions": ["<value 1>", "<value 2>", "<value 3>"], "endpoint_ids": ["<value 1>"], "merged_into_existing": false, "migration_status": "not_attempted", "toolset_id": "8fe25300-17ed-4fb9-8d55-f69cb830dda4", "warnings": []}]}
+          application/json: {"outcomes": [{"actions": ["<value 1>", "<value 2>", "<value 3>"], "migration_status": "not_attempted", "toolset_id": "8fe25300-17ed-4fb9-8d55-f69cb830dda4", "warnings": []}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1335,7 +1334,7 @@ examples:
         application/json: {"servers": [{"toolset_id": "8df6671e-5b16-4d0e-96ac-f1556c21d33b"}]}
       responses:
         "200":
-          application/json: {"outcomes": [{"actions": ["<value 1>"], "endpoint_ids": ["<value 1>"], "merged_into_existing": true, "migration_status": "failed", "toolset_id": "469e0370-3974-478d-bcfe-43d0fb8dd83f", "warnings": ["<value 1>", "<value 2>"]}]}
+          application/json: {"outcomes": [{"actions": ["<value 1>"], "migration_status": "failed", "toolset_id": "469e0370-3974-478d-bcfe-43d0fb8dd83f", "warnings": ["<value 1>", "<value 2>"]}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

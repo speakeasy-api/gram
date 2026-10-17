@@ -7,10 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type AdminExternalMcpMigrationRequest = {
   /**
-   * Merge into this existing remote server instead of creating one. It must be one of the candidate's targets.
-   */
-  targetMcpServerId?: string | undefined;
-  /**
    * The candidate's toolset.
    */
   toolsetId: string;
@@ -18,7 +14,6 @@ export type AdminExternalMcpMigrationRequest = {
 
 /** @internal */
 export type AdminExternalMcpMigrationRequest$Outbound = {
-  target_mcp_server_id?: string | undefined;
   toolset_id: string;
 };
 
@@ -28,12 +23,10 @@ export const AdminExternalMcpMigrationRequest$outboundSchema: z.ZodMiniType<
   AdminExternalMcpMigrationRequest
 > = z.pipe(
   z.object({
-    targetMcpServerId: z.optional(z.string()),
     toolsetId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      targetMcpServerId: "target_mcp_server_id",
       toolsetId: "toolset_id",
     });
   }),

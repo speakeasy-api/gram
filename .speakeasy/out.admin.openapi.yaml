@@ -467,7 +467,7 @@ paths:
       x-speakeasy-name-override: logout
   /admin/externalMcpMigration.listCandidates:
     get:
-      description: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating and the existing remote servers it may merge into.
+      description: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
       operationId: adminListExternalMcpMigrationCandidates
       responses:
         "200":
@@ -542,7 +542,7 @@ paths:
       x-speakeasy-name-override: listExternalMcpMigrationCandidates
   /admin/externalMcpMigration.migrate:
     post:
-      description: Replaces each server with a remote MCP server on its own sign-in provider, moving its address and everything that references it, then deletes the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+      description: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
       operationId: adminMigrateExternalMcpServers
       requestBody:
         content:
@@ -7665,9 +7665,6 @@ components:
           items:
             type: string
           description: Why the server cannot be migrated. Empty when it can.
-        cleaned_url:
-          type: string
-          description: The upstream URL the replacement dials, with unfilled template query parameters removed.
         mcp_slug:
           type: string
           description: The slug in the server's /mcp/<slug> address. Absent when the server has none.
@@ -7693,17 +7690,15 @@ components:
         remote_url:
           type: string
           description: The attachment's upstream URL. Absent when the server proxies several.
+        replacement_url:
+          type: string
+          description: 'The upstream URL the server will dial as a remote MCP server: the one resource its signed-in sessions recorded, otherwise the attachment''s URL without unfilled template query parameters.'
         server_name:
           type: string
           description: The server's display name.
         sign_in_provider:
           type: string
           description: The server's user session issuer and the upstream authorization servers behind it. Absent when the server has none.
-        targets:
-          type: array
-          items:
-            $ref: '#/components/schemas/AdminExternalMcpMigrationTarget'
-          description: Existing servers the migration may merge into.
         tool_calls:
           type: integer
           description: Tool calls over the last tool_call_window_days. Absent when telemetry is unavailable.
@@ -7723,7 +7718,6 @@ components:
         - project_slug
         - server_name
         - blockers
-        - targets
     AdminExternalMcpMigrationOutcome:
       type: object
       properties:
@@ -7732,21 +7726,13 @@ components:
           items:
             type: string
           description: Each change, in order.
-        endpoint_ids:
-          type: array
-          items:
-            type: string
-          description: Endpoints moved onto or created for the replacement.
         mcp_server_id:
           type: string
-          description: The replacement server.
+          description: The server, which keeps its ID.
           format: uuid
         mcp_slug:
           type: string
-          description: The address the server kept.
-        merged_into_existing:
-          type: boolean
-          description: True when the replacement already existed.
+          description: The server's /mcp/<slug> address, which does not change.
         migration_status:
           type: string
           description: migrated and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
@@ -7760,11 +7746,11 @@ components:
           description: Why the server failed or was not attempted.
         remote_mcp_server_id:
           type: string
-          description: The replacement's remote source, which belongs to the existing server when merged.
+          description: The remote MCP source the server now proxies.
           format: uuid
         remote_url:
           type: string
-          description: The upstream URL the replacement dials.
+          description: The upstream URL the server now dials.
         toolset_id:
           type: string
           description: The candidate's toolset.
@@ -7778,17 +7764,11 @@ components:
       required:
         - toolset_id
         - migration_status
-        - merged_into_existing
-        - endpoint_ids
         - actions
         - warnings
     AdminExternalMcpMigrationRequest:
       type: object
       properties:
-        target_mcp_server_id:
-          type: string
-          description: Merge into this existing remote server instead of creating one. It must be one of the candidate's targets.
-          format: uuid
         toolset_id:
           type: string
           description: The candidate's toolset.
@@ -7805,24 +7785,6 @@ components:
           description: One outcome per requested server, in request order.
       required:
         - outcomes
-    AdminExternalMcpMigrationTarget:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The mcp_servers row ID.
-          format: uuid
-        name:
-          type: string
-          description: Display name of the server.
-        url:
-          type: string
-          description: The upstream URL the server dials.
-      description: An existing remote MCP server in the same project that signs in through the candidate's provider, which the migration can merge into.
-      required:
-        - id
-        - name
-        - url
     AdminInferenceKey:
       type: object
       properties:

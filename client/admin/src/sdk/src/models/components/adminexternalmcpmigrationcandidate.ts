@@ -7,10 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import {
-  AdminExternalMcpMigrationTarget,
-  AdminExternalMcpMigrationTarget$inboundSchema,
-} from "./adminexternalmcpmigrationtarget.js";
 
 /**
  * A live server backed by an external MCP attachment.
@@ -20,10 +16,6 @@ export type AdminExternalMcpMigrationCandidate = {
    * Why the server cannot be migrated. Empty when it can.
    */
   blockers: Array<string>;
-  /**
-   * The upstream URL the replacement dials, with unfilled template query parameters removed.
-   */
-  cleanedUrl?: string | undefined;
   /**
    * The slug in the server's /mcp/<slug> address. Absent when the server has none.
    */
@@ -57,6 +49,10 @@ export type AdminExternalMcpMigrationCandidate = {
    */
   remoteUrl?: string | undefined;
   /**
+   * The upstream URL the server will dial as a remote MCP server: the one resource its signed-in sessions recorded, otherwise the attachment's URL without unfilled template query parameters.
+   */
+  replacementUrl?: string | undefined;
+  /**
    * The server's display name.
    */
   serverName: string;
@@ -64,10 +60,6 @@ export type AdminExternalMcpMigrationCandidate = {
    * The server's user session issuer and the upstream authorization servers behind it. Absent when the server has none.
    */
   signInProvider?: string | undefined;
-  /**
-   * Existing servers the migration may merge into.
-   */
-  targets: Array<AdminExternalMcpMigrationTarget>;
   /**
    * Tool calls over the last tool_call_window_days. Absent when telemetry is unavailable.
    */
@@ -85,7 +77,6 @@ export const AdminExternalMcpMigrationCandidate$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     blockers: z.array(z.string()),
-    cleaned_url: z.optional(z.string()),
     mcp_slug: z.optional(z.string()),
     organization_id: z.string(),
     organization_name: z.string(),
@@ -94,15 +85,14 @@ export const AdminExternalMcpMigrationCandidate$inboundSchema: z.ZodMiniType<
     project_name: z.string(),
     project_slug: z.string(),
     remote_url: z.optional(z.string()),
+    replacement_url: z.optional(z.string()),
     server_name: z.string(),
     sign_in_provider: z.optional(z.string()),
-    targets: z.array(AdminExternalMcpMigrationTarget$inboundSchema),
     tool_calls: z.optional(z.int()),
     toolset_id: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "cleaned_url": "cleanedUrl",
       "mcp_slug": "mcpSlug",
       "organization_id": "organizationId",
       "organization_name": "organizationName",
@@ -111,6 +101,7 @@ export const AdminExternalMcpMigrationCandidate$inboundSchema: z.ZodMiniType<
       "project_name": "projectName",
       "project_slug": "projectSlug",
       "remote_url": "remoteUrl",
+      "replacement_url": "replacementUrl",
       "server_name": "serverName",
       "sign_in_provider": "signInProvider",
       "tool_calls": "toolCalls",

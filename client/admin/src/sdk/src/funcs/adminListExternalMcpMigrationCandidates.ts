@@ -33,7 +33,7 @@ import { Result } from "../types/fp.js";
  * listExternalMcpMigrationCandidates admin
  *
  * @remarks
- * Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating and the existing remote servers it may merge into.
+ * Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
  */
 export function adminListExternalMcpMigrationCandidates(
   client: GramCore,

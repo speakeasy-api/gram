@@ -32,21 +32,13 @@ export type AdminExternalMcpMigrationOutcome = {
    */
   actions: Array<string>;
   /**
-   * Endpoints moved onto or created for the replacement.
-   */
-  endpointIds: Array<string>;
-  /**
-   * The replacement server.
+   * The server, which keeps its ID.
    */
   mcpServerId?: string | undefined;
   /**
-   * The address the server kept.
+   * The server's /mcp/<slug> address, which does not change.
    */
   mcpSlug?: string | undefined;
-  /**
-   * True when the replacement already existed.
-   */
-  mergedIntoExisting: boolean;
   /**
    * migrated and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
    */
@@ -56,11 +48,11 @@ export type AdminExternalMcpMigrationOutcome = {
    */
   reason?: string | undefined;
   /**
-   * The replacement's remote source, which belongs to the existing server when merged.
+   * The remote MCP source the server now proxies.
    */
   remoteMcpServerId?: string | undefined;
   /**
-   * The upstream URL the replacement dials.
+   * The upstream URL the server now dials.
    */
   remoteUrl?: string | undefined;
   /**
@@ -85,10 +77,8 @@ export const AdminExternalMcpMigrationOutcome$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     actions: z.array(z.string()),
-    endpoint_ids: z.array(z.string()),
     mcp_server_id: z.optional(z.string()),
     mcp_slug: z.optional(z.string()),
-    merged_into_existing: z.boolean(),
     migration_status: MigrationStatus$inboundSchema,
     reason: z.optional(z.string()),
     remote_mcp_server_id: z.optional(z.string()),
@@ -98,10 +88,8 @@ export const AdminExternalMcpMigrationOutcome$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      "endpoint_ids": "endpointIds",
       "mcp_server_id": "mcpServerId",
       "mcp_slug": "mcpSlug",
-      "merged_into_existing": "mergedIntoExisting",
       "migration_status": "migrationStatus",
       "remote_mcp_server_id": "remoteMcpServerId",
       "remote_url": "remoteUrl",

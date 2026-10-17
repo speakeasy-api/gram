@@ -290,7 +290,7 @@ export class Admin extends ClientSDK {
    * listExternalMcpMigrationCandidates admin
    *
    * @remarks
-   * Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating and the existing remote servers it may merge into.
+   * Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
    */
   async listExternalMcpMigrationCandidates(
     options?: RequestOptions,
@@ -305,7 +305,7 @@ export class Admin extends ClientSDK {
    * migrateExternalMcpServers admin
    *
    * @remarks
-   * Replaces each server with a remote MCP server on its own sign-in provider, moving its address and everything that references it, then deletes the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+   * Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
    */
   async migrateExternalMcpServers(
     request: MigrateExternalMcpServersRequestBody,
