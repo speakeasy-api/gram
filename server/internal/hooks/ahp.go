@@ -131,7 +131,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				payload := ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
 
 				canDeny := slices.Contains(c.Capabilities.Effects, ahp.ContextCompactBeforeCapabilitiesEffectsValueItemDeny)
-				reason, err := s.ingestAHPBoundary(ctx, payload, !canDeny, append(ahpItemScans(c.Event.Items), ahpBoundaryScan{text: ahpTextParts(c.Event.Instructions.Value), kind: message.User, tool: ""})...)
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canDeny, ahpItemScans(c.Event.Items)...)
 				if err != nil || reason == "" {
 					return reply, err
 				}

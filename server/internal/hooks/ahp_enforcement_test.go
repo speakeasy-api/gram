@@ -292,6 +292,9 @@ func TestAHPQuarantineBlocksEmptyBoundary(t *testing.T) {
 			require.NoError(t, err)
 			event := ahpBoundaryEvent(kind)
 			event["items"] = []any{}
+			if kind == "context.compact.before" {
+				event["instructions"] = []any{ahpTestPart("Summarize the conversation.")}
+			}
 			if kind == "user.message.outbound" {
 				event["message"] = map[string]any{"channel": "cli", "messages": []any{ahpTestMessage("assistant", "")}}
 			}
@@ -387,6 +390,43 @@ func TestAHPContentBoundaryIntentDoesNotDependOnScans(t *testing.T) {
 				require.NoError(t, err)
 				require.Contains(t, reason, "quarantined", "nil and empty evidence must both retain boundary intent")
 			}
+		})
+	}
+}
+
+func TestAHPCompactionInstructionsAreNotUserEvidence(t *testing.T) {
+	t.Parallel()
+	for _, role := range []string{"user", "tool", "instructions-only"} {
+		t.Run(role, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.auth = &ahpTestAuthorizer{authCtx: hookAuthContext(t, ctx)}
+			scanner := &ahpEvidenceScanner{}
+			scanner.result = &risk.ScanResult{Action: "block", PolicyName: "Example policy"}
+			ti.service.riskScanner = scanner
+			h, err := ti.service.ahpHandler()
+			require.NoError(t, err)
+			event := ahpBoundaryEvent("context.compact.before")
+			event["instructions"] = []any{ahpTestPart("Summarize the conversation.")}
+			event["items"] = []any{}
+			if role != "instructions-only" {
+				event["items"] = []any{ahpTestMessage(role, "context evidence")}
+			}
+			effects := ahpBoundaryRequest(t, h, event, map[string]any{"effects": []string{"deny"}})
+			if role == "instructions-only" {
+				require.Empty(t, scanner.requests)
+				require.Empty(t, effects)
+				return
+			}
+			require.Len(t, scanner.requests, 1)
+			require.Equal(t, "context evidence", scanner.requests[0].Text)
+			kind := message.User
+			if role == "tool" {
+				kind = message.ToolResponse
+			}
+			require.Equal(t, kind, scanner.requests[0].MessageType)
+			require.Len(t, effects, 1)
+			require.Equal(t, "deny", effects[0]["type"])
 		})
 	}
 }
