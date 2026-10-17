@@ -20567,7 +20567,8 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// The replacement server.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// The replacement's remote source. Absent when merged into an existing server.
+	// The replacement's remote source, which belongs to the existing server when
+	// merged.
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// True when the replacement already existed.
 	MergedIntoExisting *bool `form:"merged_into_existing,omitempty" json:"merged_into_existing,omitempty" xml:"merged_into_existing,omitempty"`

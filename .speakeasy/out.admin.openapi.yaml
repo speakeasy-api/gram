@@ -7760,7 +7760,7 @@ components:
           description: Why the server failed or was not attempted.
         remote_mcp_server_id:
           type: string
-          description: The replacement's remote source. Absent when merged into an existing server.
+          description: The replacement's remote source, which belongs to the existing server when merged.
           format: uuid
         remote_url:
           type: string

@@ -66,7 +66,7 @@ var AdminExternalMcpMigrationOutcome = Type("AdminExternalMcpMigrationOutcome", 
 	Attribute("reason", String, "Why the server failed or was not attempted.")
 	Attribute("mcp_slug", String, "The address the server kept.")
 	Attribute("mcp_server_id", String, "The replacement server.", func() { Format(FormatUUID) })
-	Attribute("remote_mcp_server_id", String, "The replacement's remote source. Absent when merged into an existing server.", func() { Format(FormatUUID) })
+	Attribute("remote_mcp_server_id", String, "The replacement's remote source, which belongs to the existing server when merged.", func() { Format(FormatUUID) })
 	Attribute("merged_into_existing", Boolean, "True when the replacement already existed.")
 	Attribute("remote_url", String, "The upstream URL the replacement dials.")
 	Attribute("endpoint_ids", ArrayOf(String), "Endpoints moved onto or created for the replacement.")

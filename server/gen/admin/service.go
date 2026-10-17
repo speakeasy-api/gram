@@ -474,7 +474,8 @@ type AdminExternalMcpMigrationOutcome struct {
 	McpSlug *string
 	// The replacement server.
 	McpServerID *string
-	// The replacement's remote source. Absent when merged into an existing server.
+	// The replacement's remote source, which belongs to the existing server when
+	// merged.
 	RemoteMcpServerID *string
 	// True when the replacement already existed.
 	MergedIntoExisting bool
