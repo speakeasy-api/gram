@@ -50,8 +50,8 @@ interface AutoRecordState {
   inFlight: number | undefined;
 
   /**
-   * The batch last sent, as the JSON of its sorted tool names so no name can
-   * blur two batches together; empty in mirror mode.
+   * The batch last sent, as the JSON of its tool names (newToolsBatch sorts
+   * them) so no name can blur two batches together; empty in mirror mode.
    */
   sent: string | undefined;
 
@@ -182,7 +182,7 @@ export function useSyncToolMetadata({
     const serverKey = `${project?.slug ?? ""}:${mcpServerId}`;
     const batch =
       mode === "additive"
-        ? JSON.stringify((tools ?? []).map((tool) => tool.toolName).sort())
+        ? JSON.stringify((tools ?? []).map((tool) => tool.toolName))
         : "";
     const state = autoState.current.get(serverKey) ?? {
       inFlight: undefined,

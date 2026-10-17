@@ -2,23 +2,16 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useTunnelAgentStatus } from "./useTunnelAgentStatus";
 
-/** The status query's request, security and query options. */
-type StatusQueryCall = [
-  { id: string; gramProject: string | undefined },
-  unknown,
-  { enabled: boolean },
-];
-
 const mocks = vi.hoisted(() => ({
   isSuccess: true,
   connectionStatus: "inactive" as string,
   refetch: vi.fn<() => Promise<unknown>>(),
-  calls: [] as StatusQueryCall[],
+  statusQuery: vi.fn<(...args: unknown[]) => void>(),
 }));
 
 vi.mock("@gram/client/react-query/getTunneledMcpServer.js", () => ({
-  useGetTunneledMcpServer: (...args: StatusQueryCall) => {
-    mocks.calls.push(args);
+  useGetTunneledMcpServer: (...args: unknown[]) => {
+    mocks.statusQuery(...args);
     return {
       isSuccess: mocks.isSuccess,
       data: mocks.isSuccess
@@ -62,7 +55,6 @@ describe("useTunnelAgentStatus", () => {
     mocks.isSuccess = true;
     mocks.connectionStatus = "inactive";
     mocks.refetch.mockReset();
-    mocks.calls.length = 0;
   });
 
   it("calls onReconnect once when the agent comes back", () => {
@@ -120,9 +112,11 @@ describe("useTunnelAgentStatus", () => {
         poll: false,
       }),
     );
-    const [input, , options] = mocks.calls.at(-1)!;
-    expect(input).toEqual({ id: "", gramProject: undefined });
-    expect(options.enabled).toBe(false);
+    expect(mocks.statusQuery).toHaveBeenLastCalledWith(
+      { id: "", gramProject: undefined },
+      undefined,
+      expect.objectContaining({ enabled: false }),
+    );
     result.current.refetch();
     expect(mocks.refetch).not.toHaveBeenCalled();
   });

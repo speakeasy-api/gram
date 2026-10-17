@@ -55,11 +55,16 @@ describe("ToolSelectionPanel search", () => {
     search("fleet");
 
     const row = screen.getByRole("button", { name: /Device fleet/ });
-    // Expanded, so its tools are requested and can be picked.
+    expect(screen.queryByRole("button", { name: /Inventory/ })).toBeNull();
+    // The search alone doesn't load it; expanding it does.
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    expect(onExpandedServersChange).toHaveBeenLastCalledWith([]);
+
+    fireEvent.click(row);
+
     expect(row.getAttribute("aria-expanded")).toBe("true");
     expect(onExpandedServersChange).toHaveBeenLastCalledWith(["lazy"]);
     expect(screen.getByText("Loading tools…")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Inventory/ })).toBeNull();
   });
 
   it("drops a server with no loaded tools when the search names a tool", () => {

@@ -246,7 +246,6 @@ function RemoteMcpToolsSectionInner({
     <ToolsSectionShell>
       {!loading && drift.length > 0 ? (
         <ToolMetadataDriftPanel
-          key={mcpServerId}
           drift={drift}
           mcpServerId={mcpServerId}
           onSync={sync}

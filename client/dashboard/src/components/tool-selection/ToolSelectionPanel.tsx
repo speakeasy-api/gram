@@ -237,9 +237,18 @@ export function ToolSelectionPanel({
   }, [servers, q]);
 
   useEffect(() => {
-    if (q) {
-      setExpandedServers(new Set(filteredServers.map((s) => s.id)));
-    }
+    if (!q) return;
+    // Open the matches that have tools to show. A server whose tools load on
+    // expand stays as the user left it, so a search doesn't start a load for
+    // every server it names.
+    setExpandedServers((prev) => {
+      const next = filteredServers
+        .filter((s) => s.tools.length > 0 || prev.has(s.id))
+        .map((s) => s.id);
+      return next.length === prev.size && next.every((id) => prev.has(id))
+        ? prev
+        : new Set(next);
+    });
   }, [q, filteredServers]);
 
   // Flattened to one server, every tool is already on screen unexpanded, so

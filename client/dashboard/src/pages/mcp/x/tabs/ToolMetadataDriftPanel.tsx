@@ -90,64 +90,18 @@ export function ToolMetadataDriftPanel({
   isSyncing: boolean;
   toolActions?: ToolMetadataActions;
 }): JSX.Element | null {
-  // The confirmation names the server it was opened for and is dropped once
-  // the panel moves to another one, so it never applies there or reopens on
-  // the way back.
-  const [removing, setRemoving] = useState<{
-    mcpServerId: string | undefined;
-    toolName: string;
-  } | null>(null);
-  if (removing !== null && removing.mcpServerId !== mcpServerId) {
-    setRemoving(null);
-  }
   if (drift.length === 0) return null;
 
   if (toolActions) {
+    // Keyed by server: a pending confirmation is dropped with the server it
+    // was opened on, so it never applies to, or reopens on, another.
     return (
-      <div className="border-border mb-5 border">
-        <div className="border-b px-4 py-2">
-          <Text small as="p" className="text-muted-foreground">
-            <span className="text-foreground font-medium">
-              {drift.length} {drift.length === 1 ? "tool" : "tools"}
-            </span>{" "}
-            {drift.length === 1 ? "differs" : "differ"} from what this server
-            listed for you. Other people may see different tools, so stored
-            annotations change one tool at a time.
-          </Text>
-        </div>
-        <ul className="divide-border divide-y">
-          {drift.map((entry) => (
-            <DriftRow
-              key={entry.toolName}
-              entry={entry}
-              action={
-                <DriftRowAction
-                  entry={entry}
-                  mcpServerId={mcpServerId}
-                  actions={toolActions}
-                  onRemove={() =>
-                    setRemoving({ mcpServerId, toolName: entry.toolName })
-                  }
-                />
-              }
-            />
-          ))}
-        </ul>
-        {removing !== null &&
-        drift.some(
-          (entry) =>
-            entry.kind === "removed" && entry.toolName === removing.toolName,
-        ) ? (
-          <RemoveStoredToolDialog
-            toolName={removing.toolName}
-            onConfirm={() => {
-              toolActions.remove(removing.toolName);
-              setRemoving(null);
-            }}
-            onClose={() => setRemoving(null)}
-          />
-        ) : null}
-      </div>
+      <PerToolDriftPanel
+        key={mcpServerId}
+        drift={drift}
+        mcpServerId={mcpServerId}
+        toolActions={toolActions}
+      />
     );
   }
 
@@ -185,6 +139,66 @@ export function ToolMetadataDriftPanel({
           <DriftRow key={entry.toolName} entry={entry} />
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Per-tool reconciliation for a server whose listings differ per caller: each
+ * row offers one write to one tool, and removal waits for confirmation.
+ */
+function PerToolDriftPanel({
+  drift,
+  mcpServerId,
+  toolActions,
+}: {
+  drift: ToolDrift[];
+  mcpServerId: string | undefined;
+  toolActions: ToolMetadataActions;
+}): JSX.Element {
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  return (
+    <div className="border-border mb-5 border">
+      <div className="border-b px-4 py-2">
+        <Text small as="p" className="text-muted-foreground">
+          <span className="text-foreground font-medium">
+            {drift.length} {drift.length === 1 ? "tool" : "tools"}
+          </span>{" "}
+          {drift.length === 1 ? "differs" : "differ"} from what this server
+          listed for you. Other people may see different tools, so stored
+          annotations change one tool at a time.
+        </Text>
+      </div>
+      <ul className="divide-border divide-y">
+        {drift.map((entry) => (
+          <DriftRow
+            key={entry.toolName}
+            entry={entry}
+            action={
+              <DriftRowAction
+                entry={entry}
+                mcpServerId={mcpServerId}
+                actions={toolActions}
+                onRemove={() => setRemoving(entry.toolName)}
+              />
+            }
+          />
+        ))}
+      </ul>
+      {removing !== null &&
+      drift.some(
+        (entry) => entry.kind === "removed" && entry.toolName === removing,
+      ) ? (
+        <RemoveStoredToolDialog
+          toolName={removing}
+          onConfirm={() => {
+            toolActions.remove(removing);
+            setRemoving(null);
+          }}
+          onClose={() => setRemoving(null)}
+        />
+      ) : null}
     </div>
   );
 }
