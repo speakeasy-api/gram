@@ -76,9 +76,6 @@ func (m *Migrator) planHeaders(ctx context.Context, tx pgx.Tx, toolset toolsetsr
 		}
 	}
 
-	if m.encryption == nil {
-		return nil, fail("stored environment values cannot be read because no application encryption key is configured")
-	}
 	systemEnv, err := environments.NewEnvironmentEntries(m.logger, tx, m.encryption, mcpmetadatarepo.New(tx)).
 		LoadSystemEnv(ctx, toolset.ProjectID, toolset.ID, string(urn.ToolKindExternalMCP), rows[0].AttachmentSlug)
 	if err != nil {
@@ -179,6 +176,11 @@ func describeHeaders(planned []plannedHeader) []string {
 func checkHeader(header plannedHeader) error {
 	if _, err := proxy.NormalizeHeaderName(header.name); err != nil {
 		return fail("header %q cannot be copied: %s", header.name, err.Error())
+	}
+	if header.fromRequest != "" {
+		if _, err := proxy.NormalizeHeaderName(header.fromRequest); err != nil {
+			return fail("header %q cannot be passed through from %q: %s", header.name, header.fromRequest, err.Error())
+		}
 	}
 	configured := proxy.ConfiguredHeader{IsRequired: false, Name: header.name, StaticValue: header.value, ValueFromRequestHeader: header.fromRequest}
 	if err := proxy.CheckRemoteHeader(configured); err != nil {

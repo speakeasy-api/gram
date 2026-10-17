@@ -219,6 +219,12 @@ func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 			seedServer(t, ctx, ti, serverOptions{slug: "shared-b", remoteURL: "https://mcp.example.com/mcp", sharedIssuer: &server})
 			return server
 		}},
+		{name: "issuer shared with an enabled toolset", blocker: "another enabled toolset", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
+			t.Helper()
+			server := seedServer(t, ctx, ti, serverOptions{slug: "toolset-a", remoteURL: "https://mcp.example.com/mcp"})
+			seedServer(t, ctx, ti, serverOptions{slug: "toolset-b", remoteURL: "https://mcp.example.com/mcp", sharedIssuer: &server, noWrapper: true})
+			return server
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

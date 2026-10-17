@@ -99,9 +99,8 @@ type Migrator struct {
 }
 
 // NewMigrator builds a migrator. enc decrypts environment values copied into
-// headers and encrypts them again; it may be nil when no application key is
-// configured, which fails any migration that needs it. toolCalls may be nil
-// when telemetry is unavailable.
+// headers and encrypts them again. toolCalls may be nil when telemetry is
+// unavailable.
 func NewMigrator(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, auditLogger *audit.Logger, policy *guardian.Policy, enc *encryption.Client, publication plugins.PublicationRequests, toolCalls ToolCallCounter) *Migrator {
 	return &Migrator{
 		logger:         logger.With(attr.SlogComponent("external_mcp_migration")),
@@ -159,6 +158,9 @@ func (m *Migrator) runOne(ctx context.Context, actor Actor, request Request, dry
 
 	outcome.ToolsetID = request.ToolsetID
 	outcome.Status = StatusFailed
+	// The transaction rolled back, so nothing it created exists.
+	outcome.RemoteMcpServerID = uuid.Nil
+	outcome.RemoteURL = ""
 	var reason failure
 	switch {
 	case errors.As(err, &reason):

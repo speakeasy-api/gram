@@ -48,11 +48,11 @@ export type AdminExternalMcpMigrationOutcome = {
    */
   reason?: string | undefined;
   /**
-   * The remote MCP source the server now proxies.
+   * The remote MCP source the server proxies once migrated. Absent when the server failed; a preview's source is rolled back.
    */
   remoteMcpServerId?: string | undefined;
   /**
-   * The upstream URL the server now dials.
+   * The upstream URL the server dials once migrated. Absent when the server failed.
    */
   remoteUrl?: string | undefined;
   /**

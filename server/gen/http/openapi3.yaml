@@ -88106,11 +88106,11 @@ components:
                     description: Why the server failed or was not attempted.
                 remote_mcp_server_id:
                     type: string
-                    description: The remote MCP source the server now proxies.
+                    description: The remote MCP source the server proxies once migrated. Absent when the server failed; a preview's source is rolled back.
                     format: uuid
                 remote_url:
                     type: string
-                    description: The upstream URL the server now dials.
+                    description: The upstream URL the server dials once migrated. Absent when the server failed.
                 toolset_id:
                     type: string
                     description: The candidate's toolset.

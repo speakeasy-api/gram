@@ -88,7 +88,9 @@ WHERE rs.user_session_issuer_id = $2
   AND rs.remote_session_client_id IN (
     SELECT link.remote_session_client_id
     FROM remote_session_client_user_session_issuers AS link
+    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id
     WHERE link.user_session_issuer_id = $2
+      AND (rsc.project_id = $4::uuid OR (rsc.project_id IS NULL AND rsc.organization_id = $3::text))
   )
 `
 
@@ -96,13 +98,19 @@ type FillRemoteSessionResourcesParams struct {
 	Resource            pgtype.Text
 	UserSessionIssuerID uuid.UUID
 	OrganizationID      string
+	ProjectID           uuid.UUID
 }
 
 // Stamps the upstream URL on the issuer's sessions that recorded no resource.
 // A remote MCP backend only forwards a credential whose resource matches its
 // URL, so without this every user would have to sign in again.
 func (q *Queries) FillRemoteSessionResources(ctx context.Context, arg FillRemoteSessionResourcesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, fillRemoteSessionResources, arg.Resource, arg.UserSessionIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, fillRemoteSessionResources,
+		arg.Resource,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -338,26 +346,52 @@ SELECT
   COALESCE((
     SELECT array_agg(DISTINCT rsi.id)
     FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_clients AS rsc
+      ON rsc.id = link.remote_session_client_id
+     AND rsc.deleted IS FALSE
+     -- The serve-time credential resolver's tenancy: the project's own
+     -- clients and its organization's organization-level clients.
+     AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
     WHERE link.user_session_issuer_id = t.user_session_issuer_id
   ), ARRAY[]::uuid[])::uuid[] AS remote_session_issuer_ids,
   COALESCE((
     SELECT array_agg(DISTINCT COALESCE(rsi.name, rsi.issuer) ORDER BY COALESCE(rsi.name, rsi.issuer))
     FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_clients AS rsc
+      ON rsc.id = link.remote_session_client_id
+     AND rsc.deleted IS FALSE
+     -- The serve-time credential resolver's tenancy: the project's own
+     -- clients and its organization's organization-level clients.
+     AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
     WHERE link.user_session_issuer_id = t.user_session_issuer_id
   ), ARRAY[]::text[])::text[] AS remote_issuer_names,
   EXISTS (
     SELECT 1
     FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_clients AS rsc
+      ON rsc.id = link.remote_session_client_id
+     AND rsc.deleted IS FALSE
+     -- The serve-time credential resolver's tenancy: the project's own
+     -- clients and its organization's organization-level clients.
+     AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     WHERE link.user_session_issuer_id = t.user_session_issuer_id AND rsc.credential_owner = 'self'
   )::boolean AS has_self_owned_clients,
   EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b WHERE b.user_session_issuer_id = t.user_session_issuer_id
   )::boolean AS has_ema_bindings,
+  -- Another enabled toolset on the issuer still reads its sessions, so
+  -- stamping a resource on them could cut it off.
+  (
+    SELECT count(*)
+    FROM toolsets AS other
+    JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
+    WHERE other.user_session_issuer_id = t.user_session_issuer_id
+      AND other.id <> t.id
+      AND other.deleted IS FALSE
+      AND other.mcp_enabled
+  )::bigint AS other_toolsets_on_issuer,
   COALESCE((
     SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))
     FROM remote_sessions AS rs
@@ -443,6 +477,7 @@ type ListCandidatesRow struct {
 	RemoteIssuerNames             []string
 	HasSelfOwnedClients           bool
 	HasEmaBindings                bool
+	OtherToolsetsOnIssuer         int64
 	SessionResources              []string
 	OtherNonRemoteServersOnIssuer int64
 	OtherRemoteUrlsOnIssuer       []string
@@ -502,6 +537,7 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.RemoteIssuerNames,
 			&i.HasSelfOwnedClients,
 			&i.HasEmaBindings,
+			&i.OtherToolsetsOnIssuer,
 			&i.SessionResources,
 			&i.OtherNonRemoteServersOnIssuer,
 			&i.OtherRemoteUrlsOnIssuer,
@@ -648,7 +684,7 @@ const rekeyToolsetMetadata = `-- name: RekeyToolsetMetadata :execrows
 UPDATE mcp_metadata AS md
 SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
 WHERE md.project_id = $2
-  AND md.toolset_id = $1
+  AND md.toolset_id = $3
   AND NOT EXISTS (
     SELECT 1 FROM mcp_metadata AS existing
     WHERE existing.project_id = $2 AND existing.mcp_server_id = $1
@@ -656,15 +692,15 @@ WHERE md.project_id = $2
 `
 
 type RekeyToolsetMetadataParams struct {
-	ID        uuid.NullUUID
-	ProjectID uuid.UUID
+	McpServerID uuid.NullUUID
+	ProjectID   uuid.UUID
+	ToolsetID   uuid.NullUUID
 }
 
-// The server keeps the toolset's id, so its metadata row moves from the
-// toolset key to the server key without changing which server it describes,
-// unless the server already has one.
+// Moves the toolset's metadata row onto the server it now describes, unless
+// the server already has one.
 func (q *Queries) RekeyToolsetMetadata(ctx context.Context, arg RekeyToolsetMetadataParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rekeyToolsetMetadata, arg.ID, arg.ProjectID)
+	result, err := q.db.Exec(ctx, rekeyToolsetMetadata, arg.McpServerID, arg.ProjectID, arg.ToolsetID)
 	if err != nil {
 		return 0, err
 	}
@@ -907,30 +943,28 @@ const switchServerToRemote = `-- name: SwitchServerToRemote :execrows
 UPDATE mcp_servers
 SET toolset_id = NULL,
   remote_mcp_server_id = $1,
-  remote_session_issuer_id = $2,
-  user_session_issuer_id = COALESCE(user_session_issuer_id, $3),
+  user_session_issuer_id = COALESCE(user_session_issuer_id, $2),
   updated_at = clock_timestamp()
-WHERE id = $4
-  AND project_id = $5
-  AND toolset_id = $6
+WHERE id = $3
+  AND project_id = $4
+  AND toolset_id = $5
   AND deleted IS FALSE
 `
 
 type SwitchServerToRemoteParams struct {
-	RemoteMcpServerID     uuid.NullUUID
-	RemoteSessionIssuerID uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	ToolsetID             uuid.NullUUID
+	RemoteMcpServerID   uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	ToolsetID           uuid.NullUUID
 }
 
 // Swaps the backend in one statement, as mcp_servers_backend_exclusivity_check
-// requires, keeping the row's id, slug, visibility and network access.
+// requires, keeping the row's id, slug, visibility and network access. The
+// upstream issuer is then derived by the shared resync, as for any server.
 func (q *Queries) SwitchServerToRemote(ctx context.Context, arg SwitchServerToRemoteParams) (int64, error) {
 	result, err := q.db.Exec(ctx, switchServerToRemote,
 		arg.RemoteMcpServerID,
-		arg.RemoteSessionIssuerID,
 		arg.UserSessionIssuerID,
 		arg.ID,
 		arg.ProjectID,
