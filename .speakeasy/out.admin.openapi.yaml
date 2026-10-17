@@ -465,6 +465,243 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: logout
+  /admin/externalMcpMigration.listCandidates:
+    get:
+      description: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
+      operationId: adminListExternalMcpMigrationCandidates
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminListExternalMcpMigrationCandidatesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listExternalMcpMigrationCandidates admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listExternalMcpMigrationCandidates
+  /admin/externalMcpMigration.migrate:
+    post:
+      description: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+      operationId: adminMigrateExternalMcpServers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateExternalMcpServersRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminExternalMcpMigrationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: migrateExternalMcpServers admin
+      tags:
+        - admin
+      x-speakeasy-name-override: migrateExternalMcpServers
+  /admin/externalMcpMigration.preview:
+    post:
+      description: Runs the migration of each server inside a transaction that is rolled back, reporting what would happen without changing anything.
+      operationId: adminPreviewExternalMcpMigration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewExternalMcpMigrationRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminExternalMcpMigrationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: previewExternalMcpMigration admin
+      tags:
+        - admin
+      x-speakeasy-name-override: previewExternalMcpMigration
   /admin/onboarding.playbooks:
     get:
       description: Read every playbook, or, when an organization is named, the shared ones and its own.
@@ -7420,6 +7657,134 @@ components:
         - pricing_basis
         - queried_at
         - customers
+    AdminExternalMcpMigrationCandidate:
+      type: object
+      properties:
+        blockers:
+          type: array
+          items:
+            type: string
+          description: Why the server cannot be migrated. Empty when it can.
+        mcp_slug:
+          type: string
+          description: The slug in the server's /mcp/<slug> address. Absent when the server has none.
+        organization_id:
+          type: string
+          description: Organization ID.
+        organization_name:
+          type: string
+          description: Organization name.
+        organization_slug:
+          type: string
+          description: Organization slug.
+        project_id:
+          type: string
+          description: Project ID.
+          format: uuid
+        project_name:
+          type: string
+          description: Project name.
+        project_slug:
+          type: string
+          description: Project slug.
+        remote_url:
+          type: string
+          description: The attachment's upstream URL. Absent when the server proxies several.
+        replacement_url:
+          type: string
+          description: 'The upstream URL the server will dial as a remote MCP server: the one resource its signed-in sessions recorded, otherwise the attachment''s URL without unfilled template query parameters.'
+        server_name:
+          type: string
+          description: The server's display name.
+        sign_in_provider:
+          type: string
+          description: The server's user session issuer and the upstream authorization servers behind it. Absent when the server has none.
+        tool_calls:
+          type: integer
+          description: Tool calls over the last tool_call_window_days. Absent when telemetry is unavailable.
+          format: int64
+        toolset_id:
+          type: string
+          description: The toolset behind the server.
+          format: uuid
+      description: A live server backed by an external MCP attachment.
+      required:
+        - toolset_id
+        - organization_id
+        - organization_name
+        - organization_slug
+        - project_id
+        - project_name
+        - project_slug
+        - server_name
+        - blockers
+    AdminExternalMcpMigrationOutcome:
+      type: object
+      properties:
+        actions:
+          type: array
+          items:
+            type: string
+          description: Each change, in order.
+        mcp_server_id:
+          type: string
+          description: The server, which keeps its ID.
+          format: uuid
+        mcp_slug:
+          type: string
+          description: The server's /mcp/<slug> address, which does not change.
+        migration_status:
+          type: string
+          description: migrated and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
+          enum:
+            - migrated
+            - previewed
+            - failed
+            - not_attempted
+        reason:
+          type: string
+          description: Why the server failed or was not attempted.
+        remote_mcp_server_id:
+          type: string
+          description: The remote MCP source the server now proxies.
+          format: uuid
+        remote_url:
+          type: string
+          description: The upstream URL the server now dials.
+        toolset_id:
+          type: string
+          description: The candidate's toolset.
+          format: uuid
+        warnings:
+          type: array
+          items:
+            type: string
+          description: What the migration could not carry over.
+      description: What happened, or in a preview what would happen, to one server.
+      required:
+        - toolset_id
+        - migration_status
+        - actions
+        - warnings
+    AdminExternalMcpMigrationRequest:
+      type: object
+      properties:
+        toolset_id:
+          type: string
+          description: The candidate's toolset.
+          format: uuid
+      required:
+        - toolset_id
+    AdminExternalMcpMigrationResult:
+      type: object
+      properties:
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminExternalMcpMigrationOutcome'
+          description: One outcome per requested server, in request order.
+      required:
+        - outcomes
     AdminInferenceKey:
       type: object
       properties:
@@ -7534,6 +7899,21 @@ components:
         - period_start
         - period_end
         - spend_usd
+    AdminListExternalMcpMigrationCandidatesResult:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminExternalMcpMigrationCandidate'
+          description: Every candidate across all organizations.
+        tool_call_window_days:
+          type: integer
+          description: Days of tool calls each candidate's tool_calls covers.
+          format: int64
+      required:
+        - candidates
+        - tool_call_window_days
     AdminListOrganizationActivityResult:
       type: object
       properties:
@@ -9807,6 +10187,18 @@ components:
       required:
         - from
         - to
+    MigrateExternalMcpServersRequestBody:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminExternalMcpMigrationRequest'
+          description: Servers to migrate, in order.
+          minItems: 1
+          maxItems: 100
+      required:
+        - servers
     MigrateRemoteSessionIssuerRequestBody:
       type: object
       properties:
@@ -9838,6 +10230,18 @@ components:
         - issuer
         - clients_migrated
         - source_deleted
+    PreviewExternalMcpMigrationRequestBody:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminExternalMcpMigrationRequest'
+          description: Servers to migrate, in order.
+          minItems: 1
+          maxItems: 100
+      required:
+        - servers
     ProductFeatures:
       type: object
       properties:
