@@ -86,7 +86,7 @@ func (c Context) Validate() error {
 // ReadingID derives a sensor result's UUIDv5 within a validated evaluation scope.
 // Request time, attempt, content and configuration do not change the identity.
 func (c Context) ReadingID(organization, project, kind, event, sensor string) uuid.UUID {
-	identity := []string{"sigint-reading-v2", organization, project, string(c.TriggerKind)}
+	identity := []string{"sigint-reading", organization, project, string(c.TriggerKind)}
 	if c.TriggerKind == TriggerManual {
 		identity = append(identity, c.RunID.String())
 	}

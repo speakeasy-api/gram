@@ -214,12 +214,12 @@ A multi-label reading requires all its Noul outcomes to succeed.
 
 ## Identity and content
 
-Reading identity is a UUIDv5 derived from a versioned JSON tuple containing tenant,
+Reading identity is a UUIDv5 derived from a JSON tuple containing tenant,
 evaluation scope, source event and sensor:
 
 ```text
-["sigint-reading-v2", organization_id, project_id, "stream", event_kind, event_id, sensor_id]
-["sigint-reading-v2", organization_id, project_id, "manual", run_id, event_kind, event_id, sensor_id]
+["sigint-reading", organization_id, project_id, "stream", event_kind, event_id, sensor_id]
+["sigint-reading", organization_id, project_id, "manual", run_id, event_kind, event_id, sensor_id]
 ```
 
 Every input supplies a validated `readings.Context`: an explicit `stream` or
