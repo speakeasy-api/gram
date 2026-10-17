@@ -22,7 +22,7 @@ import (
 func TestServePublic_PrivateRemote_DispositionGrantExcludesUnclassifiedTool(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)

@@ -255,7 +255,7 @@ const tunnelRBACMetadata = `[
 func TestServePublic_PrivateTunneled_ToolGrantNarrowsListAndCall(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -277,7 +277,7 @@ func TestServePublic_PrivateTunneled_ToolGrantNarrowsListAndCall(t *testing.T) {
 func TestServePublic_PrivateTunneled_DispositionGrantFollowsStoredMetadata(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -301,7 +301,7 @@ func TestServePublic_PrivateTunneled_DispositionGrantFollowsStoredMetadata(t *te
 func TestServePublic_PrivateTunneled_ServersSharingATunnelAuthorizeIndependently(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -335,7 +335,7 @@ func TestServePublic_PrivateTunneled_ServersSharingATunnelAuthorizeIndependently
 func TestServePublic_MetaEndpoint_ExecuteTool_PrivateTunneledMemberEnforcesToolGrants(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)

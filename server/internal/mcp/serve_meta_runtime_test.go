@@ -689,7 +689,7 @@ func TestServePublic_MetaEndpoint_ListServers_RBACFiltersPrivateMembers(t *testi
 func TestServePublic_MetaEndpoint_DescribeServer_DispositionGrantHidesUnannotatedTool(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
