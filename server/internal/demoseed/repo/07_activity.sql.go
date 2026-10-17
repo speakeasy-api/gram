@@ -224,6 +224,79 @@ func (q *Queries) ActivityInsertClaudeTagSessionLink(ctx context.Context, arg Ac
 	return err
 }
 
+const activityInsertFleetAssistant = `-- name: ActivityInsertFleetAssistant :exec
+INSERT INTO assistants
+  (id, project_id, organization_id, created_by_user_id, name, model,
+   instructions, status, created_at, updated_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::text, $5::text, 'anthropic/claude-sonnet-4.6',
+   $6::text, $7::text, now() - interval '14 days',
+   $8::timestamptz)
+`
+
+type ActivityInsertFleetAssistantParams struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID string
+	Name            string
+	Instructions    string
+	Status          string
+	UpdatedAt       pgtype.Timestamptz
+}
+
+// A configured assistant identity with archived conversations, not a live
+// runtime: no triggers, deliveries, runs or runtime rows. Project deletion
+// cascades through assistants, threads, chats and messages.
+func (q *Queries) ActivityInsertFleetAssistant(ctx context.Context, arg ActivityInsertFleetAssistantParams) error {
+	_, err := q.db.Exec(ctx, activityInsertFleetAssistant,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.CreatedByUserID,
+		arg.Name,
+		arg.Instructions,
+		arg.Status,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const activityInsertFleetAssistantThread = `-- name: ActivityInsertFleetAssistantThread :exec
+INSERT INTO assistant_threads
+  (id, assistant_id, project_id, correlation_id, chat_id, source_kind,
+   last_event_at, created_at, updated_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::uuid, $4::text,
+   $5::uuid, 'dashboard', $6::timestamptz,
+   $7::timestamptz, $6::timestamptz)
+`
+
+type ActivityInsertFleetAssistantThreadParams struct {
+	ID            uuid.UUID
+	AssistantID   uuid.UUID
+	ProjectID     uuid.UUID
+	CorrelationID string
+	ChatID        uuid.UUID
+	LastEventAt   pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+}
+
+// The explicit thread is what establishes a capture's assistantId.
+func (q *Queries) ActivityInsertFleetAssistantThread(ctx context.Context, arg ActivityInsertFleetAssistantThreadParams) error {
+	_, err := q.db.Exec(ctx, activityInsertFleetAssistantThread,
+		arg.ID,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.CorrelationID,
+		arg.ChatID,
+		arg.LastEventAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const activityInsertKillswitchAuditLog = `-- name: ActivityInsertKillswitchAuditLog :exec
 INSERT INTO audit_logs
   (id, organization_id, project_id, actor_id, actor_type, actor_display_name,

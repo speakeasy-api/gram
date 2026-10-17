@@ -2,8 +2,10 @@
 -- connections, workloads, Slack, widgets, and sigint. Each query is one
 -- count the Go code in seed_09_postflight_identity.go checks.
 
--- The seed never creates API keys: any row left here was minted by a demo
--- visitor and would grant programmatic access that survives the reseed.
+-- The seed writes only three inert agent keys: any other row was minted by a
+-- demo visitor and would grant programmatic access that survives the reseed.
+-- Local fixtures restore the separate developer key afterwards; it never
+-- belongs to the demo org.
 -- name: PostflightIDAPIKeys :one
 SELECT count(*) FROM api_keys WHERE organization_id = @org_id::text;
 
@@ -65,6 +67,149 @@ SELECT count(*) FROM agents WHERE organization_id = @org_id::text;
 -- name: PostflightIDAgentSessions :one
 SELECT count(*) FROM user_sessions
 WHERE organization_id = @org_id::text AND subject_urn LIKE 'agent:%';
+
+-- name: PostflightIDUsableAgentKeys :one
+SELECT count(*) FROM api_keys
+WHERE organization_id = @org_id::text
+  AND (expires_at IS NULL OR expires_at >= now()
+    OR key_hash NOT LIKE 'DEMO-NOT-A-VALID-HASH-%' OR cardinality(scopes) <> 0
+    OR delegated_grants IS DISTINCT FROM '[]'::jsonb
+    OR subject_urn NOT LIKE 'agent:%');
+
+-- name: PostflightIDRecentExpiredAgentSession :one
+SELECT count(*) FROM user_sessions
+WHERE organization_id = @org_id::text AND project_id = @project_id::uuid
+  AND subject_urn = @agent_urn::text
+  AND last_used_at >= now() - interval '24 hours' AND expires_at < now();
+
+-- name: PostflightIDFleetCoverageInvalid :one
+-- Fleet coverage is a contract, not names that happen to populate a table:
+-- eight agents with evidence in the last day, four org-wide and four in the
+-- project, owned across four directory departments.
+WITH evidence AS (
+  SELECT subject_urn, last_used_at AS used_at FROM user_sessions
+  WHERE organization_id = @org_id::text
+  UNION ALL
+  SELECT subject_urn, last_accessed_at FROM api_keys
+  WHERE organization_id = @org_id::text
+), recent AS (
+  SELECT a.id, a.project_id, a.owner_user_id FROM agents a
+  JOIN evidence e ON e.subject_urn = 'agent:' || a.id::text
+  WHERE a.organization_id = @org_id::text
+    AND e.used_at >= now() - interval '24 hours'
+  GROUP BY a.id
+)
+SELECT (CASE WHEN count(*) = 8
+    AND count(*) FILTER (WHERE r.project_id IS NULL) = 4
+    AND count(*) FILTER (WHERE r.project_id = @project_id::uuid) = 4
+    AND count(DISTINCT d.attributes->>'department_name') = 4
+  THEN 0 ELSE 1 END)::bigint AS stray
+FROM recent r
+JOIN directory_users d
+  ON d.organization_id = @org_id::text AND d.user_id = r.owner_user_id;
+
+-- name: PostflightIDAgentCredentialLifecycleViolations :one
+-- No credential is used before its agent exists or after it is suspended,
+-- revoked or deleted, and a revoked agent's credentials end with it.
+SELECT count(*) FROM (
+  SELECT a.created_at, a.suspended_at, a.revoked_at,
+    us.last_used_at AS used_at, us.deleted_at
+  FROM agents a JOIN user_sessions us ON us.subject_urn = 'agent:' || a.id::text
+  WHERE a.organization_id = @org_id::text AND us.organization_id = @org_id::text
+  UNION ALL
+  SELECT a.created_at, a.suspended_at, a.revoked_at,
+    k.last_accessed_at, k.deleted_at
+  FROM agents a JOIN api_keys k ON k.subject_urn = 'agent:' || a.id::text
+  WHERE a.organization_id = @org_id::text AND k.organization_id = @org_id::text
+) evidence
+WHERE used_at > now() OR used_at < created_at
+  OR used_at > suspended_at OR used_at > revoked_at OR used_at > deleted_at
+  OR (revoked_at IS NOT NULL AND deleted_at IS DISTINCT FROM revoked_at);
+
+-- name: PostflightIDUsableAgentSessions :one
+SELECT count(*) FROM user_sessions
+WHERE organization_id = @org_id::text AND subject_urn LIKE 'agent:%'
+  AND (expires_at >= now() OR refresh_expires_at >= now()
+    OR refresh_token_hash NOT LIKE 'DEMO-NOT-A-VALID-HASH-%'
+    OR delegated_grants IS DISTINCT FROM '[]'::jsonb);
+
+-- name: PostflightIDOldAgentSessions :one
+SELECT count(*) FROM user_sessions
+WHERE organization_id = @org_id::text AND subject_urn = @agent_urn::text
+  AND last_used_at < now() - interval '24 hours';
+
+-- name: PostflightIDAgentCredentials :one
+SELECT ((SELECT count(*) FROM user_sessions
+   WHERE organization_id = @org_id::text AND subject_urn = @agent_urn::text)
+  + (SELECT count(*) FROM api_keys
+     WHERE organization_id = @org_id::text AND subject_urn = @agent_urn::text))::bigint AS total;
+
+-- name: PostflightIDAgentRestrictions :one
+SELECT count(*) FROM killswitch_prescriptions
+WHERE organization_id = @org_id::text AND principal_kind = 'agent'
+  AND principal_key = (@agent_id::uuid)::text;
+
+-- name: PostflightIDRevokedAgentSessions :one
+SELECT count(*) FROM user_sessions
+WHERE organization_id = @org_id::text AND subject_urn LIKE 'agent:%'
+  AND deleted_at IS NOT NULL;
+
+-- name: PostflightIDRevokedAPIKeys :one
+SELECT count(*) FROM api_keys
+WHERE organization_id = @org_id::text AND deleted_at IS NOT NULL;
+
+-- name: PostflightIDFleetAssistants :one
+SELECT count(*) FROM assistants
+WHERE project_id = @project_id::uuid AND id = ANY(@assistant_ids::uuid[]);
+
+-- name: PostflightIDFleetAssistantThreads :one
+SELECT count(*) FROM assistant_threads
+WHERE project_id = @project_id::uuid AND assistant_id = ANY(@assistant_ids::uuid[]);
+
+-- name: PostflightIDFleetRecentAssistants :one
+-- Every Fleet assistant has recent evidence in the first page of captures.
+WITH latest AS (
+  SELECT c.id FROM chats c JOIN chat_messages m ON m.chat_id = c.id
+  WHERE c.organization_id = @org_id::text AND c.project_id = @project_id::uuid
+  GROUP BY c.id ORDER BY max(m.created_at) DESC LIMIT 50
+)
+SELECT count(DISTINCT t.assistant_id) FROM assistant_threads t
+JOIN latest ON latest.id = t.chat_id
+WHERE t.project_id = @project_id::uuid
+  AND t.last_event_at >= now() - interval '24 hours'
+  AND t.assistant_id = ANY(@assistant_ids::uuid[]);
+
+-- name: PostflightIDFleetThreadViolations :one
+SELECT count(*) FROM assistant_threads t
+JOIN chats c ON c.id = t.chat_id
+JOIN assistants a ON a.id = t.assistant_id
+WHERE t.project_id = @project_id::uuid
+  AND t.assistant_id = ANY(@assistant_ids::uuid[])
+  AND (a.project_id <> @project_id::uuid OR c.project_id <> @project_id::uuid
+    OR t.last_event_at > now() OR t.last_event_at < a.created_at);
+
+-- name: PostflightIDFleetMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = @project_id::uuid AND chat_id = ANY(@chat_ids::uuid[]);
+
+-- name: PostflightIDFleetUnattributedCaptures :one
+-- The external, same-string directory-id and unknown captures keep exactly
+-- the attribution they were written with.
+SELECT count(*) FROM chats
+WHERE organization_id = @org_id::text AND user_id IS NULL AND (
+  (id = @external_chat_id::uuid AND external_user_id = @external_user_id::text)
+  OR (id = @collision_chat_id::uuid AND external_user_id = @collision_user_id::text)
+  OR (id = @unknown_chat_id::uuid AND external_user_id IS NULL));
+
+-- name: PostflightIDFleetFinding :one
+SELECT count(*) FROM risk_results
+WHERE organization_id = @org_id::text AND id = @risk_id::uuid
+  AND chat_message_id = @message_id::uuid AND found IS TRUE;
+
+-- name: PostflightIDHistoricalAssistantThreads :one
+SELECT count(*) FROM assistant_threads
+WHERE project_id = @project_id::uuid
+  AND last_event_at < now() - interval '24 hours';
 
 -- This External OAuth row drives the metadata recommendation. Keep its count
 -- stable so a rerun cannot duplicate it or silently drop the demo surface.

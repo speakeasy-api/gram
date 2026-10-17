@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -397,6 +399,46 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 	return nil
 }
 
+// managedAgent is one registered-agent fixture. Durations are ages before the
+// transaction's now(); zero leaves the stamp NULL.
+type managedAgent struct {
+	n         int
+	owner     string
+	name      string
+	inProject bool
+	suspended time.Duration
+	revoked   time.Duration
+}
+
+// managedAgents are the registered agents Fleet and agent management list.
+// Eight have recent credential history (seed_03); Legacy invoice exporter is
+// old and Nightly report agent has never authenticated, as controls.
+var managedAgents = []managedAgent{
+	{1, "amara", "Release assistant", false, 0, 0},
+	{2, "jonas", "Support triage", false, 6 * time.Minute, 0},
+	{3, "priya", "Retired documentation bot", true, 0, 8 * time.Minute},
+	{4, "amara", "Release notes assistant", false, 0, 0},
+	{5, "hana", "Billing reconciliation", true, 0, 0},
+	{6, "mateo", "Deploy verifier", true, 0, 0},
+	{7, "priya", "Incident evidence collector", false, 0, 0},
+	{8, "lucas", "Engineering digest", true, 0, 0},
+	{9, "hana", "Legacy invoice exporter", false, 3 * 24 * time.Hour, 0},
+	{10, "lucas", "Nightly report agent", false, 0, 0},
+}
+
+// managedAgentFixture returns fixture n, which must exist.
+func managedAgentFixture(n int) managedAgent {
+	for _, a := range managedAgents {
+		if a.n == n {
+			return a
+		}
+	}
+	panic(fmt.Sprintf("demo seed: no managed agent fixture %d", n))
+}
+
+// managedAgentID is registered agent n's id.
+func (s *seeder) managedAgentID(n int) uuid.UUID { return s.det("managed-agent-" + strconv.Itoa(n)) }
+
 // orgMemberships writes fake, credential-less members so
 // team/enrollment/facepile surfaces render. Real users still never join the
 // demo org — access is by impersonation only. No WorkOS sync job iterates
@@ -425,22 +467,34 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 		}
 	}
 
-	// Managed identities are distinct from OAuth client registrations.
-	// Existing fictional owners exercise name/initials rendering without
-	// adding external avatar dependencies. The two active release agents
-	// receive only project/server-scoped direct grants alongside their inert
-	// attachments.
-	if err := s.q.OrgInsertManagedAgents(ctx, repo.OrgInsertManagedAgentsParams{
-		Agent1: s.det("managed-agent-1"),
-		OrgID:  org,
-		Owner1: s.userID(demoUsers[0].handle),
-		Agent2: s.det("managed-agent-2"),
-		Owner2: s.userID(demoUsers[1].handle),
-		Agent3: s.det("managed-agent-3"),
-		Owner3: s.userID(demoUsers[2].handle),
-		Agent4: s.det("managed-agent-4"),
-	}); err != nil {
-		return fmt.Errorf("insert demo managed agents: %w", err)
+	// Managed identities are distinct from OAuth client registrations, and
+	// registered identities have explicit owners, independent of captured
+	// chats. The two active release agents receive only project/server-scoped
+	// direct grants alongside their inert attachments.
+	for _, a := range managedAgents {
+		projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		if a.inProject {
+			projectID = uuid.NullUUID{UUID: s.projectID(), Valid: true}
+		}
+		updated := 20 * 24 * time.Hour
+		if a.suspended != 0 {
+			updated = a.suspended
+		}
+		if a.revoked != 0 {
+			updated = a.revoked
+		}
+		if err := s.q.OrgInsertManagedAgent(ctx, repo.OrgInsertManagedAgentParams{
+			ID:          s.managedAgentID(a.n),
+			OrgID:       org,
+			ProjectID:   projectID,
+			OwnerUserID: s.userID(a.owner),
+			Name:        a.name,
+			SuspendedAt: s.agoOrNull(a.suspended),
+			RevokedAt:   s.agoOrNull(a.revoked),
+			UpdatedAt:   s.ago(updated),
+		}); err != nil {
+			return fmt.Errorf("insert demo managed agent %d: %w", a.n, err)
+		}
 	}
 
 	// Role assignments (Roles column on the team page). Global roles are

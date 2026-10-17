@@ -48,6 +48,50 @@ func (q *Queries) DeployInsertAgent(ctx context.Context, arg DeployInsertAgentPa
 	return err
 }
 
+const deployInsertAgentAPIKey = `-- name: DeployInsertAgentAPIKey :exec
+INSERT INTO api_keys
+  (id, organization_id, project_id, created_by_user_id, name, key_prefix,
+   key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version,
+   expires_at, last_accessed_at, created_at, updated_at, deleted_at)
+VALUES
+  ($1::uuid, $2::text, $3::uuid,
+   $4::text, $5::text, 'DEMO-INERT', $6::text,
+   '{}'::text[], $7::text, '[]'::jsonb, 1,
+   now() - interval '1 minute', $8::timestamptz,
+   now() - interval '10 days', now() - interval '1 minute',
+   $9::timestamptz)
+`
+
+type DeployInsertAgentAPIKeyParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.NullUUID
+	CreatedByUserID string
+	Name            string
+	KeyHash         string
+	SubjectUrn      string
+	LastAccessedAt  pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+}
+
+// An expired, display-only agent key: the hash has no valid preimage, and
+// scopes and delegation are empty. The org api_keys delete in the purge
+// phase cleans it on every reseed.
+func (q *Queries) DeployInsertAgentAPIKey(ctx context.Context, arg DeployInsertAgentAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, deployInsertAgentAPIKey,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.CreatedByUserID,
+		arg.Name,
+		arg.KeyHash,
+		arg.SubjectUrn,
+		arg.LastAccessedAt,
+		arg.DeletedAt,
+	)
+	return err
+}
+
 const deployInsertAsset = `-- name: DeployInsertAsset :exec
 INSERT INTO assets (id, project_id, organization_id, name, url, kind, content_type, content_length, sha256)
 VALUES ($1, $2::uuid, $3::text, 'Acme Internal API', 'file://demo/acme-openapi.yaml',
@@ -490,14 +534,15 @@ INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id,
    user_session_client_id, subject_urn, authorizer_user_id, delegated_grants,
    delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
-   expires_at, last_used_at, created_at)
+   expires_at, last_used_at, created_at, updated_at, deleted_at)
 VALUES
   ($1, $2::uuid, $3::text,
    $4::uuid, $5::uuid,
    $6::text, $7::text, '[]'::jsonb, 1,
    $8, $9::text,
-   now() + interval '7 days', now() - interval '10 minutes',
-   now() - interval '20 minutes', now() - interval '3 days')
+   now() - interval '1 minute', now() - interval '1 minute',
+   $10::timestamptz, now() - interval '10 days',
+   now() - interval '1 minute', $11::timestamptz)
 `
 
 type DeployInsertManagedAgentSessionParams struct {
@@ -510,11 +555,14 @@ type DeployInsertManagedAgentSessionParams struct {
 	AuthorizerUserID    string
 	Jti                 string
 	RefreshTokenHash    string
+	LastUsedAt          pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
 }
 
-// A display-only managed-agent credential: no signing token, an invalid
-// refresh hash, and an empty delegation prevent usable programmatic access.
-// The issuer/project cascade cleans this row on every reseed.
+// Managed-agent credential evidence is historical, never a runnable
+// workload: access AND refresh expiry are past, the hash has no valid
+// preimage, and the delegation is empty. The issuer/project cascade cleans
+// this row on every reseed.
 func (q *Queries) DeployInsertManagedAgentSession(ctx context.Context, arg DeployInsertManagedAgentSessionParams) error {
 	_, err := q.db.Exec(ctx, deployInsertManagedAgentSession,
 		arg.ID,
@@ -526,6 +574,8 @@ func (q *Queries) DeployInsertManagedAgentSession(ctx context.Context, arg Deplo
 		arg.AuthorizerUserID,
 		arg.Jti,
 		arg.RefreshTokenHash,
+		arg.LastUsedAt,
+		arg.DeletedAt,
 	)
 	return err
 }
