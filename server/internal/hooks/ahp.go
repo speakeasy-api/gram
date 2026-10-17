@@ -460,6 +460,12 @@ func ahpModelResponsePayloads(e *ahp.ModelResponseAfterEvent) []*gen.IngestPaylo
 				CacheReadTokens: ahpTokenCount(u.CacheReadTokens), CacheWriteTokens: ahpTokenCount(u.CacheWriteTokens),
 				Cost: nil, LoopCount: nil, Status: nil,
 			}
+			// AHP input includes cache reads; canonical input counts exclude them.
+			// Keep missing counts unknown and preserve cache usage separately.
+			usage := original.Data.Usage
+			if usage.InputTokens != nil && usage.CacheReadTokens != nil {
+				*usage.InputTokens = max(0, *usage.InputTokens-*usage.CacheReadTokens)
+			}
 			if u.Cost.Present && u.Cost.Value.Currency == "USD" {
 				if cost, err := u.Cost.Value.Amount.Float64(); err == nil {
 					original.Data.Usage.Cost = &cost
