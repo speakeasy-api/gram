@@ -161,6 +161,7 @@ deprecated-paths:
 
 tunnel:
   - ".github/**"
+  - ".mise-tasks/test/tunnel.sh"
   - "go.mod"
   - "go.sum"
   - "tunnel/**"
