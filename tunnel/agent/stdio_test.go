@@ -123,6 +123,10 @@ func runStdioFixture() {
 				token, _ := os.ReadFile(os.Getenv(AccessTokenFileEnv))
 				fmt.Fprintf(os.Stderr, "upstream rejected Authorization: Bearer %s\n", token)
 				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": "leaked"}}})
+			case "block":
+				// A synchronous server busy with a slow tool: it reads no stdin meanwhile.
+				time.Sleep(2 * time.Second)
+				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": "done"}}})
 			case "elicit":
 				pendingElicit = msg.ID
 				_ = out.Encode(map[string]any{"jsonrpc": "2.0", "id": "srv-1", "method": "elicitation/create", "params": map[string]any{"message": "name?"}})
