@@ -77,7 +77,8 @@ func TestAHPUsageNormalizesCachedInput(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			raw := ahpTestResponse()
-			usage := raw["usage"].(map[string]any)
+			usage, ok := raw["usage"].(map[string]any)
+			require.True(t, ok)
 			delete(usage, "inputTokens")
 			if tc.input != nil {
 				usage["inputTokens"] = *tc.input
