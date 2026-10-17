@@ -3,6 +3,7 @@ package identitychaining
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -34,28 +35,47 @@ type Governor struct {
 
 	// resolveResource maps a direct HTTP transport to its authorization resource.
 	resolveResource func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error)
+
+	// cachedResource is resolveResource answered from its shared cache alone,
+	// reporting false on a miss; nil reads every lookup as a miss.
+	cachedResource func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error)
+
+	// recentRefusal reports a provider's recent definitive refusal of sel, as
+	// the runtime shares it; nil on a Governor, which never exchanges.
+	recentRefusal func(context.Context, Request, selection) (Outcome, bool)
 }
 
 // NewGovernor builds a configuration governor; enc verifies stored credentials
 // and delegation checks the human's retained delegation against the current
 // trusted registration.
 func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, delegation *remotesessions.DelegationService) *Governor {
-	return &Governor{
+	g := &Governor{
 		logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, delegation: delegation, now: time.Now,
 		resolveResource: nil,
-		sources: map[remotesessions.EMAProviderKind]sourceFactory{
-			remotesessions.EMAProviderExternal: func(p remotesessions.EMAProvider) tokenSource {
-				return externalSource{c: nil, issuer: p.RemoteSessionIssuerID}
-			},
-			remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return new(speakeasySource) },
-		},
+		cachedResource:  nil,
+		recentRefusal:   nil,
+		sources:         nil,
 	}
+	g.sources = map[remotesessions.EMAProviderKind]sourceFactory{
+		remotesessions.EMAProviderExternal: func(p remotesessions.EMAProvider) tokenSource {
+			return externalSource{g: g, c: nil, issuer: p.RemoteSessionIssuerID}
+		},
+		remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return new(speakeasySource) },
+	}
+	return g
 }
 
 // SetResourceResolver installs public metadata resolution before serving any
 // authenticated runtime, consent, or management requests.
 func (g *Governor) SetResourceResolver(resolve func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error)) {
 	g.resolveResource = resolve
+}
+
+// SetCachedResourceResolver installs the cache-only view of the resource
+// resolver, which RefreshDecision reads so the token endpoint never probes an
+// upstream.
+func (g *Governor) SetCachedResourceResolver(cached func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error)) {
+	g.cachedResource = cached
 }
 
 // ResolveResource returns the resource identity used by binding selection.
@@ -127,8 +147,19 @@ func (g *Governor) ProviderOrder(ctx context.Context, req Request) (remotesessio
 // in the project, a cheap check before per-upstream decisions. A lookup fault
 // logs and reads as unconfigured.
 func (g *Governor) Configured(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID) bool {
-	if organizationID == "" || projectID == uuid.Nil || userSessionIssuerID == uuid.Nil {
+	configured, err := g.configured(ctx, organizationID, projectID, userSessionIssuerID)
+	if err != nil {
+		g.logger.WarnContext(ctx, "count identity chaining bindings", attr.SlogError(err))
 		return false
+	}
+	return configured
+}
+
+// configured is Configured with a lookup fault returned instead of read as
+// unconfigured.
+func (g *Governor) configured(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID) (bool, error) {
+	if organizationID == "" || projectID == uuid.Nil || userSessionIssuerID == uuid.Nil {
+		return false, nil
 	}
 	count, err := repo.New(g.db).CountActiveEMABindingsForUserIssuer(ctx, repo.CountActiveEMABindingsForUserIssuerParams{
 		IssuerID:       userSessionIssuerID,
@@ -136,10 +167,9 @@ func (g *Governor) Configured(ctx context.Context, organizationID string, projec
 		ProjectID:      projectID,
 	})
 	if err != nil {
-		g.logger.WarnContext(ctx, "count identity chaining bindings", attr.SlogError(err))
-		return false
+		return false, fmt.Errorf("count identity chaining bindings: %w", err)
 	}
-	return count > 0
+	return count > 0, nil
 }
 
 // HasUsableCredential reports whether a stored chained credential for req is
@@ -194,12 +224,12 @@ func (g *Governor) hasUsableCredentialFrom(ctx context.Context, req Request, sel
 	if !g.source(p).authorize(ctx, g.logger, statusReq, &current).Succeeded() {
 		return false
 	}
-	row, err := readCredential(ctx, repo.New(g.db), req, current, g.now())
-	if err != nil || !row.Usable || g.enc == nil {
+	usable, err := g.storedCredentialUsable(ctx, req, current)
+	if err != nil {
+		g.logger.WarnContext(ctx, "read identity chaining credential", attr.SlogError(err))
 		return false
 	}
-	value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
-	return err == nil && value != ""
+	return usable
 }
 
 func (g *Governor) hasExternalCredential(ctx context.Context, req Request, sel selection) bool {

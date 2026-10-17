@@ -128,10 +128,22 @@ func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challeng
 		attempts:   nil,
 	}
 	c.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
-		return externalSource{c: c, issuer: p.RemoteSessionIssuerID}
+		return externalSource{g: &c.Governor, c: c, issuer: p.RemoteSessionIssuerID}
 	}
+	c.recentRefusal = c.recentFailure
 	c.SetMeterProvider(noop.NewMeterProvider())
 	return c
+}
+
+// recentFailure reads the definitive provider refusal acquisition shares for
+// sel, which outlives the attempt by failureTTL.
+func (c *Chainer) recentFailure(ctx context.Context, req Request, sel selection) (Outcome, bool) {
+	var cached Outcome
+	if c.locks == nil || c.locks.Get(ctx, cacheKey("identityChainingFailure", req, sel), &cached) != nil || cached.Reason == "" {
+		return cached, false
+	}
+	cached.Cached = true
+	return cached, true
 }
 
 // SetMeterProvider records attempts on meterProvider. Call it during wiring,
@@ -225,9 +237,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		return release(none, credentialNone)
 	}
 	failureKey := cacheKey("identityChainingFailure", req, sel)
-	var cached Outcome
-	if err := c.locks.Get(ctx, failureKey, &cached); err == nil && cached.Reason != "" {
-		cached.Cached = true
+	if cached, ok := c.recentFailure(ctx, req, sel); ok {
 		return none, cached
 	}
 
