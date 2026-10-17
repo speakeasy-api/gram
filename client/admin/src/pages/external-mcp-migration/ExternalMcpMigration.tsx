@@ -55,6 +55,9 @@ type Outcome = AdminExternalMcpMigrationOutcome;
 // The "Migrate into" value that creates a new remote server.
 const NEW_SERVER = "new";
 
+// The admin API migrates at most this many servers per request.
+const MAX_PER_RUN = 100;
+
 const empty: Candidate[] = [];
 
 const column = createColumnHelper<DataTableFeatures, Candidate>();
@@ -340,8 +343,13 @@ export function ExternalMcpMigration(): JSX.Element {
 
   const select = (pick: (c: Candidate) => boolean) => {
     const next: RowSelectionState = {};
+    let count = 0;
     for (const c of candidates) {
-      if (isReady(c) && pick(c)) next[c.toolsetId] = true;
+      if (count === MAX_PER_RUN) break;
+      if (isReady(c) && pick(c)) {
+        next[c.toolsetId] = true;
+        count++;
+      }
     }
     setRowSelection(next);
   };
@@ -515,9 +523,7 @@ export function ExternalMcpMigration(): JSX.Element {
             <DropdownMenuItem onSelect={() => select(() => true)}>
               All ready ({ready})
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => select((c) => (c.toolCalls ?? 0) === 0)}
-            >
+            <DropdownMenuItem onSelect={() => select((c) => c.toolCalls === 0)}>
               Ready with no recent calls
             </DropdownMenuItem>
             <DropdownMenuSub>
@@ -540,11 +546,18 @@ export function ExternalMcpMigration(): JSX.Element {
           </DropdownMenuContent>
         </DropdownMenu>
         <span className="text-sm text-muted-foreground" aria-live="polite">
-          {selected.length} of {candidates.length} selected · {ready} ready
+          {selected.length} of {candidates.length} selected · {ready} ready ·{" "}
+          <span
+            className={
+              selected.length > MAX_PER_RUN ? "text-destructive" : undefined
+            }
+          >
+            up to {MAX_PER_RUN} servers per run
+          </span>
         </span>
         <Button
           className="ml-auto"
-          disabled={selected.length === 0}
+          disabled={selected.length === 0 || selected.length > MAX_PER_RUN}
           onClick={openMigrate}
         >
           Migrate{selected.length > 0 ? ` ${selected.length}` : ""}
