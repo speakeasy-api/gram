@@ -13,59 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const assistantHasServer = `-- name: AssistantHasServer :one
-SELECT EXISTS (
-  SELECT 1
-  FROM assistant_mcp_servers
-  WHERE assistant_id = $1 AND project_id = $2 AND mcp_server_id = $3
-) AS present
-`
-
-type AssistantHasServerParams struct {
-	AssistantID uuid.UUID
-	ProjectID   uuid.UUID
-	McpServerID uuid.UUID
-}
-
-func (q *Queries) AssistantHasServer(ctx context.Context, arg AssistantHasServerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, assistantHasServer, arg.AssistantID, arg.ProjectID, arg.McpServerID)
-	var present bool
-	err := row.Scan(&present)
-	return present, err
-}
-
-const copyMCPGrantsToServer = `-- name: CopyMCPGrantsToServer :execrows
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, drop_resource, selectors)
-SELECT
-  g.organization_id,
-  g.principal_urn,
-  g.scope,
-  g.effect,
-  g.drop_resource,
-  jsonb_set(g.selectors, '{resource_id}', to_jsonb($1::text))
-FROM principal_grants AS g
-WHERE g.organization_id = $2
-  AND g.scope LIKE 'mcp:%'
-  AND g.selectors->>'resource_id' = $3::text
-ON CONFLICT DO NOTHING
-`
-
-type CopyMCPGrantsToServerParams struct {
-	McpServerID    string
-	OrganizationID string
-	BackendID      string
-}
-
-// Copies every MCP grant naming the old server onto the new one, keeping the
-// principal, effect and every other selector key.
-func (q *Queries) CopyMCPGrantsToServer(ctx context.Context, arg CopyMCPGrantsToServerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, copyMCPGrantsToServer, arg.McpServerID, arg.OrganizationID, arg.BackendID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const countIssuersAndClientsFixture = `-- name: CountIssuersAndClientsFixture :one
 SELECT
   (SELECT count(*) FROM user_session_issuers AS usi WHERE usi.organization_id = $1::text OR usi.project_id IN (SELECT p.id FROM projects AS p WHERE p.organization_id = $1::text))::bigint AS user_session_issuers,
@@ -86,123 +33,80 @@ func (q *Queries) CountIssuersAndClientsFixture(ctx context.Context, organizatio
 	return i, err
 }
 
-const deleteAssistantMcpServer = `-- name: DeleteAssistantMcpServer :execrows
-DELETE FROM assistant_mcp_servers
-WHERE id = $1 AND project_id = $2
+const countServerPluginEntries = `-- name: CountServerPluginEntries :one
+SELECT count(*)::bigint AS entries
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE pl.project_id = $1 AND ps.mcp_server_id = $2 AND ps.deleted IS FALSE
 `
 
-type DeleteAssistantMcpServerParams struct {
+type CountServerPluginEntriesParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.NullUUID
+}
+
+func (q *Queries) CountServerPluginEntries(ctx context.Context, arg CountServerPluginEntriesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countServerPluginEntries, arg.ProjectID, arg.McpServerID)
+	var entries int64
+	err := row.Scan(&entries)
+	return entries, err
+}
+
+const disableToolset = `-- name: DisableToolset :execrows
+UPDATE toolsets
+SET mcp_enabled = FALSE, updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type DisableToolsetParams struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) DeleteAssistantMcpServer(ctx context.Context, arg DeleteAssistantMcpServerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteAssistantMcpServer, arg.ID, arg.ProjectID)
+// The toolset stays for undo: pointing the server back at it and enabling it
+// restores the old backend.
+func (q *Queries) DisableToolset(ctx context.Context, arg DisableToolsetParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableToolset, arg.ID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const deleteAssistantToolset = `-- name: DeleteAssistantToolset :execrows
-DELETE FROM assistant_toolsets
-WHERE id = $1 AND project_id = $2
+const fillRemoteSessionResources = `-- name: FillRemoteSessionResources :execrows
+UPDATE remote_sessions AS rs
+SET resource = $1
+WHERE rs.user_session_issuer_id = $2
+  AND rs.deleted IS FALSE
+  AND (rs.resource IS NULL OR rs.resource = '')
+  AND rs.user_session_issuer_id IN (
+    SELECT usi.id
+    FROM user_session_issuers AS usi
+    WHERE usi.id = $2
+      AND (usi.organization_id = $3::text OR usi.project_id IN (SELECT p.id FROM projects AS p WHERE p.organization_id = $3::text))
+  )
+  AND rs.remote_session_client_id IN (
+    SELECT link.remote_session_client_id
+    FROM remote_session_client_user_session_issuers AS link
+    WHERE link.user_session_issuer_id = $2
+  )
 `
 
-type DeleteAssistantToolsetParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+type FillRemoteSessionResourcesParams struct {
+	Resource            pgtype.Text
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
 }
 
-func (q *Queries) DeleteAssistantToolset(ctx context.Context, arg DeleteAssistantToolsetParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteAssistantToolset, arg.ID, arg.ProjectID)
+// Stamps the upstream URL on the issuer's sessions that recorded no resource.
+// A remote MCP backend only forwards a credential whose resource matches its
+// URL, so without this every user would have to sign in again.
+func (q *Queries) FillRemoteSessionResources(ctx context.Context, arg FillRemoteSessionResourcesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, fillRemoteSessionResources, arg.Resource, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const deleteMetadata = `-- name: DeleteMetadata :execrows
-DELETE FROM mcp_metadata
-WHERE id = $1 AND project_id = $2
-`
-
-type DeleteMetadataParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-// Cascades to the row's mcp_environment_configs.
-func (q *Queries) DeleteMetadata(ctx context.Context, arg DeleteMetadataParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteMetadata, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const getCanonicalWrapper = `-- name: GetCanonicalWrapper :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
-FROM mcp_servers
-WHERE id = $1 AND project_id = $2 AND toolset_id = $1 AND deleted IS FALSE
-FOR UPDATE
-`
-
-type GetCanonicalWrapperParams struct {
-	ToolsetID uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) GetCanonicalWrapper(ctx context.Context, arg GetCanonicalWrapperParams) (McpServer, error) {
-	row := q.db.QueryRow(ctx, getCanonicalWrapper, arg.ToolsetID, arg.ProjectID)
-	var i McpServer
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.EnvironmentID,
-		&i.UserSessionIssuerID,
-		&i.RemoteSessionIssuerID,
-		&i.RemoteMcpServerID,
-		&i.TunneledMcpServerID,
-		&i.ToolsetID,
-		&i.UnproxiedMcpServerID,
-		&i.ToolVariationsGroupID,
-		&i.Visibility,
-		&i.NetworkAccessMode,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const getDistributionPluginServerFixture = `-- name: GetDistributionPluginServerFixture :one
-SELECT plugin_server_id
-FROM platform_mcp_distributions
-WHERE id = $1
-`
-
-func (q *Queries) GetDistributionPluginServerFixture(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error) {
-	row := q.db.QueryRow(ctx, getDistributionPluginServerFixture, id)
-	var plugin_server_id uuid.NullUUID
-	err := row.Scan(&plugin_server_id)
-	return plugin_server_id, err
-}
-
-const getPluginIDFixture = `-- name: GetPluginIDFixture :one
-SELECT plugin_id
-FROM plugin_servers
-WHERE id = $1
-`
-
-func (q *Queries) GetPluginIDFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getPluginIDFixture, id)
-	var plugin_id uuid.UUID
-	err := row.Scan(&plugin_id)
-	return plugin_id, err
 }
 
 const getPluginServerFixture = `-- name: GetPluginServerFixture :one
@@ -224,32 +128,6 @@ func (q *Queries) GetPluginServerFixture(ctx context.Context, id uuid.UUID) (Get
 	return i, err
 }
 
-const getPluginServerForServer = `-- name: GetPluginServerForServer :one
-SELECT ps.id
-FROM plugin_servers AS ps
-JOIN plugins AS pl ON pl.id = ps.plugin_id
-WHERE ps.plugin_id = $1
-  AND pl.project_id = $2
-  AND ps.mcp_server_id = $3
-  AND ps.deleted IS FALSE
-ORDER BY ps.id
-LIMIT 1
-`
-
-type GetPluginServerForServerParams struct {
-	PluginID    uuid.UUID
-	ProjectID   uuid.UUID
-	McpServerID uuid.NullUUID
-}
-
-// The plugin's live entry for a server, if it already carries one.
-func (q *Queries) GetPluginServerForServer(ctx context.Context, arg GetPluginServerForServerParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getPluginServerForServer, arg.PluginID, arg.ProjectID, arg.McpServerID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const getRemoteSessionResourceFixture = `-- name: GetRemoteSessionResourceFixture :one
 SELECT resource
 FROM remote_sessions
@@ -263,67 +141,42 @@ func (q *Queries) GetRemoteSessionResourceFixture(ctx context.Context, id uuid.U
 	return resource, err
 }
 
-const listAssistantAttachmentsForBackend = `-- name: ListAssistantAttachmentsForBackend :many
-WITH attachments AS (
-  SELECT 'toolset'::text AS kind, at.id, at.assistant_id, at.environment_id
-  FROM assistant_toolsets AS at
-  WHERE at.project_id = $1 AND at.toolset_id = $2
-  UNION ALL
-  SELECT 'mcp_server'::text AS kind, ams.id, ams.assistant_id, ams.environment_id
-  FROM assistant_mcp_servers AS ams
-  WHERE ams.project_id = $1 AND ams.mcp_server_id = $2
-),
-locked AS (
-  SELECT a.id
-  FROM assistants AS a
-  WHERE a.project_id = $1
-    AND a.id IN (SELECT assistant_id FROM attachments)
-  ORDER BY a.id
-  FOR NO KEY UPDATE
-)
-SELECT at.kind, at.id, at.assistant_id, at.environment_id
-FROM attachments AS at
-JOIN locked AS l ON l.id = at.assistant_id
-ORDER BY at.assistant_id, at.kind DESC, at.id
+const getToolsetServerID = `-- name: GetToolsetServerID :one
+SELECT id
+FROM mcp_servers
+WHERE toolset_id = $1 AND project_id = $2 AND deleted IS FALSE
 `
 
-type ListAssistantAttachmentsForBackendParams struct {
+type GetToolsetServerIDParams struct {
+	ToolsetID uuid.NullUUID
 	ProjectID uuid.UUID
-	BackendID uuid.UUID
 }
 
-type ListAssistantAttachmentsForBackendRow struct {
-	Kind          string
-	ID            uuid.UUID
-	AssistantID   uuid.UUID
-	EnvironmentID uuid.NullUUID
+// The one live server fronting the toolset, the row switched in place. It is
+// locked by the switch itself, after its endpoints, as hostedmcp orders locks.
+func (q *Queries) GetToolsetServerID(ctx context.Context, arg GetToolsetServerIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getToolsetServerID, arg.ToolsetID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
-// Assistant attachments of the old server, from both the toolset-keyed and
-// the server-keyed tables, with their assistants locked first.
-func (q *Queries) ListAssistantAttachmentsForBackend(ctx context.Context, arg ListAssistantAttachmentsForBackendParams) ([]ListAssistantAttachmentsForBackendRow, error) {
-	rows, err := q.db.Query(ctx, listAssistantAttachmentsForBackend, arg.ProjectID, arg.BackendID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAssistantAttachmentsForBackendRow
-	for rows.Next() {
-		var i ListAssistantAttachmentsForBackendRow
-		if err := rows.Scan(
-			&i.Kind,
-			&i.ID,
-			&i.AssistantID,
-			&i.EnvironmentID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+const getToolsetStateFixture = `-- name: GetToolsetStateFixture :one
+SELECT mcp_enabled, deleted
+FROM toolsets
+WHERE id = $1
+`
+
+type GetToolsetStateFixtureRow struct {
+	McpEnabled bool
+	Deleted    bool
+}
+
+func (q *Queries) GetToolsetStateFixture(ctx context.Context, id uuid.UUID) (GetToolsetStateFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getToolsetStateFixture, id)
+	var i GetToolsetStateFixtureRow
+	err := row.Scan(&i.McpEnabled, &i.Deleted)
+	return i, err
 }
 
 const listCandidates = `-- name: ListCandidates :many
@@ -347,12 +200,11 @@ live_toolsets AS (
     t.slug,
     t.mcp_slug,
     t.mcp_enabled,
-    t.mcp_is_public,
     t.custom_domain_id,
     t.user_session_issuer_id,
     t.external_oauth_server_id,
     t.oauth_proxy_server_id,
-    t.default_environment_slug
+    t.tool_variations_group_id
   FROM toolsets AS t
   JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
   WHERE t.deleted IS FALSE
@@ -376,9 +228,11 @@ latest_versions AS (
 proxy_definitions AS (
   SELECT
     t.id AS toolset_id,
+    ea.id AS attachment_id,
     etd.tool_urn,
     etd.remote_url,
     etd.transport_type,
+    etd.requires_oauth,
     CASE
       WHEN jsonb_typeof(etd.header_definitions) = 'array' THEN jsonb_array_length(etd.header_definitions) > 0
       ELSE FALSE
@@ -397,43 +251,39 @@ proxy_definitions AS (
 grouped AS (
   SELECT
     pd.toolset_id,
+    count(DISTINCT pd.attachment_id)::bigint AS attachment_count,
     array_agg(DISTINCT pd.remote_url ORDER BY pd.remote_url)::text[] AS remote_urls,
     array_agg(DISTINCT pd.transport_type ORDER BY pd.transport_type)::text[] AS transport_types,
-    bool_or(pd.declares_headers) AS declares_headers
+    bool_or(pd.declares_headers) AS declares_headers,
+    bool_or(pd.requires_oauth) AS requires_oauth
   FROM proxy_definitions AS pd
   GROUP BY pd.toolset_id
 )
 SELECT
   t.id AS toolset_id,
   t.organization_id,
-  o.name AS organization_name,
-  o.slug AS organization_slug,
+  COALESCE(o.name, '')::text AS organization_name,
+  COALESCE(o.slug, '')::text AS organization_slug,
+  (o.id IS NOT NULL)::boolean AS has_organization_metadata,
   t.project_id,
   p.name AS project_name,
   p.slug AS project_slug,
   t.name AS toolset_name,
   t.slug AS toolset_slug,
   t.mcp_slug,
-  t.mcp_enabled,
-  t.mcp_is_public,
   t.custom_domain_id,
   t.user_session_issuer_id,
   t.external_oauth_server_id,
   t.oauth_proxy_server_id,
-  t.default_environment_slug,
+  (t.tool_variations_group_id IS NOT NULL)::boolean AS toolset_has_variations,
   usi.slug AS user_session_issuer_slug,
-  COALESCE((
-    SELECT array_agg(DISTINCT COALESCE(rsi.name, rsi.issuer) ORDER BY COALESCE(rsi.name, rsi.issuer))
-    FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
-    JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
-    WHERE link.user_session_issuer_id = t.user_session_issuer_id
-  ), ARRAY[]::text[])::text[] AS remote_issuer_names,
+  g.attachment_count,
   g.remote_urls,
   g.transport_types,
   g.declares_headers,
-  -- The replacement only proxies the upstream, so any other tool or resource
-  -- on the server would disappear.
+  g.requires_oauth,
+  -- The switched server only proxies the upstream, so any other tool or
+  -- resource on the toolset would disappear.
   (
     COALESCE(cardinality(lv.resource_urns), 0) > 0
     OR EXISTS (
@@ -442,50 +292,166 @@ SELECT
       WHERE tool_urn.value NOT IN (SELECT pd.tool_urn FROM proxy_definitions AS pd WHERE pd.toolset_id = t.id)
     )
   )::boolean AS serves_other_tools,
-  wrapper.network_access_mode AS wrapper_network_access_mode,
-  wrapper.visibility AS wrapper_visibility
+  (
+    SELECT count(*)
+    FROM mcp_servers AS ms
+    WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE
+  )::bigint AS server_count,
+  wrapper.user_session_issuer_id AS server_user_session_issuer_id,
+  (wrapper.tool_variations_group_id IS NOT NULL)::boolean AS server_has_variations,
+  (
+    SELECT count(*)
+    FROM mcp_endpoints AS me
+    JOIN mcp_servers AS ms ON ms.id = me.mcp_server_id AND ms.project_id = me.project_id
+    WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE AND me.deleted IS FALSE
+  )::bigint AS endpoint_count,
+  -- The legacy /mcp/<mcp_slug> route stops answering once the toolset is
+  -- disabled, so the address must also be an endpoint of the server.
+  (
+    t.mcp_slug IS NULL
+    OR t.mcp_slug = ''
+    OR EXISTS (
+      SELECT 1
+      FROM mcp_endpoints AS me
+      WHERE me.mcp_server_id = wrapper.id
+        AND me.project_id = t.project_id
+        AND me.deleted IS FALSE
+        AND me.slug = t.mcp_slug
+        AND me.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id
+    )
+  )::boolean AS mcp_slug_is_endpoint,
+  EXISTS (SELECT 1 FROM toolset_prompts AS tp WHERE tp.toolset_id = t.id)::boolean AS has_prompts,
+  EXISTS (SELECT 1 FROM assistant_toolsets AS at WHERE at.toolset_id = t.id)::boolean AS has_assistants,
+  EXISTS (SELECT 1 FROM slack_app_toolsets AS sat WHERE sat.toolset_id = t.id)::boolean AS has_slack_apps,
+  EXISTS (SELECT 1 FROM user_oauth_tokens AS uot WHERE uot.toolset_id = t.id AND uot.deleted IS FALSE)::boolean AS has_user_oauth_tokens,
+  EXISTS (SELECT 1 FROM plugin_servers AS ps WHERE ps.toolset_id = t.id AND ps.deleted IS FALSE)::boolean AS has_toolset_plugin_entries,
+  EXISTS (
+    SELECT 1
+    FROM organization_mcp_collection_server_attachments AS a
+    WHERE a.deleted IS FALSE AND (a.toolset_id = t.id OR a.mcp_server_id = wrapper.id)
+  )::boolean AS has_collection_attachments,
+  EXISTS (
+    SELECT 1
+    FROM meta_mcp_server_members AS m
+    WHERE m.deleted IS FALSE AND m.mcp_server_id = wrapper.id
+  )::boolean AS in_gateway,
+  COALESCE((
+    SELECT array_agg(DISTINCT rsi.id)
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
+    WHERE link.user_session_issuer_id = t.user_session_issuer_id
+  ), ARRAY[]::uuid[])::uuid[] AS remote_session_issuer_ids,
+  COALESCE((
+    SELECT array_agg(DISTINCT COALESCE(rsi.name, rsi.issuer) ORDER BY COALESCE(rsi.name, rsi.issuer))
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
+    WHERE link.user_session_issuer_id = t.user_session_issuer_id
+  ), ARRAY[]::text[])::text[] AS remote_issuer_names,
+  EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    WHERE link.user_session_issuer_id = t.user_session_issuer_id AND rsc.credential_owner = 'self'
+  )::boolean AS has_self_owned_clients,
+  EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS b WHERE b.user_session_issuer_id = t.user_session_issuer_id
+  )::boolean AS has_ema_bindings,
+  COALESCE((
+    SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))
+    FROM remote_sessions AS rs
+    WHERE rs.user_session_issuer_id = t.user_session_issuer_id
+      AND rs.deleted IS FALSE
+      AND rs.resource IS NOT NULL
+      AND rs.resource <> ''
+  ), ARRAY[]::text[])::text[] AS session_resources,
+  -- Other live servers signing in through the issuer. Each must already be a
+  -- remote MCP server for the same upstream, or the stamped resource would
+  -- send its users' credentials to the wrong one.
+  (
+    SELECT count(*)
+    FROM mcp_servers AS other
+    JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
+    WHERE other.user_session_issuer_id = t.user_session_issuer_id
+      AND other.deleted IS FALSE
+      AND other.id IS DISTINCT FROM wrapper.id
+      AND other.remote_mcp_server_id IS NULL
+  )::bigint AS other_non_remote_servers_on_issuer,
+  COALESCE((
+    SELECT array_agg(DISTINCT rtrim(rms.url, '/') ORDER BY rtrim(rms.url, '/'))
+    FROM mcp_servers AS other
+    JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
+    JOIN remote_mcp_servers AS rms ON rms.id = other.remote_mcp_server_id AND rms.deleted IS FALSE
+    WHERE other.user_session_issuer_id = t.user_session_issuer_id
+      AND other.deleted IS FALSE
+      AND other.id IS DISTINCT FROM wrapper.id
+  ), ARRAY[]::text[])::text[] AS other_remote_urls_on_issuer
 FROM grouped AS g
 JOIN live_toolsets AS t ON t.id = g.toolset_id
 JOIN latest_versions AS lv ON lv.toolset_id = t.id
 JOIN projects AS p ON p.id = t.project_id
-JOIN organization_metadata AS o ON o.id = t.organization_id
+LEFT JOIN organization_metadata AS o ON o.id = t.organization_id
 LEFT JOIN user_session_issuers AS usi ON usi.id = t.user_session_issuer_id AND usi.deleted IS FALSE
-LEFT JOIN mcp_servers AS wrapper
-  ON wrapper.id = t.id AND wrapper.toolset_id = t.id AND wrapper.project_id = t.project_id AND wrapper.deleted IS FALSE
-ORDER BY o.name, p.name, t.name, t.id
+LEFT JOIN LATERAL (
+  SELECT ms.id, ms.user_session_issuer_id, ms.tool_variations_group_id
+  FROM mcp_servers AS ms
+  WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE
+  ORDER BY (ms.id = t.id) DESC, ms.id
+  LIMIT 1
+) AS wrapper ON TRUE
+ORDER BY organization_name, p.name, t.name, t.id
 `
 
 type ListCandidatesRow struct {
-	ToolsetID                uuid.UUID
-	OrganizationID           string
-	OrganizationName         string
-	OrganizationSlug         string
-	ProjectID                uuid.UUID
-	ProjectName              string
-	ProjectSlug              string
-	ToolsetName              string
-	ToolsetSlug              string
-	McpSlug                  pgtype.Text
-	McpEnabled               bool
-	McpIsPublic              bool
-	CustomDomainID           uuid.NullUUID
-	UserSessionIssuerID      uuid.NullUUID
-	ExternalOauthServerID    uuid.NullUUID
-	OauthProxyServerID       uuid.NullUUID
-	DefaultEnvironmentSlug   pgtype.Text
-	UserSessionIssuerSlug    pgtype.Text
-	RemoteIssuerNames        []string
-	RemoteUrls               []string
-	TransportTypes           []string
-	DeclaresHeaders          bool
-	ServesOtherTools         bool
-	WrapperNetworkAccessMode pgtype.Text
-	WrapperVisibility        pgtype.Text
+	ToolsetID                     uuid.UUID
+	OrganizationID                string
+	OrganizationName              string
+	OrganizationSlug              string
+	HasOrganizationMetadata       bool
+	ProjectID                     uuid.UUID
+	ProjectName                   string
+	ProjectSlug                   string
+	ToolsetName                   string
+	ToolsetSlug                   string
+	McpSlug                       pgtype.Text
+	CustomDomainID                uuid.NullUUID
+	UserSessionIssuerID           uuid.NullUUID
+	ExternalOauthServerID         uuid.NullUUID
+	OauthProxyServerID            uuid.NullUUID
+	ToolsetHasVariations          bool
+	UserSessionIssuerSlug         pgtype.Text
+	AttachmentCount               int64
+	RemoteUrls                    []string
+	TransportTypes                []string
+	DeclaresHeaders               bool
+	RequiresOauth                 bool
+	ServesOtherTools              bool
+	ServerCount                   int64
+	ServerUserSessionIssuerID     uuid.NullUUID
+	ServerHasVariations           bool
+	EndpointCount                 int64
+	McpSlugIsEndpoint             bool
+	HasPrompts                    bool
+	HasAssistants                 bool
+	HasSlackApps                  bool
+	HasUserOauthTokens            bool
+	HasToolsetPluginEntries       bool
+	HasCollectionAttachments      bool
+	InGateway                     bool
+	RemoteSessionIssuerIds        []uuid.UUID
+	RemoteIssuerNames             []string
+	HasSelfOwnedClients           bool
+	HasEmaBindings                bool
+	SessionResources              []string
+	OtherNonRemoteServersOnIssuer int64
+	OtherRemoteUrlsOnIssuer       []string
 }
 
 // Live servers whose latest toolset version references a proxy tool from an
 // external MCP attachment on the project's active deployment, across every
-// organization. A server is live when its toolset is MCP-enabled or fronted
+// organization, with what the migration needs to decide whether each one can
+// switch in place. A server is live when its toolset is MCP-enabled or fronted
 // by a live mcp_servers row. Pass toolset_ids to narrow the scan.
 func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([]ListCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listCandidates, toolsetIds)
@@ -501,27 +467,44 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.OrganizationID,
 			&i.OrganizationName,
 			&i.OrganizationSlug,
+			&i.HasOrganizationMetadata,
 			&i.ProjectID,
 			&i.ProjectName,
 			&i.ProjectSlug,
 			&i.ToolsetName,
 			&i.ToolsetSlug,
 			&i.McpSlug,
-			&i.McpEnabled,
-			&i.McpIsPublic,
 			&i.CustomDomainID,
 			&i.UserSessionIssuerID,
 			&i.ExternalOauthServerID,
 			&i.OauthProxyServerID,
-			&i.DefaultEnvironmentSlug,
+			&i.ToolsetHasVariations,
 			&i.UserSessionIssuerSlug,
-			&i.RemoteIssuerNames,
+			&i.AttachmentCount,
 			&i.RemoteUrls,
 			&i.TransportTypes,
 			&i.DeclaresHeaders,
+			&i.RequiresOauth,
 			&i.ServesOtherTools,
-			&i.WrapperNetworkAccessMode,
-			&i.WrapperVisibility,
+			&i.ServerCount,
+			&i.ServerUserSessionIssuerID,
+			&i.ServerHasVariations,
+			&i.EndpointCount,
+			&i.McpSlugIsEndpoint,
+			&i.HasPrompts,
+			&i.HasAssistants,
+			&i.HasSlackApps,
+			&i.HasUserOauthTokens,
+			&i.HasToolsetPluginEntries,
+			&i.HasCollectionAttachments,
+			&i.InGateway,
+			&i.RemoteSessionIssuerIds,
+			&i.RemoteIssuerNames,
+			&i.HasSelfOwnedClients,
+			&i.HasEmaBindings,
+			&i.SessionResources,
+			&i.OtherNonRemoteServersOnIssuer,
+			&i.OtherRemoteUrlsOnIssuer,
 		); err != nil {
 			return nil, err
 		}
@@ -533,108 +516,55 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 	return items, nil
 }
 
-const listCollectionAttachmentsFixture = `-- name: ListCollectionAttachmentsFixture :many
-SELECT id, toolset_id, mcp_server_id, deleted
-FROM organization_mcp_collection_server_attachments
-WHERE collection_id = $1
-ORDER BY id
+const listHeaderDefinitions = `-- name: ListHeaderDefinitions :many
+WITH active_deployment AS (
+  SELECT d.id
+  FROM deployments AS d
+  JOIN deployment_statuses AS ds ON ds.deployment_id = d.id
+  WHERE ds.status = 'completed' AND d.project_id = $1
+  ORDER BY d.seq DESC
+  LIMIT 1
+),
+latest_version AS (
+  SELECT tv.tool_urns
+  FROM toolset_versions AS tv
+  WHERE tv.toolset_id = $2 AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+)
+SELECT ea.slug AS attachment_slug, etd.requires_oauth, etd.header_definitions
+FROM latest_version AS lv
+CROSS JOIN LATERAL unnest(lv.tool_urns) AS tool_urn(value)
+JOIN external_mcp_tool_definitions AS etd ON etd.tool_urn = tool_urn.value
+JOIN external_mcp_attachments AS ea ON ea.id = etd.external_mcp_attachment_id
+JOIN active_deployment AS ad ON ad.id = ea.deployment_id
+WHERE etd.type = 'proxy' AND etd.deleted IS FALSE AND ea.deleted IS FALSE
+ORDER BY ea.slug, etd.tool_urn
 `
 
-type ListCollectionAttachmentsFixtureRow struct {
-	ID          uuid.UUID
-	ToolsetID   uuid.NullUUID
-	McpServerID uuid.NullUUID
-	Deleted     bool
-}
-
-func (q *Queries) ListCollectionAttachmentsFixture(ctx context.Context, collectionID uuid.UUID) ([]ListCollectionAttachmentsFixtureRow, error) {
-	rows, err := q.db.Query(ctx, listCollectionAttachmentsFixture, collectionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListCollectionAttachmentsFixtureRow
-	for rows.Next() {
-		var i ListCollectionAttachmentsFixtureRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ToolsetID,
-			&i.McpServerID,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listGrantResourceIDsFixture = `-- name: ListGrantResourceIDsFixture :many
-SELECT (selectors->>'resource_id')::text AS resource_id, scope
-FROM principal_grants
-WHERE organization_id = $1 AND scope LIKE 'mcp:%'
-ORDER BY 1, 2
-`
-
-type ListGrantResourceIDsFixtureRow struct {
-	ResourceID string
-	Scope      string
-}
-
-func (q *Queries) ListGrantResourceIDsFixture(ctx context.Context, organizationID string) ([]ListGrantResourceIDsFixtureRow, error) {
-	rows, err := q.db.Query(ctx, listGrantResourceIDsFixture, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListGrantResourceIDsFixtureRow
-	for rows.Next() {
-		var i ListGrantResourceIDsFixtureRow
-		if err := rows.Scan(&i.ResourceID, &i.Scope); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listMetadataForBackend = `-- name: ListMetadataForBackend :many
-SELECT id, toolset_id, mcp_server_id
-FROM mcp_metadata
-WHERE project_id = $1
-  AND (toolset_id = $2 OR mcp_server_id = $2)
-ORDER BY (toolset_id IS NULL), id
-FOR UPDATE
-`
-
-type ListMetadataForBackendParams struct {
+type ListHeaderDefinitionsParams struct {
 	ProjectID uuid.UUID
-	BackendID uuid.NullUUID
+	ToolsetID uuid.UUID
 }
 
-type ListMetadataForBackendRow struct {
-	ID          uuid.UUID
-	ToolsetID   uuid.NullUUID
-	McpServerID uuid.NullUUID
+type ListHeaderDefinitionsRow struct {
+	AttachmentSlug    string
+	RequiresOauth     bool
+	HeaderDefinitions []byte
 }
 
-// The old server's metadata rows, toolset-keyed first, locked for the move.
-func (q *Queries) ListMetadataForBackend(ctx context.Context, arg ListMetadataForBackendParams) ([]ListMetadataForBackendRow, error) {
-	rows, err := q.db.Query(ctx, listMetadataForBackend, arg.ProjectID, arg.BackendID)
+// The proxy tool definitions behind a toolset on its project's active
+// deployment, with their attachment's slug, for copying headers.
+func (q *Queries) ListHeaderDefinitions(ctx context.Context, arg ListHeaderDefinitionsParams) ([]ListHeaderDefinitionsRow, error) {
+	rows, err := q.db.Query(ctx, listHeaderDefinitions, arg.ProjectID, arg.ToolsetID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListMetadataForBackendRow
+	var items []ListHeaderDefinitionsRow
 	for rows.Next() {
-		var i ListMetadataForBackendRow
-		if err := rows.Scan(&i.ID, &i.ToolsetID, &i.McpServerID); err != nil {
+		var i ListHeaderDefinitionsRow
+		if err := rows.Scan(&i.AttachmentSlug, &i.RequiresOauth, &i.HeaderDefinitions); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -645,136 +575,34 @@ func (q *Queries) ListMetadataForBackend(ctx context.Context, arg ListMetadataFo
 	return items, nil
 }
 
-const listPluginServersForBackend = `-- name: ListPluginServersForBackend :many
-SELECT
-  ps.id,
-  ps.plugin_id,
-  ps.toolset_id,
-  ps.mcp_server_id,
-  ps.display_name,
-  ps.policy,
-  ps.sort_order,
-  pl.name AS plugin_name,
-  pl.slug AS plugin_slug,
-  EXISTS (
-    SELECT 1
-    FROM platform_mcp_distributions AS d
-    WHERE d.project_id = pl.project_id AND d.plugin_server_id = ps.id
-  ) AS distributed
-FROM plugin_servers AS ps
-JOIN plugins AS pl ON pl.id = ps.plugin_id
-WHERE pl.project_id = $1
-  AND ps.deleted IS FALSE
-  AND (ps.toolset_id = $2 OR ps.mcp_server_id = $2)
-ORDER BY ps.plugin_id, ps.id
-FOR UPDATE OF ps
+const listRemoteHeadersFixture = `-- name: ListRemoteHeadersFixture :many
+SELECT name, value, value_from_request_header, is_secret
+FROM remote_mcp_server_headers
+WHERE remote_mcp_server_id = $1 AND deleted IS FALSE
+ORDER BY name
 `
 
-type ListPluginServersForBackendParams struct {
-	ProjectID uuid.UUID
-	BackendID uuid.NullUUID
+type ListRemoteHeadersFixtureRow struct {
+	Name                   string
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	IsSecret               bool
 }
 
-type ListPluginServersForBackendRow struct {
-	ID          uuid.UUID
-	PluginID    uuid.UUID
-	ToolsetID   uuid.NullUUID
-	McpServerID uuid.NullUUID
-	DisplayName string
-	Policy      string
-	SortOrder   int32
-	PluginName  string
-	PluginSlug  string
-	Distributed bool
-}
-
-// Live plugin entries pointing at the old server, keyed either by its toolset
-// or by its canonical wrapper, locked for the move.
-func (q *Queries) ListPluginServersForBackend(ctx context.Context, arg ListPluginServersForBackendParams) ([]ListPluginServersForBackendRow, error) {
-	rows, err := q.db.Query(ctx, listPluginServersForBackend, arg.ProjectID, arg.BackendID)
+func (q *Queries) ListRemoteHeadersFixture(ctx context.Context, remoteMcpServerID uuid.UUID) ([]ListRemoteHeadersFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteHeadersFixture, remoteMcpServerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPluginServersForBackendRow
+	var items []ListRemoteHeadersFixtureRow
 	for rows.Next() {
-		var i ListPluginServersForBackendRow
+		var i ListRemoteHeadersFixtureRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.PluginID,
-			&i.ToolsetID,
-			&i.McpServerID,
-			&i.DisplayName,
-			&i.Policy,
-			&i.SortOrder,
-			&i.PluginName,
-			&i.PluginSlug,
-			&i.Distributed,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRemoteServersOnIssuers = `-- name: ListRemoteServersOnIssuers :many
-SELECT
-  ms.id,
-  ms.project_id,
-  ms.name,
-  ms.slug,
-  ms.user_session_issuer_id,
-  ms.network_access_mode,
-  ms.visibility,
-  rms.url
-FROM mcp_servers AS ms
-JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
-WHERE ms.deleted IS FALSE
-  AND ms.project_id = ANY($1::uuid[])
-  AND ms.user_session_issuer_id = ANY($2::uuid[])
-ORDER BY ms.project_id, ms.name, ms.id
-`
-
-type ListRemoteServersOnIssuersParams struct {
-	ProjectIds           []uuid.UUID
-	UserSessionIssuerIds []uuid.UUID
-}
-
-type ListRemoteServersOnIssuersRow struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	Name                pgtype.Text
-	Slug                pgtype.Text
-	UserSessionIssuerID uuid.NullUUID
-	NetworkAccessMode   pgtype.Text
-	Visibility          string
-	Url                 string
-}
-
-// Live remote-backed MCP servers in the candidates' projects that share one of
-// the given user session issuers, the servers a migration may merge into.
-func (q *Queries) ListRemoteServersOnIssuers(ctx context.Context, arg ListRemoteServersOnIssuersParams) ([]ListRemoteServersOnIssuersRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteServersOnIssuers, arg.ProjectIds, arg.UserSessionIssuerIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRemoteServersOnIssuersRow
-	for rows.Next() {
-		var i ListRemoteServersOnIssuersRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
 			&i.Name,
-			&i.Slug,
-			&i.UserSessionIssuerID,
-			&i.NetworkAccessMode,
-			&i.Visibility,
-			&i.Url,
+			&i.Value,
+			&i.ValueFromRequestHeader,
+			&i.IsSecret,
 		); err != nil {
 			return nil, err
 		}
@@ -784,85 +612,6 @@ func (q *Queries) ListRemoteServersOnIssuers(ctx context.Context, arg ListRemote
 		return nil, err
 	}
 	return items, nil
-}
-
-const listRemoteURLsOnIssuer = `-- name: ListRemoteURLsOnIssuer :many
-SELECT DISTINCT rms.url
-FROM mcp_servers AS ms
-JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
-JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
-WHERE ms.deleted IS FALSE
-  AND ms.user_session_issuer_id = $2
-  AND ms.id <> $3
-`
-
-type ListRemoteURLsOnIssuerParams struct {
-	OrganizationID      string
-	UserSessionIssuerID uuid.NullUUID
-	ExcludedMcpServerID uuid.UUID
-}
-
-// Upstream URLs of the live remote servers signed in through an issuer,
-// other than the one being migrated onto, across the issuer's organization.
-func (q *Queries) ListRemoteURLsOnIssuer(ctx context.Context, arg ListRemoteURLsOnIssuerParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listRemoteURLsOnIssuer, arg.OrganizationID, arg.UserSessionIssuerID, arg.ExcludedMcpServerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var url string
-		if err := rows.Scan(&url); err != nil {
-			return nil, err
-		}
-		items = append(items, url)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const lockTargetServer = `-- name: LockTargetServer :one
-SELECT ms.id, ms.name, ms.slug, ms.user_session_issuer_id, ms.remote_mcp_server_id, ms.network_access_mode, ms.visibility, rms.url AS remote_url
-FROM mcp_servers AS ms
-JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
-WHERE ms.id = $1 AND ms.project_id = $2 AND ms.deleted IS FALSE
-FOR UPDATE OF ms
-`
-
-type LockTargetServerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-type LockTargetServerRow struct {
-	ID                  uuid.UUID
-	Name                pgtype.Text
-	Slug                pgtype.Text
-	UserSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
-	NetworkAccessMode   pgtype.Text
-	Visibility          string
-	RemoteUrl           string
-}
-
-// The existing remote-backed server a migration merges into.
-func (q *Queries) LockTargetServer(ctx context.Context, arg LockTargetServerParams) (LockTargetServerRow, error) {
-	row := q.db.QueryRow(ctx, lockTargetServer, arg.ID, arg.ProjectID)
-	var i LockTargetServerRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.UserSessionIssuerID,
-		&i.RemoteMcpServerID,
-		&i.NetworkAccessMode,
-		&i.Visibility,
-		&i.RemoteUrl,
-	)
-	return i, err
 }
 
 const lockToolset = `-- name: LockToolset :one
@@ -884,363 +633,63 @@ func (q *Queries) LockToolset(ctx context.Context, arg LockToolsetParams) (uuid.
 	return id, err
 }
 
-const moveAssistantToolsetToServer = `-- name: MoveAssistantToolsetToServer :execrows
-WITH moved AS (
-  DELETE FROM assistant_toolsets AS at
-  WHERE at.id = $2 AND at.project_id = $3
-  RETURNING at.id, at.assistant_id, at.environment_id, at.project_id, at.created_at
+const makeClientSelfOwnedFixture = `-- name: MakeClientSelfOwnedFixture :exec
+UPDATE remote_session_clients
+SET credential_owner = 'self', token_endpoint_auth_method = 'client_secret_basic'
+WHERE id = $1
+`
+
+func (q *Queries) MakeClientSelfOwnedFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, makeClientSelfOwnedFixture, id)
+	return err
+}
+
+const rekeyToolsetMetadata = `-- name: RekeyToolsetMetadata :execrows
+UPDATE mcp_metadata AS md
+SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
+WHERE md.project_id = $2
+  AND md.toolset_id = $1
+  AND NOT EXISTS (
+    SELECT 1 FROM mcp_metadata AS existing
+    WHERE existing.project_id = $2 AND existing.mcp_server_id = $1
+  )
+`
+
+type RekeyToolsetMetadataParams struct {
+	ID        uuid.NullUUID
+	ProjectID uuid.UUID
+}
+
+// The server keeps the toolset's id, so its metadata row moves from the
+// toolset key to the server key without changing which server it describes,
+// unless the server already has one.
+func (q *Queries) RekeyToolsetMetadata(ctx context.Context, arg RekeyToolsetMetadataParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rekeyToolsetMetadata, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const seedAssistantToolsetFixture = `-- name: SeedAssistantToolsetFixture :exec
+WITH assistant AS (
+  INSERT INTO assistants (organization_id, project_id, name, model, instructions, created_by_user_id)
+  VALUES ($3, $2, 'fixture-assistant', 'fixture-model', 'fixture', 'fixture-user')
+  RETURNING id
 )
-INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, environment_id, project_id, created_at)
-SELECT moved.id, moved.assistant_id, $1::uuid, moved.environment_id, moved.project_id, moved.created_at
-FROM moved
+INSERT INTO assistant_toolsets (assistant_id, toolset_id, project_id)
+SELECT id, $1, $2 FROM assistant
 `
 
-type MoveAssistantToolsetToServerParams struct {
-	McpServerID uuid.UUID
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-// Same id, environment and created_at, so the attachment is the same row in its new table.
-func (q *Queries) MoveAssistantToolsetToServer(ctx context.Context, arg MoveAssistantToolsetToServerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, moveAssistantToolsetToServer, arg.McpServerID, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const otherToolsetsOnIssuer = `-- name: OtherToolsetsOnIssuer :one
-SELECT EXISTS (
-  SELECT 1
-  FROM toolsets AS t
-  JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
-  WHERE t.organization_id = $1
-    AND t.user_session_issuer_id = $2
-    AND t.id <> $3
-    AND t.deleted IS FALSE
-) AS present
-`
-
-type OtherToolsetsOnIssuerParams struct {
-	OrganizationID      string
-	UserSessionIssuerID uuid.NullUUID
-	ExcludedToolsetID   uuid.UUID
-}
-
-// Whether another live toolset in the organization signs in through the
-// issuer, such as an external MCP server not migrated yet.
-func (q *Queries) OtherToolsetsOnIssuer(ctx context.Context, arg OtherToolsetsOnIssuerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, otherToolsetsOnIssuer, arg.OrganizationID, arg.UserSessionIssuerID, arg.ExcludedToolsetID)
-	var present bool
-	err := row.Scan(&present)
-	return present, err
-}
-
-const rekeyCollectionAttachments = `-- name: RekeyCollectionAttachments :execrows
-UPDATE organization_mcp_collection_server_attachments AS a
-SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
-FROM organization_mcp_collections AS c
-WHERE c.id = a.collection_id
-  AND c.organization_id = $2
-  AND a.deleted IS FALSE
-  AND (a.toolset_id = $3 OR a.mcp_server_id = $3)
-  AND NOT EXISTS (
-    SELECT 1
-    FROM organization_mcp_collection_server_attachments AS existing
-    WHERE existing.collection_id = a.collection_id
-      AND existing.mcp_server_id = $1
-      AND existing.deleted IS FALSE
-  )
-`
-
-type RekeyCollectionAttachmentsParams struct {
-	McpServerID    uuid.NullUUID
+type SeedAssistantToolsetFixtureParams struct {
+	ToolsetID      uuid.UUID
+	ProjectID      uuid.UUID
 	OrganizationID string
-	BackendID      uuid.NullUUID
 }
 
-// Moves the old server's remaining collection attachments to the new server,
-// after RemoveDuplicateCollectionAttachments left at most one per collection.
-func (q *Queries) RekeyCollectionAttachments(ctx context.Context, arg RekeyCollectionAttachmentsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rekeyCollectionAttachments, arg.McpServerID, arg.OrganizationID, arg.BackendID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const rekeyMetadata = `-- name: RekeyMetadata :execrows
-UPDATE mcp_metadata
-SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
-WHERE id = $2 AND project_id = $3
-`
-
-type RekeyMetadataParams struct {
-	McpServerID uuid.NullUUID
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-// Same row id, so its mcp_environment_configs stay attached.
-func (q *Queries) RekeyMetadata(ctx context.Context, arg RekeyMetadataParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rekeyMetadata, arg.McpServerID, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const rekeyPluginServer = `-- name: RekeyPluginServer :execrows
-UPDATE plugin_servers AS ps
-SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
-FROM plugins AS pl
-WHERE ps.id = $2
-  AND pl.id = ps.plugin_id
-  AND pl.project_id = $3
-  AND ps.deleted IS FALSE
-`
-
-type RekeyPluginServerParams struct {
-	McpServerID uuid.NullUUID
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-func (q *Queries) RekeyPluginServer(ctx context.Context, arg RekeyPluginServerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rekeyPluginServer, arg.McpServerID, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const removeDuplicateCollectionAttachments = `-- name: RemoveDuplicateCollectionAttachments :execrows
-UPDATE organization_mcp_collection_server_attachments AS a
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-FROM organization_mcp_collections AS c
-WHERE c.id = a.collection_id
-  AND c.organization_id = $1
-  AND a.deleted IS FALSE
-  AND (a.toolset_id = $2 OR a.mcp_server_id = $2)
-  AND (
-    EXISTS (
-      SELECT 1
-      FROM organization_mcp_collection_server_attachments AS existing
-      WHERE existing.collection_id = a.collection_id
-        AND existing.mcp_server_id = $3
-        AND existing.deleted IS FALSE
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM organization_mcp_collection_server_attachments AS twin
-      WHERE twin.collection_id = a.collection_id
-        AND twin.id <> a.id
-        AND twin.deleted IS FALSE
-        AND (twin.toolset_id = $2 OR twin.mcp_server_id = $2)
-        AND (
-          (twin.mcp_server_id IS NOT NULL AND a.mcp_server_id IS NULL)
-          OR ((twin.mcp_server_id IS NULL) = (a.mcp_server_id IS NULL) AND twin.id < a.id)
-        )
-    )
-  )
-`
-
-type RemoveDuplicateCollectionAttachmentsParams struct {
-	OrganizationID string
-	BackendID      uuid.NullUUID
-	McpServerID    uuid.NullUUID
-}
-
-// Removes the old server's collection attachments that cannot move: those in
-// a collection that already carries the new server, and all but one of a
-// collection's twins, keeping the wrapper-keyed one, then the oldest.
-func (q *Queries) RemoveDuplicateCollectionAttachments(ctx context.Context, arg RemoveDuplicateCollectionAttachmentsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, removeDuplicateCollectionAttachments, arg.OrganizationID, arg.BackendID, arg.McpServerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const repointAssistantMcpServer = `-- name: RepointAssistantMcpServer :execrows
-UPDATE assistant_mcp_servers
-SET mcp_server_id = $1, updated_at = clock_timestamp()
-WHERE id = $2 AND project_id = $3
-`
-
-type RepointAssistantMcpServerParams struct {
-	McpServerID uuid.UUID
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-func (q *Queries) RepointAssistantMcpServer(ctx context.Context, arg RepointAssistantMcpServerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, repointAssistantMcpServer, arg.McpServerID, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const repointDistributionsToPluginServer = `-- name: RepointDistributionsToPluginServer :execrows
-UPDATE platform_mcp_distributions
-SET plugin_server_id = $1, version = version + 1, updated_at = clock_timestamp()
-WHERE project_id = $2
-  AND plugin_server_id = $3
-`
-
-type RepointDistributionsToPluginServerParams struct {
-	RetainedPluginServerID uuid.NullUUID
-	ProjectID              uuid.UUID
-	RemovedPluginServerID  uuid.NullUUID
-}
-
-// Moves Platform MCP distributions off a plugin entry being removed onto the
-// entry the plugin keeps, which sits in the same plugin.
-func (q *Queries) RepointDistributionsToPluginServer(ctx context.Context, arg RepointDistributionsToPluginServerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, repointDistributionsToPluginServer, arg.RetainedPluginServerID, arg.ProjectID, arg.RemovedPluginServerID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const repointMetaMcpMembers = `-- name: RepointMetaMcpMembers :many
-UPDATE meta_mcp_server_members AS m
-SET mcp_server_id = $1, updated_at = clock_timestamp()
-FROM meta_mcp_servers AS meta
-WHERE m.project_id = $2
-  AND m.mcp_server_id = $3
-  AND m.deleted IS FALSE
-  AND meta.id = m.meta_mcp_server_id
-  AND meta.project_id = m.project_id
-  AND NOT EXISTS (
-    SELECT 1
-    FROM meta_mcp_server_members AS existing
-    WHERE existing.meta_mcp_server_id = m.meta_mcp_server_id
-      AND existing.mcp_server_id = $1
-      AND existing.deleted IS FALSE
-  )
-RETURNING m.id, m.meta_mcp_server_id, meta.name AS meta_mcp_server_name, m.sort_order
-`
-
-type RepointMetaMcpMembersParams struct {
-	McpServerID uuid.UUID
-	ProjectID   uuid.UUID
-	BackendID   uuid.UUID
-}
-
-type RepointMetaMcpMembersRow struct {
-	ID                uuid.UUID
-	MetaMcpServerID   uuid.UUID
-	MetaMcpServerName string
-	SortOrder         int32
-}
-
-// Moves gateway memberships to the new server unless it is already a member
-// of that gateway; the memberships left behind are removed with the old server.
-func (q *Queries) RepointMetaMcpMembers(ctx context.Context, arg RepointMetaMcpMembersParams) ([]RepointMetaMcpMembersRow, error) {
-	rows, err := q.db.Query(ctx, repointMetaMcpMembers, arg.McpServerID, arg.ProjectID, arg.BackendID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RepointMetaMcpMembersRow
-	for rows.Next() {
-		var i RepointMetaMcpMembersRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.MetaMcpServerID,
-			&i.MetaMcpServerName,
-			&i.SortOrder,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const rewriteRemoteSessionResources = `-- name: RewriteRemoteSessionResources :execrows
-UPDATE remote_sessions AS rs
-SET resource = $1
-WHERE rs.user_session_issuer_id = $2
-  AND rs.deleted IS FALSE
-  AND (rs.resource IS NULL OR rs.resource = '' OR rtrim(rs.resource, '/') = rtrim($3::text, '/'))
-  AND rs.user_session_issuer_id IN (
-    SELECT usi.id
-    FROM user_session_issuers AS usi
-    WHERE usi.id = $2
-      AND (usi.organization_id = $4::text OR usi.project_id IN (SELECT p.id FROM projects AS p WHERE p.organization_id = $4::text))
-  )
-  AND rs.remote_session_client_id IN (
-    SELECT link.remote_session_client_id
-    FROM remote_session_client_user_session_issuers AS link
-    WHERE link.user_session_issuer_id = $2
-  )
-`
-
-type RewriteRemoteSessionResourcesParams struct {
-	Resource            pgtype.Text
-	UserSessionIssuerID uuid.UUID
-	PreviousResource    string
-	OrganizationID      string
-}
-
-// Stamps the new upstream URL on the issuer's sessions that recorded no
-// resource or the old one, the same stamp a refresh would apply.
-func (q *Queries) RewriteRemoteSessionResources(ctx context.Context, arg RewriteRemoteSessionResourcesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, rewriteRemoteSessionResources,
-		arg.Resource,
-		arg.UserSessionIssuerID,
-		arg.PreviousResource,
-		arg.OrganizationID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const seedCollectionAttachmentFixture = `-- name: SeedCollectionAttachmentFixture :one
-INSERT INTO organization_mcp_collection_server_attachments (collection_id, toolset_id, mcp_server_id)
-VALUES ($1, $2, $3)
-RETURNING id
-`
-
-type SeedCollectionAttachmentFixtureParams struct {
-	CollectionID uuid.UUID
-	ToolsetID    uuid.NullUUID
-	McpServerID  uuid.NullUUID
-}
-
-func (q *Queries) SeedCollectionAttachmentFixture(ctx context.Context, arg SeedCollectionAttachmentFixtureParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, seedCollectionAttachmentFixture, arg.CollectionID, arg.ToolsetID, arg.McpServerID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const seedCollectionFixture = `-- name: SeedCollectionFixture :one
-INSERT INTO organization_mcp_collections (organization_id, name, slug, visibility)
-VALUES ($1, $2, $2, 'private')
-RETURNING id
-`
-
-type SeedCollectionFixtureParams struct {
-	OrganizationID string
-	Slug           string
-}
-
-func (q *Queries) SeedCollectionFixture(ctx context.Context, arg SeedCollectionFixtureParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, seedCollectionFixture, arg.OrganizationID, arg.Slug)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+func (q *Queries) SeedAssistantToolsetFixture(ctx context.Context, arg SeedAssistantToolsetFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAssistantToolsetFixture, arg.ToolsetID, arg.ProjectID, arg.OrganizationID)
+	return err
 }
 
 const seedCompletedDeploymentFixture = `-- name: SeedCompletedDeploymentFixture :one
@@ -1271,57 +720,38 @@ func (q *Queries) SeedCompletedDeploymentFixture(ctx context.Context, arg SeedCo
 	return id, err
 }
 
-const seedDistributionFixture = `-- name: SeedDistributionFixture :one
-WITH registration AS (
-  INSERT INTO platform_mcp_catalog_registrations (organization_id, project_id, source_kind, catalog_provider, catalog_reference)
-  VALUES ($1, $2, 'remote', 'fixture', $5)
-  RETURNING id
-)
-INSERT INTO platform_mcp_distributions (
-  organization_id, project_id, registration_id, default_plugin_id, plugin_id, plugin_server_id,
-  state, version, attachment_was_created, user_id, acting_surface
-)
-SELECT $1, $2, registration.id, $3, $3, $4,
-  'active', 1, FALSE, 'fixture-user', 'dashboard'
-FROM registration
-RETURNING id
+const seedEmaBindingFixture = `-- name: SeedEmaBindingFixture :exec
+INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
+SELECT rsc.project_id, rsc.organization_id, $1, rsc.remote_session_issuer_id, 'https://mcp.example.com/mcp'
+FROM remote_session_clients AS rsc
+WHERE rsc.id = $2
 `
 
-type SeedDistributionFixtureParams struct {
-	OrganizationID   string
-	ProjectID        uuid.UUID
-	PluginID         uuid.UUID
-	PluginServerID   uuid.NullUUID
-	CatalogReference string
+type SeedEmaBindingFixtureParams struct {
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
 }
 
-func (q *Queries) SeedDistributionFixture(ctx context.Context, arg SeedDistributionFixtureParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, seedDistributionFixture,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.PluginID,
-		arg.PluginServerID,
-		arg.CatalogReference,
-	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+func (q *Queries) SeedEmaBindingFixture(ctx context.Context, arg SeedEmaBindingFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedEmaBindingFixture, arg.UserSessionIssuerID, arg.RemoteSessionClientID)
+	return err
 }
 
 const seedExternalMCPProxyFixture = `-- name: SeedExternalMCPProxyFixture :exec
 WITH attachment AS (
   INSERT INTO external_mcp_attachments (deployment_id, name, slug, registry_server_specifier)
-  VALUES ($4, $5, $5, $5)
+  VALUES ($5, $6, $6, $6)
   RETURNING id
 )
-INSERT INTO external_mcp_tool_definitions (external_mcp_attachment_id, tool_urn, remote_url, transport_type, type, header_definitions)
-SELECT id, $1, $2, 'streamable-http', 'proxy', $3::jsonb
+INSERT INTO external_mcp_tool_definitions (external_mcp_attachment_id, tool_urn, remote_url, transport_type, type, requires_oauth, header_definitions)
+SELECT id, $1, $2, 'streamable-http', 'proxy', $3, $4::jsonb
 FROM attachment
 `
 
 type SeedExternalMCPProxyFixtureParams struct {
 	ToolUrn           string
 	RemoteUrl         string
+	RequiresOauth     bool
 	HeaderDefinitions []byte
 	DeploymentID      uuid.UUID
 	Slug              string
@@ -1331,6 +761,7 @@ func (q *Queries) SeedExternalMCPProxyFixture(ctx context.Context, arg SeedExter
 	_, err := q.db.Exec(ctx, seedExternalMCPProxyFixture,
 		arg.ToolUrn,
 		arg.RemoteUrl,
+		arg.RequiresOauth,
 		arg.HeaderDefinitions,
 		arg.DeploymentID,
 		arg.Slug,
@@ -1341,17 +772,18 @@ func (q *Queries) SeedExternalMCPProxyFixture(ctx context.Context, arg SeedExter
 const seedPluginServerFixture = `-- name: SeedPluginServerFixture :one
 WITH plugin AS (
   INSERT INTO plugins (organization_id, project_id, name, slug)
-  VALUES ($4, $1, $3, $3)
+  VALUES ($5, $1, $4, $4)
   RETURNING id
 )
-INSERT INTO plugin_servers (plugin_id, project_id, toolset_id, display_name)
-SELECT id, $1, $2, $3 FROM plugin
+INSERT INTO plugin_servers (plugin_id, project_id, toolset_id, mcp_server_id, display_name)
+SELECT id, $1, $2, $3, $4 FROM plugin
 RETURNING id
 `
 
 type SeedPluginServerFixtureParams struct {
 	ProjectID      uuid.NullUUID
 	ToolsetID      uuid.NullUUID
+	McpServerID    uuid.NullUUID
 	Name           string
 	OrganizationID string
 }
@@ -1360,33 +792,9 @@ func (q *Queries) SeedPluginServerFixture(ctx context.Context, arg SeedPluginSer
 	row := q.db.QueryRow(ctx, seedPluginServerFixture,
 		arg.ProjectID,
 		arg.ToolsetID,
+		arg.McpServerID,
 		arg.Name,
 		arg.OrganizationID,
-	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const seedPluginServerForServerFixture = `-- name: SeedPluginServerForServerFixture :one
-INSERT INTO plugin_servers (plugin_id, project_id, mcp_server_id, display_name)
-VALUES ($1, $2, $3, $4)
-RETURNING id
-`
-
-type SeedPluginServerForServerFixtureParams struct {
-	PluginID    uuid.UUID
-	ProjectID   uuid.NullUUID
-	McpServerID uuid.NullUUID
-	DisplayName string
-}
-
-func (q *Queries) SeedPluginServerForServerFixture(ctx context.Context, arg SeedPluginServerForServerFixtureParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, seedPluginServerForServerFixture,
-		arg.PluginID,
-		arg.ProjectID,
-		arg.McpServerID,
-		arg.DisplayName,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -1459,59 +867,75 @@ func (q *Queries) SeedRemoteSessionFixture(ctx context.Context, arg SeedRemoteSe
 	return id, err
 }
 
-const serverHasMetadata = `-- name: ServerHasMetadata :one
-SELECT EXISTS (
-  SELECT 1
-  FROM mcp_metadata
-  WHERE project_id = $1 AND mcp_server_id = $2
-) AS present
+const seedToolsetEnvironmentFixture = `-- name: SeedToolsetEnvironmentFixture :exec
+WITH environment AS (
+  INSERT INTO environments (organization_id, project_id, name, slug)
+  VALUES ($3, $2, $4, $4)
+  RETURNING id
+),
+entry AS (
+  INSERT INTO environment_entries (name, value, is_secret, environment_id)
+  SELECT $5, $6, FALSE, id FROM environment
+)
+INSERT INTO toolset_environments (toolset_id, project_id, environment_id)
+SELECT $1, $2, id FROM environment
 `
 
-type ServerHasMetadataParams struct {
-	ProjectID   uuid.UUID
-	McpServerID uuid.NullUUID
+type SeedToolsetEnvironmentFixtureParams struct {
+	ToolsetID      uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Slug           string
+	EntryName      string
+	EntryValue     string
 }
 
-func (q *Queries) ServerHasMetadata(ctx context.Context, arg ServerHasMetadataParams) (bool, error) {
-	row := q.db.QueryRow(ctx, serverHasMetadata, arg.ProjectID, arg.McpServerID)
-	var present bool
-	err := row.Scan(&present)
-	return present, err
-}
-
-const setNetworkAccessModeFixture = `-- name: SetNetworkAccessModeFixture :exec
-UPDATE mcp_servers
-SET network_access_mode = $1
-WHERE id = $2
-`
-
-type SetNetworkAccessModeFixtureParams struct {
-	NetworkAccessMode pgtype.Text
-	ID                uuid.UUID
-}
-
-func (q *Queries) SetNetworkAccessModeFixture(ctx context.Context, arg SetNetworkAccessModeFixtureParams) error {
-	_, err := q.db.Exec(ctx, setNetworkAccessModeFixture, arg.NetworkAccessMode, arg.ID)
+// A toolset environment holding one plaintext entry.
+func (q *Queries) SeedToolsetEnvironmentFixture(ctx context.Context, arg SeedToolsetEnvironmentFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedToolsetEnvironmentFixture,
+		arg.ToolsetID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.EntryName,
+		arg.EntryValue,
+	)
 	return err
 }
 
-const softDeletePluginServer = `-- name: SoftDeletePluginServer :execrows
-UPDATE plugin_servers AS ps
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-FROM plugins AS pl
-WHERE ps.id = $1
-  AND pl.id = ps.plugin_id
-  AND pl.project_id = $2
-  AND ps.deleted IS FALSE
+const switchServerToRemote = `-- name: SwitchServerToRemote :execrows
+UPDATE mcp_servers
+SET toolset_id = NULL,
+  remote_mcp_server_id = $1,
+  remote_session_issuer_id = $2,
+  user_session_issuer_id = COALESCE(user_session_issuer_id, $3),
+  updated_at = clock_timestamp()
+WHERE id = $4
+  AND project_id = $5
+  AND toolset_id = $6
+  AND deleted IS FALSE
 `
 
-type SoftDeletePluginServerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+type SwitchServerToRemoteParams struct {
+	RemoteMcpServerID     uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	ToolsetID             uuid.NullUUID
 }
 
-func (q *Queries) SoftDeletePluginServer(ctx context.Context, arg SoftDeletePluginServerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeletePluginServer, arg.ID, arg.ProjectID)
+// Swaps the backend in one statement, as mcp_servers_backend_exclusivity_check
+// requires, keeping the row's id, slug, visibility and network access.
+func (q *Queries) SwitchServerToRemote(ctx context.Context, arg SwitchServerToRemoteParams) (int64, error) {
+	result, err := q.db.Exec(ctx, switchServerToRemote,
+		arg.RemoteMcpServerID,
+		arg.RemoteSessionIssuerID,
+		arg.UserSessionIssuerID,
+		arg.ID,
+		arg.ProjectID,
+		arg.ToolsetID,
+	)
 	if err != nil {
 		return 0, err
 	}

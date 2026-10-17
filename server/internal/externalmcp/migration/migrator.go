@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -22,7 +23,7 @@ import (
 type Status string
 
 const (
-	// StatusMigrated means the server was replaced and its toolset deleted.
+	// StatusMigrated means the server was switched and its toolset disabled.
 	StatusMigrated Status = "migrated"
 
 	// StatusPreviewed means a dry run completed every step and rolled back.
@@ -39,10 +40,6 @@ const (
 type Request struct {
 	// ToolsetID is the candidate's toolset.
 	ToolsetID uuid.UUID
-
-	// TargetMcpServerID merges into an existing remote-backed server sharing
-	// the candidate's issuer instead of creating one.
-	TargetMcpServerID uuid.NullUUID
 }
 
 // Actor is the staff member a migration is audited under.
@@ -65,23 +62,17 @@ type Outcome struct {
 	// Reason explains a failure.
 	Reason string
 
-	// McpSlug is the address the server kept.
+	// McpSlug is the server's address, which does not change.
 	McpSlug string
 
-	// McpServerID is the replacement server.
+	// McpServerID is the server, which keeps its id.
 	McpServerID uuid.UUID
 
-	// RemoteMcpServerID is the replacement's remote source.
+	// RemoteMcpServerID is the remote source the server now proxies.
 	RemoteMcpServerID uuid.UUID
 
-	// MergedIntoExisting is true when the replacement already existed.
-	MergedIntoExisting bool
-
-	// RemoteURL is the upstream URL the replacement dials.
+	// RemoteURL is the upstream URL the server now dials.
 	RemoteURL string
-
-	// EndpointIDs are the endpoints moved onto or created for the replacement.
-	EndpointIDs []uuid.UUID
 
 	// Actions describes each change, in order.
 	Actions []string
@@ -102,18 +93,23 @@ type Migrator struct {
 	db             *pgxpool.Pool
 	audit          *audit.Logger
 	policy         *guardian.Policy
+	encryption     *encryption.Client
 	publication    plugins.PublicationRequests
 	toolCalls      ToolCallCounter
 }
 
-// NewMigrator builds a migrator. toolCalls may be nil when telemetry is unavailable.
-func NewMigrator(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, auditLogger *audit.Logger, policy *guardian.Policy, publication plugins.PublicationRequests, toolCalls ToolCallCounter) *Migrator {
+// NewMigrator builds a migrator. enc decrypts environment values copied into
+// headers and encrypts them again; it may be nil when no application key is
+// configured, which fails any migration that needs it. toolCalls may be nil
+// when telemetry is unavailable.
+func NewMigrator(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, auditLogger *audit.Logger, policy *guardian.Policy, enc *encryption.Client, publication plugins.PublicationRequests, toolCalls ToolCallCounter) *Migrator {
 	return &Migrator{
 		logger:         logger.With(attr.SlogComponent("external_mcp_migration")),
 		tracerProvider: tracerProvider,
 		db:             db,
 		audit:          auditLogger,
 		policy:         policy,
+		encryption:     enc,
 		publication:    publication,
 		toolCalls:      toolCalls,
 	}
@@ -142,7 +138,7 @@ func (m *Migrator) Run(ctx context.Context, actor Actor, requests []Request, dry
 	stopped := false
 	for _, request := range requests {
 		if stopped {
-			outcomes = append(outcomes, Outcome{ToolsetID: request.ToolsetID, Status: StatusNotAttempted, Reason: "an earlier server failed", McpSlug: "", McpServerID: uuid.Nil, RemoteMcpServerID: uuid.Nil, MergedIntoExisting: false, RemoteURL: "", EndpointIDs: nil, Actions: nil, Warnings: nil})
+			outcomes = append(outcomes, Outcome{ToolsetID: request.ToolsetID, Status: StatusNotAttempted, Reason: "an earlier server failed", McpSlug: "", McpServerID: uuid.Nil, RemoteMcpServerID: uuid.Nil, RemoteURL: "", Actions: nil, Warnings: nil})
 			continue
 		}
 		outcome := m.runOne(ctx, actor, request, dryRun)

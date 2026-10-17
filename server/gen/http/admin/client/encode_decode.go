@@ -22986,34 +22986,13 @@ func unmarshalAdminExternalMcpMigrationCandidateResponseBodyToAdminAdminExternal
 		ServerName:       *v.ServerName,
 		McpSlug:          v.McpSlug,
 		RemoteURL:        v.RemoteURL,
-		CleanedURL:       v.CleanedURL,
+		ReplacementURL:   v.ReplacementURL,
 		SignInProvider:   v.SignInProvider,
 		ToolCalls:        v.ToolCalls,
 	}
 	res.Blockers = make([]string, len(v.Blockers))
 	for i, val := range v.Blockers {
 		res.Blockers[i] = val
-	}
-	res.Targets = make([]*admin.AdminExternalMcpMigrationTarget, len(v.Targets))
-	for i, val := range v.Targets {
-		if val == nil {
-			res.Targets[i] = nil
-			continue
-		}
-		res.Targets[i] = unmarshalAdminExternalMcpMigrationTargetResponseBodyToAdminAdminExternalMcpMigrationTarget(val)
-	}
-
-	return res
-}
-
-// unmarshalAdminExternalMcpMigrationTargetResponseBodyToAdminAdminExternalMcpMigrationTarget
-// builds a value of type *admin.AdminExternalMcpMigrationTarget from a value
-// of type *AdminExternalMcpMigrationTargetResponseBody.
-func unmarshalAdminExternalMcpMigrationTargetResponseBodyToAdminAdminExternalMcpMigrationTarget(v *AdminExternalMcpMigrationTargetResponseBody) *admin.AdminExternalMcpMigrationTarget {
-	res := &admin.AdminExternalMcpMigrationTarget{
-		ID:   *v.ID,
-		Name: *v.Name,
-		URL:  *v.URL,
 	}
 
 	return res
@@ -23024,8 +23003,7 @@ func unmarshalAdminExternalMcpMigrationTargetResponseBodyToAdminAdminExternalMcp
 // value of type *admin.AdminExternalMcpMigrationRequest.
 func marshalAdminAdminExternalMcpMigrationRequestToAdminExternalMcpMigrationRequestRequestBody(v *admin.AdminExternalMcpMigrationRequest) *AdminExternalMcpMigrationRequestRequestBody {
 	res := &AdminExternalMcpMigrationRequestRequestBody{
-		ToolsetID:         v.ToolsetID,
-		TargetMcpServerID: v.TargetMcpServerID,
+		ToolsetID: v.ToolsetID,
 	}
 
 	return res
@@ -23036,8 +23014,7 @@ func marshalAdminAdminExternalMcpMigrationRequestToAdminExternalMcpMigrationRequ
 // of type *AdminExternalMcpMigrationRequestRequestBody.
 func marshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(v *AdminExternalMcpMigrationRequestRequestBody) *admin.AdminExternalMcpMigrationRequest {
 	res := &admin.AdminExternalMcpMigrationRequest{
-		ToolsetID:         v.ToolsetID,
-		TargetMcpServerID: v.TargetMcpServerID,
+		ToolsetID: v.ToolsetID,
 	}
 
 	return res
@@ -23048,18 +23025,13 @@ func marshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMi
 // of type *AdminExternalMcpMigrationOutcomeResponseBody.
 func unmarshalAdminExternalMcpMigrationOutcomeResponseBodyToAdminAdminExternalMcpMigrationOutcome(v *AdminExternalMcpMigrationOutcomeResponseBody) *admin.AdminExternalMcpMigrationOutcome {
 	res := &admin.AdminExternalMcpMigrationOutcome{
-		ToolsetID:          *v.ToolsetID,
-		MigrationStatus:    *v.MigrationStatus,
-		Reason:             v.Reason,
-		McpSlug:            v.McpSlug,
-		McpServerID:        v.McpServerID,
-		RemoteMcpServerID:  v.RemoteMcpServerID,
-		MergedIntoExisting: *v.MergedIntoExisting,
-		RemoteURL:          v.RemoteURL,
-	}
-	res.EndpointIds = make([]string, len(v.EndpointIds))
-	for i, val := range v.EndpointIds {
-		res.EndpointIds[i] = val
+		ToolsetID:         *v.ToolsetID,
+		MigrationStatus:   *v.MigrationStatus,
+		Reason:            v.Reason,
+		McpSlug:           v.McpSlug,
+		McpServerID:       v.McpServerID,
+		RemoteMcpServerID: v.RemoteMcpServerID,
+		RemoteURL:         v.RemoteURL,
 	}
 	res.Actions = make([]string, len(v.Actions))
 	for i, val := range v.Actions {

@@ -30881,9 +30881,9 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-support-coverage: Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.`)
 	fmt.Fprintln(os.Stderr, `    describe-mcp-server-health: Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-tool-calls: Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.`)
-	fmt.Fprintln(os.Stderr, `    list-external-mcp-migration-candidates: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating and the existing remote servers it may merge into.`)
+	fmt.Fprintln(os.Stderr, `    list-external-mcp-migration-candidates: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.`)
 	fmt.Fprintln(os.Stderr, `    preview-external-mcp-migration: Runs the migration of each server inside a transaction that is rolled back, reporting what would happen without changing anything.`)
-	fmt.Fprintln(os.Stderr, `    migrate-external-mcp-servers: Replaces each server with a remote MCP server on its own sign-in provider, moving its address and everything that references it, then deletes the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
+	fmt.Fprintln(os.Stderr, `    migrate-external-mcp-servers: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
 	fmt.Fprintln(os.Stderr, `    get-registry-okta-candidates: Staff-only registry administration: Okta application names observed across synced tenants that plausibly belong to the entry, for confirmation in the editor.`)
 	fmt.Fprintln(os.Stderr, `    list-registry-okta-unmapped: Staff-only registry administration: observed Okta application names no entry claims yet, with the entry the heuristic would propose.`)
 	fmt.Fprintln(os.Stderr, `    list-registry-entries: Staff-only registry administration.`)
@@ -32200,7 +32200,7 @@ func adminListExternalMcpMigrationCandidatesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating and the existing remote servers it may merge into.`)
+	fmt.Fprintln(os.Stderr, `Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
@@ -32227,7 +32227,7 @@ func adminPreviewExternalMcpMigrationUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin preview-external-mcp-migration --body '{\n      \"servers\": [\n         {\n            \"target_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"target_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin preview-external-mcp-migration --body '{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminMigrateExternalMcpServersUsage() {
@@ -32239,7 +32239,7 @@ func adminMigrateExternalMcpServersUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replaces each server with a remote MCP server on its own sign-in provider, moving its address and everything that references it, then deletes the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
+	fmt.Fprintln(os.Stderr, `Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -32247,7 +32247,7 @@ func adminMigrateExternalMcpServersUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin migrate-external-mcp-servers --body '{\n      \"servers\": [\n         {\n            \"target_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"target_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin migrate-external-mcp-servers --body '{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetRegistryOktaCandidatesUsage() {

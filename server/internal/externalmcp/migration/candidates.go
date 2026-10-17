@@ -1,24 +1,21 @@
-// Package migration replaces hosted toolsets that proxy an external
-// MCP attachment with remote MCP servers. A migration keeps the server's
-// address, its user session issuer and the remote session clients behind it,
-// so people stay signed in; it never creates an issuer or a client and never
-// registers one with the upstream.
+// Package migration switches hosted toolsets that proxy an external MCP
+// attachment over to remote MCP servers, in place. The server row keeps its
+// id, address, plugins, grants and user session issuer, and the remote
+// session clients behind the issuer keep working, so people stay signed in;
+// a migration never creates an issuer or a client and never registers one
+// with the upstream.
 package migration
 
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
-	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 )
 
 // Candidate is a live server backed by an external MCP attachment.
@@ -30,59 +27,61 @@ type Candidate struct {
 	// references several.
 	RemoteURL string
 
-	// CleanedURL is RemoteURL with unfilled template query parameters removed,
-	// the URL the replacement dials. Empty when the URL cannot be cleaned.
-	CleanedURL string
+	// ReplacementURL is the upstream URL the server dials once switched: the
+	// one resource its signed-in sessions recorded, otherwise RemoteURL
+	// without unfilled template query parameters. Empty when blocked before
+	// it could be derived.
+	ReplacementURL string
 
 	// Blockers explain why the server cannot be migrated; empty when it can.
 	Blockers []string
-
-	// Targets are existing remote-backed servers in the same project that use
-	// the same user session issuer, are public-only and match the candidate's
-	// visibility, which the migration may merge into.
-	Targets []Target
 
 	// ToolCalls counts the server's tool calls over the reporting window; nil
 	// when telemetry is unavailable.
 	ToolCalls *uint64
 }
 
-// Target is an existing remote-backed server a migration may merge into.
-type Target struct {
-	// ID is the target's mcp_servers id.
-	ID uuid.UUID
-
-	// Name is the target's display name.
-	Name string
-
-	// Slug is the target's mcp_servers slug.
-	Slug string
-
-	// URL is the upstream URL the target dials.
-	URL string
-}
-
 const (
-	blockerNoIssuer       = "has no sign-in provider to reuse"
-	blockerExternalOAuth  = "uses an external OAuth server, which remote MCP servers do not support"
-	blockerOAuthProxy     = "uses an OAuth proxy, which remote MCP servers do not support"
-	blockerHeaders        = "declares upstream headers, which have no stored values to copy"
-	blockerManyURLs       = "proxies more than one upstream URL"
-	blockerManyTransports = "proxies upstreams over more than one transport"
-	blockerPrivateNetwork = "uses private network access, which the migration does not carry over"
-	blockerOtherTools     = "serves tools or resources beyond the external MCP attachment, which the replacement would drop"
+	blockerNoOrganization     = "its organization has no metadata record, so it is handled separately"
+	blockerNoIssuer           = "has no sign-in provider to reuse"
+	blockerExternalOAuth      = "uses an external OAuth server, which remote MCP servers do not support"
+	blockerOAuthProxy         = "uses an OAuth proxy, which remote MCP servers do not support"
+	blockerUserOAuthTokens    = "has stored OAuth proxy tokens, which remote MCP servers do not use" //nolint:gosec // a reason shown to staff, not a credential
+	blockerUserHeaders        = "users send their own credentials with each request; handle this server manually"
+	blockerManyAttachments    = "proxies more than one external MCP attachment"
+	blockerManyURLs           = "proxies more than one upstream URL"
+	blockerManyTransports     = "proxies upstreams over more than one transport"
+	blockerOtherTools         = "serves tools or resources beyond the external MCP attachment, which the switch would drop"
+	blockerVariations         = "uses tool variations, which the switch would drop"
+	blockerPrompts            = "has prompts, which the switch would drop"
+	blockerAssistants         = "is attached to an assistant through its toolset"
+	blockerSlackApps          = "is attached to a Slack app through its toolset"
+	blockerToolsetPlugin      = "is in a plugin through its toolset rather than its server"
+	blockerCollections        = "is in an organization collection"
+	blockerGateway            = "is a member of a gateway"
+	blockerNoServer           = "has no server row; only the legacy toolset address serves it"
+	blockerManyServers        = "has more than one server row"
+	blockerEndpoints          = "does not have exactly one address"
+	blockerServerIssuer       = "its server signs in through a different provider than its toolset"
+	blockerNoUpstreamIssuer   = "its sign-in provider has no upstream client"
+	blockerManyUpstreamIssuer = "its sign-in provider's clients use more than one upstream authorization server"
+	blockerSelfOwnedClient    = "its sign-in provider has a client that holds its own credentials"
+	blockerEMABindings        = "its sign-in provider has enterprise-managed authorization bindings"
+	blockerManyResources      = "its signed-in sessions record more than one upstream resource"
+	blockerSharedNonRemote    = "another server signs in through the same provider and is not a remote MCP server"
+	blockerSharedOtherURL     = "another remote MCP server on the same sign-in provider dials a different upstream"
 )
 
 // ListCandidates returns every live external-MCP-backed server across all
-// organizations, with its blockers and merge targets.
+// organizations, with its blockers.
 func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 	rows, err := repo.New(m.db).ListCandidates(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list external MCP candidates: %w", err)
 	}
-	candidates, err := buildCandidates(ctx, m.db, rows)
-	if err != nil {
-		return nil, err
+	candidates := make([]Candidate, 0, len(rows))
+	for _, row := range rows {
+		candidates = append(candidates, assess(row))
 	}
 	if m.toolCalls != nil {
 		counts, err := m.toolCalls.CountToolCalls(ctx, candidates)
@@ -98,110 +97,126 @@ func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 	return candidates, nil
 }
 
-func buildCandidates(ctx context.Context, db repo.DBTX, rows []repo.ListCandidatesRow) ([]Candidate, error) {
-	issuers := make([]uuid.UUID, 0, len(rows))
-	projects := make([]uuid.UUID, 0, len(rows))
-	for _, row := range rows {
-		if row.UserSessionIssuerID.Valid && !slices.Contains(issuers, row.UserSessionIssuerID.UUID) {
-			issuers = append(issuers, row.UserSessionIssuerID.UUID)
-		}
-		if !slices.Contains(projects, row.ProjectID) {
-			projects = append(projects, row.ProjectID)
-		}
-	}
-	targets := map[uuid.UUID][]repo.ListRemoteServersOnIssuersRow{}
-	if len(issuers) > 0 {
-		servers, err := repo.New(db).ListRemoteServersOnIssuers(ctx, repo.ListRemoteServersOnIssuersParams{UserSessionIssuerIds: issuers, ProjectIds: projects})
-		if err != nil {
-			return nil, fmt.Errorf("list remote servers sharing candidate issuers: %w", err)
-		}
-		for _, server := range servers {
-			targets[server.UserSessionIssuerID.UUID] = append(targets[server.UserSessionIssuerID.UUID], server)
-		}
-	}
-
-	candidates := make([]Candidate, 0, len(rows))
-	for _, row := range rows {
-		candidate := assess(row)
-		if row.UserSessionIssuerID.Valid {
-			for _, server := range targets[row.UserSessionIssuerID.UUID] {
-				// A merge moves the address onto the target, so only a
-				// public-only target keeps it reachable the same way.
-				if server.ProjectID != row.ProjectID || !publicOnly(server.NetworkAccessMode) || server.Visibility != sourceVisibility(row) {
-					continue
-				}
-				candidate.Targets = append(candidate.Targets, Target{
-					ID:   server.ID,
-					Name: server.Name.String,
-					Slug: server.Slug.String,
-					URL:  server.Url,
-				})
-			}
-		}
-		candidates = append(candidates, candidate)
-	}
-	return candidates, nil
-}
-
-// assess derives a candidate's upstream URL and blockers from its row.
+// assess derives a candidate's upstream URLs and blockers from its row.
 func assess(row repo.ListCandidatesRow) Candidate {
-	candidate := Candidate{Row: row, RemoteURL: "", CleanedURL: "", Blockers: nil, Targets: nil, ToolCalls: nil}
+	candidate := Candidate{Row: row, RemoteURL: "", ReplacementURL: "", Blockers: nil, ToolCalls: nil}
+	block := func(reason string) { candidate.Blockers = append(candidate.Blockers, reason) }
+
+	if !row.HasOrganizationMetadata {
+		block(blockerNoOrganization)
+	}
 	if !row.UserSessionIssuerID.Valid || !row.UserSessionIssuerSlug.Valid {
-		candidate.Blockers = append(candidate.Blockers, blockerNoIssuer)
+		block(blockerNoIssuer)
 	}
 	if row.ExternalOauthServerID.Valid {
-		candidate.Blockers = append(candidate.Blockers, blockerExternalOAuth)
+		block(blockerExternalOAuth)
 	}
 	if row.OauthProxyServerID.Valid {
-		candidate.Blockers = append(candidate.Blockers, blockerOAuthProxy)
+		block(blockerOAuthProxy)
 	}
-	if row.DeclaresHeaders {
-		candidate.Blockers = append(candidate.Blockers, blockerHeaders)
+	if row.HasUserOauthTokens {
+		block(blockerUserOAuthTokens)
 	}
-	if !publicOnly(row.WrapperNetworkAccessMode) {
-		candidate.Blockers = append(candidate.Blockers, blockerPrivateNetwork)
+	if row.DeclaresHeaders && !row.RequiresOauth {
+		block(blockerUserHeaders)
 	}
-	if row.ServesOtherTools {
-		candidate.Blockers = append(candidate.Blockers, blockerOtherTools)
+	if row.AttachmentCount != 1 {
+		block(blockerManyAttachments)
 	}
 	if len(row.TransportTypes) != 1 || !supportedTransport(row.TransportTypes[0]) {
-		candidate.Blockers = append(candidate.Blockers, blockerManyTransports)
+		block(blockerManyTransports)
 	}
+	if row.ServesOtherTools {
+		block(blockerOtherTools)
+	}
+	if row.ToolsetHasVariations || row.ServerHasVariations {
+		block(blockerVariations)
+	}
+	if row.HasPrompts {
+		block(blockerPrompts)
+	}
+	if row.HasAssistants {
+		block(blockerAssistants)
+	}
+	if row.HasSlackApps {
+		block(blockerSlackApps)
+	}
+	if row.HasToolsetPluginEntries {
+		block(blockerToolsetPlugin)
+	}
+	if row.HasCollectionAttachments {
+		block(blockerCollections)
+	}
+	if row.InGateway {
+		block(blockerGateway)
+	}
+	switch {
+	case row.ServerCount == 0:
+		block(blockerNoServer)
+	case row.ServerCount > 1:
+		block(blockerManyServers)
+	case row.EndpointCount != 1:
+		block(blockerEndpoints)
+	case !row.McpSlugIsEndpoint:
+		block(fmt.Sprintf("its legacy address /mcp/%s is not one of its endpoints and would stop working", row.McpSlug.String))
+	}
+	if row.ServerUserSessionIssuerID.Valid && row.ServerUserSessionIssuerID != row.UserSessionIssuerID {
+		block(blockerServerIssuer)
+	}
+	if row.UserSessionIssuerID.Valid {
+		switch len(row.RemoteSessionIssuerIds) {
+		case 0:
+			block(blockerNoUpstreamIssuer)
+		case 1:
+		default:
+			block(blockerManyUpstreamIssuer)
+		}
+		if row.HasSelfOwnedClients {
+			block(blockerSelfOwnedClient)
+		}
+		if row.HasEmaBindings {
+			block(blockerEMABindings)
+		}
+		if row.OtherNonRemoteServersOnIssuer > 0 {
+			block(blockerSharedNonRemote)
+		}
+	}
+
 	if len(row.RemoteUrls) != 1 {
-		candidate.Blockers = append(candidate.Blockers, blockerManyURLs)
+		block(blockerManyURLs)
 		return candidate
 	}
 	candidate.RemoteURL = row.RemoteUrls[0]
-	cleaned, err := CleanRemoteURL(candidate.RemoteURL)
+	replacement, err := replacementURL(candidate.RemoteURL, row.SessionResources)
 	if err != nil {
-		candidate.Blockers = append(candidate.Blockers, err.Error())
+		block(err.Error())
 		return candidate
 	}
-	candidate.CleanedURL = cleaned
+	candidate.ReplacementURL = replacement
+	for _, other := range row.OtherRemoteUrlsOnIssuer {
+		if !sameUpstream(other, replacement) {
+			block(blockerSharedOtherURL)
+			break
+		}
+	}
 	return candidate
 }
 
-// sourceVisibility is who can reach the candidate today. A disabled toolset
-// stays disabled whatever its wrapper says; otherwise the canonical wrapper's
-// visibility wins over the toolset's.
-func sourceVisibility(row repo.ListCandidatesRow) string {
-	switch {
-	case !row.McpEnabled:
-		return visibility.Disabled
-	case row.WrapperVisibility.Valid:
-		return row.WrapperVisibility.String
-	case row.McpIsPublic:
-		return visibility.Public
+// replacementURL is the URL the switched server dials. Existing upstream
+// credentials only route to a remote backend whose URL equals their stored
+// resource, so a single recorded resource wins over the attachment's URL.
+func replacementURL(attachmentURL string, sessionResources []string) (string, error) {
+	switch len(sessionResources) {
+	case 0:
+		return CleanRemoteURL(attachmentURL)
+	case 1:
+		if _, err := CleanRemoteURL(sessionResources[0]); err != nil {
+			return "", fmt.Errorf("signed-in sessions record an unusable upstream resource: %w", err)
+		}
+		return sessionResources[0], nil
 	default:
-		return visibility.Private
+		return "", fmt.Errorf("%s", blockerManyResources)
 	}
-}
-
-// publicOnly reports whether a stored network access mode serves only public
-// traffic. An unreadable mode counts as not public-only, so it blocks.
-func publicOnly(stored pgtype.Text) bool {
-	mode, err := networkaccess.Effective(stored)
-	return err == nil && mode.IsPublicOnly()
 }
 
 func supportedTransport(transport string) bool {
@@ -218,11 +233,8 @@ func loadCandidate(ctx context.Context, tx pgx.Tx, toolsetID uuid.UUID) (*Candid
 	if len(rows) != 1 {
 		return nil, nil
 	}
-	candidates, err := buildCandidates(ctx, tx, rows)
-	if err != nil {
-		return nil, err
-	}
-	return &candidates[0], nil
+	candidate := assess(rows[0])
+	return &candidate, nil
 }
 
 // SignInProvider names the candidate's user session issuer and the upstream

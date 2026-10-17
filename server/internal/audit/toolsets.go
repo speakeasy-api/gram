@@ -351,39 +351,31 @@ type LogToolsetMigrateToRemoteMcpEvent struct {
 	ToolsetName string
 	ToolsetSlug string
 
-	// McpSlug is the address the toolset served, kept by the replacement.
+	// McpSlug is the server's address, which does not change.
 	McpSlug string
 
-	// McpServerURN is the remote-backed server that replaced the toolset.
+	// McpServerURN is the server switched from the toolset to the remote source.
 	McpServerURN urn.McpServer
 
-	// MergedIntoExisting is true when the replacement already existed.
-	MergedIntoExisting bool
+	// RemoteMcpServerURN is the remote MCP source the server now proxies.
+	RemoteMcpServerURN urn.RemoteMcpServer
 
 	// PreviousRemoteURL is the external MCP attachment's upstream URL.
 	PreviousRemoteURL string
 
-	// RemoteURL is the upstream URL the replacement dials.
+	// RemoteURL is the upstream URL the server now dials.
 	RemoteURL string
-
-	// McpEndpointURNs are the endpoints moved onto or created for the replacement.
-	McpEndpointURNs []urn.McpEndpoint
 }
 
 func (l *Logger) LogToolsetMigrateToRemoteMcp(ctx context.Context, dbtx repo.DBTX, event LogToolsetMigrateToRemoteMcpEvent) error {
 	action := ActionToolsetMigrateToRemoteMcp
 
-	endpoints := make([]string, 0, len(event.McpEndpointURNs))
-	for _, endpoint := range event.McpEndpointURNs {
-		endpoints = append(endpoints, endpoint.String())
-	}
 	metadata, err := marshalAuditPayload(map[string]any{
-		"mcp_slug":             event.McpSlug,
-		"mcp_server_urn":       event.McpServerURN.String(),
-		"merged_into_existing": event.MergedIntoExisting,
-		"previous_remote_url":  event.PreviousRemoteURL,
-		"remote_url":           event.RemoteURL,
-		"mcp_endpoint_urns":    endpoints,
+		"mcp_slug":              event.McpSlug,
+		"mcp_server_urn":        event.McpServerURN.String(),
+		"remote_mcp_server_urn": event.RemoteMcpServerURN.String(),
+		"previous_remote_url":   event.PreviousRemoteURL,
+		"remote_url":            event.RemoteURL,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)

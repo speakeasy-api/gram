@@ -2240,7 +2240,7 @@ func BuildPreviewExternalMcpMigrationPayload(adminPreviewExternalMcpMigrationBod
 	{
 		err = json.Unmarshal([]byte(adminPreviewExternalMcpMigrationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"servers\": [\n         {\n            \"target_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"target_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }'")
 		}
 		if body.Servers == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
@@ -2294,7 +2294,7 @@ func BuildMigrateExternalMcpServersPayload(adminMigrateExternalMcpServersBody st
 	{
 		err = json.Unmarshal([]byte(adminMigrateExternalMcpServersBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"servers\": [\n         {\n            \"target_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"target_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }'")
 		}
 		if body.Servers == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))

@@ -228,17 +228,17 @@ type Service interface {
 	GetMcpServerToolCalls(context.Context, *GetMcpServerToolCallsPayload) (res *AdminMcpServerToolCalls, err error)
 	// Lists every live server across all organizations whose latest toolset
 	// version proxies an external MCP attachment on its project's active
-	// deployment, with the blockers that stop each one from migrating and the
-	// existing remote servers it may merge into.
+	// deployment, with the blockers that stop each one from migrating.
 	ListExternalMcpMigrationCandidates(context.Context, *ListExternalMcpMigrationCandidatesPayload) (res *AdminListExternalMcpMigrationCandidatesResult, err error)
 	// Runs the migration of each server inside a transaction that is rolled back,
 	// reporting what would happen without changing anything.
 	PreviewExternalMcpMigration(context.Context, *PreviewExternalMcpMigrationPayload) (res *AdminExternalMcpMigrationResult, err error)
-	// Replaces each server with a remote MCP server on its own sign-in provider,
-	// moving its address and everything that references it, then deletes the old
-	// toolset. Servers run one at a time, each in its own transaction, and the run
-	// stops at the first failure. Never creates a sign-in provider or a client and
-	// never registers one with the upstream.
+	// Switches each server in place from its external MCP attachment to a remote
+	// MCP source on the same sign-in provider, keeping its ID, address and
+	// everything that references it, and disables the old toolset. Servers run one
+	// at a time, each in its own transaction, and the run stops at the first
+	// failure. Never creates a sign-in provider or a client and never registers
+	// one with the upstream.
 	MigrateExternalMcpServers(context.Context, *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error)
 	// Staff-only registry administration: Okta application names observed across
 	// synced tenants that plausibly belong to the entry, for confirmation in the
@@ -446,9 +446,10 @@ type AdminExternalMcpMigrationCandidate struct {
 	McpSlug *string
 	// The attachment's upstream URL. Absent when the server proxies several.
 	RemoteURL *string
-	// The upstream URL the replacement dials, with unfilled template query
-	// parameters removed.
-	CleanedURL *string
+	// The upstream URL the server will dial as a remote MCP server: the one
+	// resource its signed-in sessions recorded, otherwise the attachment's URL
+	// without unfilled template query parameters.
+	ReplacementURL *string
 	// The server's user session issuer and the upstream authorization servers
 	// behind it. Absent when the server has none.
 	SignInProvider *string
@@ -457,8 +458,6 @@ type AdminExternalMcpMigrationCandidate struct {
 	ToolCalls *int64
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string
-	// Existing servers the migration may merge into.
-	Targets []*AdminExternalMcpMigrationTarget
 }
 
 // What happened, or in a preview what would happen, to one server.
@@ -470,19 +469,14 @@ type AdminExternalMcpMigrationOutcome struct {
 	MigrationStatus string
 	// Why the server failed or was not attempted.
 	Reason *string
-	// The address the server kept.
+	// The server's /mcp/<slug> address, which does not change.
 	McpSlug *string
-	// The replacement server.
+	// The server, which keeps its ID.
 	McpServerID *string
-	// The replacement's remote source, which belongs to the existing server when
-	// merged.
+	// The remote MCP source the server now proxies.
 	RemoteMcpServerID *string
-	// True when the replacement already existed.
-	MergedIntoExisting bool
-	// The upstream URL the replacement dials.
+	// The upstream URL the server now dials.
 	RemoteURL *string
-	// Endpoints moved onto or created for the replacement.
-	EndpointIds []string
 	// Each change, in order.
 	Actions []string
 	// What the migration could not carry over.
@@ -492,9 +486,6 @@ type AdminExternalMcpMigrationOutcome struct {
 type AdminExternalMcpMigrationRequest struct {
 	// The candidate's toolset.
 	ToolsetID string
-	// Merge into this existing remote server instead of creating one. It must be
-	// one of the candidate's targets.
-	TargetMcpServerID *string
 }
 
 // AdminExternalMcpMigrationResult is the result type of the admin service
@@ -502,17 +493,6 @@ type AdminExternalMcpMigrationRequest struct {
 type AdminExternalMcpMigrationResult struct {
 	// One outcome per requested server, in request order.
 	Outcomes []*AdminExternalMcpMigrationOutcome
-}
-
-// An existing remote MCP server in the same project that signs in through the
-// candidate's provider, which the migration can merge into.
-type AdminExternalMcpMigrationTarget struct {
-	// The mcp_servers row ID.
-	ID string
-	// Display name of the server.
-	Name string
-	// The upstream URL the server dials.
-	URL string
 }
 
 // Current usage and configured state for one materialized platform-managed

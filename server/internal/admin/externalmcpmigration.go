@@ -29,14 +29,6 @@ func (s *Service) ListExternalMcpMigrationCandidates(ctx context.Context, _ *gen
 	views := make([]*gen.AdminExternalMcpMigrationCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		row := candidate.Row
-		targets := make([]*gen.AdminExternalMcpMigrationTarget, 0, len(candidate.Targets))
-		for _, target := range candidate.Targets {
-			name := target.Name
-			if name == "" {
-				name = target.Slug
-			}
-			targets = append(targets, &gen.AdminExternalMcpMigrationTarget{ID: target.ID.String(), Name: name, URL: target.URL})
-		}
 		var toolCalls *int64
 		if candidate.ToolCalls != nil {
 			count, _ := conv.ClampedUint64ToInt64(*candidate.ToolCalls)
@@ -57,11 +49,10 @@ func (s *Service) ListExternalMcpMigrationCandidates(ctx context.Context, _ *gen
 			ServerName:       row.ToolsetName,
 			McpSlug:          conv.FromPGText[string](row.McpSlug),
 			RemoteURL:        conv.PtrEmpty(candidate.RemoteURL),
-			CleanedURL:       conv.PtrEmpty(candidate.CleanedURL),
+			ReplacementURL:   conv.PtrEmpty(candidate.ReplacementURL),
 			SignInProvider:   conv.PtrEmpty(candidate.SignInProvider()),
 			ToolCalls:        toolCalls,
 			Blockers:         blockers,
-			Targets:          targets,
 		})
 	}
 	return &gen.AdminListExternalMcpMigrationCandidatesResult{
@@ -100,15 +91,7 @@ func (s *Service) runExternalMCPMigration(ctx context.Context, servers []*gen.Ad
 			return nil, oops.E(oops.CodeBadRequest, nil, "a server is listed more than once").LogWarn(ctx, s.logger)
 		}
 		seen[toolsetID] = true
-		target := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		if server.TargetMcpServerID != nil {
-			parsed, err := uuid.Parse(*server.TargetMcpServerID)
-			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid target server id").LogWarn(ctx, s.logger)
-			}
-			target = uuid.NullUUID{UUID: parsed, Valid: true}
-		}
-		requests = append(requests, migration.Request{ToolsetID: toolsetID, TargetMcpServerID: target})
+		requests = append(requests, migration.Request{ToolsetID: toolsetID})
 	}
 
 	actor := migration.Actor{UserID: authCtx.OIDCSubject, Email: conv.PtrEmpty(authCtx.Email)}
@@ -116,22 +99,16 @@ func (s *Service) runExternalMCPMigration(ctx context.Context, servers []*gen.Ad
 
 	views := make([]*gen.AdminExternalMcpMigrationOutcome, 0, len(outcomes))
 	for _, outcome := range outcomes {
-		endpoints := make([]string, 0, len(outcome.EndpointIDs))
-		for _, id := range outcome.EndpointIDs {
-			endpoints = append(endpoints, id.String())
-		}
 		views = append(views, &gen.AdminExternalMcpMigrationOutcome{
-			ToolsetID:          outcome.ToolsetID.String(),
-			MigrationStatus:    string(outcome.Status),
-			Reason:             conv.PtrEmpty(outcome.Reason),
-			McpSlug:            conv.PtrEmpty(outcome.McpSlug),
-			McpServerID:        uuidOrNil(outcome.McpServerID),
-			RemoteMcpServerID:  uuidOrNil(outcome.RemoteMcpServerID),
-			MergedIntoExisting: outcome.MergedIntoExisting,
-			RemoteURL:          conv.PtrEmpty(outcome.RemoteURL),
-			EndpointIds:        endpoints,
-			Actions:            nonNil(outcome.Actions),
-			Warnings:           nonNil(outcome.Warnings),
+			ToolsetID:         outcome.ToolsetID.String(),
+			MigrationStatus:   string(outcome.Status),
+			Reason:            conv.PtrEmpty(outcome.Reason),
+			McpSlug:           conv.PtrEmpty(outcome.McpSlug),
+			McpServerID:       uuidOrNil(outcome.McpServerID),
+			RemoteMcpServerID: uuidOrNil(outcome.RemoteMcpServerID),
+			RemoteURL:         conv.PtrEmpty(outcome.RemoteURL),
+			Actions:           nonNil(outcome.Actions),
+			Warnings:          nonNil(outcome.Warnings),
 		})
 	}
 	return &gen.AdminExternalMcpMigrationResult{Outcomes: views}, nil

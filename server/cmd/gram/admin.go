@@ -548,7 +548,7 @@ func newAdminCommand() *cli.Command {
 				adminService.SetAssetService(assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage))
 			}
 			adminService.SetExternalMCPMigrator(migration.NewMigrator(
-				logger, tracerProvider, db, audit.NewLogger(), guardianPolicy,
+				logger, tracerProvider, db, audit.NewLogger(), guardianPolicy, applicationEncryption,
 				plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)},
 				migration.NewClickHouseToolCalls(chDB),
 			))

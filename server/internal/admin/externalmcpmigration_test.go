@@ -20,7 +20,7 @@ func withExternalMCPMigrator(t *testing.T, svc *Service) {
 	t.Helper()
 	tracerProvider := testenv.NewTracerProvider(t)
 	svc.SetExternalMCPMigrator(migration.NewMigrator(
-		testenv.NewLogger(t), tracerProvider, svc.db, audit.NewLogger(), guardian.NewDefaultPolicy(tracerProvider),
+		testenv.NewLogger(t), tracerProvider, svc.db, audit.NewLogger(), guardian.NewDefaultPolicy(tracerProvider), testenv.NewEncryptionClient(t),
 		plugins.PublicationRequests{Enabled: false}, nil,
 	))
 }
@@ -54,7 +54,7 @@ func TestMigrateExternalMcpServersRequiresStaffSession(t *testing.T) {
 
 	_, err := svc.MigrateExternalMcpServers(ctx, &gen.MigrateExternalMcpServersPayload{
 		AdminSessionToken: nil,
-		Servers:           []*gen.AdminExternalMcpMigrationRequest{{ToolsetID: uuid.NewString(), TargetMcpServerID: nil}},
+		Servers:           []*gen.AdminExternalMcpMigrationRequest{{ToolsetID: uuid.NewString()}},
 	})
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
@@ -70,7 +70,7 @@ func TestPreviewExternalMcpMigrationReportsUnknownServer(t *testing.T) {
 
 	result, err := svc.PreviewExternalMcpMigration(ctx, &gen.PreviewExternalMcpMigrationPayload{
 		AdminSessionToken: nil,
-		Servers:           []*gen.AdminExternalMcpMigrationRequest{{ToolsetID: uuid.NewString(), TargetMcpServerID: nil}},
+		Servers:           []*gen.AdminExternalMcpMigrationRequest{{ToolsetID: uuid.NewString()}},
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Outcomes, 1)
@@ -91,8 +91,8 @@ func TestMigrateExternalMcpServersRejectsDuplicates(t *testing.T) {
 	_, err := svc.MigrateExternalMcpServers(ctx, &gen.MigrateExternalMcpServersPayload{
 		AdminSessionToken: nil,
 		Servers: []*gen.AdminExternalMcpMigrationRequest{
-			{ToolsetID: id, TargetMcpServerID: nil},
-			{ToolsetID: id, TargetMcpServerID: nil},
+			{ToolsetID: id},
+			{ToolsetID: id},
 		},
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)

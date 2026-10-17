@@ -11,18 +11,9 @@ import (
 // HTTP timeout.
 const maxExternalMcpMigrationServers = 100
 
-var AdminExternalMcpMigrationTarget = Type("AdminExternalMcpMigrationTarget", func() {
-	Description("An existing remote MCP server in the same project that signs in through the candidate's provider, which the migration can merge into.")
-	Required("id", "name", "url")
-
-	Attribute("id", String, "The mcp_servers row ID.", func() { Format(FormatUUID) })
-	Attribute("name", String, "Display name of the server.")
-	Attribute("url", String, "The upstream URL the server dials.")
-})
-
 var AdminExternalMcpMigrationCandidate = Type("AdminExternalMcpMigrationCandidate", func() {
 	Description("A live server backed by an external MCP attachment.")
-	Required("toolset_id", "organization_id", "organization_name", "organization_slug", "project_id", "project_name", "project_slug", "server_name", "blockers", "targets")
+	Required("toolset_id", "organization_id", "organization_name", "organization_slug", "project_id", "project_name", "project_slug", "server_name", "blockers")
 
 	Attribute("toolset_id", String, "The toolset behind the server.", func() { Format(FormatUUID) })
 	Attribute("organization_id", String, "Organization ID.")
@@ -34,11 +25,10 @@ var AdminExternalMcpMigrationCandidate = Type("AdminExternalMcpMigrationCandidat
 	Attribute("server_name", String, "The server's display name.")
 	Attribute("mcp_slug", String, "The slug in the server's /mcp/<slug> address. Absent when the server has none.")
 	Attribute("remote_url", String, "The attachment's upstream URL. Absent when the server proxies several.")
-	Attribute("cleaned_url", String, "The upstream URL the replacement dials, with unfilled template query parameters removed.")
+	Attribute("replacement_url", String, "The upstream URL the server will dial as a remote MCP server: the one resource its signed-in sessions recorded, otherwise the attachment's URL without unfilled template query parameters.")
 	Attribute("sign_in_provider", String, "The server's user session issuer and the upstream authorization servers behind it. Absent when the server has none.")
 	Attribute("tool_calls", Int64, "Tool calls over the last tool_call_window_days. Absent when telemetry is unavailable.")
 	Attribute("blockers", ArrayOf(String), "Why the server cannot be migrated. Empty when it can.")
-	Attribute("targets", ArrayOf(AdminExternalMcpMigrationTarget), "Existing servers the migration may merge into.")
 })
 
 var AdminListExternalMcpMigrationCandidatesResult = Type("AdminListExternalMcpMigrationCandidatesResult", func() {
@@ -52,24 +42,21 @@ var AdminExternalMcpMigrationRequest = Type("AdminExternalMcpMigrationRequest", 
 	Required("toolset_id")
 
 	Attribute("toolset_id", String, "The candidate's toolset.", func() { Format(FormatUUID) })
-	Attribute("target_mcp_server_id", String, "Merge into this existing remote server instead of creating one. It must be one of the candidate's targets.", func() { Format(FormatUUID) })
 })
 
 var AdminExternalMcpMigrationOutcome = Type("AdminExternalMcpMigrationOutcome", func() {
 	Description("What happened, or in a preview what would happen, to one server.")
-	Required("toolset_id", "migration_status", "merged_into_existing", "endpoint_ids", "actions", "warnings")
+	Required("toolset_id", "migration_status", "actions", "warnings")
 
 	Attribute("toolset_id", String, "The candidate's toolset.", func() { Format(FormatUUID) })
 	Attribute("migration_status", String, "migrated and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.", func() {
 		Enum("migrated", "previewed", "failed", "not_attempted")
 	})
 	Attribute("reason", String, "Why the server failed or was not attempted.")
-	Attribute("mcp_slug", String, "The address the server kept.")
-	Attribute("mcp_server_id", String, "The replacement server.", func() { Format(FormatUUID) })
-	Attribute("remote_mcp_server_id", String, "The replacement's remote source, which belongs to the existing server when merged.", func() { Format(FormatUUID) })
-	Attribute("merged_into_existing", Boolean, "True when the replacement already existed.")
-	Attribute("remote_url", String, "The upstream URL the replacement dials.")
-	Attribute("endpoint_ids", ArrayOf(String), "Endpoints moved onto or created for the replacement.")
+	Attribute("mcp_slug", String, "The server's /mcp/<slug> address, which does not change.")
+	Attribute("mcp_server_id", String, "The server, which keeps its ID.", func() { Format(FormatUUID) })
+	Attribute("remote_mcp_server_id", String, "The remote MCP source the server now proxies.", func() { Format(FormatUUID) })
+	Attribute("remote_url", String, "The upstream URL the server now dials.")
 	Attribute("actions", ArrayOf(String), "Each change, in order.")
 	Attribute("warnings", ArrayOf(String), "What the migration could not carry over.")
 })
@@ -93,7 +80,7 @@ func externalMcpMigrationPayload() {
 func externalMcpMigrationMethods() {
 	Method("listExternalMcpMigrationCandidates", func() {
 		declareUnavailable()
-		Description("Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating and the existing remote servers it may merge into.")
+		Description("Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -134,7 +121,7 @@ func externalMcpMigrationMethods() {
 
 	Method("migrateExternalMcpServers", func() {
 		declareUnavailable()
-		Description("Replaces each server with a remote MCP server on its own sign-in provider, moving its address and everything that references it, then deletes the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.")
+		Description("Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.")
 
 		Payload(func() {
 			externalMcpMigrationPayload()

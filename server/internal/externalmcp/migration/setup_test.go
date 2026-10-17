@@ -82,7 +82,7 @@ func newTestMigrator(t *testing.T) (context.Context, *testInstance) {
 			return []net.IP{net.ParseIP("1.2.3.4")}, nil
 		},
 	})))
-	migrator := migration.NewMigrator(logger, tracerProvider, conn, audit.NewLogger(), policy, plugins.PublicationRequests{Enabled: false}, nil)
+	migrator := migration.NewMigrator(logger, tracerProvider, conn, audit.NewLogger(), policy, testenv.NewEncryptionClient(t), plugins.PublicationRequests{Enabled: false}, nil)
 
 	deploymentID, err := repo.New(conn).SeedCompletedDeploymentFixture(ctx, repo.SeedCompletedDeploymentFixtureParams{
 		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID, IdempotencyKey: uuid.NewString(),
@@ -106,11 +106,15 @@ type fixtureServer struct {
 }
 
 type serverOptions struct {
-	slug      string
-	remoteURL string
-	headers   []byte
-	noIssuer  bool
-	noWrapper bool
+	slug          string
+	remoteURL     string
+	headers       []byte
+	requiresOAuth bool
+	noIssuer      bool
+	noWrapper     bool
+	// sharedIssuer signs the server in through another server's issuer
+	// instead of creating its own.
+	sharedIssuer *fixtureServer
 }
 
 func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts serverOptions) fixtureServer {
@@ -118,7 +122,7 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 
 	toolURN := urn.NewTool(urn.ToolKindExternalMCP, opts.slug, "proxy")
 	require.NoError(t, repo.New(ti.conn).SeedExternalMCPProxyFixture(ctx, repo.SeedExternalMCPProxyFixtureParams{
-		DeploymentID: ti.deploymentID, Slug: opts.slug, ToolUrn: toolURN.String(), RemoteUrl: opts.remoteURL, HeaderDefinitions: opts.headers,
+		DeploymentID: ti.deploymentID, Slug: opts.slug, ToolUrn: toolURN.String(), RemoteUrl: opts.remoteURL, RequiresOauth: opts.requiresOAuth, HeaderDefinitions: opts.headers,
 	}))
 
 	toolsets := toolsetsrepo.New(ti.conn)
@@ -134,7 +138,14 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 	require.NoError(t, err)
 
 	server := fixtureServer{toolset: toolset, issuerID: uuid.Nil, clientID: uuid.Nil}
-	if !opts.noIssuer {
+	switch {
+	case opts.sharedIssuer != nil:
+		toolset, err = toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+			UserSessionIssuerID: conv.ToNullUUID(opts.sharedIssuer.issuerID), Slug: toolset.Slug, ProjectID: ti.projectID,
+		})
+		require.NoError(t, err)
+		server.toolset, server.issuerID, server.clientID = toolset, opts.sharedIssuer.issuerID, opts.sharedIssuer.clientID
+	case !opts.noIssuer:
 		issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 			ProjectID: ti.projectID, OrganizationID: conv.ToPGText(ti.organizationID), Slug: opts.slug + "-issuer", AuthnChallengeMode: "interactive",
 			SessionDuration: pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},

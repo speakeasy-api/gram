@@ -20517,9 +20517,10 @@ type AdminExternalMcpMigrationCandidateResponseBody struct {
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// The attachment's upstream URL. Absent when the server proxies several.
 	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
-	// The upstream URL the replacement dials, with unfilled template query
-	// parameters removed.
-	CleanedURL *string `form:"cleaned_url,omitempty" json:"cleaned_url,omitempty" xml:"cleaned_url,omitempty"`
+	// The upstream URL the server will dial as a remote MCP server: the one
+	// resource its signed-in sessions recorded, otherwise the attachment's URL
+	// without unfilled template query parameters.
+	ReplacementURL *string `form:"replacement_url,omitempty" json:"replacement_url,omitempty" xml:"replacement_url,omitempty"`
 	// The server's user session issuer and the upstream authorization servers
 	// behind it. Absent when the server has none.
 	SignInProvider *string `form:"sign_in_provider,omitempty" json:"sign_in_provider,omitempty" xml:"sign_in_provider,omitempty"`
@@ -20528,19 +20529,6 @@ type AdminExternalMcpMigrationCandidateResponseBody struct {
 	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string `form:"blockers,omitempty" json:"blockers,omitempty" xml:"blockers,omitempty"`
-	// Existing servers the migration may merge into.
-	Targets []*AdminExternalMcpMigrationTargetResponseBody `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
-}
-
-// AdminExternalMcpMigrationTargetResponseBody is used to define fields on
-// response body types.
-type AdminExternalMcpMigrationTargetResponseBody struct {
-	// The mcp_servers row ID.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Display name of the server.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The upstream URL the server dials.
-	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 }
 
 // AdminExternalMcpMigrationRequestRequestBody is used to define fields on
@@ -20548,9 +20536,6 @@ type AdminExternalMcpMigrationTargetResponseBody struct {
 type AdminExternalMcpMigrationRequestRequestBody struct {
 	// The candidate's toolset.
 	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
-	// Merge into this existing remote server instead of creating one. It must be
-	// one of the candidate's targets.
-	TargetMcpServerID *string `form:"target_mcp_server_id,omitempty" json:"target_mcp_server_id,omitempty" xml:"target_mcp_server_id,omitempty"`
 }
 
 // AdminExternalMcpMigrationOutcomeResponseBody is used to define fields on
@@ -20563,19 +20548,14 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 	MigrationStatus *string `form:"migration_status,omitempty" json:"migration_status,omitempty" xml:"migration_status,omitempty"`
 	// Why the server failed or was not attempted.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	// The address the server kept.
+	// The server's /mcp/<slug> address, which does not change.
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// The replacement server.
+	// The server, which keeps its ID.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// The replacement's remote source, which belongs to the existing server when
-	// merged.
+	// The remote MCP source the server now proxies.
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	// True when the replacement already existed.
-	MergedIntoExisting *bool `form:"merged_into_existing,omitempty" json:"merged_into_existing,omitempty" xml:"merged_into_existing,omitempty"`
-	// The upstream URL the replacement dials.
+	// The upstream URL the server now dials.
 	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
-	// Endpoints moved onto or created for the replacement.
-	EndpointIds []string `form:"endpoint_ids,omitempty" json:"endpoint_ids,omitempty" xml:"endpoint_ids,omitempty"`
 	// Each change, in order.
 	Actions []string `form:"actions,omitempty" json:"actions,omitempty" xml:"actions,omitempty"`
 	// What the migration could not carry over.
@@ -63984,39 +63964,11 @@ func ValidateAdminExternalMcpMigrationCandidateResponseBody(body *AdminExternalM
 	if body.Blockers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("blockers", "body"))
 	}
-	if body.Targets == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("targets", "body"))
-	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	for _, e := range body.Targets {
-		if e != nil {
-			if err2 := ValidateAdminExternalMcpMigrationTargetResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateAdminExternalMcpMigrationTargetResponseBody runs the validations
-// defined on AdminExternalMcpMigrationTargetResponseBody
-func ValidateAdminExternalMcpMigrationTargetResponseBody(body *AdminExternalMcpMigrationTargetResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.URL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }
@@ -64025,9 +63977,6 @@ func ValidateAdminExternalMcpMigrationTargetResponseBody(body *AdminExternalMcpM
 // defined on AdminExternalMcpMigrationRequestRequestBody
 func ValidateAdminExternalMcpMigrationRequestRequestBody(body *AdminExternalMcpMigrationRequestRequestBody) (err error) {
 	err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
-	if body.TargetMcpServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_mcp_server_id", *body.TargetMcpServerID, goa.FormatUUID))
-	}
 	return
 }
 
@@ -64039,12 +63988,6 @@ func ValidateAdminExternalMcpMigrationOutcomeResponseBody(body *AdminExternalMcp
 	}
 	if body.MigrationStatus == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("migration_status", "body"))
-	}
-	if body.MergedIntoExisting == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("merged_into_existing", "body"))
-	}
-	if body.EndpointIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_ids", "body"))
 	}
 	if body.Actions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("actions", "body"))
