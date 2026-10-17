@@ -19,6 +19,7 @@ import { ToolAnnotationIndicators } from "./ToolAnnotationIndicators";
 import { ToolMetadataDriftPanel } from "./ToolMetadataDriftPanel";
 import { computeDrift } from "./toolMetadataSync";
 import { useRemoteMcpToolConnection } from "./useRemoteMcpToolConnection";
+import { useTunnelAgentStatus } from "./useTunnelAgentStatus";
 import { type ToolMetadataByName } from "@/hooks/useToolMetadata";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -42,8 +43,8 @@ type RemoteMcpToolsSectionProps = {
    */
   userSessionIssuerId: string | undefined;
   /**
-   * The backing remote_mcp_server id, when there is one. Only remote-backed
-   * servers carry tool metadata — the API rejects toolset-backed ones.
+   * The backing remote_mcp_server id, when there is one. Remote- and
+   * tunneled-backed servers carry tool metadata — the API rejects others.
    */
   remoteMcpServerId?: string;
   /** Disabled servers cannot serve MCP requests. */
@@ -167,6 +168,9 @@ function RemoteMcpToolsErrorFallback({
 const unconfiguredAuthMessage =
   "This server has no authentication configured yet. Set up an identity provider so its tools can be listed.";
 
+const tunnelOfflineMessage =
+  "Tunnel offline — connect the agent to list its tools.";
+
 const unavailableConnectMessage =
   "Connect isn't available for this server. Review its authentication settings.";
 
@@ -183,6 +187,8 @@ function RemoteMcpToolsSectionInner({
 }: RemoteMcpToolsSectionProps): JSX.Element {
   const {
     tools,
+    listed,
+    tracksMetadata,
     metadataByTool,
     loading: connectionLoading,
     needsAuth,
@@ -192,6 +198,7 @@ function RemoteMcpToolsSectionInner({
     connect,
     sync,
     isSyncing,
+    toolActions,
   } = useRemoteMcpToolConnection({
     mcpUrl,
     mcpServerId,
@@ -208,32 +215,57 @@ function RemoteMcpToolsSectionInner({
   );
 
   const loading = isResolvingUrl || connectionLoading;
-  const tracksMetadata = !!remoteMcpServerId;
 
+  // A failed listing through a tunnel looks the same whether the agent is
+  // offline or anything else went wrong, so only the source's own status can
+  // say it is offline. Polled while the listing fails, so a reconnected agent
+  // clears it and the listing is tried again.
+  const tunnel = useTunnelAgentStatus({
+    tunneledSourceId: tunneledMcpServerId,
+    enabled: !!tunneledMcpServerId,
+    poll: !!tunneledMcpServerId && !loading && !listed,
+    onReconnect: refetch,
+  });
+
+  // Drift compares the stored set with a listing that succeeded; tools kept
+  // from an earlier listing after a failed refetch are not compared.
   const drift = useMemo(
-    () => (tracksMetadata && tools ? computeDrift(tools, metadataByTool) : []),
-    [tracksMetadata, tools, metadataByTool],
+    () =>
+      tracksMetadata && listed && tools
+        ? computeDrift(tools, metadataByTool)
+        : [],
+    [tracksMetadata, listed, tools, metadataByTool],
   );
+
+  const retry = () => {
+    refetch();
+    tunnel.refetch();
+  };
 
   return (
     <ToolsSectionShell>
       {!loading && drift.length > 0 ? (
         <ToolMetadataDriftPanel
+          key={mcpServerId}
           drift={drift}
           mcpServerId={mcpServerId}
           onSync={sync}
           isSyncing={isSyncing}
+          toolActions={toolActions}
         />
       ) : null}
       <RemoteMcpToolsBody
         loading={loading}
+        listed={listed}
         needsAuth={needsAuth}
         isError={isError}
         isIssuerGated={isIssuerGated}
+        tunnelOffline={tunnel.offline}
         authSettingsHref={authSettingsHref}
         toolEntries={toolEntries}
         metadataByTool={metadataByTool}
-        onRetry={refetch}
+        storedTools={tracksMetadata ? Object.values(metadataByTool) : []}
+        onRetry={retry}
         onConnect={connect}
       />
     </ToolsSectionShell>
@@ -241,28 +273,59 @@ function RemoteMcpToolsSectionInner({
 }
 
 function RemoteMcpToolsBody({
-  loading,
-  needsAuth,
-  isError,
-  isIssuerGated,
-  authSettingsHref,
-  toolEntries,
-  metadataByTool,
-  onRetry,
-  onConnect,
-}: {
+  storedTools,
+  ...props
+}: RemoteMcpToolsBodyProps & {
+  /** The server's recorded tools, shown whenever a live listing can't be. */
+  storedTools: ToolMetadata[];
+}): JSX.Element {
+  const state = <RemoteMcpToolsState {...props} />;
+  if (props.loading || props.listed || storedTools.length === 0) return state;
+
+  return (
+    <div className="flex flex-col gap-5">
+      {state}
+      <StoredToolsList tools={storedTools} />
+    </div>
+  );
+}
+
+type RemoteMcpToolsBodyProps = {
   loading: boolean;
+  /** The latest listing succeeded. */
+  listed: boolean;
   needsAuth: boolean;
   isError: boolean;
   isIssuerGated: boolean;
+  /** The tunnel's own status says no agent is connected. */
+  tunnelOffline: boolean;
   authSettingsHref?: string;
   toolEntries: Array<[string, ProxiedMcpTool]>;
   metadataByTool: ToolMetadataByName;
   onRetry: () => void;
   onConnect?: () => void;
-}): JSX.Element {
+};
+
+function RemoteMcpToolsState({
+  loading,
+  listed,
+  needsAuth,
+  isError,
+  isIssuerGated,
+  tunnelOffline,
+  authSettingsHref,
+  toolEntries,
+  metadataByTool,
+  onRetry,
+  onConnect,
+}: RemoteMcpToolsBodyProps): JSX.Element {
   if (loading) {
     return <ToolsListSkeleton />;
+  }
+
+  // A listing that succeeded is current, whatever an older status read said.
+  if (!listed && tunnelOffline) {
+    return <EmptyState message={tunnelOfflineMessage} onRetry={onRetry} />;
   }
 
   if (needsAuth && onConnect) {
@@ -301,6 +364,39 @@ function RemoteMcpToolsBody({
       toolEntries={toolEntries}
       metadataByTool={metadataByTool}
     />
+  );
+}
+
+/**
+ * The tools Speakeasy has recorded for the server, shown when it can't be
+ * listed live (for example while a tunnel's agent is offline). Only names and
+ * recorded annotations are known, so rows carry no description or details.
+ */
+function StoredToolsList({ tools }: { tools: ToolMetadata[] }): JSX.Element {
+  const sorted = [...tools].sort((a, b) =>
+    a.toolName.localeCompare(b.toolName),
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Text muted small>
+        Recorded tools. These are the tools access rules can name while the
+        server can&rsquo;t be listed.
+      </Text>
+      <div className="border-neutral-softest w-full overflow-hidden border">
+        {sorted.map((tool) => (
+          <div
+            key={tool.toolName}
+            className="border-neutral-softest flex min-w-0 items-center gap-2 border-b py-3 pr-3 pl-4 last:border-b-0"
+          >
+            <p className="text-foreground truncate text-sm leading-6">
+              {tool.toolName}
+            </p>
+            <ToolAnnotationIndicators stored={tool} />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

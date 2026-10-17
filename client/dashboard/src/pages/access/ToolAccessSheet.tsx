@@ -278,7 +278,7 @@ function ToolChecklist({
   source: ToolSource;
   selected: string[];
   onChange: (tools: string[]) => void;
-}): JSX.Element {
+}): JSX.Element | null {
   const [query, setQuery] = useState("");
   switch (source.status) {
     case "loading":
@@ -300,13 +300,28 @@ function ToolChecklist({
           </span>
         </Alert>
       );
-    case "dynamic":
     case "none":
+      return null;
+    case "dynamic":
       return (
         <Alert variant="default" alignTop className="text-sm">
-          This server resolves its tools when they&rsquo;re called, so it
-          can&rsquo;t be limited by tool. Limit it by annotation instead.
+          Speakeasy doesn&rsquo;t proxy this server&rsquo;s traffic, so it
+          can&rsquo;t be limited by tool or by annotation. Allow it as a whole,
+          or leave it out.
         </Alert>
+      );
+    case "offline":
+      return (
+        <InlineEmptyState
+          icon="plug-zap"
+          heading="Tunnel offline — connect the agent to list its tools"
+          description="No tools are recorded for this server yet. Once its tunnel agent connects, its tools are listed and recorded here."
+          action={
+            <Button variant="secondary" size="sm" onClick={source.retry}>
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          }
+        />
       );
     case "needs-connect":
       return <ConnectPrompt entry={entry} connect={source.connect} />;
@@ -315,7 +330,7 @@ function ToolChecklist({
         <InlineEmptyState
           icon="lock"
           heading="Setting tool-level permissions requires mcp:write"
-          description={`Someone with mcp:write on ${entry.server.name} can connect it to record its tools. Until then, limit it by annotation.`}
+          description={`Someone with mcp:write on ${entry.server.name} can connect it to record its tools. Until then, an annotation rule reaches none of its tools.`}
         />
       );
     case "ready":
@@ -416,6 +431,42 @@ function AnnotationChecklist({
         d === disposition ? on : selected.includes(d),
       ),
     );
+  const unclassified = tools?.filter((tool) => !toolDisposition(tool)).length;
+  return (
+    <div className="flex flex-col gap-2">
+      <AnnotationChecklistRows
+        tools={tools}
+        selected={selected}
+        toggle={toggle}
+      />
+      <Text muted small>
+        {unclassifiedNote(unclassified)}
+      </Text>
+    </div>
+  );
+}
+
+/**
+ * Annotation rules reach only tools Speakeasy has classified, so selecting
+ * every annotation still is not the whole server. The count covers only the
+ * tools known here; a server listing its tools live may have more.
+ */
+function unclassifiedNote(count: number | undefined): string {
+  if (count === undefined || count === 0) {
+    return "Tools without an annotation aren't included, even with every annotation selected.";
+  }
+  return `${count} known ${count === 1 ? "tool has" : "tools have"} no annotation and ${count === 1 ? "isn't" : "aren't"} included, even with every annotation selected.`;
+}
+
+function AnnotationChecklistRows({
+  tools,
+  selected,
+  toggle,
+}: {
+  tools: ServerTool[] | undefined;
+  selected: Disposition[];
+  toggle: (disposition: Disposition, on: boolean) => void;
+}): JSX.Element {
   return (
     <div className={LIST_FRAME}>
       {DISPOSITIONS.map((disposition) => {

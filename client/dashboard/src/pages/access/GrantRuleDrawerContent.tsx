@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useToolMetadata } from "@/hooks/useToolMetadata";
 import { useRoutes } from "@/routes";
+import { annotationRuleDescription } from "./mcpAccessModel";
 import { ArrowUpRight, Check, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -323,8 +324,8 @@ export function GrantRuleDrawerContent({
   }, [assistantInventory.groups, selectedResourceIds]);
 
   // The "Specific tools" picker shows servers with enumerable deploy-time tools
-  // plus remote/tunneled (dynamic-tools) servers. Remote-backed ones resolve
-  // their tools from the stored metadata table on expand; tunneled ones stay a
+  // plus remote/tunneled (dynamic-tools) servers. Both resolve their tools from
+  // the stored metadata table on expand; unproxied servers stay a
   // non-selectable row. Proxy servers (no tools/list at deploy time) appear in
   // the "Specific servers" picker for server-level grants but must not render a
   // zero-tools row here.
@@ -871,8 +872,8 @@ interface RemoteToolsState {
 }
 
 /**
- * Fetches stored remote-MCP tool metadata for one server and reports it
- * upward. Mounted per remote-backed server so the picker issues at most one
+ * Fetches stored tool metadata for one remote or tunneled server and reports
+ * it upward. Mounted per such server so the picker issues at most one
  * metadata request per expanded server; `enabled` gates the fetch to rows the
  * admin actually opens.
  */
@@ -1031,21 +1032,18 @@ function RoleToolSelectionPanel({
     (): ToolSelectionServer[] =>
       allServers.map((server) => {
         const namePrefix = `${server.projectName.toLowerCase()}/`;
-        const isRemoteBacked = server.dynamicTools && server.remoteBacked;
-        const isTunneled = server.dynamicTools && !server.remoteBacked;
-        if (isTunneled) {
+        const hasStoredInventory =
+          server.dynamicTools && server.storedToolInventory;
+        if (server.dynamicTools && !server.storedToolInventory) {
           return {
             id: server.id,
             name: server.name,
             namePrefix,
             tools: [],
             status: "unavailable",
-            unavailableLabel: "dynamic tools",
-            unavailableTooltip:
-              "Tools are dynamically resolved for this server and cannot be individually permissioned.",
           };
         }
-        if (isRemoteBacked) {
+        if (hasStoredInventory) {
           const state = remoteTools[server.id];
           const status = remoteServerStatus(state);
           return {
@@ -1177,13 +1175,13 @@ function RoleToolSelectionPanel({
     }
   };
 
-  const remoteBackedServers = allServers.filter(
-    (s) => s.dynamicTools && s.remoteBacked,
+  const storedInventoryServers = allServers.filter(
+    (s) => s.dynamicTools && s.storedToolInventory,
   );
 
   return (
     <>
-      {remoteBackedServers.map((server) => (
+      {storedInventoryServers.map((server) => (
         <RemoteToolMetadataLoader
           key={server.id}
           serverId={server.id}
@@ -1199,7 +1197,7 @@ function RoleToolSelectionPanel({
         selectedTools={selectedTools}
         onSelectionChange={handleSelectionChange}
         annotationSelectionSupported={!!onChangeAnnotations}
-        annotationsDescription="Tools can be annotated with labels that provide more context about the properties of the tool, such as if it's a destructive operation. OpenAPI sources are tagged automatically based on HTTP method. You can edit annotations on the MCP tools tab."
+        annotationsDescription={annotationRuleDescription(!!isDeny)}
         toolsDescription={
           isDeny
             ? "Select specific tools to exclude. Expand a server to choose which tools this role should not access."

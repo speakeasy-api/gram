@@ -713,6 +713,23 @@ func (q *Queries) PostflightCountPolicyMissingCustomRules(ctx context.Context, o
 	return count, err
 }
 
+const postflightCountProjectIssuer = `-- name: PostflightCountProjectIssuer :one
+SELECT count(*) FROM user_session_issuers
+WHERE project_id = $1::uuid AND deleted IS FALSE AND id = $2::uuid
+`
+
+type PostflightCountProjectIssuerParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) PostflightCountProjectIssuer(ctx context.Context, arg PostflightCountProjectIssuerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountProjectIssuer, arg.ProjectID, arg.ID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountQuarantineOpenAudits = `-- name: PostflightCountQuarantineOpenAudits :one
 SELECT count(*)
 FROM audit_logs a
@@ -753,6 +770,42 @@ func (q *Queries) PostflightCountRemovedGatewayMembers(ctx context.Context, proj
 	return count, err
 }
 
+const postflightCountServerConnectGrants = `-- name: PostflightCountServerConnectGrants :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = $1::text AND scope = 'mcp:connect'
+  AND selectors ->> 'resource_id' = ($2::uuid)::text
+`
+
+type PostflightCountServerConnectGrantsParams struct {
+	OrgID       string
+	McpServerID uuid.UUID
+}
+
+func (q *Queries) PostflightCountServerConnectGrants(ctx context.Context, arg PostflightCountServerConnectGrantsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountServerConnectGrants, arg.OrgID, arg.McpServerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountServerToolMetadata = `-- name: PostflightCountServerToolMetadata :one
+SELECT count(*) FROM mcp_server_tool_metadata
+WHERE project_id = $1::uuid AND deleted IS FALSE
+  AND mcp_server_id = $2::uuid
+`
+
+type PostflightCountServerToolMetadataParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+}
+
+func (q *Queries) PostflightCountServerToolMetadata(ctx context.Context, arg PostflightCountServerToolMetadataParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountServerToolMetadata, arg.ProjectID, arg.McpServerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountSetupTasks = `-- name: PostflightCountSetupTasks :one
 SELECT count(*) FROM organization_setup_tasks
 WHERE organization_id = $1::text
@@ -781,6 +834,23 @@ type PostflightCountShadowPolicyGrantsParams struct {
 
 func (q *Queries) PostflightCountShadowPolicyGrants(ctx context.Context, arg PostflightCountShadowPolicyGrantsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountShadowPolicyGrants, arg.OrgID, arg.PolicyID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountTunneledSource = `-- name: PostflightCountTunneledSource :one
+SELECT count(*) FROM tunneled_mcp_servers
+WHERE project_id = $1::uuid AND deleted IS FALSE AND id = $2::uuid
+`
+
+type PostflightCountTunneledSourceParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) PostflightCountTunneledSource(ctx context.Context, arg PostflightCountTunneledSourceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountTunneledSource, arg.ProjectID, arg.ID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

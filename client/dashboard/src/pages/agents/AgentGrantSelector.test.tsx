@@ -28,7 +28,7 @@ vi.mock("@/pages/access/useOrgMcpServers", () => ({
             name: "Example server",
             slug: "example",
             dynamicTools: false,
-            remoteBacked: false,
+            storedToolInventory: false,
             tools: [
               { id: "search", name: "search", type: "http" },
               { id: "fetch", name: "fetch", type: "http" },

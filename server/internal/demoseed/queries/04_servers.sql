@@ -56,6 +56,20 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
    NULL, @remote_github_id::uuid,
    @issuer_workforce_id::uuid, 'private');
 
+-- Recorded Slack tool metadata, as the Inspect tab records it from a live
+-- listing. Support Desk's read-only rule on Slack reaches only the read-only
+-- tools: annotation rules never reach a tool with no recorded annotation,
+-- such as slack_send_message here.
+-- name: ServersInsertSlackToolMetadata :exec
+INSERT INTO mcp_server_tool_metadata (id, project_id, mcp_server_id, tool_name,
+                                      title, read_only_hint, destructive_hint) VALUES
+  (@search_messages_id::uuid, @project_id::uuid, @slack_server_id::uuid,
+   'slack_search_messages', 'Search messages', TRUE, FALSE),
+  (@read_channel_id::uuid, @project_id::uuid, @slack_server_id::uuid,
+   'slack_read_channel', 'Read channel history', TRUE, FALSE),
+  (@send_message_id::uuid, @project_id::uuid, @slack_server_id::uuid,
+   'slack_send_message', 'Send message', NULL, NULL);
+
 -- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
 -- toolset id) and one endpoint at its address, mirroring its hosting
 -- columns. The fresh-id servers above stay separate servers over the same
@@ -166,6 +180,60 @@ WHERE organization_id = @org_id::text AND workos_slug = 'engineer';
 INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
 SELECT @plugin_id::uuid, id, name FROM mcp_servers
 WHERE project_id = @project_id::uuid AND slug = 'github';
+
+-- A tunneled MCP source with a private server in front of it. Its tool
+-- inventory and per-tool grants are stored, but the tunnel has never
+-- connected an agent, so the Inspect tab shows it offline over the recorded
+-- tools and the role editor can still limit it by tool. The key hash is not
+-- the hash of any key: no agent can ever authenticate to this tunnel. It is
+-- inserted after role distribution, so it is not part of any plugin.
+-- name: ServersInsertTunneledJamfSource :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
+VALUES (@id::uuid, @project_id::uuid, 'JAMF on-prem',
+        'unusable-key-hash-' || (@id::uuid)::text, 'gram_tunnel_demo');
+
+-- name: ServersInsertTunneledJamfIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration)
+VALUES (@id::uuid, @project_id::uuid, @org_id::text, 'jamf',
+        'interactive', make_interval(secs => 14 * 24 * 60 * 60));
+
+-- name: ServersInsertTunneledJamfServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         user_session_issuer_id, visibility)
+VALUES (@id::uuid, @project_id::uuid, 'JAMF', 'jamf', @source_id::uuid,
+        @issuer_id::uuid, 'private');
+
+-- name: ServersInsertTunneledJamfEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+VALUES (@id::uuid, @project_id::uuid, @mcp_server_id::uuid, @slug::text);
+
+-- device_status carries only a title, so it has no disposition: annotation
+-- rules such as the Read-only Tools role's do not reach it.
+-- name: ServersInsertTunneledJamfToolMetadata :exec
+INSERT INTO mcp_server_tool_metadata (id, project_id, mcp_server_id, tool_name,
+                                      title, read_only_hint, destructive_hint,
+                                      idempotent_hint) VALUES
+  (@list_devices_id::uuid, @project_id::uuid, @mcp_server_id::uuid,
+   'list_devices', 'List devices', TRUE, FALSE, NULL),
+  (@get_device_id::uuid, @project_id::uuid, @mcp_server_id::uuid,
+   'get_device', 'Get device', TRUE, FALSE, NULL),
+  (@lock_device_id::uuid, @project_id::uuid, @mcp_server_id::uuid,
+   'lock_device', 'Lock device', FALSE, FALSE, TRUE),
+  (@wipe_device_id::uuid, @project_id::uuid, @mcp_server_id::uuid,
+   'wipe_device', 'Wipe device', FALSE, TRUE, NULL),
+  (@device_status_id::uuid, @project_id::uuid, @mcp_server_id::uuid,
+   'device_status', 'Device status', NULL, NULL, NULL);
+
+-- Support Desk may only list devices on JAMF: one tool, not the server.
+-- name: ServersInsertSupportDeskJamfToolGrant :exec
+INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+SELECT @id::uuid, @org_id::text, 'role:organization:' || r.id, 'mcp:connect',
+       jsonb_build_object('resource_kind', 'mcp',
+         'resource_id', (@mcp_server_id::uuid)::text,
+         'tool', 'list_devices')
+FROM organization_roles r
+WHERE r.organization_id = @org_id::text AND r.workos_slug = 'support-desk';
 
 -- Leave instructions NULL so Settings starts with the editable built-in
 -- instructions, matching the gateway's initialize and server/discover text.
