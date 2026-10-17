@@ -427,7 +427,7 @@ func newTestMCPServiceWithPlatformMCPReadTools(t *testing.T) (context.Context, *
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, true)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, true, nil)
 	return ctx, ti, recorder
 }
 
@@ -450,7 +450,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, false, guardianOpts...)
+	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, false, embeddings, guardianOpts...)
 }
 
 func buildTestMCPService(
@@ -467,6 +467,7 @@ func buildTestMCPService(
 	funcs functions.ToolCaller,
 	callerAssertions *mcpauthz.Issuer,
 	withPlatformMCPReadTools bool,
+	embeddings openrouter.CompletionClient,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
