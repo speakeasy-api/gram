@@ -247,8 +247,8 @@ func TestAHPAuthoritativeTranscriptReplay(t *testing.T) {
 	require.Equal(t, "tool", rows[4].Role)
 	require.Contains(t, string(rows[3].ToolCalls), "read_file")
 	require.NotEmpty(t, rows[4].ToolCallID.String)
-	// Six original events plus four assistant envelopes and three boundary audits.
-	// Outbound/end snapshots and replay contribute neither transcript nor usage.
+	// Six original events, four assistant envelopes and three boundary audits.
+	// The outbound and turn-end events and the replay add no transcript or usage.
 	var logs []telemetryrepo.TelemetryLog
 	require.Eventually(t, func() bool {
 		logs, err = ch.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{GramProjectID: auth.ProjectID.String(), TimeStart: start.Add(-time.Minute).UnixNano(), TimeEnd: time.Now().Add(time.Minute).UnixNano(), SortOrder: "asc", Limit: 100})

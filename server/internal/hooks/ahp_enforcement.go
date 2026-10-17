@@ -17,12 +17,12 @@ type ahpBoundaryScan struct {
 }
 
 func mergeAHPScans(scans []ahpBoundaryScan) []ahpBoundaryScan {
-	// One scan per policy type/tool keeps the full boundary together and gives
-	// each scan a distinct risk operation identity rather than per-part aliases.
+	// Join scans with the same message type and tool, so that the scanner sees
+	// the full text of the boundary once instead of one fragment per part.
 	var merged []ahpBoundaryScan
 	positions := make(map[string]int)
 	for _, scan := range scans {
-		// Named tools still need tool-scoped policy checks without text.
+		// Keep a scan with a tool name and no text: tool-scoped policies can still match it.
 		if scan.text == "" && scan.tool == "" {
 			continue
 		}
@@ -37,8 +37,9 @@ func mergeAHPScans(scans []ahpBoundaryScan) []ahpBoundaryScan {
 	return merged
 }
 
-// Context snapshots are evidence, not additional transcript messages. Keep
-// their roles intact, especially tool results, which are untrusted output.
+// ahpItemScans makes one scan for each text part and uses the item role as the
+// message type. Tool results are scanned as tool responses. The items are not
+// written to the transcript.
 func ahpItemScans(items []*ahp.ModelVisibleItem) []ahpBoundaryScan {
 	var scans []ahpBoundaryScan
 	for _, item := range items {
@@ -54,15 +55,16 @@ func ahpItemScans(items []*ahp.ModelVisibleItem) []ahpBoundaryScan {
 		case "tool":
 			kind = message.ToolResponse
 		default:
-			continue // system/developer instructions are not user content
+			continue // Do not scan system or developer instructions.
 		}
 		scans = append(scans, ahpPartScans(item.Parts, kind)...)
 	}
 	return scans
 }
 
-// Inline tool-call parts are requests, not assistant prose. AHP text parts
-// do not carry a trustworthy tool name/call ID; tool.before owns that identity.
+// ahpPartScans makes one scan for each text part. An assistant part in the
+// tool-call category is scanned as a tool request. Text parts do not identify
+// the tool reliably, so the scans have no tool name. tool.before identifies it.
 func ahpPartScans(parts []*ahp.ContentItem, kind message.Type) []ahpBoundaryScan {
 	var scans []ahpBoundaryScan
 	for _, part := range parts {

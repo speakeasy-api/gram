@@ -43,8 +43,8 @@ type authenticatedIngestOptionsKey struct{}
 
 // AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
 type AuthenticatedIngestOptions struct {
-	// contentBoundary checks quarantine and typed evidence instead of canonical
-	// event policies, even when boundaryScans contains no evidence.
+	// contentBoundary applies the quarantine gate and boundaryScans instead of
+	// the policies for the event type. It applies also when boundaryScans is empty.
 	contentBoundary bool
 	boundaryScans   []ahpBoundaryScan
 	// ObserveOnly records the event without evaluating enforcement, for
@@ -626,8 +626,8 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		}
 	}
 
-	// AHP content boundaries carry typed evidence without fabricating user or
-	// assistant transcript messages from model context snapshots.
+	// AHP content boundaries scan their content directly. They do not create
+	// transcript messages from the model context.
 	if opts.contentBoundary {
 		return s.evaluateAHPBoundary(ctx, event, opts.boundaryScans)
 	}

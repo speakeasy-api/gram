@@ -284,7 +284,8 @@ func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload, obs
 	return s.ingestAHPWithOptions(ctx, payload, options)
 }
 
-// ingestAHPBoundary checks content boundaries even when there is no text to scan.
+// ingestAHPBoundary scans content at an AHP boundary. It checks quarantine also
+// when there is no text to scan.
 func (s *Service) ingestAHPBoundary(ctx context.Context, payload *gen.IngestPayload, observeOnly bool, scans ...ahpBoundaryScan) (string, error) {
 	options := defaultAuthenticatedIngestOptions()
 	options.ObserveOnly = observeOnly
@@ -349,7 +350,7 @@ func ahpReplaceSummary() *ahp.ContextCompactAfterModifyEffect {
 	}
 }
 
-// ahpNotificationPayload translates an event without content into a notification.
+// ahpNotificationPayload records an AHP event as a notification.
 func ahpNotificationPayload(source string, harness *ahp.Harness, id, rawType, occurredAt string, session ahp.Optional[*ahp.Session], turnID string) *gen.IngestPayload {
 	return ahpPayload(source, harness, id, rawType, occurredAt, "notification.reported", session, turnID)
 }
@@ -360,7 +361,7 @@ func (s *Service) ahpNotify(ctx context.Context, payload *gen.IngestPayload) err
 	return err
 }
 
-// ahpToolPermissionPayload translates a permission request into a tool request.
+// ahpToolPermissionPayload records a permission request as a tool request.
 func ahpToolPermissionPayload(e *ahp.ToolPermissionRequestEvent) *gen.IngestPayload {
 	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "tool.requested", e.Session, e.Turn.Value.ID)
 	payload.Data.ToolCall = ahpToolCall(e.Call.ID, e.Tool)
