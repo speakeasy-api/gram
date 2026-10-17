@@ -47,7 +47,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
@@ -3296,42 +3295,9 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		}
 		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
 
-		// Classify from the authoritative backend signal (unproxied_url, set
-		// only when s.unproxied_mcp_server_id resolved a live row), not from
-		// endpoint presence/absence: nothing stops an mcp_endpoints row from
-		// existing for an unproxied-backed server (verifyEndpointReferenceOwnership
-		// only checks project ownership, not backend type), and mcp_servers'
-		// own backend-exclusivity check doesn't cover mcp_endpoints either.
-		// An unproxied-backed server's URL always wins so it's never routed
-		// through a Speakeasy endpoint it can't actually be served from.
-		mcpURL := ""
-		isOAuth := m.McpServerIsOauth
-		isUnproxied := false
-		switch {
-		case m.UnproxiedUrl.Valid:
-			mode, modeErr := networkaccess.Effective(m.NetworkAccessMode)
-			if modeErr != nil {
-				return nil, oops.E(oops.CodeUnexpected, modeErr, "unproxied plugin MCP has invalid network mode").LogError(ctx, s.logger)
-			}
-			if mode != networkaccess.ModePublicOnly {
-				return nil, oops.E(oops.CodeUnexpected, nil, "unproxied plugin MCP cannot use private network mode").LogError(ctx, s.logger)
-			}
-			mcpURL = m.UnproxiedUrl.String
-			isUnproxied = true
-		default:
-			// Custom-domain endpoints win on the public surface. The private
-			// surface is pinned to the ingress's configured namespace instead.
-			mcpBase, publicSlug, domain := s.serverURL, m.EndpointSlug, m.EndpointCustomDomain
-			if m.AddressSlug.Valid {
-				publicSlug, domain = m.AddressSlug.String, m.AddressCustomDomain
-			}
-			if cd := conv.FromPGText[string](domain); cd != nil {
-				mcpBase = fmt.Sprintf("https://%s", *cd)
-			}
-			mcpURL, err = packageMCPURL(m.NetworkAccessMode, mcpBase, publicSlug, m.PrivateDnsName.String, m.PrivateEndpointSlug)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "resolve MCP plugin address").LogError(ctx, s.logger)
-			}
+		mcpURL, isUnproxied, err := remoteServerURL(s.serverURL, m)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve MCP plugin address").LogError(ctx, s.logger)
 		}
 
 		var serverEnv []ServerEnvConfig
@@ -3347,7 +3313,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 				Policy:      m.ServerPolicy,
 				MCPURL:      mcpURL,
 				IsPublic:    m.McpServerIsPublic,
-				IsOAuth:     isOAuth,
+				IsOAuth:     m.McpServerIsOauth,
 				IsUnproxied: isUnproxied,
 				EnvConfigs:  serverEnv,
 			},
