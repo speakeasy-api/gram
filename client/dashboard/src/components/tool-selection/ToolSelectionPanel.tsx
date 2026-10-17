@@ -219,22 +219,21 @@ export function ToolSelectionPanel({
 
   const filteredServers = useMemo(() => {
     if (!q) return servers;
-    return servers
-      .map((server) => {
-        // A server-name/prefix match keeps the full tool list — the user
-        // found the server, not a subset of its tools.
-        if (
-          server.name.toLowerCase().includes(q) ||
-          (server.namePrefix ?? "").toLowerCase().includes(q)
-        ) {
-          return server;
-        }
-        return {
-          ...server,
-          tools: server.tools.filter((t) => t.name.toLowerCase().includes(q)),
-        };
-      })
-      .filter((s) => s.tools.length > 0);
+    return servers.flatMap((server) => {
+      // A server-name/prefix match keeps the server and its full tool list —
+      // the user found the server, not a subset of its tools. That includes a
+      // server whose tools load only once it is expanded.
+      if (
+        server.name.toLowerCase().includes(q) ||
+        (server.namePrefix ?? "").toLowerCase().includes(q)
+      ) {
+        return [server];
+      }
+      const tools = server.tools.filter((t) =>
+        t.name.toLowerCase().includes(q),
+      );
+      return tools.length > 0 ? [{ ...server, tools }] : [];
+    });
   }, [servers, q]);
 
   useEffect(() => {
