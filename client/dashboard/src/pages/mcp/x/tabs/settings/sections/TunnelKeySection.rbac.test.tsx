@@ -31,6 +31,22 @@ vi.mock("@gram/client/react-query/grants.js", () => ({
   useGrants: () => ({ data: { grants: state.grants }, isLoading: false }),
 }));
 
+// TunnelKeySection lists the servers on the shared tunnel before a rotation
+// can be confirmed; these tests hold that read ready so they exercise only
+// the authorization and source locks.
+vi.mock("@/components/mcp/use-shared-tunnel-impact", async (original) => ({
+  ...(await original<
+    typeof import("@/components/mcp/use-shared-tunnel-impact")
+  >()),
+  useSharedTunnelImpact: () => ({
+    servers: [],
+    isReady: true,
+    isLoading: false,
+    isError: false,
+    retry: () => {},
+  }),
+}));
+
 vi.mock("@/pages/sources/tunneled-mcp/hooks", () => ({
   useRotateTunneledMcpServerKey: () => ({
     mutateAsync: state.rotate,
@@ -52,7 +68,7 @@ function section() {
   return (
     <QueryClientProvider client={new QueryClient()}>
       <TooltipProvider>
-        <TunnelKeySection tunneledMcpServer={tunnel} />
+        <TunnelKeySection tunneledMcpServer={tunnel} mcpServerId="mcp-1" />
       </TooltipProvider>
     </QueryClientProvider>
   );

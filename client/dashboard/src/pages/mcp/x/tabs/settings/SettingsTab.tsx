@@ -204,7 +204,10 @@ export function SettingsTab({
       <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
       {tunneledMcpServer && tunneledForLock ? (
         <Fragment key={tunneledMcpServer.id}>
-          <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
+          <ResourceIdentifierSection
+            tunneledMcpServer={tunneledMcpServer}
+            mcpServerId={mcpServer.id}
+          />
           <TunneledHeadersSection
             tunneledMcpServer={tunneledMcpServer}
             mcpServerId={mcpServer.id}
@@ -213,13 +216,23 @@ export function SettingsTab({
               tunnel each have their own link and draft. */}
           <EnvironmentHeadersSection key={mcpServer.id} mcpServer={mcpServer} />
           <CallerIdentitySection />
-          <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
+          <PublicAccessSection
+            tunneledMcpServer={tunneledMcpServer}
+            mcpServerId={mcpServer.id}
+          />
           <PublicRateLimitsSection
             tunneledMcpServerId={tunneledMcpServer.id}
             projectId={mcpServer.projectId}
+            mcpServerId={mcpServer.id}
           />
-          <TunnelKeySection tunneledMcpServer={tunneledForLock} />
-          <AgentSetupSection tunneledMcpServer={tunneledMcpServer} />
+          <TunnelKeySection
+            tunneledMcpServer={tunneledForLock}
+            mcpServerId={mcpServer.id}
+          />
+          <AgentSetupSection
+            tunneledMcpServer={tunneledMcpServer}
+            mcpServerId={mcpServer.id}
+          />
         </Fragment>
       ) : null}
       {isUnproxied ? null : <ToolFilteringSection mcpServer={mcpServer} />}

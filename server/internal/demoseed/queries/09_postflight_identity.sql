@@ -131,12 +131,20 @@ WHERE project_id = @project_id::uuid
 -- than the one they were seeded to tell.
 -- One issuer per Connections credential story (acme-partner-gateway), three
 -- project MCP issuers, and the organization-wide workforce issuer used by
--- GitHub. The JAMF tool-permission example's issuer is checked by id in the
--- first postflight half.
+-- GitHub. Issuers of tunnel-backed MCP servers are left out: each tunnel
+-- fixture checks its own, so adding a fixture never changes this count. The
+-- JAMF tool-permission example's issuer is also excluded by id; it is checked
+-- by id in the first postflight half.
 -- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE
-  AND id <> @tunneled_example_issuer::uuid;
+  AND id <> @tunneled_example_issuer::uuid
+  AND id NOT IN (
+    SELECT user_session_issuer_id FROM mcp_servers
+    WHERE project_id = @project_id::uuid AND deleted IS FALSE
+      AND tunneled_mcp_server_id IS NOT NULL
+      AND user_session_issuer_id IS NOT NULL
+  );
 
 -- name: PostflightIDOrgUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
@@ -536,3 +544,24 @@ WHERE env.id = ANY(@environment_ids::uuid[])
   AND env.project_id = @project_id::uuid AND env.deleted IS FALSE
   AND entry.name LIKE 'MCP\_HEADER\_%';
 
+-- The shared-tunnel fixture checks only its own rows, so other tunnel
+-- fixtures in the project never change these counts.
+-- name: PostflightIDSharedTunnel :one
+SELECT count(*) FROM tunneled_mcp_servers
+WHERE project_id = @project_id::uuid AND deleted IS FALSE
+  AND id = @tunnel_id::uuid;
+
+-- name: PostflightIDSharedTunnelIssuers :one
+SELECT count(*) FROM user_session_issuers
+WHERE project_id = @project_id::uuid AND deleted IS FALSE
+  AND id IN (@private_issuer_id::uuid, @public_issuer_id::uuid);
+
+-- name: PostflightIDSharedTunnelEndpoints :one
+SELECT count(*) FROM mcp_endpoints
+WHERE project_id = @project_id::uuid AND deleted IS FALSE
+  AND id IN (@private_endpoint_id::uuid, @public_endpoint_id::uuid);
+
+-- name: PostflightIDSharedTunnelMCPServers :one
+SELECT count(*) FROM mcp_servers
+WHERE project_id = @project_id::uuid AND deleted IS FALSE
+  AND tunneled_mcp_server_id = @tunnel_id::uuid;

@@ -143,8 +143,10 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// story than the one they were seeded to tell.
 		// One issuer per Connections credential story (acme-partner-gateway),
 		// three project MCP issuers, and the organization-wide workforce issuer
-		// used by GitHub. The JAMF tool-permission example's issuer is checked
-		// by id in the first postflight half.
+		// used by GitHub. Issuers of tunnel-backed MCP servers are left out:
+		// each tunnel fixture checks its own, so adding a fixture never changes
+		// this count. The JAMF tool-permission example's issuer is also
+		// excluded by id; it is checked by id in the first postflight half.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDProjectUserSessionIssuers(ctx, repo.PostflightIDProjectUserSessionIssuersParams{
 				ProjectID:             proj,
@@ -325,6 +327,34 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byOrg(s.q.PostflightIDSlackDirectoryMemberships), 10, "demo seed postflight: expected 10 Slack workspace memberships, found %d"},
 		{byOrg(s.q.PostflightIDSlackDirectoryConnections), 2, "demo seed postflight: expected 2 Slack workspace connections, found %d"},
 		{byProj(s.q.PostflightIDWidgets), 6, "demo seed postflight: expected 6 Explore widgets, found %d"},
+		// The shared-tunnel fixture checks only its own rows, so other tunnel
+		// fixtures in the project never change these counts.
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDSharedTunnel(ctx, repo.PostflightIDSharedTunnelParams{
+				ProjectID: proj,
+				TunnelID:  s.det("tunshare-tunnel"),
+			})
+		}, 1, "demo seed postflight: expected the shared tunnel, found %d rows"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDSharedTunnelIssuers(ctx, repo.PostflightIDSharedTunnelIssuersParams{
+				ProjectID:       proj,
+				PrivateIssuerID: s.det("tunshare-issuer-private"),
+				PublicIssuerID:  s.det("tunshare-issuer-public"),
+			})
+		}, 2, "demo seed postflight: expected 2 shared-tunnel issuers, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDSharedTunnelEndpoints(ctx, repo.PostflightIDSharedTunnelEndpointsParams{
+				ProjectID:         proj,
+				PrivateEndpointID: s.det("tunshare-endpoint-private"),
+				PublicEndpointID:  s.det("tunshare-endpoint-public"),
+			})
+		}, 2, "demo seed postflight: expected 2 shared-tunnel endpoints, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDSharedTunnelMCPServers(ctx, repo.PostflightIDSharedTunnelMCPServersParams{
+				ProjectID: proj,
+				TunnelID:  s.det("tunshare-tunnel"),
+			})
+		}, 2, "demo seed postflight: expected 2 MCP servers sharing the demo tunnel, found %d"},
 		// Sigint postflights preserve the complete authoring story: all modes,
 		// ordered memberships, a shared catalog entry, and an incomplete draft.
 		{byProj(s.q.PostflightIDSigintSignals), 9, "demo seed postflight: expected 9 sigint signals, found %d"},

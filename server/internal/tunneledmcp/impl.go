@@ -570,14 +570,32 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
-
-	// Lock first so no header write can land between the cascade below and
-	// the tombstone.
-	if _, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: serverID, ProjectID: *authCtx.ProjectID}); err != nil {
+	// Lock first, count second: an MCP server create or repoint holds a
+	// conflicting share lock on this row until it commits, so the count below
+	// sees every reference that will ever exist on the tunnel. The lock also
+	// keeps any header write from landing between the cascade below and the
+	// tombstone.
+	if _, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock tunneled mcp server").LogError(ctx, logger)
+	}
+
+	liveMcpServers, err := txRepo.CountLiveMcpServersByTunneledMcpServerID(ctx, repo.CountLiveMcpServersByTunneledMcpServerIDParams{
+		TunneledMcpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+		ProjectID:           *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "count mcp servers using tunneled mcp server").LogError(ctx, logger)
+	}
+	if liveMcpServers > 0 {
+		// The count covers servers the caller may not be able to read, so it
+		// stays in the logged error and out of the response.
+		return oops.E(oops.CodeConflict, fmt.Errorf("tunneled mcp server %s has %d live mcp servers", serverID, liveMcpServers), "this tunnel is still used by MCP servers; delete them before deleting the tunnel").LogWarn(ctx, logger)
 	}
 
 	// ON DELETE CASCADE only fires on hard deletes, so the tunnel's headers

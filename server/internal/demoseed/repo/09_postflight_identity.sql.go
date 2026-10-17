@@ -610,6 +610,12 @@ const postflightIDProjectUserSessionIssuers = `-- name: PostflightIDProjectUserS
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = $1::uuid AND deleted IS FALSE
   AND id <> $2::uuid
+  AND id NOT IN (
+    SELECT user_session_issuer_id FROM mcp_servers
+    WHERE project_id = $1::uuid AND deleted IS FALSE
+      AND tunneled_mcp_server_id IS NOT NULL
+      AND user_session_issuer_id IS NOT NULL
+  )
 `
 
 type PostflightIDProjectUserSessionIssuersParams struct {
@@ -623,8 +629,10 @@ type PostflightIDProjectUserSessionIssuersParams struct {
 // than the one they were seeded to tell.
 // One issuer per Connections credential story (acme-partner-gateway), three
 // project MCP issuers, and the organization-wide workforce issuer used by
-// GitHub. The JAMF tool-permission example's issuer is checked by id in the
-// first postflight half.
+// GitHub. Issuers of tunnel-backed MCP servers are left out: each tunnel
+// fixture checks its own, so adding a fixture never changes this count. The
+// JAMF tool-permission example's issuer is also excluded by id; it is checked
+// by id in the first postflight half.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, arg PostflightIDProjectUserSessionIssuersParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, arg.ProjectID, arg.TunneledExampleIssuer)
 	var count int64
@@ -808,6 +816,82 @@ WHERE organization_id = $1::text
 
 func (q *Queries) PostflightIDSessionBindings(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDSessionBindings, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDSharedTunnel = `-- name: PostflightIDSharedTunnel :one
+SELECT count(*) FROM tunneled_mcp_servers
+WHERE project_id = $1::uuid AND deleted IS FALSE
+  AND id = $2::uuid
+`
+
+type PostflightIDSharedTunnelParams struct {
+	ProjectID uuid.UUID
+	TunnelID  uuid.UUID
+}
+
+// The shared-tunnel fixture checks only its own rows, so other tunnel
+// fixtures in the project never change these counts.
+func (q *Queries) PostflightIDSharedTunnel(ctx context.Context, arg PostflightIDSharedTunnelParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDSharedTunnel, arg.ProjectID, arg.TunnelID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDSharedTunnelEndpoints = `-- name: PostflightIDSharedTunnelEndpoints :one
+SELECT count(*) FROM mcp_endpoints
+WHERE project_id = $1::uuid AND deleted IS FALSE
+  AND id IN ($2::uuid, $3::uuid)
+`
+
+type PostflightIDSharedTunnelEndpointsParams struct {
+	ProjectID         uuid.UUID
+	PrivateEndpointID uuid.UUID
+	PublicEndpointID  uuid.UUID
+}
+
+func (q *Queries) PostflightIDSharedTunnelEndpoints(ctx context.Context, arg PostflightIDSharedTunnelEndpointsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDSharedTunnelEndpoints, arg.ProjectID, arg.PrivateEndpointID, arg.PublicEndpointID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDSharedTunnelIssuers = `-- name: PostflightIDSharedTunnelIssuers :one
+SELECT count(*) FROM user_session_issuers
+WHERE project_id = $1::uuid AND deleted IS FALSE
+  AND id IN ($2::uuid, $3::uuid)
+`
+
+type PostflightIDSharedTunnelIssuersParams struct {
+	ProjectID       uuid.UUID
+	PrivateIssuerID uuid.UUID
+	PublicIssuerID  uuid.UUID
+}
+
+func (q *Queries) PostflightIDSharedTunnelIssuers(ctx context.Context, arg PostflightIDSharedTunnelIssuersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDSharedTunnelIssuers, arg.ProjectID, arg.PrivateIssuerID, arg.PublicIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDSharedTunnelMCPServers = `-- name: PostflightIDSharedTunnelMCPServers :one
+SELECT count(*) FROM mcp_servers
+WHERE project_id = $1::uuid AND deleted IS FALSE
+  AND tunneled_mcp_server_id = $2::uuid
+`
+
+type PostflightIDSharedTunnelMCPServersParams struct {
+	ProjectID uuid.UUID
+	TunnelID  uuid.UUID
+}
+
+func (q *Queries) PostflightIDSharedTunnelMCPServers(ctx context.Context, arg PostflightIDSharedTunnelMCPServersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDSharedTunnelMCPServers, arg.ProjectID, arg.TunnelID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
