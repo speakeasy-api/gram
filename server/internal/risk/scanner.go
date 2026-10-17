@@ -505,7 +505,6 @@ func (s *Scanner) scanForEnforcement(
 ) (result *ScanResult, retErr error) {
 	organizationID := request.Provenance.OrganizationID
 	projectID := request.Provenance.ProjectID
-	userID := request.Provenance.UserID
 	text := request.Text
 	messageType := request.MessageType
 	toolName := request.ToolName
@@ -533,61 +532,19 @@ func (s *Scanner) scanForEnforcement(
 
 	start := time.Now()
 
-	policies, err := s.repo.ListEnabledEnforcingPoliciesByProject(ctx, projectID)
-	if err != nil {
-		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-		return nil, fmt.Errorf("list enforcing policies: %w", err)
-	}
-	span.SetAttributes(attr.RiskPolicyCount(len(policies)))
-	if len(policies) == 0 {
-		// No enforcing policies, fast path. Record as "skipped" to track volume.
-		s.recordScan(ctx, projectID.String(), "skipped", time.Since(start))
-		return nil, nil
-	}
-
-	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
+	plan, err := s.enforcementPlanFor(ctx, request.Provenance)
 	if err != nil {
 		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 		return nil, err
 	}
-
-	applicablePolicies := make([]repo.RiskPolicy, 0, len(policies))
-	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
-		if err != nil {
-			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
-		}
-		if !policyApplication.Satisfied {
-			continue
-		}
-		applicablePolicies = append(applicablePolicies, p)
+	span.SetAttributes(attr.RiskPolicyCount(plan.enforcingCount))
+	if plan.enforcingCount == 0 {
+		// No enforcing policies, fast path. Record as "skipped" to track volume.
+		s.recordScan(ctx, projectID.String(), "skipped", time.Since(start))
+		return nil, nil
 	}
-
-	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
-	// fan-out) so prompt_based policies don't each repeat the slug lookup and
-	// so the lookup is never cancelled by a sibling match. Gated on the exact
-	// condition under which the fan-out would run the judge.
-
-	promptPoliciesOn := false
-	if slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType == ra.PolicyTypePromptBased
-	}) {
-		// All enforcing policies for a project belong to the same org.
-		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
-	}
-
-	// The risk engine mode selects the engine behind gitleaks, presidio and
-	// prompt_injection sources for the whole org. Resolved once, only when a
-	// policy actually has a covered source, on the parent ctx like the
-	// prompt-policy flag above. The slug rides along for the LLM lane's
-	// telemetry.
-	mode, orgSlug := feature.VariantRiskLLMOff, ""
-	if slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
-		return llmanalyzer.CoversAnySource(p.Sources)
-	}) {
-		mode, orgSlug = policyflags.ProjectFlagMode(ctx, s.logger, s.repo, s.flags, organizationID, projectID, feature.FlagRiskLLMAnalyzer)
-	}
+	applicablePolicies := plan.applicablePolicies()
+	promptPoliciesOn, mode, orgSlug := plan.promptPoliciesOn, plan.mode, plan.orgSlug
 	span.SetAttributes(attribute.String("gram.risk.llm_engine", string(mode)))
 
 	// legacyFindings holds the gitleaks and presidio Pub/Sub lanes' findings
@@ -597,9 +554,6 @@ func (s *Scanner) scanForEnforcement(
 	var legacyFindings map[string][]scanners.Finding
 	var llmFindings []scanners.Finding
 	var laneTruncated bool
-	legacyLanesOn := func() bool {
-		return len(applicablePolicies) > 0 && s.projectFlagEnabled(ctx, organizationID, projectID, feature.FlagRiskEnforcementPubsub)
-	}
 	switch mode {
 	case feature.VariantRiskLLMLLM:
 		// One LLM lane replaces the gitleaks and presidio lanes for the org,
@@ -618,13 +572,13 @@ func (s *Scanner) scanForEnforcement(
 		// content, and the scan waits for every lane. scanPolicy enforces
 		// from the legacy results alone and only compares the LLM verdict.
 		legacyFindings, llmFindings, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
-			legacy:           legacyLanesOn(),
+			legacy:           plan.legacyLanes,
 			llm:              true,
 			llmExecutionPath: realtimeShadowExecutionPath,
 			llmFailMode:      failModeShadow,
 		})
 	default:
-		if legacyLanesOn() {
+		if plan.legacyLanes {
 			legacyFindings, _, _ = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 				legacy:           true,
 				llm:              false,
@@ -650,7 +604,7 @@ func (s *Scanner) scanForEnforcement(
 		matchErr         = errors.New("risk policy enforcing match")
 	)
 	g, gctx := errgroup.WithContext(ctx)
-	for _, p := range applicablePolicies {
+	for _, p := range plan.policies {
 		g.Go(func() error {
 			result, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, mode, legacyFindings, llmFindings, laneTruncated, incomplete)
 			if scanErr != nil {
@@ -660,7 +614,7 @@ func (s *Scanner) scanForEnforcement(
 				}
 				s.logger.WarnContext(gctx, "scan failed for block policy",
 					attr.SlogError(scanErr),
-					attr.SlogRiskPolicyID(p.ID.String()),
+					attr.SlogRiskPolicyID(p.policy.ID.String()),
 				)
 				return nil
 			}
@@ -841,7 +795,8 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // legacy engines exactly as in the off mode, and llmFindings is only
 // compared with that verdict; truncated says the dispatcher size-limited
 // the content the remote lanes saw, which makes that comparison moot.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, mode feature.Variant, legacyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, planned plannedPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, mode feature.Variant, legacyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool) (result *ScanResult, retErr error) {
+	policy := planned.policy
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -917,13 +872,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 	// rules both evaluate against it.
 	view = realtimeMessageView(text, messageType, toolName)
 
-	// Per-category detection scopes are the only scoping surface.
-	eng := s.celEng
-	specified, err := ra.CompileDetectionScopes(eng, ra.DetectionScopesFromConfig(policy.AnalyzerConfig))
-	if err != nil {
-		return nil, fmt.Errorf("compile detection scopes: %w", err)
+	if planned.scopeErr != nil {
+		return nil, planned.scopeErr
 	}
-	categoryScope = ra.NewCategoryScope(s.recommended, specified)
+	categoryScope = planned.categoryScope
 
 	if policy.PolicyType == ra.PolicyTypePromptBased {
 		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
@@ -934,16 +886,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
 
-	// Suppress findings matched by an exclusion (the policy's own plus any
-	// global ones) so a false positive never blocks in real time.
-	exclusionRows, err := s.repo.ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
-		ProjectID:    policy.ProjectID,
-		RiskPolicyID: uuid.NullUUID{UUID: policy.ID, Valid: true},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list exclusions: %w", err)
+	if planned.exclusionsErr != nil {
+		return nil, planned.exclusionsErr
 	}
-	exclusions := ra.NewExclusionSet(exclusionRows)
+	exclusions := planned.exclusions
+	var err error
 	filter = func(findings []scanners.Finding) []scanners.Finding {
 		return exclusions.FilterFindings(disabled.FilterFindings(findings))
 	}
