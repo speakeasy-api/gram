@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   tunnelRefetch: vi.fn(),
   syncArgs: [] as Array<{ mode: string; live: unknown; enabled: boolean }>,
   remove: vi.fn(),
+  // Whether the viewer holds mcp:write on the server.
+  canWrite: true,
 }));
 
 vi.mock("@/hooks/useProxiedMcpTools", () => ({
@@ -77,7 +79,9 @@ vi.mock("@/components/require-scope", () => ({
   }: {
     children: ReactNode | ((state: { disabled: boolean }) => ReactNode);
   }) =>
-    typeof children === "function" ? children({ disabled: false }) : children,
+    typeof children === "function"
+      ? children({ disabled: !mocks.canWrite })
+      : children,
 }));
 
 vi.mock("@/lib/utils", async () => {
@@ -185,6 +189,7 @@ describe("RemoteMcpToolsSection tunneled servers", () => {
     mocks.tools = undefined;
     mocks.metadataByTool = {};
     mocks.tunnelOffline = false;
+    mocks.canWrite = true;
     mocks.syncArgs.length = 0;
     vi.clearAllMocks();
   });
@@ -260,6 +265,33 @@ describe("RemoteMcpToolsSection tunneled servers", () => {
     expect(mocks.remove).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Remove metadata" }));
     expect(mocks.remove).toHaveBeenCalledWith("wipe_device");
+  });
+
+  it("offers no per-tool action without write access", () => {
+    mocks.needsAuth = false;
+    mocks.canWrite = false;
+    mocks.tools = {
+      list_devices: { annotations: { readOnlyHint: true } },
+      lock_device: { annotations: {} },
+    };
+    mocks.metadataByTool = {
+      list_devices: storedTool("list_devices"),
+      wipe_device: storedTool("wipe_device"),
+    };
+    renderSection(tunneledProps);
+
+    for (const name of [
+      /Record lock_device/,
+      /Apply list_devices/,
+      /Remove wipe_device/,
+    ]) {
+      const button = screen.getByRole("button", { name }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+    }
+    fireEvent.click(screen.getByRole("button", { name: /Remove wipe_device/ }));
+    expect(
+      screen.queryByRole("button", { name: "Remove metadata" }),
+    ).toBeNull();
   });
 
   it("derives nothing from tools kept after a failed refetch", () => {
