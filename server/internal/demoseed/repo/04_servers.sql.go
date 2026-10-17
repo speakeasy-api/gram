@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
@@ -1237,6 +1238,120 @@ type ServersInsertSupportDeskGrantsParams struct {
 // names the toolset), Slack only for tools annotated read-only.
 func (q *Queries) ServersInsertSupportDeskGrants(ctx context.Context, arg ServersInsertSupportDeskGrantsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSupportDeskGrants, arg.OrgID, arg.Toolset1, arg.SlackServerID)
+	return err
+}
+
+const serversInsertTunnel = `-- name: ServersInsertTunnel :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, status)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::text,
+        'gram_tunnel_demo', 'created')
+`
+
+type ServersInsertTunnelParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Name      string
+	KeyHash   string
+}
+
+// A private MCP server behind the tunnel agent. The tunnel has never
+// connected, so its settings render from stored rows alone. key_hash is
+// built from the tunnel's own id, so it stays unique per tenant.
+func (q *Queries) ServersInsertTunnel(ctx context.Context, arg ServersInsertTunnelParams) error {
+	_, err := q.db.Exec(ctx, serversInsertTunnel,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.KeyHash,
+	)
+	return err
+}
+
+const serversInsertTunnelHeader = `-- name: ServersInsertTunnelHeader :exec
+INSERT INTO tunneled_mcp_server_headers
+  (id, tunneled_mcp_server_id, name, description, is_required, is_secret,
+   value, value_from_request_header)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text,
+   $5::boolean, FALSE, $6::text,
+   $7::text)
+`
+
+type ServersInsertTunnelHeaderParams struct {
+	ID                     uuid.UUID
+	TunneledMcpServerID    uuid.UUID
+	Name                   string
+	Description            string
+	IsRequired             bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+}
+
+// One header the tunnel adds to every forwarded request: a static value or
+// one copied from the caller's request, never both. No secret header is
+// seeded: reads decrypt secret values, and a fake ciphertext would fail them.
+func (q *Queries) ServersInsertTunnelHeader(ctx context.Context, arg ServersInsertTunnelHeaderParams) error {
+	_, err := q.db.Exec(ctx, serversInsertTunnelHeader,
+		arg.ID,
+		arg.TunneledMcpServerID,
+		arg.Name,
+		arg.Description,
+		arg.IsRequired,
+		arg.Value,
+		arg.ValueFromRequestHeader,
+	)
+	return err
+}
+
+const serversInsertTunneledMCPEndpoint = `-- name: ServersInsertTunneledMCPEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug)
+VALUES ($1::uuid, $2::uuid, NULL, $3::uuid, $4::text)
+`
+
+type ServersInsertTunneledMCPEndpointParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+	Slug        string
+}
+
+// Endpoint slugs on the platform domain are globally unique and org-slug
+// prefixed, so the slug is built from the tenant's OrgSlug.
+func (q *Queries) ServersInsertTunneledMCPEndpoint(ctx context.Context, arg ServersInsertTunneledMCPEndpointParams) error {
+	_, err := q.db.Exec(ctx, serversInsertTunneledMCPEndpoint,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.Slug,
+	)
+	return err
+}
+
+const serversInsertTunneledMCPServer = `-- name: ServersInsertTunneledMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         user_session_issuer_id, visibility)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::text,
+        $5::uuid, $6::uuid, 'private')
+`
+
+type ServersInsertTunneledMCPServerParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Name                string
+	Slug                string
+	TunneledMcpServerID uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) ServersInsertTunneledMCPServer(ctx context.Context, arg ServersInsertTunneledMCPServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertTunneledMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.TunneledMcpServerID,
+		arg.UserSessionIssuerID,
+	)
 	return err
 }
 

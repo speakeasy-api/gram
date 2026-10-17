@@ -203,6 +203,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %d"},
 		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected Linear's protected resource pinned to read, found %d matching rows"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDTunnelHeaders(ctx, repo.PostflightIDTunnelHeadersParams{TunnelID: s.det("tunhdr-tunnel"), ProjectID: proj})
+		}, 2, "demo seed postflight: expected 2 non-secret headers on the tunhdr tunnel, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
 		{byProj(s.q.PostflightIDProjectAgentSessions), 1, "demo seed postflight: expected 1 project-scoped managed agent session, found %d"},

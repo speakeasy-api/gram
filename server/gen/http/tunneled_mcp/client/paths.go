@@ -41,3 +41,28 @@ func RotateServerKeyTunneledMcpPath() string {
 func DeleteServerTunneledMcpPath() string {
 	return "/rpc/tunneledMcp.deleteServer"
 }
+
+// ListServerHeadersTunneledMcpPath returns the URL path to the tunneledMcp service listServerHeaders HTTP endpoint.
+func ListServerHeadersTunneledMcpPath() string {
+	return "/rpc/tunneledMcp.listServerHeaders"
+}
+
+// GetServerHeaderTunneledMcpPath returns the URL path to the tunneledMcp service getServerHeader HTTP endpoint.
+func GetServerHeaderTunneledMcpPath() string {
+	return "/rpc/tunneledMcp.getServerHeader"
+}
+
+// CreateServerHeaderTunneledMcpPath returns the URL path to the tunneledMcp service createServerHeader HTTP endpoint.
+func CreateServerHeaderTunneledMcpPath() string {
+	return "/rpc/tunneledMcp.createServerHeader"
+}
+
+// UpdateServerHeaderTunneledMcpPath returns the URL path to the tunneledMcp service updateServerHeader HTTP endpoint.
+func UpdateServerHeaderTunneledMcpPath() string {
+	return "/rpc/tunneledMcp.updateServerHeader"
+}
+
+// DeleteServerHeaderTunneledMcpPath returns the URL path to the tunneledMcp service deleteServerHeader HTTP endpoint.
+func DeleteServerHeaderTunneledMcpPath() string {
+	return "/rpc/tunneledMcp.deleteServerHeader"
+}

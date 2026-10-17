@@ -46,10 +46,12 @@ function headerState(
     reportErrors: false,
     saving: false,
     error: null,
+    loadError: false,
     addHeader: vi.fn(() => {}),
     replaceHeader: vi.fn(() => {}),
     removeHeader: vi.fn(() => {}),
     save: vi.fn(async () => false),
+    discard: vi.fn(() => {}),
     ...overrides,
   };
 }

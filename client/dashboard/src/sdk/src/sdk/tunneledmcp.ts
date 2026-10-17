@@ -3,34 +3,57 @@
  */
 
 import { tunneledMcpCreateServer } from "../funcs/tunneledMcpCreateServer.js";
+import { tunneledMcpCreateServerHeader } from "../funcs/tunneledMcpCreateServerHeader.js";
 import { tunneledMcpDeleteServer } from "../funcs/tunneledMcpDeleteServer.js";
+import { tunneledMcpDeleteServerHeader } from "../funcs/tunneledMcpDeleteServerHeader.js";
 import { tunneledMcpGetServer } from "../funcs/tunneledMcpGetServer.js";
+import { tunneledMcpGetServerHeader } from "../funcs/tunneledMcpGetServerHeader.js";
 import { tunneledMcpListServerConnections } from "../funcs/tunneledMcpListServerConnections.js";
+import { tunneledMcpListServerHeaders } from "../funcs/tunneledMcpListServerHeaders.js";
 import { tunneledMcpListServers } from "../funcs/tunneledMcpListServers.js";
 import { tunneledMcpRotateServerKey } from "../funcs/tunneledMcpRotateServerKey.js";
 import { tunneledMcpUpdateServer } from "../funcs/tunneledMcpUpdateServer.js";
+import { tunneledMcpUpdateServerHeader } from "../funcs/tunneledMcpUpdateServerHeader.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CreateTunneledMcpServerResult } from "../models/components/createtunneledmcpserverresult.js";
+import { ListTunneledMcpServerHeadersResult } from "../models/components/listtunneledmcpserverheadersresult.js";
 import { ListTunneledMcpServersResult } from "../models/components/listtunneledmcpserversresult.js";
 import { RotateTunneledMcpServerKeyResult } from "../models/components/rotatetunneledmcpserverkeyresult.js";
 import { TunneledMcpServer } from "../models/components/tunneledmcpserver.js";
 import { TunneledMcpServerConnections } from "../models/components/tunneledmcpserverconnections.js";
+import { TunneledMcpServerHeader } from "../models/components/tunneledmcpserverheader.js";
 import {
   CreateTunneledMcpServerRequest,
   CreateTunneledMcpServerSecurity,
 } from "../models/operations/createtunneledmcpserver.js";
 import {
+  CreateTunneledMcpServerHeaderRequest,
+  CreateTunneledMcpServerHeaderSecurity,
+} from "../models/operations/createtunneledmcpserverheader.js";
+import {
   DeleteTunneledMcpServerRequest,
   DeleteTunneledMcpServerSecurity,
 } from "../models/operations/deletetunneledmcpserver.js";
+import {
+  DeleteTunneledMcpServerHeaderRequest,
+  DeleteTunneledMcpServerHeaderSecurity,
+} from "../models/operations/deletetunneledmcpserverheader.js";
 import {
   GetTunneledMcpServerRequest,
   GetTunneledMcpServerSecurity,
 } from "../models/operations/gettunneledmcpserver.js";
 import {
+  GetTunneledMcpServerHeaderRequest,
+  GetTunneledMcpServerHeaderSecurity,
+} from "../models/operations/gettunneledmcpserverheader.js";
+import {
   ListTunneledMcpServerConnectionsRequest,
   ListTunneledMcpServerConnectionsSecurity,
 } from "../models/operations/listtunneledmcpserverconnections.js";
+import {
+  ListTunneledMcpServerHeadersRequest,
+  ListTunneledMcpServerHeadersSecurity,
+} from "../models/operations/listtunneledmcpserverheaders.js";
 import {
   ListTunneledMcpServersRequest,
   ListTunneledMcpServersSecurity,
@@ -43,6 +66,10 @@ import {
   UpdateTunneledMcpServerRequest,
   UpdateTunneledMcpServerSecurity,
 } from "../models/operations/updatetunneledmcpserver.js";
+import {
+  UpdateTunneledMcpServerHeaderRequest,
+  UpdateTunneledMcpServerHeaderSecurity,
+} from "../models/operations/updatetunneledmcpserverheader.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class TunneledMcp extends ClientSDK {
@@ -58,6 +85,25 @@ export class TunneledMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CreateTunneledMcpServerResult> {
     return unwrapAsync(tunneledMcpCreateServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createServerHeader tunneledMcp
+   *
+   * @remarks
+   * Create a header on a tunneled MCP server
+   */
+  async createServerHeader(
+    request: CreateTunneledMcpServerHeaderRequest,
+    security?: CreateTunneledMcpServerHeaderSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TunneledMcpServerHeader> {
+    return unwrapAsync(tunneledMcpCreateServerHeader(
       this,
       request,
       security,
@@ -85,6 +131,25 @@ export class TunneledMcp extends ClientSDK {
   }
 
   /**
+   * deleteServerHeader tunneledMcp
+   *
+   * @remarks
+   * Delete a tunneled MCP server header
+   */
+  async deleteServerHeader(
+    request: DeleteTunneledMcpServerHeaderRequest,
+    security?: DeleteTunneledMcpServerHeaderSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(tunneledMcpDeleteServerHeader(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getServer tunneledMcp
    *
    * @remarks
@@ -104,6 +169,25 @@ export class TunneledMcp extends ClientSDK {
   }
 
   /**
+   * getServerHeader tunneledMcp
+   *
+   * @remarks
+   * Get a tunneled MCP server header by ID
+   */
+  async getServerHeader(
+    request: GetTunneledMcpServerHeaderRequest,
+    security?: GetTunneledMcpServerHeaderSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TunneledMcpServerHeader> {
+    return unwrapAsync(tunneledMcpGetServerHeader(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listServerConnections tunneledMcp
    *
    * @remarks
@@ -115,6 +199,25 @@ export class TunneledMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<TunneledMcpServerConnections> {
     return unwrapAsync(tunneledMcpListServerConnections(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listServerHeaders tunneledMcp
+   *
+   * @remarks
+   * List the headers configured for a tunneled MCP server
+   */
+  async listServerHeaders(
+    request: ListTunneledMcpServerHeadersRequest,
+    security?: ListTunneledMcpServerHeadersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListTunneledMcpServerHeadersResult> {
+    return unwrapAsync(tunneledMcpListServerHeaders(
       this,
       request,
       security,
@@ -172,6 +275,25 @@ export class TunneledMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<TunneledMcpServer> {
     return unwrapAsync(tunneledMcpUpdateServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateServerHeader tunneledMcp
+   *
+   * @remarks
+   * Update a tunneled MCP server header
+   */
+  async updateServerHeader(
+    request: UpdateTunneledMcpServerHeaderRequest,
+    security?: UpdateTunneledMcpServerHeaderSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<TunneledMcpServerHeader> {
+    return unwrapAsync(tunneledMcpUpdateServerHeader(
       this,
       request,
       security,
