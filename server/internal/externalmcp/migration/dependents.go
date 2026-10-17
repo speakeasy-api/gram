@@ -255,6 +255,9 @@ func (d dependentMove) moveMetadata(ctx context.Context, outcome *Outcome) error
 			return fmt.Errorf("remove duplicate metadata: %w", err)
 		}
 	}
+	if present {
+		outcome.Warnings = append(outcome.Warnings, "The old server's metadata and environment configuration were removed because the replacement has its own")
+	}
 	return nil
 }
 

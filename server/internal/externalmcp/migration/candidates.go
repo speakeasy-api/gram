@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 )
 
@@ -36,9 +37,9 @@ type Candidate struct {
 	// Blockers explain why the server cannot be migrated; empty when it can.
 	Blockers []string
 
-	// Targets are existing public-only remote-backed servers in the same
-	// project that use the same user session issuer, which the migration may
-	// merge into.
+	// Targets are existing remote-backed servers in the same project that use
+	// the same user session issuer, are public-only and match the candidate's
+	// visibility, which the migration may merge into.
 	Targets []Target
 
 	// ToolCalls counts the server's tool calls over the reporting window; nil
@@ -69,6 +70,7 @@ const (
 	blockerManyURLs       = "proxies more than one upstream URL"
 	blockerManyTransports = "proxies upstreams over more than one transport"
 	blockerPrivateNetwork = "uses private network access, which the migration does not carry over"
+	blockerOtherTools     = "serves tools or resources beyond the external MCP attachment, which the replacement would drop"
 )
 
 // ListCandidates returns every live external-MCP-backed server across all
@@ -121,7 +123,7 @@ func buildCandidates(ctx context.Context, db repo.DBTX, rows []repo.ListCandidat
 			for _, server := range targets[row.UserSessionIssuerID.UUID] {
 				// A merge moves the address onto the target, so only a
 				// public-only target keeps it reachable the same way.
-				if server.ProjectID != row.ProjectID || !publicOnly(server.NetworkAccessMode) {
+				if server.ProjectID != row.ProjectID || !publicOnly(server.NetworkAccessMode) || server.Visibility != sourceVisibility(row) {
 					continue
 				}
 				candidate.Targets = append(candidate.Targets, Target{
@@ -155,6 +157,9 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if !publicOnly(row.WrapperNetworkAccessMode) {
 		candidate.Blockers = append(candidate.Blockers, blockerPrivateNetwork)
 	}
+	if row.ServesOtherTools {
+		candidate.Blockers = append(candidate.Blockers, blockerOtherTools)
+	}
 	if len(row.TransportTypes) != 1 || !supportedTransport(row.TransportTypes[0]) {
 		candidate.Blockers = append(candidate.Blockers, blockerManyTransports)
 	}
@@ -170,6 +175,21 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	}
 	candidate.CleanedURL = cleaned
 	return candidate
+}
+
+// sourceVisibility is who can reach the candidate today: its canonical
+// wrapper's visibility, or the toolset's when it has no wrapper.
+func sourceVisibility(row repo.ListCandidatesRow) string {
+	switch {
+	case row.WrapperVisibility.Valid:
+		return row.WrapperVisibility.String
+	case !row.McpEnabled:
+		return visibility.Disabled
+	case row.McpIsPublic:
+		return visibility.Public
+	default:
+		return visibility.Private
+	}
 }
 
 // publicOnly reports whether a stored network access mode serves only public

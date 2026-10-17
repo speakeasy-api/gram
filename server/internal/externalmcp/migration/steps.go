@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -103,18 +104,20 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	if err != nil {
 		return outcome, fmt.Errorf("lock wrapper endpoints: %w", err)
 	}
-	wrapper, err := repo.New(tx).GetCanonicalWrapper(ctx, repo.GetCanonicalWrapperParams{ToolsetID: toolset.ID, ProjectID: projectID})
+	var wrapper *repo.McpServer
+	locked, err := repo.New(tx).GetCanonicalWrapper(ctx, repo.GetCanonicalWrapperParams{ToolsetID: toolset.ID, ProjectID: projectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
 		return outcome, fmt.Errorf("lock canonical wrapper: %w", err)
 	default:
-		if !publicOnly(wrapper.NetworkAccessMode) {
+		if !publicOnly(locked.NetworkAccessMode) {
 			return outcome, fail("%s", blockerPrivateNetwork)
 		}
+		wrapper = &locked
 	}
 
-	target, err := m.resolveReplacement(ctx, tx, actor, request, candidate, toolset)
+	target, err := m.resolveReplacement(ctx, tx, actor, request, candidate, toolset, wrapper)
 	if err != nil {
 		return outcome, err
 	}
@@ -129,6 +132,9 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		}
 	} else {
 		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Create a remote server at %s on the existing sign-in provider", target.url))
+	}
+	if toolset.ToolVariationsGroupID.Valid || (wrapper != nil && wrapper.ToolVariationsGroupID.Valid) {
+		outcome.Warnings = append(outcome.Warnings, "Tool variations on the old server were not carried over")
 	}
 	if candidate.CleanedURL != candidate.RemoteURL {
 		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Drop the unfilled template from %s", candidate.RemoteURL))
@@ -150,7 +156,7 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, organizationID, projectID, []uuid.UUID{issuerID}); err != nil {
 		return outcome, fmt.Errorf("resync remote session issuer: %w", err)
 	}
-	if err := rewriteSessionResources(ctx, tx, organizationID, issuerID, target, candidate.RemoteURL, &outcome); err != nil {
+	if err := rewriteSessionResources(ctx, tx, organizationID, issuerID, toolset.ID, target, candidate.RemoteURL, &outcome); err != nil {
 		return outcome, err
 	}
 
@@ -192,8 +198,11 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 // resolveReplacement locks the requested existing server or creates a new
 // remote server on the toolset's own issuer. Creation passes the issuer
 // explicitly, so no issuer is minted, and touches no remote session client.
-func (m *Migrator) resolveReplacement(ctx context.Context, tx pgx.Tx, actor Actor, request Request, candidate Candidate, toolset toolsetsrepo.Toolset) (replacement, error) {
+// The replacement keeps the canonical wrapper's visibility and environment,
+// or the toolset's when it has no wrapper.
+func (m *Migrator) resolveReplacement(ctx context.Context, tx pgx.Tx, actor Actor, request Request, candidate Candidate, toolset toolsetsrepo.Toolset, wrapper *repo.McpServer) (replacement, error) {
 	issuerID := candidate.Row.UserSessionIssuerID
+	serverVisibility := sourceVisibility(candidate.Row)
 	if request.TargetMcpServerID.Valid {
 		existing, err := repo.New(tx).LockTargetServer(ctx, repo.LockTargetServerParams{ID: request.TargetMcpServerID.UUID, ProjectID: toolset.ProjectID})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -208,15 +217,23 @@ func (m *Migrator) resolveReplacement(ctx context.Context, tx pgx.Tx, actor Acto
 		if !publicOnly(existing.NetworkAccessMode) {
 			return replacement{}, fail("the selected server is not public-only, so the moved address would change who can reach it")
 		}
+		if existing.Visibility != serverVisibility {
+			return replacement{}, fail("the selected server is %s but this server is %s, so the moved address would change who can reach it", existing.Visibility, serverVisibility)
+		}
 		return replacement{id: existing.ID, remoteID: existing.RemoteMcpServerID.UUID, url: existing.RemoteUrl, merged: true}, nil
 	}
 
 	if _, err := proxy.ValidateRemoteMCPURL(ctx, m.policy, candidate.CleanedURL); err != nil {
 		return replacement{}, fail("upstream URL is not allowed: %s", err.Error())
 	}
-	environmentID, err := environmentForToolset(ctx, tx, toolset)
-	if err != nil {
-		return replacement{}, err
+	var environmentID uuid.NullUUID
+	if wrapper != nil {
+		environmentID = wrapper.EnvironmentID
+	} else {
+		var err error
+		if environmentID, err = environmentForToolset(ctx, tx, toolset); err != nil {
+			return replacement{}, err
+		}
 	}
 	name := toolset.Name
 	remote, err := remotemcp.CreateRemoteMCPSourceInTransaction(ctx, tx, m.audit, remotemcp.RemoteMCPSourceTransactionInput{
@@ -230,7 +247,7 @@ func (m *Migrator) resolveReplacement(ctx context.Context, tx pgx.Tx, actor Acto
 	server, err := mcpservers.CreateProjectMCPServerInTransaction(ctx, tx, m.audit, mcpservers.MCPServerTransactionInput{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID,
 		ActorUserID: actor.UserID, ActorEmail: actor.Email,
-		Name: toolset.Name, Visibility: hostedmcp.Visibility(toolset), NetworkAccessMode: networkaccess.ModePublicOnly,
+		Name: toolset.Name, Visibility: serverVisibility, NetworkAccessMode: networkaccess.ModePublicOnly,
 		EnvironmentID: environmentID, UserSessionIssuerID: issuerID,
 		RemoteMCPServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
 		TunneledMCPServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, UnproxiedMCPServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -256,8 +273,8 @@ func environmentForToolset(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.
 }
 
 // moveEndpoints repoints the wrapper's endpoints at the replacement, keeping
-// each endpoint's id, slug and domain. A toolset served only from its legacy
-// mcp_slug gets an endpoint for that slug instead. Either way the address
+// each endpoint's id, slug and domain. A legacy mcp_slug no endpoint carries
+// gets an endpoint of its own. Either way the address
 // moves in this transaction, before the toolset is deleted, so it never 404s.
 func (m *Migrator) moveEndpoints(ctx context.Context, tx pgx.Tx, principal urn.Principal, actorEmail *string, toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint, target replacement, outcome *Outcome) error {
 	endpointRepo := mcpendpointsrepo.New(tx)
@@ -281,15 +298,19 @@ func (m *Migrator) moveEndpoints(ctx context.Context, tx pgx.Tx, principal urn.P
 		outcome.EndpointIDs = append(outcome.EndpointIDs, updated.ID)
 		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Move the address /mcp/%s to the replacement", updated.Slug))
 	}
-	if len(endpoints) > 0 {
+	if !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+		if len(endpoints) == 0 {
+			outcome.Warnings = append(outcome.Warnings, "The server had no address to keep")
+		}
 		return nil
 	}
-	if !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
-		outcome.Warnings = append(outcome.Warnings, "The server had no address to keep")
+	slug := toolset.McpSlug.String
+	if slices.ContainsFunc(endpoints, func(e mcpendpointsrepo.McpEndpoint) bool {
+		return e.Slug == slug && e.CustomDomainID == toolset.CustomDomainID
+	}) {
 		return nil
 	}
 
-	slug := toolset.McpSlug.String
 	if err := endpointRepo.LockSlugScope(ctx, mcpendpointsrepo.LockSlugScopeParams{CustomDomainID: toolset.CustomDomainID, Slug: slug}); err != nil {
 		return fmt.Errorf("lock slug scope: %w", err)
 	}
@@ -301,6 +322,12 @@ func (m *Migrator) moveEndpoints(ctx context.Context, tx pgx.Tx, principal urn.P
 		return fmt.Errorf("check slug availability: %w", err)
 	}
 	if !available.Valid || !available.Bool {
+		// With endpoints already moved, the legacy slug is a secondary
+		// address, so losing it is reported rather than blocking.
+		if len(endpoints) > 0 {
+			outcome.Warnings = append(outcome.Warnings, fmt.Sprintf("The legacy address /mcp/%s is held by another server and was not kept", slug))
+			return nil
+		}
 		return fail("the address /mcp/%s is held by another server", slug)
 	}
 	created, err := endpointRepo.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
@@ -324,10 +351,21 @@ func (m *Migrator) moveEndpoints(ctx context.Context, tx pgx.Tx, principal urn.P
 
 // rewriteSessionResources stamps the replacement's URL on the issuer's
 // sessions, so upstream tokens route to it at once instead of after their
-// next refresh. It is skipped when the issuer also fronts a remote server at
-// another URL, where the resource would be ambiguous.
-func rewriteSessionResources(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, target replacement, previousURL string, outcome *Outcome) error {
+// next refresh. It is skipped when the issuer also fronts another toolset or
+// a remote server at another URL, where the resource would be ambiguous.
+func rewriteSessionResources(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, toolsetID uuid.UUID, target replacement, previousURL string, outcome *Outcome) error {
+	const ambiguous = "Signed-in sessions were left as they are because the sign-in provider also serves another upstream; people may need to sign in again"
 	queries := repo.New(tx)
+	shared, err := queries.OtherToolsetsOnIssuer(ctx, repo.OtherToolsetsOnIssuerParams{
+		OrganizationID: organizationID, UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, ExcludedToolsetID: toolsetID,
+	})
+	if err != nil {
+		return fmt.Errorf("check other servers on issuer: %w", err)
+	}
+	if shared {
+		outcome.Warnings = append(outcome.Warnings, ambiguous)
+		return nil
+	}
 	urls, err := queries.ListRemoteURLsOnIssuer(ctx, repo.ListRemoteURLsOnIssuerParams{
 		OrganizationID: organizationID, UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, ExcludedMcpServerID: target.id,
 	})
@@ -336,7 +374,7 @@ func rewriteSessionResources(ctx context.Context, tx pgx.Tx, organizationID stri
 	}
 	for _, other := range urls {
 		if !sameUpstream(other, target.url) {
-			outcome.Warnings = append(outcome.Warnings, "Signed-in sessions were left as they are because the sign-in provider also serves another upstream; people may need to sign in again")
+			outcome.Warnings = append(outcome.Warnings, ambiguous)
 			return nil
 		}
 	}

@@ -332,6 +332,10 @@ WITH active_deployments AS (
   FROM deployments AS d
   JOIN deployment_statuses AS ds ON ds.deployment_id = d.id
   WHERE ds.status = 'completed'
+    AND (
+      $1::uuid[] IS NULL
+      OR d.project_id IN (SELECT t.project_id FROM toolsets AS t WHERE t.id = ANY($1::uuid[]))
+    )
   ORDER BY d.project_id, d.seq DESC
 ),
 live_toolsets AS (
@@ -363,7 +367,7 @@ live_toolsets AS (
     )
 ),
 latest_versions AS (
-  SELECT DISTINCT ON (tv.toolset_id) tv.toolset_id, tv.tool_urns
+  SELECT DISTINCT ON (tv.toolset_id) tv.toolset_id, tv.tool_urns, tv.resource_urns
   FROM toolset_versions AS tv
   JOIN live_toolsets AS lt ON lt.id = tv.toolset_id
   WHERE tv.deleted IS FALSE
@@ -372,6 +376,7 @@ latest_versions AS (
 proxy_definitions AS (
   SELECT
     t.id AS toolset_id,
+    etd.tool_urn,
     etd.remote_url,
     etd.transport_type,
     CASE
@@ -427,9 +432,21 @@ SELECT
   g.remote_urls,
   g.transport_types,
   g.declares_headers,
-  wrapper.network_access_mode AS wrapper_network_access_mode
+  -- The replacement only proxies the upstream, so any other tool or resource
+  -- on the server would disappear.
+  (
+    COALESCE(cardinality(lv.resource_urns), 0) > 0
+    OR EXISTS (
+      SELECT 1
+      FROM unnest(lv.tool_urns) AS tool_urn(value)
+      WHERE tool_urn.value NOT IN (SELECT pd.tool_urn FROM proxy_definitions AS pd WHERE pd.toolset_id = t.id)
+    )
+  )::boolean AS serves_other_tools,
+  wrapper.network_access_mode AS wrapper_network_access_mode,
+  wrapper.visibility AS wrapper_visibility
 FROM grouped AS g
 JOIN live_toolsets AS t ON t.id = g.toolset_id
+JOIN latest_versions AS lv ON lv.toolset_id = t.id
 JOIN projects AS p ON p.id = t.project_id
 JOIN organization_metadata AS o ON o.id = t.organization_id
 LEFT JOIN user_session_issuers AS usi ON usi.id = t.user_session_issuer_id AND usi.deleted IS FALSE
@@ -461,7 +478,9 @@ type ListCandidatesRow struct {
 	RemoteUrls               []string
 	TransportTypes           []string
 	DeclaresHeaders          bool
+	ServesOtherTools         bool
 	WrapperNetworkAccessMode pgtype.Text
+	WrapperVisibility        pgtype.Text
 }
 
 // Live servers whose latest toolset version references a proxy tool from an
@@ -500,7 +519,9 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.RemoteUrls,
 			&i.TransportTypes,
 			&i.DeclaresHeaders,
+			&i.ServesOtherTools,
 			&i.WrapperNetworkAccessMode,
+			&i.WrapperVisibility,
 		); err != nil {
 			return nil, err
 		}
@@ -708,6 +729,7 @@ SELECT
   ms.slug,
   ms.user_session_issuer_id,
   ms.network_access_mode,
+  ms.visibility,
   rms.url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
@@ -723,6 +745,7 @@ type ListRemoteServersOnIssuersRow struct {
 	Slug                pgtype.Text
 	UserSessionIssuerID uuid.NullUUID
 	NetworkAccessMode   pgtype.Text
+	Visibility          string
 	Url                 string
 }
 
@@ -744,6 +767,7 @@ func (q *Queries) ListRemoteServersOnIssuers(ctx context.Context, userSessionIss
 			&i.Slug,
 			&i.UserSessionIssuerID,
 			&i.NetworkAccessMode,
+			&i.Visibility,
 			&i.Url,
 		); err != nil {
 			return nil, err
@@ -795,7 +819,7 @@ func (q *Queries) ListRemoteURLsOnIssuer(ctx context.Context, arg ListRemoteURLs
 }
 
 const lockTargetServer = `-- name: LockTargetServer :one
-SELECT ms.id, ms.name, ms.slug, ms.user_session_issuer_id, ms.remote_mcp_server_id, ms.network_access_mode, rms.url AS remote_url
+SELECT ms.id, ms.name, ms.slug, ms.user_session_issuer_id, ms.remote_mcp_server_id, ms.network_access_mode, ms.visibility, rms.url AS remote_url
 FROM mcp_servers AS ms
 JOIN remote_mcp_servers AS rms ON rms.id = ms.remote_mcp_server_id AND rms.project_id = ms.project_id AND rms.deleted IS FALSE
 WHERE ms.id = $1 AND ms.project_id = $2 AND ms.deleted IS FALSE
@@ -814,6 +838,7 @@ type LockTargetServerRow struct {
 	UserSessionIssuerID uuid.NullUUID
 	RemoteMcpServerID   uuid.NullUUID
 	NetworkAccessMode   pgtype.Text
+	Visibility          string
 	RemoteUrl           string
 }
 
@@ -828,6 +853,7 @@ func (q *Queries) LockTargetServer(ctx context.Context, arg LockTargetServerPara
 		&i.UserSessionIssuerID,
 		&i.RemoteMcpServerID,
 		&i.NetworkAccessMode,
+		&i.Visibility,
 		&i.RemoteUrl,
 	)
 	return i, err
@@ -876,6 +902,32 @@ func (q *Queries) MoveAssistantToolsetToServer(ctx context.Context, arg MoveAssi
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const otherToolsetsOnIssuer = `-- name: OtherToolsetsOnIssuer :one
+SELECT EXISTS (
+  SELECT 1
+  FROM toolsets AS t
+  WHERE t.organization_id = $1
+    AND t.user_session_issuer_id = $2
+    AND t.id <> $3
+    AND t.deleted IS FALSE
+) AS present
+`
+
+type OtherToolsetsOnIssuerParams struct {
+	OrganizationID      string
+	UserSessionIssuerID uuid.NullUUID
+	ExcludedToolsetID   uuid.UUID
+}
+
+// Whether another live toolset in the organization signs in through the
+// issuer, such as an external MCP server not migrated yet.
+func (q *Queries) OtherToolsetsOnIssuer(ctx context.Context, arg OtherToolsetsOnIssuerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, otherToolsetsOnIssuer, arg.OrganizationID, arg.UserSessionIssuerID, arg.ExcludedToolsetID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
 }
 
 const rekeyCollectionAttachments = `-- name: RekeyCollectionAttachments :execrows
