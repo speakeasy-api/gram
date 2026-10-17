@@ -439,9 +439,9 @@ function AnnotationChecklist({
  */
 function unclassifiedNote(count: number | undefined): string {
   if (count === undefined || count === 0) {
-    return "Tools without an annotation aren't included, even with every annotation selected.";
+    return "Tools with no annotation hint set to true aren't included, even with every annotation selected.";
   }
-  return `${count} known ${count === 1 ? "tool has" : "tools have"} no annotation and ${count === 1 ? "isn't" : "aren't"} included, even with every annotation selected.`;
+  return `${count} known ${count === 1 ? "tool has" : "tools have"} no annotation hint set to true and ${count === 1 ? "isn't" : "aren't"} included, even with every annotation selected.`;
 }
 
 function AnnotationChecklistRows({

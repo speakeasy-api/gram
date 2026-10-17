@@ -317,7 +317,7 @@ func TestGetMCPAccessExcludesUnclassifiedToolsFromDispositionRole(t *testing.T) 
 	require.Equal(t, "Readers", output.Roles[0].Name)
 	require.True(t, output.Roles[0].CanEnterServer)
 	require.Equal(t, []string{"list_tasks"}, output.Roles[0].AllowedKnownTools)
-	require.NotEqual(t, "all", output.Roles[0].KnownToolAccess)
+	require.Equal(t, "some", output.Roles[0].KnownToolAccess)
 }
 
 func seedAccessMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, email string) {

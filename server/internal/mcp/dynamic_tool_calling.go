@@ -21,6 +21,15 @@ const searchToolsToolName = "search_tools"
 var errToolSearchIndexUnavailable = errors.New("tool search index is unavailable")
 
 func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
+	tagsDescription := "Tags to filter the results by. If not provided, all tools will be returned."
+	if len(availableTags) > 0 {
+		tagsDescription += " Available tags: " + strings.Join(availableTags, ", ")
+	}
+	encodedTagsDescription, err := json.Marshal(tagsDescription)
+	if err != nil {
+		panic(fmt.Sprintf("encode search tools tag description: %v", err))
+	}
+
 	return json.RawMessage(fmt.Sprintf(`{
 		"type": "object",
 		"properties": {
@@ -34,7 +43,7 @@ func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
 					"type": "string",
 					"description": "Tag to filter the results by."
 				},
-				"description": "Tags to filter the results by. If not provided, all tools will be returned. Available tags: %s"
+				"description": %s
 			},
 			"match_mode": {
 				"type": "string",
@@ -51,7 +60,7 @@ func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
 		},
 		"required": ["query"],
 		"additionalProperties": false
-	}`, strings.Join(availableTags, ", ")))
+	}`, encodedTagsDescription))
 }
 
 func buildDynamicSessionTools(
