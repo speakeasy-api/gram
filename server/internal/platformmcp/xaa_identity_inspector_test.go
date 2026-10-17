@@ -2,14 +2,17 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -270,4 +273,92 @@ func TestXAAIdentityInspectorExplainsANonRoutableServer(t *testing.T) {
 		require.NotNil(t, chaining.NotServedReason, name)
 		require.Equal(t, xaaNotRoutable, *chaining.NotServedReason, name)
 	}
+}
+
+// fixtureOrgInspector reads the fixture's organization; the test session's
+// principal belongs to a placeholder one.
+type fixtureOrgInspector struct {
+	inner          *postgresXAAIdentityInspector
+	organizationID string
+}
+
+func (f fixtureOrgInspector) Inspect(ctx context.Context, _ string, projectID, serverID, issuerID uuid.UUID, resource string) (XAAIdentityChaining, *string, error) {
+	return f.inner.Inspect(ctx, f.organizationID, projectID, serverID, issuerID, resource)
+}
+
+func TestXAAReadinessToolReportsConnectionScopes(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_connection_scopes")
+	require.NoError(t, err)
+	f := seedXAAInspectorFixture(t, ctx, conn, pgtype.Text{})
+	const upstream = "https://upstream.example.test/mcp"
+	bindXAAInspectorUpstream(t, ctx, conn, f, f.issuerA)
+
+	issuerID := f.issuerA.String()
+	reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{
+		{ProjectID: f.projectID.String(), McpServerID: f.serverID.String(), State: "connected", IssuerID: &issuerID, ResourceIndicator: upstream},
+	}}}
+	inspector := &postgresXAAIdentityInspector{db: conn, governor: nil, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
+	session := xaaTestSession(t, &xaaReadinessService{connections: reader, enabled: func(context.Context, string) (bool, error) { return true, nil }, identity: fixtureOrgInspector{inner: inspector, organizationID: f.organizationID}}, false)
+	call := func() (XAAIdentityChainingBinding, map[string]any) {
+		t.Helper()
+		result := xaaCall(t, session, f.projectID.String(), f.serverID.String())
+		if result.IsError {
+			text, _ := result.Content[0].(*mcp.TextContent)
+			require.FailNow(t, "tool error", "%+v", text)
+		}
+		wire, err := json.Marshal(result.StructuredContent)
+		require.NoError(t, err)
+		var output GetXAAReadinessOutput
+		require.NoError(t, json.Unmarshal(wire, &output))
+		require.NotNil(t, output.IdentityChaining)
+		require.Len(t, output.IdentityChaining.Bindings, 1)
+		var raw struct {
+			IdentityChaining struct {
+				Bindings []map[string]any `json:"bindings"`
+			} `json:"identity_chaining"`
+		}
+		require.NoError(t, json.Unmarshal(wire, &raw))
+		return output.IdentityChaining.Bindings[0], raw.IdentityChaining.Bindings[0]
+	}
+
+	binding, raw := call()
+	require.Equal(t, []string{"read"}, binding.ConnectionScopes, "an unlinked client has no connection to follow, so it reports the recorded scopes")
+	require.False(t, binding.ScopesOutOfDate)
+	require.Contains(t, raw, "scopes_out_of_date")
+
+	q := remotesessionsrepo.New(conn)
+	current, err := q.GetEMABinding(ctx, remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: f.issuerA, Resource: upstream})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: current.RemoteSessionClientID.UUID, UserSessionIssuerID: f.userIssuer}))
+	rmcp := remotemcprepo.New(conn)
+	_, err = rmcp.UpsertRemoteProtectedResource(ctx, remotemcprepo.UpsertRemoteProtectedResourceParams{
+		ProjectID: f.projectID, OrganizationID: f.organizationID, ResourceIdentifier: upstream,
+		MetadataUrl: "", AuthorizationServers: []string{"https://as-a.example.test"}, ScopesSupported: nil, BearerMethodsSupported: nil,
+		ResourceName: "", ResourceDocumentation: "", ResourcePolicyUri: "", ResourceTosUri: "", Metadata: "",
+	})
+	require.NoError(t, err)
+	_, err = rmcp.UpsertRemoteProtectedResourceScopeOverride(ctx, remotemcprepo.UpsertRemoteProtectedResourceScopeOverrideParams{ScopeOverride: []string{"files:write"}, ProjectID: f.projectID, OrganizationID: f.organizationID, ResourceIdentifier: upstream})
+	require.NoError(t, err)
+
+	binding, _ = call()
+	require.Equal(t, []string{"files:write"}, binding.ConnectionScopes, "a linked client follows its server connection")
+	require.Equal(t, []string{"read"}, binding.ConfiguredScopes)
+	require.True(t, binding.ScopesOutOfDate, "the connection's scopes differ from the recorded ones")
+}
+
+func TestXAAIdentityChainingBindingConnectionScopesWire(t *testing.T) {
+	t.Parallel()
+	bound, err := json.Marshal(XAAIdentityChainingBinding{ConnectionScopes: []string{}})
+	require.NoError(t, err)
+	require.Contains(t, string(bound), `"connection_scopes":[]`, "a bound client recording no scope reports an empty set")
+	unbound, err := json.Marshal(XAAIdentityChainingBinding{})
+	require.NoError(t, err)
+	require.NotContains(t, string(unbound), "connection_scopes", "omitted when no client is bound")
+
+	schema, err := json.Marshal(inferOutputSchema[GetXAAReadinessOutput]("get_xaa_readiness"))
+	require.NoError(t, err)
+	require.Contains(t, string(schema), `"connection_scopes"`)
+	require.Contains(t, string(schema), `"scopes_out_of_date"`)
 }

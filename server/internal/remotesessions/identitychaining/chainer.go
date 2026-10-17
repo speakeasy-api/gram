@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
@@ -275,7 +276,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		if req.consent() && c.signedWithRecentKey(sel, outcome, grantValidated) {
 			outcome.Retryable = true
 		}
-		logAcquisitionFailure(ctx, logger, outcome)
+		logAcquisitionFailure(ctx, logger, outcome, sel)
 		outcome.providerDescription = ""
 		// Requests waiting on this attempt adopt its failure instead of timing out.
 		attemptKey := cacheKey("identityChainingAttempt", req, sel)
@@ -402,11 +403,14 @@ func logCredentialSource(ctx context.Context, logger *slog.Logger, sel selection
 	logger.Log(ctx, level, "identity chaining credential released", attr.SlogIdentityChainingCredentialSource(source))
 }
 
-// logAcquisitionFailure logs a failed attempt with the provider's error text.
-func logAcquisitionFailure(ctx context.Context, logger *slog.Logger, outcome Outcome) {
+// logAcquisitionFailure logs a failed attempt with the provider's error text
+// and the scopes requested, which always come from the binding.
+func logAcquisitionFailure(ctx context.Context, logger *slog.Logger, outcome Outcome, sel selection) {
 	logger.WarnContext(ctx, "identity chaining failed",
 		attr.SlogOutcome(string(outcome.Reason)),
 		attr.SlogReason(string(outcome.Stage)),
 		attr.SlogOAuthErrorDescription(outcome.providerDescription),
+		attr.SlogOAuthScope(strings.Join(sel.scopes, " ")),
+		attr.SlogOAuthScopeSource(remotesessionmetrics.ScopeSourceEMABinding),
 	)
 }

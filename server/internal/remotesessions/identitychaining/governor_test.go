@@ -116,7 +116,7 @@ func TestInspectIdentityChainingForTenant(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 
-	results, err := remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource+"/")
+	results, err := remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource+"/", true)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, remotesessions.PreparationStateReady, results[0].State)
@@ -124,14 +124,14 @@ func TestInspectIdentityChainingForTenant(t *testing.T) {
 	require.Equal(t, []string{"read"}, results[0].Scopes)
 
 	f.addSlashVariantBinding(t, remotesessions.PreparationStateUnknownGrants)
-	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource)
+	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource, true)
 	require.NoError(t, err)
 	require.Len(t, results, 2, "inspection reports bindings in every live state")
 
 	for _, suffix := range []string{"//", "///", "////", "/////"} {
 		bindResource(t, f.db, f.req, f.sel.remoteIssuerID, f.sel.clientID, "https://api.resource.example.test"+suffix, remotesessions.PreparationStateUnknownGrants)
 	}
-	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource)
+	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource, true)
 	require.NoError(t, err)
 	require.Len(t, results, 6, "inspection never truncates the binding list")
 
@@ -139,11 +139,11 @@ func TestInspectIdentityChainingForTenant(t *testing.T) {
 		project uuid.UUID
 		org     string
 	}{{uuid.New(), f.req.OrganizationID}, {f.req.ProjectID, "org-" + uuid.NewString()}} {
-		results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, foreign.project, foreign.org, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource)
+		results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, foreign.project, foreign.org, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource, true)
 		require.NoError(t, err)
 		require.Empty(t, results, "another tenant never reads these bindings")
 	}
-	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: uuid.New(), Valid: true}, f.req.UpstreamResource)
+	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: uuid.New(), Valid: true}, f.req.UpstreamResource, true)
 	require.NoError(t, err)
 	require.Empty(t, results)
 }
