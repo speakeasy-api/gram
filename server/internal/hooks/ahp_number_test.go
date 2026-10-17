@@ -25,6 +25,7 @@ func TestAHPTokenCountExactNumbers(t *testing.T) {
 		{strconv.Itoa(maxInt) + "0e-1", maxInt},
 	} {
 		t.Run(tc.value, func(t *testing.T) {
+			t.Parallel()
 			got := ahpTokenCount(ahp.Some(json.Number(tc.value)))
 			require.NotNil(t, got)
 			require.Equal(t, tc.want, *got)
@@ -50,6 +51,7 @@ func TestAHPTokenCountRejectsInvalidNumbers(t *testing.T) {
 		"", "null", "true", "[]", "{}", "NaN", "Infinity", "01", "+1", "1.", ".1", "1e", "1 2",
 	} {
 		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
 			require.Nil(t, ahpTokenCount(ahp.Some(json.Number(raw))))
 		})
 	}

@@ -2,7 +2,7 @@
 
 The hooks service supports three hook entry points:
 
-- Agent Hooks Protocol: `/ahp` accepts native events from arbitrary harnesses through the typed AHP Go SDK.
+- Agent Hooks Protocol: `/ahp` accepts native events from arbitrary harnesses for session capture and policy enforcement.
 - Legacy provider endpoints: `/rpc/hooks.claude`, `/rpc/hooks.cursor`, `/rpc/hooks.codex`, and Claude OTEL ingestion. These keep existing installed hooks working.
 - Unified ingest: `/rpc/hooks.ingest`. Latest generated hooks use this endpoint and translate provider-native events into Speakeasy feature events before sending.
 
@@ -37,25 +37,16 @@ Generated hooks translate that response into the local provider response shape.
 
 ## Agent Hooks Protocol
 
-`POST /ahp` accepts typed AHP SDK 0.7.0 frames using the existing hooks key and
-project authorization. Harness names remain the reported source adapter names.
+`POST /ahp` accepts AHP events with a hooks-scoped API key in
+`Authorization: Bearer <HOOKS_SCOPED_API_KEY>` or `Gram-Key`. Use `Gram-Project`
+when an explicit project selector is needed. Keep secret-bearing hook
+configuration uncommitted.
 
-- `user.message.inbound` owns prompt capture and prompt policy. Only user-role
-  envelopes in `message.messages` contribute prompt text. Interception evaluates
-  policy only when the harness advertises `deny`; observation never evaluates it.
-- `model.response.after` owns assistant transcript capture. Each assistant
-  envelope produces a separate, ordered `assistant.responded` event with a
-  replay-stable identity. Only inline text parts with category `text` or no
-  category are included; reasoning, tool-call, and unknown categories are not.
-- Model response usage stays on the original `usage.reported` event, never on
-  derived transcript events. Only per-attempt amounts are counted; costs must be
-  reported in USD. Replaying the response does not add usage or transcript rows.
-- `turn.start`, `turn.end`, and `user.message.outbound` do not duplicate prompts
-  or assistant messages. Intercepted `turn.start` is acknowledged without policy.
-- Tool request enforcement and executed tool result capture retain their existing
-  behavior. Tool output is not subject to the assistant text category filter.
-
-Content references are not fetched, and this adapter does not implement uploads.
+Subscribe to `user.message.inbound` for prompts, `model.response.after` for
+assistant responses and usage, and `tool.before` / `tool.after` for tool activity.
+Observe mode records events without enforcing policy. Prompt and tool
+interception require the harness to support denial at the subscribed boundary.
+Only inline text is supported; content references and uploads are not supported.
 
 ## Legacy Compatibility
 
