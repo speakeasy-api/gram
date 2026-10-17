@@ -772,8 +772,9 @@ func TestStdioRouteCutOffFreesQueueAndAbortsWriter(t *testing.T) {
 	require.False(t, ok, "a cut-off stream frees what it queued")
 }
 
+// Not parallel: pushing 32 MiB through the bridge would skew the timing of
+// parallel tests.
 func TestStdioBridgeStalledReaderReleasesSession(t *testing.T) {
-	t.Parallel()
 	// 32 MiB of notifications: more than socket buffers hold, under the stream's cut-off.
 	notification := filepath.Join(t.TempDir(), "notification")
 	require.NoError(t, os.WriteFile(notification, []byte(`{"jsonrpc":"2.0","method":"notifications/message","params":{"data":"`+strings.Repeat("z", 1<<20)+`"}}`+"\n"), 0o600))
