@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -69,7 +70,29 @@ func NewTestMetaCodeBackend(t *testing.T, ctx context.Context, service *Service,
 		return ctx, gate, nil
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() { backend.sessions.end(context.WithoutCancel(ctx)) })
 	return backend
+}
+
+// NewTestSharedMetaCodeBackend builds a backend for a verified caller holding
+// credential, whose member sessions outlive one execution.
+func NewTestSharedMetaCodeBackend(t *testing.T, ctx context.Context, service *Service, gatewayID uuid.UUID, credential string) codemode.Backend {
+	t.Helper()
+	ctx = context.WithValue(ctx, metaCodeCancellableKey{}, true)
+	ctx = context.WithValue(ctx, metaCodeCredentialKey{}, credential)
+	return NewTestMetaCodeBackend(t, ctx, service, gatewayID, nil)
+}
+
+// SetTestCodeSessionPool replaces the service's shared member session pool.
+func SetTestCodeSessionPool(service *Service, idleTTL, pingAfter time.Duration, maxEntries int) {
+	service.codeSessions = newCodeMemberSessions(service.logger, idleTTL, codeSessionMaxAge, pingAfter, maxEntries)
+}
+
+// CloseTestMetaCodeSessions ends a test backend's execution-scoped member sessions.
+func CloseTestMetaCodeSessions(ctx context.Context, backend codemode.Backend) {
+	if b, ok := backend.(*metaCodeBackend); ok {
+		b.sessions.end(ctx)
+	}
 }
 
 // SetTestCodeExecutor injects the real local transport before serving integration requests.
