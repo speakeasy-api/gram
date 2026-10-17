@@ -99,6 +99,17 @@ func checkCustomDomainRouting(ctx context.Context, resolver dns.Resolver, domain
 	return "", nil
 }
 
+func checkCustomDomainCAA(ctx context.Context, resolver dns.Resolver, domain string) (customdomains.HealthIssue, error) {
+	restriction, err := dns.FindIssueRestriction(ctx, resolver, domain)
+	if err != nil {
+		return "", fmt.Errorf("resolve custom domain CAA: %w", err)
+	}
+	if restriction.Name == "" || dns.IssueAllows(restriction.Records, dns.LetsEncryptIssueDomain) {
+		return "", nil
+	}
+	return customdomains.HealthIssueCAAForbidden, nil
+}
+
 func normalizeDNSName(name string) string {
 	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
 }
