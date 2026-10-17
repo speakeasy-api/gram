@@ -610,7 +610,9 @@ describe("identity chaining checks", () => {
   });
 
   it("does not signal when chained services connect", async () => {
-    fetchMock.mockResolvedValue(reply({ status: "connected", message: "Connected" }));
+    fetchMock.mockResolvedValue(
+      reply({ status: "connected", message: "Connected" }),
+    );
     const rejected = chainedPage();
     await waitFor(() =>
       expect(chainCheck("client-b").getAttribute("data-chain-check")).toBe(
