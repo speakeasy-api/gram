@@ -1,3 +1,5 @@
+import { requireKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
@@ -372,7 +374,10 @@ async function setMcpServerVisibility(
         toolsetId: mcpServer.toolsetId ?? undefined,
         environmentId: mcpServer.environmentId ?? undefined,
         toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-        visibility,
+        visibility: requireKnownEnumValue(
+          KnownUpdateMcpServerFormVisibility,
+          visibility,
+        ),
       },
     },
     undefined,

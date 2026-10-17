@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -21,7 +22,7 @@ export const SkillSuggestionApprovalItemOutcome = {
 /**
  * The item's processing outcome.
  */
-export type SkillSuggestionApprovalItemOutcome = ClosedEnum<
+export type SkillSuggestionApprovalItemOutcome = OpenEnum<
   typeof SkillSuggestionApprovalItemOutcome
 >;
 
@@ -60,9 +61,10 @@ export type SkillSuggestionApprovalItem = {
 };
 
 /** @internal */
-export const SkillSuggestionApprovalItemOutcome$inboundSchema: z.ZodMiniEnum<
-  typeof SkillSuggestionApprovalItemOutcome
-> = z.enum(SkillSuggestionApprovalItemOutcome);
+export const SkillSuggestionApprovalItemOutcome$inboundSchema: z.ZodMiniType<
+  SkillSuggestionApprovalItemOutcome,
+  unknown
+> = openEnums.inboundSchema(SkillSuggestionApprovalItemOutcome);
 
 /** @internal */
 export const SkillSuggestionApprovalItem$inboundSchema: z.ZodMiniType<

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const InstallMode = {
 /**
  * How the agent installs the plugin. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.
  */
-export type InstallMode = ClosedEnum<typeof InstallMode>;
+export type InstallMode = OpenEnum<typeof InstallMode>;
 
 export type AgentPlugin = {
   /**
@@ -46,8 +47,8 @@ export type AgentPlugin = {
 };
 
 /** @internal */
-export const InstallMode$inboundSchema: z.ZodMiniEnum<typeof InstallMode> = z
-  .enum(InstallMode);
+export const InstallMode$inboundSchema: z.ZodMiniType<InstallMode, unknown> =
+  openEnums.inboundSchema(InstallMode);
 
 /** @internal */
 export const AgentPlugin$inboundSchema: z.ZodMiniType<AgentPlugin, unknown> = z

@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import { accessLibrary, detection, scanTarget } from "./access-fixtures";
 import {
@@ -8,6 +9,29 @@ import {
 } from "./access-rows";
 
 describe("buildAccessRows", () => {
+  it("keeps an unknown stored decision out of editable and known decision counts", () => {
+    const target = scanTarget({
+      access: {
+        state: "blocked",
+        decision: unrecognized("future_decision"),
+        enforceable: true,
+      },
+    });
+    const rows = buildAccessRows([target], []);
+    expect(rows[0]).toMatchObject({ stored: "unknown", enforceable: false });
+    const staleDraft = new Map([[target.id, "approved" as const]]);
+    expect(effectiveDecision(rows[0]!, staleDraft)).toBe("unknown");
+    expect(countDecisions(rows, staleDraft)).toEqual({
+      approved: 0,
+      blocked: 0,
+      unreviewed: 0,
+      inventoryOnly: 0,
+    });
+    expect(
+      changedDecisions(rows, new Map([[target.id, "approved" as const]])),
+    ).toEqual([]);
+  });
+
   it("lists every library target, with its own decision and the detection as evidence", () => {
     const rows = buildAccessRows(
       [

@@ -257,7 +257,9 @@ export function ManageToolsDialog({
             await onToolUpdate(editingTool, updates);
             toast.success("Tool updated");
           } catch (error) {
-            toast.error("Failed to update tool");
+            toast.error(
+              error instanceof Error ? error.message : "Failed to update tool",
+            );
             throw error;
           }
         }}

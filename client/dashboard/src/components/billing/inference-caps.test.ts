@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { InferenceSpendCap } from "@gram/client/models/components/inferencespendcap.js";
 import { describe, expect, it } from "vitest";
 
@@ -77,6 +78,21 @@ describe("cap copy", () => {
   });
 
   const FORBIDDEN = ["chat", "internal", "spend cap", "fallback key"] as const;
+
+  it.each(["future_inference", "another_future_cap", "constructor"])(
+    "keeps unknown identifier %s out of labels and paused copy",
+    (key) => {
+      const unknown = unrecognized(key);
+      const copy = [
+        inferenceCapLabel(unknown),
+        inferenceCapPausedNote(unknown),
+        inferenceCapRaiseLabel(unknown),
+      ]
+        .join(" ")
+        .toLowerCase();
+      for (const term of [...FORBIDDEN, key]) expect(copy).not.toContain(term);
+    },
+  );
 
   // The correction this section exists for: the misleading identifiers are gone
   // from everything a customer reads.
@@ -158,6 +174,19 @@ describe("sortInferenceCaps", () => {
     ]);
   });
 
+  it("places unknown caps after known caps and preserves their relative order", () => {
+    const unknown = cap({ keyType: unrecognized("future_inference") });
+    const another = cap({ keyType: unrecognized("another_future_cap") });
+    const chat = cap();
+    const internal = cap({ keyType: "internal" });
+    expect(sortInferenceCaps([unknown, internal, another, chat])).toEqual([
+      chat,
+      internal,
+      unknown,
+      another,
+    ]);
+  });
+
   it("handles an organization with one cap, or none", () => {
     expect(sortInferenceCaps([]).length).toBe(0);
     expect(sortInferenceCaps([cap({ keyType: "internal" })]).length).toBe(1);
@@ -170,4 +199,13 @@ describe("sortInferenceCaps", () => {
 
     expect(list.map((c) => c.keyType)).toEqual(["internal", "chat"]);
   });
+});
+
+it("links unsupported caps to the section without exposing API identifiers", () => {
+  for (const key of ["future_inference", "another_future_cap", "constructor"]) {
+    const unknown = unrecognized(key);
+    expect(inferenceCapAnchor(unknown)).toBe(INFERENCE_CAPS_ANCHOR);
+    expect(isInferenceCapAnchor(inferenceCapAnchor(unknown))).toBe(true);
+    expect(inferenceCapRaiseLabel(unknown)).toBe("View inference caps");
+  }
 });

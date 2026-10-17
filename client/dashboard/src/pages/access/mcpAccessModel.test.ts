@@ -1,6 +1,12 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 
-import { convertToolLimit, fuzzyMatch } from "./mcpAccessModel";
+import {
+  convertToolLimit,
+  fuzzyMatch,
+  toggleDisposition,
+  dispositionCopy,
+} from "./mcpAccessModel";
 import type { ServerTool } from "./serverMerge";
 
 describe("tool limits", () => {
@@ -49,4 +55,25 @@ describe("fuzzyMatch", () => {
     expect(fuzzyMatch("xyz", "Google Drive")).toBe(false);
     expect(fuzzyMatch("", "anything")).toBe(true);
   });
+});
+
+describe("unknown tool annotations", () => {
+  it("keeps unknown annotations when toggling a known one", () => {
+    const future = unrecognized("future_annotation");
+    expect(toggleDisposition([future], "read_only", true)).toEqual([
+      future,
+      "read_only",
+    ]);
+    expect(
+      toggleDisposition([future, "read_only"], "read_only", false),
+    ).toEqual([future]);
+  });
+  it.each(["future_annotation", "__proto__"])(
+    "renders %s neutrally",
+    (value) => {
+      expect(dispositionCopy(unrecognized(value)).label).toBe(
+        "Unknown annotation",
+      );
+    },
+  );
 });

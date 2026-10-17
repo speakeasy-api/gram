@@ -3,6 +3,9 @@ import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+// Open SDK enums accept future values, but only understood scopes may authorize.
+const knownScopes: ReadonlySet<string> = new Set(Object.values(Scope));
+
 /**
  * Derive the resource kind from a scope's family prefix.
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
@@ -146,6 +149,8 @@ export function hasScopeInGrants(
   resourceId?: string | readonly string[],
   projectId?: string,
 ): boolean {
+  if (!knownScopes.has(scope)) return false;
+
   const resourceIds =
     typeof resourceId === "string" || resourceId === undefined
       ? [resourceId]
@@ -174,6 +179,8 @@ export function hasScopeInGrants(
   const directAllow = allowChecks.map(() => false);
 
   for (const grant of grants) {
+    // An unknown parent must not authorize through its known sub-scopes either.
+    if (grant.scope === undefined || !knownScopes.has(grant.scope)) continue;
     const effect = grant.effect || "allow";
 
     const isLegacyDeny = effect === "deny" && grant.scope === scope;

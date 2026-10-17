@@ -1,3 +1,11 @@
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import {
+  RiskPolicyAction,
+  RiskPolicyAudienceType,
+  RiskPolicyPolicyType,
+  RiskPolicyShadowMcpDisposition,
+  type RiskPolicy,
+} from "@gram/client/models/components/riskpolicy.js";
 import type { RiskPreset } from "@gram/client/models/components/riskpreset.js";
 import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
 import type { PolicyAction } from "./policy-data";
@@ -54,12 +62,39 @@ function toAction(value: string): PolicyAction {
   return ACTIONS.has(value) ? (value as PolicyAction) : "flag";
 }
 
+export function supportsPolicyDraft(source: {
+  policyType: string;
+  action: string;
+}): boolean {
+  return (
+    isKnownEnumValue(RiskPolicyPolicyType, source.policyType) &&
+    isKnownEnumValue(RiskPolicyAction, source.action)
+  );
+}
+
+export function supportsPolicyEditing(
+  policy: Pick<
+    RiskPolicy,
+    "policyType" | "action" | "audienceType" | "shadowMcpDisposition"
+  >,
+): boolean {
+  return (
+    supportsPolicyDraft(policy) &&
+    isKnownEnumValue(RiskPolicyAudienceType, policy.audienceType) &&
+    (policy.shadowMcpDisposition === undefined ||
+      isKnownEnumValue(
+        RiskPolicyShadowMcpDisposition,
+        policy.shadowMcpDisposition,
+      ))
+  );
+}
+
 export function draftFromPreset(preset: RiskPreset): PolicyDraft {
   return {
     presetId: preset.id,
-    policyType: preset.policyType,
+    policyType: requireKnownEnumValue(RiskPolicyPolicyType, preset.policyType),
     name: preset.label,
-    action: toAction(preset.action),
+    action: requireKnownEnumValue(RiskPolicyAction, preset.action),
     score: preset.score,
     sources: [...preset.sources],
     presidioEntities: [...preset.presidioEntities],
@@ -75,9 +110,12 @@ export function draftFromSuggestion(
 ): PolicyDraft {
   return {
     presetId: suggestion.presetId,
-    policyType: suggestion.policyType,
+    policyType: requireKnownEnumValue(
+      RiskPolicyPolicyType,
+      suggestion.policyType,
+    ),
     name: suggestion.name,
-    action: toAction(suggestion.action),
+    action: requireKnownEnumValue(RiskPolicyAction, suggestion.action),
     score: suggestion.score,
     sources: [...suggestion.sources],
     presidioEntities: [...suggestion.presidioEntities],
@@ -335,9 +373,9 @@ export function clearPolicyStartSession(projectSlug: string): void {
 export function actionBadgeVariant(
   action: string,
 ): "neutral" | "warning" | "destructive" {
-  if (action === "flag") return "neutral";
   if (action === "warn") return "warning";
-  return "destructive";
+  if (action === "block" || action === "quarantine") return "destructive";
+  return "neutral";
 }
 
 const HOSTNAME =

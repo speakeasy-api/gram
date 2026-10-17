@@ -1,3 +1,8 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import {
+  Field,
+  Format,
+} from "@gram/client/models/components/workloadformblock.js";
 import type { WorkloadCustomFlows } from "@gram/client/models/components/workloadcustomflows.js";
 import type { WorkloadForm } from "@gram/client/models/components/workloadform.js";
 import type { WorkloadFormBlock } from "@gram/client/models/components/workloadformblock.js";
@@ -10,7 +15,7 @@ import type { CustomFlows, CustomForm, FormBlock } from "./definition";
  * The custom flows the server ships, as the renderer's types. The server
  * validates them when it loads, so this only reshapes: an empty optional field
  * becomes absent, a block keeps only the fields its type uses, and a block
- * this dashboard cannot render is dropped.
+ * this dashboard cannot render makes its entire form unavailable.
  */
 export function useCustomFlows(): {
   flows: CustomFlows | undefined;
@@ -44,17 +49,26 @@ function toCustomFlows(flows: WorkloadCustomFlows): CustomFlows {
   };
 }
 
-function toCustomForm(form: WorkloadForm): CustomForm {
+function toCustomForm(form: WorkloadForm): CustomForm | null {
+  const steps = form.steps.map((step) => ({
+    id: step.id,
+    title: step.title,
+    blocks: step.blocks.flatMap(toFormBlock),
+  }));
+  // Missing controls may hide required values or newer access restrictions.
+  if (
+    steps.some(
+      (step, index) => step.blocks.length !== form.steps[index]!.blocks.length,
+    )
+  ) {
+    return null;
+  }
   return {
     title: form.title,
     description: form.description,
     submitLabel: form.submitLabel,
     pendingLabel: form.pendingLabel,
-    steps: form.steps.map((step) => ({
-      id: step.id,
-      title: step.title,
-      blocks: step.blocks.flatMap(toFormBlock),
-    })),
+    steps,
   };
 }
 
@@ -65,7 +79,13 @@ function toFormBlock(block: WorkloadFormBlock): FormBlock[] {
     case "link":
       return [{ type: "link", href: block.href, label: block.label }];
     case "input":
-      if (block.field === "" || block.format === "") return [];
+      if (
+        !isKnownEnumValue(Field, block.field) ||
+        !isKnownEnumValue(Format, block.format) ||
+        block.field === "" ||
+        block.format === ""
+      )
+        return [];
       return [
         {
           type: "input",
@@ -82,7 +102,7 @@ function toFormBlock(block: WorkloadFormBlock): FormBlock[] {
     case "tags":
       return [
         {
-          type: block.type,
+          type: block.type === "agent_picker" ? "agent_picker" : "tags",
           label: block.label,
           placeholder: optional(block.placeholder),
           help: optional(block.help),

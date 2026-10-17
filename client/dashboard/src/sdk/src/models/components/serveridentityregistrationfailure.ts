@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -13,7 +14,7 @@ export const ServerIdentityRegistrationFailureOutcome = {
   Unreachable: "unreachable",
   Refused: "refused",
 } as const;
-export type ServerIdentityRegistrationFailureOutcome = ClosedEnum<
+export type ServerIdentityRegistrationFailureOutcome = OpenEnum<
   typeof ServerIdentityRegistrationFailureOutcome
 >;
 
@@ -27,7 +28,7 @@ export const ServerIdentityRegistrationFailureReason = {
   AuthorizationRejected: "authorization_rejected",
   InvalidSuccessResponse: "invalid_success_response",
 } as const;
-export type ServerIdentityRegistrationFailureReason = ClosedEnum<
+export type ServerIdentityRegistrationFailureReason = OpenEnum<
   typeof ServerIdentityRegistrationFailureReason
 >;
 
@@ -50,15 +51,13 @@ export type ServerIdentityRegistrationFailure = {
 
 /** @internal */
 export const ServerIdentityRegistrationFailureOutcome$inboundSchema:
-  z.ZodMiniEnum<typeof ServerIdentityRegistrationFailureOutcome> = z.enum(
-    ServerIdentityRegistrationFailureOutcome,
-  );
+  z.ZodMiniType<ServerIdentityRegistrationFailureOutcome, unknown> = openEnums
+    .inboundSchema(ServerIdentityRegistrationFailureOutcome);
 
 /** @internal */
 export const ServerIdentityRegistrationFailureReason$inboundSchema:
-  z.ZodMiniEnum<typeof ServerIdentityRegistrationFailureReason> = z.enum(
-    ServerIdentityRegistrationFailureReason,
-  );
+  z.ZodMiniType<ServerIdentityRegistrationFailureReason, unknown> = openEnums
+    .inboundSchema(ServerIdentityRegistrationFailureReason);
 
 /** @internal */
 export const ServerIdentityRegistrationFailure$inboundSchema: z.ZodMiniType<

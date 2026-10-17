@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -32,7 +33,7 @@ export const AiScanTargetCategory = {
 /**
  * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
  */
-export type AiScanTargetCategory = ClosedEnum<typeof AiScanTargetCategory>;
+export type AiScanTargetCategory = OpenEnum<typeof AiScanTargetCategory>;
 
 /**
  * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
@@ -44,7 +45,7 @@ export const Origin = {
 /**
  * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
  */
-export type Origin = ClosedEnum<typeof Origin>;
+export type Origin = OpenEnum<typeof Origin>;
 
 /**
  * One Shadow AI scan target in an organization's list: a Speakeasy built-in, or a target the organization added.
@@ -97,14 +98,14 @@ export type AiScanTarget = {
 };
 
 /** @internal */
-export const AiScanTargetCategory$inboundSchema: z.ZodMiniEnum<
-  typeof AiScanTargetCategory
-> = z.enum(AiScanTargetCategory);
+export const AiScanTargetCategory$inboundSchema: z.ZodMiniType<
+  AiScanTargetCategory,
+  unknown
+> = openEnums.inboundSchema(AiScanTargetCategory);
 
 /** @internal */
-export const Origin$inboundSchema: z.ZodMiniEnum<typeof Origin> = z.enum(
-  Origin,
-);
+export const Origin$inboundSchema: z.ZodMiniType<Origin, unknown> = openEnums
+  .inboundSchema(Origin);
 
 /** @internal */
 export const AiScanTarget$inboundSchema: z.ZodMiniType<AiScanTarget, unknown> =

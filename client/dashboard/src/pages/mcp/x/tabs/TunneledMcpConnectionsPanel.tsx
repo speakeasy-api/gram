@@ -35,6 +35,7 @@ function connectionStatusPresentation(
     case undefined:
       return { label: "Unknown", variant: "neutral" };
   }
+  return { label: "Unknown", variant: "neutral" };
 }
 
 function relative(date: Date): string {

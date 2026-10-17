@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const StandingDecision = {
 /**
  * The latest recorded decision still standing for this server, independent of the request's lifecycle status — a reopened request's prior decision keeps enforcing until re-decided, and clients checking an edit against standing intent must read this rather than status. Absent when nothing was ever decided or the decision was superseded.
  */
-export type StandingDecision = ClosedEnum<typeof StandingDecision>;
+export type StandingDecision = OpenEnum<typeof StandingDecision>;
 
 /**
  * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
@@ -34,7 +35,7 @@ export const Status = {
 /**
  * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
  */
-export type Status = ClosedEnum<typeof Status>;
+export type Status = OpenEnum<typeof Status>;
 
 /**
  * The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
@@ -60,14 +61,14 @@ export type ShadowMCPInventoryApprovalRequest = {
 };
 
 /** @internal */
-export const StandingDecision$inboundSchema: z.ZodMiniEnum<
-  typeof StandingDecision
-> = z.enum(StandingDecision);
+export const StandingDecision$inboundSchema: z.ZodMiniType<
+  StandingDecision,
+  unknown
+> = openEnums.inboundSchema(StandingDecision);
 
 /** @internal */
-export const Status$inboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
-  Status,
-);
+export const Status$inboundSchema: z.ZodMiniType<Status, unknown> = openEnums
+  .inboundSchema(Status);
 
 /** @internal */
 export const ShadowMCPInventoryApprovalRequest$inboundSchema: z.ZodMiniType<

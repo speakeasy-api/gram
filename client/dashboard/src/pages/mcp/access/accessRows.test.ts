@@ -1,7 +1,9 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
+  accessSummary,
   buildAccessRows,
   complementTools,
   inheritedGrants,
@@ -516,4 +518,58 @@ describe("keptIndividually", () => {
       "Outside Staff",
     ]);
   });
+});
+
+it.each(["future_level", "constructor", "__proto__"])(
+  "keeps an unknown own level %s readable without claiming access",
+  (level) => {
+    const rows = buildAccessRows([
+      entry({}),
+      entry({ level: unrecognized(level) }),
+    ]);
+    expect(accessSummary(rows[0]!)).toBe("Access unknown");
+    expect(scopeState(rows[0]!, "use").value).toBe("Access unknown");
+  },
+);
+
+it("does not claim known access survives an unknown inherited block", () => {
+  const row = personIn([
+    entry({}),
+    role("Engineering", { level: unrecognized("future_block") }),
+  ]);
+  expect(accessSummary(row)).toBe("Access unknown");
+});
+
+it("treats unknown applicability as unknown reach", () => {
+  const row = rowFor([
+    entry({ appliesTo: unrecognized("future_applicability") }),
+  ]);
+  expect(accessSummary(row)).toBe("Access unknown");
+  expect(scopeState(row, "use").value).toBe("Access unknown");
+});
+
+it.each(["future_kind", "constructor", "__proto__"])(
+  "does not infer reach for principal kind %s",
+  (kind) => {
+    const row = rowFor([entry({ kind: unrecognized(kind) })]);
+    expect(accessSummary(row)).toBe("Access unknown");
+    expect(scopeState(row, "use").value).toBe("Access unknown");
+  },
+);
+
+it("marks members reached by an unknown principal kind as unknown without changing unrelated rows", () => {
+  const rows = buildAccessRows([
+    role("Future group", {
+      kind: unrecognized("future_group"),
+      memberIds: ["u1"],
+    }),
+    entry({}),
+    entry({ principalUrn: "user:unrelated" }),
+  ]);
+  expect(
+    accessSummary(rows.find((row) => row.principalUrn === "user:u1")!),
+  ).toBe("Access unknown");
+  expect(
+    accessSummary(rows.find((row) => row.principalUrn === "user:unrelated")!),
+  ).toBe("All tools");
 });

@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const ToolUsageTargetSummaryTargetKind = {
 /**
  * Tool usage aggregation target kind
  */
-export type ToolUsageTargetSummaryTargetKind = ClosedEnum<
+export type ToolUsageTargetSummaryTargetKind = OpenEnum<
   typeof ToolUsageTargetSummaryTargetKind
 >;
 
@@ -38,7 +39,7 @@ export const ToolUsageTargetSummaryTargetType = {
 /**
  * Tool usage target type
  */
-export type ToolUsageTargetSummaryTargetType = ClosedEnum<
+export type ToolUsageTargetSummaryTargetType = OpenEnum<
   typeof ToolUsageTargetSummaryTargetType
 >;
 
@@ -85,14 +86,16 @@ export type ToolUsageTargetSummary = {
 };
 
 /** @internal */
-export const ToolUsageTargetSummaryTargetKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTargetSummaryTargetKind
-> = z.enum(ToolUsageTargetSummaryTargetKind);
+export const ToolUsageTargetSummaryTargetKind$inboundSchema: z.ZodMiniType<
+  ToolUsageTargetSummaryTargetKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTargetSummaryTargetKind);
 
 /** @internal */
-export const ToolUsageTargetSummaryTargetType$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTargetSummaryTargetType
-> = z.enum(ToolUsageTargetSummaryTargetType);
+export const ToolUsageTargetSummaryTargetType$inboundSchema: z.ZodMiniType<
+  ToolUsageTargetSummaryTargetType,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTargetSummaryTargetType);
 
 /** @internal */
 export const ToolUsageTargetSummary$inboundSchema: z.ZodMiniType<

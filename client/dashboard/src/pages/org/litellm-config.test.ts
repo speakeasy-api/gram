@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import {
   buildLiteLLMEnvironment,
@@ -85,4 +86,13 @@ describe("LiteLLM configuration", () => {
     expect(liteLLMVerificationCommands.safe).toContain("Reply with OK.");
     expect(liteLLMVerificationCommands.blocked).toContain("ghp_R2D2C3POL");
   });
+});
+
+it("does not generate executable configuration for an unsupported failure posture", () => {
+  expect(() =>
+    buildLiteLLMGuardrailConfig(
+      "https://api.example.com",
+      unrecognized("future_posture"),
+    ),
+  ).toThrow("not supported");
 });

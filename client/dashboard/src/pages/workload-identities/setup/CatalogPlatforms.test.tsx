@@ -1,3 +1,6 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import type { WorkloadPlatform } from "@gram/client/models/components/workloadplatform.js";
+import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -11,7 +14,10 @@ const policy = vi.hoisted(() => ({
   issuers: [] as unknown[],
   isError: false,
 }));
-const catalogQuery = vi.hoisted(() => ({ isError: false }));
+const catalogQuery = vi.hoisted(() => ({
+  isError: false,
+  platforms: undefined as WorkloadPlatform[] | undefined,
+}));
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -70,7 +76,7 @@ vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
     catalogQuery.isError
       ? { data: undefined, isPending: false, isError: true, refetch: vi.fn() }
       : {
-          data: { platforms: [claudeTagPlatform] },
+          data: { platforms: catalogQuery.platforms ?? [claudeTagPlatform] },
           isPending: false,
           isError: false,
         },
@@ -116,6 +122,7 @@ afterEach(() => {
   policy.issuers = [];
   policy.isError = false;
   catalogQuery.isError = false;
+  catalogQuery.platforms = undefined;
 });
 
 const claudeTagIssuer = {
@@ -227,3 +234,61 @@ it("does not read a failed policy load as a platform not yet trusted", () => {
   expect(screen.getByText("Couldn’t load this platform")).toBeTruthy();
   expect(screen.queryByText("No Claude Tag connections yet")).toBeNull();
 });
+
+it.each([false, true])(
+  "keeps unsupported platforms visible with setup unavailable (connected: %s)",
+  (connected) => {
+    const platform = structuredClone(claudeTagPlatform);
+    platform.steps[0]!.phase = unrecognized("future_phase");
+    catalogQuery.platforms = [platform];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <CatalogPlatforms
+            issuers={connected ? [claudeTagIssuer as WorkloadIssuer] : []}
+            isPending={false}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText(platform.displayName)).toBeTruthy();
+    expect(
+      screen.getByText(/Setup is unavailable in this dashboard version/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(connected ? "Connected" : "Setup unavailable"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Coming soon")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  },
+);
+
+it("keeps an unsupported platform's direct setup link read-only", () => {
+  const platform = structuredClone(claudeTagPlatform);
+  platform.variables[0]!.tier = unrecognized("future_tier");
+  catalogQuery.platforms = [platform];
+  policy.issuers = [claudeTagIssuer];
+  renderPage("/access-hub/catalog/claude-tag?setup=&step=agent");
+  expect(screen.getByText(platform.displayName)).toBeTruthy();
+  expect(screen.getByText("Connected")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Refresh page" })).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "Register new access" }),
+  ).toBeNull();
+  expect(screen.queryByText("Access Hub list")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it.each([false, true])(
+  "redirects a disabled catalog platform even when unsupported (%s)",
+  (unsupported) => {
+    const platform = structuredClone(claudeTagPlatform);
+    platform.enabled = false;
+    if (unsupported) platform.steps[0]!.phase = unrecognized("future_phase");
+    catalogQuery.platforms = [platform];
+    renderPage("/access-hub/catalog/claude-tag?setup=&step=agent");
+    expect(screen.getByText("Access Hub list")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Refresh page" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  },
+);

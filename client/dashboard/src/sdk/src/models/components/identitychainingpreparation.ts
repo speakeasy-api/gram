@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -20,7 +21,7 @@ export const IdentityChainingPreparationStage = {
   Discovery: "discovery",
   Publication: "publication",
 } as const;
-export type IdentityChainingPreparationStage = ClosedEnum<
+export type IdentityChainingPreparationStage = OpenEnum<
   typeof IdentityChainingPreparationStage
 >;
 
@@ -44,7 +45,7 @@ export const IdentityChainingPreparationState = {
 /**
  * Preparation state; readiness never proves user access.
  */
-export type IdentityChainingPreparationState = ClosedEnum<
+export type IdentityChainingPreparationState = OpenEnum<
   typeof IdentityChainingPreparationState
 >;
 
@@ -102,14 +103,16 @@ export type IdentityChainingPreparation = {
 };
 
 /** @internal */
-export const IdentityChainingPreparationStage$inboundSchema: z.ZodMiniEnum<
-  typeof IdentityChainingPreparationStage
-> = z.enum(IdentityChainingPreparationStage);
+export const IdentityChainingPreparationStage$inboundSchema: z.ZodMiniType<
+  IdentityChainingPreparationStage,
+  unknown
+> = openEnums.inboundSchema(IdentityChainingPreparationStage);
 
 /** @internal */
-export const IdentityChainingPreparationState$inboundSchema: z.ZodMiniEnum<
-  typeof IdentityChainingPreparationState
-> = z.enum(IdentityChainingPreparationState);
+export const IdentityChainingPreparationState$inboundSchema: z.ZodMiniType<
+  IdentityChainingPreparationState,
+  unknown
+> = openEnums.inboundSchema(IdentityChainingPreparationState);
 
 /** @internal */
 export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<

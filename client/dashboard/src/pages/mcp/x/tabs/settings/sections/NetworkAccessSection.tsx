@@ -1,3 +1,5 @@
+import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { RequireScope } from "@/components/require-scope";
 import {
   FooterSaveButton,
@@ -38,7 +40,7 @@ import {
   McpServerNetworkAccessMode,
   type McpServer,
 } from "@gram/client/models/components/mcpserver.js";
-import type { UpdateMcpServerFormNetworkAccessMode } from "@gram/client/models/components/updatemcpserverform.js";
+import { UpdateMcpServerFormNetworkAccessMode } from "@gram/client/models/components/updatemcpserverform.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
@@ -82,7 +84,7 @@ type NetworkAccessProps =
       metaMcpServer?: never;
       endpoints?: never;
       toolset: Toolset & {
-        networkAccessMode?: UpdateMcpServerFormNetworkAccessMode;
+        networkAccessMode?: McpServerNetworkAccessMode;
       };
     };
 
@@ -159,7 +161,7 @@ function NetworkAccessSectionContent({
   mcpServer?: McpServer;
   metaMcpServer?: MetaMcpServer;
   toolset?: Toolset & {
-    networkAccessMode?: UpdateMcpServerFormNetworkAccessMode;
+    networkAccessMode?: McpServerNetworkAccessMode;
   };
   endpoints: McpEndpoint[];
   canReadIngress: boolean;
@@ -172,8 +174,14 @@ function NetworkAccessSectionContent({
     toolset?.networkAccessMode ??
     server?.networkAccessMode ??
     McpServerNetworkAccessMode.PublicOnly;
-  const [draft, setDraft] =
-    useState<UpdateMcpServerFormNetworkAccessMode>(currentMode);
+  const supportsEditing =
+    isKnownEnumValue(UpdateMcpServerFormNetworkAccessMode, currentMode) &&
+    (!mcpServer ||
+      isKnownEnumValue(
+        KnownUpdateMcpServerFormVisibility,
+        mcpServer.visibility,
+      ));
+  const [draft, setDraft] = useState<McpServerNetworkAccessMode>(currentMode);
   const [confirmPrivateOnlyOpen, setConfirmPrivateOnlyOpen] = useState(false);
 
   useEffect(() => {
@@ -316,6 +324,11 @@ function NetworkAccessSectionContent({
 
   const save = () => {
     if (
+      !supportsEditing ||
+      !isKnownEnumValue(UpdateMcpServerFormNetworkAccessMode, draft)
+    )
+      return;
+    if (
       (draft !== McpServerNetworkAccessMode.PublicOnly &&
         !privateChoicesAvailable) ||
       (draft === McpServerNetworkAccessMode.PrivateOnly &&
@@ -330,7 +343,10 @@ function NetworkAccessSectionContent({
           request: {
             slug: toolset.slug,
             updateToolsetRequestBody: {
-              networkAccessMode: draft,
+              networkAccessMode: requireKnownEnumValue(
+                UpdateMcpServerFormNetworkAccessMode,
+                draft,
+              ),
             },
           },
         },
@@ -357,7 +373,10 @@ function NetworkAccessSectionContent({
           updateMetaMcpServerForm: {
             id: metaMcpServer.id,
             name: metaMcpServer.name,
-            networkAccessMode: draft,
+            networkAccessMode: requireKnownEnumValue(
+              UpdateMcpServerFormNetworkAccessMode,
+              draft,
+            ),
           },
         },
       });
@@ -366,14 +385,20 @@ function NetworkAccessSectionContent({
         request: {
           updateMcpServerForm: {
             id: mcpServer.id,
-            networkAccessMode: draft,
+            networkAccessMode: requireKnownEnumValue(
+              UpdateMcpServerFormNetworkAccessMode,
+              draft,
+            ),
             remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
             tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
             toolsetId: mcpServer.toolsetId ?? undefined,
             unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
             environmentId: mcpServer.environmentId ?? undefined,
             toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-            visibility: mcpServer.visibility,
+            visibility: requireKnownEnumValue(
+              KnownUpdateMcpServerFormVisibility,
+              mcpServer.visibility,
+            ),
           },
         },
       });
@@ -408,6 +433,12 @@ function NetworkAccessSectionContent({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
+          {!supportsEditing && (
+            <Text small muted>
+              Refresh the page before editing this unsupported network
+              configuration.
+            </Text>
+          )}
           <Field className="max-w-md">
             <FieldLabel htmlFor="mcp-network-access-mode">
               Access mode
@@ -417,7 +448,7 @@ function NetworkAccessSectionContent({
               onValueChange={(value) =>
                 setDraft(value as UpdateMcpServerFormNetworkAccessMode)
               }
-              disabled={isUpdating}
+              disabled={isUpdating || !supportsEditing}
             >
               <SelectTrigger
                 id="mcp-network-access-mode"
@@ -521,7 +552,9 @@ function NetworkAccessSectionContent({
             >
               <FooterSaveButton
                 pending={isUpdating}
-                disabled={!dirty || !draftAllowed || isUpdating}
+                disabled={
+                  !dirty || !draftAllowed || isUpdating || !supportsEditing
+                }
                 onClick={() => {
                   if (draft === McpServerNetworkAccessMode.PrivateOnly) {
                     setConfirmPrivateOnlyOpen(true);
@@ -595,7 +628,7 @@ function NetworkAccessSectionContent({
           <Dialog.Footer>
             <Button
               variant="secondary"
-              disabled={isUpdating}
+              disabled={isUpdating || !supportsEditing}
               onClick={() => setConfirmPrivateOnlyOpen(false)}
             >
               <Button.Text>Cancel</Button.Text>
@@ -632,7 +665,7 @@ function networkAccessHint({
   entitled: boolean;
   ingressOnline: boolean;
   hasEligibleEndpoint: boolean;
-  endpointNamespaceKind?: "platform" | "custom_domain";
+  endpointNamespaceKind?: string;
   isGateway: boolean;
   privateStatusPending: boolean;
   privateStatusUnavailable: boolean;

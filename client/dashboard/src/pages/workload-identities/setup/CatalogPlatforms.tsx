@@ -5,7 +5,7 @@ import { useOrgRoutes } from "@/routes";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { Check } from "lucide-react";
 import { Link } from "react-router";
-import type { CatalogEntry } from "./definition";
+import { UNSUPPORTED_SETUP_MESSAGE, type CatalogItem } from "./definition";
 import { connectedIssuer, useCatalogEntries } from "./platforms";
 import { isRelativePath } from "@/components/setup-steps/origin";
 
@@ -49,7 +49,7 @@ function CatalogCard({
   entry,
   connected,
 }: {
-  entry: CatalogEntry;
+  entry: CatalogItem;
   connected: boolean;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
@@ -68,14 +68,30 @@ function CatalogCard({
         </Card.Description>
       </Card.Header>
       <Card.Content>
-        <CatalogStatus available={available} connected={connected} />
+        <CatalogStatus
+          available={available}
+          connected={connected}
+          unsupported={entry.unsupported === true}
+        />
+        {entry.unsupported && (
+          <p className="text-muted-foreground mt-3 text-sm">
+            {UNSUPPORTED_SETUP_MESSAGE}
+          </p>
+        )}
       </Card.Content>
     </Card>
   );
 
   if (!available) {
     return (
-      <div aria-disabled className="h-full cursor-not-allowed opacity-50">
+      <div
+        aria-disabled
+        className={
+          entry.unsupported
+            ? "h-full cursor-not-allowed"
+            : "h-full cursor-not-allowed opacity-50"
+        }
+      >
         {card}
       </div>
     );
@@ -95,13 +111,12 @@ function CatalogCard({
 function CatalogStatus({
   available,
   connected,
+  unsupported,
 }: {
   available: boolean;
   connected: boolean;
+  unsupported: boolean;
 }): JSX.Element {
-  if (!available) {
-    return <Badge variant="neutral">Coming soon</Badge>;
-  }
   if (connected) {
     return (
       <Badge variant="success" background>
@@ -112,5 +127,7 @@ function CatalogStatus({
       </Badge>
     );
   }
+  if (unsupported) return <Badge variant="neutral">Setup unavailable</Badge>;
+  if (!available) return <Badge variant="neutral">Coming soon</Badge>;
   return <Badge variant="information">Set up</Badge>;
 }

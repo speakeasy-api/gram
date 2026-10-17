@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -23,7 +24,7 @@ export const RotateObservabilityCredentialResultPreviousKeyFate = {
 /**
  * What happened to previous observability plugin hooks keys.
  */
-export type RotateObservabilityCredentialResultPreviousKeyFate = ClosedEnum<
+export type RotateObservabilityCredentialResultPreviousKeyFate = OpenEnum<
   typeof RotateObservabilityCredentialResultPreviousKeyFate
 >;
 
@@ -64,8 +65,8 @@ export type RotateObservabilityCredentialResult = {
 
 /** @internal */
 export const RotateObservabilityCredentialResultPreviousKeyFate$inboundSchema:
-  z.ZodMiniEnum<typeof RotateObservabilityCredentialResultPreviousKeyFate> = z
-    .enum(RotateObservabilityCredentialResultPreviousKeyFate);
+  z.ZodMiniType<RotateObservabilityCredentialResultPreviousKeyFate, unknown> =
+    openEnums.inboundSchema(RotateObservabilityCredentialResultPreviousKeyFate);
 
 /** @internal */
 export const RotateObservabilityCredentialResult$inboundSchema: z.ZodMiniType<

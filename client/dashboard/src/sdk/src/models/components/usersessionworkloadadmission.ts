@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -18,7 +19,7 @@ export const UserSessionWorkloadAdmissionTier = {
 /**
  * Whether the admission belongs to this project or to the whole organization.
  */
-export type UserSessionWorkloadAdmissionTier = ClosedEnum<
+export type UserSessionWorkloadAdmissionTier = OpenEnum<
   typeof UserSessionWorkloadAdmissionTier
 >;
 
@@ -41,9 +42,10 @@ export type UserSessionWorkloadAdmission = {
 };
 
 /** @internal */
-export const UserSessionWorkloadAdmissionTier$inboundSchema: z.ZodMiniEnum<
-  typeof UserSessionWorkloadAdmissionTier
-> = z.enum(UserSessionWorkloadAdmissionTier);
+export const UserSessionWorkloadAdmissionTier$inboundSchema: z.ZodMiniType<
+  UserSessionWorkloadAdmissionTier,
+  unknown
+> = openEnums.inboundSchema(UserSessionWorkloadAdmissionTier);
 
 /** @internal */
 export const UserSessionWorkloadAdmission$inboundSchema: z.ZodMiniType<

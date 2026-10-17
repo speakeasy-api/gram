@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -97,6 +98,33 @@ afterEach(() => {
 });
 
 describe("MCPServerAvailabilityToggle", () => {
+  it("keeps unknown availability neutral and blocks both controls", () => {
+    const unknown = {
+      ...server,
+      visibility: unrecognized("future_visibility"),
+    };
+    renderInApp(
+      <>
+        <MCPServerAvailabilityToggle server={unknown} />
+        <MCPServerStatusDropdown server={unknown} />
+      </>,
+    );
+    const toggle = screen.getByRole("switch", {
+      name: "MCP server availability unknown",
+    });
+    const dropdown = screen.getByRole("button", { name: "Unknown" });
+    expect(toggle).toHaveProperty("disabled", true);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.parentElement?.getAttribute("title")).toContain(
+      "Refresh the page",
+    );
+    expect(dropdown).toHaveProperty("disabled", true);
+    fireEvent.click(toggle);
+    fireEvent.click(dropdown);
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Private/ }));
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
   it("disables a Remote MCP server while preserving its backend fields", () => {
     renderToggle();
 
@@ -239,4 +267,13 @@ describe("hosted MCP server visibility", () => {
       true,
     );
   });
+});
+
+it("keeps public non-tunneled servers green without offering Public as an editable option", () => {
+  renderInApp(
+    <MCPServerStatusDropdown server={{ ...server, visibility: "public" }} />,
+  );
+  const current = screen.getByRole("button", { name: "Public" });
+  expect(current.querySelector(".bg-green-400")).not.toBeNull();
+  expect(screen.queryByRole("menuitem", { name: /^Public/ })).toBeNull();
 });

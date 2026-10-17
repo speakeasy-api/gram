@@ -29,7 +29,8 @@ import { ServerMark } from "./McpAccessParts";
 import { LIST_FRAME, LIST_ROW, LIST_ROW_SELECTED } from "./mcpAccessStyles";
 import {
   convertToolLimit,
-  DISPOSITION_COPY,
+  dispositionCopy,
+  toggleDisposition,
   fuzzyMatch,
   DISPOSITIONS,
   toolDisposition,
@@ -135,20 +136,35 @@ function ToolAccessSheetBody({
   const readyTools = source.status === "ready" ? source.tools : undefined;
   const tools = useMemo(() => readyTools ?? [], [readyTools]);
   const specific = granted && limit.kind !== "all";
+  const unsupportedLimit =
+    limit.kind === "annotations" &&
+    limit.dispositions.some(
+      (value) => !DISPOSITIONS.some((known) => known === value),
+    );
 
   // A remote server's tools arrive after the sheet opens, and converting
   // before then would carry nothing over.
   const toolsKnown = source.status === "ready" || isAllServers;
   const [pendingApply, setPendingApply] = useState(applyTab);
   useEffect(() => {
-    if (!pendingApply || source.status === "loading") return;
+    if (!pendingApply || source.status === "loading" || unsupportedLimit)
+      return;
     // A conversion that reads the tool list waits until the list is known;
     // converting before then would narrow the server to no tools. A remote
     // server that needs connecting converts once it lists.
     if (!toolsKnown && (tab === "tools" || limit.kind === "tools")) return;
     setPendingApply(false);
     onChange(convertToolLimit(limit, tab, tools));
-  }, [pendingApply, source.status, toolsKnown, limit, tab, tools, onChange]);
+  }, [
+    pendingApply,
+    source.status,
+    toolsKnown,
+    limit,
+    tab,
+    tools,
+    onChange,
+    unsupportedLimit,
+  ]);
 
   // Choosing Specific tools before a remote server's tools have loaded grants
   // an empty list at once, and fills it with every tool when they arrive, so
@@ -161,6 +177,23 @@ function ToolAccessSheetBody({
       onChange({ kind: "tools", tools: tools.map((tool) => tool.name) });
     }
   }, [pendingFill, source.status, limit, tools, onChange]);
+
+  if (unsupportedLimit) {
+    return (
+      <>
+        <SheetHeader>
+          <SheetTitle>Tool access</SheetTitle>
+          <SheetDescription>
+            This role uses annotations that this version cannot edit. Refresh
+            the page before changing tool access.
+          </SheetDescription>
+        </SheetHeader>
+        <SheetFooter>
+          <Button onClick={onClose}>Close</Button>
+        </SheetFooter>
+      </>
+    );
+  }
 
   const chooseSpecific = () => {
     if (tab === "tools" && !toolsKnown) {
@@ -389,7 +422,7 @@ function ToolChecklist({
               </Text>
               {disposition && (
                 <Badge variant="neutral" size="sm">
-                  {DISPOSITION_COPY[disposition].label}
+                  {dispositionCopy(disposition).label}
                 </Badge>
               )}
             </label>
@@ -411,15 +444,11 @@ function AnnotationChecklist({
   onChange: (dispositions: Disposition[]) => void;
 }): JSX.Element {
   const toggle = (disposition: Disposition, on: boolean) =>
-    onChange(
-      DISPOSITIONS.filter((d) =>
-        d === disposition ? on : selected.includes(d),
-      ),
-    );
+    onChange(toggleDisposition(selected, disposition, on));
   return (
     <div className={LIST_FRAME}>
       {DISPOSITIONS.map((disposition) => {
-        const copy = DISPOSITION_COPY[disposition];
+        const copy = dispositionCopy(disposition);
         const count = tools?.filter(
           (tool) => toolDisposition(tool) === disposition,
         ).length;

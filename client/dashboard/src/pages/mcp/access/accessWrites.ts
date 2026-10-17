@@ -18,6 +18,7 @@ import {
 } from "./accessRows";
 import {
   ruleId,
+  supportsAudienceEditing,
   withAdded,
   withRule,
   withoutPrincipal,
@@ -218,6 +219,9 @@ export function narrowWrite(
   toolCatalog: ToolSelectionTool[] | undefined,
   resourceName?: string,
 ): AudienceWrite {
+  if (!supportsAudienceEditing(direct)) {
+    throw new Error("These access rules are not supported by this version.");
+  }
   const base = narrowingBase(direct, row, next);
   const server = serverLabel(resourceName);
   const label = narrowingLabel(next).toLowerCase();
@@ -402,7 +406,7 @@ export function revokeRowWrite(
     };
   }
   return {
-    entries: SCOPE_ROWS.reduce<AudienceRule[]>(
+    entries: SCOPE_ROWS.reduce<SetResourceAudienceEntry[]>(
       (entries, { key }) =>
         withRule(entries, row.principalUrn, BLOCK_LEVEL[key]),
       cleared,
@@ -477,8 +481,14 @@ export function narrowingSeed(
     : [...new Set(cell.grants.flatMap((grant) => grant.dispositions ?? []))];
   const dispositions = granted.filter(
     (disposition) =>
-      (reachableTools(cell, [{ name: "", annotations: [disposition] }]) ?? [])
-        .length > 0,
+      (
+        reachableTools(cell, [
+          {
+            name: "",
+            annotations: DISPOSITIONS.filter((known) => known === disposition),
+          },
+        ]) ?? []
+      ).length > 0,
   );
   return { tools: [], dispositions };
 }

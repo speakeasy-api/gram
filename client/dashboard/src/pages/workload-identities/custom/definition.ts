@@ -80,9 +80,10 @@ export interface CustomForm {
   steps: FormStep[];
 }
 
+/** A null flow uses controls this dashboard cannot safely render. */
 export interface CustomFlows {
-  registerPlatform: CustomForm;
-  editPlatform: CustomForm;
-  allowAccess: CustomForm;
-  editAccess: CustomForm;
+  registerPlatform: CustomForm | null;
+  editPlatform: CustomForm | null;
+  allowAccess: CustomForm | null;
+  editAccess: CustomForm | null;
 }

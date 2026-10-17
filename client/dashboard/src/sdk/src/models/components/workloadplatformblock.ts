@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -26,7 +27,7 @@ export const WorkloadPlatformBlockType = {
 /**
  * The kind of content.
  */
-export type WorkloadPlatformBlockType = ClosedEnum<
+export type WorkloadPlatformBlockType = OpenEnum<
   typeof WorkloadPlatformBlockType
 >;
 
@@ -42,7 +43,7 @@ export const Value = {
 /**
  * The value a computed block or checklist item shows.
  */
-export type Value = ClosedEnum<typeof Value>;
+export type Value = OpenEnum<typeof Value>;
 
 /**
  * One piece of a guided setup step. Which fields are set depends on type; the rest are empty.
@@ -91,12 +92,14 @@ export type WorkloadPlatformBlock = {
 };
 
 /** @internal */
-export const WorkloadPlatformBlockType$inboundSchema: z.ZodMiniEnum<
-  typeof WorkloadPlatformBlockType
-> = z.enum(WorkloadPlatformBlockType);
+export const WorkloadPlatformBlockType$inboundSchema: z.ZodMiniType<
+  WorkloadPlatformBlockType,
+  unknown
+> = openEnums.inboundSchema(WorkloadPlatformBlockType);
 
 /** @internal */
-export const Value$inboundSchema: z.ZodMiniEnum<typeof Value> = z.enum(Value);
+export const Value$inboundSchema: z.ZodMiniType<Value, unknown> = openEnums
+  .inboundSchema(Value);
 
 /** @internal */
 export const WorkloadPlatformBlock$inboundSchema: z.ZodMiniType<

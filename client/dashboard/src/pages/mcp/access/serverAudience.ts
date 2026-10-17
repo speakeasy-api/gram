@@ -1,3 +1,5 @@
+import { supportsAudienceReading } from "./manageAccessState";
+import { enumPresentation } from "@/lib/enum";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
@@ -52,7 +54,7 @@ const KIND_ICON: Record<string, LucideIcon> = {
 };
 
 export function audienceIcon(kind: string): LucideIcon {
-  return KIND_ICON[kind] ?? User;
+  return enumPresentation(KIND_ICON, kind, User);
 }
 
 /** Rules edited on this page: the ones whose selector names this server. */
@@ -104,7 +106,7 @@ const BLOCKED_CAPABILITY: Partial<Record<AudienceLevel, AudienceLevel>> = {
 };
 
 function isBlock(entry: { level: AudienceLevel }): boolean {
-  return BLOCKED_CAPABILITY[entry.level] !== undefined;
+  return Object.hasOwn(BLOCKED_CAPABILITY, entry.level);
 }
 
 /** A rule covering the whole server rather than a slice of it. */
@@ -243,8 +245,21 @@ export function effectiveReach(
   /** The person these rules reach, so their own rules here take precedence. */
   principalUrn?: string,
 ): EffectiveReach | null {
+  // An unknown level might grant or deny access; do not infer either.
+  if (!supportsAudienceReading(allReaching)) {
+    return {
+      toolsLabel: "Access unknown",
+      capabilities: [],
+      scopedLevels: [],
+      excluded: [],
+      grantedBy: [],
+      reachableTools: [],
+    };
+  }
   const reaching = withoutOutrankedBlocks(allReaching, principalUrn);
-  const granting = reaching.filter((entry) => !isBlock(entry));
+  const granting = reaching.filter(
+    (entry) => capabilitiesOf(entry.level).length > 0,
+  );
   if (granting.length === 0) return null;
 
   const isNarrowed = isNarrowedRule;
@@ -398,6 +413,7 @@ function capabilitiesOf(level: AudienceLevel): AudienceLevel[] {
       // A block permits nothing; it only subtracts.
       return [];
   }
+  return [];
 }
 
 function capitalize(value: string): string {
@@ -409,10 +425,14 @@ export function narrowingLabel(entry: {
   tools?: string[];
   dispositions?: string[];
 }): string {
-  const dispositions = (entry.dispositions ?? []).map(
-    (disposition) => DISPOSITION_LABEL[disposition] ?? disposition,
-  );
-  const tools = entry.tools ?? [];
+  const dispositions = [
+    ...new Set(
+      (entry.dispositions ?? []).map((disposition) =>
+        enumPresentation(DISPOSITION_LABEL, disposition, "unknown annotation"),
+      ),
+    ),
+  ];
+  const tools = [...new Set(entry.tools ?? [])];
 
   // A rule stores one or the other, but a summary can hold both — from two
   // rules — and naming only the annotations would hide the tools.

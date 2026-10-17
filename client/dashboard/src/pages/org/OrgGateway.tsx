@@ -213,4 +213,9 @@ function GatewayNotServed({
     case undefined:
       return null;
   }
+  return (
+    <Text small className="text-warning mt-3">
+      Gateway status unavailable. Refresh the page for updated details.
+    </Text>
+  );
 }

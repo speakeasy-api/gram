@@ -465,6 +465,7 @@ function defaultChartForKind(kind: AnalyticsDataset["kind"]): ChartType {
     case "metric":
       return "bar";
   }
+  return "line";
 }
 
 /**

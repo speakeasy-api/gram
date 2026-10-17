@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const SuggestedRecordType = {
 /**
  * The suggested DNS record type for this domain. A suggestion only — delegated subzones can make an apex-looking domain CNAME-capable.
  */
-export type SuggestedRecordType = ClosedEnum<typeof SuggestedRecordType>;
+export type SuggestedRecordType = OpenEnum<typeof SuggestedRecordType>;
 
 export type CustomDomain = {
   /**
@@ -97,9 +98,10 @@ export type CustomDomain = {
 };
 
 /** @internal */
-export const SuggestedRecordType$inboundSchema: z.ZodMiniEnum<
-  typeof SuggestedRecordType
-> = z.enum(SuggestedRecordType);
+export const SuggestedRecordType$inboundSchema: z.ZodMiniType<
+  SuggestedRecordType,
+  unknown
+> = openEnums.inboundSchema(SuggestedRecordType);
 
 /** @internal */
 export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =

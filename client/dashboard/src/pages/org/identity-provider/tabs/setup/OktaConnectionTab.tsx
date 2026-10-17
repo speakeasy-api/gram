@@ -1,3 +1,4 @@
+import { enumPresentation } from "@/lib/enum";
 import { useEffect, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -91,6 +92,7 @@ function VerificationOutcome({
 }
 
 const FOOTER_HINTS: Record<ConnectionStep, string> = {
+  unknown: "Refresh the page to check the connection status.",
   connected: "Re-verify after changing the app’s permissions in Okta.",
   repair: "Re-verify after changing the app’s permissions in Okta.",
   verify: "Verify once the app is set up to use the public key URL (JWKS).",
@@ -147,7 +149,10 @@ function ConnectionCard({
   }, [location.hash, location.key]);
   const queryClient = useQueryClient();
   const step = connectionStep(connection);
-  const status = CONNECTION_STATUS[connection.status];
+  const status = enumPresentation(CONNECTION_STATUS, connection.status, {
+    variant: "neutral",
+    label: "Unknown",
+  });
   const verify = useVerifyIdentityProviderConnectionMutation({
     onSuccess: (updated) => {
       if (updated.status === "verified") {

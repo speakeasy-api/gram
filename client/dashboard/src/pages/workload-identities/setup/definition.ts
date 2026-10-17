@@ -45,6 +45,7 @@ interface SubjectTemplate {
 }
 
 export interface CatalogEntry {
+  unsupported?: false;
   /** Permanent: written onto the rows this entry creates. */
   key: string;
   displayName: string;
@@ -60,6 +61,21 @@ export interface CatalogEntry {
   /** Without a guided setup, the entry is listed as coming soon and cannot be opened. */
   setup?: SetupDefinition;
 }
+
+/** Display-only metadata for a platform whose setup this client cannot interpret. */
+type UnsupportedCatalogEntry = Pick<
+  CatalogEntry,
+  "key" | "displayName" | "description" | "icon" | "enabled"
+> & {
+  unsupported: true;
+  issuer: { value: string };
+  setup?: undefined;
+};
+
+export type CatalogItem = CatalogEntry | UnsupportedCatalogEntry;
+
+export const UNSUPPORTED_SETUP_MESSAGE =
+  "Setup is unavailable in this dashboard version. Refresh the page to check for an update.";
 
 /**
  * Values the server derives for the platform to be pointed at. A definition can place

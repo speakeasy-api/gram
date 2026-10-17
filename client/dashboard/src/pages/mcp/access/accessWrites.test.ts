@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
@@ -1043,4 +1044,23 @@ it("keeps unannotated tools when an existing direct grant already overrides the 
       { name: "unannotated", annotations: [] },
     ]),
   ).toEqual(["search", "fetch", "unannotated"]);
+});
+
+it("refuses narrowing that would discard an unknown stored block", () => {
+  const { direct, rows } = state([
+    role(),
+    role({
+      appliesTo: "resource",
+      level: "blocked",
+      dispositions: [unrecognized("future_disposition")],
+    }),
+  ]);
+  expect(() =>
+    narrowWrite(
+      direct,
+      rows[0]!,
+      { tools: ["search", "fetch", "delete"], dispositions: [] },
+      catalog,
+    ),
+  ).toThrow("not supported");
 });

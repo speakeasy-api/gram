@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const UserSessionIssuerMcpServerKind = {
 /**
  * Which kind of MCP server this is.
  */
-export type UserSessionIssuerMcpServerKind = ClosedEnum<
+export type UserSessionIssuerMcpServerKind = OpenEnum<
   typeof UserSessionIssuerMcpServerKind
 >;
 
@@ -55,9 +56,10 @@ export type UserSessionIssuerMcpServer = {
 };
 
 /** @internal */
-export const UserSessionIssuerMcpServerKind$inboundSchema: z.ZodMiniEnum<
-  typeof UserSessionIssuerMcpServerKind
-> = z.enum(UserSessionIssuerMcpServerKind);
+export const UserSessionIssuerMcpServerKind$inboundSchema: z.ZodMiniType<
+  UserSessionIssuerMcpServerKind,
+  unknown
+> = openEnums.inboundSchema(UserSessionIssuerMcpServerKind);
 
 /** @internal */
 export const UserSessionIssuerMcpServer$inboundSchema: z.ZodMiniType<

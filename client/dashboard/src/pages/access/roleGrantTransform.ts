@@ -1,10 +1,14 @@
+import { isKnownEnumValue } from "@/lib/enum";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
   Scope,
   type RoleGrant as SdkRoleGrant,
 } from "@gram/client/models/components/rolegrant.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
-import type { Selector } from "@gram/client/models/components/selector.js";
+import {
+  ResourceKind,
+  type Selector,
+} from "@gram/client/models/components/selector.js";
 
 import type {
   AnnotationHint,
@@ -65,7 +69,8 @@ function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
 function isUnrestrictedSelectorList(selectors: Selector[]): boolean {
   if (selectors.length !== 1) return false;
   const s = selectors[0]!;
-  if (s.resourceId !== "*") return false;
+  if (s.resourceId !== "*" || !isKnownEnumValue(ResourceKind, s.resourceKind))
+    return false;
   return (
     s.disposition == null &&
     s.tool == null &&
@@ -79,7 +84,7 @@ export function grantsFromRole(
   role: Role,
   scopes: ScopeDefinition[],
 ): Record<string, RoleGrant> {
-  const result: Record<string, RoleGrant> = {};
+  const result: Record<string, RoleGrant> = Object.create(null);
   const baseScopeByBlocklist = baseScopeByBlocklistScope(scopes);
 
   for (const g of role.grants) {
@@ -96,7 +101,8 @@ export function grantsFromRole(
     if (
       !g.selectors ||
       g.selectors.length === 0 ||
-      isUnrestrictedSelectorList(g.selectors as Selector[])
+      (isKnownEnumValue(Scope, scope) &&
+        isUnrestrictedSelectorList(g.selectors as Selector[]))
     ) {
       result[baseScope]!.rules.push({
         id: crypto.randomUUID(),
@@ -117,7 +123,11 @@ export function grantsFromRole(
           rule.customTab = "auto-groups";
           rule.annotations = sels
             .filter((s) => s.disposition)
-            .map((s) => DISPOSITION_TO_ANNOTATION[s.disposition!])
+            .map((s) =>
+              Object.hasOwn(DISPOSITION_TO_ANNOTATION, s.disposition!)
+                ? DISPOSITION_TO_ANNOTATION[s.disposition!]
+                : undefined,
+            )
             .filter((a): a is AnnotationHint => !!a);
         }
         result[baseScope]!.rules.push(rule)!;

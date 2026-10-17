@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const Tier = {
 /**
  * Which tenancy tier owns the match: project-specific, organization-level, or platform-level.
  */
-export type Tier = ClosedEnum<typeof Tier>;
+export type Tier = OpenEnum<typeof Tier>;
 
 /**
  * An existing remote_session_issuer that already describes the upstream authorization server a caller is about to add.
@@ -53,7 +54,8 @@ export type RemoteSessionIssuerDuplicateMatch = {
 };
 
 /** @internal */
-export const Tier$inboundSchema: z.ZodMiniEnum<typeof Tier> = z.enum(Tier);
+export const Tier$inboundSchema: z.ZodMiniType<Tier, unknown> = openEnums
+  .inboundSchema(Tier);
 
 /** @internal */
 export const RemoteSessionIssuerDuplicateMatch$inboundSchema: z.ZodMiniType<

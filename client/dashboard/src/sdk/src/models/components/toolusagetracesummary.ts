@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,7 +26,7 @@ export const ToolUsageTraceSummaryHookStatus = {
 /**
  * Hook execution status when the row came from hook telemetry
  */
-export type ToolUsageTraceSummaryHookStatus = ClosedEnum<
+export type ToolUsageTraceSummaryHookStatus = OpenEnum<
   typeof ToolUsageTraceSummaryHookStatus
 >;
 
@@ -40,7 +41,7 @@ export const ToolUsageTraceSummaryTargetKind = {
 /**
  * Tool usage aggregation target kind
  */
-export type ToolUsageTraceSummaryTargetKind = ClosedEnum<
+export type ToolUsageTraceSummaryTargetKind = OpenEnum<
   typeof ToolUsageTraceSummaryTargetKind
 >;
 
@@ -58,7 +59,7 @@ export const ToolUsageTraceSummaryTargetType = {
 /**
  * Tool usage target type
  */
-export type ToolUsageTraceSummaryTargetType = ClosedEnum<
+export type ToolUsageTraceSummaryTargetType = OpenEnum<
   typeof ToolUsageTraceSummaryTargetType
 >;
 
@@ -75,7 +76,7 @@ export const ToolUsageTraceSummaryUserKind = {
 /**
  * Tool usage user identity kind
  */
-export type ToolUsageTraceSummaryUserKind = ClosedEnum<
+export type ToolUsageTraceSummaryUserKind = OpenEnum<
   typeof ToolUsageTraceSummaryUserKind
 >;
 
@@ -186,24 +187,28 @@ export type ToolUsageTraceSummary = {
 };
 
 /** @internal */
-export const ToolUsageTraceSummaryHookStatus$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTraceSummaryHookStatus
-> = z.enum(ToolUsageTraceSummaryHookStatus);
+export const ToolUsageTraceSummaryHookStatus$inboundSchema: z.ZodMiniType<
+  ToolUsageTraceSummaryHookStatus,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTraceSummaryHookStatus);
 
 /** @internal */
-export const ToolUsageTraceSummaryTargetKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTraceSummaryTargetKind
-> = z.enum(ToolUsageTraceSummaryTargetKind);
+export const ToolUsageTraceSummaryTargetKind$inboundSchema: z.ZodMiniType<
+  ToolUsageTraceSummaryTargetKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTraceSummaryTargetKind);
 
 /** @internal */
-export const ToolUsageTraceSummaryTargetType$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTraceSummaryTargetType
-> = z.enum(ToolUsageTraceSummaryTargetType);
+export const ToolUsageTraceSummaryTargetType$inboundSchema: z.ZodMiniType<
+  ToolUsageTraceSummaryTargetType,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTraceSummaryTargetType);
 
 /** @internal */
-export const ToolUsageTraceSummaryUserKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTraceSummaryUserKind
-> = z.enum(ToolUsageTraceSummaryUserKind);
+export const ToolUsageTraceSummaryUserKind$inboundSchema: z.ZodMiniType<
+  ToolUsageTraceSummaryUserKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTraceSummaryUserKind);
 
 /** @internal */
 export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
