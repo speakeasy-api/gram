@@ -31,3 +31,5 @@ func processGroupAlive(_ *exec.Cmd, exited <-chan struct{}) bool {
 func killProcessGroup(cmd *exec.Cmd) {
 	terminateProcessGroup(cmd)
 }
+
+func reapGroupMembers(*exec.Cmd) {}

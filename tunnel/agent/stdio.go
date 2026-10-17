@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -32,11 +33,40 @@ const (
 	stdioPingTimeout          = 5 * time.Second
 	stdioMaxNumericIDLength   = 64
 	stdioMaxNumericIDExponent = 64
-	stdioWriteTimeout         = 30 * time.Second
 	stdioPingQueue            = 8
 	stdioKillWait             = time.Second
 	// Under Speakeasy's 60s idle cutoff for a silent stream, e.g. one awaiting a user's elicitation answer.
 	stdioSSEKeepalive = 15 * time.Second
+
+	// stdioEvictIdleAfter is how long a session must go without a request
+	// before a new session at capacity may evict it. Shorter pauses are
+	// normal within a conversation that is still active.
+	stdioEvictIdleAfter = 2 * time.Minute
+
+	// stdioStdinStallTimeout is how long a write to a server's stdin may go
+	// without the server accepting a byte before the server counts as stuck
+	// and is stopped. A synchronous server stops reading while it runs a slow
+	// tool, so this is generous; later writes wait behind a stalled one.
+	stdioStdinStallTimeout = 2 * time.Minute
+
+	// stdioResponseWriteTimeout is how long an HTTP response write may go
+	// without the client accepting a chunk. A client that stops reading then
+	// fails the write instead of holding its handler, and the session, open.
+	stdioResponseWriteTimeout = 30 * time.Second
+
+	// stdioResponseChunkBytes is the most written to a response under one
+	// deadline, so a large message to a slow client is bounded by progress
+	// rather than by its size. It matches yamux's default stream window.
+	stdioResponseChunkBytes = 256 << 10 // 256 KiB
+
+	// stdioStderrLineBytes caps one stderr line in the agent's log; the rest
+	// of a longer line is dropped, and logging carries on with the next.
+	stdioStderrLineBytes = 8 << 10 // 8 KiB
+
+	// stdioStderrLinesPerMinute caps the stderr lines a session logs each
+	// minute, so a chatty server cannot flood the agent's logs. Lines over it
+	// are counted and the count is logged when the minute ends.
+	stdioStderrLinesPerMinute = 120
 
 	stdioMaxMessageBytes = 32 << 20
 	stdioStreamMaxBytes  = 64 << 20
@@ -56,6 +86,7 @@ var (
 	errStdioSessionClosed = errors.New("stdio session closed")
 	errStdioDuplicateID   = errors.New("duplicate in-flight JSON-RPC id")
 	errStdioFrameTooLarge = errors.New("stdio server message exceeds size limit")
+	errStdioStreamCutOff  = errors.New("stdio stream cut off")
 )
 
 type stdioBridge struct {
@@ -65,6 +96,12 @@ type stdioBridge struct {
 	idleTimeout time.Duration
 	keepalive   time.Duration
 	logger      *slog.Logger
+
+	// evictIdleAfter, responseWriteTimeout and stdinStallTimeout default to
+	// their stdio* constants; tests shorten them.
+	evictIdleAfter       time.Duration
+	responseWriteTimeout time.Duration
+	stdinStallTimeout    time.Duration
 
 	mu       sync.Mutex
 	sessions map[string]*stdioSession
@@ -85,8 +122,13 @@ func newStdioBridge(command string, maxSessions int, idleTimeout time.Duration, 
 		idleTimeout: idleTimeout,
 		keepalive:   stdioSSEKeepalive,
 		logger:      logger,
-		sessions:    make(map[string]*stdioSession),
-		closed:      false,
+
+		evictIdleAfter:       stdioEvictIdleAfter,
+		responseWriteTimeout: stdioResponseWriteTimeout,
+		stdinStallTimeout:    stdioStdinStallTimeout,
+
+		sessions: make(map[string]*stdioSession),
+		closed:   false,
 	}
 }
 
@@ -102,7 +144,8 @@ func childEnv(environ []string) []string {
 	return env
 }
 
-func (b *stdioBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (b *stdioBridge) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	w := b.newResponseWriter(rw)
 	// OAuth back-channel paths have no stdio equivalent.
 	if r.URL.Path != "/" && r.URL.Path != "" {
 		http.NotFound(w, r)
@@ -121,7 +164,7 @@ func (b *stdioBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
+func (b *stdioBridge) handlePost(w *responseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, stdioMaxMessageBytes+1))
 	if err != nil {
 		writeRPCError(w, http.StatusBadRequest, nil, rpcCodeParseError, "failed to read request body")
@@ -147,7 +190,11 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
 		return
 	}
-	release := sess.acquire()
+	release, ok := sess.acquire()
+	if !ok {
+		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
+		return
+	}
 	defer release()
 
 	requests := requestMessages(msgs)
@@ -178,14 +225,17 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sse {
-		writeSSEHeaders(w, sid)
+		stream.setAbort(w.abort)
+		if err := w.startSSE(sid); err != nil {
+			return
+		}
 		for msg := range stream.events(r.Context(), sess, len(requests), b.keepalive) {
-			if err := writeSSEEvent(w, msg); err != nil {
+			if err := w.writeSSEEvent(msg); err != nil {
 				return
 			}
 		}
 		for _, msg := range sess.unanswered(stream) {
-			if err := writeSSEEvent(w, msg); err != nil {
+			if err := w.writeSSEEvent(msg); err != nil {
 				return
 			}
 		}
@@ -201,27 +251,36 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	responses = append(responses, sess.unanswered(stream)...)
 	w.Header().Set(headerMCPSessionID, sid)
-	writeJSONResponses(w, responses, batch)
+	_ = w.writeJSON(responses, batch)
 }
 
-func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, msgs []rpcMessage, batch bool) {
+func (b *stdioBridge) handleInitialize(w *responseWriter, r *http.Request, msgs []rpcMessage, batch bool) {
 	if batch || len(msgs) != 1 || msgs[0].method != "initialize" || msgs[0].id == "" {
 		writeRPCError(w, http.StatusBadRequest, nil, rpcCodeInvalidRequest, "Bad Request: Mcp-Session-Id header is required")
 		return
 	}
 
-	sess, err := b.start()
+	exited := func() {
+		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server exited during initialize")
+	}
+	sess, err := b.start(r.Context())
 	switch {
 	case errors.Is(err, errStdioAtCapacity):
 		w.Header().Set("Retry-After", "5")
 		writeRPCError(w, http.StatusServiceUnavailable, msgs[0].rawID, rpcCodeServerError, "MCP server is at capacity")
+		return
+	case r.Context().Err() != nil:
 		return
 	case err != nil:
 		b.logger.Warn("tunnel stdio server failed to start", slog.Any("error", err))
 		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server failed to start")
 		return
 	}
-	release := sess.acquire()
+	release, ok := sess.acquire()
+	if !ok {
+		exited()
+		return
+	}
 	defer release()
 
 	committed := false
@@ -237,7 +296,7 @@ func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, m
 
 	stream, err := sess.openStream(msgs, false)
 	if err != nil {
-		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server exited during initialize")
+		exited()
 		return
 	}
 	defer sess.closeStream(stream)
@@ -257,23 +316,28 @@ func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, m
 		if r.Context().Err() != nil {
 			return
 		}
-		writeRPCError(w, http.StatusGatewayTimeout, msgs[0].rawID, rpcCodeServerError, "MCP server did not answer initialize")
+		select {
+		case <-sess.done:
+			exited()
+		default:
+			writeRPCError(w, http.StatusGatewayTimeout, msgs[0].rawID, rpcCodeServerError, "MCP server did not answer initialize")
+		}
 		return
 	}
 
 	if isRPCError(response) {
-		writeJSONResponses(w, []json.RawMessage{response}, false)
+		_ = w.writeJSON([]json.RawMessage{response}, false)
 		return
 	}
 	w.Header().Set(headerMCPSessionID, sess.id)
-	if err := writeJSONResponses(w, []json.RawMessage{response}, false); err != nil || r.Context().Err() != nil {
+	if err := w.writeJSON([]json.RawMessage{response}, false); err != nil || r.Context().Err() != nil {
 		return
 	}
 	committed = true
 	sess.logger.Info("tunnel stdio session started")
 }
 
-func (b *stdioBridge) handleGet(w http.ResponseWriter, r *http.Request) {
+func (b *stdioBridge) handleGet(w *responseWriter, r *http.Request) {
 	sid := r.Header.Get(headerMCPSessionID)
 	if sid == "" {
 		writeRPCError(w, http.StatusBadRequest, nil, rpcCodeInvalidRequest, "Bad Request: Mcp-Session-Id header is required")
@@ -288,21 +352,28 @@ func (b *stdioBridge) handleGet(w http.ResponseWriter, r *http.Request) {
 	sess.touch()
 
 	listener, err := sess.attachListener()
-	if err != nil {
+	switch {
+	case errors.Is(err, errStdioSessionClosed):
+		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
+		return
+	case err != nil:
 		writeRPCError(w, http.StatusConflict, nil, rpcCodeInvalidRequest, "a GET stream is already open for this session")
 		return
 	}
 	defer sess.detachListener(listener)
 
-	writeSSEHeaders(w, sid)
+	listener.setAbort(w.abort)
+	if err := w.startSSE(sid); err != nil {
+		return
+	}
 	for msg := range listener.events(r.Context(), sess, -1, b.keepalive) {
-		if err := writeSSEEvent(w, msg); err != nil {
+		if err := w.writeSSEEvent(msg); err != nil {
 			return
 		}
 	}
 }
 
-func (b *stdioBridge) handleDelete(w http.ResponseWriter, r *http.Request) {
+func (b *stdioBridge) handleDelete(w *responseWriter, r *http.Request) {
 	sid := r.Header.Get(headerMCPSessionID)
 	if sid == "" {
 		writeRPCError(w, http.StatusBadRequest, nil, rpcCodeInvalidRequest, "Bad Request: Mcp-Session-Id header is required")
@@ -318,10 +389,15 @@ func (b *stdioBridge) handleDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// session finds a live session. A closing one is treated as gone, so its
+// client gets 404 while its server shuts down.
 func (b *stdioBridge) session(id string) *stdioSession {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.sessions[id]
+	if sess := b.sessions[id]; sess != nil && !sess.closing.Load() {
+		return sess
+	}
+	return nil
 }
 
 func (b *stdioBridge) remove(id string) {
@@ -330,31 +406,63 @@ func (b *stdioBridge) remove(id string) {
 	delete(b.sessions, id)
 }
 
-func (b *stdioBridge) start() (*stdioSession, error) {
+// start launches a session's server. At capacity it evicts the session idle
+// longest, waiting for its server to stop so the process count stays capped.
+func (b *stdioBridge) start(ctx context.Context) (*stdioSession, error) {
 	id, err := newStdioSessionID()
 	if err != nil {
 		return nil, err
 	}
+	for {
+		sess, evicted, err := b.startOrEvict(id)
+		if sess != nil || err != nil {
+			return sess, err
+		}
+		evicted.logger.Info("tunnel stdio session evicted for a new session; stopping server")
+		evicted.close()
+		select {
+		case <-evicted.done:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		// Its own removal races this retry, which could otherwise still count it and evict another session.
+		b.remove(evicted.id)
+	}
+}
 
+// startOrEvict starts a session if there is room. At capacity it claims the
+// session idle longest, if idle past evictIdleAfter, for the caller to stop.
+func (b *stdioBridge) startOrEvict(id string) (*stdioSession, *stdioSession, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
-		return nil, errStdioBridgeClosed
+		return nil, nil, errStdioBridgeClosed
 	}
 	if len(b.sessions) >= b.maxSessions {
-		return nil, errStdioAtCapacity
+		now := time.Now()
+		var idlest *stdioSession
+		longest := time.Duration(0)
+		for _, sess := range b.sessions {
+			if idle := sess.idleFor(now); idle > longest {
+				idlest, longest = sess, idle
+			}
+		}
+		if idlest == nil || !idlest.claimIdle(now, b.evictIdleAfter) {
+			return nil, nil, errStdioAtCapacity
+		}
+		return nil, idlest, nil
 	}
 
-	sess, err := startStdioSession(id, b.command, b.env, b.logger.With(slog.String("stdio_session", logSessionID(id))))
+	sess, err := startStdioSession(id, b.command, b.env, b.stdinStallTimeout, b.logger.With(slog.String("stdio_session", logSessionID(id))))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	b.sessions[id] = sess
 	go func() {
 		<-sess.done
 		b.remove(id)
 	}()
-	return sess, nil
+	return sess, nil, nil
 }
 
 func (b *stdioBridge) reap(ctx context.Context) {
@@ -369,7 +477,7 @@ func (b *stdioBridge) reap(ctx context.Context) {
 			b.mu.Lock()
 			idle := make([]*stdioSession, 0)
 			for _, sess := range b.sessions {
-				if sess.idleSince(now) > b.idleTimeout {
+				if sess.claimIdle(now, b.idleTimeout) {
 					idle = append(idle, sess)
 				}
 			}
@@ -407,8 +515,15 @@ func (b *stdioBridge) Close() {
 type stdioSession struct {
 	id     string
 	cmd    *exec.Cmd
-	stdin  io.WriteCloser
+	stdin  *os.File
 	logger *slog.Logger
+
+	// stdinStall bounds how long a stdin write may make no progress.
+	stdinStall time.Duration
+
+	// closing is set first thing when the session starts to close. Nothing
+	// is admitted once it is set.
+	closing atomic.Bool
 
 	// A channel so a waiting writer can give up on cancellation.
 	writeSem chan struct{}
@@ -432,47 +547,45 @@ type stdioSession struct {
 	lastActive   time.Time
 }
 
-func startStdioSession(id, command string, env []string, logger *slog.Logger) (*stdioSession, error) {
+func startStdioSession(id, command string, env []string, stdinStall time.Duration, logger *slog.Logger) (*stdioSession, error) {
 	cmd := shellCommand(command)
 	cmd.Env = env
 	configureProcessGroup(cmd)
 
-	stdin, err := cmd.StdinPipe()
+	// The agent keeps an *os.File for stdin so writes can take deadlines.
+	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
 		return nil, fmt.Errorf("stdin pipe: %w", err)
 	}
 	stdoutR, stdoutW, err := os.Pipe()
 	if err != nil {
-		_ = stdin.Close()
+		closeFiles(stdinR, stdinW)
 		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
 	stderrR, stderrW, err := os.Pipe()
 	if err != nil {
-		_ = stdin.Close()
-		_ = stdoutR.Close()
-		_ = stdoutW.Close()
+		closeFiles(stdinR, stdinW, stdoutR, stdoutW)
 		return nil, fmt.Errorf("stderr pipe: %w", err)
 	}
+	cmd.Stdin = stdinR
 	cmd.Stdout = stdoutW
 	cmd.Stderr = stderrW
 
 	if err := cmd.Start(); err != nil {
-		_ = stdin.Close()
-		_ = stdoutR.Close()
-		_ = stdoutW.Close()
-		_ = stderrR.Close()
-		_ = stderrW.Close()
+		closeFiles(stdinR, stdinW, stdoutR, stdoutW, stderrR, stderrW)
 		// Omits the command, which commonly carries credentials.
 		return nil, fmt.Errorf("start stdio server: %w", err)
 	}
-	_ = stdoutW.Close()
-	_ = stderrW.Close()
+	// The server holds its own copies of these ends.
+	closeFiles(stdinR, stdoutW, stderrW)
 
 	s := &stdioSession{
 		id:           id,
 		cmd:          cmd,
-		stdin:        stdin,
+		stdin:        stdinW,
 		logger:       logger.With(slog.Int("pid", cmd.Process.Pid)),
+		stdinStall:   stdinStall,
+		closing:      atomic.Bool{},
 		writeSem:     make(chan struct{}, 1),
 		exited:       make(chan struct{}),
 		terminated:   make(chan struct{}),
@@ -514,17 +627,22 @@ func startStdioSession(id, command string, env []string, logger *slog.Logger) (*
 	return s, nil
 }
 
-func (s *stdioSession) acquire() func() {
+// acquire admits a request, keeping the session from idling out until
+// release. It refuses once the session is closing.
+func (s *stdioSession) acquire() (func(), bool) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closing.Load() {
+		return nil, false
+	}
 	s.inflight++
 	s.lastActive = time.Now()
-	s.mu.Unlock()
 	return func() {
 		s.mu.Lock()
 		s.inflight--
 		s.lastActive = time.Now()
 		s.mu.Unlock()
-	}
+	}, true
 }
 
 func (s *stdioSession) touch() {
@@ -533,13 +651,32 @@ func (s *stdioSession) touch() {
 	s.mu.Unlock()
 }
 
-func (s *stdioSession) idleSince(now time.Time) time.Duration {
+// idleFor is how long the session has gone without activity: zero while a
+// request is in flight or once it is closing.
+func (s *stdioSession) idleFor(now time.Time) time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.inflight > 0 {
+	return s.idleForLocked(now)
+}
+
+func (s *stdioSession) idleForLocked(now time.Time) time.Duration {
+	if s.inflight > 0 || s.closing.Load() {
 		return 0
 	}
 	return now.Sub(s.lastActive)
+}
+
+// claimIdle marks the session closing if it has been idle longer than limit.
+// It decides under the lock acquire takes, so a request admitted first keeps
+// the session, and one that comes after is refused.
+func (s *stdioSession) claimIdle(now time.Time, limit time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.idleForLocked(now) <= limit {
+		return false
+	}
+	s.closing.Store(true)
+	return true
 }
 
 func (s *stdioSession) endInitialize() {
@@ -548,8 +685,9 @@ func (s *stdioSession) endInitialize() {
 	s.mu.Unlock()
 }
 
-// A write that cannot finish closes the session: a partial message would
-// corrupt the framing of everything after it.
+// send writes msgs to the server's stdin, one write at a time. A caller that
+// gives up only stops waiting: its write carries on, because abandoning it
+// part way would corrupt the framing of everything after it.
 func (s *stdioSession) send(ctx context.Context, msgs []rpcMessage) error {
 	select {
 	case s.writeSem <- struct{}{}:
@@ -558,45 +696,49 @@ func (s *stdioSession) send(ctx context.Context, msgs []rpcMessage) error {
 	case <-s.done:
 		return errStdioSessionClosed
 	}
-	defer func() { <-s.writeSem }()
 
-	var buf bytes.Buffer
+	size := 0
 	for _, msg := range msgs {
-		buf.Write(msg.raw)
-		buf.WriteByte('\n')
+		size += len(msg.raw) + 1
+	}
+	frames := make([]byte, 0, size)
+	for _, msg := range msgs {
+		frames = append(append(frames, msg.raw...), '\n')
 	}
 	written := make(chan error, 1)
 	go func() {
-		_, err := s.stdin.Write(buf.Bytes())
-		written <- err
+		defer func() { <-s.writeSem }()
+		written <- s.writeStdin(frames)
 	}()
-	writeTimeout := time.NewTimer(stdioWriteTimeout)
-	defer writeTimeout.Stop()
 	select {
 	case err := <-written:
-		if err != nil {
-			return errors.Join(errStdioSessionClosed, err)
-		}
-		return nil
+		return err
 	case <-ctx.Done():
-	case <-writeTimeout.C:
+		return ctx.Err()
 	case <-s.done:
+		return errStdioSessionClosed
 	}
-	select {
-	case err := <-written:
-		if err != nil {
-			return errors.Join(errStdioSessionClosed, err)
+}
+
+// writeStdin writes p in full, failing only when the server accepts nothing
+// for stdinStall or the write fails. Either way it ends the session.
+func (s *stdioSession) writeStdin(p []byte) error {
+	for {
+		_ = s.stdin.SetWriteDeadline(time.Now().Add(s.stdinStall))
+		n, err := s.stdin.Write(p)
+		p = p[n:]
+		if err == nil {
+			return nil
 		}
-		return nil
-	default:
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			if n > 0 {
+				continue
+			}
+			s.logger.Warn("tunnel stdio server is not reading stdin; stopping server", slog.Duration("stalled_for", s.stdinStall))
+		}
+		s.close()
+		return errors.Join(errStdioSessionClosed, err)
 	}
-	s.logger.Warn("tunnel stdio server is not reading stdin; stopping server")
-	s.close()
-	select {
-	case <-written:
-	case <-time.After(stdioShutdownGrace):
-	}
-	return errStdioSessionClosed
 }
 
 func (s *stdioSession) openStream(requests []rpcMessage, unsolicited bool) (*rpcStream, error) {
@@ -662,6 +804,9 @@ func (s *stdioSession) closeStream(stream *rpcStream) {
 func (s *stdioSession) attachListener() (*rpcStream, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closing.Load() {
+		return nil, errStdioSessionClosed
+	}
 	if s.listener != nil {
 		return nil, errors.New("listener already attached")
 	}
@@ -724,10 +869,13 @@ func readFrame(r *bufio.Reader, limit int) ([]byte, error) {
 }
 
 // Must never block on a consumer: it runs on the session's only stdout reader.
+//
+// Only a message that reaches a stream counts as activity: one left in the
+// backlog has no consumer, and a server that notifies on a timer must not keep
+// an abandoned session alive.
 func (s *stdioSession) route(msg rpcMessage) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.lastActive = time.Now()
 
 	if msg.method == "" && msg.id != "" {
 		stream, ok := s.pending[msg.id]
@@ -741,7 +889,9 @@ func (s *stdioSession) route(msg rpcMessage) {
 			// Its handler stops reading after the last response.
 			delete(s.streams, stream)
 		}
-		if !stream.deliver(rpcEvent{msg: msg.raw, response: true}) {
+		if stream.deliver(rpcEvent{msg: msg.raw, response: true}) {
+			s.lastActive = time.Now()
+		} else {
 			s.logger.Warn("tunnel stdio response dropped: its HTTP stream is gone or over its buffer limit")
 		}
 		return
@@ -757,14 +907,9 @@ func (s *stdioSession) route(msg rpcMessage) {
 		return
 	}
 
-	event := rpcEvent{msg: msg.raw, response: false}
-	if s.listener != nil && s.listener.deliver(event) {
+	if s.deliverUnsolicitedLocked(rpcEvent{msg: msg.raw, response: false}) {
+		s.lastActive = time.Now()
 		return
-	}
-	for stream := range s.streams {
-		if stream.deliver(event) {
-			return
-		}
 	}
 
 	s.backlog = append(s.backlog, msg.raw)
@@ -775,6 +920,20 @@ func (s *stdioSession) route(msg rpcMessage) {
 		s.backlog = s.backlog[1:]
 		s.logger.Warn("tunnel stdio backlog full; dropping oldest server message")
 	}
+}
+
+// deliverUnsolicitedLocked hands a server message to the GET stream, else to
+// any POST stream that takes it.
+func (s *stdioSession) deliverUnsolicitedLocked(event rpcEvent) bool {
+	if s.listener != nil && s.listener.deliver(event) {
+		return true
+	}
+	for stream := range s.streams {
+		if stream.deliver(event) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *stdioSession) answerPings() {
@@ -791,18 +950,50 @@ func (s *stdioSession) answerPings() {
 	}
 }
 
+// logStderr logs the server's stderr line by line until it closes, so the
+// server never blocks on a full pipe.
 func (s *stdioSession) logStderr(r io.Reader) {
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 4096), 64<<10)
-	for scanner.Scan() {
-		s.logger.Info("tunnel stdio server stderr", slog.String("line", scanner.Text()))
+	reader := bufio.NewReaderSize(r, stdioStderrLineBytes)
+	window := time.Now()
+	logged, suppressed := 0, 0
+	reportSuppressed := func() {
+		if suppressed > 0 {
+			s.logger.Warn("tunnel stdio server stderr lines over the per-minute limit were not logged", slog.Int("lines", suppressed))
+			suppressed = 0
+		}
 	}
-	// Keep draining so the server never blocks on a full stderr pipe.
-	_, _ = io.Copy(io.Discard, r)
+	for {
+		line, err := reader.ReadSlice('\n')
+		if len(line) > 0 {
+			if now := time.Now(); now.Sub(window) >= time.Minute {
+				reportSuppressed()
+				window, logged = now, 0
+			}
+			if logged >= stdioStderrLinesPerMinute {
+				suppressed++
+			} else {
+				logged++
+				attrs := []any{slog.String("line", string(bytes.TrimRight(line, "\r\n")))}
+				if errors.Is(err, bufio.ErrBufferFull) {
+					attrs = append(attrs, slog.Bool("truncated", true))
+				}
+				s.logger.Info("tunnel stdio server stderr", attrs...)
+			}
+		}
+		// Drop the rest of a line too long for the buffer.
+		for errors.Is(err, bufio.ErrBufferFull) {
+			_, err = reader.ReadSlice('\n')
+		}
+		if err != nil {
+			reportSuppressed()
+			return
+		}
+	}
 }
 
 func (s *stdioSession) close() {
 	s.closeOnce.Do(func() {
+		s.closing.Store(true)
 		_ = s.stdin.Close()
 		go func() {
 			defer close(s.terminated)
@@ -826,6 +1017,12 @@ func (s *stdioSession) close() {
 func (s *stdioSession) awaitGroupExit(wait time.Duration) bool {
 	deadline := time.Now().Add(wait)
 	for {
+		// Only once cmd.Wait has reaped the leader, so its status is never taken.
+		select {
+		case <-s.exited:
+			reapGroupMembers(s.cmd)
+		default:
+		}
 		if !processGroupAlive(s.cmd, s.exited) {
 			return false
 		}
@@ -848,6 +1045,11 @@ type rpcStream struct {
 	limit  int
 	notify chan struct{}
 
+	// abort, when set, fails the writes of the handler serving the stream.
+	// Guarded by mu and dropped when the stream closes, so it never runs
+	// after that handler returns.
+	abort func()
+
 	gone     chan struct{}
 	goneOnce sync.Once
 
@@ -863,6 +1065,7 @@ func newRPCStream(remaining int) *rpcStream {
 		bytes:     0,
 		limit:     stdioStreamMaxBytes,
 		notify:    make(chan struct{}, 1),
+		abort:     nil,
 		gone:      make(chan struct{}),
 		goneOnce:  sync.Once{},
 		remaining: remaining,
@@ -870,22 +1073,31 @@ func newRPCStream(remaining int) *rpcStream {
 	}
 }
 
+func (s *rpcStream) setAbort(abort func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.abort = abort
+}
+
 func (s *rpcStream) deliver(event rpcEvent) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	select {
 	case <-s.gone:
-		s.mu.Unlock()
 		return false
 	default:
 	}
 	if s.bytes+len(event.msg) > s.limit {
-		s.mu.Unlock()
-		s.close()
+		// Its client fell too far behind. The handler may be stuck writing to
+		// it, so fail that write now rather than when its deadline passes.
+		if s.abort != nil {
+			s.abort()
+		}
+		s.closeLocked()
 		return false
 	}
 	s.queue = append(s.queue, event)
 	s.bytes += len(event.msg)
-	s.mu.Unlock()
 	select {
 	case s.notify <- struct{}{}:
 	default:
@@ -907,6 +1119,14 @@ func (s *rpcStream) pop() (rpcEvent, bool) {
 }
 
 func (s *rpcStream) close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeLocked()
+}
+
+// closeLocked ends the stream and frees anything still queued on it.
+func (s *rpcStream) closeLocked() {
+	s.queue, s.bytes, s.abort = nil, 0, nil
 	s.goneOnce.Do(func() { close(s.gone) })
 }
 
@@ -1097,35 +1317,102 @@ func acceptsSSE(r *http.Request) bool {
 	return false
 }
 
-func writeSSEHeaders(w http.ResponseWriter, sid string) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set(headerMCPSessionID, sid)
-	w.WriteHeader(http.StatusOK)
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
+// responseWriter renews the write deadline before each chunk it writes, so
+// every write is bounded by progress; see stdioResponseWriteTimeout.
+type responseWriter struct {
+	http.ResponseWriter
+	rc      *http.ResponseController
+	timeout time.Duration
+
+	mu      sync.Mutex
+	aborted bool
+}
+
+var (
+	sseKeepalive   = []byte(": keepalive\n\n")
+	sseEventPrefix = []byte("event: message\ndata: ")
+	sseEventSuffix = []byte("\n\n")
+)
+
+func (b *stdioBridge) newResponseWriter(w http.ResponseWriter) *responseWriter {
+	rc := http.NewResponseController(w)
+	// A deadline left by an earlier response on a reused connection must not fail this one.
+	_ = rc.SetWriteDeadline(time.Time{})
+	return &responseWriter{
+		ResponseWriter: w,
+		rc:             rc,
+		timeout:        b.responseWriteTimeout,
+		mu:             sync.Mutex{},
+		aborted:        false,
 	}
 }
 
-func writeSSEEvent(w http.ResponseWriter, msg json.RawMessage) error {
-	var err error
-	if msg == nil {
-		_, err = io.WriteString(w, ": keepalive\n\n")
-	} else {
-		_, err = fmt.Fprintf(w, "event: message\ndata: %s\n\n", msg)
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
+func (rw *responseWriter) arm() error {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+	if rw.aborted {
+		return errStdioStreamCutOff
 	}
-	if err != nil {
+	return ignoreUnsupported(rw.rc.SetWriteDeadline(time.Now().Add(rw.timeout)))
+}
+
+// abort fails the write in progress, and every later one, at once.
+func (rw *responseWriter) abort() {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+	rw.aborted = true
+	_ = rw.rc.SetWriteDeadline(time.Now())
+}
+
+func (rw *responseWriter) Write(p []byte) (int, error) {
+	written := 0
+	for written < len(p) {
+		if err := rw.arm(); err != nil {
+			return written, err
+		}
+		n, err := rw.ResponseWriter.Write(p[written:min(len(p), written+stdioResponseChunkBytes)])
+		written += n
+		if err != nil {
+			return written, err
+		}
+	}
+	return written, nil
+}
+
+func (rw *responseWriter) flush() error {
+	if err := rw.arm(); err != nil {
 		return err
 	}
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
-	return nil
+	return ignoreUnsupported(rw.rc.Flush())
 }
 
-func writeJSONResponses(w http.ResponseWriter, responses []json.RawMessage, batch bool) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+func (rw *responseWriter) startSSE(sid string) error {
+	rw.Header().Set("Content-Type", "text/event-stream")
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Header().Set(headerMCPSessionID, sid)
+	rw.WriteHeader(http.StatusOK)
+	return rw.flush()
+}
+
+// writeSSEEvent writes msg as an event, or a keepalive comment when msg is nil.
+func (rw *responseWriter) writeSSEEvent(msg json.RawMessage) error {
+	parts := [][]byte{sseKeepalive}
+	if msg != nil {
+		parts = [][]byte{sseEventPrefix, msg, sseEventSuffix}
+	}
+	for _, part := range parts {
+		if _, err := rw.Write(part); err != nil {
+			return err
+		}
+	}
+	return rw.flush()
+}
+
+func (rw *responseWriter) writeJSON(responses []json.RawMessage, batch bool) error {
 	payload := []byte(nil)
 	if !batch && len(responses) == 1 {
 		payload = responses[0]
@@ -1135,13 +1422,20 @@ func writeJSONResponses(w http.ResponseWriter, responses []json.RawMessage, batc
 			return err
 		}
 	}
-	if _, err := w.Write(payload); err != nil {
+	rw.Header().Set("Content-Type", "application/json")
+	rw.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+	rw.WriteHeader(http.StatusOK)
+	if _, err := rw.Write(payload); err != nil {
 		return err
 	}
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
+	return rw.flush()
+}
+
+func ignoreUnsupported(err error) error {
+	if errors.Is(err, http.ErrNotSupported) {
+		return nil
 	}
-	return nil
+	return err
 }
 
 func rpcErrorPayload(id json.RawMessage, code int, message string) json.RawMessage {
@@ -1160,6 +1454,12 @@ func writeRPCError(w http.ResponseWriter, status int, id json.RawMessage, code i
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(rpcErrorPayload(id, code, message))
+}
+
+func closeFiles(files ...*os.File) {
+	for _, f := range files {
+		_ = f.Close()
+	}
 }
 
 func newStdioSessionID() (string, error) {
