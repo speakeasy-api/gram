@@ -145,28 +145,29 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		},
 		read("http tools", &toolCount, byProject(s.q.PostflightCountHTTPTools)),
 
-		// Killswitch aggregate counts are exact: six headers, two successor
-		// versions, eight complete selected snapshots, one expiry marker, and
-		// one completed operation/audit event for every lifecycle mutation.
+		// Killswitch aggregate counts are exact: ten headers (four for
+		// registered agents), two successor versions, ten complete selected
+		// snapshots, one expiry marker, and one completed operation/audit
+		// event for every lifecycle mutation.
 		{
 			what:  "killswitch prescriptions",
 			count: byOrg(s.q.PostflightCountKillswitchPrescriptions),
-			fail:  postflightMustEqual(6, "expected 6 killswitch prescriptions, found %d"),
+			fail:  postflightMustEqual(10, "expected 10 killswitch prescriptions, found %d"),
 		},
 		{
 			what:  "killswitch versions",
 			count: byOrg(s.q.PostflightCountKillswitchVersions),
-			fail:  postflightMustEqual(8, "expected 8 killswitch versions, found %d"),
+			fail:  postflightMustEqual(12, "expected 12 killswitch versions, found %d"),
 		},
 		{
 			what:  "killswitch resource snapshots",
 			count: byOrg(s.q.PostflightCountKillswitchResources),
-			fail:  postflightMustEqual(8, "expected 8 killswitch resource snapshots, found %d"),
+			fail:  postflightMustEqual(10, "expected 10 killswitch resource snapshots, found %d"),
 		},
 		{
 			what:  "killswitch operations",
 			count: byOrg(s.q.PostflightCountKillswitchOperations),
-			fail:  postflightMustEqual(8, "expected 8 killswitch operations, found %d"),
+			fail:  postflightMustEqual(12, "expected 12 killswitch operations, found %d"),
 		},
 		{
 			what:  "killswitch expiry markers",
@@ -212,10 +213,10 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountKillswitchInvalidResources),
 			fail:  postflightMustBeZero("%d killswitch resources are not live canonical MCP servers"),
 		},
-		// Database-time status projection: three active, one scheduled, one
-		// lifted, and one expired current aggregate. The two Amara rows
-		// overlap because one selected-server interval intersects one dynamic
-		// all-server interval.
+		// Database-time status projection: seven active (four of them agent
+		// restrictions), one scheduled, one lifted, and one expired current
+		// aggregate. The two Amara rows overlap because one selected-server
+		// interval intersects one dynamic all-server interval.
 		{
 			what:  "killswitch status coverage",
 			count: byOrg(s.q.PostflightKillswitchStatusCoverageInvalid),
@@ -246,7 +247,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "killswitch lifecycle audits",
 			count: byOrg(s.q.PostflightCountKillswitchLifecycleAudits),
-			fail:  postflightMustEqual(8, "expected 8 killswitch lifecycle audits, found %d"),
+			fail:  postflightMustEqual(12, "expected 12 killswitch lifecycle audits, found %d"),
 		},
 		{
 			what:  "invalid killswitch lifecycle audits",
@@ -353,9 +354,18 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail: postflightMustBeZero("%d chats on demo projects belong to another org"),
 		},
 		{
-			what:  "ownerless chats",
-			count: byOrg(s.q.PostflightCountOwnerlessChats),
-			fail:  postflightMustBeZero("%d chats have no owner (sessions would render as anonymous)"),
+			what: "ownerless chats",
+			count: func() (int64, error) {
+				return s.q.PostflightCountOwnerlessChats(ctx, repo.PostflightCountOwnerlessChatsParams{
+					OrgID: org,
+					ExemptChatIds: []uuid.UUID{
+						s.fleetChatID(fleetExternalCapture),
+						s.fleetChatID(fleetCollisionCapture),
+						s.fleetChatID(fleetUnknownCapture),
+					},
+				})
+			},
+			fail: postflightMustBeZero("%d chats have no owner (sessions would render as anonymous)"),
 		},
 		// Every table that carries both the demo org id and a project id must
 		// agree with the demo constants: a mismatch means an insert escaped

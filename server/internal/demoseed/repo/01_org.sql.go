@@ -707,45 +707,39 @@ func (q *Queries) OrgInsertHooksFailOpenFeature(ctx context.Context, orgID strin
 	return err
 }
 
-const orgInsertManagedAgents = `-- name: OrgInsertManagedAgents :exec
+const orgInsertManagedAgent = `-- name: OrgInsertManagedAgent :exec
 INSERT INTO agents
-  (id, organization_id, owner_user_id, name, suspended_at, revoked_at)
+  (id, organization_id, project_id, owner_user_id, name, suspended_at,
+   revoked_at, created_at, updated_at)
 VALUES
-  ($1::uuid, $2::text, $3::text,
-   'Release assistant', NULL, NULL),
-  ($4::uuid, $2::text, $5::text,
-   'Support triage', now() - interval '2 days', NULL),
-  ($6::uuid, $2::text, $7::text,
-   'Retired documentation bot', NULL, now() - interval '5 days'),
-  ($8::uuid, $2::text, $3::text,
-   'Release notes assistant', NULL, NULL)
+  ($1::uuid, $2::text, $3::uuid, $4::text,
+   $5::text, $6::timestamptz,
+   $7::timestamptz, now() - interval '30 days',
+   $8::timestamptz)
 `
 
-type OrgInsertManagedAgentsParams struct {
-	Agent1 uuid.UUID
-	OrgID  string
-	Owner1 string
-	Agent2 uuid.UUID
-	Owner2 string
-	Agent3 uuid.UUID
-	Owner3 string
-	Agent4 uuid.UUID
+type OrgInsertManagedAgentParams struct {
+	ID          uuid.UUID
+	OrgID       string
+	ProjectID   uuid.NullUUID
+	OwnerUserID string
+	Name        string
+	SuspendedAt pgtype.Timestamptz
+	RevokedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }
 
-// Managed identities are distinct from OAuth client registrations. Existing
-// fictional owners exercise name/initials rendering without adding external
-// avatar dependencies. The two active release agents receive only
-// project/server-scoped direct grants alongside their inert attachments.
-func (q *Queries) OrgInsertManagedAgents(ctx context.Context, arg OrgInsertManagedAgentsParams) error {
-	_, err := q.db.Exec(ctx, orgInsertManagedAgents,
-		arg.Agent1,
+// One registered agent with an explicit owner, independent of captured chats.
+func (q *Queries) OrgInsertManagedAgent(ctx context.Context, arg OrgInsertManagedAgentParams) error {
+	_, err := q.db.Exec(ctx, orgInsertManagedAgent,
+		arg.ID,
 		arg.OrgID,
-		arg.Owner1,
-		arg.Agent2,
-		arg.Owner2,
-		arg.Agent3,
-		arg.Owner3,
-		arg.Agent4,
+		arg.ProjectID,
+		arg.OwnerUserID,
+		arg.Name,
+		arg.SuspendedAt,
+		arg.RevokedAt,
+		arg.UpdatedAt,
 	)
 	return err
 }

@@ -40,6 +40,7 @@ export interface ProjectNavRoute {
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
+  const fleetFlag = useFeatureFlag(FEATURE_FLAGS.fleet);
   const organization = useOrganization();
   const productFeatures = useProductFeatures(
     { organizationId: organization.id },
@@ -135,6 +136,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
           ]
         : []),
       { route: routes.insights, scope: observe },
+      ...(fleetFlag.status === "enabled"
+        ? [{ route: routes.fleet, scope: read }]
+        : []),
       { route: routes.agentSessions, scope: observe },
       ...(isSignalsIntelligenceEnabled
         ? [
@@ -153,6 +157,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     ];
   }, [
     routes,
+    fleetFlag.status,
     userSessionsFlag.status,
     projectId,
     isAssistantsEnabled,

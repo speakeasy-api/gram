@@ -33,6 +33,7 @@ const routes = {
     "Remote Identity Providers",
     "remote-identity-providers",
   ),
+  fleet: route("Fleet", "fleet"),
   agents: route("Agent Identity", "agent-management"),
   agentSessions: route("Agent Sessions", "agent-sessions"),
   assistants: route("Assistants", "assistants"),
@@ -100,6 +101,7 @@ beforeEach(() => {
     data: { signalsIntelligenceEnabled: false },
   };
   testState.featureFlags = {
+    [FEATURE_FLAGS.fleet]: { status: "enabled" },
     [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
     [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
@@ -175,6 +177,12 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes.indexOf(routes.policyCenter)).toBeLessThan(
       navRoutes.indexOf(routes.costs),
     );
+    const insightsIndex = navRoutes.indexOf(routes.insights);
+    expect(navRoutes.slice(insightsIndex, insightsIndex + 3)).toEqual([
+      routes.insights,
+      routes.fleet,
+      routes.agentSessions,
+    ]);
   });
 
   it("leaves Shadow AI and Shadow MCP out of nav; they live in Guardrails", () => {
@@ -224,6 +232,7 @@ describe("useProjectNavRoutes", () => {
     "preserves opt-in and opt-out navigation while flags are %s",
     (status) => {
       testState.featureFlags = {
+        [FEATURE_FLAGS.fleet]: { status: "enabled" },
         [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
         [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
@@ -260,6 +269,7 @@ describe("useProjectNavRoutes", () => {
 
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
+      [FEATURE_FLAGS.fleet]: { status: "enabled" },
       [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
       [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
@@ -303,3 +313,14 @@ describe("useProjectNavRoutes", () => {
     );
   });
 });
+
+it.each(["disabled", "missing", "error", "loading"] as const)(
+  "hides Fleet from navigation when its rollout is %s",
+  (status) => {
+    testState.featureFlags[FEATURE_FLAGS.fleet] = { status };
+    const { result } = renderHook(() => useProjectNavRoutes());
+    expect(result.current.map((entry) => entry.route)).not.toContain(
+      routes.fleet,
+    );
+  },
+);

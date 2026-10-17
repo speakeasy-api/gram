@@ -17,13 +17,17 @@ import (
 // CreateRequestBody is the type of the "killswitches" service "create"
 // endpoint HTTP request body.
 type CreateRequestBody struct {
-	OperationID   *string                                   `form:"operation_id,omitempty" json:"operation_id,omitempty" xml:"operation_id,omitempty"`
-	CapabilityKey *string                                   `form:"capability_key,omitempty" json:"capability_key,omitempty" xml:"capability_key,omitempty"`
-	UserID        *string                                   `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	Scope         *KillswitchScopeRequestBodyRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	Schedule      *KillswitchScheduleRequestBodyRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
-	ExternalNote  *string                                   `form:"external_note,omitempty" json:"external_note,omitempty" xml:"external_note,omitempty"`
-	InternalNote  *string                                   `form:"internal_note,omitempty" json:"internal_note,omitempty" xml:"internal_note,omitempty"`
+	OperationID   *string `form:"operation_id,omitempty" json:"operation_id,omitempty" xml:"operation_id,omitempty"`
+	CapabilityKey *string `form:"capability_key,omitempty" json:"capability_key,omitempty" xml:"capability_key,omitempty"`
+	// Target user. Supply exactly one of user_id or agent_id.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Target registered agent, independent of its owner. Applies across all
+	// credential sessions in the organization.
+	AgentID      *string                                   `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	Scope        *KillswitchScopeRequestBodyRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	Schedule     *KillswitchScheduleRequestBodyRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+	ExternalNote *string                                   `form:"external_note,omitempty" json:"external_note,omitempty" xml:"external_note,omitempty"`
+	InternalNote *string                                   `form:"internal_note,omitempty" json:"internal_note,omitempty" xml:"internal_note,omitempty"`
 }
 
 // EditRequestBody is the type of the "killswitches" service "edit" endpoint
@@ -49,17 +53,27 @@ type LiftRequestBody struct {
 // PreviewOverlapsRequestBody is the type of the "killswitches" service
 // "previewOverlaps" endpoint HTTP request body.
 type PreviewOverlapsRequestBody struct {
-	ID            *string                                   `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	CapabilityKey *string                                   `form:"capability_key,omitempty" json:"capability_key,omitempty" xml:"capability_key,omitempty"`
-	UserID        *string                                   `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	Scope         *KillswitchScopeRequestBodyRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	Schedule      *KillswitchScheduleRequestBodyRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+	ID            *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	CapabilityKey *string `form:"capability_key,omitempty" json:"capability_key,omitempty" xml:"capability_key,omitempty"`
+	// Target user. Supply exactly one of user_id or agent_id.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Target registered agent, independent of its owner. Applies across all
+	// credential sessions in the organization.
+	AgentID  *string                                   `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	Scope    *KillswitchScopeRequestBodyRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	Schedule *KillswitchScheduleRequestBodyRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
 }
 
 // BatchUserBadgesRequestBody is the type of the "killswitches" service
 // "batchUserBadges" endpoint HTTP request body.
 type BatchUserBadgesRequestBody struct {
 	UserIds []string `form:"user_ids,omitempty" json:"user_ids,omitempty" xml:"user_ids,omitempty"`
+}
+
+// BatchAgentBadgesRequestBody is the type of the "killswitches" service
+// "batchAgentBadges" endpoint HTTP request body.
+type BatchAgentBadgesRequestBody struct {
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 }
 
 // ListCapabilitiesResponseBody is the type of the "killswitches" service
@@ -92,11 +106,15 @@ type GetResponseBody struct {
 	ID               string                                `form:"id" json:"id" xml:"id"`
 	CapabilityKey    string                                `form:"capability_key" json:"capability_key" xml:"capability_key"`
 	CapabilityLabel  string                                `form:"capability_label" json:"capability_label" xml:"capability_label"`
-	UserID           string                                `form:"user_id" json:"user_id" xml:"user_id"`
-	Version          int64                                 `form:"version" json:"version" xml:"version"`
-	Status           string                                `form:"status" json:"status" xml:"status"`
-	Scope            *KillswitchScopeResponseBody          `form:"scope" json:"scope" xml:"scope"`
-	Schedule         *KillswitchScheduleResponseBody       `form:"schedule" json:"schedule" xml:"schedule"`
+	// Present only for user restrictions
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Present only for registered-agent restrictions
+	AgentID       *string                         `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	PrincipalKind string                          `form:"principal_kind" json:"principal_kind" xml:"principal_kind"`
+	Version       int64                           `form:"version" json:"version" xml:"version"`
+	Status        string                          `form:"status" json:"status" xml:"status"`
+	Scope         *KillswitchScopeResponseBody    `form:"scope" json:"scope" xml:"scope"`
+	Schedule      *KillswitchScheduleResponseBody `form:"schedule" json:"schedule" xml:"schedule"`
 }
 
 // CreateResponseBody is the type of the "killswitches" service "create"
@@ -134,6 +152,12 @@ type PreviewOverlapsResponseBody struct {
 // "batchUserBadges" endpoint HTTP response body.
 type BatchUserBadgesResponseBody struct {
 	Badges []*KillswitchUserBadgeResponseBody `form:"badges" json:"badges" xml:"badges"`
+}
+
+// BatchAgentBadgesResponseBody is the type of the "killswitches" service
+// "batchAgentBadges" endpoint HTTP response body.
+type BatchAgentBadgesResponseBody struct {
+	Badges []*KillswitchAgentBadgeResponseBody `form:"badges" json:"badges" xml:"badges"`
 }
 
 // ListCapabilitiesUnauthorizedResponseBody is the type of the "killswitches"
@@ -1829,6 +1853,196 @@ type BatchUserBadgesUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// BatchAgentBadgesUnauthorizedResponseBody is the type of the "killswitches"
+// service "batchAgentBadges" endpoint HTTP response body for the
+// "unauthorized" error.
+type BatchAgentBadgesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BatchAgentBadgesForbiddenResponseBody is the type of the "killswitches"
+// service "batchAgentBadges" endpoint HTTP response body for the "forbidden"
+// error.
+type BatchAgentBadgesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BatchAgentBadgesBadRequestResponseBody is the type of the "killswitches"
+// service "batchAgentBadges" endpoint HTTP response body for the "bad_request"
+// error.
+type BatchAgentBadgesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BatchAgentBadgesNotFoundResponseBody is the type of the "killswitches"
+// service "batchAgentBadges" endpoint HTTP response body for the "not_found"
+// error.
+type BatchAgentBadgesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BatchAgentBadgesUnsupportedMediaResponseBody is the type of the
+// "killswitches" service "batchAgentBadges" endpoint HTTP response body for
+// the "unsupported_media" error.
+type BatchAgentBadgesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BatchAgentBadgesInvalidResponseBody is the type of the "killswitches"
+// service "batchAgentBadges" endpoint HTTP response body for the "invalid"
+// error.
+type BatchAgentBadgesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BatchAgentBadgesInvariantViolationResponseBody is the type of the
+// "killswitches" service "batchAgentBadges" endpoint HTTP response body for
+// the "invariant_violation" error.
+type BatchAgentBadgesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BatchAgentBadgesUnexpectedResponseBody is the type of the "killswitches"
+// service "batchAgentBadges" endpoint HTTP response body for the "unexpected"
+// error.
+type BatchAgentBadgesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BatchAgentBadgesGatewayErrorResponseBody is the type of the "killswitches"
+// service "batchAgentBadges" endpoint HTTP response body for the
+// "gateway_error" error.
+type BatchAgentBadgesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BatchAgentBadgesUnavailableResponseBody is the type of the "killswitches"
+// service "batchAgentBadges" endpoint HTTP response body for the "unavailable"
+// error.
+type BatchAgentBadgesUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // KillswitchCapabilityResponseBody is used to define fields on response body
 // types.
 type KillswitchCapabilityResponseBody struct {
@@ -1855,14 +2069,18 @@ type KillswitchMCPServerResponseBody struct {
 // KillswitchSummaryResponseBody is used to define fields on response body
 // types.
 type KillswitchSummaryResponseBody struct {
-	ID              string                          `form:"id" json:"id" xml:"id"`
-	CapabilityKey   string                          `form:"capability_key" json:"capability_key" xml:"capability_key"`
-	CapabilityLabel string                          `form:"capability_label" json:"capability_label" xml:"capability_label"`
-	UserID          string                          `form:"user_id" json:"user_id" xml:"user_id"`
-	Version         int64                           `form:"version" json:"version" xml:"version"`
-	Status          string                          `form:"status" json:"status" xml:"status"`
-	Scope           *KillswitchScopeResponseBody    `form:"scope" json:"scope" xml:"scope"`
-	Schedule        *KillswitchScheduleResponseBody `form:"schedule" json:"schedule" xml:"schedule"`
+	ID              string `form:"id" json:"id" xml:"id"`
+	CapabilityKey   string `form:"capability_key" json:"capability_key" xml:"capability_key"`
+	CapabilityLabel string `form:"capability_label" json:"capability_label" xml:"capability_label"`
+	// Present only for user restrictions
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Present only for registered-agent restrictions
+	AgentID       *string                         `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	PrincipalKind string                          `form:"principal_kind" json:"principal_kind" xml:"principal_kind"`
+	Version       int64                           `form:"version" json:"version" xml:"version"`
+	Status        string                          `form:"status" json:"status" xml:"status"`
+	Scope         *KillswitchScopeResponseBody    `form:"scope" json:"scope" xml:"scope"`
+	Schedule      *KillswitchScheduleResponseBody `form:"schedule" json:"schedule" xml:"schedule"`
 }
 
 // KillswitchScopeResponseBody is used to define fields on response body types.
@@ -1917,6 +2135,15 @@ type KillswitchOverlapResponseBody struct {
 // types.
 type KillswitchUserBadgeResponseBody struct {
 	UserID      string `form:"user_id" json:"user_id" xml:"user_id"`
+	Affected    bool   `form:"affected" json:"affected" xml:"affected"`
+	AffectedNow bool   `form:"affected_now" json:"affected_now" xml:"affected_now"`
+	Scheduled   bool   `form:"scheduled" json:"scheduled" xml:"scheduled"`
+}
+
+// KillswitchAgentBadgeResponseBody is used to define fields on response body
+// types.
+type KillswitchAgentBadgeResponseBody struct {
+	AgentID     string `form:"agent_id" json:"agent_id" xml:"agent_id"`
 	Affected    bool   `form:"affected" json:"affected" xml:"affected"`
 	AffectedNow bool   `form:"affected_now" json:"affected_now" xml:"affected_now"`
 	Scheduled   bool   `form:"scheduled" json:"scheduled" xml:"scheduled"`
@@ -2020,6 +2247,8 @@ func NewGetResponseBody(res *killswitches.KillswitchDetail) *GetResponseBody {
 		CapabilityKey:    string(res.CapabilityKey),
 		CapabilityLabel:  res.CapabilityLabel,
 		UserID:           res.UserID,
+		AgentID:          res.AgentID,
+		PrincipalKind:    string(res.PrincipalKind),
 		Version:          res.Version,
 		Status:           string(res.Status),
 	}
@@ -2126,6 +2355,25 @@ func NewBatchUserBadgesResponseBody(res *killswitches.KillswitchBatchUserBadgesR
 		}
 	} else {
 		body.Badges = []*KillswitchUserBadgeResponseBody{}
+	}
+	return body
+}
+
+// NewBatchAgentBadgesResponseBody builds the HTTP response body from the
+// result of the "batchAgentBadges" endpoint of the "killswitches" service.
+func NewBatchAgentBadgesResponseBody(res *killswitches.KillswitchBatchAgentBadgesResult) *BatchAgentBadgesResponseBody {
+	body := &BatchAgentBadgesResponseBody{}
+	if res.Badges != nil {
+		body.Badges = make([]*KillswitchAgentBadgeResponseBody, len(res.Badges))
+		for i, val := range res.Badges {
+			if val == nil {
+				body.Badges[i] = nil
+				continue
+			}
+			body.Badges[i] = marshalKillswitchesKillswitchAgentBadgeToKillswitchAgentBadgeResponseBody(val)
+		}
+	} else {
+		body.Badges = []*KillswitchAgentBadgeResponseBody{}
 	}
 	return body
 }
@@ -3455,6 +3703,151 @@ func NewBatchUserBadgesUnavailableResponseBody(res *goa.ServiceError) *BatchUser
 	return body
 }
 
+// NewBatchAgentBadgesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "batchAgentBadges" endpoint of the "killswitches"
+// service.
+func NewBatchAgentBadgesUnauthorizedResponseBody(res *goa.ServiceError) *BatchAgentBadgesUnauthorizedResponseBody {
+	body := &BatchAgentBadgesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBatchAgentBadgesForbiddenResponseBody builds the HTTP response body from
+// the result of the "batchAgentBadges" endpoint of the "killswitches" service.
+func NewBatchAgentBadgesForbiddenResponseBody(res *goa.ServiceError) *BatchAgentBadgesForbiddenResponseBody {
+	body := &BatchAgentBadgesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBatchAgentBadgesBadRequestResponseBody builds the HTTP response body from
+// the result of the "batchAgentBadges" endpoint of the "killswitches" service.
+func NewBatchAgentBadgesBadRequestResponseBody(res *goa.ServiceError) *BatchAgentBadgesBadRequestResponseBody {
+	body := &BatchAgentBadgesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBatchAgentBadgesNotFoundResponseBody builds the HTTP response body from
+// the result of the "batchAgentBadges" endpoint of the "killswitches" service.
+func NewBatchAgentBadgesNotFoundResponseBody(res *goa.ServiceError) *BatchAgentBadgesNotFoundResponseBody {
+	body := &BatchAgentBadgesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBatchAgentBadgesUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "batchAgentBadges" endpoint of the
+// "killswitches" service.
+func NewBatchAgentBadgesUnsupportedMediaResponseBody(res *goa.ServiceError) *BatchAgentBadgesUnsupportedMediaResponseBody {
+	body := &BatchAgentBadgesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBatchAgentBadgesInvalidResponseBody builds the HTTP response body from
+// the result of the "batchAgentBadges" endpoint of the "killswitches" service.
+func NewBatchAgentBadgesInvalidResponseBody(res *goa.ServiceError) *BatchAgentBadgesInvalidResponseBody {
+	body := &BatchAgentBadgesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBatchAgentBadgesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "batchAgentBadges" endpoint of the
+// "killswitches" service.
+func NewBatchAgentBadgesInvariantViolationResponseBody(res *goa.ServiceError) *BatchAgentBadgesInvariantViolationResponseBody {
+	body := &BatchAgentBadgesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBatchAgentBadgesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "batchAgentBadges" endpoint of the "killswitches" service.
+func NewBatchAgentBadgesUnexpectedResponseBody(res *goa.ServiceError) *BatchAgentBadgesUnexpectedResponseBody {
+	body := &BatchAgentBadgesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBatchAgentBadgesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "batchAgentBadges" endpoint of the "killswitches"
+// service.
+func NewBatchAgentBadgesGatewayErrorResponseBody(res *goa.ServiceError) *BatchAgentBadgesGatewayErrorResponseBody {
+	body := &BatchAgentBadgesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBatchAgentBadgesUnavailableResponseBody builds the HTTP response body
+// from the result of the "batchAgentBadges" endpoint of the "killswitches"
+// service.
+func NewBatchAgentBadgesUnavailableResponseBody(res *goa.ServiceError) *BatchAgentBadgesUnavailableResponseBody {
+	body := &BatchAgentBadgesUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListCapabilitiesPayload builds a killswitches service listCapabilities
 // endpoint payload.
 func NewListCapabilitiesPayload(sessionToken *string) *killswitches.ListCapabilitiesPayload {
@@ -3474,13 +3867,18 @@ func NewListMCPServersPayload(sessionToken *string) *killswitches.ListMCPServers
 }
 
 // NewListPayload builds a killswitches service list endpoint payload.
-func NewListPayload(capabilityKey *string, userID *string, status *string, limit *int32, cursor *string, sessionToken *string) *killswitches.ListPayload {
+func NewListPayload(capabilityKey *string, userID *string, agentID *string, principalKind *string, status *string, limit *int32, cursor *string, sessionToken *string) *killswitches.ListPayload {
 	v := &killswitches.ListPayload{}
 	if capabilityKey != nil {
 		tmpcapabilityKey := killswitches.KillswitchCapabilityKey(*capabilityKey)
 		v.CapabilityKey = &tmpcapabilityKey
 	}
 	v.UserID = userID
+	v.AgentID = agentID
+	if principalKind != nil {
+		tmpprincipalKind := killswitches.KillswitchPrincipalKind(*principalKind)
+		v.PrincipalKind = &tmpprincipalKind
+	}
 	if status != nil {
 		tmpstatus := killswitches.KillswitchStatus(*status)
 		v.Status = &tmpstatus
@@ -3506,7 +3904,8 @@ func NewCreatePayload(body *CreateRequestBody, sessionToken *string) *killswitch
 	v := &killswitches.CreatePayload{
 		OperationID:   *body.OperationID,
 		CapabilityKey: killswitches.KillswitchCapabilityKey(*body.CapabilityKey),
-		UserID:        *body.UserID,
+		UserID:        body.UserID,
+		AgentID:       body.AgentID,
 		ExternalNote:  *body.ExternalNote,
 		InternalNote:  *body.InternalNote,
 	}
@@ -3551,7 +3950,8 @@ func NewPreviewOverlapsPayload(body *PreviewOverlapsRequestBody, sessionToken *s
 	v := &killswitches.PreviewOverlapsPayload{
 		ID:            body.ID,
 		CapabilityKey: killswitches.KillswitchCapabilityKey(*body.CapabilityKey),
-		UserID:        *body.UserID,
+		UserID:        body.UserID,
+		AgentID:       body.AgentID,
 	}
 	v.Scope = unmarshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(body.Scope)
 	v.Schedule = unmarshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
@@ -3567,6 +3967,19 @@ func NewBatchUserBadgesPayload(body *BatchUserBadgesRequestBody, sessionToken *s
 	v.UserIds = make([]string, len(body.UserIds))
 	for i, val := range body.UserIds {
 		v.UserIds[i] = val
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewBatchAgentBadgesPayload builds a killswitches service batchAgentBadges
+// endpoint payload.
+func NewBatchAgentBadgesPayload(body *BatchAgentBadgesRequestBody, sessionToken *string) *killswitches.BatchAgentBadgesPayload {
+	v := &killswitches.BatchAgentBadgesPayload{}
+	v.AgentIds = make([]string, len(body.AgentIds))
+	for i, val := range body.AgentIds {
+		v.AgentIds[i] = val
 	}
 	v.SessionToken = sessionToken
 
@@ -3593,9 +4006,6 @@ func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
 	if body.CapabilityKey == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("capability_key", "body"))
 	}
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
-	}
 	if body.OperationID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.operation_id", *body.OperationID, goa.FormatUUID))
 	}
@@ -3603,6 +4013,9 @@ func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
 		if !(*body.CapabilityKey == "mcp_tool_calls") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.capability_key", *body.CapabilityKey, []any{"mcp_tool_calls"}))
 		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
 	if body.Scope != nil {
 		if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
@@ -3705,9 +4118,6 @@ func ValidatePreviewOverlapsRequestBody(body *PreviewOverlapsRequestBody) (err e
 	if body.CapabilityKey == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("capability_key", "body"))
 	}
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
-	}
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
@@ -3721,6 +4131,9 @@ func ValidatePreviewOverlapsRequestBody(body *PreviewOverlapsRequestBody) (err e
 		if !(*body.CapabilityKey == "mcp_tool_calls") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.capability_key", *body.CapabilityKey, []any{"mcp_tool_calls"}))
 		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
 	if body.Scope != nil {
 		if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
@@ -3746,6 +4159,24 @@ func ValidateBatchUserBadgesRequestBody(body *BatchUserBadgesRequestBody) (err e
 	}
 	if len(body.UserIds) > 100 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_ids", body.UserIds, len(body.UserIds), 100, false))
+	}
+	return
+}
+
+// ValidateBatchAgentBadgesRequestBody runs the validations defined on
+// BatchAgentBadgesRequestBody
+func ValidateBatchAgentBadgesRequestBody(body *BatchAgentBadgesRequestBody) (err error) {
+	if body.AgentIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_ids", "body"))
+	}
+	if len(body.AgentIds) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_ids", body.AgentIds, len(body.AgentIds), 1, true))
+	}
+	if len(body.AgentIds) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_ids", body.AgentIds, len(body.AgentIds), 100, false))
+	}
+	for _, e := range body.AgentIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

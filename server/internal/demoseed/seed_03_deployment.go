@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -338,18 +340,81 @@ func (s *seeder) seedDeploymentConnections(ctx context.Context) error {
 		}
 	}
 
-	if err := s.q.DeployInsertManagedAgentSession(ctx, repo.DeployInsertManagedAgentSessionParams{
-		ID:                  s.det("managed-agent-session-1"),
-		ProjectID:           proj,
-		OrganizationID:      org,
-		UserSessionIssuerID: s.usIssuer(),
-		UserSessionClientID: s.uscPublic(),
-		SubjectUrn:          "agent:" + s.det("managed-agent-1").String(),
-		AuthorizerUserID:    s.userID(demoUsers[0].handle),
-		Jti:                 s.det("managed-agent-jti-1").String(),
-		RefreshTokenHash:    "DEMO-NOT-A-VALID-HASH-" + s.det("managed-agent-refresh-1").String(),
-	}); err != nil {
-		return fmt.Errorf("insert demo managed agent session: %w", err)
+	return s.seedDeploymentAgentCredentials(ctx)
+}
+
+// agentCredential is one historical credential of registered agent n: last
+// used lastUsed ago, and revoked revoked ago (zero when it was not).
+type agentCredential struct {
+	n        int
+	lastUsed time.Duration
+	revoked  time.Duration
+}
+
+// seedDeploymentAgentCredentials writes the credential evidence Fleet reads.
+// It is history, never a runnable workload: access and refresh expiry are
+// past, hashes have no valid preimage, and delegation is empty. Release notes
+// assistant (4) is API-key-only, Legacy invoice exporter (9) is old, and
+// Nightly report agent (10) has never authenticated. Revoked Retired
+// documentation bot (3) and the revoked Deploy verifier credentials keep their
+// last-use stamps.
+func (s *seeder) seedDeploymentAgentCredentials(ctx context.Context) error {
+	proj := s.projectID()
+	org := s.orgID()
+	sessions := []agentCredential{
+		{1, 2 * time.Minute, 0},
+		{2, 12 * time.Minute, 0},
+		{3, 15 * time.Minute, managedAgentFixture(3).revoked},
+		{5, 5 * time.Minute, 0},
+		{6, 10 * time.Minute, 4 * time.Minute},
+		{7, 7 * time.Minute, 0},
+		{8, 20 * time.Minute, 0},
+		{9, 4 * 24 * time.Hour, 0},
+	}
+	for _, c := range sessions {
+		num := strconv.Itoa(c.n)
+		if err := s.q.DeployInsertManagedAgentSession(ctx, repo.DeployInsertManagedAgentSessionParams{
+			ID:                  s.det("managed-agent-session-" + num),
+			ProjectID:           proj,
+			OrganizationID:      org,
+			UserSessionIssuerID: s.usIssuer(),
+			UserSessionClientID: s.uscPublic(),
+			SubjectUrn:          "agent:" + s.managedAgentID(c.n).String(),
+			AuthorizerUserID:    s.userID(managedAgentFixture(c.n).owner),
+			Jti:                 s.det("managed-agent-jti-" + num).String(),
+			RefreshTokenHash:    "DEMO-NOT-A-VALID-HASH-" + s.det("managed-agent-refresh-"+num).String(),
+			LastUsedAt:          s.ago(c.lastUsed),
+			DeletedAt:           s.agoOrNull(c.revoked),
+		}); err != nil {
+			return fmt.Errorf("insert demo managed agent session %d: %w", c.n, err)
+		}
+	}
+
+	keys := []agentCredential{
+		{4, 3 * time.Minute, 0},
+		{5, 25 * time.Minute, 0},
+		{6, 30 * time.Minute, 4 * time.Minute},
+	}
+	for _, c := range keys {
+		num := strconv.Itoa(c.n)
+		agent := managedAgentFixture(c.n)
+		projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		if agent.inProject {
+			projectID = uuid.NullUUID{UUID: proj, Valid: true}
+		}
+		if err := s.q.DeployInsertAgentAPIKey(ctx, repo.DeployInsertAgentAPIKeyParams{
+			ID:              s.det("agent-api-key-" + num),
+			OrganizationID:  org,
+			ProjectID:       projectID,
+			CreatedByUserID: s.userID(agent.owner),
+			Name:            agent.name + " — expired demo credential",
+			KeyHash:         "DEMO-NOT-A-VALID-HASH-" + s.det("agent-api-key-hash-"+num).String(),
+			SubjectUrn:      "agent:" + s.managedAgentID(c.n).String(),
+			LastAccessedAt:  s.ago(c.lastUsed),
+			DeletedAt:       s.agoOrNull(c.revoked),
+		}); err != nil {
+			return fmt.Errorf("insert demo agent api key %d: %w", c.n, err)
+		}
 	}
 	return nil
 }

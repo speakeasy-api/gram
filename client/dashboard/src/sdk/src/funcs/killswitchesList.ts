@@ -115,9 +115,11 @@ async function $do(
   const path = pathToFunc("/rpc/killswitches.list")();
 
   const query = encodeFormQuery({
+    "agent_id": payload?.agent_id,
     "capability_key": payload?.capability_key,
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "principal_kind": payload?.principal_kind,
     "status": payload?.status,
     "user_id": payload?.user_id,
   });

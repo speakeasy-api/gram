@@ -101,7 +101,7 @@ describe("KillswitchEditorSheet", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Turn off MCP tool calls" }),
     );
-    expect(await screen.findByText("Choose one team member.")).not.toBeNull();
+    expect(await screen.findByText("Choose one target.")).not.toBeNull();
     expect(screen.getByText("Choose one capability.")).not.toBeNull();
     expect(screen.getByText("Choose an MCP server scope.")).not.toBeNull();
     expect(screen.getAllByText("This note is required.")).toHaveLength(2);
@@ -165,7 +165,7 @@ describe("KillswitchEditorSheet", () => {
     expect(
       screen.getByRole("button", { name: "Choose servers (1)" }),
     ).not.toBeNull();
-    expect(screen.getByText("Server A")).not.toBeNull();
+    expect(screen.getByText("Server A (Alpha)")).not.toBeNull();
     await userEvent.type(
       screen.getByLabelText("Public message shown to the member"),
       "Access is temporarily paused.",
@@ -212,6 +212,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -240,10 +241,14 @@ describe("KillswitchEditorSheet", () => {
       ),
     ).not.toBeNull();
     expect(
-      screen.getByText("Removed servers regain access immediately."),
+      screen.getByText(
+        "This restriction no longer covers removed servers. Other access controls still apply.",
+      ),
     ).not.toBeNull();
-    expect(screen.getByText("Unchanged: Server A")).not.toBeNull();
-    expect(screen.getByText("Removed: Server B, Server C")).not.toBeNull();
+    expect(screen.getByText("Unchanged: Server A (Alpha)")).not.toBeNull();
+    expect(
+      screen.getByText("Removed: Server B (Beta), Server C (Beta)"),
+    ).not.toBeNull();
   });
 
   it("warns when all-server scope narrows on a future schedule", async () => {
@@ -253,6 +258,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-all",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "scheduled",
@@ -285,8 +291,10 @@ describe("KillswitchEditorSheet", () => {
       screen.getByText(/Future MCP servers will no longer be covered/),
     ).not.toBeNull();
     expect(screen.getByText("Added: None")).not.toBeNull();
-    expect(screen.getByText("Unchanged: Server A")).not.toBeNull();
-    expect(screen.getByText("Removed: Server B, Server C")).not.toBeNull();
+    expect(screen.getByText("Unchanged: Server A (Alpha)")).not.toBeNull();
+    expect(
+      screen.getByText("Removed: Server B (Beta), Server C (Beta)"),
+    ).not.toBeNull();
   });
 
   it("warns about lost dynamic coverage when every current server is selected", async () => {
@@ -296,6 +304,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-all-current",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "active",
@@ -332,6 +341,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -441,6 +451,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-deleted-server",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "active",
@@ -468,6 +479,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-picker-names",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "active",
@@ -497,6 +509,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-picker",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -525,6 +538,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-active",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 2,
         status: "active",
@@ -560,6 +574,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-conflict",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "active",
@@ -640,6 +655,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -696,6 +712,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -787,5 +804,51 @@ describe("KillswitchEditorSheet", () => {
     );
     expect(onSubmit).toHaveBeenCalledTimes(2);
     expect(onSubmit.mock.calls[0]![1]).toBe(onSubmit.mock.calls[1]![1]);
+  });
+
+  it("retains the exact agent and capability when adding another restriction", async () => {
+    const view = renderEditor({
+      agentTarget: { id: "agent-1", name: "Synthetic agent" },
+      members: [],
+    });
+    await userEvent.click(screen.getByLabelText(/All MCP servers/));
+    await userEvent.type(
+      screen.getByLabelText("Public message returned to the caller"),
+      "Synthetic review",
+    );
+    await userEvent.type(
+      screen.getByLabelText("Internal note"),
+      "Synthetic test",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Review impact" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Turn off MCP tool calls" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Add another killswitch for Synthetic agent",
+      }),
+    );
+    expect(
+      (screen.getByLabelText("MCP tool calls") as HTMLInputElement).checked,
+    ).toBe(true);
+    await userEvent.click(screen.getByLabelText(/All MCP servers/));
+    await userEvent.type(
+      screen.getByLabelText("Public message returned to the caller"),
+      "Second review",
+    );
+    await userEvent.type(screen.getByLabelText("Internal note"), "Second test");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Review impact" }),
+    );
+    expect(view.onPreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agentId: "agent-1",
+        userId: "",
+        capabilityKey: "mcp_tool_calls",
+      }),
+    );
   });
 });

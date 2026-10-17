@@ -434,14 +434,20 @@ SELECT count(*)
 FROM killswitch_prescriptions p
 WHERE p.organization_id = $1::text
   AND (p.definition_key <> 'mcp_tool_execution'
-    OR p.principal_kind <> 'user'
+    OR p.principal_kind NOT IN ('user', 'agent')
     OR p.resource_kind <> 'mcp_server'
-    OR NOT EXISTS (
+    OR (p.principal_kind = 'user' AND NOT EXISTS (
       SELECT 1 FROM organization_user_relationships member
       WHERE member.organization_id = p.organization_id
         AND member.user_id = p.principal_key
         AND member.deleted_at IS NULL
     ))
+    OR (p.principal_kind = 'agent' AND NOT EXISTS (
+      SELECT 1 FROM agents agent
+      WHERE agent.organization_id = p.organization_id
+        AND agent.id::text = p.principal_key
+        AND agent.deleted IS FALSE
+    )))
 `
 
 // Principal and resource keys are canonical records owned by this org.
@@ -651,10 +657,17 @@ const postflightCountOwnerlessChats = `-- name: PostflightCountOwnerlessChats :o
 SELECT count(*)
 FROM chats WHERE organization_id = $1::text
   AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL)
+  AND id <> ALL($2::uuid[])
 `
 
-func (q *Queries) PostflightCountOwnerlessChats(ctx context.Context, orgID string) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightCountOwnerlessChats, orgID)
+type PostflightCountOwnerlessChatsParams struct {
+	OrgID         string
+	ExemptChatIds []uuid.UUID
+}
+
+// Fleet's external, collision and unknown captures are deliberately exempt.
+func (q *Queries) PostflightCountOwnerlessChats(ctx context.Context, arg PostflightCountOwnerlessChatsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountOwnerlessChats, arg.OrgID, arg.ExemptChatIds)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -838,12 +851,12 @@ func (q *Queries) PostflightCountUnwrappedToolsets(ctx context.Context, projectI
 const postflightKillswitchStartSemanticsInvalid = `-- name: PostflightKillswitchStartSemanticsInvalid :one
 
 SELECT (CASE WHEN
-    count(*) FILTER (WHERE starts_at IS NULL) = 7
+    count(*) FILTER (WHERE starts_at IS NULL) = 11
     AND count(*) FILTER (WHERE starts_at > clock_timestamp()) = 1
     AND count(*) FILTER (WHERE starts_at IS NOT NULL) = 1
     AND count(*) FILTER (
       WHERE activated_at IS NOT NULL AND activated_at < clock_timestamp()
-    ) = 8
+    ) = 12
   THEN 0 ELSE 1 END)::bigint AS stray
 FROM killswitch_prescription_versions
 WHERE organization_id = $1::text
@@ -861,7 +874,7 @@ func (q *Queries) PostflightKillswitchStartSemanticsInvalid(ctx context.Context,
 const postflightKillswitchStatusCoverageInvalid = `-- name: PostflightKillswitchStatusCoverageInvalid :one
 
 SELECT (CASE WHEN
-    count(*) FILTER (WHERE customer_status = 'active') = 3
+    count(*) FILTER (WHERE customer_status = 'active') = 7
     AND count(*) FILTER (WHERE customer_status = 'scheduled') = 1
     AND count(*) FILTER (WHERE customer_status = 'lifted') = 1
     AND count(*) FILTER (WHERE customer_status = 'expired') = 1

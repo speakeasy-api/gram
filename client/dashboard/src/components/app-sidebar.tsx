@@ -286,6 +286,9 @@ export function AppSidebar({
                   ]
                 : []),
               { item: routes.insights, ...accessFor(routes.insights) },
+              ...(navAccess.has(routes.fleet.url)
+                ? [{ item: routes.fleet, ...accessFor(routes.fleet) }]
+                : []),
               {
                 item: routes.agentSessions,
                 ...accessFor(routes.agentSessions),

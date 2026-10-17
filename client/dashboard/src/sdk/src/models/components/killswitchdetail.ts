@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -28,20 +29,38 @@ import {
   KillswitchStatus$inboundSchema,
 } from "./killswitchstatus.js";
 
+export const PrincipalKind = {
+  User: "user",
+  Agent: "agent",
+} as const;
+export type PrincipalKind = ClosedEnum<typeof PrincipalKind>;
+
 export type KillswitchDetail = {
+  /**
+   * Present only for registered-agent restrictions
+   */
+  agentId?: string | undefined;
   capabilityLabel: string;
   externalNote: string;
   history: Array<KillswitchHistoryEvent>;
   historyTruncated: boolean;
   id: string;
   internalNote: string;
+  principalKind: PrincipalKind;
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
-  userId: string;
+  /**
+   * Present only for user restrictions
+   */
+  userId?: string | undefined;
   version: number;
   capabilityKey: KillswitchCapabilityKey;
   status: KillswitchStatus;
 };
+
+/** @internal */
+export const PrincipalKind$inboundSchema: z.ZodMiniEnum<typeof PrincipalKind> =
+  z.enum(PrincipalKind);
 
 /** @internal */
 export const KillswitchDetail$inboundSchema: z.ZodMiniType<
@@ -49,25 +68,29 @@ export const KillswitchDetail$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    agent_id: z.optional(z.string()),
     capability_label: z.string(),
     external_note: z.string(),
     history: z.array(KillswitchHistoryEvent$inboundSchema),
     history_truncated: z.boolean(),
     id: z.string(),
     internal_note: z.string(),
+    principal_kind: PrincipalKind$inboundSchema,
     schedule: KillswitchSchedule$inboundSchema,
     scope: KillswitchScope$inboundSchema,
-    user_id: z.string(),
+    user_id: z.optional(z.string()),
     version: z.int(),
     capability_key: KillswitchCapabilityKey$inboundSchema,
     status: KillswitchStatus$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_id": "agentId",
       "capability_label": "capabilityLabel",
       "external_note": "externalNote",
       "history_truncated": "historyTruncated",
       "internal_note": "internalNote",
+      "principal_kind": "principalKind",
       "user_id": "userId",
       "capability_key": "capabilityKey",
     });
