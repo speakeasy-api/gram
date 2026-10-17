@@ -146,8 +146,13 @@ func newStdioBridge(command string, maxSessions int, idleTimeout time.Duration, 
 		keepalive:   stdioSSEKeepalive,
 		logger:      logger,
 		creds:       creds,
-		sessions:    make(map[string]*stdioSession),
-		closed:      false,
+
+		evictIdleAfter:       stdioEvictIdleAfter,
+		responseWriteTimeout: stdioResponseWriteTimeout,
+		stdinStallTimeout:    stdioStdinStallTimeout,
+
+		sessions: make(map[string]*stdioSession),
+		closed:   false,
 	}
 }
 
@@ -229,7 +234,11 @@ func (b *stdioBridge) handlePost(w *responseWriter, r *http.Request) {
 		}
 		return sess.send(ctx, msgs)
 	}
-	release := sess.acquire()
+	release, ok := sess.acquire()
+	if !ok {
+		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
+		return
+	}
 	defer release()
 
 	requests := requestMessages(msgs)
@@ -289,7 +298,7 @@ func (b *stdioBridge) handlePost(w *responseWriter, r *http.Request) {
 	_ = w.writeJSON(responses, batch)
 }
 
-func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, msgs []rpcMessage, batch bool, assertion callerAssertion) {
+func (b *stdioBridge) handleInitialize(w *responseWriter, r *http.Request, msgs []rpcMessage, batch bool, assertion callerAssertion) {
 	if batch || len(msgs) != 1 || msgs[0].method != "initialize" || msgs[0].id == "" {
 		writeRPCError(w, http.StatusBadRequest, nil, rpcCodeInvalidRequest, "Bad Request: Mcp-Session-Id header is required")
 		return
@@ -310,7 +319,10 @@ func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, m
 		cred = &admitted
 	}
 
-	sess, err := b.start(cred, assertion.principal)
+	exited := func() {
+		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server exited during initialize")
+	}
+	sess, err := b.start(r.Context(), cred, assertion.principal)
 	switch {
 	case errors.Is(err, errCredentialExpired):
 		writeUnauthorized(w)
@@ -329,7 +341,11 @@ func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, m
 	if cred != nil {
 		b.logger.Info("tunnel stdio session credential admitted", slog.String("stdio_session", logSessionID(sess.id)))
 	}
-	release := sess.acquire()
+	release, ok := sess.acquire()
+	if !ok {
+		exited()
+		return
+	}
 	defer release()
 
 	committed := false
@@ -390,7 +406,7 @@ func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, m
 	sess.logger.Info("tunnel stdio session started")
 }
 
-func (b *stdioBridge) handleGet(w http.ResponseWriter, r *http.Request) {
+func (b *stdioBridge) handleGet(w *responseWriter, r *http.Request) {
 	var assertion callerAssertion
 	if b.creds != nil {
 		var ok bool
@@ -432,7 +448,7 @@ func (b *stdioBridge) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (b *stdioBridge) handleDelete(w http.ResponseWriter, r *http.Request) {
+func (b *stdioBridge) handleDelete(w *responseWriter, r *http.Request) {
 	var assertion callerAssertion
 	if b.creds != nil {
 		var ok bool
@@ -543,6 +559,8 @@ func writeForwardError(w http.ResponseWriter, err error) {
 	}
 }
 
+// session finds a live session. A closing one is treated as gone, so its
+// client gets 404 while its server shuts down.
 func (b *stdioBridge) session(id string) *stdioSession {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -560,19 +578,35 @@ func (b *stdioBridge) remove(id string) {
 
 // start launches a session's server. In credentials mode cred is the
 // admitted credential: its token is written before the server starts, so a
-// server that reads it during startup finds it.
-func (b *stdioBridge) start(cred *admittedCredential, owner principal) (*stdioSession, error) {
+// server that reads it during startup finds it. At capacity it evicts the
+// session idle longest, waiting for its server to stop so the process count
+// stays capped.
+func (b *stdioBridge) start(ctx context.Context, cred *admittedCredential, owner principal) (*stdioSession, error) {
 	id, err := newStdioSessionID()
 	if err != nil {
 		return nil, err
 	}
-	logger := b.logger.With(slog.String("stdio_session", logSessionID(id)))
+	for {
+		sess, evicted, err := b.startOrEvict(id, cred, owner)
+		if sess != nil || err != nil {
+			return sess, err
+		}
+		evicted.logger.Info("tunnel stdio session evicted for a new session; stopping server")
+		// Waits for any admitted write, so it runs apart from this wait.
+		go evicted.terminate()
+		select {
+		case <-evicted.done:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		// Its own removal races this retry, which could otherwise still count it and evict another session.
+		b.remove(evicted.id)
+	}
+}
 
-// startOrEvict starts a session if there is room. At capacity it returns a
-// session whose slot will free for the caller to wait on: one already
-// closing, else the session idle longest, if idle past evictIdleAfter, which
-// it claims for the caller to stop.
-func (b *stdioBridge) startOrEvict(id string) (sess, freeing *stdioSession, evicted bool, err error) {
+// startOrEvict starts a session if there is room. At capacity it claims the
+// session idle longest, if idle past evictIdleAfter, for the caller to stop.
+func (b *stdioBridge) startOrEvict(id string, cred *admittedCredential, owner principal) (*stdioSession, *stdioSession, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -598,30 +632,31 @@ func (b *stdioBridge) startOrEvict(id string) (sess, freeing *stdioSession, evic
 		return nil, idlest, true, nil
 	}
 
+	logger := b.logger.With(slog.String("stdio_session", logSessionID(id)))
 	if b.creds == nil {
-		sess, err := startStdioSession(id, b.command, b.env, nil, logger)
+		sess, err := startStdioSession(id, b.command, b.env, b.stdinStallTimeout, nil, logger)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		b.sessions[id] = sess
 		go func() {
 			<-sess.done
 			b.remove(id)
 		}()
-		return sess, nil
+		return sess, nil, nil
 	}
 
 	dir, err := b.creds.store.createSession()
 	if err != nil {
-		return nil, fmt.Errorf("create session credentials: %w", err)
+		return nil, nil, fmt.Errorf("create session credentials: %w", err)
 	}
 	creds := newSessionCredentials(owner, cred.context, dir, b.creds.maxAge, b.creds.expiryGrace, b.creds.now)
-	sess, err := startCredentialedSession(id, b.command, credentialChildEnv(b.env, dir.tokenPath(), dir.homePath()), creds, *cred, logger)
+	sess, err := startCredentialedSession(id, b.command, credentialChildEnv(b.env, dir.tokenPath(), dir.homePath()), b.stdinStallTimeout, creds, *cred, logger)
 	if err != nil {
 		if rerr := dir.remove(); rerr != nil {
 			logger.Warn("tunnel stdio session credentials could not be removed", slog.Any("error", rerr))
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	b.sessions[id] = sess
 	b.creds.cleanups.Go(func() {
@@ -637,7 +672,7 @@ func (b *stdioBridge) startOrEvict(id string) (sess, freeing *stdioSession, evic
 }
 
 // startCredentialedSession publishes the first token, then starts the server.
-func startCredentialedSession(id, command string, env []string, creds *sessionCredentials, cred admittedCredential, logger *slog.Logger) (*stdioSession, error) {
+func startCredentialedSession(id, command string, env []string, stdinStall time.Duration, creds *sessionCredentials, cred admittedCredential, logger *slog.Logger) (*stdioSession, error) {
 	now := creds.now()
 	if cred.expired(now) {
 		return nil, errCredentialExpired
@@ -645,7 +680,7 @@ func startCredentialedSession(id, command string, env []string, creds *sessionCr
 	if err := creds.dir.writeToken(cred.token); err != nil {
 		return nil, fmt.Errorf("write session token: %w", err)
 	}
-	sess, err := startStdioSession(id, command, env, creds, logger)
+	sess, err := startStdioSession(id, command, env, stdinStall, creds, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -668,7 +703,7 @@ func (b *stdioBridge) reap(ctx context.Context) {
 			b.mu.Lock()
 			idle := make([]*stdioSession, 0)
 			for _, sess := range b.sessions {
-				if !sess.closing.Load() && sess.idleSince(now) > b.idleTimeout {
+				if sess.claimIdle(now, b.idleTimeout) {
 					idle = append(idle, sess)
 				}
 			}
@@ -733,6 +768,9 @@ type stdioSession struct {
 	// cred is nil unless credentials mode is on.
 	cred *sessionCredentials
 
+	// stdinStall bounds how long a stdin write may make no progress.
+	stdinStall time.Duration
+
 	// closing is set first thing when the session starts to close. Nothing
 	// is admitted once it is set.
 	closing atomic.Bool
@@ -765,7 +803,7 @@ type stdioSession struct {
 // creds is the session's credential state in credentials mode, set before
 // any of the session's goroutines start; nil otherwise. In credentials mode
 // the server's stderr is counted instead of logged: it can carry the token.
-func startStdioSession(id, command string, env []string, creds *sessionCredentials, logger *slog.Logger) (*stdioSession, error) {
+func startStdioSession(id, command string, env []string, stdinStall time.Duration, creds *sessionCredentials, logger *slog.Logger) (*stdioSession, error) {
 	quietStderr := creds != nil
 	cmd := shellCommand(command)
 	cmd.Env = env
@@ -803,6 +841,7 @@ func startStdioSession(id, command string, env []string, creds *sessionCredentia
 		cmd:          cmd,
 		stdin:        stdinW,
 		logger:       logger.With(slog.Int("pid", cmd.Process.Pid)),
+		stdinStall:   stdinStall,
 		cred:         creds,
 		closing:      atomic.Bool{},
 		groupAlive:   nil,

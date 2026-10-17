@@ -104,6 +104,9 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 	a := &Agent{cfg: cfg, handler: nil, stdio: nil, logger: logger}
 	var upstream http.Handler
 	if hasCommand {
+		if err := hideFromStdioServer(); err != nil {
+			logger.Warn("tunnel agent could not hide its environment from the stdio server", slog.Any("error", err))
+		}
 		creds, err := newCredentialBroker(cfg.StdioCredentials, logger)
 		if err != nil {
 			return nil, err

@@ -235,7 +235,8 @@ func (s *stdioSession) publishLocked(cred admittedCredential) error {
 // holding the gate. A token or assertion that expired while the request
 // waited is refused without ending the session: a stale request says nothing
 // about the session's newest token, and the deadline still bounds it. Any
-// other failure after admission ends the session.
+// other failure after admission, short of the caller giving up, ends the
+// session.
 func (s *stdioSession) sendCredentialed(ctx context.Context, msgs []rpcMessage, cred admittedCredential) error {
 	if !s.enterGate(ctx) {
 		if ctx.Err() != nil {
@@ -259,10 +260,13 @@ func (s *stdioSession) sendCredentialed(ctx context.Context, msgs []rpcMessage, 
 		s.cred.afterPublish()
 	}
 	// A request admitted with a published token that cannot be forwarded,
-	// whether stdin is closed, a write failed part way, or the caller gave up
-	// waiting, ends the session before the gate is released.
+	// because stdin is closed or a write failed, ends the session before the
+	// gate is released. A caller that gives up only stops waiting; its write
+	// carries on.
 	if err := s.send(ctx, msgs); err != nil {
-		s.close()
+		if ctx.Err() == nil {
+			s.close()
+		}
 		return err
 	}
 	return nil

@@ -2707,7 +2707,7 @@ jobs:
       # The stdio credential tests are Linux-only and need /dev/shm on tmpfs;
       # they fail rather than skip when it is missing.
       - name: Test
-        run: mise exec -- go test -race -count=1 ./tunnel/...
+        run: mise run test:tunnel -race -count=1 ./tunnel/...
 
       # Switching to another user needs root; the job itself runs unprivileged.
       - name: Test credential paths against another user
