@@ -1,0 +1,221 @@
+# GitHub Actions on github.com.
+#
+# Every github.com workflow's tokens come from the same issuer, so the issuer
+# and its keys are constants and the repository in the subject is what pins an
+# access rule to one customer. The rule uses the ID-bearing subject format,
+# repo:OWNER@OWNER_ID/REPO@REPO_ID:..., which every repository created after
+# July 15, 2026 uses: a released name re-registered by someone else carries new
+# IDs, so the rule does not follow the name. The stem ends at the ":" before the
+# run's context, so the wildcard admits every branch, tag, environment and pull
+# request run in that one repository and nothing in another. Each pattern
+# refuses ":", "/" and "@", which would otherwise let a value extend the stem
+# past its own segment.
+key: github-actions
+display_name: GitHub Actions
+description: Let GitHub Actions workflows in a repository call your MCP servers, with no Speakeasy secret stored in GitHub.
+icon: /access-hub/github-actions.svg
+enabled: true
+
+issuer:
+  value: https://token.actions.githubusercontent.com
+  visibility: hidden
+jwks_uri:
+  value: https://token.actions.githubusercontent.com/.well-known/jwks
+  visibility: hidden
+
+variables:
+  - key: owner
+    tier: rule
+    label: Repository owner
+    help: The user or organization the repository belongs to, as in github.com/OWNER/REPO.
+    placeholder: your-org
+    pattern: "[A-Za-z0-9-]+"
+    pattern_message: An owner is letters, numbers and hyphens.
+  - key: owner_id
+    tier: rule
+    label: Owner ID
+    help: The owner's numeric ID, the number after OWNER@ in the subject.
+    placeholder: "12345678"
+    pattern: "[0-9]+"
+    pattern_message: An owner ID is a number.
+  - key: repo
+    tier: rule
+    label: Repository name
+    help: The repository's name, as in github.com/OWNER/REPO.
+    placeholder: your-repo
+    pattern: "[A-Za-z0-9._-]+"
+    pattern_message: A repository name is letters, numbers, ".", "_" and "-".
+  - key: repo_id
+    tier: rule
+    label: Repository ID
+    help: The repository's numeric ID, the number after REPO@ in the subject.
+    placeholder: "123456789"
+    pattern: "[0-9]+"
+    pattern_message: A repository ID is a number.
+
+subject:
+  template: "repo:{owner}@{owner_id}/{repo}@{repo_id}:"
+  wildcard: true
+
+setup:
+  steps:
+    - id: before
+      title: Before you start
+      phase: collect
+      blocks:
+        - type: text
+          markdown: |
+            You need:
+
+            - **Admin access to the repository**, to add workflows and Actions variables.
+            - **A repository created after July 15, 2026**, or one whose tokens already use ID-bearing subjects. Older repositories sign tokens with name-based subjects, which this setup does not support yet.
+            - **A Speakeasy MCP server** reached on a Speakeasy host, not a custom domain.
+        - type: text
+          markdown: |
+            The workflow requests a short-lived token from GitHub and exchanges it with Speakeasy for each run. Nothing secret is stored in GitHub.
+        - type: link
+          href: https://docs.github.com/en/actions/reference/security/oidc
+          label: "GitHub docs: OpenID Connect reference"
+
+    - id: repository
+      title: Your repository
+      phase: collect
+      blocks:
+        - type: text
+          markdown: |
+            GitHub doesn't show a repository's numeric IDs on its pages, so read them from a token one of its workflows receives. Use either way below.
+
+            **In the browser.** In the repository, open **Actions → New workflow → set up a workflow yourself**, paste this, and commit it. Then open the workflow under **Actions**, click **Run workflow**, and open the run's log.
+
+            ```yaml
+            name: Show Speakeasy subject
+            on: workflow_dispatch
+            permissions:
+              id-token: write
+            jobs:
+              subject:
+                runs-on: ubuntu-latest
+                steps:
+                  - name: Show this repository's subject
+                    run: |
+                      token=$(curl -sS --fail-with-body \
+                        -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                        "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
+                      echo "::add-mask::$token"
+                      jq -nR --arg t "$token" '$t | split(".")[1]
+                        | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson
+                        | {"Subject": .sub,
+                           "Repository owner": .repository_owner,
+                           "Owner ID": .repository_owner_id,
+                           "Repository name": (.repository | split("/")[1]),
+                           "Repository ID": .repository_id}'
+            ```
+
+            **With the GitHub CLI.** Run this, replacing OWNER and REPO. Each ID follows an `@` in `sub_claim_prefix`.
+
+            ```sh
+            gh api repos/OWNER/REPO/actions/oidc/customization/sub
+            ```
+
+            Either way, the subject must start `repo:OWNER@OWNER_ID/REPO@REPO_ID:`. If it has no IDs after the `@` signs, or starts any other way, the repository uses a subject format this setup doesn't support yet.
+        - type: field
+          variable: owner
+        - type: field
+          variable: owner_id
+        - type: field
+          variable: repo
+        - type: field
+          variable: repo_id
+        - type: text
+          markdown: |
+            This rule admits **every workflow run in the repository**: each branch, tag, environment and pull request run. Anyone who can push a workflow to the repository can use it. Choose an agent whose policy reaches only what those workflows need.
+        - type: subject_rule
+
+    - id: agent
+      title: Choose an agent and connect
+      phase: create
+      blocks:
+        - type: text
+          markdown: |
+            Every workflow run in this repository acts under the agent you choose, and can do only what its policy allows. Connecting saves the access rule from the previous step with this agent. You can remove it from the Access Hub at any time, and the next run is refused.
+        - type: agent_picker
+        - type: tags
+
+    - id: variables
+      title: Add the repository variables
+      phase: connect
+      blocks:
+        - type: text
+          markdown: |
+            In the repository, open **Settings → Secrets and variables → Actions**, choose the **Variables** tab, and add each variable below with **New repository variable**. None of them is secret.
+        - type: computed_status
+        - type: checklist_item
+          label: SPEAKEASY_AUDIENCE
+          value: issuer_url
+          help: The audience the workflow requests its GitHub token for. Speakeasy refuses a token issued for any other audience.
+        - type: checklist_item
+          label: SPEAKEASY_TOKEN_ENDPOINT
+          value: token_endpoint
+        - type: checklist_item
+          label: SPEAKEASY_MCP_URL
+          markdown: The URL of the MCP server the workflow calls, shown on the server's page in Speakeasy.
+
+    - id: workflow
+      title: Add the workflow step
+      phase: connect
+      blocks:
+        - type: text
+          markdown: |
+            Give the job permission to request a GitHub token, then add a step that exchanges it for a Speakeasy access token. Later steps in the job read it from `SPEAKEASY_ACCESS_TOKEN`.
+
+            ```yaml
+            jobs:
+              speakeasy:
+                runs-on: ubuntu-latest
+                permissions:
+                  id-token: write
+                  contents: read
+                steps:
+                  - name: Get a Speakeasy access token
+                    env:
+                      AUDIENCE: ${{ vars.SPEAKEASY_AUDIENCE }}
+                      TOKEN_ENDPOINT: ${{ vars.SPEAKEASY_TOKEN_ENDPOINT }}
+                    run: |
+                      set -euo pipefail
+                      oidc=$(curl -sS --fail-with-body \
+                        -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                        "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$(jq -rn --arg a "$AUDIENCE" '$a|@uri')" \
+                        | jq -r .value)
+                      echo "::add-mask::$oidc"
+                      token=$(curl -sS --fail-with-body "$TOKEN_ENDPOINT" \
+                        --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \
+                        --data-urlencode "assertion=$oidc" \
+                        | jq -r .access_token)
+                      echo "::add-mask::$token"
+                      echo "SPEAKEASY_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
+
+                  - name: List the MCP server's tools
+                    env:
+                      MCP_URL: ${{ vars.SPEAKEASY_MCP_URL }}
+                    run: |
+                      curl -sS --fail-with-body "$MCP_URL" \
+                        -H "Authorization: Bearer $SPEAKEASY_ACCESS_TOKEN" \
+                        -H "Content-Type: application/json" \
+                        -H "Accept: application/json, text/event-stream" \
+                        -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+            ```
+
+            The access token lasts up to 15 minutes and cannot be refreshed. A job that runs longer repeats the first step, which requests a new GitHub token: each one can be exchanged only once.
+
+    - id: check
+      title: Check it worked
+      phase: connect
+      blocks:
+        - type: text
+          markdown: |
+            Run the workflow. The second step prints the tools the agent's policy lets the workflow reach.
+
+            If the exchange answers `invalid_grant`, check that the run's repository matches the access rule and that `SPEAKEASY_AUDIENCE` matches the value above exactly.
+        - type: text
+          markdown: |
+            Each run that signs in appears in **Sessions**, under GitHub Actions' issuer and the run's own subject, such as `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main`.
