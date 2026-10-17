@@ -16,35 +16,37 @@ import (
 
 // Client is the "mcpServers" service client.
 type Client struct {
-	CreateMcpServerEndpoint      goa.Endpoint
-	GetMcpServerEndpoint         goa.Endpoint
-	ListMcpServersEndpoint       goa.Endpoint
-	ListMcpServersForOrgEndpoint goa.Endpoint
-	UpdateMcpServerEndpoint      goa.Endpoint
-	ListToolFiltersEndpoint      goa.Endpoint
-	SetToolMetadataBatchEndpoint goa.Endpoint
-	AddToolMetadataBatchEndpoint goa.Endpoint
-	ListToolMetadataEndpoint     goa.Endpoint
-	SetToolMetadataEndpoint      goa.Endpoint
-	DeleteToolMetadataEndpoint   goa.Endpoint
-	DeleteMcpServerEndpoint      goa.Endpoint
+	CreateMcpServerEndpoint       goa.Endpoint
+	GetMcpServerEndpoint          goa.Endpoint
+	GetEnvironmentHeadersEndpoint goa.Endpoint
+	ListMcpServersEndpoint        goa.Endpoint
+	ListMcpServersForOrgEndpoint  goa.Endpoint
+	UpdateMcpServerEndpoint       goa.Endpoint
+	ListToolFiltersEndpoint       goa.Endpoint
+	SetToolMetadataBatchEndpoint  goa.Endpoint
+	AddToolMetadataBatchEndpoint  goa.Endpoint
+	ListToolMetadataEndpoint      goa.Endpoint
+	SetToolMetadataEndpoint       goa.Endpoint
+	DeleteToolMetadataEndpoint    goa.Endpoint
+	DeleteMcpServerEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "mcpServers" service client given the endpoints.
-func NewClient(createMcpServer, getMcpServer, listMcpServers, listMcpServersForOrg, updateMcpServer, listToolFilters, setToolMetadataBatch, addToolMetadataBatch, listToolMetadata, setToolMetadata, deleteToolMetadata, deleteMcpServer goa.Endpoint) *Client {
+func NewClient(createMcpServer, getMcpServer, getEnvironmentHeaders, listMcpServers, listMcpServersForOrg, updateMcpServer, listToolFilters, setToolMetadataBatch, addToolMetadataBatch, listToolMetadata, setToolMetadata, deleteToolMetadata, deleteMcpServer goa.Endpoint) *Client {
 	return &Client{
-		CreateMcpServerEndpoint:      createMcpServer,
-		GetMcpServerEndpoint:         getMcpServer,
-		ListMcpServersEndpoint:       listMcpServers,
-		ListMcpServersForOrgEndpoint: listMcpServersForOrg,
-		UpdateMcpServerEndpoint:      updateMcpServer,
-		ListToolFiltersEndpoint:      listToolFilters,
-		SetToolMetadataBatchEndpoint: setToolMetadataBatch,
-		AddToolMetadataBatchEndpoint: addToolMetadataBatch,
-		ListToolMetadataEndpoint:     listToolMetadata,
-		SetToolMetadataEndpoint:      setToolMetadata,
-		DeleteToolMetadataEndpoint:   deleteToolMetadata,
-		DeleteMcpServerEndpoint:      deleteMcpServer,
+		CreateMcpServerEndpoint:       createMcpServer,
+		GetMcpServerEndpoint:          getMcpServer,
+		GetEnvironmentHeadersEndpoint: getEnvironmentHeaders,
+		ListMcpServersEndpoint:        listMcpServers,
+		ListMcpServersForOrgEndpoint:  listMcpServersForOrg,
+		UpdateMcpServerEndpoint:       updateMcpServer,
+		ListToolFiltersEndpoint:       listToolFilters,
+		SetToolMetadataBatchEndpoint:  setToolMetadataBatch,
+		AddToolMetadataBatchEndpoint:  addToolMetadataBatch,
+		ListToolMetadataEndpoint:      listToolMetadata,
+		SetToolMetadataEndpoint:       setToolMetadata,
+		DeleteToolMetadataEndpoint:    deleteToolMetadata,
+		DeleteMcpServerEndpoint:       deleteMcpServer,
 	}
 }
 
@@ -93,6 +95,30 @@ func (c *Client) GetMcpServer(ctx context.Context, p *GetMcpServerPayload) (res 
 		return
 	}
 	return ires.(*types.McpServer), nil
+}
+
+// GetEnvironmentHeaders calls the "getEnvironmentHeaders" endpoint of the
+// "mcpServers" service.
+// GetEnvironmentHeaders may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) GetEnvironmentHeaders(ctx context.Context, p *GetEnvironmentHeadersPayload) (res *McpServerEnvironmentHeaders, err error) {
+	var ires any
+	ires, err = c.GetEnvironmentHeadersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*McpServerEnvironmentHeaders), nil
 }
 
 // ListMcpServers calls the "listMcpServers" endpoint of the "mcpServers"

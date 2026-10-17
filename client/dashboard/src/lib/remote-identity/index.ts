@@ -30,7 +30,10 @@ export type {
   HeaderSource,
 } from "./drafts/headerDrafts";
 
-export { useHeaderDrafts } from "./drafts/useHeaderDrafts";
+export {
+  useHeaderDrafts,
+  useTunneledHeaderDrafts,
+} from "./drafts/useHeaderDrafts";
 export type { HeaderDraftsState } from "./drafts/useHeaderDrafts";
 
 export {

@@ -32,7 +32,7 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 		Name:                                server.Name,
 		KeyPrefix:                           server.KeyPrefix,
 		Status:                              types.TunneledMcpLifecycleStatus(server.Status),
-		ConnectionStatus:                    tunneledMcpConnectionStatus(server, connections),
+		ConnectionStatus:                    ClassifyTunneledMcpConnection(server.Status, server.LastSeenAt.Valid, len(connections)),
 		AllowPublic:                         server.AllowPublic,
 		AgentVersion:                        agentVersion,
 		ResourceIdentifier:                  conv.FromPGText[string](server.ResourceIdentifier),
@@ -43,8 +43,12 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 		LastSeenAt:                          lastSeenAt,
 		ActiveConnectionCount:               len(connections),
 		ActiveConsumerSessionCount:          activeConsumerSessionCount(connections),
-		CreatedAt:                           server.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                           server.UpdatedAt.Time.Format(time.RFC3339),
+		// Set by getServer, which is the only response that checks the
+		// tunnel's MCP servers for environment links.
+		EnvironmentLinked:         nil,
+		EnvironmentLinkAuthorized: nil,
+		CreatedAt:                 server.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                 server.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
@@ -56,6 +60,35 @@ func BuildTunneledMcpServerListView(servers []repo.TunneledMcpServer, connection
 	return result
 }
 
+// BuildTunneledMcpServerHeaderView converts a repo header row into the API
+// response type. The row's value should already be decrypted and redacted
+// before being passed to this function.
+func BuildTunneledMcpServerHeaderView(header repo.TunneledMcpServerHeader) *types.TunneledMcpServerHeader {
+	return &types.TunneledMcpServerHeader{
+		ID:                     header.ID.String(),
+		Name:                   header.Name,
+		Description:            conv.FromPGText[string](header.Description),
+		IsRequired:             header.IsRequired,
+		IsSecret:               header.IsSecret,
+		Value:                  conv.FromPGText[string](header.Value),
+		ValueFromRequestHeader: conv.FromPGText[string](header.ValueFromRequestHeader),
+		CreatedAt:              header.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              header.UpdatedAt.Time.Format(time.RFC3339),
+	}
+}
+
+// BuildTunneledMcpServerHeaderListView converts repo header rows into the API
+// response type. The rows' values should already be decrypted and redacted
+// before being passed to this function.
+func BuildTunneledMcpServerHeaderListView(headers []repo.TunneledMcpServerHeader) []*types.TunneledMcpServerHeader {
+	result := make([]*types.TunneledMcpServerHeader, len(headers))
+	for i, header := range headers {
+		result[i] = BuildTunneledMcpServerHeaderView(header)
+	}
+
+	return result
+}
+
 func BuildTunneledMcpServerConnectionsView(connections []TunneledMcpConnectionCache) *types.TunneledMcpServerConnections {
 	return &types.TunneledMcpServerConnections{
 		Connections:                buildTunneledMcpConnectionViews(connections),
@@ -64,11 +97,16 @@ func BuildTunneledMcpServerConnectionsView(connections []TunneledMcpConnectionCa
 	}
 }
 
-func tunneledMcpConnectionStatus(server repo.TunneledMcpServer, connections []TunneledMcpConnectionCache) types.TunneledMcpConnectionStatus {
-	if len(connections) > 0 {
+// ClassifyTunneledMcpConnection derives a tunnel's agent connection state from
+// its durable lifecycle status, whether an agent has ever been seen, and the
+// number of unexpired live connections in the runtime store. Any live
+// connection wins; otherwise a source that has never reported in is
+// never_connected and every other source is inactive.
+func ClassifyTunneledMcpConnection(sourceStatus string, everSeen bool, liveConnections int) types.TunneledMcpConnectionStatus {
+	if liveConnections > 0 {
 		return types.TunneledMcpConnectionStatus("connected")
 	}
-	if server.Status == "created" && !server.LastSeenAt.Valid {
+	if sourceStatus == "created" && !everSeen {
 		return types.TunneledMcpConnectionStatus("never_connected")
 	}
 	return types.TunneledMcpConnectionStatus("inactive")

@@ -723,3 +723,52 @@ VALUES
      'prescription_version', @prescription_version::int, 'state', @state::text),
    now() + (@expires_in::text)::interval, now() - (@created_ago::text)::interval,
    now() - (@created_ago::text)::interval);
+
+-- A private MCP server behind the tunnel agent. The tunnel has never
+-- connected, so its settings render from stored rows alone. key_hash is
+-- built from the tunnel's own id, so it stays unique per tenant.
+-- name: ServersInsertTunnel :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, status)
+VALUES (@id::uuid, @project_id::uuid, @name::text, @key_hash::text,
+        'gram_tunnel_demo', 'created');
+
+-- One header the tunnel adds to every forwarded request: a static value or
+-- one copied from the caller's request, never both. No secret header is
+-- seeded: reads decrypt secret values, and a fake ciphertext would fail them.
+-- name: ServersInsertTunnelHeader :exec
+INSERT INTO tunneled_mcp_server_headers
+  (id, tunneled_mcp_server_id, name, description, is_required, is_secret,
+   value, value_from_request_header)
+VALUES
+  (@id::uuid, @tunneled_mcp_server_id::uuid, @name::text, @description::text,
+   @is_required::boolean, FALSE, sqlc.narg('value')::text,
+   sqlc.narg('value_from_request_header')::text);
+
+-- environment_id is the server's linked environment, NULL for none.
+-- name: ServersInsertTunneledMCPServer :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                         environment_id, user_session_issuer_id, visibility)
+VALUES (@id::uuid, @project_id::uuid, @name::text, @slug::text,
+        @tunneled_mcp_server_id::uuid, sqlc.narg('environment_id')::uuid,
+        @user_session_issuer_id::uuid, 'private');
+
+-- Endpoint slugs on the platform domain are globally unique and org-slug
+-- prefixed, so the slug is built from the tenant's OrgSlug.
+-- name: ServersInsertTunneledMCPEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug)
+VALUES (@id::uuid, @project_id::uuid, NULL, @mcp_server_id::uuid, @slug::text);
+
+-- An environment for per-server environment headers. Environments are
+-- deleted by organization at the top of the seed (OrgDeleteEnvironments),
+-- since projects deleting them would only null their project_id.
+-- name: ServersInsertEnvironment :exec
+INSERT INTO environments (id, organization_id, project_id, name, slug, description)
+VALUES (@id::uuid, @org_id::text, @project_id::uuid, @name::text, @slug::text,
+        @description::text);
+
+-- Values are non-secret placeholders: a fake ciphertext would fail
+-- decryption.
+-- name: ServersInsertEnvironmentEntry :exec
+INSERT INTO environment_entries (environment_id, name, value, is_secret)
+VALUES (@environment_id::uuid, @name::text, @value::text, FALSE);
+

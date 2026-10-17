@@ -50,13 +50,19 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
 vi.mock("@gram/client/react-query/toolset.js", () => ({
   invalidateAllToolset: vi.fn(),
 }));
-vi.mock("@gram/client/react-query/updateEnvironment.js", () => ({
-  useUpdateEnvironmentMutation: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn(),
-    isPending: false,
+vi.mock(
+  "@gram/client/react-query/updateEnvironment.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/updateEnvironment.js")
+    >()),
+    useUpdateEnvironmentMutation: () => ({
+      mutate: vi.fn(),
+      mutateAsync: vi.fn(),
+      isPending: false,
+    }),
   }),
-}));
+);
 vi.mock("./useEnvironmentVariables", () => ({
   useEnvironmentVariables: () => [],
 }));

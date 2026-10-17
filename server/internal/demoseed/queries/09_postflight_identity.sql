@@ -507,3 +507,32 @@ LEFT JOIN sigint_custom_signals cs
 WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
   AND (s.id IS NULL OR s.deleted IS TRUE
     OR cs.id IS NULL OR cs.deleted IS TRUE);
+
+-- Scoped to one fixture's own tunnel, so other tunneled fixtures in the
+-- project never change the count.
+-- name: PostflightIDTunnelHeaders :one
+SELECT count(*)
+FROM tunneled_mcp_server_headers header
+JOIN tunneled_mcp_servers tunnel ON tunnel.id = header.tunneled_mcp_server_id
+WHERE tunnel.id = @tunnel_id::uuid
+  AND tunnel.project_id = @project_id::uuid AND tunnel.deleted IS FALSE
+  AND header.deleted IS FALSE AND header.is_secret IS FALSE;
+
+-- The tunenv checks are scoped to that fixture's own tunnel and
+-- environments, so other fixtures in the project never change them.
+-- name: PostflightIDTunnelEnvironmentLinkedServers :one
+SELECT count(*)
+FROM mcp_servers server
+JOIN environments env ON env.id = server.environment_id
+WHERE server.project_id = @project_id::uuid AND server.deleted IS FALSE
+  AND env.project_id = @project_id::uuid AND env.deleted IS FALSE
+  AND server.tunneled_mcp_server_id = @tunnel_id::uuid;
+
+-- name: PostflightIDTunnelEnvironmentHeaderEntries :one
+SELECT count(*)
+FROM environment_entries entry
+JOIN environments env ON env.id = entry.environment_id
+WHERE env.id = ANY(@environment_ids::uuid[])
+  AND env.project_id = @project_id::uuid AND env.deleted IS FALSE
+  AND entry.name LIKE 'MCP\_HEADER\_%';
+

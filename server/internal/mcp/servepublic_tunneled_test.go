@@ -180,6 +180,7 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type publicTunnelFixture struct {
 	endpointSlug  string
+	mcpServerID   uuid.UUID
 	tunnelID      uuid.UUID
 	gateway       *fakeTunnelGateway
 	gatewayServer *httptest.Server
@@ -246,6 +247,7 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 
 	return publicTunnelFixture{
 		endpointSlug:  endpointSlug,
+		mcpServerID:   mcpServer.ID,
 		tunnelID:      tunneledServer.ID,
 		gateway:       gateway,
 		gatewayServer: gatewayServer,

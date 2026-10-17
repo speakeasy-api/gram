@@ -1074,6 +1074,73 @@ func (q *Queries) PostflightIDTrustedIssuerSessions(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightIDTunnelEnvironmentHeaderEntries = `-- name: PostflightIDTunnelEnvironmentHeaderEntries :one
+SELECT count(*)
+FROM environment_entries entry
+JOIN environments env ON env.id = entry.environment_id
+WHERE env.id = ANY($1::uuid[])
+  AND env.project_id = $2::uuid AND env.deleted IS FALSE
+  AND entry.name LIKE 'MCP\_HEADER\_%'
+`
+
+type PostflightIDTunnelEnvironmentHeaderEntriesParams struct {
+	EnvironmentIds []uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) PostflightIDTunnelEnvironmentHeaderEntries(ctx context.Context, arg PostflightIDTunnelEnvironmentHeaderEntriesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDTunnelEnvironmentHeaderEntries, arg.EnvironmentIds, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDTunnelEnvironmentLinkedServers = `-- name: PostflightIDTunnelEnvironmentLinkedServers :one
+SELECT count(*)
+FROM mcp_servers server
+JOIN environments env ON env.id = server.environment_id
+WHERE server.project_id = $1::uuid AND server.deleted IS FALSE
+  AND env.project_id = $1::uuid AND env.deleted IS FALSE
+  AND server.tunneled_mcp_server_id = $2::uuid
+`
+
+type PostflightIDTunnelEnvironmentLinkedServersParams struct {
+	ProjectID uuid.UUID
+	TunnelID  uuid.UUID
+}
+
+// The tunenv checks are scoped to that fixture's own tunnel and
+// environments, so other fixtures in the project never change them.
+func (q *Queries) PostflightIDTunnelEnvironmentLinkedServers(ctx context.Context, arg PostflightIDTunnelEnvironmentLinkedServersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDTunnelEnvironmentLinkedServers, arg.ProjectID, arg.TunnelID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDTunnelHeaders = `-- name: PostflightIDTunnelHeaders :one
+SELECT count(*)
+FROM tunneled_mcp_server_headers header
+JOIN tunneled_mcp_servers tunnel ON tunnel.id = header.tunneled_mcp_server_id
+WHERE tunnel.id = $1::uuid
+  AND tunnel.project_id = $2::uuid AND tunnel.deleted IS FALSE
+  AND header.deleted IS FALSE AND header.is_secret IS FALSE
+`
+
+type PostflightIDTunnelHeadersParams struct {
+	TunnelID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Scoped to one fixture's own tunnel, so other tunneled fixtures in the
+// project never change the count.
+func (q *Queries) PostflightIDTunnelHeaders(ctx context.Context, arg PostflightIDTunnelHeadersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDTunnelHeaders, arg.TunnelID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDUndecidedAITools = `-- name: PostflightIDUndecidedAITools :one
 SELECT count(*) FROM ai_scan_targets
 WHERE organization_id = $1::text AND status NOT IN ('approved', 'blocked')

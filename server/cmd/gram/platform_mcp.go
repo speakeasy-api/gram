@@ -63,6 +63,7 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 type platformMCPConfig struct {
@@ -504,7 +505,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
-		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
+		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore)).
+		WithTunnelStatus(platformMCPTunnelConnections(config)).
+		WithTunneledMCPSetupHandoff(config.DashboardURL, budgets.Handoff, config.FeatureFlags)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
@@ -1106,7 +1109,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
-		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
+		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore)).
+		WithTunnelStatus(platformMCPTunnelConnections(config)).
+		WithTunneledMCPSetupHandoff(config.DashboardURL, budgets.Handoff, config.FeatureFlags)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
@@ -1181,4 +1186,14 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
 	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
+}
+
+// platformMCPTunnelConnections reads live tunnel agent connections from the
+// tunnel runtime store. Without Redis it returns no reader, so tunneled MCP
+// servers report their connection state as unknown instead of failing.
+func platformMCPTunnelConnections(config platformMCPConfig) platformmcp.TunnelConnectionReader {
+	if config.Redis == nil {
+		return nil
+	}
+	return route.NewRedis(config.Redis)
 }

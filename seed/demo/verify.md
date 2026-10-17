@@ -562,6 +562,28 @@ that URL.
       on purpose, so interactive sign-in through it (GitHub, the organization
       gateway) keeps working.
 
+32. **Tunneled MCP upstream headers** — open the **JAMF Headers** MCP server's
+    settings. Upstream Headers sits after Resource Identifier and shows the
+    always-on notice that the headers are stored on the tunnel and apply to
+    every MCP server on it, public ones included, plus the stdio note. Rows:
+    `X-Jamf-Tenant` (Static value `demo-tenant`, Required) and
+    `X-Jamf-Region` (From request header `X-Region`). The tunnel has never
+    connected and the section still renders from stored rows. In the shared
+    demo the controls are editable (visitor edits revert on the daily reseed);
+    saving a reserved name such as
+    `Gram-Key` is refused. Plugin compatibility for a plugin using JAMF Headers is
+    false because of the request-derived row.
+
+33. **Per-server environment headers** — open **JAMF Prod** and then
+    **JAMF Sandbox** settings; both sit on the tunnel **JAMF (multi-instance)**.
+    Environment Headers sits after Upstream Headers. On JAMF Prod the picker
+    shows **JAMF Prod** and the table lists `MCP_HEADER_X-Instance-Url` as
+    Overrides source header and `MCP_HEADER_X-Jamf-Site` as Mapped. On JAMF
+    Sandbox the picker shows **JAMF Sandbox**, with the same two entries plus
+    `HEADER_X-Jamf-Region` as Not used. No value is shown anywhere. Picking
+    another environment without saving previews it and offers Save; picking
+    None previews no headers.
+
 ## On failure
 
 Fix the seed (see rules in `PAGES.md`), then re-run the target that owns

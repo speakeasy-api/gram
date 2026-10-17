@@ -391,6 +391,81 @@ func (q *Queries) GetEnvironmentForToolset(ctx context.Context, arg GetEnvironme
 	return i, err
 }
 
+const getMCPServerHeaderSnapshot = `-- name: GetMCPServerHeaderSnapshot :many
+SELECT
+    s.environment_id AS server_environment_id,
+    s.remote_mcp_server_id AS server_remote_mcp_server_id,
+    s.tunneled_mcp_server_id AS server_tunneled_mcp_server_id,
+    r.url AS remote_url,
+    e.id AS live_environment_id,
+    ee.name AS entry_name,
+    ee.value AS entry_value,
+    ee.is_secret AS entry_is_secret
+FROM mcp_servers s
+LEFT JOIN remote_mcp_servers r
+    ON r.id = s.remote_mcp_server_id AND r.project_id = s.project_id AND r.deleted IS FALSE
+LEFT JOIN environments e
+    ON e.id = s.environment_id AND e.project_id = s.project_id AND e.deleted IS FALSE
+LEFT JOIN environment_entries ee
+    ON ee.environment_id = e.id AND ee.name LIKE 'MCP\_HEADER\_%'
+WHERE s.id = $1
+  AND s.project_id = $2
+  AND s.deleted IS FALSE
+ORDER BY ee.name
+`
+
+type GetMCPServerHeaderSnapshotParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type GetMCPServerHeaderSnapshotRow struct {
+	ServerEnvironmentID       uuid.NullUUID
+	ServerRemoteMcpServerID   uuid.NullUUID
+	ServerTunneledMcpServerID uuid.NullUUID
+	RemoteUrl                 pgtype.Text
+	LiveEnvironmentID         uuid.NullUUID
+	EntryName                 pgtype.Text
+	EntryValue                pgtype.Text
+	EntryIsSecret             pgtype.Bool
+}
+
+// Reads, in one statement, an MCP server's current backend, the URL of its
+// remote source, its environment link and only the MCP_HEADER_ entries of
+// that environment. A caller compares the backend, URL and link with the row
+// it already authorized the request against, so the headers it sends and the
+// destination it dials belong to one configuration that existed at one
+// instant. A missing or deleted server yields no rows; a server whose linked
+// environment is deleted, missing or foreign yields NULL environment columns.
+func (q *Queries) GetMCPServerHeaderSnapshot(ctx context.Context, arg GetMCPServerHeaderSnapshotParams) ([]GetMCPServerHeaderSnapshotRow, error) {
+	rows, err := q.db.Query(ctx, getMCPServerHeaderSnapshot, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMCPServerHeaderSnapshotRow
+	for rows.Next() {
+		var i GetMCPServerHeaderSnapshotRow
+		if err := rows.Scan(
+			&i.ServerEnvironmentID,
+			&i.ServerRemoteMcpServerID,
+			&i.ServerTunneledMcpServerID,
+			&i.RemoteUrl,
+			&i.LiveEnvironmentID,
+			&i.EntryName,
+			&i.EntryValue,
+			&i.EntryIsSecret,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnvironmentEntries = `-- name: ListEnvironmentEntries :many
 SELECT ee.name, ee.value, ee.is_secret, ee.environment_id, ee.created_at, ee.updated_at
 FROM environment_entries ee
@@ -518,18 +593,165 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 	return items, nil
 }
 
+const listMCPHeaderEnvironmentEntries = `-- name: ListMCPHeaderEnvironmentEntries :many
+SELECT
+    e.id AS environment_id,
+    e.name AS environment_name,
+    e.slug AS environment_slug,
+    ee.name AS entry_name,
+    ee.value AS entry_value,
+    ee.is_secret AS entry_is_secret
+FROM environments e
+LEFT JOIN environment_entries ee
+    ON ee.environment_id = e.id AND ee.name LIKE 'MCP\_HEADER\_%'
+WHERE e.id = $1
+  AND e.project_id = $2
+  AND e.deleted IS FALSE
+ORDER BY ee.name
+`
+
+type ListMCPHeaderEnvironmentEntriesParams struct {
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+type ListMCPHeaderEnvironmentEntriesRow struct {
+	EnvironmentID   uuid.UUID
+	EnvironmentName string
+	EnvironmentSlug string
+	EntryName       pgtype.Text
+	EntryValue      pgtype.Text
+	EntryIsSecret   pgtype.Bool
+}
+
+// Reads a live environment of a project together with only its MCP_HEADER_
+// entries, in one statement so a concurrent delete yields either the earlier
+// mapping or no environment row, never a live environment missing its
+// entries. An environment with no such entries yields one row with NULL entry
+// columns; a deleted, missing or foreign environment yields no rows.
+func (q *Queries) ListMCPHeaderEnvironmentEntries(ctx context.Context, arg ListMCPHeaderEnvironmentEntriesParams) ([]ListMCPHeaderEnvironmentEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listMCPHeaderEnvironmentEntries, arg.EnvironmentID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPHeaderEnvironmentEntriesRow
+	for rows.Next() {
+		var i ListMCPHeaderEnvironmentEntriesRow
+		if err := rows.Scan(
+			&i.EnvironmentID,
+			&i.EnvironmentName,
+			&i.EnvironmentSlug,
+			&i.EntryName,
+			&i.EntryValue,
+			&i.EntryIsSecret,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPHeaderNearMissEntryNames = `-- name: ListMCPHeaderNearMissEntryNames :many
+SELECT ee.name
+FROM environment_entries ee
+JOIN environments e ON e.id = ee.environment_id
+WHERE e.id = $1
+  AND e.project_id = $2
+  AND e.deleted IS FALSE
+  AND ee.name NOT LIKE 'MCP\_HEADER\_%'
+  AND (LOWER(ee.name) LIKE 'mcp\_header%' OR LOWER(ee.name) LIKE 'header\_%')
+ORDER BY ee.name
+`
+
+type ListMCPHeaderNearMissEntryNamesParams struct {
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+// Names, never values, of entries in a live environment of a project that look
+// like an attempt at the MCP_HEADER_ prefix but do not match it exactly.
+func (q *Queries) ListMCPHeaderNearMissEntryNames(ctx context.Context, arg ListMCPHeaderNearMissEntryNamesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listMCPHeaderNearMissEntryNames, arg.EnvironmentID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockSourceEnvironmentBinding = `-- name: LockSourceEnvironmentBinding :one
+SELECT environment_id
+FROM source_environments
+WHERE source_kind = $1
+  AND source_slug = $2
+  AND project_id = $3
+FOR UPDATE
+`
+
+type LockSourceEnvironmentBindingParams struct {
+	SourceKind string
+	SourceSlug string
+	ProjectID  uuid.UUID
+}
+
+// The environment a source is bound to, as stored (the environment may since
+// have been deleted), locked for the caller's link change.
+func (q *Queries) LockSourceEnvironmentBinding(ctx context.Context, arg LockSourceEnvironmentBindingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockSourceEnvironmentBinding, arg.SourceKind, arg.SourceSlug, arg.ProjectID)
+	var environment_id uuid.UUID
+	err := row.Scan(&environment_id)
+	return environment_id, err
+}
+
+const lockToolsetEnvironmentBinding = `-- name: LockToolsetEnvironmentBinding :one
+SELECT environment_id
+FROM toolset_environments
+WHERE toolset_id = $1
+  AND project_id = $2
+FOR UPDATE
+`
+
+type LockToolsetEnvironmentBindingParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The toolset counterpart of LockSourceEnvironmentBinding.
+func (q *Queries) LockToolsetEnvironmentBinding(ctx context.Context, arg LockToolsetEnvironmentBindingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockToolsetEnvironmentBinding, arg.ToolsetID, arg.ProjectID)
+	var environment_id uuid.UUID
+	err := row.Scan(&environment_id)
+	return environment_id, err
+}
+
 const setSourceEnvironment = `-- name: SetSourceEnvironment :one
 INSERT INTO source_environments (
     source_kind,
     source_slug,
     project_id,
     environment_id
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4
 )
+SELECT $1, $2, e.project_id, e.id
+FROM environments e
+WHERE e.id = $3
+  AND e.project_id = $4
+  AND e.deleted IS FALSE
 ON CONFLICT (source_kind, source_slug, project_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,
@@ -540,16 +762,18 @@ RETURNING id, source_kind, source_slug, project_id, environment_id, created_at, 
 type SetSourceEnvironmentParams struct {
 	SourceKind    string
 	SourceSlug    string
-	ProjectID     uuid.UUID
 	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
 }
 
+// Writes nothing (no row returned) unless the environment is live in this
+// project.
 func (q *Queries) SetSourceEnvironment(ctx context.Context, arg SetSourceEnvironmentParams) (SourceEnvironment, error) {
 	row := q.db.QueryRow(ctx, setSourceEnvironment,
 		arg.SourceKind,
 		arg.SourceSlug,
-		arg.ProjectID,
 		arg.EnvironmentID,
+		arg.ProjectID,
 	)
 	var i SourceEnvironment
 	err := row.Scan(
@@ -569,26 +793,38 @@ INSERT INTO toolset_environments (
     toolset_id,
     project_id,
     environment_id
-) VALUES (
-    $1,
-    $2,
-    $3
 )
+SELECT t.id, t.project_id, $1
+FROM toolsets t
+WHERE t.id = $2
+  AND t.project_id = $3
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM environments e
+    WHERE e.id = $1
+      AND e.project_id = $3
+      AND e.deleted IS FALSE
+  )
 ON CONFLICT (toolset_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,
     updated_at = now()
+WHERE toolset_environments.project_id = EXCLUDED.project_id
 RETURNING id, toolset_id, project_id, environment_id, created_at, updated_at
 `
 
 type SetToolsetEnvironmentParams struct {
+	EnvironmentID uuid.UUID
 	ToolsetID     uuid.UUID
 	ProjectID     uuid.UUID
-	EnvironmentID uuid.UUID
 }
 
+// Writes nothing (no row returned) unless the toolset is live in this
+// project, the environment is live in the same project, and never rewrites a
+// binding that belongs to another project.
 func (q *Queries) SetToolsetEnvironment(ctx context.Context, arg SetToolsetEnvironmentParams) (ToolsetEnvironment, error) {
-	row := q.db.QueryRow(ctx, setToolsetEnvironment, arg.ToolsetID, arg.ProjectID, arg.EnvironmentID)
+	row := q.db.QueryRow(ctx, setToolsetEnvironment, arg.EnvironmentID, arg.ToolsetID, arg.ProjectID)
 	var i ToolsetEnvironment
 	err := row.Scan(
 		&i.ID,

@@ -441,6 +441,7 @@ func (s *Service) serveTunneledPublicInit(
 		UpstreamAuth:       "",
 		WWWAuthenticate:    "",
 		Selection:          nil,
+		EnvironmentHeaders: nil,
 	})
 	if err != nil {
 		if reserved {
@@ -665,15 +666,16 @@ func (s *Service) serveTunneledPublicSession(
 		return oops.E(oops.CodeNotFound, nil, "session not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("recorded tunnel gateway is no longer live")))
 	}
 
-	headers := tunnelrouting.Headers(tunnelID, m.forwardToken, tunnelrouting.HashedClientAffinityKey(anonymousAffinityPrefix, sid))
-	headers = append(headers,
+	routing := tunnelrouting.Headers(tunnelID, m.forwardToken, tunnelrouting.HashedClientAffinityKey(anonymousAffinityPrefix, sid))
+	routing = append(routing,
 		proxy.ConfiguredHeader{
 			IsRequired:             true,
 			Name:                   wire.HeaderTunnelAgentSession,
 			StaticValue:            session.AgentSessionID,
 			ValueFromRequestHeader: "",
 		},
-		// Configured headers win over copied request headers.
+		// Routing headers win over copied request headers, so the backend
+		// session replaces the Speakeasy-minted one the client sent.
 		proxy.ConfiguredHeader{
 			IsRequired:             true,
 			Name:                   proxy.McpSessionIDHeader,
@@ -681,6 +683,15 @@ func (s *Service) serveTunneledPublicSession(
 			ValueFromRequestHeader: "",
 		},
 	)
+
+	configured, err := m.configuredHeaders(ctx, endpoint.ProjectID, mcpServer.TunneledMcpServerID.UUID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load tunneled mcp server headers").LogError(ctx, logger)
+	}
+	environment, err := loadEnvironmentHeaders(ctx, logger, m.environments, endpoint.ProjectID, mcpServer, "")
+	if err != nil {
+		return err
+	}
 
 	p := m.proxyManager.BuildTarget(
 		logger,
@@ -691,13 +702,15 @@ func (s *Service) serveTunneledPublicSession(
 			MetaMCPServerID:     "",
 		},
 		session.GatewayAddr,
-		headers,
+		configured,
 		mcpServer.Visibility,
 		organizationID,
 		endpoint.ProjectID.String(),
 		"",
 		"",
 		nil,
+		remotemcp.WithEnvironmentHeaders(environment.rows),
+		remotemcp.WithRoutingHeaders(routing),
 		remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled),
 	)
 	// Redirects won't work across a tunnel boundary; disable.

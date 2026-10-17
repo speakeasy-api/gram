@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 )
 
@@ -210,6 +213,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		RemoteMcpServerID: s.det("remotemcp-slack"),
 	}); err != nil {
 		return fmt.Errorf("insert demo slack identity header: %w", err)
+	}
+	if err := s.seedTunneledHeaders(ctx); err != nil {
+		return err
+	}
+	if err := s.seedTunneledEnvironmentHeaders(ctx); err != nil {
+		return err
 	}
 
 	if err := s.q.ServersInsertMetaMCPServer(ctx, repo.ServersInsertMetaMCPServerParams{
@@ -610,6 +619,173 @@ func (s *seeder) seedServersTunneledJamf(ctx context.Context) error {
 		McpServerID: serverID,
 	}); err != nil {
 		return fmt.Errorf("insert demo support desk jamf tool grant: %w", err)
+	}
+	return nil
+}
+
+// seedTunneledHeaders: a private MCP server on a never-connected tunnel, with
+// the headers the tunnel adds to every forwarded request — a fixed tenant
+// selector and a value copied from the caller's request. The request-derived
+// row keeps plugins backed by this tunnel from being distributed.
+func (s *seeder) seedTunneledHeaders(ctx context.Context) error {
+	proj := s.projectID()
+	tunnelID := s.det("tunhdr-tunnel")
+	if err := s.q.ServersInsertTunnel(ctx, repo.ServersInsertTunnelParams{
+		ID:        tunnelID,
+		ProjectID: proj,
+		Name:      "JAMF Headers (on-prem)",
+		KeyHash:   "demo-nonfunctional-" + tunnelID.String(),
+	}); err != nil {
+		return fmt.Errorf("insert demo tunhdr tunnel: %w", err)
+	}
+
+	headers := []repo.ServersInsertTunnelHeaderParams{
+		{
+			ID:                     s.det("tunhdr-header-tenant"),
+			TunneledMcpServerID:    tunnelID,
+			Name:                   "X-Jamf-Tenant",
+			Description:            "Inert demo tenant selector",
+			IsRequired:             true,
+			Value:                  pgtype.Text{String: "demo-tenant", Valid: true},
+			ValueFromRequestHeader: pgtype.Text{String: "", Valid: false},
+		},
+		{
+			ID:                     s.det("tunhdr-header-region"),
+			TunneledMcpServerID:    tunnelID,
+			Name:                   "X-Jamf-Region",
+			Description:            "Copied from the caller's X-Region header. A request-derived header keeps plugins backed by this tunnel from being distributed.",
+			IsRequired:             false,
+			Value:                  pgtype.Text{String: "", Valid: false},
+			ValueFromRequestHeader: pgtype.Text{String: "X-Region", Valid: true},
+		},
+	}
+	for _, h := range headers {
+		if err := s.q.ServersInsertTunnelHeader(ctx, h); err != nil {
+			return fmt.Errorf("insert demo tunhdr header %s: %w", h.Name, err)
+		}
+	}
+
+	serverID := s.det("tunhdr-mcpserver")
+	if err := s.q.ServersInsertTunneledMCPServer(ctx, repo.ServersInsertTunneledMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           proj,
+		Name:                "JAMF Headers",
+		Slug:                "jamf-headers",
+		TunneledMcpServerID: tunnelID,
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: s.det("issuer-workforce"),
+	}); err != nil {
+		return fmt.Errorf("insert demo tunhdr mcp server: %w", err)
+	}
+	if err := s.q.ServersInsertTunneledMCPEndpoint(ctx, repo.ServersInsertTunneledMCPEndpointParams{
+		ID:          s.det("tunhdr-endpoint"),
+		ProjectID:   proj,
+		McpServerID: serverID,
+		Slug:        s.spec.OrgSlug + "-jamf-headers",
+	}); err != nil {
+		return fmt.Errorf("insert demo tunhdr endpoint: %w", err)
+	}
+	return nil
+}
+
+// serversTunnelEnvironment is one MCP server of the tunenv fixture and the
+// environment linked to it.
+type serversTunnelEnvironment struct {
+	key, serverName, slug, envName, envSlug, envDescription string
+	entries                                                 [][2]string
+}
+
+// seedTunneledEnvironmentHeaders: two MCP servers on one tunnel, each linked
+// to its own environment. The tunnel sends one instance URL to every server
+// on it; each environment's MCP_HEADER_X-Instance-Url entry replaces it for
+// its own server, so prod and sandbox reach different instances through the
+// same agent. The sandbox environment also holds a near-miss HEADER_ entry,
+// which the settings preview lists as not used.
+func (s *seeder) seedTunneledEnvironmentHeaders(ctx context.Context) error {
+	org := s.orgID()
+	proj := s.projectID()
+	tunnelID := s.det("tunenv-tunnel")
+	if err := s.q.ServersInsertTunnel(ctx, repo.ServersInsertTunnelParams{
+		ID:        tunnelID,
+		ProjectID: proj,
+		Name:      "JAMF (multi-instance)",
+		KeyHash:   "demo-nonfunctional-" + tunnelID.String(),
+	}); err != nil {
+		return fmt.Errorf("insert demo tunenv tunnel: %w", err)
+	}
+	if err := s.q.ServersInsertTunnelHeader(ctx, repo.ServersInsertTunnelHeaderParams{
+		ID:                     s.det("tunenv-header-instance"),
+		TunneledMcpServerID:    tunnelID,
+		Name:                   "X-Instance-Url",
+		Description:            "Default instance; each server's environment overrides it",
+		IsRequired:             true,
+		Value:                  pgtype.Text{String: "https://default.jamf.example.invalid", Valid: true},
+		ValueFromRequestHeader: pgtype.Text{String: "", Valid: false},
+	}); err != nil {
+		return fmt.Errorf("insert demo tunenv header: %w", err)
+	}
+
+	servers := []serversTunnelEnvironment{
+		{
+			key: "prod", serverName: "JAMF Prod", slug: "jamf-prod",
+			envName: "JAMF Prod", envSlug: "jamf-prod", envDescription: "Headers for the production JAMF MCP server",
+			entries: [][2]string{
+				{"MCP_HEADER_X-Instance-Url", "https://prod.jamf.example.invalid"},
+				{"MCP_HEADER_X-Jamf-Site", "demo-site-prod"},
+			},
+		},
+		{
+			key: "sandbox", serverName: "JAMF Sandbox", slug: "jamf-sandbox",
+			envName: "JAMF Sandbox", envSlug: "jamf-sandbox", envDescription: "Headers for the sandbox JAMF MCP server",
+			entries: [][2]string{
+				{"MCP_HEADER_X-Instance-Url", "https://sandbox.jamf.example.invalid"},
+				{"MCP_HEADER_X-Jamf-Site", "demo-site-sandbox"},
+				{"HEADER_X-Jamf-Region", "demo-region"},
+			},
+		},
+	}
+	for _, srv := range servers {
+		envID := s.det("tunenv-env-" + srv.key)
+		if err := s.q.ServersInsertEnvironment(ctx, repo.ServersInsertEnvironmentParams{
+			ID:          envID,
+			OrgID:       org,
+			ProjectID:   proj,
+			Name:        srv.envName,
+			Slug:        srv.envSlug,
+			Description: srv.envDescription,
+		}); err != nil {
+			return fmt.Errorf("insert demo tunenv environment %s: %w", srv.key, err)
+		}
+		for _, entry := range srv.entries {
+			if err := s.q.ServersInsertEnvironmentEntry(ctx, repo.ServersInsertEnvironmentEntryParams{
+				EnvironmentID: envID,
+				Name:          entry[0],
+				Value:         entry[1],
+			}); err != nil {
+				return fmt.Errorf("insert demo tunenv environment %s entry %s: %w", srv.key, entry[0], err)
+			}
+		}
+
+		serverID := s.det("tunenv-mcpserver-" + srv.key)
+		if err := s.q.ServersInsertTunneledMCPServer(ctx, repo.ServersInsertTunneledMCPServerParams{
+			ID:                  serverID,
+			ProjectID:           proj,
+			Name:                srv.serverName,
+			Slug:                srv.slug,
+			TunneledMcpServerID: tunnelID,
+			EnvironmentID:       uuid.NullUUID{UUID: envID, Valid: true},
+			UserSessionIssuerID: s.det("issuer-workforce"),
+		}); err != nil {
+			return fmt.Errorf("insert demo tunenv mcp server %s: %w", srv.key, err)
+		}
+		if err := s.q.ServersInsertTunneledMCPEndpoint(ctx, repo.ServersInsertTunneledMCPEndpointParams{
+			ID:          s.det("tunenv-endpoint-" + srv.key),
+			ProjectID:   proj,
+			McpServerID: serverID,
+			Slug:        s.spec.OrgSlug + "-" + srv.slug,
+		}); err != nil {
+			return fmt.Errorf("insert demo tunenv endpoint %s: %w", srv.key, err)
+		}
 	}
 	return nil
 }

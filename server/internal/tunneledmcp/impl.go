@@ -32,10 +32,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -48,6 +51,7 @@ type Service struct {
 	auth          *auth.Auth
 	authz         *authz.Engine
 	audit         *audit.Logger
+	enc           *encryption.Client
 	tunnelManager *tunnelManager
 	// redisClient revokes live anonymous MCP sessions when public consent is
 	// withdrawn. Nil disables that best-effort cleanup (the serve path's
@@ -65,6 +69,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	enc *encryption.Client,
 	runtime route.RuntimeStore,
 	redisClient *redis.Client,
 ) *Service {
@@ -77,6 +82,7 @@ func NewService(
 		auth:          auth.New(logger, db, sessions, authzEngine),
 		authz:         authzEngine,
 		audit:         auditLogger,
+		enc:           enc,
 		tunnelManager: newTunnelManager(runtime),
 		redisClient:   redisClient,
 	}
@@ -260,7 +266,25 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, s.logger)
 	}
 
-	return s.tunnelManager.serverView(ctx, s.logger, server), nil
+	// Lets the dashboard explain up front why a key rotation will be refused.
+	// Only booleans: they name no server or environment the caller may not be
+	// able to read.
+	// The answer is advisory: if it cannot be worked out, leave it unset (the
+	// dashboard treats that as unknown and locks) rather than fail the read.
+	view := s.tunnelManager.serverView(ctx, s.logger, server)
+	linked, err := mcpservers.TunnelLinkedEnvironmentIDs(ctx, s.db, *authCtx.ProjectID, server.ID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "check environment-linked mcp servers", attr.SlogError(err))
+		return view, nil
+	}
+	eligibility, err := mcpservers.EvaluateDestinationChange(ctx, s.authz, *authCtx.ProjectID, linked)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "evaluate environment link authority", attr.SlogError(err))
+		return view, nil
+	}
+	view.EnvironmentLinked = &eligibility.Linked
+	view.EnvironmentLinkAuthorized = &eligibility.Authorized
+	return view, nil
 }
 
 func (s *Service) ListServerConnections(ctx context.Context, payload *gen.ListServerConnectionsPayload) (*types.TunneledMcpServerConnections, error) {
@@ -454,8 +478,13 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// The project lock orders rotation against concurrent environment links
+	// (see mcpservers/environment_link.go); it is taken before the tunnel row.
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock project").LogError(ctx, logger)
+	}
 	txRepo := repo.New(dbtx)
-	existing, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+	existing, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -464,6 +493,19 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
+	}
+
+	// Whoever holds the new key operates the tunnel's destination, so a
+	// tunnel fronting an environment-linked server needs the same authority
+	// as linking that environment.
+	linked, err := mcpservers.TunnelLinkedEnvironmentIDs(ctx, dbtx, *authCtx.ProjectID, serverID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, logger)
+	}
+	if len(linked) > 0 {
+		if err := s.authz.Require(ctx, mcpservers.EnvironmentLinkChecks(*authCtx.ProjectID, linked)...); err != nil {
+			return nil, err
+		}
 	}
 
 	beforeView := s.tunnelManager.serverView(ctx, s.logger, existing)
@@ -528,15 +570,49 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Lock first so no header write can land between the cascade below and
+	// the tombstone.
+	if _, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: serverID, ProjectID: *authCtx.ProjectID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock tunneled mcp server").LogError(ctx, logger)
+	}
+
+	// ON DELETE CASCADE only fires on hard deletes, so the tunnel's headers
+	// are soft-deleted explicitly, and each is audited, before the tunnel.
+	deletedHeaders, err := txRepo.DeleteHeadersByServerID(ctx, repo.DeleteHeadersByServerIDParams{
+		TunneledMcpServerID: serverID,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server headers").LogError(ctx, logger)
+	}
+
+	// The row is locked and live, so the delete always matches it.
 	deleted, err := txRepo.DeleteServer(ctx, repo.DeleteServerParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server").LogError(ctx, logger)
+	}
+
+	for _, header := range deletedHeaders {
+		if err := s.audit.LogTunneledMcpServerHeaderDelete(ctx, dbtx, audit.LogTunneledMcpServerHeaderDeleteEvent{
+			OrganizationID:              authCtx.ActiveOrganizationID,
+			ProjectID:                   *authCtx.ProjectID,
+			Actor:                       urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:            authCtx.Email,
+			ActorSlug:                   nil,
+			TunneledMcpServerHeaderURN:  urn.NewTunneledMcpServerHeader(header.ID),
+			TunneledMcpServerHeaderName: header.Name,
+			TunneledMcpServerURN:        urn.NewTunneledMcpServer(deleted.ID),
+			TunneledMcpServerName:       deleted.Name,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log tunneled mcp server header deletion").LogError(ctx, logger)
+		}
 	}
 
 	if err := s.audit.LogTunneledMcpServerDelete(ctx, dbtx, audit.LogTunneledMcpServerDeleteEvent{

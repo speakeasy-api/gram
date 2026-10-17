@@ -154,17 +154,19 @@ WHERE se.source_kind = @source_kind
     AND e.deleted IS FALSE;
 
 -- name: SetSourceEnvironment :one
+-- Writes nothing (no row returned) unless the environment is live in this
+-- project.
 INSERT INTO source_environments (
     source_kind,
     source_slug,
     project_id,
     environment_id
-) VALUES (
-    @source_kind,
-    @source_slug,
-    @project_id,
-    @environment_id
 )
+SELECT @source_kind, @source_slug, e.project_id, e.id
+FROM environments e
+WHERE e.id = @environment_id
+  AND e.project_id = @project_id
+  AND e.deleted IS FALSE
 ON CONFLICT (source_kind, source_slug, project_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,
@@ -184,21 +186,114 @@ WHERE te.toolset_id = @toolset_id
     AND e.deleted IS FALSE;
 
 -- name: SetToolsetEnvironment :one
+-- Writes nothing (no row returned) unless the toolset is live in this
+-- project, the environment is live in the same project, and never rewrites a
+-- binding that belongs to another project.
 INSERT INTO toolset_environments (
     toolset_id,
     project_id,
     environment_id
-) VALUES (
-    @toolset_id,
-    @project_id,
-    @environment_id
 )
+SELECT t.id, t.project_id, @environment_id
+FROM toolsets t
+WHERE t.id = @toolset_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM environments e
+    WHERE e.id = @environment_id
+      AND e.project_id = @project_id
+      AND e.deleted IS FALSE
+  )
 ON CONFLICT (toolset_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,
     updated_at = now()
+WHERE toolset_environments.project_id = EXCLUDED.project_id
 RETURNING *;
 
 -- name: DeleteToolsetEnvironment :exec
 DELETE FROM toolset_environments
 WHERE toolset_id = @toolset_id AND project_id = @project_id;
+
+-- name: LockSourceEnvironmentBinding :one
+-- The environment a source is bound to, as stored (the environment may since
+-- have been deleted), locked for the caller's link change.
+SELECT environment_id
+FROM source_environments
+WHERE source_kind = @source_kind
+  AND source_slug = @source_slug
+  AND project_id = @project_id
+FOR UPDATE;
+
+-- name: LockToolsetEnvironmentBinding :one
+-- The toolset counterpart of LockSourceEnvironmentBinding.
+SELECT environment_id
+FROM toolset_environments
+WHERE toolset_id = @toolset_id
+  AND project_id = @project_id
+FOR UPDATE;
+
+-- name: ListMCPHeaderEnvironmentEntries :many
+-- Reads a live environment of a project together with only its MCP_HEADER_
+-- entries, in one statement so a concurrent delete yields either the earlier
+-- mapping or no environment row, never a live environment missing its
+-- entries. An environment with no such entries yields one row with NULL entry
+-- columns; a deleted, missing or foreign environment yields no rows.
+SELECT
+    e.id AS environment_id,
+    e.name AS environment_name,
+    e.slug AS environment_slug,
+    ee.name AS entry_name,
+    ee.value AS entry_value,
+    ee.is_secret AS entry_is_secret
+FROM environments e
+LEFT JOIN environment_entries ee
+    ON ee.environment_id = e.id AND ee.name LIKE 'MCP\_HEADER\_%'
+WHERE e.id = @environment_id
+  AND e.project_id = @project_id
+  AND e.deleted IS FALSE
+ORDER BY ee.name;
+
+-- name: ListMCPHeaderNearMissEntryNames :many
+-- Names, never values, of entries in a live environment of a project that look
+-- like an attempt at the MCP_HEADER_ prefix but do not match it exactly.
+SELECT ee.name
+FROM environment_entries ee
+JOIN environments e ON e.id = ee.environment_id
+WHERE e.id = @environment_id
+  AND e.project_id = @project_id
+  AND e.deleted IS FALSE
+  AND ee.name NOT LIKE 'MCP\_HEADER\_%'
+  AND (LOWER(ee.name) LIKE 'mcp\_header%' OR LOWER(ee.name) LIKE 'header\_%')
+ORDER BY ee.name;
+
+-- name: GetMCPServerHeaderSnapshot :many
+-- Reads, in one statement, an MCP server's current backend, the URL of its
+-- remote source, its environment link and only the MCP_HEADER_ entries of
+-- that environment. A caller compares the backend, URL and link with the row
+-- it already authorized the request against, so the headers it sends and the
+-- destination it dials belong to one configuration that existed at one
+-- instant. A missing or deleted server yields no rows; a server whose linked
+-- environment is deleted, missing or foreign yields NULL environment columns.
+SELECT
+    s.environment_id AS server_environment_id,
+    s.remote_mcp_server_id AS server_remote_mcp_server_id,
+    s.tunneled_mcp_server_id AS server_tunneled_mcp_server_id,
+    r.url AS remote_url,
+    e.id AS live_environment_id,
+    ee.name AS entry_name,
+    ee.value AS entry_value,
+    ee.is_secret AS entry_is_secret
+FROM mcp_servers s
+LEFT JOIN remote_mcp_servers r
+    ON r.id = s.remote_mcp_server_id AND r.project_id = s.project_id AND r.deleted IS FALSE
+LEFT JOIN environments e
+    ON e.id = s.environment_id AND e.project_id = s.project_id AND e.deleted IS FALSE
+LEFT JOIN environment_entries ee
+    ON ee.environment_id = e.id AND ee.name LIKE 'MCP\_HEADER\_%'
+WHERE s.id = @mcp_server_id
+  AND s.project_id = @project_id
+  AND s.deleted IS FALSE
+ORDER BY ee.name;

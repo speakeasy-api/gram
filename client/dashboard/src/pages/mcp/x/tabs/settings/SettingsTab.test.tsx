@@ -13,8 +13,22 @@ vi.mock("@/hooks/useToolsetUrl", async (importOriginal) => ({
   }),
 }));
 
+const received = vi.hoisted(() => ({
+  general: [] as unknown[],
+  tunnelKey: [] as unknown[],
+  // Lets a test hand back a retained row from a refetch that failed.
+  source: {
+    environmentLinked: false as boolean | undefined,
+    environmentLinkAuthorized: true as boolean | undefined,
+    isError: false,
+  },
+}));
+
 vi.mock("./sections/GeneralSection", () => ({
-  GeneralSection: () => <h2>General</h2>,
+  GeneralSection: (props: { remoteMcpServer?: unknown }) => {
+    received.general.push(props.remoteMcpServer);
+    return <h2>General</h2>;
+  },
 }));
 vi.mock("./sections/authentication/AuthenticationSection", () => ({
   MCP_AUTHENTICATION_SECTION_ID: "authentication",
@@ -49,6 +63,12 @@ vi.mock("./sections/ResourceIdentifierSection", () => ({
   MCP_RESOURCE_IDENTIFIER_SECTION_ID: "resource-identifier",
   ResourceIdentifierSection: () => <h2>Resource Identifier</h2>,
 }));
+vi.mock("./sections/TunneledHeadersSection", () => ({
+  TunneledHeadersSection: () => <h2>Upstream Headers</h2>,
+}));
+vi.mock("./sections/EnvironmentHeadersSection", () => ({
+  EnvironmentHeadersSection: () => <h2>Environment Headers</h2>,
+}));
 vi.mock("./sections/CallerIdentitySection", () => ({
   CallerIdentitySection: () => <h2>Caller Identity</h2>,
 }));
@@ -58,7 +78,10 @@ vi.mock("./sections/PublicAccessSection", () => ({
 }));
 vi.mock("./sections/TunnelKeySection", () => ({
   MCP_TUNNEL_KEY_SECTION_ID: "tunnel-key",
-  TunnelKeySection: () => <h2>Tunnel Key</h2>,
+  TunnelKeySection: (props: { tunneledMcpServer: unknown }) => {
+    received.tunnelKey.push(props.tunneledMcpServer);
+    return <h2>Tunnel Key</h2>;
+  },
 }));
 vi.mock("./sections/AgentSetupSection", () => ({
   MCP_AGENT_SETUP_SECTION_ID: "agent-setup",
@@ -73,8 +96,14 @@ function sourceRow(id: string) {
     _options: unknown,
     query?: { enabled?: boolean },
   ) => ({
-    data: query?.enabled ? { id } : undefined,
-    isError: false,
+    data: query?.enabled
+      ? {
+          id,
+          environmentLinked: received.source.environmentLinked,
+          environmentLinkAuthorized: received.source.environmentLinkAuthorized,
+        }
+      : undefined,
+    isError: received.source.isError,
   });
 }
 vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
@@ -115,7 +144,16 @@ function renderSettings(mcpServer: McpServer): string[] {
     .map((heading) => heading.textContent ?? "");
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  received.general = [];
+  received.tunnelKey = [];
+  received.source = {
+    environmentLinked: false,
+    environmentLinkAuthorized: true,
+    isError: false,
+  };
+});
 
 describe("SettingsTab", () => {
   it("orders Remote MCP settings around display, identity, and sessions", () => {
@@ -131,6 +169,7 @@ describe("SettingsTab", () => {
       // Upstream headers are the Identity panel's Custom Headers disclosure
       // not a section of their own.
       "Identity",
+      "Environment Headers",
       "Server URL",
       "Network Access",
       "Sessions",
@@ -148,6 +187,8 @@ describe("SettingsTab", () => {
       "Network Access",
       "Authentication",
       "Resource Identifier",
+      "Upstream Headers",
+      "Environment Headers",
       "Caller Identity",
       "Public Access",
       "Public Rate Limits",
@@ -162,5 +203,41 @@ describe("SettingsTab", () => {
     expect(
       renderSettings(server({ unproxiedMcpServerId: "unproxied-source-1" })),
     ).toEqual(["General", "Authentication", "Danger Zone"]);
+  });
+
+  it("passes a confirmed environment link to the sections that move the source", () => {
+    renderSettings(server({ remoteMcpServerId: "remote-source-1" }));
+    expect(received.general.at(-1)).toMatchObject({
+      id: "remote-source-1",
+      environmentLinked: false,
+      environmentLinkAuthorized: true,
+    });
+    cleanup();
+    renderSettings(server({ tunneledMcpServerId: "tunneled-source-1" }));
+    expect(received.tunnelKey.at(-1)).toMatchObject({
+      id: "tunneled-source-1",
+      environmentLinked: false,
+      environmentLinkAuthorized: true,
+    });
+  });
+
+  it("treats a retained row from a failed refetch as an unknown link", () => {
+    received.source = {
+      environmentLinked: false,
+      environmentLinkAuthorized: true,
+      isError: true,
+    };
+    renderSettings(server({ remoteMcpServerId: "remote-source-1" }));
+    const general = received.general.at(-1) as Record<string, unknown>;
+    expect(general.id).toBe("remote-source-1");
+    expect(general.environmentLinked).toBeUndefined();
+    expect(general.environmentLinkAuthorized).toBeUndefined();
+
+    cleanup();
+    renderSettings(server({ tunneledMcpServerId: "tunneled-source-1" }));
+    const tunnelKey = received.tunnelKey.at(-1) as Record<string, unknown>;
+    expect(tunnelKey.id).toBe("tunneled-source-1");
+    expect(tunnelKey.environmentLinked).toBeUndefined();
+    expect(tunnelKey.environmentLinkAuthorized).toBeUndefined();
   });
 });
