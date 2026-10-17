@@ -3526,12 +3526,45 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 			"**Local servers, left unchanged:**",
 			"Report each one to the user by alias and transport only",
 			"for stdio, say the command is not shown",
-			"Do not migrate, wrap, tunnel, disable or remove them, and do not offer to",
+			"Do not migrate, wrap, disable or remove them. They stay exactly as configured in the client.",
 			"List local servers left unchanged separately",
 			"with the reason `local server left unchanged`",
 		}},
+		{"tunnel setup is a dashboard handoff, never an import", []string{
+			"## 8. Optionally set up a local server behind a Speakeasy tunnel",
+			"only if the user chooses it; that is never an import",
+			"To add, call `get_tunneled_mcp_setup_handoff`",
+			"no inbound firewall port is needed, but the selected server does become reachable through its AICP MCP endpoint",
+			"Present the returned `setup_url` as a clickable link",
+			"follows the agent setup panel for the transport the panel offers",
+			"do not invent commands or flags",
+			"Never ask for, accept or repeat a tunnel key, header value, command line, environment value or any other credential in chat",
+			"Do not suggest rotating a key as a repair for a disconnected agent",
+			"Only if the user has lost the key may they rotate it in the dashboard",
+			"its tunnel was deleted, so offer to add a new tunneled server instead",
+			"A handoff creates nothing",
+			"`tunnel.connection_status`",
+			"not that the private server behind it works",
+			"an absent `tunnel` was not read, not offline",
+			"Do not call registration, readiness, provider attachment or plugin-changing tools for a tunneled MCP server",
+			"Read-only plugin checks such as `get_plugin` in step 9 remain allowed",
+			"Ask the user to choose explicitly between reopening one of them and adding a new one",
+			"A `not_found` refusal means the project, that MCP server or its tunnel is not available to this caller",
+			"An `invalid_request` refusal means the IDs were malformed",
+			"never as added",
+			"`local server left unchanged; tunnel setup handed off`",
+			"A `not_enabled` refusal means adding tunneled MCP servers is not available for this organization yet",
+			"do not send the user to the dashboard to look for it",
+			"A `feature_unavailable` refusal means tunnel setup could not be checked right now",
+			"stop this step without retrying in a loop",
+		}},
+		{"a verified tunneled server can take the private network step", []string{
+			"plus any tunneled MCP server step 8 verified with a fresh `get_mcp` read and an exact MCP ID",
+			"keep reporting its local server as left unchanged, never as added",
+			"may still take part in step 9's private network restriction",
+		}},
 		{"private access is gated on live ingress readiness", []string{
-			"## 8. Optionally restrict migrated servers to the Tailscale private network",
+			"## 9. Optionally restrict migrated servers to the Tailscale private network",
 			"It is optional: declining leaves the import complete",
 			"It does not move or hide the upstream MCP server",
 			"`backend_kind: unproxied`",
@@ -3566,9 +3599,13 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 		})
 	}
 	require.NotEqual(t, -1, strings.Index(workflow, "## 7. Keep authentication separate"))
-	require.Less(t, strings.Index(workflow, "## 7. Keep authentication separate"), strings.Index(workflow, "## 8. Optionally restrict"))
+	require.Less(t, strings.Index(workflow, "## 7. Keep authentication separate"), strings.Index(workflow, "## 8. Optionally set up a local server"))
+	require.Less(t, strings.Index(workflow, "## 8. Optionally set up a local server"), strings.Index(workflow, "## 9. Optionally restrict"))
 	require.Less(t, strings.Index(workflow, "call `get_mcp_network_traffic`"), strings.Index(workflow, "Present the choice per server"))
-	require.Less(t, strings.Index(workflow, "## 8. Optionally restrict"), strings.Index(workflow, "## 9. Record diagnostics only when the user asks"))
+	require.Less(t, strings.Index(workflow, "## 9. Optionally restrict"), strings.Index(workflow, "## 10. Record diagnostics only when the user asks"))
+	require.NotContains(t, workflow, "do not offer to")
+	require.NotContains(t, workflow, "nothing on that network is exposed")
+	require.Contains(t, workflow, "it only decides whether step 9 can finish in this session")
 	require.NotContains(t, workflow, "Claude Code session")
 	for _, forbidden := range []string{"codex mcp add", "codex mcp remove", "tailscale up", "OAuth client secret:"} {
 		require.NotContains(t, workflow, forbidden)
