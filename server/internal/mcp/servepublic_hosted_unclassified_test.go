@@ -99,7 +99,7 @@ func hostedCallOutcome(t *testing.T, ti *testInstance, slug, bearer, tool string
 func TestServePublic_PrivateHosted_DispositionGrantExcludesUnannotatedTools(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
 	toolset, bearer := privateHostedFixture(t, ctx, ti)
 	seedMockUserToolsetGrant(t, ctx, ti, toolset.ID, map[string]string{authz.SelectorKeyDisposition: authz.DispositionReadOnly})
 
@@ -119,7 +119,7 @@ func TestServePublic_PrivateHosted_DispositionGrantExcludesUnannotatedTools(t *t
 func TestServePublic_PrivateHosted_NamedGrantReachesUnannotatedTool(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
 	toolset, bearer := privateHostedFixture(t, ctx, ti)
 	seedMockUserToolsetGrant(t, ctx, ti, toolset.ID, map[string]string{authz.SelectorKeyTool: "eraser"})
 

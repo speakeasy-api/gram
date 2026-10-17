@@ -97,7 +97,7 @@ func newPassthroughFixture(t *testing.T) (context.Context, *testInstance, passth
 func newPassthroughFixtureWith(t *testing.T, withLookup bool) (context.Context, *testInstance, passthroughFixture) {
 	t.Helper()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithoutTemporal(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
