@@ -3,6 +3,7 @@ package migration
 import (
 	"errors"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -10,14 +11,20 @@ import (
 // registry variable, which has no safe default.
 var ErrTemplatedPath = errors.New("upstream URL path contains an unfilled template variable")
 
+// ErrInvalidURL marks an upstream URL that is not an absolute HTTP(S) URL.
+var ErrInvalidURL = errors.New("upstream URL is not an absolute http or https URL")
+
+// templateVariable matches a registry placeholder such as {TOOLSETS}.
+var templateVariable = regexp.MustCompile(`\{[A-Za-z_][A-Za-z0-9_]*\}`)
+
 // CleanRemoteURL drops query parameters that still carry an unfilled registry
 // variable such as {TOOLSETS}. Registry remotes declare these for the client to
 // fill; the external MCP proxy sent them upstream verbatim, so the cleaned URL
 // is what the upstream effectively served.
 func CleanRemoteURL(raw string) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return "", errors.New("upstream URL is not a valid URL")
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return "", ErrInvalidURL
 	}
 	if hasTemplate(parsed.Path) || hasTemplate(parsed.RawPath) {
 		return "", ErrTemplatedPath
@@ -35,12 +42,14 @@ func CleanRemoteURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
+// hasTemplate reports whether value holds a template variable, either as is or
+// percent-encoded.
 func hasTemplate(value string) bool {
-	if strings.ContainsAny(value, "{}") {
+	if templateVariable.MatchString(value) {
 		return true
 	}
-	lower := strings.ToLower(value)
-	return strings.Contains(lower, "%7b") || strings.Contains(lower, "%7d")
+	decoded, err := url.QueryUnescape(value)
+	return err == nil && templateVariable.MatchString(decoded)
 }
 
 // sameUpstream compares two upstream URLs the way credential routing does:
