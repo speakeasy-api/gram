@@ -41,6 +41,7 @@ type metaCodeBackend struct {
 	issuer   uuid.NullUUID
 	surface  networkaccess.Surface
 	revoked  atomic.Bool
+	sessions *codeSessionScope
 }
 
 // metaCodeGateRefresher must re-run endpoint binding and issuer admission using
@@ -69,7 +70,32 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
 		surface = networkaccess.SurfacePrivate
 	}
-	return &metaCodeBackend{service: service, gate: *gate, admitted: admitted, meta: meta, boundary: boundary, refresh: refresh, endpoint: endpoint, issuer: issuer, surface: surface, revoked: atomic.Bool{}}, nil
+	backend := &metaCodeBackend{service: service, gate: *gate, admitted: admitted, meta: meta, boundary: boundary, refresh: refresh, endpoint: endpoint, issuer: issuer, surface: surface, revoked: atomic.Bool{}, sessions: nil}
+	recheck := func(ctx context.Context, slug string) (context.Context, error) {
+		ctx, _, members, err := backend.current(ctx)
+		if err != nil {
+			return ctx, err
+		}
+		if _, ok := findMetaMember(members, slug); !ok {
+			return ctx, codemode.ErrToolUnavailable
+		}
+		return ctx, nil
+	}
+	// Only a caller the issuer gate verified may reuse sessions across
+	// executions, and only its own: the prefix holds its identity, credential
+	// and grants. Anonymous callers keep sessions to one execution.
+	if cancellable, _ := ctx.Value(metaCodeCancellableKey{}).(bool); cancellable && gate.authenticated && service.codeSessions != nil {
+		credential, _ := ctx.Value(metaCodeCredentialKey{}).(string)
+		prefix, err := json.Marshal([]any{gate.organizationID, gate.projectID, gate.metaServerID, gate.userID, gate.externalUserID, gate.apiKeyID, credential, gate.toolSelection, gate.selectionMembers})
+		if err != nil {
+			return nil, fmt.Errorf("key code member sessions: %w", err)
+		}
+		affinity := sha256.Sum256(prefix)
+		backend.sessions = &codeSessionScope{pool: service.codeSessions, prefix: string(prefix), affinity: "code:" + hex.EncodeToString(affinity[:]), recheck: recheck, owned: false}
+		return backend, nil
+	}
+	backend.sessions = &codeSessionScope{pool: newCodeMemberSessions(service.logger, 0, 0, 0, codeSessionMaxEntries), prefix: "", affinity: "", recheck: recheck, owned: true}
+	return backend, nil
 }
 
 func (b *metaCodeBackend) current(ctx context.Context) (context.Context, *metaGateContext, []metaMember, error) {
@@ -201,7 +227,7 @@ func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, me
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	catalog, err := b.service.describeMetaMember(ctx, b.service.logger, gate, member)
+	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
 	if err != nil {
 		return nil, codemode.ErrToolUnavailable
 	}
@@ -231,7 +257,7 @@ func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	catalog, err := b.service.describeMetaMember(ctx, b.service.logger, gate, member)
+	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
 	if err != nil {
 		return nil, codemode.ErrToolUnavailable
 	}
@@ -255,6 +281,7 @@ func (b *metaCodeBackend) Call(ctx context.Context, path string, arguments json.
 	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID(uuid.NewString()), Method: "tools/call", Params: nil}
 	invocation := &metaCodeInvocation{dispatched: false, rejected: false, notApproved: false, message: ""}
 	ctx = context.WithValue(ctx, metaCodeInvocationKey{}, invocation)
+	ctx = context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions)
 	raw, err := b.service.executeMetaMemberTool(ctx, b.service.logger, &callGate, members, req, path, arguments, b.meta)
 	if err != nil {
 		failure := invocation.failure()

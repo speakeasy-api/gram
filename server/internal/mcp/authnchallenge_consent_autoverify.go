@@ -99,6 +99,9 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		wg.Go(func() { errs[i] = drain() })
 	}
 	wg.Wait()
+	if s.codeSessions != nil {
+		s.codeSessions.close(ctx, true)
+	}
 	s.toolCallLogger.Close()
 	return errors.Join(errs...)
 }
