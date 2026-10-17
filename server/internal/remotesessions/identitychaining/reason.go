@@ -6,10 +6,6 @@ type Reason string
 const (
 	ReasonSuccess Reason = "success"
 
-	// ReasonConsentRequired means local eligibility passed, but no MCP grant
-	// exists yet and no downstream token has been issued.
-	ReasonConsentRequired Reason = "consent_required"
-
 	// ReasonNotApplicable: no ready binding names the upstream, so the
 	// interactive path applies unchanged.
 	ReasonNotApplicable Reason = "not_applicable"

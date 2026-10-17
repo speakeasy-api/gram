@@ -13,6 +13,40 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const adoptSpeakeasyConsentEMACredential = `-- name: AdoptSpeakeasyConsentEMACredential :execrows
+UPDATE remote_session_ema_credentials
+SET user_session_id = $1::uuid
+WHERE id = $2::uuid AND organization_id = $3::text AND project_id = $4::uuid
+  AND sign_in_id = $5::uuid AND user_session_id IS NULL
+  AND ema_provider = 'speakeasy' AND deleted IS FALSE
+`
+
+type AdoptSpeakeasyConsentEMACredentialParams struct {
+	UserSessionID  uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SignInID       uuid.UUID
+}
+
+// Binds a consent credential to a grant backed by the same sign-in. The caller
+// holds the publish locks and read the row as usable under them; this only
+// guards against a concurrent adoption or retirement. updated_at is left
+// unchanged: it records when the vendor issued the token.
+func (q *Queries) AdoptSpeakeasyConsentEMACredential(ctx context.Context, arg AdoptSpeakeasyConsentEMACredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adoptSpeakeasyConsentEMACredential,
+		arg.UserSessionID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SignInID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const attachPrincipalRemoteSessionBinding = `-- name: AttachPrincipalRemoteSessionBinding :one
 INSERT INTO principal_remote_session_bindings
 (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
@@ -5623,6 +5657,101 @@ func (q *Queries) GetRemoteURLForMcpServer(ctx context.Context, arg GetRemoteURL
 	var url string
 	err := row.Scan(&url)
 	return url, err
+}
+
+const getSpeakeasyConsentEMACredentialForUse = `-- name: GetSpeakeasyConsentEMACredentialForUse :one
+SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+  COALESCE(
+    c.ema_provider = 'speakeasy'
+    AND c.remote_session_issuer_id = $1::uuid
+    AND c.client_selection = 'binding'
+    AND c.remote_session_ema_binding_id = $2::uuid
+    AND c.ema_binding_generation = $3::bigint
+    AND c.requested_scopes = $4::text[]
+    AND c.internal_session_issuer_id = $5::uuid
+    AND c.internal_session_issuer_updated_at = $6::timestamptz
+    AND c.internal_session_issuer_key_id = $7::uuid
+    AND c.sign_in_id = $8::uuid
+    AND c.user_session_id IS NULL
+    AND c.access_token_encrypted IS NOT NULL
+    AND c.access_expires_at > $9::timestamptz
+    AND EXISTS (
+      SELECT 1 FROM remote_session_ema_bindings b
+      WHERE b.id = c.remote_session_ema_binding_id AND b.generation = c.ema_binding_generation
+        AND b.project_id = c.project_id AND b.organization_id = c.organization_id
+        AND b.user_session_issuer_id = c.user_session_issuer_id
+        AND b.remote_session_issuer_id = c.remote_session_issuer_id
+        AND b.remote_session_client_id = c.remote_session_client_id
+        AND b.resource = c.resource AND b.state = 'ready'
+    ), FALSE)::boolean AS usable
+FROM remote_session_ema_credentials c
+WHERE c.organization_id = $10::text AND c.project_id = $11
+  AND c.user_session_issuer_id = $12
+  AND c.remote_session_client_id = $13 AND c.resource = $14
+  AND c.subject_urn = $15 AND c.user_session_id IS NULL AND c.sign_in_id = $8::uuid
+  AND c.deleted IS FALSE AND c.ema_provider = 'speakeasy'
+ORDER BY c.updated_at DESC, c.id DESC
+LIMIT 1
+`
+
+type GetSpeakeasyConsentEMACredentialForUseParams struct {
+	RemoteSessionIssuerID          uuid.UUID
+	BindingID                      uuid.UUID
+	BindingGeneration              int64
+	RequestedScopes                []string
+	InternalSessionIssuerID        uuid.UUID
+	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
+	InternalSessionIssuerKeyID     uuid.UUID
+	SignInID                       uuid.UUID
+	UsableAfter                    pgtype.Timestamptz
+	OrganizationID                 string
+	ProjectID                      uuid.NullUUID
+	UserSessionIssuerID            uuid.NullUUID
+	RemoteSessionClientID          uuid.NullUUID
+	Resource                       string
+	SubjectUrn                     string
+}
+
+type GetSpeakeasyConsentEMACredentialForUseRow struct {
+	ID                   uuid.UUID
+	UpdatedAt            pgtype.Timestamptz
+	AccessTokenEncrypted pgtype.Text
+	AccessExpiresAt      pgtype.Timestamptz
+	GrantedScopes        []string
+	Usable               bool
+}
+
+// A consent credential has no MCP grant yet and belongs to the sign-in whose
+// consent page minted it. Its provenance predicate matches
+// GetSpeakeasyEMACredentialForUse, so adoption and reuse judge it alike.
+func (q *Queries) GetSpeakeasyConsentEMACredentialForUse(ctx context.Context, arg GetSpeakeasyConsentEMACredentialForUseParams) (GetSpeakeasyConsentEMACredentialForUseRow, error) {
+	row := q.db.QueryRow(ctx, getSpeakeasyConsentEMACredentialForUse,
+		arg.RemoteSessionIssuerID,
+		arg.BindingID,
+		arg.BindingGeneration,
+		arg.RequestedScopes,
+		arg.InternalSessionIssuerID,
+		arg.InternalSessionIssuerUpdatedAt,
+		arg.InternalSessionIssuerKeyID,
+		arg.SignInID,
+		arg.UsableAfter,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+	)
+	var i GetSpeakeasyConsentEMACredentialForUseRow
+	err := row.Scan(
+		&i.ID,
+		&i.UpdatedAt,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.GrantedScopes,
+		&i.Usable,
+	)
+	return i, err
 }
 
 const getSpeakeasyEMACredentialForUse = `-- name: GetSpeakeasyEMACredentialForUse :one
@@ -12343,7 +12472,7 @@ func (q *Queries) ReprojectRemoteSessionIssuerMetadataCapabilities(ctx context.C
 	return i, err
 }
 
-const retireEMACredential = `-- name: RetireEMACredential :exec
+const retireEMACredential = `-- name: RetireEMACredential :execrows
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = $1 AND organization_id = $2 AND project_id = $3 AND deleted IS FALSE
@@ -12359,15 +12488,19 @@ type RetireEMACredentialParams struct {
 
 // Soft deletes one credential slot and erases its ciphertext in the same write.
 // expected_updated_at is the version the caller judged unusable, so a
-// concurrent publish into the same slot is never erased.
-func (q *Queries) RetireEMACredential(ctx context.Context, arg RetireEMACredentialParams) error {
-	_, err := q.db.Exec(ctx, retireEMACredential,
+// concurrent publish into the same slot is never erased; it then retires
+// nothing and reports zero rows.
+func (q *Queries) RetireEMACredential(ctx context.Context, arg RetireEMACredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retireEMACredential,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ExpectedUpdatedAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const retireLegacyEMACredentialSlot = `-- name: RetireLegacyEMACredentialSlot :exec
@@ -12401,6 +12534,77 @@ func (q *Queries) RetireLegacyEMACredentialSlot(ctx context.Context, arg RetireL
 		arg.SubjectUrn,
 	)
 	return err
+}
+
+const retireSpeakeasyConsentEMACredentials = `-- name: RetireSpeakeasyConsentEMACredentials :exec
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND user_session_issuer_id = $3::uuid
+  AND remote_session_client_id = $4::uuid
+  AND resource = $5::text AND subject_urn = $6::text
+  AND sign_in_id = $7::uuid
+  AND ema_provider = 'speakeasy' AND user_session_id IS NULL
+  AND deleted IS FALSE
+`
+
+type RetireSpeakeasyConsentEMACredentialsParams struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	Resource              string
+	SubjectUrn            string
+	SignInID              uuid.UUID
+}
+
+// NULL grants never conflict in the per-grant key, so a sign-in's earlier
+// consent credentials are retired before it publishes a new one.
+func (q *Queries) RetireSpeakeasyConsentEMACredentials(ctx context.Context, arg RetireSpeakeasyConsentEMACredentialsParams) error {
+	_, err := q.db.Exec(ctx, retireSpeakeasyConsentEMACredentials,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+		arg.SignInID,
+	)
+	return err
+}
+
+const retireSpeakeasySignInConsentEMACredentials = `-- name: RetireSpeakeasySignInConsentEMACredentials :execrows
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND user_session_issuer_id = $3::uuid
+  AND subject_urn = $4::text AND sign_in_id = $5::uuid
+  AND ema_provider = 'speakeasy' AND user_session_id IS NULL
+  AND deleted IS FALSE
+`
+
+type RetireSpeakeasySignInConsentEMACredentialsParams struct {
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          string
+	SignInID            uuid.UUID
+}
+
+// Erases every credential a sign-in's consent pages minted for one user
+// session issuer that no grant adopted, when the user denies consent.
+func (q *Queries) RetireSpeakeasySignInConsentEMACredentials(ctx context.Context, arg RetireSpeakeasySignInConsentEMACredentialsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retireSpeakeasySignInConsentEMACredentials,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.SubjectUrn,
+		arg.SignInID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeOrganizationRemoteSession = `-- name: RevokeOrganizationRemoteSession :one
@@ -15830,7 +16034,7 @@ type UpsertSpeakeasyEMACredentialParams struct {
 	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
 	InternalSessionIssuerKeyID     uuid.UUID
 	SignInID                       uuid.UUID
-	UserSessionID                  uuid.UUID
+	UserSessionID                  uuid.NullUUID
 	RequestedScopes                []string
 	GrantedScopes                  []string
 	AccessTokenEncrypted           string
@@ -15845,7 +16049,8 @@ type UpsertSpeakeasyEMACredentialRow struct {
 
 // The caller locks the binding, sign-in and issuer and checks the exact
 // grant before this statement. Client changes during redemption still fence
-// publication. Each authenticated MCP grant keeps its own slot.
+// publication. Each authenticated MCP grant keeps its own slot; a consent
+// credential has no grant yet and a NULL user_session_id.
 func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSpeakeasyEMACredentialParams) (UpsertSpeakeasyEMACredentialRow, error) {
 	row := q.db.QueryRow(ctx, upsertSpeakeasyEMACredential,
 		arg.OrganizationID,
