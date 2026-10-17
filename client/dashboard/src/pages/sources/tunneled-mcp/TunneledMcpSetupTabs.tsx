@@ -296,12 +296,14 @@ function stdioServerTabs(ctx: SnippetContext): SnippetTab[] {
 
   const dockerfile = `cat > Dockerfile <<'DOCKERFILE'
 # Any Linux base image with your command's runtime works. Keep USER pointed
-# at a non-root user in that image with a writable home directory.
+# at a non-root user in that image with a writable home directory, and keep
+# an init such as tini in front of the agent to reap orphaned processes.
 FROM node:22-alpine
+RUN apk add --no-cache tini
 COPY --from=${TUNNEL_AGENT_IMAGE} /usr/local/bin/tunnel-agent /usr/local/bin/tunnel-agent
 USER node
 ENV TUNNEL_LOCAL_MCP_COMMAND="${MCP_COMMAND_SENTINEL}"
-ENTRYPOINT ["/usr/local/bin/tunnel-agent"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/tunnel-agent"]
 DOCKERFILE`;
 
   const docker = `mkdir -p gram-tunnel-${slug}
