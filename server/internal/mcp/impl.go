@@ -247,6 +247,9 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+	// codeSessions keeps proxied member sessions for verified callers'
+	// rapid successive Code Mode executions.
+	codeSessions *codeMemberSessions
 	// replayLiveness overrides the refresh-replay session check in unit tests
 	// that run without a database.
 	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool)
@@ -615,6 +618,7 @@ func NewService(
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 		codeExecutor:         codeExecutor,
+		codeSessions:         newCodeMemberSessions(logger, codeSessionIdleTTL, codeSessionMaxAge, codeSessionPingAfter, codeSessionMaxEntries),
 	}
 	return service, nil
 }

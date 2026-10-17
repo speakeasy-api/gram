@@ -48,7 +48,7 @@ func TestClassifyProbe(t *testing.T) {
 		if tc.expired {
 			ctx = expired
 		}
-		rt := &memberRoundTripper{build: nil, deadline: time.Time{}, closeFloor: 0, mu: sync.Mutex{}, rejected: tc.rejected, lastStatus: tc.lastStatus}
+		rt := &memberRoundTripper{memberAttempt: &memberAttempt{build: nil, mu: sync.Mutex{}, rejected: tc.rejected, lastStatus: tc.lastStatus, lastErr: nil, refused: false, sentCall: false}, deadline: time.Time{}, closeFloor: 0, mu: sync.Mutex{}, initialSessionID: "", deleteAttempted: false}
 		outcome, reason := classifyProbe(ctx, rt, tc.err, "linear")
 		require.Equal(t, tc.outcome, outcome, tc.name)
 		require.Equal(t, tc.reason, reason, tc.name)

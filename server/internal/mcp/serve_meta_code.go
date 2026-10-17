@@ -170,6 +170,7 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	if err != nil {
 		return nil, oops.E(oops.CodeForbidden, err, "code admission is unavailable")
 	}
+	defer backend.sessions.end(ctx)
 	factory := codemode.HostFactory(func(runCtx context.Context) (codemode.Host, error) {
 		return codemode.NewHost(runCtx, backend, gate.metaServerID.String(), selected)
 	})
