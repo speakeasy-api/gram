@@ -24,12 +24,18 @@ vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: mocks.hasScope }),
 }));
-vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
-  useUpdateMcpServerMutation: (options: unknown) => {
-    mocks.mutationOptions(options);
-    return { isPending: false, mutate: mocks.mutate };
-  },
-}));
+vi.mock(
+  "@gram/client/react-query/updateMcpServer.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/updateMcpServer.js")
+    >()),
+    useUpdateMcpServerMutation: (options: unknown) => {
+      mocks.mutationOptions(options);
+      return { isPending: false, mutate: mocks.mutate };
+    },
+  }),
+);
 vi.mock("@gram/client/react-query/getTunneledMcpServer.js", () => ({
   useGetTunneledMcpServer: () => mocks.tunneledSource(),
 }));

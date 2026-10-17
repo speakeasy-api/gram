@@ -80,6 +80,8 @@ type Service struct {
 	distributionAdmission    *admission.Guard
 	publicationRequests      plugins.PublicationRequests
 	hostedServers            HostedServerWriter
+	// environmentHeaders reads environments for GetEnvironmentHeaders.
+	environmentHeaders EnvironmentHeaderInspector
 
 	// serverURL is the public Speakeasy origin that platform-domain MCP
 	// endpoint URLs resolve under; nil omits those URLs.
@@ -122,6 +124,7 @@ func NewService(
 		distributionAdmission:    admission.NewGuard(),
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
 		hostedServers:            nil,
+		environmentHeaders:       nil,
 		serverURL:                nil,
 	}
 }
