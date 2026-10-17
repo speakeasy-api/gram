@@ -1848,6 +1848,7 @@ func newStartCommand() *cli.Command {
 			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				AssistantIdentity:         assistantsSvc,
+				Workspaces:                platformMCPWorkspaces{auth: authService, organizations: organizationsService},
 				SignalAuthoring:           sigintSvc,
 				Logger:                    logger,
 				MeterProvider:             meterProvider,

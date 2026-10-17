@@ -143,7 +143,8 @@
         font-size: 0.8125rem;
       }
 
-      .field select {
+      .field select,
+      .field input {
         width: 100%;
         padding: 0.75rem;
         border: solid 1px var(--border-neutral-softest);
@@ -154,9 +155,16 @@
       }
 
       .field select:focus-visible,
+      .field input:focus-visible,
       .btn:focus-visible {
         outline: 2px solid var(--color-brand-blue-600);
         outline-offset: 2px;
+      }
+
+      .field-error {
+        margin: 0;
+        color: hsl(0 60% 40%);
+        font-size: 0.8125rem;
       }
 
       .actions {
@@ -167,6 +175,10 @@
       .actions form,
       .actions .btn {
         flex: 1;
+      }
+
+      .actions-stacked {
+        flex-direction: column;
       }
 
       .btn {
@@ -251,6 +263,70 @@
           </select>
           <button class="btn btn-primary" type="submit">Continue</button>
         </form>
+        {{else if eq .Kind "workspace"}}
+        <header class="header">
+          <h1 id="page-title">Name your workspace</h1>
+          <p>
+            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
+            Your account has no Speakeasy workspace yet. Name one to continue.
+            It starts with a 14-day trial.
+          </p>
+        </header>
+        <form method="post" action="create-workspace" class="field">
+          <input type="hidden" name="state" value="{{.State}}" />
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+          <label class="field-label" for="workspace_name">Workspace name</label>
+          <input
+            id="workspace_name"
+            name="workspace_name"
+            type="text"
+            value="{{.WorkspaceName}}"
+            maxlength="100"
+            required
+            autofocus
+            {{if .WorkspaceError}}aria-invalid="true" aria-describedby="workspace_error"{{end}}
+          />
+          {{if .WorkspaceError}}
+          <p class="field-error" id="workspace_error" role="alert">{{.WorkspaceError}}</p>
+          {{end}}
+          <button class="btn btn-primary" type="submit">Create workspace</button>
+        </form>
+        {{else if eq .Kind "invitation"}}
+        <header class="header">
+          <h1 id="page-title">Join your team</h1>
+          <p>
+            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
+            You have an invitation to a Speakeasy organization. Join it to
+            continue.
+          </p>
+        </header>
+        <div class="actions actions-stacked">
+          {{range .Invitations}}{{if not .RequiresSSO}}
+          <form method="post" action="join-workspace">
+            <input type="hidden" name="state" value="{{$.State}}" />
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
+            <input type="hidden" name="invitation_id" value="{{.ID}}" />
+            <button class="btn btn-primary" type="submit">Join {{.OrganizationName}}</button>
+          </form>
+          {{end}}{{end}}
+        </div>
+        {{range .Invitations}}{{if .RequiresSSO}}
+        <p class="info">
+          To join <strong>{{.OrganizationName}}</strong>, sign in with your
+          company's single sign-on, then connect again.
+        </p>
+        {{end}}{{end}}
+        {{else if eq .Kind "sso-required"}}
+        <header class="header">
+          <h1 id="page-title">Sign in with SSO</h1>
+          <p>
+            <strong>{{.ClientName}}</strong> requests access to Platform MCP.
+            Your invitation to
+            {{range $i, $invitation := .Invitations}}{{if $i}}, {{end}}<strong>{{$invitation.OrganizationName}}</strong>{{end}}
+            requires your company's single sign-on. Sign in with SSO, then
+            connect again.
+          </p>
+        </header>
         {{else if eq .Kind "connect"}}
         <header class="header">
           <h1 id="page-title">Connect Platform MCP</h1>

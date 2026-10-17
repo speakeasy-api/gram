@@ -407,6 +407,25 @@ SELECT EXISTS (
     AND expires_at > clock_timestamp()
 );
 
+-- name: ListPendingInvitationsForEmail :many
+-- Lists the live invitations addressed to this email in every organization,
+-- newest first. A signed-in user with no organization is offered these before
+-- creating one, so an invited teammate joins their team instead.
+SELECT
+  organization_invitations.id,
+  organization_invitations.organization_id,
+  organization_metadata.name AS organization_name,
+  organization_metadata.workos_id AS organization_workos_id,
+  COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_enabled,
+  COALESCE(organization_metadata.verified_domains, '{}'::text[])::text[] AS verified_domains
+FROM organization_invitations
+JOIN organization_metadata ON organization_metadata.id = organization_invitations.organization_id
+WHERE organization_invitations.email = @email
+  AND organization_invitations.state = 'pending'
+  AND organization_invitations.expires_at > clock_timestamp()
+  AND organization_metadata.disabled_at IS NULL
+ORDER BY organization_invitations.created_at DESC;
+
 -- name: ExpireInvitationForTest :exec
 UPDATE organization_invitations
 SET expires_at = clock_timestamp() - interval '1 hour'

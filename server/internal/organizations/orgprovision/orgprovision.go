@@ -47,6 +47,11 @@ const (
 	// SourcePlatformAdmin is an organization a platform admin created from the
 	// admin app, which is how the prospect flow starts.
 	SourcePlatformAdmin = "platform_admin"
+
+	// SourcePlatformMCP is a self-serve signup that started from an MCP client
+	// connecting the Platform MCP: someone with no organization named one
+	// during the OAuth flow.
+	SourcePlatformMCP = "platform_mcp"
 )
 
 // WorkOSOrganizationCreator is the WorkOS surface CreateInWorkOS needs. It
