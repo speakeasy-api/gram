@@ -17,12 +17,9 @@ type ahpBoundaryScan struct {
 }
 
 func mergeAHPScans(scans []ahpBoundaryScan) []ahpBoundaryScan {
-	if scans == nil {
-		return nil
-	}
 	// One scan per policy type/tool keeps the full boundary together and gives
 	// each scan a distinct risk operation identity rather than per-part aliases.
-	merged := make([]ahpBoundaryScan, 0, len(scans))
+	var merged []ahpBoundaryScan
 	positions := make(map[string]int)
 	for _, scan := range scans {
 		// Named tools still need tool-scoped policy checks without text.
@@ -43,7 +40,7 @@ func mergeAHPScans(scans []ahpBoundaryScan) []ahpBoundaryScan {
 // Context snapshots are evidence, not additional transcript messages. Keep
 // their roles intact, especially tool results, which are untrusted output.
 func ahpItemScans(items []*ahp.ModelVisibleItem) []ahpBoundaryScan {
-	scans := make([]ahpBoundaryScan, 0)
+	var scans []ahpBoundaryScan
 	for _, item := range items {
 		if item == nil {
 			continue
@@ -69,11 +66,7 @@ func ahpItemScans(items []*ahp.ModelVisibleItem) []ahpBoundaryScan {
 func ahpPartScans(parts []*ahp.ContentItem, kind message.Type) []ahpBoundaryScan {
 	var scans []ahpBoundaryScan
 	for _, part := range parts {
-		if part == nil {
-			continue
-		}
-		text, ok := ahpBodyText(part.TextBodyPart)
-		if !ok {
+		if part == nil || !part.TextBodyPart.Present || part.TextBodyPart.Value == nil {
 			continue
 		}
 		body := part.TextBodyPart.Value
@@ -81,7 +74,7 @@ func ahpPartScans(parts []*ahp.ContentItem, kind message.Type) []ahpBoundaryScan
 		if kind == message.Assistant && body.Category.Value == "tool-call" {
 			partKind = message.ToolRequest
 		}
-		scans = append(scans, ahpBoundaryScan{text: text, kind: partKind, tool: ""})
+		scans = append(scans, ahpBoundaryScan{text: body.Text, kind: partKind, tool: ""})
 	}
 	return scans
 }
@@ -92,11 +85,8 @@ func ahpTextParts(parts *ahp.TextParts) string {
 	}
 	var texts []string
 	for _, part := range *parts {
-		if part == nil {
-			continue
-		}
-		if text, ok := ahpBodyText(part.TextBodyPart); ok {
-			texts = append(texts, text)
+		if part != nil && part.TextBodyPart.Present && part.TextBodyPart.Value != nil {
+			texts = append(texts, part.TextBodyPart.Value.Text)
 		}
 	}
 	return strings.Join(texts, "\n")

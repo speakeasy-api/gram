@@ -217,6 +217,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		Raw: nil,
 	}
 	outcome, err := s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+		ContentBoundary:              false,
 		BoundaryScans:                nil,
 		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     false,
@@ -349,6 +350,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		Raw: nil,
 	}
 	_, err = s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+		ContentBoundary:              false,
 		BoundaryScans:                nil,
 		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     false,

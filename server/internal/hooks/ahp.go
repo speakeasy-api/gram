@@ -73,7 +73,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 					payload = ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
 				}
 				canReplace := slices.Contains(c.Capabilities.Effects, ahp.ToolAfterCapabilitiesEffectsValueItemModify) && c.Capabilities.Modify.Present && c.Capabilities.Modify.Value.Output.Present && c.Capabilities.Modify.Value.Output.Value.Replace
-				reason, err := s.ingestAHP(ctx, payload, !canReplace, ahpBoundaryScan{text: ahpText(c.Event.Items), kind: message.ToolResponse, tool: c.Event.Tool.Name})
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canReplace, ahpBoundaryScan{text: ahpText(c.Event.Items), kind: message.ToolResponse, tool: c.Event.Tool.Name})
 				if err != nil || reason == "" {
 					return reply, err
 				}
@@ -84,7 +84,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				var reply ahpserver.ModelResponseAfterReply
 				payloads := ahpModelResponsePayloads(c.Event)
 				canReplace := slices.Contains(c.Capabilities.Effects, ahp.ModelResponseAfterCapabilitiesEffectsValueItemModify) && c.Capabilities.Modify.Present && c.Capabilities.Modify.Value.Response.Present && c.Capabilities.Modify.Value.Response.Value.Replace
-				reason, err := s.ingestAHP(ctx, payloads[0], !canReplace, ahpItemScans(c.Event.Items)...)
+				reason, err := s.ingestAHPBoundary(ctx, payloads[0], !canReplace, ahpItemScans(c.Event.Items)...)
 				if err != nil {
 					return reply, err
 				}
@@ -104,7 +104,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				payload := ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
 
 				canDeny := slices.Contains(c.Capabilities.Effects, ahp.ModelRequestBeforeCapabilitiesEffectsValueItemDeny)
-				reason, err := s.ingestAHP(ctx, payload, !canDeny, ahpItemScans(c.Event.Items)...)
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canDeny, ahpItemScans(c.Event.Items)...)
 				if err != nil || reason == "" {
 					return reply, err
 				}
@@ -114,12 +114,12 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 			UserMessageOutbound: func(ctx context.Context, c ahpserver.InterceptContext[ahp.UserMessageOutboundEvent, ahp.UserMessageOutboundCapabilities]) (ahpserver.UserMessageOutboundReply, error) {
 				var reply ahpserver.UserMessageOutboundReply
 				payload := ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
-				scans := make([]ahpBoundaryScan, 0)
+				var scans []ahpBoundaryScan
 				for _, item := range c.Event.Message.Messages {
 					scans = append(scans, ahpPartScans(item.Parts, message.Assistant)...)
 				}
 				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageOutboundCapabilitiesEffectsValueItemDeny)
-				reason, err := s.ingestAHP(ctx, payload, !canDeny, scans...)
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canDeny, scans...)
 				if err != nil || reason == "" {
 					return reply, err
 				}
@@ -131,7 +131,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				payload := ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
 
 				canDeny := slices.Contains(c.Capabilities.Effects, ahp.ContextCompactBeforeCapabilitiesEffectsValueItemDeny)
-				reason, err := s.ingestAHP(ctx, payload, !canDeny, append(ahpItemScans(c.Event.Items), ahpBoundaryScan{text: ahpTextParts(c.Event.Instructions.Value), kind: message.User, tool: ""})...)
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canDeny, append(ahpItemScans(c.Event.Items), ahpBoundaryScan{text: ahpTextParts(c.Event.Instructions.Value), kind: message.User, tool: ""})...)
 				if err != nil || reason == "" {
 					return reply, err
 				}
@@ -153,7 +153,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				var reply ahpserver.ContextCompactAfterReply
 				payload := ahpNotificationPayload(c.Event.Source, c.Event.Harness, c.Event.ID, string(c.Event.Type), c.Event.Time, c.Event.Session, c.Event.Turn.Value.ID)
 				canReplace := slices.Contains(c.Capabilities.Effects, ahp.ContextCompactAfterCapabilitiesEffectsValueItemModify) && c.Capabilities.Modify.Present && c.Capabilities.Modify.Value.Summary.Present && c.Capabilities.Modify.Value.Summary.Value.Replace
-				reason, err := s.ingestAHP(ctx, payload, !canReplace, ahpBoundaryScan{text: ahpTextParts(c.Event.Summary), kind: message.Assistant, tool: ""})
+				reason, err := s.ingestAHPBoundary(ctx, payload, !canReplace, ahpBoundaryScan{text: ahpTextParts(c.Event.Summary), kind: message.Assistant, tool: ""})
 				if err != nil || reason == "" {
 					return reply, err
 				}
@@ -278,15 +278,27 @@ func (s *Service) ahpAuthenticate(h http.Handler) http.Handler {
 // deny reason, or "" when the event is allowed. observeOnly records the event
 // without evaluating policy. Errors surface to the harness as protocol errors,
 // so its registered failure policy decides the outcome.
-func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload, observeOnly bool, scans ...ahpBoundaryScan) (string, error) {
+func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload, observeOnly bool) (string, error) {
+	options := defaultAuthenticatedIngestOptions()
+	options.ObserveOnly = observeOnly
+	return s.ingestAHPWithOptions(ctx, payload, options)
+}
+
+// ingestAHPBoundary checks content boundaries even when there is no text to scan.
+func (s *Service) ingestAHPBoundary(ctx context.Context, payload *gen.IngestPayload, observeOnly bool, scans ...ahpBoundaryScan) (string, error) {
+	options := defaultAuthenticatedIngestOptions()
+	options.ObserveOnly = observeOnly
+	options.ContentBoundary = true
+	options.BoundaryScans = mergeAHPScans(scans)
+	return s.ingestAHPWithOptions(ctx, payload, options)
+}
+
+func (s *Service) ingestAHPWithOptions(ctx context.Context, payload *gen.IngestPayload, options AuthenticatedIngestOptions) (string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return "", errors.New("AHP request is not authenticated")
 	}
 	payload.IdempotencyKey = new(fmt.Sprintf("ahp:%s:%s", authCtx.ProjectID, *payload.IdempotencyKey))
-	options := defaultAuthenticatedIngestOptions()
-	options.ObserveOnly = observeOnly
-	options.BoundaryScans = mergeAHPScans(scans)
 	result, err := s.IngestAuthenticatedWithOptions(ctx, authCtx, payload, options)
 	if err != nil {
 		return "", err
@@ -301,7 +313,6 @@ func ahpDeny(reason string) *ahp.DenyEffect {
 	return &ahp.DenyEffect{Type: ahp.DenyEffectTypeDeny, Reason: reason, Code: ahp.Optional[string]{Value: "", Present: false}, Extensions: ahp.Optional[*ahp.Extensions]{Value: nil, Present: false}, AdditionalProperties: nil}
 }
 
-// ahpReplaceToolOutput replaces the blocked content with an empty value.
 func ahpReplaceToolOutput() *ahp.ToolAfterModifyEffect {
 	return &ahp.ToolAfterModifyEffect{
 		Type: "modify", Target: "output",
@@ -314,7 +325,6 @@ func ahpReplaceToolOutput() *ahp.ToolAfterModifyEffect {
 	}
 }
 
-// ahpReplaceResponse replaces the blocked content with an empty value.
 func ahpReplaceResponse() *ahp.ModelResponseAfterModifyEffect {
 	return &ahp.ModelResponseAfterModifyEffect{
 		Type: "modify", Target: "response",
@@ -327,7 +337,6 @@ func ahpReplaceResponse() *ahp.ModelResponseAfterModifyEffect {
 	}
 }
 
-// ahpReplaceSummary replaces the blocked content with an empty value.
 func ahpReplaceSummary() *ahp.ContextCompactAfterModifyEffect {
 	return &ahp.ContextCompactAfterModifyEffect{
 		Type: "modify", Target: "summary",
@@ -566,11 +575,8 @@ func ahpText(items []*ahp.ModelVisibleItem) string {
 			continue
 		}
 		for _, part := range item.Parts {
-			if part == nil {
-				continue
-			}
-			if text, ok := ahpBodyText(part.TextBodyPart); ok {
-				texts = append(texts, text)
+			if part != nil && part.TextBodyPart.Present && part.TextBodyPart.Value != nil {
+				texts = append(texts, part.TextBodyPart.Value.Text)
 			}
 		}
 	}
@@ -583,26 +589,14 @@ func ahpText(items []*ahp.ModelVisibleItem) string {
 func ahpPartsText(parts []*ahp.ContentItem, assistant bool) string {
 	var texts []string
 	for _, part := range parts {
-		if part == nil {
-			continue
-		}
-		text, ok := ahpBodyText(part.TextBodyPart)
-		if !ok {
+		if part == nil || !part.TextBodyPart.Present || part.TextBodyPart.Value == nil {
 			continue
 		}
 		body := part.TextBodyPart.Value
 		if assistant && body.Category.Present && body.Category.Value != "text" {
 			continue
 		}
-		texts = append(texts, text)
+		texts = append(texts, body.Text)
 	}
 	return strings.Join(texts, "\n")
-}
-
-// ahpBodyText returns inline text only when the body is present.
-func ahpBodyText(body ahp.Optional[*ahp.TextBodyPart]) (string, bool) {
-	if !body.Present || body.Value == nil {
-		return "", false
-	}
-	return body.Value.Text, true
 }

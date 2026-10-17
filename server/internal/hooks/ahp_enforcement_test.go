@@ -337,8 +337,8 @@ func TestAHPQuarantineBlocksEmptyBoundary(t *testing.T) {
 
 func TestAHPMergeBoundaryScans(t *testing.T) {
 	t.Parallel()
-	require.Nil(t, mergeAHPScans(nil), "canonical ingestion has no content boundary")
-	require.NotNil(t, mergeAHPScans([]ahpBoundaryScan{}), "empty boundaries still check quarantine")
+	require.Empty(t, mergeAHPScans(nil))
+	require.Empty(t, mergeAHPScans([]ahpBoundaryScan{}))
 	scans := mergeAHPScans([]ahpBoundaryScan{
 		{text: "", kind: message.User, tool: ""},
 		{text: "first", kind: message.User, tool: ""},
@@ -366,4 +366,27 @@ func TestAHPCompactionAbsentInstructions(t *testing.T) {
 	require.Len(t, scanner.requests, 1)
 	require.Equal(t, "context evidence", scanner.requests[0].Text)
 	require.Equal(t, message.User, scanner.requests[0].MessageType)
+}
+
+func TestAHPContentBoundaryIntentDoesNotDependOnScans(t *testing.T) {
+	t.Parallel()
+	for _, eventType := range []string{"notification.reported", "usage.reported"} {
+		t.Run(eventType, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			auth := hookAuthContext(t, ctx)
+			sessionID := "boundary-session"
+			require.NoError(t, sessionquarantine.Write(ctx, ti.service.cache, sessionquarantine.Quarantine{
+				OrganizationID: auth.ActiveOrganizationID, ProjectID: auth.ProjectID.String(), SessionID: sessionID,
+				RiskPolicyID: "", RiskPolicyName: "Example policy", Reason: "test quarantine", CreatedAt: time.Now().UTC(),
+			}))
+			for name, scans := range map[string][]ahpBoundaryScan{"nil": nil, "empty": {}} {
+				payload := canonicalIngestPayload("example-harness", eventType, sessionID)
+				payload.IdempotencyKey = new(eventType + ":" + name)
+				reason, err := ti.service.ingestAHPBoundary(ctx, payload, false, scans...)
+				require.NoError(t, err)
+				require.Contains(t, reason, "quarantined", "nil and empty evidence must both retain boundary intent")
+			}
+		})
+	}
 }
