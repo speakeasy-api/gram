@@ -2,6 +2,8 @@ package hooks
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -148,5 +150,55 @@ func TestAHPInboundAttachmentWarnAcknowledgement(t *testing.T) {
 	for _, req := range scanner.requests {
 		require.Equal(t, "prompt evidence\nattachment evidence", req.Text)
 		require.Equal(t, message.User, req.MessageType)
+	}
+}
+
+func TestAHPInboundAttachmentEvidenceLimit(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name         string
+		prompt       string
+		contentBytes int
+		copies       int
+		deny         bool
+	}{
+		{"at aggregate limit", "p", ahpMaxEvidenceBytes - 2, 1, false},
+		{"prompt pushes over limit", "pp", ahpMaxEvidenceBytes - 2, 1, true},
+		{"repeated ref exceeds limit", "", ahpMaxEvidenceBytes / 2, 2, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.auth = &ahpTestAuthorizer{authCtx: hookAuthContext(t, ctx)}
+			scanner := &ahpContentMatchingScanner{}
+			ti.service.riskScanner = scanner
+			h, err := ti.service.ahpHandler()
+			require.NoError(t, err)
+			ref := ahpUploadRef(t, ti.service.ahpUploadHandler(), []byte(strings.Repeat("a", tc.contentBytes)))
+			parts := []any{}
+			if tc.prompt != "" {
+				parts = append(parts, ahpTestPart(tc.prompt))
+			}
+			for i := range tc.copies {
+				parts = append(parts, ahpTestAttachmentPart(strconv.Itoa(i), "application/xml", ref))
+			}
+			event := ahpTestInbound()
+			event["message"] = map[string]any{"sender": "user", "channel": "cli", "messages": []any{
+				map[string]any{"id": "message", "role": "user", "parts": parts},
+			}}
+			effects := ahpBoundaryRequest(t, h, event, map[string]any{"effects": []string{"deny"}})
+			if tc.deny {
+				require.Len(t, effects, 1)
+				require.Equal(t, "deny", effects[0]["type"])
+				require.Equal(t, errAHPEvidenceSize.Error(), effects[0]["reason"])
+				require.Empty(t, scanner.requests, "oversized evidence must not reach the scanner")
+				w := ahpRequest(t, h, "hooks/intercept", event, []string{}, ahpAuthHeaders)
+				require.Contains(t, w.Body.String(), `"error"`, "without deny capability, reject with a protocol error")
+			} else {
+				require.Empty(t, effects)
+				require.Len(t, scanner.requests, 1)
+				require.Len(t, scanner.requests[0].Text, ahpMaxEvidenceBytes)
+			}
+		})
 	}
 }

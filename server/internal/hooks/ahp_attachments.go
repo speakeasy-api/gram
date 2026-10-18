@@ -30,6 +30,8 @@ const (
 	ahpUploadPath = "/ahp/uploads"
 	// ahpMaxUploadBytes bounds a single staged attachment.
 	ahpMaxUploadBytes = 1 << 20
+	// Bound resolved attachment text and the final prompt-policy evidence.
+	ahpMaxEvidenceBytes = 1 << 20
 	// ahpUploadTTL bounds how long staged bytes wait for the referencing
 	// event. Events follow their uploads within one dispatch, so this only
 	// needs to cover retries.
@@ -42,6 +44,8 @@ const (
 	// ahpAttachmentKind is the prompt attachment kind for AHP attachments.
 	ahpAttachmentKind = "file"
 )
+
+var errAHPEvidenceSize = errors.New("AHP prompt and attachment text exceeds the 1 MiB limit")
 
 // ahpStagedUpload is the verified upload body kept until an event resolves it.
 type ahpStagedUpload struct {
@@ -139,15 +143,16 @@ func (s *Service) serveAHPUpload(w http.ResponseWriter, r *http.Request) {
 // messages into prompt attachments. Only references issued by the upload
 // endpoint in the authenticated project resolve. Binary bodies are staged but
 // excluded from text prompt ingestion.
-func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageInboundEvent) []*gen.HookPromptAttachmentEntry {
+func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageInboundEvent) ([]*gen.HookPromptAttachmentEntry, error) {
 	if e == nil || s.cache == nil {
-		return nil
+		return nil, nil
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil
+		return nil, nil
 	}
 	var attachments []*gen.HookPromptAttachmentEntry
+	evidenceBytes := 0
 	for _, message := range e.Message.Messages {
 		if message.Role != "user" {
 			continue
@@ -174,6 +179,14 @@ func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageIn
 			if !ahpIsText(staged.Content) {
 				continue
 			}
+			size := len(staged.Content)
+			if len(attachments) > 0 {
+				size++ // separator in the combined policy evidence
+			}
+			if size > ahpMaxEvidenceBytes-evidenceBytes {
+				return nil, errAHPEvidenceSize
+			}
+			evidenceBytes += size
 			timestamp := e.Time
 			attachments = append(attachments, &gen.HookPromptAttachmentEntry{
 				EntryUUID:      ahpAttachmentEntryID(e.Source, e.ID, message.ID, body.ID),
@@ -190,7 +203,7 @@ func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageIn
 			})
 		}
 	}
-	return attachments
+	return attachments, nil
 }
 
 // ahpAttachmentEntryID derives a stable attachment identifier from the event

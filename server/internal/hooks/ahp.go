@@ -54,11 +54,19 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.InterceptContext[ahp.UserMessageInboundEvent, ahp.UserMessageInboundCapabilities]) (ahpserver.UserMessageInboundReply, error) {
 				var reply ahpserver.UserMessageInboundReply
-				payload := ahpUserMessageInboundPayload(c.Event, s.ahpPromptAttachments(ctx, c.Event))
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageInboundCapabilitiesEffectsValueItemDeny)
+				attachments, err := s.ahpPromptAttachments(ctx, c.Event)
+				if err != nil {
+					if canDeny && errors.Is(err, errAHPEvidenceSize) {
+						reply.Effects = []*ahp.UserMessageInboundEffect{{DenyEffect: ahp.Some(ahpDeny(err.Error()))}}
+						return reply, nil
+					}
+					return reply, err
+				}
+				payload := ahpUserMessageInboundPayload(c.Event, attachments)
 				if payload == nil {
 					return reply, nil
 				}
-				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageInboundCapabilitiesEffectsValueItemDeny)
 				reason, err := s.ingestAHPInbound(ctx, payload, !canDeny)
 				if err != nil || reason == "" {
 					return reply, err
@@ -205,11 +213,15 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				return err
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.ObserveContext[ahp.UserMessageInboundEvent]) error {
-				payload := ahpUserMessageInboundPayload(c.Event, s.ahpPromptAttachments(ctx, c.Event))
+				attachments, err := s.ahpPromptAttachments(ctx, c.Event)
+				if err != nil {
+					return err
+				}
+				payload := ahpUserMessageInboundPayload(c.Event, attachments)
 				if payload == nil {
 					return nil
 				}
-				_, err := s.ingestAHP(ctx, payload, true)
+				_, err = s.ingestAHP(ctx, payload, true)
 				return err
 			},
 			ModelResponseAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ModelResponseAfterEvent]) error {
@@ -300,6 +312,20 @@ func (s *Service) ingestAHPInbound(ctx context.Context, payload *gen.IngestPaylo
 		if attachment != nil {
 			texts = append(texts, attachment.Content)
 		}
+	}
+	evidenceBytes := 0
+	for i, text := range texts {
+		size := len(text)
+		if i > 0 {
+			size++
+		}
+		if size > ahpMaxEvidenceBytes-evidenceBytes {
+			if observeOnly {
+				return "", errAHPEvidenceSize
+			}
+			return errAHPEvidenceSize.Error(), nil
+		}
+		evidenceBytes += size
 	}
 	policyText := strings.Join(texts, "\n")
 	options := defaultAuthenticatedIngestOptions()

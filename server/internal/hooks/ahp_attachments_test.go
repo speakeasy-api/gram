@@ -193,11 +193,15 @@ func TestAHPAttachmentReferencesAreProjectScoped(t *testing.T) {
 	var e ahp.UserMessageInboundEvent
 	require.NoError(t, json.Unmarshal(b, &e))
 
-	require.Len(t, ti.service.ahpPromptAttachments(contextvalues.SetAuthContext(ctx, authCtx), &e), 1)
+	attachments, err := ti.service.ahpPromptAttachments(contextvalues.SetAuthContext(ctx, authCtx), &e)
+	require.NoError(t, err)
+	require.Len(t, attachments, 1)
 	other := *authCtx
 	otherProject := uuid.New()
 	other.ProjectID = &otherProject
-	require.Empty(t, ti.service.ahpPromptAttachments(contextvalues.SetAuthContext(ctx, &other), &e))
+	attachments, err = ti.service.ahpPromptAttachments(contextvalues.SetAuthContext(ctx, &other), &e)
+	require.NoError(t, err)
+	require.Empty(t, attachments)
 }
 
 func TestAHPUploadStagesEveryReceipt(t *testing.T) {
