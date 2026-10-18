@@ -115,7 +115,7 @@ WHERE id = (
   AND state IN ($4, $1)
   AND deleted IS FALSE
   AND ended IS FALSE
-RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+RETURNING id, assistant_thread_id, assistant_id, project_id, runtime_version, backend, backend_metadata_json, state, warm_until
 `
 
 type BeginExpireAssistantRuntimeParams struct {
@@ -131,6 +131,7 @@ type BeginExpireAssistantRuntimeRow struct {
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
+	RuntimeVersion      int16
 	Backend             string
 	BackendMetadataJson []byte
 	State               string
@@ -165,6 +166,7 @@ func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpi
 		&i.AssistantThreadID,
 		&i.AssistantID,
 		&i.ProjectID,
+		&i.RuntimeVersion,
 		&i.Backend,
 		&i.BackendMetadataJson,
 		&i.State,
@@ -186,7 +188,7 @@ WHERE id = $2
     state = $4
     OR (state = $1 AND updated_at < $5)
   )
-RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+RETURNING id, assistant_thread_id, assistant_id, project_id, runtime_version, backend, backend_metadata_json, state, warm_until
 `
 
 type BeginExpireIdleAssistantRuntimeParams struct {
@@ -202,6 +204,7 @@ type BeginExpireIdleAssistantRuntimeRow struct {
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
+	RuntimeVersion      int16
 	Backend             string
 	BackendMetadataJson []byte
 	State               string
@@ -226,6 +229,7 @@ func (q *Queries) BeginExpireIdleAssistantRuntime(ctx context.Context, arg Begin
 		&i.AssistantThreadID,
 		&i.AssistantID,
 		&i.ProjectID,
+		&i.RuntimeVersion,
 		&i.Backend,
 		&i.BackendMetadataJson,
 		&i.State,
@@ -798,7 +802,7 @@ INSERT INTO assistants (
   $8,
   $9
 )
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 `
 
 type CreateAssistantParams struct {
@@ -823,6 +827,7 @@ type CreateAssistantRow struct {
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
+	RuntimeVersion  int16
 	Status          string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -852,6 +857,7 @@ func (q *Queries) CreateAssistant(ctx context.Context, arg CreateAssistantParams
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
+		&i.RuntimeVersion,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1085,7 +1091,7 @@ func (q *Queries) GetActiveAssistantRuntimeByThreadID(ctx context.Context, arg G
 }
 
 const getAssistant = `-- name: GetAssistant :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND project_id = $2
@@ -1107,6 +1113,7 @@ type GetAssistantRow struct {
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
+	RuntimeVersion  int16
 	Status          string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -1126,6 +1133,7 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
+		&i.RuntimeVersion,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1176,7 +1184,7 @@ func (q *Queries) GetAssistantForClientMetadataDocument(ctx context.Context, ass
 }
 
 const getAssistantForDispatch = `-- name: GetAssistantForDispatch :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND deleted IS FALSE
@@ -1192,6 +1200,7 @@ type GetAssistantForDispatchRow struct {
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
+	RuntimeVersion  int16
 	Status          string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -1211,6 +1220,7 @@ func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
+		&i.RuntimeVersion,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1220,7 +1230,7 @@ func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.
 }
 
 const getAssistantIgnoringDeleted = `-- name: GetAssistantIgnoringDeleted :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = $1
   AND project_id = $2
@@ -1241,6 +1251,7 @@ type GetAssistantIgnoringDeletedRow struct {
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
+	RuntimeVersion  int16
 	Status          string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -1260,6 +1271,7 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
+		&i.RuntimeVersion,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1412,7 +1424,7 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 }
 
 const getAssistantRuntimeV2 = `-- name: GetAssistantRuntimeV2 :one
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+SELECT id, assistant_thread_id, assistant_id, project_id, runtime_version, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
 WHERE project_id = $1
   AND assistant_id = $2
@@ -1432,6 +1444,7 @@ type GetAssistantRuntimeV2Row struct {
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
+	RuntimeVersion      int16
 	Backend             string
 	BackendMetadataJson []byte
 	State               string
@@ -1450,6 +1463,7 @@ func (q *Queries) GetAssistantRuntimeV2(ctx context.Context, arg GetAssistantRun
 		&i.AssistantThreadID,
 		&i.AssistantID,
 		&i.ProjectID,
+		&i.RuntimeVersion,
 		&i.Backend,
 		&i.BackendMetadataJson,
 		&i.State,
@@ -1613,7 +1627,7 @@ func (q *Queries) GetLatestAssistantThreadEventByThreadID(ctx context.Context, a
 }
 
 const getManagedAssistantByProject = `-- name: GetManagedAssistantByProject :one
-SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.status, a.created_at, a.updated_at, a.deleted_at
+SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.runtime_version, a.status, a.created_at, a.updated_at, a.deleted_at
 FROM project_managed_assistants pma
 JOIN assistants a ON a.id = pma.assistant_id
 WHERE pma.project_id = $1
@@ -1630,6 +1644,7 @@ type GetManagedAssistantByProjectRow struct {
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
+	RuntimeVersion  int16
 	Status          string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -1652,6 +1667,7 @@ func (q *Queries) GetManagedAssistantByProject(ctx context.Context, projectID uu
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
+		&i.RuntimeVersion,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1784,7 +1800,7 @@ func (q *Queries) InvalidateAssistantMCPOAuthClient(ctx context.Context, arg Inv
 }
 
 const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
-SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = $1
   AND r.runtime_version = 2
@@ -1806,6 +1822,7 @@ type ListActiveAssistantRuntimesRow struct {
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
+	RuntimeVersion      int16
 	Backend             string
 	BackendMetadataJson []byte
 	State               string
@@ -1831,6 +1848,7 @@ func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState s
 			&i.AssistantThreadID,
 			&i.AssistantID,
 			&i.ProjectID,
+			&i.RuntimeVersion,
 			&i.Backend,
 			&i.BackendMetadataJson,
 			&i.State,
@@ -1943,7 +1961,7 @@ func (q *Queries) ListAssistantPendingThreads(ctx context.Context, arg ListAssis
 }
 
 const listAssistantRuntimesForReap = `-- name: ListAssistantRuntimesForReap :many
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+SELECT id, assistant_thread_id, assistant_id, project_id, runtime_version, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
 WHERE assistant_id = $1
   AND project_id = $2
@@ -1960,6 +1978,7 @@ type ListAssistantRuntimesForReapRow struct {
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
+	RuntimeVersion      int16
 	Backend             string
 	BackendMetadataJson []byte
 	State               string
@@ -1984,6 +2003,7 @@ func (q *Queries) ListAssistantRuntimesForReap(ctx context.Context, arg ListAssi
 			&i.AssistantThreadID,
 			&i.AssistantID,
 			&i.ProjectID,
+			&i.RuntimeVersion,
 			&i.Backend,
 			&i.BackendMetadataJson,
 			&i.State,
@@ -2000,7 +2020,7 @@ func (q *Queries) ListAssistantRuntimesForReap(ctx context.Context, arg ListAssi
 }
 
 const listAssistants = `-- name: ListAssistants :many
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -2017,6 +2037,7 @@ type ListAssistantsRow struct {
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
+	RuntimeVersion  int16
 	Status          string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -2042,6 +2063,7 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 			&i.Instructions,
 			&i.WarmTtlSeconds,
 			&i.MaxConcurrency,
+			&i.RuntimeVersion,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -2366,7 +2388,7 @@ func (q *Queries) ListIdleAssistantRuntimes(ctx context.Context, arg ListIdleAss
 }
 
 const listInactiveAssistantRuntimesForReap = `-- name: ListInactiveAssistantRuntimesForReap :many
-SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
   AND (
@@ -2413,6 +2435,7 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
+	RuntimeVersion      int16
 	Backend             string
 	BackendMetadataJson []byte
 	State               string
@@ -2451,6 +2474,7 @@ func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg 
 			&i.AssistantThreadID,
 			&i.AssistantID,
 			&i.ProjectID,
+			&i.RuntimeVersion,
 			&i.Backend,
 			&i.BackendMetadataJson,
 			&i.State,
@@ -2467,7 +2491,7 @@ func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg 
 }
 
 const listStoppedRuntimesForReap = `-- name: ListStoppedRuntimesForReap :many
-SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
   AND r.state IN ($1, $2)
@@ -2497,6 +2521,7 @@ type ListStoppedRuntimesForReapRow struct {
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
 	ProjectID           uuid.UUID
+	RuntimeVersion      int16
 	Backend             string
 	BackendMetadataJson []byte
 	State               string
@@ -2531,6 +2556,7 @@ func (q *Queries) ListStoppedRuntimesForReap(ctx context.Context, arg ListStoppe
 			&i.AssistantThreadID,
 			&i.AssistantID,
 			&i.ProjectID,
+			&i.RuntimeVersion,
 			&i.Backend,
 			&i.BackendMetadataJson,
 			&i.State,
@@ -2807,6 +2833,7 @@ SELECT
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
+  a.runtime_version AS assistant_runtime_version,
   a.status,
   a.created_at,
   a.updated_at,
@@ -2825,24 +2852,25 @@ type LoadAssistantThreadForBootstrapParams struct {
 }
 
 type LoadAssistantThreadForBootstrapRow struct {
-	ID              uuid.UUID
-	AssistantID     uuid.UUID
-	ProjectID       uuid.UUID
-	CorrelationID   string
-	ChatID          uuid.UUID
-	SourceKind      string
-	SourceRefJson   []byte
-	OrganizationID  string
-	CreatedByUserID pgtype.Text
-	Name            string
-	Model           string
-	Instructions    string
-	WarmTtlSeconds  int64
-	MaxConcurrency  int64
-	Status          string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
+	ID                      uuid.UUID
+	AssistantID             uuid.UUID
+	ProjectID               uuid.UUID
+	CorrelationID           string
+	ChatID                  uuid.UUID
+	SourceKind              string
+	SourceRefJson           []byte
+	OrganizationID          string
+	CreatedByUserID         pgtype.Text
+	Name                    string
+	Model                   string
+	Instructions            string
+	WarmTtlSeconds          int64
+	MaxConcurrency          int64
+	AssistantRuntimeVersion int16
+	Status                  string
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
 }
 
 func (q *Queries) LoadAssistantThreadForBootstrap(ctx context.Context, arg LoadAssistantThreadForBootstrapParams) (LoadAssistantThreadForBootstrapRow, error) {
@@ -2863,6 +2891,7 @@ func (q *Queries) LoadAssistantThreadForBootstrap(ctx context.Context, arg LoadA
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
+		&i.AssistantRuntimeVersion,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -3021,6 +3050,7 @@ SELECT
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
+  a.runtime_version AS assistant_runtime_version,
   a.status,
   a.created_at,
   a.updated_at,
@@ -3029,6 +3059,7 @@ SELECT
   r.assistant_thread_id,
   r.assistant_id AS runtime_assistant_id,
   r.project_id AS runtime_project_id,
+  r.runtime_version,
   r.backend,
   r.backend_metadata_json,
   r.state,
@@ -3072,6 +3103,7 @@ type LoadThreadContextRow struct {
 	Instructions             string
 	WarmTtlSeconds           int64
 	MaxConcurrency           int64
+	AssistantRuntimeVersion  int16
 	Status                   string
 	CreatedAt                pgtype.Timestamptz
 	UpdatedAt                pgtype.Timestamptz
@@ -3080,6 +3112,7 @@ type LoadThreadContextRow struct {
 	AssistantThreadID        uuid.UUID
 	RuntimeAssistantID       uuid.UUID
 	RuntimeProjectID         uuid.UUID
+	RuntimeVersion           int16
 	Backend                  string
 	BackendMetadataJson      []byte
 	State                    string
@@ -3112,6 +3145,7 @@ func (q *Queries) LoadThreadContext(ctx context.Context, arg LoadThreadContextPa
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
+		&i.AssistantRuntimeVersion,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -3120,6 +3154,7 @@ func (q *Queries) LoadThreadContext(ctx context.Context, arg LoadThreadContextPa
 		&i.AssistantThreadID,
 		&i.RuntimeAssistantID,
 		&i.RuntimeProjectID,
+		&i.RuntimeVersion,
 		&i.Backend,
 		&i.BackendMetadataJson,
 		&i.State,
@@ -3147,6 +3182,7 @@ SELECT
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
+  a.runtime_version AS assistant_runtime_version,
   a.status,
   a.created_at,
   a.updated_at,
@@ -3154,6 +3190,7 @@ SELECT
   r.id AS runtime_id,
   r.assistant_id AS runtime_assistant_id,
   r.project_id AS runtime_project_id,
+  r.runtime_version,
   r.backend,
   r.backend_metadata_json,
   r.state,
@@ -3197,6 +3234,7 @@ type LoadThreadContextV2Row struct {
 	Instructions             string
 	WarmTtlSeconds           int64
 	MaxConcurrency           int64
+	AssistantRuntimeVersion  int16
 	Status                   string
 	CreatedAt                pgtype.Timestamptz
 	UpdatedAt                pgtype.Timestamptz
@@ -3204,6 +3242,7 @@ type LoadThreadContextV2Row struct {
 	RuntimeID                uuid.UUID
 	RuntimeAssistantID       uuid.UUID
 	RuntimeProjectID         uuid.UUID
+	RuntimeVersion           int16
 	Backend                  string
 	BackendMetadataJson      []byte
 	State                    string
@@ -3240,6 +3279,7 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
+		&i.AssistantRuntimeVersion,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -3247,6 +3287,7 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 		&i.RuntimeID,
 		&i.RuntimeAssistantID,
 		&i.RuntimeProjectID,
+		&i.RuntimeVersion,
 		&i.Backend,
 		&i.BackendMetadataJson,
 		&i.State,
@@ -4340,7 +4381,7 @@ SET
 WHERE id = $7
   AND project_id = $8
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 `
 
 type UpdateAssistantParams struct {
@@ -4364,6 +4405,7 @@ type UpdateAssistantRow struct {
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
+	RuntimeVersion  int16
 	Status          string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -4392,6 +4434,7 @@ func (q *Queries) UpdateAssistant(ctx context.Context, arg UpdateAssistantParams
 		&i.Instructions,
 		&i.WarmTtlSeconds,
 		&i.MaxConcurrency,
+		&i.RuntimeVersion,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,

@@ -147,6 +147,9 @@ type GetAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -188,6 +191,9 @@ type CreateAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -229,6 +235,9 @@ type UpgradeAssistantIdentityResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -270,6 +279,9 @@ type UpdateAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -336,6 +348,9 @@ type GetManagedAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -377,6 +392,9 @@ type EnsureManagedAssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -2277,6 +2295,9 @@ type AssistantResponseBody struct {
 	WarmTTLSeconds int `form:"warm_ttl_seconds" json:"warm_ttl_seconds" xml:"warm_ttl_seconds"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int `form:"max_concurrency" json:"max_concurrency" xml:"max_concurrency"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion int `form:"runtime_version" json:"runtime_version" xml:"runtime_version"`
 	// The assistant status.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Creation timestamp.
@@ -2384,6 +2405,7 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2441,6 +2463,7 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2499,6 +2522,7 @@ func NewUpgradeAssistantIdentityResponseBody(res *types.Assistant) *UpgradeAssis
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2556,6 +2580,7 @@ func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantRespon
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2635,6 +2660,7 @@ func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssista
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2692,6 +2718,7 @@ func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedA
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
+		RuntimeVersion:  res.RuntimeVersion,
 		Status:          res.Status,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,

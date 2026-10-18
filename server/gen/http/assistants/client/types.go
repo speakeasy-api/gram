@@ -147,6 +147,9 @@ type GetAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -188,6 +191,9 @@ type CreateAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -229,6 +235,9 @@ type UpgradeAssistantIdentityResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -270,6 +279,9 @@ type UpdateAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -336,6 +348,9 @@ type GetManagedAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -377,6 +392,9 @@ type EnsureManagedAssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -2277,6 +2295,9 @@ type AssistantResponseBody struct {
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
 	// The assistant status.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Creation timestamp.
@@ -2652,6 +2673,7 @@ func NewGetAssistantAssistantOK(body *GetAssistantResponseBody) *types.Assistant
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -2848,6 +2870,7 @@ func NewCreateAssistantAssistantOK(body *CreateAssistantResponseBody) *types.Ass
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3044,6 +3067,7 @@ func NewUpgradeAssistantIdentityAssistantOK(body *UpgradeAssistantIdentityRespon
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3240,6 +3264,7 @@ func NewUpdateAssistantAssistantOK(body *UpdateAssistantResponseBody) *types.Ass
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3910,6 +3935,7 @@ func NewGetManagedAssistantAssistantOK(body *GetManagedAssistantResponseBody) *t
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -4106,6 +4132,7 @@ func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBo
 		Instructions:    *body.Instructions,
 		WarmTTLSeconds:  *body.WarmTTLSeconds,
 		MaxConcurrency:  *body.MaxConcurrency,
+		RuntimeVersion:  *body.RuntimeVersion,
 		Status:          *body.Status,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -4337,6 +4364,9 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -4427,6 +4457,9 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 	}
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
+	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
 	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
@@ -4519,6 +4552,9 @@ func ValidateUpgradeAssistantIdentityResponseBody(body *UpgradeAssistantIdentity
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -4609,6 +4645,9 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 	}
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
+	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
 	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
@@ -4734,6 +4773,9 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
 	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
+	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
@@ -4824,6 +4866,9 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 	}
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
+	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
 	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
@@ -7318,6 +7363,9 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 	}
 	if body.MaxConcurrency == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
+	}
+	if body.RuntimeVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
 	}
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))

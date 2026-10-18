@@ -39,6 +39,9 @@ type Assistant struct {
 	WarmTTLSeconds int
 	// Maximum active warm runtimes for the assistant.
 	MaxConcurrency int
+	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
+	// Read-only until safe runtime switching is available.
+	RuntimeVersion int
 	// The assistant status.
 	Status string
 	// Creation timestamp.

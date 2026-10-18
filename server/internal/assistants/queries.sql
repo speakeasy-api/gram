@@ -59,6 +59,7 @@ SELECT
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
+  a.runtime_version AS assistant_runtime_version,
   a.status,
   a.created_at,
   a.updated_at,
@@ -561,24 +562,24 @@ INSERT INTO assistants (
   @max_concurrency,
   @status
 )
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at;
 
 -- name: ListAssistants :many
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
 -- name: GetAssistant :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: GetAssistantForDispatch :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = @assistant_id
   AND deleted IS FALSE;
@@ -587,7 +588,7 @@ WHERE id = @assistant_id
 -- Resolves a project's platform-managed assistant (powers the AI Insights
 -- sidebar) through the project_managed_assistants mapping. Returns no rows
 -- when the feature isn't toggled on for the project.
-SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.status, a.created_at, a.updated_at, a.deleted_at
+SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.runtime_version, a.status, a.created_at, a.updated_at, a.deleted_at
 FROM project_managed_assistants pma
 JOIN assistants a ON a.id = pma.assistant_id
 WHERE pma.project_id = @project_id
@@ -627,7 +628,7 @@ SET
 WHERE id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
+RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at;
 
 -- name: DeleteAssistant :exec
 UPDATE assistants
@@ -963,7 +964,7 @@ LIMIT 1;
 -- the backend metadata to drive Ensure without a thread to join through
 -- (eager warmup at assistant creation). At most one row matches per the
 -- v2 unique partial index.
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+SELECT id, assistant_thread_id, assistant_id, project_id, runtime_version, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
 WHERE project_id = @project_id
   AND assistant_id = @assistant_id
@@ -1001,6 +1002,7 @@ SELECT
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
+  a.runtime_version AS assistant_runtime_version,
   a.status,
   a.created_at,
   a.updated_at,
@@ -1008,6 +1010,7 @@ SELECT
   r.id AS runtime_id,
   r.assistant_id AS runtime_assistant_id,
   r.project_id AS runtime_project_id,
+  r.runtime_version,
   r.backend,
   r.backend_metadata_json,
   r.state,
@@ -1062,6 +1065,7 @@ SELECT
   a.instructions,
   a.warm_ttl_seconds,
   a.max_concurrency,
+  a.runtime_version AS assistant_runtime_version,
   a.status,
   a.created_at,
   a.updated_at,
@@ -1070,6 +1074,7 @@ SELECT
   r.assistant_thread_id,
   r.assistant_id AS runtime_assistant_id,
   r.project_id AS runtime_project_id,
+  r.runtime_version,
   r.backend,
   r.backend_metadata_json,
   r.state,
@@ -1217,7 +1222,7 @@ WHERE project_id = @project_id
 -- metadata, regardless of soft-delete state. A stopped row whose resources
 -- were not collected retains backend metadata and would otherwise
 -- be invisible to deleted-aware queries.
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+SELECT id, assistant_thread_id, assistant_id, project_id, runtime_version, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
 WHERE assistant_id = @assistant_id
   AND project_id = @project_id
@@ -1237,7 +1242,7 @@ WHERE assistant_id = @assistant_id
 --      window. Collecting it frees the deprecated backend's resources so the
 --      next admit lands on the target backend. Active/starting/expiring rows
 --      are left to finish, so a live assistant is never disrupted mid-turn.
-SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
   AND (
@@ -1303,7 +1308,7 @@ WHERE id = @runtime_id
 -- mid-boot, while expiring/stopped rows are already being torn down or await
 -- re-admission. Rows orphaned by a deleted assistant belong to the
 -- deleted-assistant janitor and are excluded here.
-SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = @active_state
   AND r.runtime_version = 2
@@ -1341,7 +1346,7 @@ WHERE id = @runtime_id
 -- non-empty metadata into each new row, so a stale older sibling can share
 -- resource metadata with the current owner — destroying it would yank the live
 -- machine out from under a fresher row that is still inside its own TTL.
-SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
   AND r.state IN (@stopped_state, @failed_state)
@@ -1412,7 +1417,7 @@ WHERE id = (
   AND state IN (@active_state, @expiring_state)
   AND deleted IS FALSE
   AND ended IS FALSE
-RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
+RETURNING id, assistant_thread_id, assistant_id, project_id, runtime_version, backend, backend_metadata_json, state, warm_until;
 
 -- name: ListIdleAssistantRuntimes :many
 -- Idle-sweep candidates on an idle-expiring backend:
@@ -1464,7 +1469,7 @@ WHERE id = @runtime_id
     state = @active_state
     OR (state = @expiring_state AND updated_at < @expiring_before)
   )
-RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
+RETURNING id, assistant_thread_id, assistant_id, project_id, runtime_version, backend, backend_metadata_json, state, warm_until;
 
 -- name: RevertExpireAssistantRuntimeToActive :exec
 UPDATE assistant_runtimes
@@ -1539,7 +1544,7 @@ WHERE assistant_thread_id = @assistant_thread_id
   AND state = @state;
 
 -- name: GetAssistantIgnoringDeleted :one
-SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, runtime_version, status, created_at, updated_at, deleted_at
 FROM assistants
 WHERE id = @assistant_id
   AND project_id = @project_id;

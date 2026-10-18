@@ -199,10 +199,12 @@ type assistantRecord struct {
 	Skills          []assistantSkillRow
 	WarmTTLSeconds  int
 	MaxConcurrency  int
-	Status          string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	DeletedAt       pgtype.Timestamptz
+	// RuntimeVersion is the desired protocol for the next runtime, not a live row mutation.
+	RuntimeVersion int16
+	Status         string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	DeletedAt      pgtype.Timestamptz
 }
 
 type assistantThreadRecord struct {
@@ -222,9 +224,11 @@ type assistantRuntimeRecord struct {
 	// every thread under the assistant, so the binding is via AssistantID
 	// and the foreign key to assistant_threads is dropped on this column
 	// (so the sentinel does not have to back to a real row).
-	AssistantThreadID   uuid.UUID
-	AssistantID         uuid.UUID
-	ProjectID           uuid.UUID
+	AssistantThreadID uuid.UUID
+	AssistantID       uuid.UUID
+	ProjectID         uuid.UUID
+	// RuntimeVersion is immutable for the lifetime of this runtime row.
+	RuntimeVersion      int16
 	Backend             string
 	BackendMetadataJSON []byte
 	State               string
@@ -283,6 +287,7 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -305,6 +310,7 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -327,6 +333,7 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -349,6 +356,7 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -371,6 +379,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.RuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -731,6 +740,7 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 				AssistantThreadID:   row.AssistantThreadID,
 				AssistantID:         row.AssistantID,
 				ProjectID:           row.ProjectID,
+				RuntimeVersion:      row.RuntimeVersion,
 				Backend:             row.Backend,
 				BackendMetadataJSON: row.BackendMetadataJson,
 				State:               row.State,
@@ -876,6 +886,7 @@ func (s *ServiceCore) sweepIdleRuntimes(ctx context.Context, now time.Time, affe
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -1552,6 +1563,7 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		Skills:          skills,
 		WarmTTLSeconds:  record.WarmTTLSeconds,
 		MaxConcurrency:  record.MaxConcurrency,
+		RuntimeVersion:  int(record.RuntimeVersion),
 		Status:          record.Status,
 		CreatedAt:       record.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:       record.UpdatedAt.UTC().Format(time.RFC3339),
@@ -1925,6 +1937,7 @@ func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assi
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -1987,6 +2000,7 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -2043,6 +2057,7 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -2095,6 +2110,7 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
 			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
 			Backend:             row.Backend,
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
@@ -2612,6 +2628,20 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		return AdmitPendingThreadsResult{}, fmt.Errorf("acquire assistant advisory lock: %w", err)
 	}
 
+	// Re-read selection under the admission lock. A future runtime switch uses
+	// this same lock; a pre-lock configuration snapshot must not launch legacy.
+	fresh, err := queries.GetAssistantForDispatch(ctx, assistant.ID)
+	if err != nil {
+		return AdmitPendingThreadsResult{}, fmt.Errorf("reload assistant during admission: %w", err)
+	}
+	assistant = assistantRecordFromDispatchRow(fresh)
+	if assistant.Status != StatusActive {
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
+	}
+	if assistant.RuntimeVersion != 2 {
+		return AdmitPendingThreadsResult{}, fmt.Errorf("assistant runtime version %d admission is not configured", assistant.RuntimeVersion)
+	}
+
 	threads, err := queries.ListAssistantPendingThreads(ctx, assistantrepo.ListAssistantPendingThreadsParams{
 		ProjectID:     assistant.ProjectID,
 		AssistantID:   assistant.ID,
@@ -2745,6 +2775,18 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		return noop, fmt.Errorf("acquire assistant advisory lock: %w", err)
 	}
 
+	fresh, err := queries.GetAssistantForDispatch(ctx, assistant.ID)
+	if err != nil {
+		return noop, fmt.Errorf("reload assistant during warmup: %w", err)
+	}
+	assistant = assistantRecordFromDispatchRow(fresh)
+	if assistant.Status != StatusActive {
+		return noop, nil
+	}
+	if assistant.RuntimeVersion != 2 {
+		return noop, fmt.Errorf("assistant runtime version %d admission is not configured", assistant.RuntimeVersion)
+	}
+
 	chatID := deterministicChatID(assistant.ID, warmupCorrelationID)
 	if err := queries.UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
 		ChatID:         chatID,
@@ -2867,6 +2909,11 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{}, err
 	}
 
+	protocol, err := resolveRuntimeProtocol(runtimeRecord.RuntimeVersion, s.runtime, nil)
+	if err != nil {
+		return ProcessThreadEventsResult{}, err
+	}
+
 	ctx = withAssistantLogContext(ctx, assistantLogContext{
 		OrganizationID:    assistant.OrganizationID,
 		ProjectID:         assistant.ProjectID.String(),
@@ -2926,7 +2973,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
 		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
-		currentSkillSnapshot, runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event)
+		currentSkillSnapshot, runErr := s.processEventTurnWithProtocol(turnCtx, thread, assistant, runtimeRecord, event, protocol)
 		stopLeaseHeartbeat()
 		if runErr != nil {
 			s.logger.WarnContext(ctx, "assistant turn failed",
@@ -3162,12 +3209,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 	}, nil
 }
 
-func (s *ServiceCore) processEventTurn(
+func (s *ServiceCore) processEventTurnWithProtocol(
 	ctx context.Context,
 	thread assistantThreadRecord,
 	assistant assistantRecord,
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
+	protocol runtimeProtocol,
 ) ([]byte, error) {
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
@@ -3228,7 +3276,7 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, runTurnRequest{
+	if err := protocol.RunTurn(ctx, runtime, runTurnRequest{
 		ThreadID:       thread.ID,
 		IdempotencyKey: event.ID.String(),
 		AuthToken:      turnToken,
@@ -3442,6 +3490,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.AssistantRuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -3722,6 +3771,7 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 		AssistantThreadID:   row.AssistantThreadID,
 		AssistantID:         row.AssistantID,
 		ProjectID:           row.ProjectID,
+		RuntimeVersion:      row.RuntimeVersion,
 		Backend:             row.Backend,
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,
@@ -3809,6 +3859,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		RuntimeVersion:  row.AssistantRuntimeVersion,
 		Status:          row.Status,
 		CreatedAt:       row.CreatedAt.Time,
 		UpdatedAt:       row.UpdatedAt.Time,
@@ -3819,6 +3870,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		AssistantThreadID:   uuid.Nil,
 		AssistantID:         row.RuntimeAssistantID,
 		ProjectID:           row.RuntimeProjectID,
+		RuntimeVersion:      row.RuntimeVersion,
 		Backend:             row.Backend,
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,

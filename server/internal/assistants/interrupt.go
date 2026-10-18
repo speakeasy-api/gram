@@ -177,6 +177,7 @@ func (s *ServiceCore) interruptThreadRuntime(ctx context.Context, projectID, ass
 		AssistantThreadID:   row.AssistantThreadID,
 		AssistantID:         row.AssistantID,
 		ProjectID:           row.ProjectID,
+		RuntimeVersion:      row.RuntimeVersion,
 		Backend:             row.Backend,
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,
