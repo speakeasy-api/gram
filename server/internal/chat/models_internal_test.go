@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestHandleModelsRejectsInvalidRuntimeCredentialWithoutFallback(t *testing.T) {
@@ -31,7 +31,7 @@ func TestHandleModelsRejectsInvalidRuntimeCredentialWithoutFallback(t *testing.T
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/chat/models", nil)
 	req.Header.Set("Authorization", "Bearer "+raw)
 	rec := httptest.NewRecorder()
-	oops.ErrHandle(slog.Default(), svc.HandleModels).ServeHTTP(rec, req)
+	oops.ErrHandle(testenv.NewLogger(t), svc.HandleModels).ServeHTTP(rec, req)
 	require.Equal(t, http.StatusUnauthorized, rec.Code, rec.Body.String())
 	require.NotContains(t, rec.Body.String(), `"data"`)
 }
