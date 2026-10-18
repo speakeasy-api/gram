@@ -834,3 +834,26 @@ func TestListDismissedRiskResults_ClickHouseResolvesLatestCopy(t *testing.T) {
 	require.Equal(t, stillDismissedID.String(), dismissed.Results[0].ID)
 	require.Equal(t, int64(1), dismissed.TotalCount)
 }
+
+func TestAppendAutomatedFalsePositiveSuppression_RoundTrip(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	createdAt := time.Now().UTC().Add(-time.Hour)
+	finding := chListFinding(t, projectID, orgID, uuid.New(), uuid.New(), uuid.NewString(), createdAt, createdAt,
+		"presidio", "pii.email", "", "<redacted len=8 sha=aaaaaaaa>", "fingerprint", "")
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	now := chrepo.FormatCHTime(time.Now())
+	require.NoError(t, chQueries.AppendAutomatedFalsePositiveSuppression(ctx, orgID, projectID.String(), now, now, "placeholder email", []uuid.UUID{finding.ID}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	states, err := chQueries.ListFalsePositiveStates(ctx, orgID, projectID.String(), []uuid.UUID{finding.ID})
+	require.NoError(t, err)
+	require.Equal(t, []chrepo.FalsePositiveState{{ID: finding.ID, Dismissed: true, RuleSuppressed: false}}, states)
+}

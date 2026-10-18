@@ -23,14 +23,27 @@ WHERE r.organization_id = $3
   AND r.false_positive_at IS NULL
 `
 
+// chunkSize keeps each ClickHouse id IN-list under the default max_query_size.
+const chunkSize = 1000
+
 // Apply writes ClickHouse first, then mirrors every eligible finding to Postgres.
 func Apply(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, organizationID string, projectID uuid.UUID, ids []uuid.UUID, reasons []string, dryRun bool) (int64, error) {
 	if len(ids) != len(reasons) {
 		return 0, fmt.Errorf("finding ids and reasons have different lengths")
 	}
-	if len(ids) == 0 {
-		return 0, nil
+	var changed int64
+	for start := 0; start < len(ids); start += chunkSize {
+		end := min(start+chunkSize, len(ids))
+		n, err := applyChunk(ctx, pool, ch, organizationID, projectID, ids[start:end], reasons[start:end], dryRun)
+		changed += n
+		if err != nil {
+			return changed, err
+		}
 	}
+	return changed, nil
+}
+
+func applyChunk(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, organizationID string, projectID uuid.UUID, ids []uuid.UUID, reasons []string, dryRun bool) (int64, error) {
 
 	states, err := ch.ListFalsePositiveStates(ctx, organizationID, projectID.String(), ids)
 	if err != nil {
@@ -64,7 +77,7 @@ func Apply(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, organiza
 		return changed, nil
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := chrepo.FormatCHTime(time.Now())
 	groupReasons := make([]string, 0, len(groups))
 	for reason := range groups {
 		groupReasons = append(groupReasons, reason)

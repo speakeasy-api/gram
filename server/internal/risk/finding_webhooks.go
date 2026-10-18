@@ -48,7 +48,7 @@ func NewOutboxRiskFindingCreatedEmitter(logger *slog.Logger, db *pgxpool.Pool, f
 
 // Emit appends stable-id events only for projects switched to this emitter.
 func (e *OutboxRiskFindingCreatedEmitter) Emit(ctx context.Context, candidates []RiskFindingCreatedEvent) error {
-	if len(candidates) == 0 || e == nil || e.db == nil || e.flags == nil {
+	if len(candidates) == 0 {
 		return nil
 	}
 
@@ -59,7 +59,12 @@ func (e *OutboxRiskFindingCreatedEmitter) Emit(ctx context.Context, candidates [
 	for _, candidate := range candidates {
 		enabled, ok := enabledProjects[candidate.ProjectID]
 		if !ok {
-			enabled = policyflags.ProjectFlagEnabled(ctx, e.logger, queries, e.flags, candidate.OrganizationID, candidate.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
+			// A failed lookup fails the batch so redelivery retries it rather than dropping the webhook.
+			var err error
+			enabled, err = policyflags.ProjectFlagChecked(ctx, e.logger, queries, e.flags, candidate.OrganizationID, candidate.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
+			if err != nil {
+				return fmt.Errorf("check finding webhook emitter flag: %w", err)
+			}
 			enabledProjects[candidate.ProjectID] = enabled
 		}
 		if enabled {

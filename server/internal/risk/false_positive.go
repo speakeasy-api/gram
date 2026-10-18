@@ -58,9 +58,8 @@ func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 
 // FalsePositiveMutation names one manual dismissal or restore batch inside a
 // project. IDs must already be parsed and deduplicated. Ids that do not exist
-// in the project, or that are already in the requested state, match no row
-// and are skipped; the rows returned by the core are exactly the ones that
-// changed.
+// in the project, or that are already in the requested state, are skipped;
+// the result's ChangedIDs are exactly the findings that changed.
 type FalsePositiveMutation struct {
 	// OrganizationID scopes the audit entries and the ClickHouse mirror.
 	OrganizationID string

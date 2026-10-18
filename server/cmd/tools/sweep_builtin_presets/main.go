@@ -4,7 +4,26 @@
 // credit cards, example API keys/tokens, module hashes, placeholder emails,
 // ...) as false positives so the dashboard hides them.
 //
-// This cross-source sweep requires Postgres and ClickHouse DSNs; dry run is the default.
+// It is meant to be run rarely and by hand, against production databases
+// reached through tunnels:
+//
+//	GRAM_DATABASE_URL=postgres://USER:PASS@127.0.0.1:5432/gram \
+//	GRAM_CLICKHOUSE_URL=clickhouse://USER:PASS@HOST:9440/gram?secure=true \
+//	  go run ./server/cmd/tools/sweep_builtin_presets \
+//	  -org org_123 -project <uuid> \
+//	  -from 2024-01-01T00:00:00Z -to 2024-06-01T00:00:00Z \
+//	  -dry-run=false
+//
+// Safety properties:
+//   - -dry-run defaults to true: a plain run only reports what it would mark.
+//   - Candidates are paged from Postgres risk_results, so findings that exist
+//     only in ClickHouse are not swept.
+//   - Marks are appended to ClickHouse first, then mirrored to Postgres. Every
+//     write is scoped by organization_id + project_id + id and skips findings
+//     already dismissed, so re-runs and resumes are idempotent.
+//   - Marks are reversible through the risk results restore API, which
+//     appends ClickHouse reversal copies and clears the Postgres mirror. A
+//     Postgres UPDATE alone does not undo a sweep.
 //
 // On interruption (Ctrl-C) or error it prints the last processed id so the run
 // can be resumed with -cursor.

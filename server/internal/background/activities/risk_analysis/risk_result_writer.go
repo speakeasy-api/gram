@@ -317,6 +317,14 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	defer writeSpan.End()
 
+	// The flag is checked on both producers so one organization has one emitter.
+	// A failed lookup retries the write rather than guessing which emitter owns it.
+	clickHouseEmitsWebhooks, err := policyflags.ProjectFlagChecked(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
+	if err != nil {
+		writeSpan.SetStatus(codes.Error, err.Error())
+		return false, fmt.Errorf("check finding webhook emitter flag: %w", err)
+	}
+
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
 		writeSpan.SetStatus(codes.Error, err.Error())
@@ -389,8 +397,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		}
 	}
 
-	// The flag is checked on both producers so one organization has one emitter.
-	if !policyflags.ProjectFlagEnabled(ctx, a.logger, txRepo, a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskFindingsClickHouseCutover) {
+	if !clickHouseEmitsWebhooks {
 		webhookEvents := findingCreatedEvents(rows, prior, time.Now())
 		if len(webhookEvents) > 0 {
 			if _, err := outbox.PublishIdentifiedWebhookEvents(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, webhookEvents); err != nil {

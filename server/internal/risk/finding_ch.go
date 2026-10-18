@@ -443,12 +443,10 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			EnforcementOutcome:       findingEnforcementOutcome(message.GetEnforcementOutcome()),
 		}
 		if w.webhooks != nil {
+			// A bad webhook identity skips only the webhook; the finding is still stored.
 			event, err := riskFindingCreatedWebhook(row)
 			if err != nil {
-				logger.ErrorContext(ctx, "finding has invalid webhook identity", attr.SlogError(err))
-				w.metrics.RecordFindingCHSkipped(ctx, "invalid_webhook_identity")
-				failed[msgIdx] = err
-				continue
+				logger.ErrorContext(ctx, "finding has invalid webhook identity, skipping its webhook", attr.SlogError(err))
 			}
 			if event != nil {
 				if _, duplicate := webhookFindingIDs[row.ID]; !duplicate {

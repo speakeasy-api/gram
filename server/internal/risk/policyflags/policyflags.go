@@ -2,6 +2,7 @@ package policyflags
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -53,30 +54,43 @@ func ProjectFlagEnabled(ctx context.Context, logger *slog.Logger, queries *repo.
 // carry so callers that need the slug for telemetry do not repeat the lookup.
 // Any lookup failure reads as off with an empty slug.
 func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (enabled bool, orgSlug string) {
+	state, _ := projectFlagState(ctx, logger, queries, flags, orgID, projectID, flag)
+	return state.enabled, state.orgSlug
+}
+
+// ProjectFlagChecked is ProjectFlagEnabled for callers that must not read a
+// failed lookup as off. A nil provider reads as off without error.
+func ProjectFlagChecked(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (bool, error) {
+	state, resolved := projectFlagState(ctx, logger, queries, flags, orgID, projectID, flag)
+	if !resolved {
+		return false, fmt.Errorf("resolve %s for project %s", flag, projectID)
+	}
+	return state.enabled, nil
+}
+
+func projectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (flagState, bool) {
 	if flags == nil {
-		return false, ""
+		return flagState{enabled: false, orgSlug: ""}, true
 	}
 	memo, _ := ctx.Value(memoKey{}).(*requestMemo)
 	if memo == nil {
-		state, _ := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
-		return state.enabled, state.orgSlug
+		return resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
 	}
 	// The lock is held through resolution so concurrent scans that miss the
 	// same flag wait for one lookup instead of each making their own.
 	memo.mu.Lock()
 	defer memo.mu.Unlock()
 	key := projectID.String() + ":" + string(flag)
-	state, ok := memo.states[key]
-	if !ok {
-		// A failed lookup reads as off for this scan only; the next scan
-		// retries it rather than inheriting the failure.
-		var resolved bool
-		state, resolved = resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
-		if resolved {
-			memo.states[key] = state
-		}
+	if state, ok := memo.states[key]; ok {
+		return state, true
 	}
-	return state.enabled, state.orgSlug
+	// A failed lookup is not memoized; the next scan retries it rather than
+	// inheriting the failure.
+	state, resolved := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
+	if resolved {
+		memo.states[key] = state
+	}
+	return state, resolved
 }
 
 // ProjectFlagMode resolves the risk engine mode the multivariate flag selects
