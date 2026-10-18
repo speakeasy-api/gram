@@ -107,9 +107,9 @@ func TestHandle_PublishesPromptInjectionFinding(t *testing.T) {
 	require.Zero(t, f.GetConfidence(), "the typed judge carries evidence in tags, not a score")
 }
 
-// The judge flags the whole scanned content, so the published finding indexes
-// the anchored message text: surface "content" with no span attribution.
-func TestHandle_StampsContentSurface(t *testing.T) {
+// The match is the rendered event, not a slice of stored text, so the published
+// finding carries surface "none" with no span attribution.
+func TestHandle_StampsNoneSurface(t *testing.T) {
 	t.Parallel()
 
 	pub, published := capturingPub(t)
@@ -123,7 +123,7 @@ func TestHandle_StampsContentSurface(t *testing.T) {
 
 	require.Len(t, *published, 1)
 	f := (*published)[0]
-	require.Equal(t, "content", f.GetSurface())
+	require.Equal(t, "none", f.GetSurface())
 	require.Empty(t, f.GetField())
 	require.Empty(t, f.GetPath())
 	require.Empty(t, f.GetToolCallId())

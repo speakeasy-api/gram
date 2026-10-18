@@ -240,15 +240,14 @@ func FindingSurface(source, field, path string) string {
 	}
 
 	switch source {
-	case "gitleaks", "presidio", "prompt_injection":
+	case "gitleaks", "presidio":
 		// These scanners match against the request's verbatim content, so the
-		// offsets index the anchored message/part text (prompt_injection flags
-		// the whole scanned content).
+		// offsets index the anchored message/part text.
 		return SurfaceContent
-	case "llm_judge", "llm_analyzer":
-		// The judge's match is a rendered artifact of the judged content and
-		// the LLM analyzer records no match at all; in both the rationale
-		// carries the signal and the offsets index no stored text.
+	case "prompt_injection", "llm_judge", "llm_analyzer":
+		// The judges' match is the rendered event they judged and the LLM
+		// analyzer records no match at all; the rationale carries the signal
+		// and the offsets index no stored text.
 		return SurfaceNone
 	case "shadow_mcp", "account_identity", "destructive_tool", "cli_destructive":
 		// The match is derived metadata (server identifier, account email,
