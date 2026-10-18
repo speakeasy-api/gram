@@ -504,6 +504,7 @@ func NewService(
 	)
 
 	service := &Service{
+		assistantWorkloadTokens:   nil,
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,

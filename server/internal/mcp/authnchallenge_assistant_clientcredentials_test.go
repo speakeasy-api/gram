@@ -21,6 +21,8 @@ func (f assistantWorkloadIssuerFunc) IssueAssistantWorkloadToken(ctx context.Con
 }
 
 func TestAssistantClientCredentialsDispatch(t *testing.T) {
+	t.Parallel()
+
 	s, _, _ := newTokenDispatchTestService(t)
 	r := newTokenDispatchRequest(t, url.Values{})
 	_, ok := s.tokenGrantFor(r, "client_credentials", presentedClientCredentials{})
@@ -36,6 +38,8 @@ func TestAssistantClientCredentialsDispatch(t *testing.T) {
 }
 
 func TestAssistantClientCredentialsBoundRequest(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name, resource, scope string
 		public, denied        bool
@@ -49,6 +53,8 @@ func TestAssistantClientCredentialsBoundRequest(t *testing.T) {
 		{name: "revoked or policy denied", resource: "https://gram.example/mcp/test", scope: "mcp:connect", denied: true, status: 400},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			s, endpoint, _ := newTokenDispatchTestService(t)
 			calls := 0
 			client := &usersessions_repo.UserSessionClient{ID: uuid.New(), ClientID: "test-client", UserSessionIssuerID: endpoint.UserSessionIssuerID, ClientSecretHash: pgtype.Text{String: "hashed", Valid: !tc.public}}
@@ -80,6 +86,8 @@ func TestAssistantClientCredentialsBoundRequest(t *testing.T) {
 }
 
 func TestAssistantWorkloadScopeSyntax(t *testing.T) {
+	t.Parallel()
+
 	for _, scope := range []string{"", " a", "a ", "a  b", "a a", "a\tb", "a\nb", "a\\b", "a\"b", "é"} {
 		require.False(t, validAssistantWorkloadScopes(scope), scope)
 	}
