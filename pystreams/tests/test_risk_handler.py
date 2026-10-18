@@ -16,6 +16,7 @@ from pystreams.risk.handler import PresidioHandler, RetryablePresidioError
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
     Detection,
+    ScanInputError,
     ScanSlotTimeout,
     _AsyncCloseable,
 )
@@ -616,7 +617,7 @@ async def test_external_cancellation_during_meter_publish_is_not_swallowed():
 async def test_scan_failure_does_not_publish_meter_reading():
     meter_publisher = FakeMeterPublisher()
     handler = _handler(
-        FakeScanner(error=ValueError("scan failed")),
+        FakeScanner(error=ScanInputError("ValueError")),
         meter_publisher=meter_publisher,
     )
 
@@ -681,7 +682,7 @@ async def test_unset_score_threshold_defaults():
 
 async def test_deterministic_scan_failure_is_acked_and_logged():
     secret = "my ssn is 123-45-6789"
-    scanner = FakeScanner(error=ValueError(secret))
+    scanner = FakeScanner(error=ScanInputError(secret))
     publisher = FakePublisher()
     handler = _handler(scanner, publisher)
     msg = _message(secret, request_id="req-1", reply_urn="urn:reply:1")
@@ -692,7 +693,7 @@ async def test_deterministic_scan_failure_is_acked_and_logged():
     (entry,) = logs
     assert entry["event"] == "presidio scan rejected input"
     assert entry["request_id"] == "req-1"
-    assert entry["error_type"] == "ValueError"
+    assert entry["error_type"] == "ScanInputError"
     assert entry["delivery_attempt"] == 3
     assert publisher.published == []
     assert secret not in repr(entry)
@@ -879,13 +880,23 @@ async def test_records_clean_outcome_when_nothing_detected(recorded_durations):
 async def test_records_dropped_outcome_when_scan_failure_is_deterministic(
     recorded_durations,
 ):
-    handler = _handler(FakeScanner(error=ValueError("boom")))
+    handler = _handler(FakeScanner(error=ScanInputError("ValueError")))
 
     await handler.handle(_message("...", request_id="req-1"), _meta())
 
     (seconds, outcome, _) = recorded_durations[-1]
     assert outcome == metrics.OUTCOME_DROPPED
     assert seconds >= 0.0
+
+
+async def test_unclassified_value_error_is_requeued(recorded_durations):
+    handler = _handler(FakeScanner(error=ValueError("worker failure")))
+
+    with pytest.raises(RetryablePresidioError):
+        await handler.handle(_message("...", request_id="req-1"), _meta())
+
+    (_, outcome, _) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_REQUEUED
 
 
 async def test_records_requeued_outcome_when_publish_fails(recorded_durations):

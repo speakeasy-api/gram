@@ -19,6 +19,7 @@ from pystreams.risk.metering import MeterReadingPublisher, publish_meter_reading
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
     Detection,
+    ScanInputError,
     Scanner,
     ScanSlotTimeout,
 )
@@ -40,7 +41,7 @@ class RetryablePresidioError(RuntimeError):
 
 def _is_deterministic_scan_error(exc: Exception) -> bool:
     """Return whether retrying the same input cannot change the scan outcome."""
-    return isinstance(exc, (TimeoutError, ValueError))
+    return isinstance(exc, (TimeoutError, ScanInputError))
 
 
 class PresidioHandler:

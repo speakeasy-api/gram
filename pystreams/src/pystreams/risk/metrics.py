@@ -141,7 +141,8 @@ def record_scan_duration(seconds: float, size_bucket: str) -> None:
 
     Recorded by the scanners on scan success only: a timed-out or failed scan
     never reports a duration (its cost shows up in ``process_duration`` under
-    ``outcome=error`` instead), so this distribution stays a clean read of what
-    completed scans cost.
+    ``outcome=dropped`` for an input failure or ``outcome=requeued`` for a
+    transient one), so this distribution stays a clean read of what completed
+    scans cost.
     """
     _scan_duration.record(seconds, {_SIZE_BUCKET_ATTR: size_bucket})
