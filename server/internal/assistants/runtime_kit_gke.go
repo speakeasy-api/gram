@@ -24,7 +24,7 @@ import (
 var kitTemplateGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxtemplates"}
 var kitPinnedImage = regexp.MustCompile(`^[^@\s]+@sha256:[a-f0-9]{64}$`)
 
-var kitSecretGVR = schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
+var kitSecretGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"}
 
 // KitGKEIdentity must come from the authoritative runtime record, not pod labels.
 // A cold/reset boot MUST have a new Lineage; absent restore annotations permit
@@ -81,6 +81,8 @@ func kitObject(kind, version, name string, i KitGKEIdentity) *unstructured.Unstr
 
 // RenderKitGKEProvision is pure. Returned objects contain credentials and must
 // never be logged. ProvisionKitGKE creates them in Secret -> Template -> Claim order.
+//
+//nolint:exhaustruct // Only renderer-defined Kubernetes fields are set; optional fields must retain API defaults.
 func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	var out KitGKEObjects
 	if err := in.Identity.validate(); err != nil {
@@ -90,13 +92,13 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		return out, fmt.Errorf("invalid dedicated Kit object name")
 	}
 	if !kitPinnedImage.MatchString(in.Image) {
-		return out, fmt.Errorf("Kit image must be pinned to a lowercase SHA-256 digest")
+		return out, fmt.Errorf("kit image must be pinned to a lowercase SHA-256 digest")
 	}
 	if err := validateKitResources(in.Resources); err != nil {
 		return out, err
 	}
 	if len(in.Command) == 0 || in.Command[0] == "" || in.Args == nil {
-		return out, fmt.Errorf("Kit command and explicit args are required")
+		return out, fmt.Errorf("kit command and explicit args are required")
 	}
 	if in.GuestPort < 1 || in.GuestPort > 65535 {
 		return out, fmt.Errorf("invalid Kit guest port")
@@ -105,29 +107,26 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		return out, fmt.Errorf("invalid Kit ingress CIDR")
 	}
 	if len(in.AgentsMD) == 0 || len(in.GatewayToken) == 0 || !json.Valid(in.InferenceJSON) || !json.Valid(in.MCPJSON) {
-		return out, fmt.Errorf("Kit bootstrap requires nonempty instructions/token and valid JSON configurations")
+		return out, fmt.Errorf("kit bootstrap requires nonempty instructions/token and valid JSON configurations")
 	}
 	if in.ColdReset {
 		if in.PreviousIdentity == nil || in.PreviousIdentity.AssistantID != in.Identity.AssistantID || in.PreviousIdentity.Namespace != in.Identity.Namespace || in.PreviousIdentity.Lineage == in.Identity.Lineage || in.PreviousIdentity.Lineage == "" || in.Restore != nil {
-			return out, fmt.Errorf("Kit cold/reset requires a new lineage for the same assistant and namespace, without restore")
+			return out, fmt.Errorf("kit cold/reset requires a new lineage for the same assistant and namespace, without restore")
 		}
 	}
 	annotations := map[string]string{"cluster-autoscaler.kubernetes.io/safe-to-evict": "false"}
 	if in.Restore != nil {
 		if !in.SnapshotsEnabled || in.RestoreSource == nil || *in.RestoreSource != in.Restore.binding || in.Restore.binding.Identity != in.Identity || in.Restore.name == "" {
-			return out, fmt.Errorf("Kit restore requires a verified snapshot with exact identity and snapshots enabled")
+			return out, fmt.Errorf("kit restore requires a verified snapshot with exact identity and snapshots enabled")
 		}
 		annotations["podsnapshot.gke.io/ps-name"] = in.Restore.name
 	}
 	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "inference.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
 	// Content-address the immutable generation-specific bootstrap: no credential
 	// rotation in place, and no names shared across assistants or runtime lineages.
-	encoded, err := json.Marshal(struct {
-		Identity KitGKEIdentity
-		Data     map[string][]byte
-	}{in.Identity, data})
+	encoded, err := json.Marshal(map[string]any{"namespace": in.Identity.Namespace, "identity": in.Identity.labels(), "data": data})
 	if err != nil {
-		return out, err
+		return out, fmt.Errorf("encode Kit bootstrap generation: %w", err)
 	}
 	secretName := fmt.Sprintf("kit-bootstrap-%x", sha256.Sum256(encoded))[:63]
 	yes, no := true, false
@@ -136,7 +135,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	secret := &corev1.Secret{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}, ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: in.Identity.Namespace, Labels: in.Identity.labels()}, Immutable: &yes, Type: corev1.SecretTypeOpaque, Data: data}
 	secretMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(secret)
 	if err != nil {
-		return out, err
+		return out, fmt.Errorf("convert Kit bootstrap Secret: %w", err)
 	}
 	out.Secret = &unstructured.Unstructured{Object: secretMap}
 	work, err := kitMemoryVolume("work", in.WorkSizeLimit)
@@ -164,7 +163,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	}
 	podMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&pod)
 	if err != nil {
-		return out, err
+		return out, fmt.Errorf("convert Kit pod template: %w", err)
 	}
 	out.Template = kitObject("SandboxTemplate", "extensions.agents.x-k8s.io/v1alpha1", in.Name, in.Identity)
 	out.Template.Object["spec"] = map[string]any{"networkPolicyManagement": "Managed", "networkPolicy": map[string]any{
@@ -192,7 +191,7 @@ chmod 600 /home/kit/.kit/AGENTS.md /home/kit/.kit/credentials/*
 // lock; existing objects are never overwritten or trusted by name alone.
 func ProvisionKitGKE(ctx context.Context, client dynamic.Interface, in KitGKEProvisionInput) error {
 	if client == nil {
-		return fmt.Errorf("Kit provisioning requires a dynamic client")
+		return fmt.Errorf("kit provisioning requires a dynamic client")
 	}
 	objects, err := RenderKitGKEProvision(in)
 	if err != nil {
@@ -216,7 +215,7 @@ func validateKitResources(resources corev1.ResourceRequirements) error {
 		limit, hasLimit := resources.Limits[name]
 		request, hasRequest := resources.Requests[name]
 		if !hasLimit || !hasRequest || limit.Sign() <= 0 || request.Sign() <= 0 || request.Cmp(limit) > 0 {
-			return fmt.Errorf("Kit requires positive explicit %s requests and limits with request <= limit", name)
+			return fmt.Errorf("kit requires positive explicit %s requests and limits with request <= limit", name)
 		}
 	}
 	return nil

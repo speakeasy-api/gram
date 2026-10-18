@@ -5,12 +5,9 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
-
-var kitManualTriggerGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io", Version: "v1", Resource: "podsnapshotmanualtriggers"}
 
 // KitGKESnapshotBinding is read from authoritative control-plane state. Labels
 // are checked in addition to, never in place of, this source-pod UID binding.
@@ -25,17 +22,17 @@ func (b KitGKESnapshotBinding) validate() error {
 		return err
 	}
 	if b.SourcePodUID == "" || len(validation.IsDNS1123Subdomain(b.SourcePodName)) != 0 {
-		return fmt.Errorf("Kit snapshot requires an exact source pod name and UID")
+		return fmt.Errorf("kit snapshot requires an exact source pod name and UID")
 	}
 	return nil
 }
 func kitCheckIdentity(obj *unstructured.Unstructured, identity KitGKEIdentity) error {
 	if obj == nil || obj.GetNamespace() != identity.Namespace {
-		return fmt.Errorf("Kit object namespace mismatch")
+		return fmt.Errorf("kit object namespace mismatch")
 	}
 	for key, value := range identity.labels() {
 		if obj.GetLabels()[key] != value {
-			return fmt.Errorf("Kit object identity mismatch: %s", key)
+			return fmt.Errorf("kit object identity mismatch: %s", key)
 		}
 	}
 	return nil
@@ -46,7 +43,7 @@ func kitCheckIdentity(obj *unstructured.Unstructured, identity KitGKEIdentity) e
 // source UID throughout trigger execution: targetPod has no UID precondition.
 func RenderKitGKEManualTrigger(enabled bool, name string, binding KitGKESnapshotBinding, pod *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	if !enabled {
-		return nil, fmt.Errorf("Kit snapshots are disabled")
+		return nil, fmt.Errorf("kit snapshots are disabled")
 	}
 	if err := binding.validate(); err != nil {
 		return nil, err
@@ -58,7 +55,7 @@ func RenderKitGKEManualTrigger(enabled bool, name string, binding KitGKESnapshot
 		return nil, err
 	}
 	if pod.GetAPIVersion() != "v1" || pod.GetKind() != "Pod" || pod.GetName() != binding.SourcePodName || pod.GetUID() != binding.SourcePodUID || pod.GetLabels()["gram.ai/snapshots"] != "enabled" {
-		return nil, fmt.Errorf("Kit snapshot source pod does not match authoritative binding")
+		return nil, fmt.Errorf("kit snapshot source pod does not match authoritative binding")
 	}
 	trigger := kitObject("PodSnapshotManualTrigger", "podsnapshot.gke.io/v1", name, binding.Identity)
 	trigger.Object["spec"] = map[string]any{"targetPod": binding.SourcePodName}
