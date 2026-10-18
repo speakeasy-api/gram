@@ -1,0 +1,52 @@
+.changeset/agent-policy-containment.md
+  h_2620cc60cfd1e9 1-5
+docs/rbac.md
+  h_2620cc60cfd1e9 41,42-46,51-60
+server/internal/agentmanagement/create_policy_test.go
+  h_2620cc60cfd1e9 29,85,109,129-131
+server/internal/agentmanagement/membership_locks_test.go
+  h_2620cc60cfd1e9 50,72-73
+server/internal/agentmanagement/ownership_test.go
+  h_2620cc60cfd1e9 21,35,228-230
+server/internal/agentmanagement/policy.go
+  h_2620cc60cfd1e9 73,87-90,127,143-146,200-240
+server/internal/agentmanagement/policy_containment_test.go
+  h_2620cc60cfd1e9 1-213
+server/internal/agentmanagement/policy_test.go
+  h_2620cc60cfd1e9 26,127,168-171,174
+server/internal/agentmanagement/service.go
+  h_2620cc60cfd1e9 154-155
+server/internal/keys/agent_initial_policy_test.go
+  h_2620cc60cfd1e9 10,39-40,49,51,53-61
+.changeset/workload-owner-boundary.md
+  h_2620cc60cfd1e9 1-5
+server/internal/agents/runtimepolicy/workload_admission.go
+  h_2620cc60cfd1e9 20-24,108,120-123,130
+server/internal/agents/runtimepolicy/workload_admission_test.go
+  h_2620cc60cfd1e9 1-245
+server/internal/assistants/execution_authorization_test.go
+  h_2620cc60cfd1e9 140-167
+server/internal/authz/workload_admission.go
+  h_2620cc60cfd1e9 14-15,20-21,23,26,29-31,39,55
+server/internal/authz/workload_admission_test.go
+  h_2620cc60cfd1e9 29,48-79
+server/internal/mcp/authnchallenge_workload_session_challenge_test.go
+  h_2620cc60cfd1e9 41,174,214
+server/internal/mcp/authnchallenge_workload_session_test.go
+  h_2620cc60cfd1e9 15,31-45,161,192-218,225,267,299,332
+server/internal/mcp/authnchallenge_workloadgrant_catalog_test.go
+  h_2620cc60cfd1e9 64
+server/internal/mcp/authnchallenge_workloadgrant_test.go
+  h_2620cc60cfd1e9 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90e7d9df4a186c4ba984308780b475a47543a4b0",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

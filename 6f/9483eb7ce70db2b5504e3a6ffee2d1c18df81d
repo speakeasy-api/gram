@@ -1,0 +1,46 @@
+.agents/skills/gram-rbac/SKILL.md
+  h_2620cc60cfd1e9 34,76-78,141-142
+client/dashboard/src/hooks/useRBAC.test.ts
+  h_2620cc60cfd1e9 3,15-37
+client/dashboard/src/hooks/useRBAC.ts
+  h_2620cc60cfd1e9 255-261
+docs/rbac.md
+  h_2620cc60cfd1e9 84-92,105-106
+server/internal/agentmanagement/authorize.go
+  h_2620cc60cfd1e9 36,62,150,165-166,264,281-284
+server/internal/agentmanagement/authorize_test.go
+  h_2620cc60cfd1e9 22,26-33,247
+server/internal/agentmanagement/eligible_owners.go
+  h_2620cc60cfd1e9 47
+server/internal/agentmanagement/eligible_owners_test.go
+  h_2620cc60cfd1e9 64-65,69
+server/internal/assistantidentity/provision.go
+  h_2620cc60cfd1e9 159-160
+server/internal/authz/access.go
+  h_2620cc60cfd1e9 84-89,93
+server/internal/authz/agent_access.go
+  h_2620cc60cfd1e9 1-109
+server/internal/authz/agent_access_test.go
+  h_2620cc60cfd1e9 1-96
+server/internal/authz/engine.go
+  h_2620cc60cfd1e9 237-261,263-266,273
+server/internal/authz/engine_test.go
+  h_2620cc60cfd1e9 26-68
+server/internal/authz/testdata/agent_creation_cases.json
+  h_2620cc60cfd1e9 1-82
+server/internal/mcp/authnchallenge_consent_agent.go
+  h_2620cc60cfd1e9 305-306
+server/internal/remotesessions/bindinghandlers_test.go
+  h_2620cc60cfd1e9 39-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6f9483eb7ce70db2b5504e3a6ffee2d1c18df81d",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

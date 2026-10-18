@@ -1,0 +1,14 @@
+docs/rbac.md
+  h_2620cc60cfd1e9 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f4040648a57e6527aada2c9a48b2830ce1e84b9",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

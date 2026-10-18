@@ -1,0 +1,26 @@
+server/internal/mcp/authnchallenge_token.go
+  h_2620cc60cfd1e9 76-80,918,927,929,965-971,1101-1109
+server/internal/mcp/authnchallenge_token_refresh_test.go
+  h_2620cc60cfd1e9 20,35,151-244,648-684
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4bc10000653dd0d294e6dc41aa3ee11e87c3e0a9",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_7d53e62d74a0c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bee6cd2a-1426-49fb-b3db-0867fb2f36ae",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

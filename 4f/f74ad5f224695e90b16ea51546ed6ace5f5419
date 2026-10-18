@@ -1,0 +1,92 @@
+.agents/skills/gram-rbac/SKILL.md
+  h_2620cc60cfd1e9 26,34
+.changeset/owner-scoped-agent-creation.md
+  h_2620cc60cfd1e9 6
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 103615
+client/dashboard/src/hooks/useRBAC.test.ts
+  h_2620cc60cfd1e9 18,27,50,67
+client/dashboard/src/hooks/useRBAC.ts
+  h_2620cc60cfd1e9 249,254
+client/dashboard/src/pages/access/AgentOwnerRulePicker.test.tsx
+  h_2620cc60cfd1e9 25,31-32,46-48,57-58,65,73,79,111
+client/dashboard/src/pages/access/AgentOwnerRulePicker.tsx
+  h_2620cc60cfd1e9 26,28,30,36,39,56
+client/dashboard/src/pages/access/RoleAccessMatrix.test.tsx
+  h_2620cc60cfd1e9 27
+client/dashboard/src/pages/access/roleDialogState.test.ts
+  h_2620cc60cfd1e9 21,26,398
+client/dashboard/src/pages/access/roleDialogState.ts
+  h_2620cc60cfd1e9 68,160,165,168-169
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  h_2620cc60cfd1e9 74
+client/dashboard/src/pages/access/roleMatrixModel.test.ts
+  h_2620cc60cfd1e9 86,96
+client/dashboard/src/pages/access/roleMatrixModel.ts
+  h_2620cc60cfd1e9 645
+client/dashboard/src/sdk/src/models/components/selector.ts
+  h_2620cc60cfd1e9 58,99,118,133
+docs/rbac.md
+  h_2620cc60cfd1e9 73,686-691
+server/cmd/tools/migrations/main.go
+  h_2620cc60cfd1e9 97
+server/design/access/design.go
+  h_2620cc60cfd1e9 990
+server/gen/access/service.go
+  h_2620cc60cfd1e9 1047
+server/gen/http/access/client/cli.go
+  h_2620cc60cfd1e9 77,150
+server/gen/http/access/client/encode_decode.go
+  h_2620cc60cfd1e9 7667,7706,7745
+server/gen/http/access/client/types.go
+  h_2620cc60cfd1e9 6499,6529
+server/gen/http/access/server/encode_decode.go
+  h_2620cc60cfd1e9 7154,7193
+server/gen/http/access/server/types.go
+  h_2620cc60cfd1e9 6501,7099
+server/gen/http/cli/gram/cli.go
+  h_2620cc60cfd1e9 12863,12885
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 112989
+server/internal/access/agent_owner_selector_test.go
+  h_2620cc60cfd1e9 17-22
+server/internal/access/impl.go
+  h_2620cc60cfd1e9 663-664,680,691-692
+server/internal/agentmanagement/authorize_test.go
+  h_2620cc60cfd1e9 239
+server/internal/agentmanagement/eligible_owners.go
+  h_2620cc60cfd1e9 83
+server/internal/agentmanagement/runtime_policy_test.go
+  h_2620cc60cfd1e9 96
+server/internal/authz/access.go
+  h_2620cc60cfd1e9 39,42
+server/internal/authz/agent_creation.go
+  h_2620cc60cfd1e9 9,24,29
+server/internal/authz/agent_creation_test.go
+  h_2620cc60cfd1e9 60-70
+server/internal/authz/engine.go
+  h_2620cc60cfd1e9 711
+server/internal/authz/selector.go
+  h_2620cc60cfd1e9 23,116,174-175
+server/internal/demoseed/queries/02_roles.sql
+  h_2620cc60cfd1e9 39
+server/internal/demoseed/queries/09_postflight_identity.sql
+  h_2620cc60cfd1e9 491
+server/internal/demoseed/repo/02_roles.sql.go
+  h_2620cc60cfd1e9 212
+server/internal/demoseed/repo/09_postflight_identity.sql.go
+  h_2620cc60cfd1e9 58
+server/internal/platformmcp/access_role_mutations.go
+  h_2620cc60cfd1e9 426
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ff74ad5f224695e90b16ea51546ed6ace5f5419",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
