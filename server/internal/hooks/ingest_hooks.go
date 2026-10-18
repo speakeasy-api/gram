@@ -47,6 +47,8 @@ type AuthenticatedIngestOptions struct {
 	// the policies for the event type. It applies also when boundaryScans is empty.
 	contentBoundary bool
 	boundaryScans   []ahpBoundaryScan
+	// promptPolicyText overrides prompt evidence without changing transcript capture.
+	promptPolicyText *string
 	// ObserveOnly records the event without evaluating enforcement, for
 	// events the sender cannot block.
 	ObserveOnly                  bool
@@ -74,6 +76,7 @@ func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
 		contentBoundary:              false,
 		boundaryScans:                nil,
+		promptPolicyText:             nil,
 		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
@@ -635,7 +638,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
-			Prompt: canonicalPromptText(payload),
+			Prompt: conv.PtrValOr(opts.promptPolicyText, canonicalPromptText(payload)),
 		})
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			if scanResult.Action == "quarantine" {
@@ -1895,7 +1898,12 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		if err != nil {
 			return fmt.Errorf("marshal prompt attachment metadata: %w", err)
 		}
-		parentID := parentResolver.resolve(promptSHA256)
+		parentID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		// AHP attachment-only messages have no prompt parent. The latest user
+		// row belongs to an earlier event, unlike transcript attachment fallback.
+		if promptSHA256 != "" || !strings.HasPrefix(attachment.EntryUUID, "ahp-attachment:") {
+			parentID = parentResolver.resolve(promptSHA256)
+		}
 		pending = append(pending, pendingPromptAttachment{
 			attachment: attachment,
 			content:    []byte(attachment.Content),
