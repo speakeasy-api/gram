@@ -26,12 +26,13 @@ import (
 
 // Service is the analytics query API: query and describe over the catalog.
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	auth           *auth.Auth
-	authz          *authz.Engine
-	engine         *Engine
-	signalFeatures SignalFeatures
+	tracer             trace.Tracer
+	logger             *slog.Logger
+	auth               *auth.Auth
+	authz              *authz.Engine
+	engine             *Engine
+	signalFeatures     SignalFeatures
+	conversationAccess ConversationAccess
 }
 
 // SignalFeatures resolves the durable organization entitlement shared by surfaces.
@@ -49,13 +50,20 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		panic(err)
 	}
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/analytics"),
-		logger:         logger,
-		auth:           auth.New(logger, db, sessions, authzEngine),
-		authz:          authzEngine,
-		engine:         engine,
-		signalFeatures: signalFeatures,
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/analytics"),
+		logger:             logger,
+		auth:               auth.New(logger, db, sessions, authzEngine),
+		authz:              authzEngine,
+		engine:             engine,
+		signalFeatures:     signalFeatures,
+		conversationAccess: nil,
 	}
+}
+
+// WithConversationAccess binds the same exact-resource gate as transcript reads.
+func (s *Service) WithConversationAccess(access ConversationAccess) *Service {
+	s.conversationAccess = access
+	return s
 }
 
 // Engine is the query path this service answers through, for a surface that

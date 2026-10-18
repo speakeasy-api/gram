@@ -63,6 +63,77 @@ func BuildSignalDefinitionPayload(analyticsSignalDefinitionSensorID string, anal
 	return v, nil
 }
 
+// BuildSignalFindingsPayload builds the payload for the analytics
+// signalFindings endpoint from CLI flags.
+func BuildSignalFindingsPayload(analyticsSignalFindingsBody string, analyticsSignalFindingsSessionToken string, analyticsSignalFindingsProjectSlugInput string) (*analytics.SignalFindingsPayload, error) {
+	var err error
+	var body SignalFindingsRequestBody
+	{
+		err = json.Unmarshal([]byte(analyticsSignalFindingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"compare_previous\": false,\n      \"evidence\": false,\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"peer\": {\n         \"minimum_level\": 1,\n         \"sensor_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"signal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"threshold\": 1\n      },\n      \"signal_query\": {\n         \"filters\": [\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            },\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            },\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"group_by\": [\n            {\n               \"attribute\": \"aa\",\n               \"field\": \"abc123\"\n            },\n            {\n               \"attribute\": \"aa\",\n               \"field\": \"abc123\"\n            }\n         ],\n         \"groups\": 2,\n         \"points\": 2,\n         \"run_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"selection\": {\n            \"minimum_level\": 1,\n            \"sensor_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"signal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"threshold\": 1\n         },\n         \"trigger\": \"abc123\"\n      },\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }'")
+		}
+		if body.SignalQuery == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("signal_query", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.SignalQuery != nil {
+			if err2 := ValidateAnalyticsSignalQueryRequestBody(body.SignalQuery); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.Peer != nil {
+			if err2 := ValidateAnalyticsSignalSelectionRequestBody(body.Peer); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if analyticsSignalFindingsSessionToken != "" {
+			sessionToken = &analyticsSignalFindingsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if analyticsSignalFindingsProjectSlugInput != "" {
+			projectSlugInput = &analyticsSignalFindingsProjectSlugInput
+		}
+	}
+	v := &analytics.SignalFindingsPayload{
+		From:            body.From,
+		To:              body.To,
+		ComparePrevious: body.ComparePrevious,
+		Evidence:        body.Evidence,
+	}
+	if body.SignalQuery != nil {
+		v.SignalQuery = marshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery(body.SignalQuery)
+	}
+	if body.Peer != nil {
+		v.Peer = marshalAnalyticsSignalSelectionRequestBodyToAnalyticsAnalyticsSignalSelection(body.Peer)
+	}
+	{
+		var zero bool
+		if v.ComparePrevious == zero {
+			v.ComparePrevious = false
+		}
+	}
+	{
+		var zero bool
+		if v.Evidence == zero {
+			v.Evidence = false
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildQueryPayload builds the payload for the analytics query endpoint from
 // CLI flags.
 func BuildQueryPayload(analyticsQueryBody string, analyticsQuerySessionToken string, analyticsQueryProjectSlugInput string) (*analytics.QueryPayload, error) {

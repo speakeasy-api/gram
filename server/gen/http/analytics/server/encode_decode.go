@@ -248,6 +248,231 @@ func EncodeSignalDefinitionError(encoder func(context.Context, http.ResponseWrit
 	}
 }
 
+// EncodeSignalFindingsResponse returns an encoder for responses returned by
+// the analytics signalFindings endpoint.
+func EncodeSignalFindingsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*analytics.AnalyticsSignalFindings)
+		enc := encoder(ctx, w)
+		body := NewSignalFindingsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSignalFindingsRequest returns a decoder for requests sent to the
+// analytics signalFindings endpoint.
+func DecodeSignalFindingsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*analytics.SignalFindingsPayload, error) {
+	return func(r *http.Request) (*analytics.SignalFindingsPayload, error) {
+		var payload *analytics.SignalFindingsPayload
+		var (
+			body SignalFindingsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSignalFindingsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewSignalFindingsPayload(&body, sessionToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSignalFindingsError returns an encoder for errors returned by the
+// signalFindings analytics endpoint.
+func EncodeSignalFindingsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalFindingsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeQueryResponse returns an encoder for responses returned by the
 // analytics query endpoint.
 func EncodeQueryResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -907,9 +1132,6 @@ func EncodeDimensionValuesError(encoder func(context.Context, http.ResponseWrite
 // builds a value of type *analytics.AnalyticsSignalQuery from a value of type
 // *AnalyticsSignalQueryRequestBody.
 func unmarshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery(v *AnalyticsSignalQueryRequestBody) *analytics.AnalyticsSignalQuery {
-	if v == nil {
-		return nil
-	}
 	res := &analytics.AnalyticsSignalQuery{
 		RunID: v.RunID,
 	}
@@ -1006,68 +1228,10 @@ func unmarshalAnalyticsSignalFilterRequestBodyToAnalyticsAnalyticsSignalFilter(v
 	return res
 }
 
-// unmarshalAnalyticsMeasureRequestBodyToAnalyticsAnalyticsMeasure builds a
-// value of type *analytics.AnalyticsMeasure from a value of type
-// *AnalyticsMeasureRequestBody.
-func unmarshalAnalyticsMeasureRequestBodyToAnalyticsAnalyticsMeasure(v *AnalyticsMeasureRequestBody) *analytics.AnalyticsMeasure {
-	if v == nil {
-		return nil
-	}
-	res := &analytics.AnalyticsMeasure{
-		Op:    *v.Op,
-		Field: v.Field,
-		Alias: v.Alias,
-	}
-
-	return res
-}
-
-// unmarshalAnalyticsFilterRequestBodyToAnalyticsAnalyticsFilter builds a value
-// of type *analytics.AnalyticsFilter from a value of type
-// *AnalyticsFilterRequestBody.
-func unmarshalAnalyticsFilterRequestBodyToAnalyticsAnalyticsFilter(v *AnalyticsFilterRequestBody) *analytics.AnalyticsFilter {
-	if v == nil {
-		return nil
-	}
-	res := &analytics.AnalyticsFilter{
-		Field:    *v.Field,
-		Operator: *v.Operator,
-	}
-	res.Values = make([]string, len(v.Values))
-	for i, val := range v.Values {
-		res.Values[i] = val
-	}
-
-	return res
-}
-
-// unmarshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy builds a
-// value of type *analytics.AnalyticsOrderBy from a value of type
-// *AnalyticsOrderByRequestBody.
-func unmarshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy(v *AnalyticsOrderByRequestBody) *analytics.AnalyticsOrderBy {
-	if v == nil {
-		return nil
-	}
-	res := &analytics.AnalyticsOrderBy{
-		Measure: *v.Measure,
-	}
-	if v.Direction != nil {
-		res.Direction = *v.Direction
-	}
-	if v.Direction == nil {
-		res.Direction = "desc"
-	}
-
-	return res
-}
-
 // marshalAnalyticsAnalyticsSignalResultToAnalyticsSignalResultResponseBody
 // builds a value of type *AnalyticsSignalResultResponseBody from a value of
 // type *analytics.AnalyticsSignalResult.
 func marshalAnalyticsAnalyticsSignalResultToAnalyticsSignalResultResponseBody(v *analytics.AnalyticsSignalResult) *AnalyticsSignalResultResponseBody {
-	if v == nil {
-		return nil
-	}
 	res := &AnalyticsSignalResultResponseBody{}
 	if v.Metadata != nil {
 		res.Metadata = marshalAnalyticsAnalyticsSignalMetadataToAnalyticsSignalMetadataResponseBody(v.Metadata)
@@ -1191,6 +1355,94 @@ func marshalAnalyticsAnalyticsSignalDimensionToAnalyticsSignalDimensionResponseB
 	res := &AnalyticsSignalDimensionResponseBody{
 		Field:     v.Field,
 		Attribute: v.Attribute,
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsSignalComparisonToAnalyticsSignalComparisonResponseBody
+// builds a value of type *AnalyticsSignalComparisonResponseBody from a value
+// of type *analytics.AnalyticsSignalComparison.
+func marshalAnalyticsAnalyticsSignalComparisonToAnalyticsSignalComparisonResponseBody(v *analytics.AnalyticsSignalComparison) *AnalyticsSignalComparisonResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AnalyticsSignalComparisonResponseBody{
+		From:       v.From,
+		To:         v.To,
+		Comparable: v.Comparable,
+		DeltaShare: v.DeltaShare,
+	}
+	if v.Summary != nil {
+		res.Summary = make(map[string]any, len(v.Summary))
+		for key, val := range v.Summary {
+			tk := key
+			tv := val
+			res.Summary[tk] = tv
+		}
+	}
+	if v.Reasons != nil {
+		res.Reasons = make([]string, len(v.Reasons))
+		for i, val := range v.Reasons {
+			res.Reasons[i] = val
+		}
+	} else {
+		res.Reasons = []string{}
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsMeasureRequestBodyToAnalyticsAnalyticsMeasure builds a
+// value of type *analytics.AnalyticsMeasure from a value of type
+// *AnalyticsMeasureRequestBody.
+func unmarshalAnalyticsMeasureRequestBodyToAnalyticsAnalyticsMeasure(v *AnalyticsMeasureRequestBody) *analytics.AnalyticsMeasure {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsMeasure{
+		Op:    *v.Op,
+		Field: v.Field,
+		Alias: v.Alias,
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsFilterRequestBodyToAnalyticsAnalyticsFilter builds a value
+// of type *analytics.AnalyticsFilter from a value of type
+// *AnalyticsFilterRequestBody.
+func unmarshalAnalyticsFilterRequestBodyToAnalyticsAnalyticsFilter(v *AnalyticsFilterRequestBody) *analytics.AnalyticsFilter {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsFilter{
+		Field:    *v.Field,
+		Operator: *v.Operator,
+	}
+	res.Values = make([]string, len(v.Values))
+	for i, val := range v.Values {
+		res.Values[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy builds a
+// value of type *analytics.AnalyticsOrderBy from a value of type
+// *AnalyticsOrderByRequestBody.
+func unmarshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy(v *AnalyticsOrderByRequestBody) *analytics.AnalyticsOrderBy {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsOrderBy{
+		Measure: *v.Measure,
+	}
+	if v.Direction != nil {
+		res.Direction = *v.Direction
+	}
+	if v.Direction == nil {
+		res.Direction = "desc"
 	}
 
 	return res

@@ -101,3 +101,25 @@ func TestSignalDefinitionToolHasExactScopeAndUnavailableParity(t *testing.T) {
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
 }
+
+func TestSignalSessionFinderSharesEntitlementAndUnavailableContract(t *testing.T) {
+	t.Parallel()
+	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	args := fmt.Sprintf(`{"project_id":%q,%s,"signal_query":{"selection":{"sensor_id":%q,"signal_id":%q,"threshold":0.5}},"compare_previous":true}`, h.project.ID.String(), analyticsTestWindow, uuid.NewString(), uuid.NewString())
+	_, err := h.invoke(t, findSignalSessionsToolName, args)
+	require.Equal(t, analyticsNotEnabledCode, requireAnalyticsRefusal(t, err).Code)
+	require.Zero(t, h.engine.calls)
+	h.service.signalFeatures = signalAnalyticsFeatures(true)
+	raw, err := h.invoke(t, findSignalSessionsToolName, args)
+	require.NoError(t, err)
+	result, ok := raw.(FindSignalSessionsOutput)
+	require.True(t, ok)
+	require.InDelta(t, .5, result.Findings.Concentration["top_session_share"], .000001)
+	reg := newRegistrar(newTestMCPServer())
+	registerAnalyticsTools(reg, nil)
+	live, unavailable := descriptorByName(t, h.reg, findSignalSessionsToolName), descriptorByName(t, reg, findSignalSessionsToolName)
+	require.Equal(t, bothAudiences, live.Meta.Audiences)
+	require.Equal(t, ProjectScopeExplicit, live.Meta.ProjectScope)
+	require.Equal(t, live.Meta, unavailable.Meta)
+	require.JSONEq(t, string(live.InputSchema), string(unavailable.InputSchema))
+}

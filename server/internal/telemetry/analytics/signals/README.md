@@ -56,6 +56,33 @@ Applied rules: `schema-pk-filter-on-orderby`, `schema-pk-prioritize-filters`,
 experiment is **derived** from immutable event time and measured sparse-index
 boundary amplification, not a replacement for primary-key scoping.
 
+## Cross-session findings
+
+`analytics.signalFindings` and `find_signal_sessions` use the same compiled
+source predicates. Concentration counts matching original messages per linked
+conversation, then divides the largest one/five by all linked matches.
+Co-occurrence collapses each predicate independently to a message or conversation
+before counting jointly answered units. Missing/failed peer answers never become
+negative answers. Both branches retain the full sort-key scope
+(`schema-pk-filter-on-orderby`, `query-join-filter-before`); the implementation
+uses a bounded union and aggregation rather than a many-to-many join.
+
+Previous-window changes are descriptive differences over adjacent equal-duration
+windows. Comparability requires at least 30 measured answers and five evaluated
+conversations in each window, one identical known definition, and identical known
+classifier/compiler/input settings. A window ending within five minutes of query
+time is marked unsettled. That grace period is an interpretation guard, not an
+ingestion watermark. Unknown census coverage and correctable live reads apply
+even when the gates pass.
+
+Evidence samples the most recent hit from at most twenty conversations and applies
+the transcript service's exact-resource access check to every candidate. Owners,
+explicit chat grants, managed runtimes, external-user credentials and support
+impersonation retain their underlying rules. Returned references contain the
+sensor/window context, message/reading/conversation coordinates, probability and
+definition fingerprint, never transcript content. Absence is not evidence of no
+matching activity. Export both values and context for later interpretation.
+
 ## Reproducible local benchmark
 
 `mise run sigint:benchmark` owns a disposable ClickHouse **26.6.8.7**, four query

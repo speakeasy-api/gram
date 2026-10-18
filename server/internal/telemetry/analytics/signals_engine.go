@@ -89,8 +89,7 @@ type SignalResult struct {
 	Rows []Row `json:"-"`
 }
 
-// SignalQuery executes the canonical semantic compiler through the shared runner.
-func (e *Engine) SignalQuery(ctx context.Context, tenant Tenant, window Window, step string, request signalquery.Request) (*SignalResult, error) {
+func (e *Engine) prepareSignalPlan(ctx context.Context, tenant Tenant, window Window, step string, request signalquery.Request) (*signalquery.Plan, error) {
 	plan, err := signalquery.Compile(signalquery.Context{
 		OrganizationID: tenant.OrganizationID, ProjectID: tenant.ProjectID,
 		From: time.Unix(0, window.FromUnixNano), To: time.Unix(0, window.ToUnixNano), Now: time.Now().UTC(), Step: step, RequestedAt: nil,
@@ -107,6 +106,15 @@ func (e *Engine) SignalQuery(ctx context.Context, tenant Tenant, window Window, 
 		if err != nil {
 			return nil, signalFailure(err)
 		}
+	}
+	return plan, nil
+}
+
+// SignalQuery executes the canonical semantic compiler through the shared runner.
+func (e *Engine) SignalQuery(ctx context.Context, tenant Tenant, window Window, step string, request signalquery.Request) (*SignalResult, error) {
+	plan, err := e.prepareSignalPlan(ctx, tenant, window, step, request)
+	if err != nil {
+		return nil, err
 	}
 	top, err := runSignalPlan(ctx, e.ch, plan.Groups)
 	if err != nil {

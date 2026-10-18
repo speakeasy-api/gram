@@ -10871,6 +10871,102 @@ paths:
       x-speakeasy-name-override: signalDefinition
       x-speakeasy-react-hook:
         name: AnalyticsSignalDefinition
+  /rpc/analytics.signalFindings:
+    post:
+      description: Find cross-session signal patterns, joint-answer co-occurrence and guarded previous-window changes. Aggregate reads require project:read and Signals Intelligence; each evidence reference additionally passes the underlying conversation access checks.
+      operationId: analyticsSignalFindings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalFindingsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsSignalFindings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: signalFindings analytics
+      tags:
+        - analytics
+      x-speakeasy-name-override: signalFindings
+      x-speakeasy-react-hook:
+        name: AnalyticsSignalFindings
   /rpc/assets.createSignedChatAttachmentURL:
     post:
       description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -83461,6 +83557,35 @@ components:
         - max_points
         - sensors
         - signals
+    AnalyticsSignalComparison:
+      type: object
+      properties:
+        comparable:
+          type: boolean
+        delta_share:
+          type: number
+          description: Descriptive difference in observed answer shares, never a significance test
+          format: double
+        from:
+          type: string
+          format: date-time
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Failed comparison gates. Coverage remains unknown even when the observed measurements are comparable.
+        summary:
+          type: object
+          additionalProperties: true
+        to:
+          type: string
+          format: date-time
+      required:
+        - from
+        - to
+        - summary
+        - comparable
+        - reasons
     AnalyticsSignalDefinition:
       type: object
       properties:
@@ -83506,6 +83631,41 @@ components:
       required:
         - dimension
         - operator
+    AnalyticsSignalFindings:
+      type: object
+      properties:
+        comparison:
+          $ref: '#/components/schemas/AnalyticsSignalComparison'
+        concentration:
+          type: object
+          additionalProperties: true
+        cooccurrence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Separate same_message and same_session joint-answer counts and shares
+        evidence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Permitted recent conversation references without transcript content
+        evidence_scope:
+          type: string
+        measurement:
+          $ref: '#/components/schemas/AnalyticsSignalResult'
+        peer:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        peer_summary:
+          type: object
+          additionalProperties: true
+      required:
+        - measurement
+        - concentration
+        - cooccurrence
+        - evidence
+        - evidence_scope
     AnalyticsSignalMetadata:
       type: object
       properties:
@@ -107622,6 +107782,29 @@ components:
         - slug
         - created_at
         - updated_at
+    SignalFindingsRequestBody:
+      type: object
+      properties:
+        compare_previous:
+          type: boolean
+          default: false
+        evidence:
+          type: boolean
+          default: false
+        from:
+          type: string
+          format: date-time
+        peer:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        signal_query:
+          $ref: '#/components/schemas/AnalyticsSignalQuery'
+        to:
+          type: string
+          format: date-time
+      required:
+        - from
+        - to
+        - signal_query
     Skill:
       type: object
       properties:

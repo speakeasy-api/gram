@@ -20,6 +20,11 @@ type Service interface {
 	// Inspect the immutable semantic definition used by a signal reading. Requires
 	// signals_intelligence and project:read.
 	SignalDefinition(context.Context, *SignalDefinitionPayload) (res *AnalyticsSignalDefinition, err error)
+	// Find cross-session signal patterns, joint-answer co-occurrence and guarded
+	// previous-window changes. Aggregate reads require project:read and Signals
+	// Intelligence; each evidence reference additionally passes the underlying
+	// conversation access checks.
+	SignalFindings(context.Context, *SignalFindingsPayload) (res *AnalyticsSignalFindings, err error)
 	// Run a query against one dataset. Grouped: aggregate over dimensions,
 	// optionally bucketed by time. Ungrouped: rows at the dataset's grain, newest
 	// first.
@@ -53,7 +58,7 @@ const ServiceName = "analytics"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"signalDefinition", "query", "describe", "dimensionValues"}
+var MethodNames = [5]string{"signalDefinition", "signalFindings", "query", "describe", "dimensionValues"}
 
 // A dataset and the fields it exposes. The builder is generated from this.
 type AnalyticsDataset struct {
@@ -185,6 +190,18 @@ type AnalyticsSignalCatalog struct {
 	Signals           []*AnalyticsSignalName
 }
 
+type AnalyticsSignalComparison struct {
+	From       string
+	To         string
+	Summary    map[string]any
+	Comparable bool
+	// Failed comparison gates. Coverage remains unknown even when the observed
+	// measurements are comparable.
+	Reasons []string
+	// Descriptive difference in observed answer shares, never a significance test
+	DeltaShare *float64
+}
+
 // AnalyticsSignalDefinition is the result type of the analytics service
 // signalDefinition method.
 type AnalyticsSignalDefinition struct {
@@ -209,6 +226,21 @@ type AnalyticsSignalFilter struct {
 	// Comparison from the analytics catalog: equals, in, exists or missing
 	Operator string
 	Values   []string
+}
+
+// AnalyticsSignalFindings is the result type of the analytics service
+// signalFindings method.
+type AnalyticsSignalFindings struct {
+	Measurement   *AnalyticsSignalResult
+	Concentration map[string]any
+	Peer          *AnalyticsSignalSelection
+	PeerSummary   map[string]any
+	// Separate same_message and same_session joint-answer counts and shares
+	Cooccurrence []map[string]any
+	Comparison   *AnalyticsSignalComparison
+	// Permitted recent conversation references without transcript content
+	Evidence      []map[string]any
+	EvidenceScope string
 }
 
 type AnalyticsSignalMetadata struct {
@@ -354,6 +386,21 @@ type QueryPayload struct {
 type SignalDefinitionPayload struct {
 	SensorID         string
 	DefinitionHash   string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// SignalFindingsPayload is the payload type of the analytics service
+// signalFindings method.
+type SignalFindingsPayload struct {
+	From string
+	To   string
+	// Select a complete cohort, without group_by
+	SignalQuery *AnalyticsSignalQuery
+	// Optional second predicate for co-occurrence in the same cohort and window
+	Peer             *AnalyticsSignalSelection
+	ComparePrevious  bool
+	Evidence         bool
 	SessionToken     *string
 	ProjectSlugInput *string
 }

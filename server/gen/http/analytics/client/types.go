@@ -14,6 +14,19 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SignalFindingsRequestBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP request body.
+type SignalFindingsRequestBody struct {
+	From string `form:"from" json:"from" xml:"from"`
+	To   string `form:"to" json:"to" xml:"to"`
+	// Select a complete cohort, without group_by
+	SignalQuery *AnalyticsSignalQueryRequestBody `form:"signal_query" json:"signal_query" xml:"signal_query"`
+	// Optional second predicate for co-occurrence in the same cohort and window
+	Peer            *AnalyticsSignalSelectionRequestBody `form:"peer,omitempty" json:"peer,omitempty" xml:"peer,omitempty"`
+	ComparePrevious bool                                 `form:"compare_previous" json:"compare_previous" xml:"compare_previous"`
+	Evidence        bool                                 `form:"evidence" json:"evidence" xml:"evidence"`
+}
+
 // QueryRequestBody is the type of the "analytics" service "query" endpoint
 // HTTP request body.
 type QueryRequestBody struct {
@@ -72,6 +85,21 @@ type SignalDefinitionResponseBody struct {
 	DefinitionHash *string        `form:"definition_hash,omitempty" json:"definition_hash,omitempty" xml:"definition_hash,omitempty"`
 	Definition     map[string]any `form:"definition,omitempty" json:"definition,omitempty" xml:"definition,omitempty"`
 	CapturedAt     *string        `form:"captured_at,omitempty" json:"captured_at,omitempty" xml:"captured_at,omitempty"`
+}
+
+// SignalFindingsResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body.
+type SignalFindingsResponseBody struct {
+	Measurement   *AnalyticsSignalResultResponseBody    `form:"measurement,omitempty" json:"measurement,omitempty" xml:"measurement,omitempty"`
+	Concentration map[string]any                        `form:"concentration,omitempty" json:"concentration,omitempty" xml:"concentration,omitempty"`
+	Peer          *AnalyticsSignalSelectionResponseBody `form:"peer,omitempty" json:"peer,omitempty" xml:"peer,omitempty"`
+	PeerSummary   map[string]any                        `form:"peer_summary,omitempty" json:"peer_summary,omitempty" xml:"peer_summary,omitempty"`
+	// Separate same_message and same_session joint-answer counts and shares
+	Cooccurrence []map[string]any                       `form:"cooccurrence,omitempty" json:"cooccurrence,omitempty" xml:"cooccurrence,omitempty"`
+	Comparison   *AnalyticsSignalComparisonResponseBody `form:"comparison,omitempty" json:"comparison,omitempty" xml:"comparison,omitempty"`
+	// Permitted recent conversation references without transcript content
+	Evidence      []map[string]any `form:"evidence,omitempty" json:"evidence,omitempty" xml:"evidence,omitempty"`
+	EvidenceScope *string          `form:"evidence_scope,omitempty" json:"evidence_scope,omitempty" xml:"evidence_scope,omitempty"`
 }
 
 // QueryResponseBody is the type of the "analytics" service "query" endpoint
@@ -280,6 +308,190 @@ type SignalDefinitionUnexpectedResponseBody struct {
 // service "signalDefinition" endpoint HTTP response body for the
 // "gateway_error" error.
 type SignalDefinitionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsUnauthorizedResponseBody is the type of the "analytics"
+// service "signalFindings" endpoint HTTP response body for the "unauthorized"
+// error.
+type SignalFindingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsForbiddenResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "forbidden" error.
+type SignalFindingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsBadRequestResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "bad_request" error.
+type SignalFindingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsNotFoundResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "not_found" error.
+type SignalFindingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsConflictResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "conflict" error.
+type SignalFindingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsUnsupportedMediaResponseBody is the type of the "analytics"
+// service "signalFindings" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SignalFindingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsInvalidResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "invalid" error.
+type SignalFindingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsInvariantViolationResponseBody is the type of the "analytics"
+// service "signalFindings" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SignalFindingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsUnexpectedResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "unexpected" error.
+type SignalFindingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SignalFindingsGatewayErrorResponseBody is the type of the "analytics"
+// service "signalFindings" endpoint HTTP response body for the "gateway_error"
+// error.
+type SignalFindingsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -889,36 +1101,6 @@ type AnalyticsSignalFilterRequestBody struct {
 	Values   []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
 }
 
-// AnalyticsMeasureRequestBody is used to define fields on request body types.
-type AnalyticsMeasureRequestBody struct {
-	// Aggregation to apply. count takes no field; count_distinct takes a dimension
-	// that admits it; every other op needs a measure field that admits it, per
-	// describe.
-	Op string `form:"op" json:"op" xml:"op"`
-	// Field the op applies to: a dimension for count_distinct, a measure
-	// otherwise. Absent for count.
-	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
-	// Result column name. Defaults to the op, or op_field.
-	Alias *string `form:"alias,omitempty" json:"alias,omitempty" xml:"alias,omitempty"`
-}
-
-// AnalyticsFilterRequestBody is used to define fields on request body types.
-type AnalyticsFilterRequestBody struct {
-	// Dimension to filter on
-	Field string `form:"field" json:"field" xml:"field"`
-	// Operator the dimension admits, per describe
-	Operator string `form:"operator" json:"operator" xml:"operator"`
-	// equals takes exactly one value; in matches any of them.
-	Values []string `form:"values" json:"values" xml:"values"`
-}
-
-// AnalyticsOrderByRequestBody is used to define fields on request body types.
-type AnalyticsOrderByRequestBody struct {
-	// Alias of a requested measure
-	Measure   string `form:"measure" json:"measure" xml:"measure"`
-	Direction string `form:"direction" json:"direction" xml:"direction"`
-}
-
 // AnalyticsSignalResultResponseBody is used to define fields on response body
 // types.
 type AnalyticsSignalResultResponseBody struct {
@@ -987,6 +1169,50 @@ type AnalyticsSignalDimensionResponseBody struct {
 	// Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces
 	// the byte limit.
 	Attribute *string `form:"attribute,omitempty" json:"attribute,omitempty" xml:"attribute,omitempty"`
+}
+
+// AnalyticsSignalComparisonResponseBody is used to define fields on response
+// body types.
+type AnalyticsSignalComparisonResponseBody struct {
+	From       *string        `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	To         *string        `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	Summary    map[string]any `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	Comparable *bool          `form:"comparable,omitempty" json:"comparable,omitempty" xml:"comparable,omitempty"`
+	// Failed comparison gates. Coverage remains unknown even when the observed
+	// measurements are comparable.
+	Reasons []string `form:"reasons,omitempty" json:"reasons,omitempty" xml:"reasons,omitempty"`
+	// Descriptive difference in observed answer shares, never a significance test
+	DeltaShare *float64 `form:"delta_share,omitempty" json:"delta_share,omitempty" xml:"delta_share,omitempty"`
+}
+
+// AnalyticsMeasureRequestBody is used to define fields on request body types.
+type AnalyticsMeasureRequestBody struct {
+	// Aggregation to apply. count takes no field; count_distinct takes a dimension
+	// that admits it; every other op needs a measure field that admits it, per
+	// describe.
+	Op string `form:"op" json:"op" xml:"op"`
+	// Field the op applies to: a dimension for count_distinct, a measure
+	// otherwise. Absent for count.
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// Result column name. Defaults to the op, or op_field.
+	Alias *string `form:"alias,omitempty" json:"alias,omitempty" xml:"alias,omitempty"`
+}
+
+// AnalyticsFilterRequestBody is used to define fields on request body types.
+type AnalyticsFilterRequestBody struct {
+	// Dimension to filter on
+	Field string `form:"field" json:"field" xml:"field"`
+	// Operator the dimension admits, per describe
+	Operator string `form:"operator" json:"operator" xml:"operator"`
+	// equals takes exactly one value; in matches any of them.
+	Values []string `form:"values" json:"values" xml:"values"`
+}
+
+// AnalyticsOrderByRequestBody is used to define fields on request body types.
+type AnalyticsOrderByRequestBody struct {
+	// Alias of a requested measure
+	Measure   string `form:"measure" json:"measure" xml:"measure"`
+	Direction string `form:"direction" json:"direction" xml:"direction"`
 }
 
 // AnalyticsDatasetResponseBody is used to define fields on response body types.
@@ -1082,6 +1308,36 @@ type AnalyticsDimensionValueResponseBody struct {
 	// For signal attributes, false distinguishes absent labels from present empty
 	// strings
 	Present *bool `form:"present,omitempty" json:"present,omitempty" xml:"present,omitempty"`
+}
+
+// NewSignalFindingsRequestBody builds the HTTP request body from the payload
+// of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsRequestBody(p *analytics.SignalFindingsPayload) *SignalFindingsRequestBody {
+	body := &SignalFindingsRequestBody{
+		From:            p.From,
+		To:              p.To,
+		ComparePrevious: p.ComparePrevious,
+		Evidence:        p.Evidence,
+	}
+	if p.SignalQuery != nil {
+		body.SignalQuery = marshalAnalyticsAnalyticsSignalQueryToAnalyticsSignalQueryRequestBody(p.SignalQuery)
+	}
+	if p.Peer != nil {
+		body.Peer = marshalAnalyticsAnalyticsSignalSelectionToAnalyticsSignalSelectionRequestBody(p.Peer)
+	}
+	{
+		var zero bool
+		if body.ComparePrevious == zero {
+			body.ComparePrevious = false
+		}
+	}
+	{
+		var zero bool
+		if body.Evidence == zero {
+			body.Evidence = false
+		}
+	}
+	return body
 }
 
 // NewQueryRequestBody builds the HTTP request body from the payload of the
@@ -1328,6 +1584,205 @@ func NewSignalDefinitionUnexpected(body *SignalDefinitionUnexpectedResponseBody)
 // NewSignalDefinitionGatewayError builds a analytics service signalDefinition
 // endpoint gateway_error error.
 func NewSignalDefinitionGatewayError(body *SignalDefinitionGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsAnalyticsSignalFindingsOK builds a "analytics" service
+// "signalFindings" endpoint result from a HTTP "OK" response.
+func NewSignalFindingsAnalyticsSignalFindingsOK(body *SignalFindingsResponseBody) *analytics.AnalyticsSignalFindings {
+	v := &analytics.AnalyticsSignalFindings{
+		EvidenceScope: *body.EvidenceScope,
+	}
+	v.Measurement = unmarshalAnalyticsSignalResultResponseBodyToAnalyticsAnalyticsSignalResult(body.Measurement)
+	v.Concentration = make(map[string]any, len(body.Concentration))
+	for key, val := range body.Concentration {
+		tk := key
+		tv := val
+		v.Concentration[tk] = tv
+	}
+	if body.Peer != nil {
+		v.Peer = unmarshalAnalyticsSignalSelectionResponseBodyToAnalyticsAnalyticsSignalSelection(body.Peer)
+	}
+	if body.PeerSummary != nil {
+		v.PeerSummary = make(map[string]any, len(body.PeerSummary))
+		for key, val := range body.PeerSummary {
+			tk := key
+			tv := val
+			v.PeerSummary[tk] = tv
+		}
+	}
+	v.Cooccurrence = make([]map[string]any, len(body.Cooccurrence))
+	for i, val := range body.Cooccurrence {
+		v.Cooccurrence[i] = make(map[string]any, len(val))
+		for key, val := range val {
+			tk := key
+			tv := val
+			v.Cooccurrence[i][tk] = tv
+		}
+	}
+	if body.Comparison != nil {
+		v.Comparison = unmarshalAnalyticsSignalComparisonResponseBodyToAnalyticsAnalyticsSignalComparison(body.Comparison)
+	}
+	v.Evidence = make([]map[string]any, len(body.Evidence))
+	for i, val := range body.Evidence {
+		v.Evidence[i] = make(map[string]any, len(val))
+		for key, val := range val {
+			tk := key
+			tv := val
+			v.Evidence[i][tk] = tv
+		}
+	}
+
+	return v
+}
+
+// NewSignalFindingsUnauthorized builds a analytics service signalFindings
+// endpoint unauthorized error.
+func NewSignalFindingsUnauthorized(body *SignalFindingsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsForbidden builds a analytics service signalFindings
+// endpoint forbidden error.
+func NewSignalFindingsForbidden(body *SignalFindingsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsBadRequest builds a analytics service signalFindings
+// endpoint bad_request error.
+func NewSignalFindingsBadRequest(body *SignalFindingsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsNotFound builds a analytics service signalFindings endpoint
+// not_found error.
+func NewSignalFindingsNotFound(body *SignalFindingsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsConflict builds a analytics service signalFindings endpoint
+// conflict error.
+func NewSignalFindingsConflict(body *SignalFindingsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsUnsupportedMedia builds a analytics service signalFindings
+// endpoint unsupported_media error.
+func NewSignalFindingsUnsupportedMedia(body *SignalFindingsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsInvalid builds a analytics service signalFindings endpoint
+// invalid error.
+func NewSignalFindingsInvalid(body *SignalFindingsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsInvariantViolation builds a analytics service
+// signalFindings endpoint invariant_violation error.
+func NewSignalFindingsInvariantViolation(body *SignalFindingsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsUnexpected builds a analytics service signalFindings
+// endpoint unexpected error.
+func NewSignalFindingsUnexpected(body *SignalFindingsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSignalFindingsGatewayError builds a analytics service signalFindings
+// endpoint gateway_error error.
+func NewSignalFindingsGatewayError(body *SignalFindingsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1874,6 +2329,42 @@ func ValidateSignalDefinitionResponseBody(body *SignalDefinitionResponseBody) (e
 	return
 }
 
+// ValidateSignalFindingsResponseBody runs the validations defined on
+// SignalFindingsResponseBody
+func ValidateSignalFindingsResponseBody(body *SignalFindingsResponseBody) (err error) {
+	if body.Measurement == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("measurement", "body"))
+	}
+	if body.Concentration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("concentration", "body"))
+	}
+	if body.Cooccurrence == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cooccurrence", "body"))
+	}
+	if body.Evidence == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("evidence", "body"))
+	}
+	if body.EvidenceScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("evidence_scope", "body"))
+	}
+	if body.Measurement != nil {
+		if err2 := ValidateAnalyticsSignalResultResponseBody(body.Measurement); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Peer != nil {
+		if err2 := ValidateAnalyticsSignalSelectionResponseBody(body.Peer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Comparison != nil {
+		if err2 := ValidateAnalyticsSignalComparisonResponseBody(body.Comparison); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateQueryResponseBody runs the validations defined on QueryResponseBody
 func ValidateQueryResponseBody(body *QueryResponseBody) (err error) {
 	if body.Dataset == nil {
@@ -2155,6 +2646,246 @@ func ValidateSignalDefinitionUnexpectedResponseBody(body *SignalDefinitionUnexpe
 // ValidateSignalDefinitionGatewayErrorResponseBody runs the validations
 // defined on signalDefinition_gateway_error_response_body
 func ValidateSignalDefinitionGatewayErrorResponseBody(body *SignalDefinitionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsUnauthorizedResponseBody runs the validations defined
+// on signalFindings_unauthorized_response_body
+func ValidateSignalFindingsUnauthorizedResponseBody(body *SignalFindingsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsForbiddenResponseBody runs the validations defined on
+// signalFindings_forbidden_response_body
+func ValidateSignalFindingsForbiddenResponseBody(body *SignalFindingsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsBadRequestResponseBody runs the validations defined on
+// signalFindings_bad_request_response_body
+func ValidateSignalFindingsBadRequestResponseBody(body *SignalFindingsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsNotFoundResponseBody runs the validations defined on
+// signalFindings_not_found_response_body
+func ValidateSignalFindingsNotFoundResponseBody(body *SignalFindingsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsConflictResponseBody runs the validations defined on
+// signalFindings_conflict_response_body
+func ValidateSignalFindingsConflictResponseBody(body *SignalFindingsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsUnsupportedMediaResponseBody runs the validations
+// defined on signalFindings_unsupported_media_response_body
+func ValidateSignalFindingsUnsupportedMediaResponseBody(body *SignalFindingsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsInvalidResponseBody runs the validations defined on
+// signalFindings_invalid_response_body
+func ValidateSignalFindingsInvalidResponseBody(body *SignalFindingsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsInvariantViolationResponseBody runs the validations
+// defined on signalFindings_invariant_violation_response_body
+func ValidateSignalFindingsInvariantViolationResponseBody(body *SignalFindingsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsUnexpectedResponseBody runs the validations defined on
+// signalFindings_unexpected_response_body
+func ValidateSignalFindingsUnexpectedResponseBody(body *SignalFindingsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSignalFindingsGatewayErrorResponseBody runs the validations defined
+// on signalFindings_gateway_error_response_body
+func ValidateSignalFindingsGatewayErrorResponseBody(body *SignalFindingsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2999,39 +3730,6 @@ func ValidateAnalyticsSignalFilterRequestBody(body *AnalyticsSignalFilterRequest
 	return
 }
 
-// ValidateAnalyticsMeasureRequestBody runs the validations defined on
-// AnalyticsMeasureRequestBody
-func ValidateAnalyticsMeasureRequestBody(body *AnalyticsMeasureRequestBody) (err error) {
-	if !(body.Op == "count" || body.Op == "count_distinct" || body.Op == "sum" || body.Op == "avg" || body.Op == "min" || body.Op == "max" || body.Op == "p50" || body.Op == "p95" || body.Op == "p99") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", body.Op, []any{"count", "count_distinct", "sum", "avg", "min", "max", "p50", "p95", "p99"}))
-	}
-	return
-}
-
-// ValidateAnalyticsFilterRequestBody runs the validations defined on
-// AnalyticsFilterRequestBody
-func ValidateAnalyticsFilterRequestBody(body *AnalyticsFilterRequestBody) (err error) {
-	if body.Values == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
-	}
-	if !(body.Operator == "equals" || body.Operator == "in") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operator", body.Operator, []any{"equals", "in"}))
-	}
-	if len(body.Values) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 1, true))
-	}
-	return
-}
-
-// ValidateAnalyticsOrderByRequestBody runs the validations defined on
-// AnalyticsOrderByRequestBody
-func ValidateAnalyticsOrderByRequestBody(body *AnalyticsOrderByRequestBody) (err error) {
-	if !(body.Direction == "asc" || body.Direction == "desc") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.direction", body.Direction, []any{"asc", "desc"}))
-	}
-	return
-}
-
 // ValidateAnalyticsSignalResultResponseBody runs the validations defined on
 // AnalyticsSignalResultResponseBody
 func ValidateAnalyticsSignalResultResponseBody(body *AnalyticsSignalResultResponseBody) (err error) {
@@ -3205,6 +3903,66 @@ func ValidateAnalyticsSignalDimensionResponseBody(body *AnalyticsSignalDimension
 		if utf8.RuneCountInString(*body.Attribute) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 1, true))
 		}
+	}
+	return
+}
+
+// ValidateAnalyticsSignalComparisonResponseBody runs the validations defined
+// on AnalyticsSignalComparisonResponseBody
+func ValidateAnalyticsSignalComparisonResponseBody(body *AnalyticsSignalComparisonResponseBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.Summary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
+	}
+	if body.Comparable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("comparable", "body"))
+	}
+	if body.Reasons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reasons", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAnalyticsMeasureRequestBody runs the validations defined on
+// AnalyticsMeasureRequestBody
+func ValidateAnalyticsMeasureRequestBody(body *AnalyticsMeasureRequestBody) (err error) {
+	if !(body.Op == "count" || body.Op == "count_distinct" || body.Op == "sum" || body.Op == "avg" || body.Op == "min" || body.Op == "max" || body.Op == "p50" || body.Op == "p95" || body.Op == "p99") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", body.Op, []any{"count", "count_distinct", "sum", "avg", "min", "max", "p50", "p95", "p99"}))
+	}
+	return
+}
+
+// ValidateAnalyticsFilterRequestBody runs the validations defined on
+// AnalyticsFilterRequestBody
+func ValidateAnalyticsFilterRequestBody(body *AnalyticsFilterRequestBody) (err error) {
+	if body.Values == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
+	}
+	if !(body.Operator == "equals" || body.Operator == "in") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.operator", body.Operator, []any{"equals", "in"}))
+	}
+	if len(body.Values) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 1, true))
+	}
+	return
+}
+
+// ValidateAnalyticsOrderByRequestBody runs the validations defined on
+// AnalyticsOrderByRequestBody
+func ValidateAnalyticsOrderByRequestBody(body *AnalyticsOrderByRequestBody) (err error) {
+	if !(body.Direction == "asc" || body.Direction == "desc") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.direction", body.Direction, []any{"asc", "desc"}))
 	}
 	return
 }

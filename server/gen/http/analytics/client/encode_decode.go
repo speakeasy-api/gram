@@ -256,6 +256,244 @@ func DecodeSignalDefinitionResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildSignalFindingsRequest instantiates a HTTP request object with method
+// and path set to call the "analytics" service "signalFindings" endpoint
+func (c *Client) BuildSignalFindingsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SignalFindingsAnalyticsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("analytics", "signalFindings", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSignalFindingsRequest returns an encoder for requests sent to the
+// analytics signalFindings server.
+func EncodeSignalFindingsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*analytics.SignalFindingsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("analytics", "signalFindings", "*analytics.SignalFindingsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSignalFindingsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("analytics", "signalFindings", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSignalFindingsResponse returns a decoder for responses returned by the
+// analytics signalFindings endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeSignalFindingsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSignalFindingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SignalFindingsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+			}
+			err = ValidateSignalFindingsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+			}
+			res := NewSignalFindingsAnalyticsSignalFindingsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SignalFindingsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+			}
+			err = ValidateSignalFindingsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+			}
+			return nil, NewSignalFindingsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SignalFindingsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+			}
+			err = ValidateSignalFindingsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+			}
+			return nil, NewSignalFindingsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SignalFindingsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+			}
+			err = ValidateSignalFindingsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+			}
+			return nil, NewSignalFindingsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SignalFindingsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+			}
+			err = ValidateSignalFindingsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+			}
+			return nil, NewSignalFindingsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SignalFindingsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+			}
+			err = ValidateSignalFindingsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+			}
+			return nil, NewSignalFindingsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SignalFindingsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+			}
+			err = ValidateSignalFindingsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+			}
+			return nil, NewSignalFindingsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SignalFindingsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+			}
+			err = ValidateSignalFindingsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+			}
+			return nil, NewSignalFindingsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SignalFindingsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+				}
+				err = ValidateSignalFindingsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+				}
+				return nil, NewSignalFindingsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SignalFindingsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+				}
+				err = ValidateSignalFindingsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+				}
+				return nil, NewSignalFindingsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("analytics", "signalFindings", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SignalFindingsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "signalFindings", err)
+			}
+			err = ValidateSignalFindingsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "signalFindings", err)
+			}
+			return nil, NewSignalFindingsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("analytics", "signalFindings", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildQueryRequest instantiates a HTTP request object with method and path
 // set to call the "analytics" service "query" endpoint
 func (c *Client) BuildQueryRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -970,9 +1208,6 @@ func DecodeDimensionValuesResponse(decoder func(*http.Response) goahttp.Decoder,
 // a value of type *AnalyticsSignalQueryRequestBody from a value of type
 // *analytics.AnalyticsSignalQuery.
 func marshalAnalyticsAnalyticsSignalQueryToAnalyticsSignalQueryRequestBody(v *analytics.AnalyticsSignalQuery) *AnalyticsSignalQueryRequestBody {
-	if v == nil {
-		return nil
-	}
 	res := &AnalyticsSignalQueryRequestBody{
 		Trigger: v.Trigger,
 		RunID:   v.RunID,
@@ -1076,73 +1311,10 @@ func marshalAnalyticsAnalyticsSignalFilterToAnalyticsSignalFilterRequestBody(v *
 	return res
 }
 
-// marshalAnalyticsAnalyticsMeasureToAnalyticsMeasureRequestBody builds a value
-// of type *AnalyticsMeasureRequestBody from a value of type
-// *analytics.AnalyticsMeasure.
-func marshalAnalyticsAnalyticsMeasureToAnalyticsMeasureRequestBody(v *analytics.AnalyticsMeasure) *AnalyticsMeasureRequestBody {
-	if v == nil {
-		return nil
-	}
-	res := &AnalyticsMeasureRequestBody{
-		Op:    v.Op,
-		Field: v.Field,
-		Alias: v.Alias,
-	}
-
-	return res
-}
-
-// marshalAnalyticsAnalyticsFilterToAnalyticsFilterRequestBody builds a value
-// of type *AnalyticsFilterRequestBody from a value of type
-// *analytics.AnalyticsFilter.
-func marshalAnalyticsAnalyticsFilterToAnalyticsFilterRequestBody(v *analytics.AnalyticsFilter) *AnalyticsFilterRequestBody {
-	if v == nil {
-		return nil
-	}
-	res := &AnalyticsFilterRequestBody{
-		Field:    v.Field,
-		Operator: v.Operator,
-	}
-	if v.Values != nil {
-		res.Values = make([]string, len(v.Values))
-		for i, val := range v.Values {
-			res.Values[i] = val
-		}
-	} else {
-		res.Values = []string{}
-	}
-
-	return res
-}
-
-// marshalAnalyticsAnalyticsOrderByToAnalyticsOrderByRequestBody builds a value
-// of type *AnalyticsOrderByRequestBody from a value of type
-// *analytics.AnalyticsOrderBy.
-func marshalAnalyticsAnalyticsOrderByToAnalyticsOrderByRequestBody(v *analytics.AnalyticsOrderBy) *AnalyticsOrderByRequestBody {
-	if v == nil {
-		return nil
-	}
-	res := &AnalyticsOrderByRequestBody{
-		Measure:   v.Measure,
-		Direction: v.Direction,
-	}
-	{
-		var zero string
-		if res.Direction == zero {
-			res.Direction = "desc"
-		}
-	}
-
-	return res
-}
-
 // marshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery builds
 // a value of type *analytics.AnalyticsSignalQuery from a value of type
 // *AnalyticsSignalQueryRequestBody.
 func marshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery(v *AnalyticsSignalQueryRequestBody) *analytics.AnalyticsSignalQuery {
-	if v == nil {
-		return nil
-	}
 	res := &analytics.AnalyticsSignalQuery{
 		Trigger: v.Trigger,
 		RunID:   v.RunID,
@@ -1246,73 +1418,10 @@ func marshalAnalyticsSignalFilterRequestBodyToAnalyticsAnalyticsSignalFilter(v *
 	return res
 }
 
-// marshalAnalyticsMeasureRequestBodyToAnalyticsAnalyticsMeasure builds a value
-// of type *analytics.AnalyticsMeasure from a value of type
-// *AnalyticsMeasureRequestBody.
-func marshalAnalyticsMeasureRequestBodyToAnalyticsAnalyticsMeasure(v *AnalyticsMeasureRequestBody) *analytics.AnalyticsMeasure {
-	if v == nil {
-		return nil
-	}
-	res := &analytics.AnalyticsMeasure{
-		Op:    v.Op,
-		Field: v.Field,
-		Alias: v.Alias,
-	}
-
-	return res
-}
-
-// marshalAnalyticsFilterRequestBodyToAnalyticsAnalyticsFilter builds a value
-// of type *analytics.AnalyticsFilter from a value of type
-// *AnalyticsFilterRequestBody.
-func marshalAnalyticsFilterRequestBodyToAnalyticsAnalyticsFilter(v *AnalyticsFilterRequestBody) *analytics.AnalyticsFilter {
-	if v == nil {
-		return nil
-	}
-	res := &analytics.AnalyticsFilter{
-		Field:    v.Field,
-		Operator: v.Operator,
-	}
-	if v.Values != nil {
-		res.Values = make([]string, len(v.Values))
-		for i, val := range v.Values {
-			res.Values[i] = val
-		}
-	} else {
-		res.Values = []string{}
-	}
-
-	return res
-}
-
-// marshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy builds a value
-// of type *analytics.AnalyticsOrderBy from a value of type
-// *AnalyticsOrderByRequestBody.
-func marshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy(v *AnalyticsOrderByRequestBody) *analytics.AnalyticsOrderBy {
-	if v == nil {
-		return nil
-	}
-	res := &analytics.AnalyticsOrderBy{
-		Measure:   v.Measure,
-		Direction: v.Direction,
-	}
-	{
-		var zero string
-		if res.Direction == zero {
-			res.Direction = "desc"
-		}
-	}
-
-	return res
-}
-
 // unmarshalAnalyticsSignalResultResponseBodyToAnalyticsAnalyticsSignalResult
 // builds a value of type *analytics.AnalyticsSignalResult from a value of type
 // *AnalyticsSignalResultResponseBody.
 func unmarshalAnalyticsSignalResultResponseBodyToAnalyticsAnalyticsSignalResult(v *AnalyticsSignalResultResponseBody) *analytics.AnalyticsSignalResult {
-	if v == nil {
-		return nil
-	}
 	res := &analytics.AnalyticsSignalResult{}
 	res.Metadata = unmarshalAnalyticsSignalMetadataResponseBodyToAnalyticsAnalyticsSignalMetadata(v.Metadata)
 	res.Summary = make(map[string]any, len(v.Summary))
@@ -1416,6 +1525,153 @@ func unmarshalAnalyticsSignalDimensionResponseBodyToAnalyticsAnalyticsSignalDime
 	res := &analytics.AnalyticsSignalDimension{
 		Field:     v.Field,
 		Attribute: v.Attribute,
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsSignalComparisonResponseBodyToAnalyticsAnalyticsSignalComparison
+// builds a value of type *analytics.AnalyticsSignalComparison from a value of
+// type *AnalyticsSignalComparisonResponseBody.
+func unmarshalAnalyticsSignalComparisonResponseBodyToAnalyticsAnalyticsSignalComparison(v *AnalyticsSignalComparisonResponseBody) *analytics.AnalyticsSignalComparison {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsSignalComparison{
+		From:       *v.From,
+		To:         *v.To,
+		Comparable: *v.Comparable,
+		DeltaShare: v.DeltaShare,
+	}
+	res.Summary = make(map[string]any, len(v.Summary))
+	for key, val := range v.Summary {
+		tk := key
+		tv := val
+		res.Summary[tk] = tv
+	}
+	res.Reasons = make([]string, len(v.Reasons))
+	for i, val := range v.Reasons {
+		res.Reasons[i] = val
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsMeasureToAnalyticsMeasureRequestBody builds a value
+// of type *AnalyticsMeasureRequestBody from a value of type
+// *analytics.AnalyticsMeasure.
+func marshalAnalyticsAnalyticsMeasureToAnalyticsMeasureRequestBody(v *analytics.AnalyticsMeasure) *AnalyticsMeasureRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AnalyticsMeasureRequestBody{
+		Op:    v.Op,
+		Field: v.Field,
+		Alias: v.Alias,
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsFilterToAnalyticsFilterRequestBody builds a value
+// of type *AnalyticsFilterRequestBody from a value of type
+// *analytics.AnalyticsFilter.
+func marshalAnalyticsAnalyticsFilterToAnalyticsFilterRequestBody(v *analytics.AnalyticsFilter) *AnalyticsFilterRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AnalyticsFilterRequestBody{
+		Field:    v.Field,
+		Operator: v.Operator,
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	} else {
+		res.Values = []string{}
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsOrderByToAnalyticsOrderByRequestBody builds a value
+// of type *AnalyticsOrderByRequestBody from a value of type
+// *analytics.AnalyticsOrderBy.
+func marshalAnalyticsAnalyticsOrderByToAnalyticsOrderByRequestBody(v *analytics.AnalyticsOrderBy) *AnalyticsOrderByRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AnalyticsOrderByRequestBody{
+		Measure:   v.Measure,
+		Direction: v.Direction,
+	}
+	{
+		var zero string
+		if res.Direction == zero {
+			res.Direction = "desc"
+		}
+	}
+
+	return res
+}
+
+// marshalAnalyticsMeasureRequestBodyToAnalyticsAnalyticsMeasure builds a value
+// of type *analytics.AnalyticsMeasure from a value of type
+// *AnalyticsMeasureRequestBody.
+func marshalAnalyticsMeasureRequestBodyToAnalyticsAnalyticsMeasure(v *AnalyticsMeasureRequestBody) *analytics.AnalyticsMeasure {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsMeasure{
+		Op:    v.Op,
+		Field: v.Field,
+		Alias: v.Alias,
+	}
+
+	return res
+}
+
+// marshalAnalyticsFilterRequestBodyToAnalyticsAnalyticsFilter builds a value
+// of type *analytics.AnalyticsFilter from a value of type
+// *AnalyticsFilterRequestBody.
+func marshalAnalyticsFilterRequestBodyToAnalyticsAnalyticsFilter(v *AnalyticsFilterRequestBody) *analytics.AnalyticsFilter {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsFilter{
+		Field:    v.Field,
+		Operator: v.Operator,
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	} else {
+		res.Values = []string{}
+	}
+
+	return res
+}
+
+// marshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy builds a value
+// of type *analytics.AnalyticsOrderBy from a value of type
+// *AnalyticsOrderByRequestBody.
+func marshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy(v *AnalyticsOrderByRequestBody) *analytics.AnalyticsOrderBy {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsOrderBy{
+		Measure:   v.Measure,
+		Direction: v.Direction,
+	}
+	{
+		var zero string
+		if res.Direction == zero {
+			res.Direction = "desc"
+		}
 	}
 
 	return res

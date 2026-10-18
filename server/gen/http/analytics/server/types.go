@@ -14,6 +14,19 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SignalFindingsRequestBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP request body.
+type SignalFindingsRequestBody struct {
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	To   *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Select a complete cohort, without group_by
+	SignalQuery *AnalyticsSignalQueryRequestBody `form:"signal_query,omitempty" json:"signal_query,omitempty" xml:"signal_query,omitempty"`
+	// Optional second predicate for co-occurrence in the same cohort and window
+	Peer            *AnalyticsSignalSelectionRequestBody `form:"peer,omitempty" json:"peer,omitempty" xml:"peer,omitempty"`
+	ComparePrevious *bool                                `form:"compare_previous,omitempty" json:"compare_previous,omitempty" xml:"compare_previous,omitempty"`
+	Evidence        *bool                                `form:"evidence,omitempty" json:"evidence,omitempty" xml:"evidence,omitempty"`
+}
+
 // QueryRequestBody is the type of the "analytics" service "query" endpoint
 // HTTP request body.
 type QueryRequestBody struct {
@@ -72,6 +85,21 @@ type SignalDefinitionResponseBody struct {
 	DefinitionHash string         `form:"definition_hash" json:"definition_hash" xml:"definition_hash"`
 	Definition     map[string]any `form:"definition" json:"definition" xml:"definition"`
 	CapturedAt     string         `form:"captured_at" json:"captured_at" xml:"captured_at"`
+}
+
+// SignalFindingsResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body.
+type SignalFindingsResponseBody struct {
+	Measurement   *AnalyticsSignalResultResponseBody    `form:"measurement" json:"measurement" xml:"measurement"`
+	Concentration map[string]any                        `form:"concentration" json:"concentration" xml:"concentration"`
+	Peer          *AnalyticsSignalSelectionResponseBody `form:"peer,omitempty" json:"peer,omitempty" xml:"peer,omitempty"`
+	PeerSummary   map[string]any                        `form:"peer_summary,omitempty" json:"peer_summary,omitempty" xml:"peer_summary,omitempty"`
+	// Separate same_message and same_session joint-answer counts and shares
+	Cooccurrence []map[string]any                       `form:"cooccurrence" json:"cooccurrence" xml:"cooccurrence"`
+	Comparison   *AnalyticsSignalComparisonResponseBody `form:"comparison,omitempty" json:"comparison,omitempty" xml:"comparison,omitempty"`
+	// Permitted recent conversation references without transcript content
+	Evidence      []map[string]any `form:"evidence" json:"evidence" xml:"evidence"`
+	EvidenceScope string           `form:"evidence_scope" json:"evidence_scope" xml:"evidence_scope"`
 }
 
 // QueryResponseBody is the type of the "analytics" service "query" endpoint
@@ -280,6 +308,190 @@ type SignalDefinitionUnexpectedResponseBody struct {
 // service "signalDefinition" endpoint HTTP response body for the
 // "gateway_error" error.
 type SignalDefinitionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsUnauthorizedResponseBody is the type of the "analytics"
+// service "signalFindings" endpoint HTTP response body for the "unauthorized"
+// error.
+type SignalFindingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsForbiddenResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "forbidden" error.
+type SignalFindingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsBadRequestResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "bad_request" error.
+type SignalFindingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsNotFoundResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "not_found" error.
+type SignalFindingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsConflictResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "conflict" error.
+type SignalFindingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsUnsupportedMediaResponseBody is the type of the "analytics"
+// service "signalFindings" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SignalFindingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsInvalidResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "invalid" error.
+type SignalFindingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsInvariantViolationResponseBody is the type of the "analytics"
+// service "signalFindings" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SignalFindingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsUnexpectedResponseBody is the type of the "analytics" service
+// "signalFindings" endpoint HTTP response body for the "unexpected" error.
+type SignalFindingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalFindingsGatewayErrorResponseBody is the type of the "analytics"
+// service "signalFindings" endpoint HTTP response body for the "gateway_error"
+// error.
+type SignalFindingsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -910,6 +1122,20 @@ type AnalyticsSignalDimensionResponseBody struct {
 	Attribute *string `form:"attribute,omitempty" json:"attribute,omitempty" xml:"attribute,omitempty"`
 }
 
+// AnalyticsSignalComparisonResponseBody is used to define fields on response
+// body types.
+type AnalyticsSignalComparisonResponseBody struct {
+	From       string         `form:"from" json:"from" xml:"from"`
+	To         string         `form:"to" json:"to" xml:"to"`
+	Summary    map[string]any `form:"summary" json:"summary" xml:"summary"`
+	Comparable bool           `form:"comparable" json:"comparable" xml:"comparable"`
+	// Failed comparison gates. Coverage remains unknown even when the observed
+	// measurements are comparable.
+	Reasons []string `form:"reasons" json:"reasons" xml:"reasons"`
+	// Descriptive difference in observed answer shares, never a significance test
+	DeltaShare *float64 `form:"delta_share,omitempty" json:"delta_share,omitempty" xml:"delta_share,omitempty"`
+}
+
 // AnalyticsDatasetResponseBody is used to define fields on response body types.
 type AnalyticsDatasetResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
@@ -1099,6 +1325,66 @@ func NewSignalDefinitionResponseBody(res *analytics.AnalyticsSignalDefinition) *
 			tv := val
 			body.Definition[tk] = tv
 		}
+	}
+	return body
+}
+
+// NewSignalFindingsResponseBody builds the HTTP response body from the result
+// of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsResponseBody(res *analytics.AnalyticsSignalFindings) *SignalFindingsResponseBody {
+	body := &SignalFindingsResponseBody{
+		EvidenceScope: res.EvidenceScope,
+	}
+	if res.Measurement != nil {
+		body.Measurement = marshalAnalyticsAnalyticsSignalResultToAnalyticsSignalResultResponseBody(res.Measurement)
+	}
+	if res.Concentration != nil {
+		body.Concentration = make(map[string]any, len(res.Concentration))
+		for key, val := range res.Concentration {
+			tk := key
+			tv := val
+			body.Concentration[tk] = tv
+		}
+	}
+	if res.Peer != nil {
+		body.Peer = marshalAnalyticsAnalyticsSignalSelectionToAnalyticsSignalSelectionResponseBody(res.Peer)
+	}
+	if res.PeerSummary != nil {
+		body.PeerSummary = make(map[string]any, len(res.PeerSummary))
+		for key, val := range res.PeerSummary {
+			tk := key
+			tv := val
+			body.PeerSummary[tk] = tv
+		}
+	}
+	if res.Cooccurrence != nil {
+		body.Cooccurrence = make([]map[string]any, len(res.Cooccurrence))
+		for i, val := range res.Cooccurrence {
+			body.Cooccurrence[i] = make(map[string]any, len(val))
+			for key, val := range val {
+				tk := key
+				tv := val
+				body.Cooccurrence[i][tk] = tv
+			}
+		}
+	} else {
+		body.Cooccurrence = []map[string]any{}
+	}
+	if res.Comparison != nil {
+		body.Comparison = marshalAnalyticsAnalyticsSignalComparisonToAnalyticsSignalComparisonResponseBody(res.Comparison)
+	}
+	if res.Evidence != nil {
+		body.Evidence = make([]map[string]any, len(res.Evidence))
+		for i, val := range res.Evidence {
+			body.Evidence[i] = make(map[string]any, len(val))
+			for key, val := range val {
+				tk := key
+				tv := val
+				body.Evidence[i][tk] = tv
+			}
+		}
+	} else {
+		body.Evidence = []map[string]any{}
 	}
 	return body
 }
@@ -1313,6 +1599,147 @@ func NewSignalDefinitionUnexpectedResponseBody(res *goa.ServiceError) *SignalDef
 // service.
 func NewSignalDefinitionGatewayErrorResponseBody(res *goa.ServiceError) *SignalDefinitionGatewayErrorResponseBody {
 	body := &SignalDefinitionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsUnauthorizedResponseBody(res *goa.ServiceError) *SignalFindingsUnauthorizedResponseBody {
+	body := &SignalFindingsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsForbiddenResponseBody builds the HTTP response body from
+// the result of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsForbiddenResponseBody(res *goa.ServiceError) *SignalFindingsForbiddenResponseBody {
+	body := &SignalFindingsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsBadRequestResponseBody builds the HTTP response body from
+// the result of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsBadRequestResponseBody(res *goa.ServiceError) *SignalFindingsBadRequestResponseBody {
+	body := &SignalFindingsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsNotFoundResponseBody builds the HTTP response body from the
+// result of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsNotFoundResponseBody(res *goa.ServiceError) *SignalFindingsNotFoundResponseBody {
+	body := &SignalFindingsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsConflictResponseBody builds the HTTP response body from the
+// result of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsConflictResponseBody(res *goa.ServiceError) *SignalFindingsConflictResponseBody {
+	body := &SignalFindingsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsUnsupportedMediaResponseBody(res *goa.ServiceError) *SignalFindingsUnsupportedMediaResponseBody {
+	body := &SignalFindingsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsInvalidResponseBody builds the HTTP response body from the
+// result of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsInvalidResponseBody(res *goa.ServiceError) *SignalFindingsInvalidResponseBody {
+	body := &SignalFindingsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "signalFindings" endpoint of the "analytics"
+// service.
+func NewSignalFindingsInvariantViolationResponseBody(res *goa.ServiceError) *SignalFindingsInvariantViolationResponseBody {
+	body := &SignalFindingsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsUnexpectedResponseBody(res *goa.ServiceError) *SignalFindingsUnexpectedResponseBody {
+	body := &SignalFindingsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalFindingsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "signalFindings" endpoint of the "analytics" service.
+func NewSignalFindingsGatewayErrorResponseBody(res *goa.ServiceError) *SignalFindingsGatewayErrorResponseBody {
+	body := &SignalFindingsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1756,6 +2183,35 @@ func NewSignalDefinitionPayload(sensorID string, definitionHash string, sessionT
 	return v
 }
 
+// NewSignalFindingsPayload builds a analytics service signalFindings endpoint
+// payload.
+func NewSignalFindingsPayload(body *SignalFindingsRequestBody, sessionToken *string, projectSlugInput *string) *analytics.SignalFindingsPayload {
+	v := &analytics.SignalFindingsPayload{
+		From: *body.From,
+		To:   *body.To,
+	}
+	if body.ComparePrevious != nil {
+		v.ComparePrevious = *body.ComparePrevious
+	}
+	if body.Evidence != nil {
+		v.Evidence = *body.Evidence
+	}
+	v.SignalQuery = unmarshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery(body.SignalQuery)
+	if body.Peer != nil {
+		v.Peer = unmarshalAnalyticsSignalSelectionRequestBodyToAnalyticsAnalyticsSignalSelection(body.Peer)
+	}
+	if body.ComparePrevious == nil {
+		v.ComparePrevious = false
+	}
+	if body.Evidence == nil {
+		v.Evidence = false
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewQueryPayload builds a analytics service query endpoint payload.
 func NewQueryPayload(body *QueryRequestBody, sessionToken *string, projectSlugInput *string) *analytics.QueryPayload {
 	v := &analytics.QueryPayload{
@@ -1853,6 +2309,37 @@ func NewDimensionValuesPayload(body *DimensionValuesRequestBody, sessionToken *s
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateSignalFindingsRequestBody runs the validations defined on
+// SignalFindingsRequestBody
+func ValidateSignalFindingsRequestBody(body *SignalFindingsRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.SignalQuery == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signal_query", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.SignalQuery != nil {
+		if err2 := ValidateAnalyticsSignalQueryRequestBody(body.SignalQuery); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Peer != nil {
+		if err2 := ValidateAnalyticsSignalSelectionRequestBody(body.Peer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
 }
 
 // ValidateQueryRequestBody runs the validations defined on QueryRequestBody

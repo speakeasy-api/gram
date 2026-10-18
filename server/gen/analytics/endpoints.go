@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "analytics" service endpoints.
 type Endpoints struct {
 	SignalDefinition goa.Endpoint
+	SignalFindings   goa.Endpoint
 	Query            goa.Endpoint
 	Describe         goa.Endpoint
 	DimensionValues  goa.Endpoint
@@ -28,6 +29,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		SignalDefinition: NewSignalDefinitionEndpoint(s, a.APIKeyAuth),
+		SignalFindings:   NewSignalFindingsEndpoint(s, a.APIKeyAuth),
 		Query:            NewQueryEndpoint(s, a.APIKeyAuth),
 		Describe:         NewDescribeEndpoint(s, a.APIKeyAuth),
 		DimensionValues:  NewDimensionValuesEndpoint(s, a.APIKeyAuth),
@@ -37,6 +39,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "analytics" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SignalDefinition = m(e.SignalDefinition)
+	e.SignalFindings = m(e.SignalFindings)
 	e.Query = m(e.Query)
 	e.Describe = m(e.Describe)
 	e.DimensionValues = m(e.DimensionValues)
@@ -74,6 +77,41 @@ func NewSignalDefinitionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.SignalDefinition(ctx, p)
+	}
+}
+
+// NewSignalFindingsEndpoint returns an endpoint function that calls the method
+// "signalFindings" of service "analytics".
+func NewSignalFindingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SignalFindingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SignalFindings(ctx, p)
 	}
 }
 
