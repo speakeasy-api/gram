@@ -1501,6 +1501,7 @@ func newStartCommand() *cli.Command {
 				publishers.OTELLogs,
 				sessionManager,
 				hooksCache,
+				ratelimit.NewRedisStore(redisClient),
 				chatClient,
 				temporalEnv,
 				authzEngine,

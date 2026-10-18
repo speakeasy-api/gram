@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -33,6 +34,9 @@ const (
 	// event. Events follow their uploads within one dispatch, so this only
 	// needs to cover retries.
 	ahpUploadTTL = 15 * time.Minute
+	// Limit upload admission across the fleet to a burst of 64 per project,
+	// refilling 64 slots per staging TTL. Each upload is also size-bounded.
+	ahpUploadBurst = 64
 	// ahpUploadRefPrefix marks receiver references issued by this endpoint.
 	ahpUploadRefPrefix = "urn:speakeasy:ahp:upload:"
 	// ahpAttachmentKind is the prompt attachment kind for AHP attachments.
@@ -41,7 +45,6 @@ const (
 
 // ahpStagedUpload is the verified upload body kept until an event resolves it.
 type ahpStagedUpload struct {
-	SHA256  string `json:"sha256"`
 	Content []byte `json:"content"`
 }
 
@@ -66,7 +69,7 @@ func (s *Service) serveAHPUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	if s.cache == nil {
+	if s.cache == nil || s.ahpUploadLimiter == nil {
 		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 		return
 	}
@@ -76,6 +79,22 @@ func (s *Service) serveAHPUpload(w http.ResponseWriter, r *http.Request) {
 		status := http.StatusBadRequest
 		if errors.Is(err, ahpserver.ErrUploadSize) {
 			status = http.StatusRequestEntityTooLarge
+		}
+		http.Error(w, http.StatusText(status), status)
+		return
+	}
+	// Reserve a project-scoped slot before reading or staging the body. Fail
+	// closed when the shared quota store is unavailable.
+	limit, err := s.ahpUploadLimiter.Allow(ctx, authCtx.ProjectID.String())
+	if err != nil || !limit.Allowed {
+		_ = upload.Close()
+		status := http.StatusTooManyRequests
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to check AHP upload quota", attr.SlogError(err))
+			status = http.StatusServiceUnavailable
+		} else {
+			seconds := max(1, int((limit.RetryAfter+time.Second-1)/time.Second))
+			w.Header().Set("Retry-After", strconv.Itoa(seconds))
 		}
 		http.Error(w, http.StatusText(status), status)
 		return
@@ -97,20 +116,9 @@ func (s *Service) serveAHPUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	// Prompt attachments hold text visible to the model. AHP carries text
-	// inline, so attachments are non-text media types; only bodies that are
-	// still UTF-8 text (XML, YAML, source files) can be ingested. Binary
-	// bodies are acknowledged so delivery proceeds, but are not staged.
-	if !ahpIsText(content) {
-		if err := ahpserver.WriteUploadResponse(w, receipt); err != nil {
-			s.logger.WarnContext(ctx, "failed to write AHP upload response",
-				attr.SlogError(err),
-				attr.SlogProjectID(authCtx.ProjectID.String()),
-			)
-		}
-		return
-	}
-	staged := ahpStagedUpload{SHA256: receipt.Sha256, Content: content}
+	// A receipt promises a resolvable reference, including for binary content.
+	// Text-only filtering belongs at ingestion, not upload acceptance.
+	staged := ahpStagedUpload{Content: content}
 	if err := s.cache.Set(ctx, ahpUploadCacheKey(*authCtx.ProjectID, id), staged, ahpUploadTTL); err != nil {
 		s.logger.ErrorContext(ctx, "failed to stage AHP upload",
 			attr.SlogError(err),
@@ -129,8 +137,8 @@ func (s *Service) serveAHPUpload(w http.ResponseWriter, r *http.Request) {
 
 // ahpPromptAttachments resolves body-selected attachments on inbound user
 // messages into prompt attachments. Only references issued by the upload
-// endpoint in the authenticated project resolve. Binary bodies are never
-// staged, so they do not resolve.
+// endpoint in the authenticated project resolve. Binary bodies are staged but
+// excluded from text prompt ingestion.
 func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageInboundEvent) []*gen.HookPromptAttachmentEntry {
 	if e == nil || s.cache == nil {
 		return nil

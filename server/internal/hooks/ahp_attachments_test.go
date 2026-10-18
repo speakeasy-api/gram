@@ -10,15 +10,18 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
 func ahpUploadRequest(t *testing.T, h http.Handler, content []byte, digest string, headers map[string]string) *httptest.ResponseRecorder {
@@ -195,4 +198,59 @@ func TestAHPAttachmentReferencesAreProjectScoped(t *testing.T) {
 	otherProject := uuid.New()
 	other.ProjectID = &otherProject
 	require.Empty(t, ti.service.ahpPromptAttachments(contextvalues.SetAuthContext(ctx, &other), &e))
+}
+
+func TestAHPUploadStagesEveryReceipt(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
+	for _, content := range [][]byte{[]byte("<notes>text</notes>"), {0, 0xff, 0xfe}, {}} {
+		ref := ahpUploadRef(t, ti.service.ahpUploadHandler(), content)
+		var staged ahpStagedUpload
+		key := ahpUploadCacheKey(*authCtx.ProjectID, strings.TrimPrefix(ref, ahpUploadRefPrefix))
+		require.NoError(t, ti.service.cache.Get(ctx, key, &staged))
+		require.True(t, bytes.Equal(content, staged.Content))
+		ttl, err := ti.redisClient.TTL(ctx, key).Result()
+		require.NoError(t, err)
+		require.Positive(t, ttl)
+		require.LessOrEqual(t, ttl, ahpUploadTTL)
+	}
+}
+
+func TestAHPUploadQuotaIsSharedAndProjectScoped(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
+	limit, err := ti.service.ahpUploadLimiter.AllowN(ctx, authCtx.ProjectID.String(), ahpUploadBurst)
+	require.NoError(t, err)
+	require.True(t, limit.Allowed)
+	// A separate limiter instance must see the same quota, as another replica does.
+	ti.service.ahpUploadLimiter = ratelimit.New(ratelimit.NewRedisStore(ti.redisClient), "ahp-upload",
+		ratelimit.Rate{Tokens: ahpUploadBurst, Interval: ahpUploadTTL, Burst: ahpUploadBurst})
+	content := []byte("quota test")
+	w := ahpUploadRequest(t, ti.service.ahpUploadHandler(), content, ahpDigest(content), ahpAuthHeaders)
+	require.Equal(t, http.StatusTooManyRequests, w.Code)
+	retryAfter, err := strconv.Atoi(w.Header().Get("Retry-After"))
+	require.NoError(t, err)
+	require.Positive(t, retryAfter)
+	other := *authCtx
+	otherProject := uuid.New()
+	other.ProjectID = &otherProject
+	ti.service.auth = &ahpTestAuthorizer{authCtx: &other}
+	ahpUploadRef(t, ti.service.ahpUploadHandler(), content)
+}
+
+func TestAHPUploadQuotaFailsClosed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: hookAuthContext(t, ctx)}
+	client := redis.NewClient(ti.redisClient.Options())
+	require.NoError(t, client.Close())
+	ti.service.ahpUploadLimiter = ratelimit.New(ratelimit.NewRedisStore(client), "ahp-upload", ratelimit.PerMinute(1))
+	content := []byte("quota unavailable")
+	w := ahpUploadRequest(t, ti.service.ahpUploadHandler(), content, ahpDigest(content), ahpAuthHeaders)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	require.Empty(t, w.Header().Get("Retry-After"))
 }

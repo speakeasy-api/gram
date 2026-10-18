@@ -59,7 +59,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 					return reply, nil
 				}
 				canDeny := slices.Contains(c.Capabilities.Effects, ahp.UserMessageInboundCapabilitiesEffectsValueItemDeny)
-				reason, err := s.ingestAHP(ctx, payload, !canDeny)
+				reason, err := s.ingestAHPInbound(ctx, payload, !canDeny)
 				if err != nil || reason == "" {
 					return reply, err
 				}
@@ -283,6 +283,28 @@ func (s *Service) ahpAuthenticate(h http.Handler) http.Handler {
 func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload, observeOnly bool) (string, error) {
 	options := defaultAuthenticatedIngestOptions()
 	options.ObserveOnly = observeOnly
+	return s.ingestAHPWithOptions(ctx, payload, options)
+}
+
+// ingestAHPInbound includes resolved attachments in prompt policy evidence,
+// without adding their contents to the persisted prompt text.
+func (s *Service) ingestAHPInbound(ctx context.Context, payload *gen.IngestPayload, observeOnly bool) (string, error) {
+	if len(payload.Data.PromptAttachments) == 0 {
+		return s.ingestAHP(ctx, payload, observeOnly)
+	}
+	var texts []string
+	if prompt := canonicalPromptText(payload); prompt != "" {
+		texts = append(texts, prompt)
+	}
+	for _, attachment := range payload.Data.PromptAttachments {
+		if attachment != nil {
+			texts = append(texts, attachment.Content)
+		}
+	}
+	policyText := strings.Join(texts, "\n")
+	options := defaultAuthenticatedIngestOptions()
+	options.ObserveOnly = observeOnly
+	options.promptPolicyText = &policyText
 	return s.ingestAHPWithOptions(ctx, payload, options)
 }
 
