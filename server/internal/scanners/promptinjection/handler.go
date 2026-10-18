@@ -24,11 +24,10 @@ type Handler struct {
 	metrics      *scanners.AsyncScanHandlerMetrics
 	realScanner  *Scanner
 	stubScanner  *Scanner
-	gate         *scanners.AsyncShadowGate
 	riskRecorder *metering.RiskRecorder
 }
 
-func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realScanner, stubScanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding], gate *scanners.AsyncShadowGate, riskRecorder *metering.RiskRecorder) *Handler {
+func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realScanner, stubScanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding], riskRecorder *metering.RiskRecorder) *Handler {
 	if stubScanner == nil {
 		stubScanner = NewScanner(logger, NoopClassifier)
 	}
@@ -41,7 +40,6 @@ func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realSca
 		metrics:      scanners.NewAsyncScanHandlerMetrics(meterProvider, logger),
 		realScanner:  realScanner,
 		stubScanner:  stubScanner,
-		gate:         gate,
 		riskRecorder: riskRecorder,
 	}
 }
@@ -51,15 +49,18 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 	if anchorID == "" {
 		anchorID = m.GetContentPartId()
 	}
-	gateReason := h.gate.Decide(ctx, m.GetProjectId(), anchorID)
-	engine := gateReason.Engine()
+	selectionReason := scanners.AsyncScanEngineSelectionRequestStub
+	if m.GetRunJudge() {
+		selectionReason = scanners.AsyncScanEngineSelectionRequestReal
+	}
+	engine := selectionReason.Engine()
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
 		attr.RiskScanRequestID(m.GetRequestId()),
 		attr.MessageID(anchorID),
 		attr.AuthOrganizationID(m.GetOrganizationId()),
 		attr.RiskScanEngine(engine),
-		attr.RiskScanGateReason(gateReason),
+		attr.RiskScanSelectionReason(selectionReason),
 	)
 	// message.id carries whichever anchor resolved, so a part-anchored scan also
 	// gets the dedicated key: without it those spans are unsearchable by part.
@@ -78,7 +79,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		RecentUntrustedContent: m.GetRecentUntrustedContent(),
 	})
 	if err != nil {
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeScanError, gateReason)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeScanError, selectionReason)
 		return fmt.Errorf("scan prompt injection: %w", err)
 	}
 	findings := result.Findings
@@ -119,11 +120,11 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		}
 	}
 	if err != nil {
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomePublishError, gateReason)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomePublishError, selectionReason)
 		return err
 	}
 
-	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeOK, gateReason)
+	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeOK, selectionReason)
 	return nil
 }
 
