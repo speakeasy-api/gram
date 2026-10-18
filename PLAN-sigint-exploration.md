@@ -1,7 +1,8 @@
 # Signal Intelligence exploration plan
 
 Agreed first epic, 2026-10-18, incorporating the independent Opus review.
-Stack starts at the freshly fetched `origin/main` (`12dd47d8a7`).
+Initial stack base: freshly fetched `origin/main` (`12dd47d8a7`). The completed
+stack is rebased against `origin/main` before handoff.
 
 ## Agreed scope
 
@@ -96,12 +97,38 @@ Follow-on scope: measured acceleration/catalogs, saved detectors/notifications a
 - Queries: 6h/minute, 7d/hour, 90d/day, 24mo/month; threshold/share; exact distinct sessions; arbitrary labels; co-occurrence; bounded session evidence; manual-run partition pruning; concurrent chart requests.
 - Record cold/warm p50/p95, rows/bytes/granules, memory and parts. Pin 26.6 settings; use `EXPLAIN indexes = 1` with query-condition cache and streaming skip-index evaluation disabled, plus `EXPLAIN ESTIMATE` verified against actual reads.
 - Test `FINAL` settings and compare every result with latest-attempt oracle. Verify month/edge boundaries, zero versus unknown, complete tail buckets, and weighted/distinct reaggregation.
-- No workload benchmark has yet been run. Sub-500 ms charts and 30–60-second aggregate freshness are candidate targets, not commitments. Use synthetic local fixtures; concrete customer workload facts remain in internal systems.
+- The ClickHouse 26.6.8.7 matrix covers 1k/10k/100k readings per sensor/day, 3/10/50 sensors, 5–1,000 attribute values, 100–10,000 messages per conversation, and 4/8 concurrent readers. It includes two-year histories, corrections, historical imports, manual runs, evidence, co-occurrence and concurrent duplicate/new ingestion. All returned results matched latest-attempt oracles. The largest two-year query is explicitly refused by the scan budget. Full measurements and reproduction commands live in `server/cmd/sigint-bench/README.md`.
 - Relevant implementation skills: Go, PostgreSQL, Pub/Sub, ClickHouse and architecture guidance, demo seed, management API, frontend, Platform MCP, RBAC and PR-stack workflows as each layer touches them.
 
-## Open decisions
+## Delivered layers
 
-- Workload, latency, concurrency, scan and freshness budgets before performance acceptance.
-- Exact hit-predicate defaults and ordered-level policy before exposing metrics.
-- Trailing-bucket settling/comparability rules and current entitlement/rollout alignment before product release.
-- Literal PromQL compatibility and approximate aggregate policies only when their follow-on work requires them; first-slice distinct counts are exact.
+Stack: https://github.com/speakeasy-api/gram/stack/7683
+
+| PR                                                       | Concern                                                                                                   |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| [#7681](https://github.com/speakeasy-api/gram/pull/7681) | Immutable message-time attributes and this plan                                                           |
+| [#7682](https://github.com/speakeasy-api/gram/pull/7682) | Dedicated provenance-storage migration prerequisite                                                       |
+| [#7684](https://github.com/speakeasy-api/gram/pull/7684) | Original/copy/summary/unknown capture lineage and evaluation exclusions                                   |
+| [#7685](https://github.com/speakeasy-api/gram/pull/7685) | Immutable evaluated definitions and activation audit history                                              |
+| [#7688](https://github.com/speakeasy-api/gram/pull/7688) | Canonical compiler, shared runner, exact metrics and complete-series budgeting                            |
+| [#7691](https://github.com/speakeasy-api/gram/pull/7691) | Dedicated measured source-time index migration                                                            |
+| [#7693](https://github.com/speakeasy-api/gram/pull/7693) | Analytics RPC, Platform MCP discovery/query/definition parity and shipped workflow                        |
+| [#7696](https://github.com/speakeasy-api/gram/pull/7696) | Explore dashboard, count/share charts, partial markers, linked intraday fixtures and exports              |
+| [#7700](https://github.com/speakeasy-api/gram/pull/7700) | Cross-session breadth/concentration, both co-occurrence units, guarded comparisons and permitted evidence |
+| [#7707](https://github.com/speakeasy-api/gram/pull/7707) | Expanded correctness/performance matrix and measured workload envelope                                    |
+
+## First-epic decisions and evidence
+
+- New API vocabulary uses plain strings, with advertised values and shared-engine validation.
+- Multi-label thresholds are explicit; the dashboard starts at 0.5 and names the rule. Exclusive measurements use the selected answer. Ordered measurements use cumulative probability at/above the selected level.
+- Physical reads are canonical at every interval. Initial per-read limits are five seconds, 25 million rows, four billion read bytes and one billion memory bytes. These are engineering limits, not a production latency SLO or a freshness guarantee.
+- At 219M retained synthetic readings, six-hour charts measured 88.8 ms warm p95; eight concurrent readers with new ingestion measured 220.8 ms. The largest two-year request exceeds the scan budget and returns an actionable refusal. Output coarsening alone does not reduce canonical work.
+- Comparisons retain both windows' values. Comparability requires at least 30 measured answers and five evaluated conversations in each window, one identical known definition, and identical known classifier/model/provider/compiler/input settings. Windows ending within five minutes of query time are marked unsettled. Unknown census coverage remains explicit even when these gates pass.
+- RPC and both analytics MCP audiences require the same Signals Intelligence entitlement and exact project access, independently of Explore. Supporting references use batched chat grants plus the existing owner/runtime/external-user/support boundary; opening content checks access again.
+- Demo/local seeds include 4,968 original messages in 828 linked conversations across 400 days, dense recent intraday activity, known/missing attributes, failed/draft/not-applicable outcomes and separate manual runs. Repeated local seeding and tenant-isolation checks passed.
+- Analytics, chat, Platform MCP and shipped-plugin package checks passed together (3,248 tests), with server lint and dashboard checks. Browser QA covered minute/month and count/share views, definition inspection, conversation drilldown, loading/empty/error recovery, dark mode and 400px layout. Reviewed synthetic screenshots are attached to the UI PRs.
+
+## Follow-on decisions
+
+- What deployment-specific workload and latency/freshness SLO should govern acceleration beyond the demonstrated canonical envelope? Correction-aware hourly acceleration and attribute catalogs remain follow-on work.
+- Should a future text syntax target literal PromQL compatibility? Saved detectors, notifications and approximate aggregates remain outside this epic; first-slice distinct counts are exact.
