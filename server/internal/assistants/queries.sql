@@ -1810,3 +1810,12 @@ WHERE project_id = @project_id::uuid
   AND id = ANY(@ids::uuid[])
   AND kind = 'chat_attachment'
   AND deleted IS FALSE;
+
+-- name: SetAssistantDesiredRuntimeVersionForTest :exec
+-- Test fixture only: runtime selection is not a supported mutation.
+UPDATE assistants SET runtime_version = @runtime_version
+WHERE id = @assistant_id AND project_id = @project_id;
+
+-- name: CountAssistantRuntimeRowsForTest :one
+SELECT count(*) FROM assistant_runtimes
+WHERE assistant_id = @assistant_id AND project_id = @project_id;

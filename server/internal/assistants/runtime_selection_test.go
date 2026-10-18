@@ -32,7 +32,10 @@ func TestAssistantAdmissionRejectsUnavailableDesiredRuntime(t *testing.T) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "runtime_selection_admission")
 	require.NoError(t, err)
 	projectID, assistantID, _, _ := insertAssistantFixture(t, conn)
-	_, err = conn.Exec(t.Context(), "UPDATE assistants SET runtime_version = 3 WHERE id = $1", assistantID)
+	queries := assistantrepo.New(conn)
+	err = queries.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{
+		AssistantID: assistantID, ProjectID: projectID, RuntimeVersion: 3,
+	})
 	require.NoError(t, err)
 	core := &ServiceCore{db: conn}
 
@@ -44,7 +47,9 @@ func TestAssistantAdmissionRejectsUnavailableDesiredRuntime(t *testing.T) {
 	require.ErrorContains(t, err, "version 3 admission is not configured")
 	_, err = core.EnsureWarmupThread(t.Context(), assistantID)
 	require.ErrorContains(t, err, "version 3 admission is not configured")
-	var count int
-	require.NoError(t, conn.QueryRow(t.Context(), "SELECT count(*) FROM assistant_runtimes WHERE assistant_id = $1", assistantID).Scan(&count))
+	count, err := queries.CountAssistantRuntimeRowsForTest(t.Context(), assistantrepo.CountAssistantRuntimeRowsForTestParams{
+		AssistantID: assistantID, ProjectID: projectID,
+	})
+	require.NoError(t, err)
 	require.Zero(t, count)
 }

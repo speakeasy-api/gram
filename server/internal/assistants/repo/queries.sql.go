@@ -747,6 +747,23 @@ func (q *Queries) CountActiveAssistantThreads(ctx context.Context, arg CountActi
 	return active_threads, err
 }
 
+const countAssistantRuntimeRowsForTest = `-- name: CountAssistantRuntimeRowsForTest :one
+SELECT count(*) FROM assistant_runtimes
+WHERE assistant_id = $1 AND project_id = $2
+`
+
+type CountAssistantRuntimeRowsForTestParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) CountAssistantRuntimeRowsForTest(ctx context.Context, arg CountAssistantRuntimeRowsForTestParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAssistantRuntimeRowsForTest, arg.AssistantID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countInFlightAssistantThreadEvents = `-- name: CountInFlightAssistantThreadEvents :one
 SELECT COUNT(*)
 FROM assistant_thread_events
@@ -4147,6 +4164,23 @@ func (q *Queries) RevokeSkillDistributionsByAssistant(ctx context.Context, arg R
 		return nil, err
 	}
 	return items, nil
+}
+
+const setAssistantDesiredRuntimeVersionForTest = `-- name: SetAssistantDesiredRuntimeVersionForTest :exec
+UPDATE assistants SET runtime_version = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetAssistantDesiredRuntimeVersionForTestParams struct {
+	RuntimeVersion int16
+	AssistantID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Test fixture only: runtime selection is not a supported mutation.
+func (q *Queries) SetAssistantDesiredRuntimeVersionForTest(ctx context.Context, arg SetAssistantDesiredRuntimeVersionForTestParams) error {
+	_, err := q.db.Exec(ctx, setAssistantDesiredRuntimeVersionForTest, arg.RuntimeVersion, arg.AssistantID, arg.ProjectID)
+	return err
 }
 
 const setAssistantRuntimeActive = `-- name: SetAssistantRuntimeActive :exec

@@ -82098,6 +82098,10 @@ components:
           type: string
           description: The project ID owning the assistant.
           format: uuid
+        runtime_version:
+          type: integer
+          description: 'Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Read-only until safe runtime switching is available.'
+          format: int64
         skills:
           type: array
           items:
@@ -82133,6 +82137,7 @@ components:
         - skills
         - warm_ttl_seconds
         - max_concurrency
+        - runtime_version
         - status
         - created_at
         - updated_at

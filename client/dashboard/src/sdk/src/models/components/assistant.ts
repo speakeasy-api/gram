@@ -92,6 +92,10 @@ export type Assistant = {
    */
   projectId: string;
   /**
+   * Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Read-only until safe runtime switching is available.
+   */
+  runtimeVersion: number;
+  /**
    * Skills attached to the assistant.
    */
   skills: Array<AssistantSkillRef>;
@@ -140,6 +144,7 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
       model: z.string(),
       name: z.string(),
       project_id: z.string(),
+      runtime_version: z.int(),
       skills: z.array(AssistantSkillRef$inboundSchema),
       status: AssistantStatus$inboundSchema,
       toolsets: z.array(AssistantToolsetRef$inboundSchema),
@@ -158,6 +163,7 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
         "max_concurrency": "maxConcurrency",
         "mcp_servers": "mcpServers",
         "project_id": "projectId",
+        "runtime_version": "runtimeVersion",
         "updated_at": "updatedAt",
         "warm_ttl_seconds": "warmTtlSeconds",
       });
