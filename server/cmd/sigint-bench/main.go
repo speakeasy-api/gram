@@ -121,6 +121,10 @@ func run(parent context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("open benchmark connection: %w", err)
 	}
 	defer o11y.LogDefer(ctx, logger, "close benchmark connection", conn.Close)
+	// Keep the baseline independent of which indexes the current schema ships.
+	if err := conn.Exec(ctx, "ALTER TABLE sigint_readings_v2 DROP INDEX IF EXISTS event_occurred_at_minmax_idx"); err != nil {
+		return fmt.Errorf("prepare unindexed benchmark baseline: %w", err)
+	}
 	now := time.Now().UTC().Truncate(time.Second)
 	from := now.Add(-time.Duration(*days) * 24 * time.Hour)
 	project := uuid.NewSHA1(uuid.Nil, []byte("benchmark-project"))
