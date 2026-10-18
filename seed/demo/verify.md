@@ -559,7 +559,7 @@ that URL.
     - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
     - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
     - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
-31. **Gateway tool picker**
+32. **Gateway tool picker**
     - Connect an MCP client to the Acme Agent Gateway. On the consent screen, choose Specific tools: tools are grouped under each member server and show their tool names without the server prefix.
     - Select one server's heading, then a single tool from another server, and approve. The connection's tools list, Progressive `describe_tools`, and `execute_tool` only reach the chosen tools; calls to the others are refused.
     - Reconnect: the consent screen opens with the previous choice selected.
