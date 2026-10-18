@@ -62,14 +62,14 @@ export const PolicyType = {
 export type PolicyType = ClosedEnum<typeof PolicyType>;
 
 /**
- * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
  */
 export const ShadowMcpDisposition = {
   BlockAll: "block_all",
   AllowAll: "allow_all",
 } as const;
 /**
- * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
  */
 export type ShadowMcpDisposition = ClosedEnum<typeof ShadowMcpDisposition>;
 
@@ -149,7 +149,7 @@ export type CreateRiskPolicyRequestBody = {
    */
   shadowMcpBlockedUrls?: Array<string> | undefined;
   /**
-   * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+   * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
    */
   shadowMcpDisposition?: ShadowMcpDisposition | undefined;
   /**

@@ -1148,7 +1148,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"30 day log retention",
 				"SSO",
 				"Audit logs",
-				"Self-hosting Gram dataplane",
+				"Self-hosting Speakeasy dataplane",
 			},
 			IncludedBullets: []string{
 				"Dedicated slack channel",

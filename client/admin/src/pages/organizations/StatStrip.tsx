@@ -64,7 +64,7 @@ const STAT_CELLS: StatCell[] = [
     action: "Show the PAYG and enterprise organizations",
   },
   {
-    // No sub-line: the design's "N with no owner" is cut, Gram has no owners.
+    // No sub-line: the design's "N with no owner" is cut, Speakeasy has no owners.
     label: "Trials ending in 7 days",
     value: (stats) => stats.trials_ending_soon,
     filters: { ...NO_FILTERS, trial: [ENDING_SOON], disabled: EVERY_STATUS },

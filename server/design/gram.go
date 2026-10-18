@@ -39,6 +39,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/identityproviderconnections"
 	_ "github.com/speakeasy-api/gram/server/design/instances"
 	_ "github.com/speakeasy-api/gram/server/design/integrations"
+	_ "github.com/speakeasy-api/gram/server/design/internalsessionissuers"
 	_ "github.com/speakeasy-api/gram/server/design/jsonwebkeysets"
 	_ "github.com/speakeasy-api/gram/server/design/keys"
 	_ "github.com/speakeasy-api/gram/server/design/killswitches"
@@ -73,6 +74,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/remotesessions"
 	_ "github.com/speakeasy-api/gram/server/design/resources"
 	_ "github.com/speakeasy-api/gram/server/design/risk"
+	_ "github.com/speakeasy-api/gram/server/design/sigint"
 	_ "github.com/speakeasy-api/gram/server/design/skillefficacy"
 	_ "github.com/speakeasy-api/gram/server/design/skills"
 	_ "github.com/speakeasy-api/gram/server/design/spendrules"
@@ -96,14 +98,14 @@ import (
 )
 
 var _ = API("gram", func() {
-	Title("Gram API Description")
-	Description("Gram is the tools platform for AI agents")
+	Title("Speakeasy API Description")
+	Description("Speakeasy is the tools platform for AI agents")
 	Meta("openapi:example", "false")
 	Randomizer(expr.NewDeterministicRandomizer())
 
 	Server("gram", func() {
 		Host("production", func() {
-			Description("Gram production API base URL")
+			Description("Speakeasy production API base URL")
 			URI("https://app.getgram.ai")
 		})
 	})

@@ -1,11 +1,11 @@
 ---
 name: clickhouse
-description: Use when changing or reviewing Gram ClickHouse schemas, migrations, queries, inserts, access principals, bootstrap SQL, Cloud compatibility, partial migration failures, or performance for analytics, telemetry, risk, authz, and spend features
+description: Use when changing or reviewing Speakeasy ClickHouse schemas, migrations, CHECK constraints, queries, inserts, access principals, bootstrap SQL, Cloud compatibility, partial migration failures, or performance for analytics, telemetry, risk, authz, and spend features
 ---
 
 ## Official ClickHouse guidance
 
-Gram conventions and the checked-in schema remain authoritative. Also use:
+Speakeasy conventions and the checked-in schema remain authoritative. Also use:
 
 - `clickhouse-best-practices` when reviewing or changing a ClickHouse schema, query, insert strategy, or configuration. Read its applicable rule files and cite the rules in review findings.
 - `clickhouse-architecture-advisor` when choosing between ingestion patterns, raw tables and materialized views, partitioning or retention strategies, joins or enrichment, or mutable-state models.
@@ -55,6 +55,10 @@ This produces migrations in **two flavors** that must always stay in sync:
 - `server/clickhouse/local/golang_migrate/` — **golang-migrate** format (`.up.sql`/`.down.sql` pairs). Used only for local development, so contributors without an Atlas Pro login can still run migrations.
 
 `mise run clickhouse:diff` generates both flavors together. When adjusting a newly generated, unpublished migration (for example, adding grants Atlas ignores), make the equivalent change in **both** directories, then run `mise run clickhouse:hash` to regenerate `atlas.sum`. Hashing updates checksums, not database or revision state. Apply pending migrations locally with `mise run clickhouse:migrate`.
+
+**Every column needs a data classification.** End each column `COMMENT` with a line `@access: <class>` (for example `COMMENT 'Raw log body.\n@access: opaque-restricted'`). Classes are `confidential` (internal IDs, timestamps, Speakeasy-controlled enums, counts, short labels), `confidential-pii` (emails, personal names, IPs, person IDs in external IdPs), `opaque-confidential` (short customer- or producer-chosen identifiers and labels support needs: tool, skill, agent, MCP server and client names, span and event names, producer session IDs, attribute keys), `secret-restricted` (credentials, tokens and their hashes, encrypted auth material), `restricted` (billing-system IDs, customer-configured endpoints, other known-sensitive or uncertain data) or `opaque-restricted` (arbitrary customer, user or model content: messages, prompts, tool payloads, customer JSON, free-form descriptions). A `Nested(...)` column shares one comment across its subcolumns, so use the strictest class among them. The server test suite in CI fails on unclassified columns (run `go test ./internal/dataclassification/...` from `server/` locally; needs Docker); see `server/internal/dataclassification`.
+
+**Keep `CHECK` constraints minimal.** ClickHouse evaluates `CONSTRAINT ... CHECK` on every insert and rejects the whole batch on a violation. Use only simple single-column shape checks: `notEmpty(col)` or a length bound (`length(col) <= 64`). Do not encode enums (`status IN (...)`, `has([...], status)`), numeric ranges, or rules that relate columns (`(status = 'failed') = notEmpty(failure_reason)`). Each rule change would need an `ALTER TABLE ... DROP CONSTRAINT` / `ADD CONSTRAINT` migration in both flavors, while the Go parser or writer that builds the rows changes with the code. Validate there, drop or log rows that fail before the insert, and test it there. Decline reviewer suggestions to add or rely on such constraints, and do not describe their absence as a gap.
 
 **No semicolons in `COMMENT '...'` strings.** golang-migrate splits statements naively, so a semicolon inside a column/table comment breaks its parser and the local migrations fail to replay. Rephrase the comment instead.
 

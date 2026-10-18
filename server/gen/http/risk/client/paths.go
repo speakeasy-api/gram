@@ -107,6 +107,16 @@ func ListRiskCategoriesRiskPath() string {
 	return "/rpc/risk.listCategories"
 }
 
+// ListRiskPresetsRiskPath returns the URL path to the risk service listRiskPresets HTTP endpoint.
+func ListRiskPresetsRiskPath() string {
+	return "/rpc/risk.listPresets"
+}
+
+// SuggestRiskPolicyRiskPath returns the URL path to the risk service suggestRiskPolicy HTTP endpoint.
+func SuggestRiskPolicyRiskPath() string {
+	return "/rpc/risk.suggestPolicy"
+}
+
 // CompileExprRiskPath returns the URL path to the risk service compileExpr HTTP endpoint.
 func CompileExprRiskPath() string {
 	return "/rpc/risk.compileCELExpression"
@@ -115,11 +125,6 @@ func CompileExprRiskPath() string {
 // GetRiskUserBreakdownRiskPath returns the URL path to the risk service getRiskUserBreakdown HTTP endpoint.
 func GetRiskUserBreakdownRiskPath() string {
 	return "/rpc/risk.getUserBreakdown"
-}
-
-// GetRiskRuleBreakdownRiskPath returns the URL path to the risk service getRiskRuleBreakdown HTTP endpoint.
-func GetRiskRuleBreakdownRiskPath() string {
-	return "/rpc/risk.getRuleBreakdown"
 }
 
 // GetRiskSignalsRiskPath returns the URL path to the risk service getRiskSignals HTTP endpoint.
@@ -135,11 +140,6 @@ func GetRiskMcpServerCountsRiskPath() string {
 // GetRiskAnalysisStatusRiskPath returns the URL path to the risk service getRiskAnalysisStatus HTTP endpoint.
 func GetRiskAnalysisStatusRiskPath() string {
 	return "/rpc/risk.getAnalysisStatus"
-}
-
-// GetRiskPolicyStatusRiskPath returns the URL path to the risk service getRiskPolicyStatus HTTP endpoint.
-func GetRiskPolicyStatusRiskPath() string {
-	return "/rpc/risk.getPolicyStatus"
 }
 
 // CreateRiskPolicyBypassRequestRiskPath returns the URL path to the risk service createRiskPolicyBypassRequest HTTP endpoint.

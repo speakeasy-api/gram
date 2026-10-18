@@ -14,7 +14,7 @@ describe("extractStreamError", () => {
   });
 
   it("extracts goa ServiceError top-level message from responseBody", () => {
-    // Gram's /chat/completions returns this shape on 402 insufficient_credits.
+    // Speakeasy's /chat/completions returns this shape on 402 insufficient_credits.
     const event = {
       error: {
         responseBody: JSON.stringify({

@@ -1,5 +1,5 @@
 // WorkOS-shaped REST surface backing the local identity backend. Wire
-// shapes match workos-go/v6 SDK types (see workos_types.go) so Gram-side's
+// shapes match workos-go/v6 SDK types (see workos_types.go) so Speakeasy-side's
 // `*workos.Client` decodes our responses identically to api.workos.com.
 //
 // Endpoint inventory:
@@ -44,7 +44,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -83,7 +85,9 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /user_management/magic_auth", h.handleWorkosCreateMagicAuth)
 	mux.HandleFunc("POST /user_management/authenticate", h.handleWorkosAuthenticate)
 	mux.HandleFunc("POST /user_management/sessions/revoke", h.handleWorkosRevokeSession)
+	mux.HandleFunc("GET /user_management/users/{id}/sessions", h.handleWorkosListSessions)
 	mux.HandleFunc("GET /user_management/users/{id}", h.handleWorkosGetUser)
+	mux.HandleFunc("GET /google/userinfo", h.handleGoogleUserInfo)
 	mux.HandleFunc("GET /user_management/users", h.handleWorkosListUsers)
 
 	mux.HandleFunc("GET /organizations/{id}", h.handleWorkosGetOrganization)
@@ -252,7 +256,7 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 
 	// Look up the user's first org membership so we can return organization_id.
 	// This mirrors production WorkOS which includes the org ID in the auth response,
-	// triggering SyncMembershipsFromWorkOS on the Gram side.
+	// triggering SyncMembershipsFromWorkOS on the Speakeasy side.
 	var orgID string
 	memberships, err := queries.ListMembershipsWithOrgName(ctx, repo.ListMembershipsWithOrgNameParams{
 		After:   uuid.Nil,
@@ -270,6 +274,9 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 
 	first, last := splitName(user.DisplayName)
 	sessionID := "mock_session_" + randomToken()
+	h.sessionsMu.Lock()
+	h.sessions[sessionID] = mockSession{userID: workosUserID(user.ID), createdAt: time.Now().UTC(), revoked: false}
+	h.sessionsMu.Unlock()
 	resp := map[string]any{
 		"user": map[string]any{
 			"id":                  workosUserID(user.ID),
@@ -287,6 +294,11 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 	}
 	if body.GrantType == magicAuthGrantType {
 		resp["authentication_method"] = "MagicAuth"
+	} else if method := authenticationMethod(); method != "" {
+		resp["authentication_method"] = method
+		if tokens := oauthTokens(method, user.Email); tokens != nil {
+			resp["oauth_tokens"] = tokens
+		}
 	}
 	if orgID != "" {
 		resp["organization_id"] = orgID
@@ -294,9 +306,51 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// handleWorkosRevokeSession is a no-op mock of POST /user_management/sessions/revoke.
-func (h *Handler) handleWorkosRevokeSession(w http.ResponseWriter, _ *http.Request) {
+// handleWorkosRevokeSession mocks POST /user_management/sessions/revoke.
+// Unknown sessions succeed, as revocation is idempotent.
+func (h *Handler) handleWorkosRevokeSession(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		SessionID string `json:"session_id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	h.sessionsMu.Lock()
+	if s, ok := h.sessions[body.SessionID]; ok {
+		s.revoked = true
+		h.sessions[body.SessionID] = s
+	}
+	h.sessionsMu.Unlock()
 	w.WriteHeader(http.StatusOK)
+}
+
+// mockSessionLifetime is how long an emulated WorkOS session stays active.
+const mockSessionLifetime = 30 * 24 * time.Hour
+
+// handleWorkosListSessions mocks GET /user_management/users/{id}/sessions:
+// the user's active sessions, newest first, in one page.
+func (h *Handler) handleWorkosListSessions(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	type sessionJSON struct {
+		Object    string `json:"object"`
+		ID        string `json:"id"`
+		UserID    string `json:"user_id"`
+		Status    string `json:"status"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	h.sessionsMu.Lock()
+	data := make([]sessionJSON, 0)
+	now := time.Now()
+	for id, s := range h.sessions {
+		if s.userID != userID || s.revoked || !now.Before(s.createdAt.Add(mockSessionLifetime)) {
+			continue
+		}
+		created := s.createdAt.Format(time.RFC3339Nano)
+		data = append(data, sessionJSON{Object: "session", ID: id, UserID: s.userID, Status: "active", CreatedAt: created, UpdatedAt: created, ExpiresAt: s.createdAt.Add(mockSessionLifetime).Format(time.RFC3339Nano)})
+	}
+	h.sessionsMu.Unlock()
+	sort.Slice(data, func(i, j int) bool { return data[i].CreatedAt > data[j].CreatedAt })
+	writeJSON(w, http.StatusOK, map[string]any{"data": data, "list_metadata": map[string]any{"before": nil, "after": nil}})
 }
 
 // mockJWT builds a minimal unsigned JWT with a "sid" claim so that
@@ -351,7 +405,7 @@ func (h *Handler) handlePasswordlessCreateSession(w http.ResponseWriter, r *http
 	}
 	h.pwlMu.Unlock()
 
-	// Build the authorize link. The caller (Gram server) will embed this
+	// Build the authorize link. The caller (Speakeasy server) will embed this
 	// in the invite email; clicking it simulates the magic-link flow.
 	scheme := "http"
 	if r.TLS != nil {
@@ -605,8 +659,8 @@ func (h *Handler) handleWorkosGetOrganization(w http.ResponseWriter, r *http.Req
 }
 
 // handleWorkosCreateOrganization creates an organization with no members. It is
-// the endpoint behind Gram's admin create-organization flow, which mints the
-// organization first and only then decides what its Gram id is, so external_id
+// the endpoint behind Speakeasy's admin create-organization flow, which mints the
+// organization first and only then decides what its Speakeasy id is, so external_id
 // normally arrives later through PUT rather than here.
 func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -674,7 +728,7 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 
 // handleWorkosUpdateOrganization applies a partial update. The WorkOS SDK omits
 // empty fields from the request body, so an absent field means "leave alone"
-// rather than "set to empty": Gram's external_id back-fill sends external_id
+// rather than "set to empty": Speakeasy's external_id back-fill sends external_id
 // and no name, and must not blank the name it just set.
 //
 // The ID is resolved without auto-association, so an unknown one is a 404
@@ -904,7 +958,7 @@ func (h *Handler) handleWorkosDeleteMembership(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		// Gram may store KSUID-style membership IDs (e.g. "om_01KPD...") that
+		// Speakeasy may store KSUID-style membership IDs (e.g. "om_01KPD...") that
 		// don't exist in dev-idp's SQLite. Treat as already-deleted.
 		w.WriteHeader(http.StatusAccepted)
 		return
@@ -1152,7 +1206,7 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 // =============================================================================
 
 // resolveOrgID maps an external organization ID (which may be a UUID or an
-// opaque string like a Gram KSUID "org_01KMD...") to the dev-idp's internal
+// opaque string like a Speakeasy KSUID "org_01KMD...") to the dev-idp's internal
 // UUID. Resolution order:
 //  1. Try UUID parse → direct lookup by organizations.id
 //  2. Lookup by organizations.workos_id (text match)
@@ -1208,7 +1262,7 @@ func (h *Handler) lookupOrgID(ctx context.Context, raw string) (uuid.UUID, error
 }
 
 // optionalQueryOrgID is like optionalQueryUUID but routes non-UUID org IDs
-// through resolveOrgID so that Gram KSUIDs work transparently.
+// through resolveOrgID so that Speakeasy KSUIDs work transparently.
 func (h *Handler) optionalQueryOrgID(ctx context.Context, q map[string][]string, key string) (uuid.NullUUID, error) {
 	raw := firstQuery(q, key)
 	if raw == "" {
@@ -1699,7 +1753,7 @@ func nullableString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
-// The prefix lives in devidentity because the Gram local seed writes the same
+// The prefix lives in devidentity because the Speakeasy local seed writes the same
 // subject into users.workos_id before anyone has logged in.
 const workosUserIDPrefix = devidentity.WorkOSUserIDPrefix
 
@@ -1763,5 +1817,19 @@ func statusCodeForJSON(status int) string {
 		return "conflict"
 	default:
 		return "server_error"
+	}
+}
+
+// authenticationMethod is what an authorization-code exchange reports.
+// DEVIDP_AUTHENTICATION_METHOD overrides the "SSO" default (e.g. "Password");
+// "none" omits it.
+func authenticationMethod() string {
+	switch v := os.Getenv("DEVIDP_AUTHENTICATION_METHOD"); v {
+	case "":
+		return "SSO"
+	case "none":
+		return ""
+	default:
+		return v
 	}
 }

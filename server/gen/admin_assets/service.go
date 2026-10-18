@@ -65,7 +65,7 @@ type Asset struct {
 // UploadImageResult is the result type of the adminAssets service
 // uploadPlatformImage method.
 type UploadImageResult struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *Asset
 }
 

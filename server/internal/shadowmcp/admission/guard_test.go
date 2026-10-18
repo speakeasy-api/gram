@@ -1,40 +1,20 @@
 package admission
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/feature"
 )
 
-func TestGuardResolveRequiresInjectedProvider(t *testing.T) {
+func TestApprovalRequiredErrorCarriesTheRefusedTarget(t *testing.T) {
 	t.Parallel()
 
-	_, err := (&Guard{}).Resolve(t.Context(), "organization", "organization", "project")
-	require.ErrorIs(t, err, ErrUnavailable)
-}
+	err := error(&ApprovalRequiredError{CanonicalURL: "https://mcp.example.test/server"})
+	require.ErrorIs(t, err, ErrApprovalRequired)
 
-func TestRequireUsableRolloutRejectsOpenMode(t *testing.T) {
-	t.Parallel()
-
-	require.ErrorIs(t, requireUsableRollout(RolloutConfig{}, nil), ErrUnavailable)
-	require.ErrorIs(t, requireUsableRollout(RolloutConfig{Mode: ModeEnforce}, context.Canceled), ErrUnavailable)
-	require.NoError(t, requireUsableRollout(RolloutConfig{Mode: ModeLegacy}, nil))
-}
-
-func TestRolloutKillSwitchIsIndependentFromMode(t *testing.T) {
-	t.Parallel()
-
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, "organization", false)
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, "organization", true)
-
-	config, err := NewGuard(flags, nil).Resolve(t.Context(), "organization", "organization", "project")
-	require.NoError(t, err)
-	require.Equal(t, ModeLegacy, config.Mode)
-	require.True(t, config.DirectRemoteDistributionDisabled)
+	var typed *ApprovalRequiredError
+	require.ErrorAs(t, err, &typed)
+	require.Equal(t, "https://mcp.example.test/server", typed.CanonicalURL)
 }
 
 // Compile-time assertions keep the transaction-facing guard API stable for the

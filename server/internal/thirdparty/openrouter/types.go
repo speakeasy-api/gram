@@ -335,7 +335,7 @@ type CompletionTokensDetails struct {
 	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
-// GramMetadata is a Gram-specific extension attached to chat completion
+// GramMetadata is a Speakeasy-specific extension attached to chat completion
 // responses to surface upstream model attributes resolved by the proxy.
 type GramMetadata struct {
 	ContextWindow int `json:"context_window"`

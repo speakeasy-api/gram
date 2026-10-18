@@ -1,4 +1,5 @@
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
+import type { ProxiedMcpTool } from "@/hooks/useProxiedMcpTools";
 import type { ServerTool } from "./serverMerge";
 
 /**
@@ -29,6 +30,27 @@ export function toolMetadataToServerTools(
       destructiveHint: m.destructiveHint,
       idempotentHint: m.idempotentHint,
       openWorldHint: m.openWorldHint,
+    },
+  }));
+}
+
+/**
+ * Maps the tools a live session advertises into the same `ServerTool` shape,
+ * for a remote server whose tools have not been stored yet.
+ */
+export function proxiedToolsToServerTools(
+  serverId: string,
+  tools: Record<string, ProxiedMcpTool>,
+): ServerTool[] {
+  return Object.entries(tools).map(([name, tool]) => ({
+    id: `${serverId}:${name}`,
+    name,
+    type: "remotemcp",
+    annotations: {
+      readOnlyHint: tool.annotations?.readOnlyHint,
+      destructiveHint: tool.annotations?.destructiveHint,
+      idempotentHint: tool.annotations?.idempotentHint,
+      openWorldHint: tool.annotations?.openWorldHint,
     },
   }));
 }

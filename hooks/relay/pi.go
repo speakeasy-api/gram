@@ -142,7 +142,7 @@ type piSessionData struct {
 }
 
 // RunPiServe serves the Pi extension shim over NDJSON stdio, translating each
-// Pi event into the canonical Gram hook contract and answering with the
+// Pi event into the canonical Speakeasy hook contract and answering with the
 // server's verdict. It returns the process exit code.
 //
 // Frames are processed strictly in order: Pi awaits each handler, and a tool

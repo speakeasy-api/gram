@@ -14,7 +14,7 @@ import (
 )
 
 var _ = Service("adminExternalCredentials", func() {
-	Description("Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.")
+	Description("Platform-admin management of platform external_credentials — how Speakeasy authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
@@ -169,14 +169,14 @@ var _ = Service("adminExternalCredentials", func() {
 //   - wif_* triple set: Workload Identity Federation (impersonate_service_account
 //     is an optional hop).
 //   - impersonate_service_account only: direct impersonation.
-//   - none: Gram's ambient attached identity.
+//   - none: Speakeasy's ambient attached identity.
 //
-// The platform tier keeps all three because these records describe Gram's own
+// The platform tier keeps all three because these records describe Speakeasy's own
 // infrastructure identity. The organization tier accepts impersonation only —
 // see externalcredentials.CreateGcpIamCredentialForm for why.
 var CreatePlatformGcpIamCredentialForm = Type("CreatePlatformGcpIamCredentialForm", func() {
 	Attribute("name", String, "A human-readable name for the credential.")
-	Attribute("impersonate_service_account", String, "The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.")
+	Attribute("impersonate_service_account", String, "The service account Speakeasy impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.")
 	Attribute("wif_pool_id", String, "Workload Identity Federation pool ID. Set together with the other wif_* fields.")
 	Attribute("wif_provider_id", String, "Workload Identity Federation provider ID. Set together with the other wif_* fields.")
 	Attribute("wif_project_number", String, "GCP project number backing the WIF pool. Set together with the other wif_* fields.")

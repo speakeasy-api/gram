@@ -15,7 +15,7 @@ import (
 )
 
 // Manage organization-level external keys — externally-managed AWS or GCP KMS
-// keys Gram signs with.
+// keys Speakeasy signs with.
 type Service interface {
 	// Create an AWS KMS external key. Requires org:admin.
 	CreateAwsKmsKey(context.Context, *CreateAwsKmsKeyPayload) (res *AwsKmsKey, err error)
@@ -25,7 +25,7 @@ type Service interface {
 	// algorithm are immutable: an external key identifies exactly one signable key
 	// permanently, so changing what the key is means deleting it and creating a
 	// new one. The backing credential stays editable because repairing the path to
-	// a key does not change the key material Gram signs with.
+	// a key does not change the key material Speakeasy signs with.
 	UpdateAwsKmsKey(context.Context, *UpdateAwsKmsKeyPayload) (res *AwsKmsKey, err error)
 	// Create a GCP KMS external key. Requires org:admin.
 	CreateGcpKmsKey(context.Context, *CreateGcpKmsKeyPayload) (res *GcpKmsKey, err error)
@@ -35,7 +35,8 @@ type Service interface {
 	// and algorithm are immutable: an external key identifies exactly one signable
 	// crypto key version permanently, so changing what the key is means deleting
 	// it and creating a new one. The backing credential stays editable because
-	// repairing the path to a key does not change the key material Gram signs with.
+	// repairing the path to a key does not change the key material Speakeasy signs
+	// with.
 	UpdateGcpKmsKey(context.Context, *UpdateGcpKmsKeyPayload) (res *GcpKmsKey, err error)
 	// List the organization's external keys (provider-independent summary).
 	// Optionally filter by provider. Requires org:read.
@@ -48,7 +49,7 @@ type Service interface {
 	GetAwsKmsKey(context.Context, *GetAwsKmsKeyPayload) (res *AwsKmsKey, err error)
 	// Get a GCP KMS external key by ID. Requires org:read.
 	GetGcpKmsKey(context.Context, *GetGcpKmsKeyPayload) (res *GcpKmsKey, err error)
-	// Probe that Gram can reach a GCP KMS external key through its backing
+	// Probe that Speakeasy can reach a GCP KMS external key through its backing
 	// credential and use it to sign: read the key's public half, confirm its
 	// algorithm matches the one recorded, sign a probe digest, and verify that
 	// signature locally against the public half. Performs a real signing
@@ -99,7 +100,7 @@ type AwsKmsKey struct {
 	ID string
 	// The organization that owns the key.
 	OrganizationID string
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string
 	// The cloud KMS provider of the key.
 	Provider string
@@ -107,7 +108,7 @@ type AwsKmsKey struct {
 	Algorithm string
 	// A human-readable name for the key.
 	Name string
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string
@@ -123,17 +124,17 @@ type CreateAwsKmsKeyPayload struct {
 	SessionToken *string
 	// The ARN of the AWS KMS key.
 	KeyArn string
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Speakeasy uses to authenticate to the key. Must
+	// belong to the same organization and matching cloud family (an aws_kms key
+	// requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
 	ExternalCredentialID string
 	// The signing algorithm of the key.
 	Algorithm string
 	// A human-readable name for the key.
 	Name string
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The Speakeasy identity (GCP service-account email or AWS principal
+	// ARN) the customer granted on the key for the key-policy / IAM-grant model.
+	// Not a secret.
 	CustomerGrantReference *string
 }
 
@@ -143,17 +144,17 @@ type CreateGcpKmsKeyPayload struct {
 	SessionToken *string
 	// The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
 	ResourceName string
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Speakeasy uses to authenticate to the key. Must
+	// belong to the same organization and matching cloud family (an aws_kms key
+	// requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
 	ExternalCredentialID string
 	// The signing algorithm of the key.
 	Algorithm string
 	// A human-readable name for the key.
 	Name string
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The Speakeasy identity (GCP service-account email or AWS principal
+	// ARN) the customer granted on the key for the key-policy / IAM-grant model.
+	// Not a secret.
 	CustomerGrantReference *string
 }
 
@@ -179,7 +180,7 @@ type ExternalKeySummary struct {
 	ID string
 	// The organization that owns the key.
 	OrganizationID string
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string
 	// The cloud KMS provider of the key.
 	Provider string
@@ -187,7 +188,7 @@ type ExternalKeySummary struct {
 	Algorithm string
 	// A human-readable name for the key.
 	Name string
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string
@@ -206,7 +207,7 @@ type GcpKmsKey struct {
 	ID string
 	// The organization that owns the key.
 	OrganizationID string
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string
 	// The cloud KMS provider of the key.
 	Provider string
@@ -214,7 +215,7 @@ type GcpKmsKey struct {
 	Algorithm string
 	// A human-readable name for the key.
 	Name string
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string
@@ -273,8 +274,8 @@ type UpdateAwsKmsKeyPayload struct {
 	// The ID of the key to update.
 	ID           string
 	SessionToken *string
-	// The external credential Gram uses to authenticate to the key. Must be an
-	// aws_iam credential belonging to the same organization.
+	// The external credential Speakeasy uses to authenticate to the key. Must be
+	// an aws_iam credential belonging to the same organization.
 	ExternalCredentialID string
 	// A human-readable name for the key.
 	Name string
@@ -289,13 +290,13 @@ type UpdateGcpKmsKeyPayload struct {
 	// The ID of the key to update.
 	ID           string
 	SessionToken *string
-	// The external credential Gram uses to authenticate to the key. Must be a
+	// The external credential Speakeasy uses to authenticate to the key. Must be a
 	// gcp_iam credential belonging to the same organization.
 	ExternalCredentialID string
 	// A human-readable name for the key.
 	Name string
-	// Optional. The Gram service-account email the customer granted on the key in
-	// an IAM binding. Not a secret.
+	// Optional. The Speakeasy service-account email the customer granted on the
+	// key in an IAM binding. Not a secret.
 	CustomerGrantReference *string
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-//MISE description="Setup a Gram encryption key for local development."
+//MISE description="Setup a Speakeasy encryption key for local development."
 //MISE hide=true
 
 import { $ } from "zx";
@@ -16,7 +16,7 @@ async function run() {
   }
 
   console.log(
-    "💬 Melange signing keys will be create to build Gram Functions image locally.",
+    "💬 Melange signing keys will be created to build Speakeasy Functions image locally.",
   );
 
   const key_file = "./local/keys/melange-signing-key.rsa";

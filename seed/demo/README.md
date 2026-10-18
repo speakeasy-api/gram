@@ -1,46 +1,52 @@
 # Demo org seed
 
-SQL-first seed for the shared demo organization — and, retargeted,
-for your local development organization. The SQL lives in
-`server/internal/demoseed/{postgres,clickhouse}.sql`, is go:embedded into the
-server binary, and is applied by the `gram demo-seed` subcommand — the SAME
-code path locally and in prod, versioned atomically with each deploy. This
-directory holds the authoring docs:
+Go seed for the shared demo organization — and, retargeted, for your local
+development organization. It lives in `server/internal/demoseed/`, compiles
+into the server binary, and runs through the `gram demo-seed` subcommand — the
+SAME code path locally and in prod, versioned atomically with each deploy.
+This directory holds the authoring docs:
 
-- `server/internal/demoseed/postgres.sql` — installs and executes
-  `demo.ensure_demo_org()` (idempotent; all writes scoped to the demo
-  constants; pre/postflight isolation asserts abort the transaction on any
-  violation). Deliberately NOT a migration: migrations are append-only and
-  the seed churns; `CREATE OR REPLACE` + daily rerun is the upgrade path.
-- `server/internal/demoseed/clickhouse.sql` — scoped deletes of raw/source
-  tables and every incremental MV target followed by fresh inserts. The
-  inserts repopulate those targets automatically; postflight `throwIf` asserts
-  fail the run on missing or leaked rows. Keep semicolons out of string
-  literals — the runner splits on ';'.
+- Postgres: `seed_NN_*.go` phases (`seeder.runPostgres` lists them in order),
+  with their sqlc queries in `queries/NN_*.sql` (generated into `repo/` by
+  `mise run gen:sqlc-server`). The phases run in ONE transaction, so a failed
+  run leaves yesterday's data in place, and every statement gets its own
+  `statement_timeout`. The first phase asserts the demo constants collide with
+  nothing else and deletes the demo-scoped data; the last (postflight) phases
+  fail the run on missing or leaked rows. Deliberately NOT a migration:
+  migrations are append-only and the seed churns; the daily rerun is the
+  upgrade path.
+- ClickHouse: `ch_NN_*.go` phases (`seeder.runClickHouse`). Scoped deletes of
+  raw/source tables and every incremental MV target, then fresh inserts built
+  in Go and sent with `PrepareBatch`. The inserts repopulate the MV targets;
+  postflight checks fail the run on missing or leaked rows.
+- Shared helpers: `names.go` (deterministic ids, the chat schedule, risk
+  draws, `hash64` for variety) and `roster.go` (the demo users and fixed ids).
+  Both stores derive chat ids, owners, and timestamps from these, which is
+  what keeps them joined.
 - `PAGES.md` — the acceptance contract: which dashboard page each piece of
   data feeds and its verification status.
 - `verify.md` — the agent-driven page verification playbook.
 
 ## Exact upstream-session attachment fixture
 
-The shared SQL seeds two active release agents with one fictional human owner.
+The shared seed writes two active release agents with one fictional human owner.
 Both reference the same exact upstream session through
 `principal_remote_session_bindings`; the requesting Linear session's issuer is
 linked to its upstream client. This is intentionally inert: `.invalid` issuer,
 invalid ciphertext, no refresh token, and auto-refresh off. No real credentials
 or external account IDs are included. Deterministic `gram-demo-attachment-*`
-IDs are covered by the existing `Spec.NameSeed` rewrite. Cleanup runs before
+IDs come from `seeder.det`, which namespaces them by `Spec.NameSeed`. Cleanup runs before
 any referenced parent deletes; postflight checks enforce two reachable
 bindings and one underlying session. See `PAGES.md` and `verify.md` for UI QA.
 
 ## Fixed constants
 
-| Thing      | Value                                                                                         |
-| ---------- | --------------------------------------------------------------------------------------------- |
-| Org id     | `org_gram_demo_workspace` (slug `acme-demo`, account type `enterprise` for gated pages)       |
-| Project    | `dec0de00-0000-4000-a000-000000000001` (`default` — the single demo project)                  |
-| Chat ids   | `demo.det_uuid('gram-demo-chat-' + n)`: md5, version nibble 5, variant 8; same in both stores |
-| Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                           |
+| Thing      | Value                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| Org id     | `org_gram_demo_workspace` (slug `acme-demo`, account type `enterprise` for gated pages)                      |
+| Project    | `dec0de00-0000-4000-a000-000000000001` (`default` — the single demo project)                                 |
+| Chat ids   | `seeder.chatID(n)` = `detUUID("gram-demo-chat-" + n)`: md5, version nibble 5, variant 8; same in both stores |
+| Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                                          |
 
 Timestamps are always `now()`-relative (trailing ~12 days): the daily prod
 rerun regenerates a fresh window and data never goes stale. Incremental MVs,
@@ -49,9 +55,9 @@ Physical duplicate meter deliveries intentionally count independently.
 
 ## Tenants
 
-The scripts are written against the demo org's literals. Every other tenant is
-produced by rewriting those literals — one `demoseed.Spec` per tenant, applied
-by `Spec.Rewrite` before the SQL is executed:
+Every id, user, and email the seed writes is built from a `demoseed.Spec`
+through the `seeder` helpers (`orgID`, `projectID`, `fixed`, `det`, `name`,
+`userID`, `email`), one Spec per tenant:
 
 | Spec              | Org id                                     | Used by                                      |
 | ----------------- | ------------------------------------------ | -------------------------------------------- |
@@ -59,12 +65,10 @@ by `Spec.Rewrite` before the SQL is executed:
 | `LocalSpec()`     | derived from WorkOS `org_devidp_speakeasy` | `mise run seed` — your local dev org         |
 | `otherTenantSpec` | `org_gram_othr_workspace`                  | `TestDemoSeedSafety`'s adversarial fixture   |
 
-Rewriting with `DefaultSpec()` is a no-op, so production executes the scripts
-exactly as written (asserted by `TestDefaultSpecRewriteIsIdentity`). Adding a
-new identifier family to the SQL means adding a field to `Spec` — otherwise it
-is NOT rewritten, and the local and test tenants write it into the demo org's
-scope. `TestLocalSpecRewritesEveryDefaultIdentifier` catches that without
-needing a database.
+Adding a new identifier family means adding a field to `Spec` and a helper
+that builds it — a literal written straight into the seed would put the local
+and test tenants' rows in the demo org's scope.
+`TestSeedSourceHasNoDemoIdentifiers` catches that without needing a database.
 
 `LocalSpec` identifies the dev-idp's default org, so logging in locally lands
 you inside the seeded data. Unlike the demo org it is an ordinary org whose
@@ -99,7 +103,7 @@ suffixed slug because the seeded row already holds `speakeasy`.
 
 ### Billing usage summaries
 
-The ClickHouse script deletes the demo tenant's
+The ClickHouse seed deletes the demo tenant's
 `billing_meter_daily_summaries` rows before deleting its raw meter rows. The
 runner waits until both deletions are visible, then the fresh
 `billing_meter_readings_by_time` inserts synchronously trigger the incremental
@@ -129,7 +133,7 @@ needs and the shared demo org must never have:
   developer's database.
 - **A default environment**, the global `Gram Recommended` MCP registry row
   (not tenant-scoped, so it cannot live in the seed proper), and the
-  Playground's MCP App: a Gram Function zipped in-memory from
+  Playground's MCP App: a Speakeasy Function zipped in-memory from
   `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
   demo org never gets a functions deployment production would have to run.
 
@@ -145,7 +149,8 @@ pipeline is a test's job, not the seed's.
 
 ## Iteration loop
 
-1. Edit the SQL in `server/internal/demoseed/`.
+1. Edit the seed phase (and its sqlc queries) in `server/internal/demoseed/`;
+   run `mise run gen:sqlc-server` after changing a query.
 2. `mise run seed:demo`, verify per `verify.md`.
 3. Run the safety test (below), fix until green, tick the page in `PAGES.md`,
    commit. Prod picks the change up on the next release.

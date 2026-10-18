@@ -203,6 +203,7 @@ SELECT
   , rpr.challenge_scopes
   , rpr.scopes_supported
   , rpr.metadata_fetched_at
+  , COALESCE(rpr.metadata->>'resource', '')::text AS document_resource
 FROM remote_protected_resources AS rpr
 JOIN projects AS p
   ON p.id = rpr.project_id
@@ -349,6 +350,13 @@ SET grant_types_supported = @grant_types_supported::text[],
     authorization_grant_profiles_supported = @authorization_grant_profiles_supported::text[],
     metadata_fetched_at = clock_timestamp()
 WHERE id = @id;
+
+-- Test fixture: an issuer whose advertised capabilities have no discovery recorded.
+-- name: ClearIssuerDiscoveryFixture :execrows
+UPDATE remote_session_issuers
+SET metadata_fetched_at = NULL
+WHERE id = @id
+  AND organization_id = @organization_id;
 
 -- Test fixture: an issuer identifier, e.g. to match a confirmed audience.
 -- name: SetIssuerURLFixture :execrows

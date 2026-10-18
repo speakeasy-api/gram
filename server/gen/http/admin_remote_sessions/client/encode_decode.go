@@ -3775,6 +3775,43 @@ func DecodeMigrateToGlobalIssuerResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder builds a value
+// of type *types.EMAProviderOrder from a value of type
+// *EMAProviderOrderResponseBody.
+func unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v *EMAProviderOrderResponseBody) *types.EMAProviderOrder {
+	if v == nil {
+		return nil
+	}
+	res := &types.EMAProviderOrder{
+		VendorIssuer: *v.VendorIssuer,
+		IsDefault:    *v.IsDefault,
+	}
+	res.Providers = make([]*types.EMAProvider, len(v.Providers))
+	for i, val := range v.Providers {
+		if val == nil {
+			res.Providers[i] = nil
+			continue
+		}
+		res.Providers[i] = unmarshalEMAProviderResponseBodyToTypesEMAProvider(val)
+	}
+
+	return res
+}
+
+// unmarshalEMAProviderResponseBodyToTypesEMAProvider builds a value of type
+// *types.EMAProvider from a value of type *EMAProviderResponseBody.
+func unmarshalEMAProviderResponseBodyToTypesEMAProvider(v *EMAProviderResponseBody) *types.EMAProvider {
+	res := &types.EMAProvider{
+		Kind:                    *v.Kind,
+		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
+		InternalSessionIssuerID: v.InternalSessionIssuerID,
+		UnavailableReason:       v.UnavailableReason,
+		LastAcceptedAt:          v.LastAcceptedAt,
+	}
+
+	return res
+}
+
 // unmarshalRemoteSessionIssuerDuplicateMatchResponseBodyToTypesRemoteSessionIssuerDuplicateMatch
 // builds a value of type *types.RemoteSessionIssuerDuplicateMatch from a value
 // of type *RemoteSessionIssuerDuplicateMatchResponseBody.
@@ -3902,6 +3939,9 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 			res.ScopeOverride[i] = val
 		}
 	}
+	if v.EmaProviders != nil {
+		res.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v.EmaProviders)
+	}
 
 	return res
 }
@@ -3925,7 +3965,9 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
 		LegacyCallbackURL:               *v.LegacyCallbackURL,
+		CredentialOwner:                 *v.CredentialOwner,
 		CallbackURL:                     v.CallbackURL,
+		FederatedCallbackURL:            v.FederatedCallbackURL,
 		CreatedAt:                       *v.CreatedAt,
 		UpdatedAt:                       *v.UpdatedAt,
 	}

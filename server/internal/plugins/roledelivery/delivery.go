@@ -38,10 +38,24 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 	if err != nil {
 		return nil, fmt.Errorf("list role delivery server candidates: %w", err)
 	}
+	for i := range candidates {
+		s := &candidates[i]
+		// Keep the row for removals; only automatic additions use eligibility.
+		if HasPlatformTool(s.ToolUrns) {
+			s.Eligible = false
+		}
+	}
 	return candidates, nil
 }
 
+// allowed reports whether grants deliver s. Only connect (or root) grants
+// deliver: read and write still satisfy connect at the endpoint (see
+// authz scopeExpansions[ScopeMCPConnect]), but counting them here would make a
+// narrowed connect rule meaningless.
 func allowed(grants []authz.Grant, s server) (bool, error) {
+	grants = slices.DeleteFunc(slices.Clone(grants), func(g authz.Grant) bool {
+		return g.Scope == authz.ScopeMCPRead || g.Scope == authz.ScopeMCPWrite
+	})
 	allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, s.ResourceID.String(), s.ProjectID.String()))
 	if err != nil {
 		return false, fmt.Errorf("evaluate role delivery Use access: %w", err)
@@ -121,8 +135,10 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		return false, nil
 	}
 	if s.BackendKind == "mcp_server" {
-		// An absent rollout context fails closed for provenance-bound remotes, while
-		// CheckAttachment leaves legacy/non-remote backends unaffected.
+		// CheckAttachment applies only to provenance-bound remotes; other
+		// backends pass untouched. For those remotes it fails closed: it refuses
+		// when the project's Shadow MCP policy does not permit the audience, and
+		// also when provenance or the policy cannot be evaluated.
 		if err := checkAttachment(ctx, tx, guard, org, s.ProjectID, pluginID, s.ID); err != nil {
 			return false, err
 		}

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Client is the Okta Management API surface used by Gram.
+// Client is the Okta Management API surface used by Speakeasy.
 type Client interface {
 	ListUsers(ctx context.Context, req ListUsersRequest) ([]User, error)
 	ListApps(ctx context.Context, req ListAppsRequest) ([]App, error)

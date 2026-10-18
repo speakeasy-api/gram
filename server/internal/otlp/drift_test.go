@@ -175,7 +175,7 @@ func TestNoUpstreamFieldsMissing(t *testing.T) {
 // TestGramAdditionsStayOutOfUpstreamRange asserts every field we add sits at
 // 1000 or above, leaving the whole low range to OTLP.
 //
-// Without this, a Gram field could be added at, say, 17 on Span — harmless
+// Without this, a Speakeasy field could be added at, say, 17 on Span — harmless
 // today, and silently wire-incompatible the day OTLP allocates that number.
 // Keeping the ranges disjoint is what makes the superset claim durable rather
 // than true-for-now.
@@ -277,7 +277,7 @@ func TestUpstreamEnumsMatch(t *testing.T) {
 
 // TestSkipEntriesAreReserved asserts a deliberately omitted upstream field has
 // its number reserved in our copy, so it cannot later be handed to an unrelated
-// Gram field and quietly collide with upstream's meaning.
+// Speakeasy field and quietly collide with upstream's meaning.
 func TestSkipEntriesAreReserved(t *testing.T) {
 	t.Parallel()
 

@@ -162,7 +162,7 @@ export function RotateObservabilityCredentialDialog({
             <Dialog.Header>
               <Dialog.Title>Observability credential rotated</Dialog.Title>
               <Dialog.Description>
-                Copy the new key now. Gram cannot show it again.
+                Copy the new key now. Speakeasy cannot show it again.
               </Dialog.Description>
             </Dialog.Header>
             <Stack gap={4}>
@@ -240,8 +240,8 @@ export function RotateObservabilityCredentialDialog({
             <Dialog.Header>
               <Dialog.Title>Rotate observability credential</Dialog.Title>
               <Dialog.Description>
-                Create a new key for sending observability data to Gram, and
-                choose how long existing installations can keep using their
+                Create a new key for sending observability data to Speakeasy,
+                and choose how long existing installations can keep using their
                 current key. You will see the new key once — replace it in your
                 marketplace package and anywhere the plugin was installed by
                 hand.

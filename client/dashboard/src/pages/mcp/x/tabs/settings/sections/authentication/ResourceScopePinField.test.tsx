@@ -13,6 +13,11 @@ import {
 const FLAG_OFF =
   "Not used: pinned scopes are not enabled for your organization.";
 const EMPTY_HINT = "Leave empty to use the scopes the MCP server advertises.";
+const ADVERTISED = "Sign-ins request read, advertised by the MCP server.";
+const CATALOGUE =
+  "Sign-ins request every scope the identity provider advertises.";
+const OWN_SCOPES = "Not used: this connection requests its own scopes.";
+const OWN_REQUEST = "Sign-ins request read, set on this connection.";
 
 function scopes(
   overrides: Partial<RemoteMcpServerScopes> = {},
@@ -25,6 +30,7 @@ function scopes(
     challengeScopes: [],
     discoveryEnabled: true,
     sharedServerCount: 0,
+    canPin: true,
     clients: [
       {
         clientId: "client-1",
@@ -49,7 +55,10 @@ function withSource(
       {
         clientId: "client-1",
         scopeSource,
-        requestedScopes: [],
+        requestedScopes:
+          scopeSource === "issuer_omitted" || scopeSource === "none"
+            ? []
+            : ["read"],
         unadvertisedPinnedScopes: unadvertised,
         pinWouldDecide,
       },
@@ -66,7 +75,6 @@ function pin(
   return {
     data: undefined,
     isError: false,
-    forbidden: false,
     value,
     setValue,
     dirty,
@@ -84,14 +92,14 @@ describe("scopePinStatus", () => {
     for (const source of ["cached_resource", "live_resource"] as const) {
       expect(
         scopePinStatus(withSource(source, { pinnedScopes: [] }), "client-1"),
-      ).toEqual([EMPTY_HINT]);
+      ).toEqual([`${EMPTY_HINT} ${ADVERTISED}`]);
     }
     expect(
       scopePinStatus(
         withSource("issuer_catalogue", { pinnedScopes: [] }),
         "client-1",
       ),
-    ).toEqual([]);
+    ).toEqual([CATALOGUE]);
     expect(
       scopePinStatus(
         withSource("live_resource", {
@@ -100,7 +108,7 @@ describe("scopePinStatus", () => {
         }),
         "client-1",
       ),
-    ).toEqual([FLAG_OFF]);
+    ).toEqual([`${FLAG_OFF} ${ADVERTISED}`]);
   });
 
   it("says the pin is used when the server resolves to it", () => {
@@ -110,7 +118,7 @@ describe("scopePinStatus", () => {
   });
 
   it("says the connection's own scopes win, pinned or not", () => {
-    const line = "Not used: this connection requests its own scopes.";
+    const line = `${OWN_SCOPES} ${OWN_REQUEST}`;
     expect(scopePinStatus(withSource("client_scope"), "client-1")).toEqual([
       line,
     ]);
@@ -124,7 +132,7 @@ describe("scopePinStatus", () => {
 
   it("says the last challenge wins", () => {
     expect(scopePinStatus(withSource("challenge_scope"), "client-1")).toEqual([
-      "Not used: the MCP server's last sign-in challenge names the scopes.",
+      "Not used: the MCP server's last sign-in challenge names the scopes. Sign-ins request read, from the MCP server's last sign-in challenge.",
     ]);
   });
 
@@ -134,13 +142,13 @@ describe("scopePinStatus", () => {
         withSource("client_scope", { discoveryEnabled: false }),
         "client-1",
       ),
-    ).toEqual([FLAG_OFF, "Not used: this connection requests its own scopes."]);
+    ).toEqual([FLAG_OFF, `${OWN_SCOPES} ${OWN_REQUEST}`]);
     expect(
       scopePinStatus(
         withSource("issuer_catalogue", { discoveryEnabled: false }),
         "client-1",
       ),
-    ).toEqual([FLAG_OFF]);
+    ).toEqual([`${FLAG_OFF} ${CATALOGUE}`]);
     expect(
       scopePinStatus(
         { ...scopes({ discoveryEnabled: false }), pinnedScopes: [] },
@@ -151,10 +159,54 @@ describe("scopePinStatus", () => {
 
   it("stays neutral for a saved pin any other source decides", () => {
     expect(scopePinStatus(withSource("issuer_catalogue"), "client-1")).toEqual([
-      "Not used for this connection.",
+      `Not used for this connection. ${CATALOGUE}`,
     ]);
     expect(scopePinStatus(withSource("resource_pin"), "client-2")).toEqual([
       "Not used for this connection.",
+    ]);
+  });
+
+  it("names what sign-ins request when the pin does not decide", () => {
+    expect(
+      scopePinStatus(
+        withSource("issuer_override", { discoveryEnabled: false }),
+        "client-1",
+      ),
+    ).toEqual([
+      `${FLAG_OFF} Sign-ins request read, set by the identity provider's override.`,
+    ]);
+    expect(
+      scopePinStatus(
+        withSource("issuer_omitted", { discoveryEnabled: false }),
+        "client-1",
+      ),
+    ).toEqual([
+      `${FLAG_OFF} Sign-ins request no scopes; the identity provider applies its defaults.`,
+    ]);
+    expect(
+      scopePinStatus(
+        withSource(
+          "issuer_override",
+          { pinnedScopes: [], advertisedScopesKnown: false },
+          [],
+          true,
+        ),
+        "client-1",
+      ),
+    ).toEqual([
+      "Sign-ins request read, set by the identity provider's override. This may change once the MCP server is next contacted.",
+    ]);
+    // A client that does not own the resource never reads it, so nothing can change.
+    expect(
+      scopePinStatus(
+        withSource("issuer_override", {
+          pinnedScopes: [],
+          advertisedScopesKnown: false,
+        }),
+        "client-1",
+      ),
+    ).toEqual([
+      "Sign-ins request read, set by the identity provider's override.",
     ]);
   });
 
@@ -182,7 +234,7 @@ describe("scopePinStatus", () => {
         "client-1",
         ["read"],
       ),
-    ).toEqual(["Not used: this connection requests its own scopes."]);
+    ).toEqual([OWN_SCOPES]);
     expect(
       scopePinStatus(
         withSource("issuer_catalogue", { discoveryEnabled: false }),
@@ -557,6 +609,33 @@ describe("ResourceScopePinField", () => {
     expect(setValue).toHaveBeenCalledWith([]);
   });
 
+  it("is read-only for a caller who cannot write every sharing server", () => {
+    for (const discoveryEnabled of [true, false]) {
+      render(
+        <ResourceScopePinField
+          pin={pin(["read"])}
+          scopes={scopes({ canPin: false, discoveryEnabled })}
+          connectedClientId="client-1"
+          issuerScopes={[]}
+          serverName="Linear"
+          disabled={false}
+        />,
+      );
+
+      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
+      expect((field as HTMLButtonElement).disabled).toBe(true);
+      expect(
+        screen.getByText(
+          "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to change the pin.",
+        ),
+      ).toBeDefined();
+      expect(
+        screen.queryByRole("button", { name: "Clear pinned scopes" }),
+      ).toBeNull();
+      cleanup();
+    }
+  });
+
   it("offers no Clear button with the flag on", () => {
     render(
       <ResourceScopePinField
@@ -587,7 +666,7 @@ describe("ResourceScopePinField", () => {
     );
 
     expect(screen.getByText("Advertised scopes")).toBeDefined();
-    expect(screen.getByText(EMPTY_HINT)).toBeDefined();
+    expect(screen.getByText(`${EMPTY_HINT} ${ADVERTISED}`)).toBeDefined();
   });
 
   it("names the other servers sharing the URL", () => {

@@ -1,0 +1,15 @@
+# zizmor (https://docs.zizmor.sh) audits GitHub Actions workflows. hk runs it
+# with --pedantic, which is what makes unpinned-images flag `image: repo:tag`
+# without a digest.
+#
+# Pinning is the rule this config exists to enforce: every `uses:` is pinned
+# to a commit SHA and every container image to a sha256 digest. Tags are
+# mutable, so a tag pin runs whatever the tag points at today.
+#
+# Every audit is enforced. Where a finding is accepted rather than fixed, the
+# workflow carries a `# zizmor: ignore[...]` comment with the reason.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "*": hash-pin

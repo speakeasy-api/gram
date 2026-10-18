@@ -1,10 +1,10 @@
 # Plugin Development Guide
 
-This guide will help you create custom plugins for the Gram Elements library.
+This guide will help you create custom plugins for the Speakeasy Elements library.
 
 ## What are Plugins?
 
-Plugins enable you to add custom rendering capabilities to the Gram Elements library. They allow you to transform markdown code blocks with specific language identifiers into rich, interactive components.
+Plugins enable you to add custom rendering capabilities to the Speakeasy Elements library. They allow you to transform markdown code blocks with specific language identifiers into rich, interactive components.
 
 The typical plugin workflow is:
 

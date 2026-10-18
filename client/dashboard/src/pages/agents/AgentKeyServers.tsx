@@ -180,9 +180,7 @@ export function AgentKeyServers({
           issuerId: detail.userSessionIssuerId,
           endpoints: url ? [url] : [],
           connectUrl: detail.mcpSlug
-            ? firstPartyConnectUrl(`${getServerURL()}/mcp/${detail.mcpSlug}`, {
-                runtimePath: "mcp",
-              })
+            ? firstPartyConnectUrl(`${getServerURL()}/mcp/${detail.mcpSlug}`)
             : undefined,
         };
       } else {
@@ -310,7 +308,7 @@ export function AgentKeyServers({
                 </Text>
                 {server.kind === "Unproxied" && (
                   <Text as="span" small muted className="block">
-                    This server doesn’t accept Gram API keys.
+                    This server doesn’t accept Speakeasy API keys.
                   </Text>
                 )}
               </span>

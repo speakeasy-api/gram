@@ -5,14 +5,14 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
-// In production the admin dashboard and the Gram admin API share one origin,
+// In production the admin dashboard and the Speakeasy admin API share one origin,
 // so this config needs no CDN base and no build-time server URL.
 //
 // The dev proxy below reproduces that single origin locally: this dev server
 // is GRAM_ADMIN_SERVER_URL, and it forwards /admin to the admin API. It is not
 // the cross-origin machinery this app deliberately avoids: it is what lets the
 // app keep relative paths, no CORS and no `credentials: 'include'` in dev too.
-// 5173 belongs to the Gram dashboard. mise.toml owns this port and
+// 5173 belongs to the Speakeasy dashboard. mise.toml owns this port and
 // zero:remap-ports randomizes it per worktree, so the fallback only matters
 // when vite runs outside mise.
 const DEFAULT_DEV_PORT = 5174;

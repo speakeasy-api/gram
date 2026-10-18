@@ -1395,6 +1395,83 @@ func BuildListRiskCategoriesPayload(riskListRiskCategoriesApikeyToken string, ri
 	return v, nil
 }
 
+// BuildListRiskPresetsPayload builds the payload for the risk listRiskPresets
+// endpoint from CLI flags.
+func BuildListRiskPresetsPayload(riskListRiskPresetsApikeyToken string, riskListRiskPresetsSessionToken string, riskListRiskPresetsProjectSlugInput string) (*risk.ListRiskPresetsPayload, error) {
+	var apikeyToken *string
+	{
+		if riskListRiskPresetsApikeyToken != "" {
+			apikeyToken = &riskListRiskPresetsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskPresetsSessionToken != "" {
+			sessionToken = &riskListRiskPresetsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskPresetsProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskPresetsProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskPresetsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSuggestRiskPolicyPayload builds the payload for the risk
+// suggestRiskPolicy endpoint from CLI flags.
+func BuildSuggestRiskPolicyPayload(riskSuggestRiskPolicyBody string, riskSuggestRiskPolicyApikeyToken string, riskSuggestRiskPolicySessionToken string, riskSuggestRiskPolicyProjectSlugInput string) (*risk.SuggestRiskPolicyPayload, error) {
+	var err error
+	var body SuggestRiskPolicyRequestBody
+	{
+		err = json.Unmarshal([]byte(riskSuggestRiskPolicyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"prompt\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Prompt) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 3, true))
+		}
+		if utf8.RuneCountInString(body.Prompt) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskSuggestRiskPolicyApikeyToken != "" {
+			apikeyToken = &riskSuggestRiskPolicyApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskSuggestRiskPolicySessionToken != "" {
+			sessionToken = &riskSuggestRiskPolicySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskSuggestRiskPolicyProjectSlugInput != "" {
+			projectSlugInput = &riskSuggestRiskPolicyProjectSlugInput
+		}
+	}
+	v := &risk.SuggestRiskPolicyPayload{
+		Prompt: body.Prompt,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCompileExprPayload builds the payload for the risk compileExpr endpoint
 // from CLI flags.
 func BuildCompileExprPayload(riskCompileExprExpr string, riskCompileExprApikeyToken string, riskCompileExprSessionToken string, riskCompileExprProjectSlugInput string) (*risk.CompileExprPayload, error) {
@@ -1479,63 +1556,6 @@ func BuildGetRiskUserBreakdownPayload(riskGetRiskUserBreakdownExternalUserID str
 	}
 	v := &risk.GetRiskUserBreakdownPayload{}
 	v.ExternalUserID = externalUserID
-	v.From = from
-	v.To = to
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildGetRiskRuleBreakdownPayload builds the payload for the risk
-// getRiskRuleBreakdown endpoint from CLI flags.
-func BuildGetRiskRuleBreakdownPayload(riskGetRiskRuleBreakdownCategory string, riskGetRiskRuleBreakdownFrom string, riskGetRiskRuleBreakdownTo string, riskGetRiskRuleBreakdownApikeyToken string, riskGetRiskRuleBreakdownSessionToken string, riskGetRiskRuleBreakdownProjectSlugInput string) (*risk.GetRiskRuleBreakdownPayload, error) {
-	var err error
-	var category string
-	{
-		category = riskGetRiskRuleBreakdownCategory
-	}
-	var from *string
-	{
-		if riskGetRiskRuleBreakdownFrom != "" {
-			from = &riskGetRiskRuleBreakdownFrom
-			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var to *string
-	{
-		if riskGetRiskRuleBreakdownTo != "" {
-			to = &riskGetRiskRuleBreakdownTo
-			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var apikeyToken *string
-	{
-		if riskGetRiskRuleBreakdownApikeyToken != "" {
-			apikeyToken = &riskGetRiskRuleBreakdownApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskGetRiskRuleBreakdownSessionToken != "" {
-			sessionToken = &riskGetRiskRuleBreakdownSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskGetRiskRuleBreakdownProjectSlugInput != "" {
-			projectSlugInput = &riskGetRiskRuleBreakdownProjectSlugInput
-		}
-	}
-	v := &risk.GetRiskRuleBreakdownPayload{}
-	v.Category = category
 	v.From = from
 	v.To = to
 	v.ApikeyToken = apikeyToken
@@ -1682,45 +1702,6 @@ func BuildGetRiskAnalysisStatusPayload(riskGetRiskAnalysisStatusApikeyToken stri
 		}
 	}
 	v := &risk.GetRiskAnalysisStatusPayload{}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildGetRiskPolicyStatusPayload builds the payload for the risk
-// getRiskPolicyStatus endpoint from CLI flags.
-func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRiskPolicyStatusApikeyToken string, riskGetRiskPolicyStatusSessionToken string, riskGetRiskPolicyStatusProjectSlugInput string) (*risk.GetRiskPolicyStatusPayload, error) {
-	var err error
-	var id string
-	{
-		id = riskGetRiskPolicyStatusID
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if riskGetRiskPolicyStatusApikeyToken != "" {
-			apikeyToken = &riskGetRiskPolicyStatusApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskGetRiskPolicyStatusSessionToken != "" {
-			sessionToken = &riskGetRiskPolicyStatusSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskGetRiskPolicyStatusProjectSlugInput != "" {
-			projectSlugInput = &riskGetRiskPolicyStatusProjectSlugInput
-		}
-	}
-	v := &risk.GetRiskPolicyStatusPayload{}
-	v.ID = id
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

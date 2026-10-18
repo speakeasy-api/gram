@@ -11,7 +11,7 @@ import (
 )
 
 // IdentityProviderEndpoint is an organization's trusted identity provider:
-// its token endpoint, bound to Gram's trusted client registration, and the key
+// its token endpoint, bound to Speakeasy's trusted client registration, and the key
 // set that signs what it issues.
 type IdentityProviderEndpoint struct {
 	*TokenEndpoint

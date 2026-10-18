@@ -7,13 +7,16 @@ import { organizationUserSessionIssuersCreateCimdClient } from "../funcs/organiz
 import { organizationUserSessionIssuersDelete } from "../funcs/organizationUserSessionIssuersDelete.js";
 import { organizationUserSessionIssuersDeleteCimdClient } from "../funcs/organizationUserSessionIssuersDeleteCimdClient.js";
 import { organizationUserSessionIssuersGet } from "../funcs/organizationUserSessionIssuersGet.js";
+import { organizationUserSessionIssuersGetAuthenticationHostImpact } from "../funcs/organizationUserSessionIssuersGetAuthenticationHostImpact.js";
 import { organizationUserSessionIssuersGetCimdClient } from "../funcs/organizationUserSessionIssuersGetCimdClient.js";
 import { organizationUserSessionIssuersGetDeletePreflight } from "../funcs/organizationUserSessionIssuersGetDeletePreflight.js";
 import { organizationUserSessionIssuersGetMigratePreflight } from "../funcs/organizationUserSessionIssuersGetMigratePreflight.js";
 import { organizationUserSessionIssuersList } from "../funcs/organizationUserSessionIssuersList.js";
 import { organizationUserSessionIssuersListCimdClients } from "../funcs/organizationUserSessionIssuersListCimdClients.js";
+import { organizationUserSessionIssuersListMcpServers } from "../funcs/organizationUserSessionIssuersListMcpServers.js";
 import { organizationUserSessionIssuersMigrate } from "../funcs/organizationUserSessionIssuersMigrate.js";
 import { organizationUserSessionIssuersMove } from "../funcs/organizationUserSessionIssuersMove.js";
+import { organizationUserSessionIssuersSetAuthenticationHost } from "../funcs/organizationUserSessionIssuersSetAuthenticationHost.js";
 import { organizationUserSessionIssuersUpdate } from "../funcs/organizationUserSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CreateUserSessionIssuerCimdClientResult } from "../models/components/createusersessionissuercimdclientresult.js";
@@ -21,6 +24,7 @@ import { MigrateOrganizationUserSessionIssuerResult } from "../models/components
 import { OrganizationUserSessionIssuerDeletePreflight } from "../models/components/organizationusersessionissuerdeletepreflight.js";
 import { OrganizationUserSessionIssuerMigratePreflight } from "../models/components/organizationusersessionissuermigratepreflight.js";
 import { UserSessionIssuer } from "../models/components/usersessionissuer.js";
+import { UserSessionIssuerAuthenticationHostImpact } from "../models/components/usersessionissuerauthenticationhostimpact.js";
 import { UserSessionIssuerCimdClient } from "../models/components/usersessionissuercimdclient.js";
 import {
   CreateOrganizationUserSessionIssuerRequest,
@@ -43,6 +47,10 @@ import {
   GetOrganizationUserSessionIssuerSecurity,
 } from "../models/operations/getorganizationusersessionissuer.js";
 import {
+  GetOrganizationUserSessionIssuerAuthenticationHostImpactRequest,
+  GetOrganizationUserSessionIssuerAuthenticationHostImpactSecurity,
+} from "../models/operations/getorganizationusersessionissuerauthenticationhostimpact.js";
+import {
   GetOrganizationUserSessionIssuerCimdClientRequest,
   GetOrganizationUserSessionIssuerCimdClientSecurity,
 } from "../models/operations/getorganizationusersessionissuercimdclient.js";
@@ -60,6 +68,11 @@ import {
   ListOrganizationUserSessionIssuerCimdClientsSecurity,
 } from "../models/operations/listorganizationusersessionissuercimdclients.js";
 import {
+  ListOrganizationUserSessionIssuerMcpServersRequest,
+  ListOrganizationUserSessionIssuerMcpServersResponse,
+  ListOrganizationUserSessionIssuerMcpServersSecurity,
+} from "../models/operations/listorganizationusersessionissuermcpservers.js";
+import {
   ListOrganizationUserSessionIssuersRequest,
   ListOrganizationUserSessionIssuersResponse,
   ListOrganizationUserSessionIssuersSecurity,
@@ -72,6 +85,10 @@ import {
   MoveOrganizationUserSessionIssuerRequest,
   MoveOrganizationUserSessionIssuerSecurity,
 } from "../models/operations/moveorganizationusersessionissuer.js";
+import {
+  SetOrganizationUserSessionIssuerAuthenticationHostRequest,
+  SetOrganizationUserSessionIssuerAuthenticationHostSecurity,
+} from "../models/operations/setorganizationusersessionissuerauthenticationhost.js";
 import {
   UpdateOrganizationUserSessionIssuerRequest,
   UpdateOrganizationUserSessionIssuerSecurity,
@@ -164,7 +181,7 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
    * getIssuer organizationUserSessionIssuers
    *
    * @remarks
-   * Get an organization-owned user_session_issuer by id. Requires org:read.
+   * Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.
    */
   async get(
     request: GetOrganizationUserSessionIssuerRequest,
@@ -177,6 +194,29 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
       security,
       options,
     ));
+  }
+
+  /**
+   * getAuthenticationHostImpact organizationUserSessionIssuers
+   *
+   * @remarks
+   * Preview moving a user_session_issuer in the caller's organization onto or off the deployment's authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.
+   */
+  async getAuthenticationHostImpact(
+    request: GetOrganizationUserSessionIssuerAuthenticationHostImpactRequest,
+    security?:
+      | GetOrganizationUserSessionIssuerAuthenticationHostImpactSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionIssuerAuthenticationHostImpact> {
+    return unwrapAsync(
+      organizationUserSessionIssuersGetAuthenticationHostImpact(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
   }
 
   /**
@@ -244,7 +284,7 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
    * listIssuers organizationUserSessionIssuers
    *
    * @remarks
-   * List organization-owned user_session_issuers. Requires org:read.
+   * List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.
    */
   async list(
     request?: ListOrganizationUserSessionIssuersRequest | undefined,
@@ -286,6 +326,30 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
   }
 
   /**
+   * listMcpServers organizationUserSessionIssuers
+   *
+   * @remarks
+   * List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.
+   */
+  async listMcpServers(
+    request: ListOrganizationUserSessionIssuerMcpServersRequest,
+    security?: ListOrganizationUserSessionIssuerMcpServersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<
+    PageIterator<
+      ListOrganizationUserSessionIssuerMcpServersResponse,
+      { cursor: string }
+    >
+  > {
+    return unwrapResultIterator(organizationUserSessionIssuersListMcpServers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * migrateIssuer organizationUserSessionIssuers
    *
    * @remarks
@@ -316,6 +380,27 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<UserSessionIssuer> {
     return unwrapAsync(organizationUserSessionIssuersMove(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setAuthenticationHost organizationUserSessionIssuers
+   *
+   * @remarks
+   * Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.
+   */
+  async setAuthenticationHost(
+    request: SetOrganizationUserSessionIssuerAuthenticationHostRequest,
+    security?:
+      | SetOrganizationUserSessionIssuerAuthenticationHostSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionIssuer> {
+    return unwrapAsync(organizationUserSessionIssuersSetAuthenticationHost(
       this,
       request,
       security,

@@ -82,6 +82,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	require.Equal(t, role.WorkosName, accessBefore.Roles[0].Name)
 	require.True(t, accessBefore.Roles[0].CanEnterServer)
 	require.NotEmpty(t, accessBefore.Roles[0].Version)
+	require.Equal(t, []MCPMatchingPlugin{{PluginID: plugin.ID.String(), Name: plugin.Name, Slug: plugin.Slug}}, accessBefore.Roles[0].MatchingPlugins)
 
 	removed := callSkillsTool[RemovePluginServerOutput](t, ctx, session, "remove_plugin_server", map[string]any{"project_id": project.ID.String(), "plugin_id": plugin.ID.String(), "membership_id": after.Servers[0].MembershipID, "confirmed": true})
 	require.True(t, removed.Removed)
@@ -91,6 +92,8 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	require.Len(t, accessAfter.Roles, 1)
 	require.Equal(t, role.WorkosName, accessAfter.Roles[0].Name)
 	require.True(t, accessAfter.Roles[0].CanEnterServer)
+	require.NotNil(t, accessAfter.Roles[0].MatchingPlugins)
+	require.Empty(t, accessAfter.Roles[0].MatchingPlugins)
 	// The role version covers its exact grants, not just effective server access.
 	require.Equal(t, accessBefore.Roles[0].Version, accessAfter.Roles[0].Version)
 	replay := callSkillsTool[audienceResult](t, ctx, session, "set_plugin_assignments", args)

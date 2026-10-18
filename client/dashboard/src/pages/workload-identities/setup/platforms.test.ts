@@ -5,9 +5,9 @@ import {
   existingRule,
   toCatalogEntry,
 } from "./platforms";
-import { testPlatform } from "./testPlatform";
+import { claudeTagPlatform } from "./catalogFixture";
 
-const entry = toCatalogEntry(testPlatform);
+const entry = toCatalogEntry(claudeTagPlatform);
 
 function admission(overrides: Partial<WorkloadAdmission>): WorkloadAdmission {
   return {

@@ -10,7 +10,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -55,35 +54,21 @@ func chOverviewFinding(t *testing.T, projectID uuid.UUID, orgID string, chatID, 
 	}
 }
 
-// TestGetRiskOverview_ClickHouseParity seeds Postgres and ClickHouse with
-// equivalent findings and asserts the ClickHouse read path returns the same
-// numbers TestGetRiskOverview_CustomWindowAggregates asserts for the Postgres
-// path (kept adjacent on purpose: if the expectations there change, they must
-// change here identically). On top of the shared expectations, ClickHouse-only
-// rows probe the read-path filters: a redelivered duplicate id, an
-// insert-time-excluded row, a dead-letter sentinel, a post-hoc false positive,
-// and a foreign-tenant row must all leave the numbers untouched.
-func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
+// TestGetRiskOverview_CustomWindowAggregates seeds ClickHouse findings and
+// asserts the overview aggregates. Extra rows probe the read-path filters: a
+// redelivered duplicate id, an insert-time-excluded row, a dead-letter
+// sentinel, a post-hoc false positive, and a foreign-tenant row must all leave
+// the numbers untouched.
+func TestGetRiskOverview_CustomWindowAggregates(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskOverviewFromClickHouse, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Overview CH Active")})
-	require.NoError(t, err)
-	disabledPolicy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Overview CH Disabled"), Enabled: new(false)})
-	require.NoError(t, err)
-
-	policyID, err := uuid.Parse(policy.ID)
-	require.NoError(t, err)
-	disabledPolicyID, err := uuid.Parse(disabledPolicy.ID)
-	require.NoError(t, err)
 
 	now := time.Now().UTC()
 	from := now.AddDate(0, 0, -30).Truncate(24 * time.Hour) // 30 days ago, well within ClickHouse TTL
@@ -93,25 +78,11 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	aliceSecret2Chat, aliceSecret2 := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
 	alicePIIChat, alicePII := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
 	bobShadowChat, bobShadow := seedChatWithUser(t, ti, projectID, orgID, "bob@example.com")
-	_, opaqueNoFinding := seedChatWithUser(t, ti, projectID, orgID, "opaque-user-id")
 	opaqueFindingChat, opaqueFinding := seedChatWithUser(t, ti, projectID, orgID, "opaque-user-id")
 	outsideWindowChat, outsideWindow := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
 	disabledPolicyChat, disabledPolicyFinding := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
 
-	// Postgres side: identical to the Postgres-path test. MessagesScanned and
-	// ActivePolicies are served from Postgres on both paths.
-	seedRiskOverviewResult(t, ti, projectID, orgID, policyID, aliceSecret1, from.Add(36*time.Hour), "gitleaks", "secret.github_pat", true)
-	seedRiskOverviewResult(t, ti, projectID, orgID, policyID, aliceSecret2, from.Add(38*time.Hour), "gitleaks", "secret.aws_access_token", true)
-	seedRiskOverviewResult(t, ti, projectID, orgID, policyID, alicePII, from.Add(60*time.Hour), "presidio", "pii.email_address", true)
-	seedRiskOverviewResult(t, ti, projectID, orgID, policyID, bobShadow, from.Add(84*time.Hour), "shadow_mcp", "", true)
-	seedRiskOverviewResult(t, ti, projectID, orgID, policyID, opaqueNoFinding, from.Add(108*time.Hour), "gitleaks", "", false)
-	seedRiskOverviewResult(t, ti, projectID, orgID, policyID, opaqueFinding, from.Add(109*time.Hour), "gitleaks", "secret.github_pat", true)
-	seedRiskOverviewResult(t, ti, projectID, orgID, policyID, outsideWindow, to.Add(24*time.Hour), "gitleaks", "secret.github_pat", true)
-	seedRiskOverviewResult(t, ti, projectID, orgID, disabledPolicyID, disabledPolicyFinding, from.Add(110*time.Hour), "gitleaks", "secret.github_pat", true)
-
-	// ClickHouse side: the found=true findings as the enriched writer stores
-	// them. The found=false scan row never becomes a finding message, so it has
-	// no ClickHouse counterpart.
+	// The findings as the enriched writer stores them.
 	rows := []chrepo.RiskFindingRow{
 		chOverviewFinding(t, projectID, orgID, aliceSecret1Chat, aliceSecret1, from.Add(36*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com"),
 		chOverviewFinding(t, projectID, orgID, aliceSecret2Chat, aliceSecret2, from.Add(38*time.Hour), "gitleaks", "secret.aws_access_token", "alice@example.com"),
@@ -169,10 +140,8 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, int64(7), result.MessagesScanned)
 	require.Equal(t, int64(6), result.Findings)
 	require.Equal(t, int64(6), result.FlaggedSessions)
-	require.Equal(t, int64(1), result.ActivePolicies)
 
 	categoryCounts := map[string]int64{}
 	for _, category := range result.TopCategories {
@@ -219,7 +188,6 @@ func TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskOverviewFromClickHouse, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -285,7 +253,6 @@ func TestInsertRiskFindings_SameIDTwiceInOneBatchGetsDistinctInsertedAt(t *testi
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskOverviewFromClickHouse, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -339,7 +306,6 @@ func TestGetRiskOverview_ClickHouseUserEmailPrecedence(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskOverviewFromClickHouse, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)

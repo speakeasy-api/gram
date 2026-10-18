@@ -1,11 +1,12 @@
-import { Gram } from "@gram/client";
-import { HTTPClient } from "@gram/client/lib/http.js";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   completeCreateRoleFlow,
   pendingMappingFromParams,
   startCreateRoleFlow,
 } from "./directoryMappingFlow";
+
+import { Gram } from "@gram/client";
+import { HTTPClient } from "@gram/client/lib/http.js";
 
 afterEach(() => window.sessionStorage.clear());
 
@@ -31,7 +32,7 @@ function recordingClient() {
 
 describe("directory mapping SDK contract", () => {
   it.each(["selection", "create-role return"])(
-    "keeps singleton %s on the guarded endpoint and surfaces conflicts",
+    "sends singleton %s as a guarded set write and surfaces conflicts",
     async (flow) => {
       const { client, requests } = recordingClient();
       const source = {
@@ -40,29 +41,40 @@ describe("directory mapping SDK contract", () => {
         attributeValue: "Engineering",
       };
       const roleUrn = "role:global:admin";
+      const previous = "role:organization:previous";
       const form =
         flow === "selection"
-          ? { ...source, roleUrn }
+          ? { ...source, roleUrns: [roleUrn], expectedRoleUrns: [previous] }
           : pendingMappingFromParams(
               completeCreateRoleFlow(
                 startCreateRoleFlow(source, "Engineering"),
                 roleUrn,
               ),
+              [
+                {
+                  id: "mapping-1",
+                  ...source,
+                  roleUrn: previous,
+                  createdAt: new Date(0),
+                  updatedAt: new Date(0),
+                },
+              ],
             )!.form;
       await expect(
-        client.access.setDirectoryRoleMapping({
-          setDirectoryRoleMappingForm: form,
+        client.access.setDirectoryRoleMappings({
+          setDirectoryRoleMappingsForm: form,
         }),
       ).rejects.toMatchObject({ statusCode: 409 });
       expect(requests).toHaveLength(1);
       expect(new URL(requests[0]!.url).pathname).toBe(
-        "/rpc/access.setDirectoryRoleMapping",
+        "/rpc/access.setDirectoryRoleMappings",
       );
       expect(await requests[0]!.json()).toEqual({
         source_kind: "attribute",
         attribute_key: "department",
         attribute_value: "Engineering",
-        role_urn: roleUrn,
+        role_urns: [roleUrn],
+        expected_role_urns: [previous],
       });
     },
   );

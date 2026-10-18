@@ -23,7 +23,7 @@ import (
 // package's TestMain so package-internal tests can clone databases too.
 var TestInfra *testenv.Environment
 
-// TestAdmitCIMDClient_PlatformAssistant: a document Gram publishes for one
+// TestAdmitCIMDClient_PlatformAssistant: a document Speakeasy publishes for one
 // of its own assistants is admitted on any issuer that accepts CIMD, without
 // a catalog entry or a custom URL row. The exemption is bound to an
 // assistant that exists: a guessed id on the same path is an ordinary

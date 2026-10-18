@@ -112,7 +112,7 @@ describe("SetupGuidePanel", () => {
         guides: [
           guide({
             externalMarkdown:
-              "Next, [add the server](speakeasy.md#add-server) in Gram.\n",
+              "Next, [add the server](speakeasy.md#add-server) in Speakeasy.\n",
             speakeasyMarkdown:
               "## Add the server {#add-server}\n\nClick Add, then see [the console steps](./external.md).\n",
           }),

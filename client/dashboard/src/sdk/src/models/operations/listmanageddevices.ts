@@ -45,7 +45,7 @@ export type ListManagedDevicesRequest = {
    */
   coverageBucket?: CoverageBucket | undefined;
   /**
-   * Only devices assigned to these Gram users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
+   * Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
    */
   userIds?: Array<string> | undefined;
   /**

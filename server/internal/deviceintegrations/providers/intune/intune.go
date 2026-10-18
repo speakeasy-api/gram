@@ -1,6 +1,6 @@
 // Package intune implements the Microsoft Intune inventory-source provider:
 // it pulls the managed-device fleet from a customer's Intune tenant via
-// Microsoft Graph so Gram can compute agent coverage.
+// Microsoft Graph so Speakeasy can compute agent coverage.
 //
 // Customer-side setup, for the docs: create an Entra ID app registration,
 // grant it only the DeviceManagementManagedDevices.Read.All APPLICATION

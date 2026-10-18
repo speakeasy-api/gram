@@ -44,7 +44,7 @@ func TestReviewPreparationDCRScopePresence(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	service := &Service{policy: policy}
+	service := newPreparationDCRTestService(t, policy)
 	for _, tc := range []struct{ name, field, want string }{
 		{"omitted", "", PreparationStateReady},
 		{"null", `,"scope":null`, PreparationStateIndeterminate},
@@ -67,7 +67,7 @@ func TestReviewPreparationDCRScopePresence(t *testing.T) {
 				_, _ = fmt.Fprintf(w, `{"client_id":"test-client","client_secret":"test-secret","grant_types":["%s"]%s}`, oauthwire.GrantTypeJWTBearer, tc.field)
 			}))
 			t.Cleanup(server.Close)
-			response, state := service.submitPreparationDCR(t.Context(), PreparationInput{Scopes: []string{"read", "write"}}, server.URL, oauthwire.AuthMethodClientSecretBasic)
+			response, state := service.submitPreparationDCR(t.Context(), PreparationInput{Scopes: []string{"read", "write"}}, server.URL, oauthwire.AuthMethodClientSecretBasic, preparationDCRInteractiveGrants)
 			require.Equal(t, tc.want, state)
 			if tc.name == "omitted" {
 				require.Nil(t, response.Scope)

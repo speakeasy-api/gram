@@ -1,5 +1,5 @@
 /**
- * Datadog RUM configuration for Gram Elements.
+ * Datadog RUM configuration for Speakeasy Elements.
  * Values are injected at build time via environment variables.
  * These client tokens are designed to be client-side safe.
  *

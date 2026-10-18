@@ -72,10 +72,10 @@ export function ExternalOAuthMetadataRecommendation({
       <AlertTitle>Provider-hosted metadata is recommended</AlertTitle>
       <AlertDescription className="flex items-center justify-between gap-4">
         <span>
-          Gram continues to host protected-resource metadata. Review switching
-          authorization-server discovery to your provider without replacing
-          registrations or tokens. Some clients may request authentication
-          again.
+          Speakeasy continues to host protected-resource metadata. Review
+          switching authorization-server discovery to your provider without
+          replacing registrations or tokens. Some clients may request
+          authentication again.
         </span>
         <Button variant="secondary" onClick={onReview}>
           Review update

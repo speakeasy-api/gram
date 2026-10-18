@@ -3,6 +3,7 @@
  */
 
 import { workloadIdentitiesAdmitSubject } from "../funcs/workloadIdentitiesAdmitSubject.js";
+import { workloadIdentitiesGetCustomFlows } from "../funcs/workloadIdentitiesGetCustomFlows.js";
 import { workloadIdentitiesList } from "../funcs/workloadIdentitiesList.js";
 import { workloadIdentitiesListPlatforms } from "../funcs/workloadIdentitiesListPlatforms.js";
 import { workloadIdentitiesListTokenEndpoints } from "../funcs/workloadIdentitiesListTokenEndpoints.js";
@@ -12,6 +13,7 @@ import { workloadIdentitiesUpdateSubject } from "../funcs/workloadIdentitiesUpda
 import { workloadIdentitiesWithdrawIssuer } from "../funcs/workloadIdentitiesWithdrawIssuer.js";
 import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWithdrawSubject.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { WorkloadCustomFlows } from "../models/components/workloadcustomflows.js";
 import { WorkloadIdentityPolicy } from "../models/components/workloadidentitypolicy.js";
 import { WorkloadPlatformCatalog } from "../models/components/workloadplatformcatalog.js";
 import { WorkloadTokenEndpoints } from "../models/components/workloadtokenendpoints.js";
@@ -19,6 +21,10 @@ import {
   AdmitWorkloadSubjectRequest,
   AdmitWorkloadSubjectSecurity,
 } from "../models/operations/admitworkloadsubject.js";
+import {
+  GetWorkloadCustomFlowsRequest,
+  GetWorkloadCustomFlowsSecurity,
+} from "../models/operations/getworkloadcustomflows.js";
 import {
   ListWorkloadIdentitiesRequest,
   ListWorkloadIdentitiesSecurity,
@@ -66,6 +72,25 @@ export class WorkloadIdentities extends ClientSDK {
     options?: RequestOptions,
   ): Promise<WorkloadIdentityPolicy> {
     return unwrapAsync(workloadIdentitiesAdmitSubject(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getCustomFlows workloadIdentities
+   *
+   * @remarks
+   * Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.
+   */
+  async getCustomFlows(
+    request?: GetWorkloadCustomFlowsRequest | undefined,
+    security?: GetWorkloadCustomFlowsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadCustomFlows> {
+    return unwrapAsync(workloadIdentitiesGetCustomFlows(
       this,
       request,
       security,

@@ -131,9 +131,9 @@ func NewRiskMutationReceiptStore(db *pgxpool.Pool) *RiskMutationReceiptStore {
 }
 
 // Execute serializes one user's exact operation/project/key, replays an exact
-// completed input from its stored result, and commits receipt + domain + audit
-// atomically. Any callback, completion, or commit failure rolls all three back.
-func (s *RiskMutationReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, request RiskMutationReceiptRequest, mutate RiskMutationTransaction) (OperationReceipt, error) {
+// completed input from its stored result without charging, and commits
+// receipt + domain + audit atomically. Any callback, completion, or commit failure rolls all three back.
+func (s *RiskMutationReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, request RiskMutationReceiptRequest, charge func(context.Context) error, mutate RiskMutationTransaction) (OperationReceipt, error) {
 	if s == nil || s.db == nil || s.now == nil || mutate == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || !riskMutationOperation(request.Operation) {
 		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request is invalid.", Cause: ErrRiskMutationInvalid}
 	}
@@ -141,7 +141,7 @@ func (s *RiskMutationReceiptStore) Execute(ctx context.Context, principal Princi
 	if err != nil {
 		return OperationReceipt{}, &RiskMutationError{Code: "invalid_request", Message: "The risk mutation request could not be normalized.", Cause: ErrRiskMutationInvalid}
 	}
-	return executeMutationReceipt(ctx, mutationReceiptExecution[RiskMutationReceiptResult]{
+	return executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[RiskMutationReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: request.Operation, IdempotencyKey: request.IdempotencyKey, InputHash: inputHash, Label: "risk mutation",
 		Invalid: func(cause error) error {
 			return &RiskMutationError{Code: "invalid_request", Message: "The risk mutation caller identity is invalid.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationInvalid, cause)}

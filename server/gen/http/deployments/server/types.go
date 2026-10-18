@@ -78,6 +78,18 @@ type RedeployRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 }
 
+// EvaluateOpenAPIv3RequestBody is the type of the "deployments" service
+// "evaluateOpenAPIv3" endpoint HTTP request body.
+type EvaluateOpenAPIv3RequestBody struct {
+	// The ID of the uploaded OpenAPI document asset to evaluate.
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	// The slug of the OpenAPI source the document will replace. A slug that is not
+	// in the active deployment is evaluated as a new source.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The display name of the source. Defaults to the deployed name or the slug.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // GetDeploymentResponseBody is the type of the "deployments" service
 // "getDeployment" endpoint HTTP response body.
 type GetDeploymentResponseBody struct {
@@ -180,6 +192,47 @@ type GetDeploymentLogsResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// The logs for the deployment
 	Events []*DeploymentLogEventResponseBody `form:"events" json:"events" xml:"events"`
+}
+
+// EvaluateOpenAPIv3ResponseBody is the type of the "deployments" service
+// "evaluateOpenAPIv3" endpoint HTTP response body.
+type EvaluateOpenAPIv3ResponseBody struct {
+	// The slug of the OpenAPI source.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The display name of the OpenAPI source.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Whether the source is new, changed, unchanged or removed.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The asset ID of the evaluated document. Absent when the source was removed.
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	// The asset ID of the deployed document. Absent for a new source.
+	BaseAssetID *string `form:"base_asset_id,omitempty" json:"base_asset_id,omitempty" xml:"base_asset_id,omitempty"`
+	// A summary of the deployed document.
+	Base *OpenAPIv3DocumentSnapshotResponseBody `form:"base,omitempty" json:"base,omitempty" xml:"base,omitempty"`
+	// A summary of the evaluated document.
+	Next *OpenAPIv3DocumentSnapshotResponseBody `form:"next,omitempty" json:"next,omitempty" xml:"next,omitempty"`
+	// Every change found, most severe first.
+	Changes []*OpenAPIv3EvaluationChangeResponseBody `form:"changes" json:"changes" xml:"changes"`
+	// The number of breaking changes.
+	BreakingCount int `form:"breaking_count" json:"breaking_count" xml:"breaking_count"`
+	// The number of changes that need attention.
+	WarningCount int `form:"warning_count" json:"warning_count" xml:"warning_count"`
+	// The number of informational changes.
+	InfoCount int `form:"info_count" json:"info_count" xml:"info_count"`
+	// Toolsets (MCP servers) that include tools from this source.
+	AffectedToolsets []*OpenAPIv3AffectedToolsetResponseBody `form:"affected_toolsets" json:"affected_toolsets" xml:"affected_toolsets"`
+}
+
+// GetDeploymentEvaluationResponseBody is the type of the "deployments" service
+// "getDeploymentEvaluation" endpoint HTTP response body.
+type GetDeploymentEvaluationResponseBody struct {
+	// The ID of the evaluated deployment.
+	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
+	// The ID of the deployment it is compared with. Absent for the first
+	// deployment in a project.
+	BaseDeploymentID *string `form:"base_deployment_id,omitempty" json:"base_deployment_id,omitempty" xml:"base_deployment_id,omitempty"`
+	// One evaluation per OpenAPI source that was added, changed or removed.
+	Documents []*OpenAPIv3EvaluationResponseBody `form:"documents" json:"documents" xml:"documents"`
 }
 
 // GetDeploymentUnauthorizedResponseBody is the type of the "deployments"
@@ -1675,6 +1728,386 @@ type GetDeploymentLogsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// EvaluateOpenAPIv3UnauthorizedResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the
+// "unauthorized" error.
+type EvaluateOpenAPIv3UnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvaluateOpenAPIv3ForbiddenResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "forbidden"
+// error.
+type EvaluateOpenAPIv3ForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvaluateOpenAPIv3BadRequestResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the
+// "bad_request" error.
+type EvaluateOpenAPIv3BadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvaluateOpenAPIv3NotFoundResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "not_found"
+// error.
+type EvaluateOpenAPIv3NotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvaluateOpenAPIv3ConflictResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "conflict"
+// error.
+type EvaluateOpenAPIv3ConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvaluateOpenAPIv3UnsupportedMediaResponseBody is the type of the
+// "deployments" service "evaluateOpenAPIv3" endpoint HTTP response body for
+// the "unsupported_media" error.
+type EvaluateOpenAPIv3UnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvaluateOpenAPIv3InvalidResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "invalid"
+// error.
+type EvaluateOpenAPIv3InvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvaluateOpenAPIv3InvariantViolationResponseBody is the type of the
+// "deployments" service "evaluateOpenAPIv3" endpoint HTTP response body for
+// the "invariant_violation" error.
+type EvaluateOpenAPIv3InvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvaluateOpenAPIv3UnexpectedResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the "unexpected"
+// error.
+type EvaluateOpenAPIv3UnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EvaluateOpenAPIv3GatewayErrorResponseBody is the type of the "deployments"
+// service "evaluateOpenAPIv3" endpoint HTTP response body for the
+// "gateway_error" error.
+type EvaluateOpenAPIv3GatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationUnauthorizedResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetDeploymentEvaluationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationForbiddenResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "forbidden" error.
+type GetDeploymentEvaluationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationBadRequestResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "bad_request" error.
+type GetDeploymentEvaluationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationNotFoundResponseBody is the type of the "deployments"
+// service "getDeploymentEvaluation" endpoint HTTP response body for the
+// "not_found" error.
+type GetDeploymentEvaluationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationConflictResponseBody is the type of the "deployments"
+// service "getDeploymentEvaluation" endpoint HTTP response body for the
+// "conflict" error.
+type GetDeploymentEvaluationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationUnsupportedMediaResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetDeploymentEvaluationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationInvalidResponseBody is the type of the "deployments"
+// service "getDeploymentEvaluation" endpoint HTTP response body for the
+// "invalid" error.
+type GetDeploymentEvaluationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationInvariantViolationResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetDeploymentEvaluationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationUnexpectedResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "unexpected" error.
+type GetDeploymentEvaluationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDeploymentEvaluationGatewayErrorResponseBody is the type of the
+// "deployments" service "getDeploymentEvaluation" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetDeploymentEvaluationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // OpenAPIv3DeploymentAssetResponseBody is used to define fields on response
 // body types.
 type OpenAPIv3DeploymentAssetResponseBody struct {
@@ -1821,6 +2254,102 @@ type DeploymentLogEventResponseBody struct {
 	Event string `form:"event" json:"event" xml:"event"`
 	// The message of the log event
 	Message string `form:"message" json:"message" xml:"message"`
+}
+
+// OpenAPIv3DocumentSnapshotResponseBody is used to define fields on response
+// body types.
+type OpenAPIv3DocumentSnapshotResponseBody struct {
+	// The number of tools the document produces.
+	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	// The number of operations that cannot be turned into tools.
+	SkippedOperationCount int `form:"skipped_operation_count" json:"skipped_operation_count" xml:"skipped_operation_count"`
+	// The security schemes tools can use.
+	SecuritySchemes []*OpenAPIv3SecuritySchemeSummaryResponseBody `form:"security_schemes" json:"security_schemes" xml:"security_schemes"`
+	// The document-level security requirement.
+	DefaultSecurity string `form:"default_security" json:"default_security" xml:"default_security"`
+	// The default server URL tools call.
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
+}
+
+// OpenAPIv3SecuritySchemeSummaryResponseBody is used to define fields on
+// response body types.
+type OpenAPIv3SecuritySchemeSummaryResponseBody struct {
+	// The name of the scheme under components.securitySchemes.
+	Key string `form:"key" json:"key" xml:"key"`
+	// The OpenAPI security scheme type.
+	Type string `form:"type" json:"type" xml:"type"`
+	// A short description of the scheme.
+	Summary string `form:"summary" json:"summary" xml:"summary"`
+	// The environment variables that supply credentials for the scheme.
+	EnvVariables []string `form:"env_variables" json:"env_variables" xml:"env_variables"`
+}
+
+// OpenAPIv3EvaluationChangeResponseBody is used to define fields on response
+// body types.
+type OpenAPIv3EvaluationChangeResponseBody struct {
+	// How likely the change is to break existing MCP servers.
+	Severity string `form:"severity" json:"severity" xml:"severity"`
+	// The part of the MCP the change affects.
+	Category string `form:"category" json:"category" xml:"category"`
+	// A stable identifier for the kind of change.
+	Code string `form:"code" json:"code" xml:"code"`
+	// A one-line summary of the change.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Supporting lines, such as before and after values.
+	Details []string `form:"details" json:"details" xml:"details"`
+	// The names of the tools the change affects.
+	Tools []string `form:"tools" json:"tools" xml:"tools"`
+}
+
+// OpenAPIv3AffectedToolsetResponseBody is used to define fields on response
+// body types.
+type OpenAPIv3AffectedToolsetResponseBody struct {
+	// The ID of the toolset.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the toolset.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The MCP slug of the toolset, when it is served as an MCP server.
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is served as an MCP server.
+	McpEnabled bool `form:"mcp_enabled" json:"mcp_enabled" xml:"mcp_enabled"`
+	// Whether the MCP server has OAuth configured.
+	OauthConfigured bool `form:"oauth_configured" json:"oauth_configured" xml:"oauth_configured"`
+	// The number of tools from this source in the toolset.
+	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	// The number of those tools with breaking changes or changes that need
+	// attention.
+	AffectedToolCount int `form:"affected_tool_count" json:"affected_tool_count" xml:"affected_tool_count"`
+}
+
+// OpenAPIv3EvaluationResponseBody is used to define fields on response body
+// types.
+type OpenAPIv3EvaluationResponseBody struct {
+	// The slug of the OpenAPI source.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The display name of the OpenAPI source.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Whether the source is new, changed, unchanged or removed.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The asset ID of the evaluated document. Absent when the source was removed.
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	// The asset ID of the deployed document. Absent for a new source.
+	BaseAssetID *string `form:"base_asset_id,omitempty" json:"base_asset_id,omitempty" xml:"base_asset_id,omitempty"`
+	// A summary of the deployed document.
+	Base *OpenAPIv3DocumentSnapshotResponseBody `form:"base,omitempty" json:"base,omitempty" xml:"base,omitempty"`
+	// A summary of the evaluated document.
+	Next *OpenAPIv3DocumentSnapshotResponseBody `form:"next,omitempty" json:"next,omitempty" xml:"next,omitempty"`
+	// Every change found, most severe first.
+	Changes []*OpenAPIv3EvaluationChangeResponseBody `form:"changes" json:"changes" xml:"changes"`
+	// The number of breaking changes.
+	BreakingCount int `form:"breaking_count" json:"breaking_count" xml:"breaking_count"`
+	// The number of changes that need attention.
+	WarningCount int `form:"warning_count" json:"warning_count" xml:"warning_count"`
+	// The number of informational changes.
+	InfoCount int `form:"info_count" json:"info_count" xml:"info_count"`
+	// Toolsets (MCP servers) that include tools from this source.
+	AffectedToolsets []*OpenAPIv3AffectedToolsetResponseBody `form:"affected_toolsets" json:"affected_toolsets" xml:"affected_toolsets"`
 }
 
 // AddOpenAPIv3DeploymentAssetFormRequestBody is used to define fields on
@@ -2044,6 +2573,75 @@ func NewGetDeploymentLogsResponseBody(res *deployments.GetDeploymentLogsResult) 
 		}
 	} else {
 		body.Events = []*DeploymentLogEventResponseBody{}
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3ResponseBody builds the HTTP response body from the
+// result of the "evaluateOpenAPIv3" endpoint of the "deployments" service.
+func NewEvaluateOpenAPIv3ResponseBody(res *deployments.OpenAPIv3Evaluation) *EvaluateOpenAPIv3ResponseBody {
+	body := &EvaluateOpenAPIv3ResponseBody{
+		Slug:          res.Slug,
+		Name:          res.Name,
+		Status:        res.Status,
+		AssetID:       res.AssetID,
+		BaseAssetID:   res.BaseAssetID,
+		BreakingCount: res.BreakingCount,
+		WarningCount:  res.WarningCount,
+		InfoCount:     res.InfoCount,
+	}
+	if res.Base != nil {
+		body.Base = marshalDeploymentsOpenAPIv3DocumentSnapshotToOpenAPIv3DocumentSnapshotResponseBody(res.Base)
+	}
+	if res.Next != nil {
+		body.Next = marshalDeploymentsOpenAPIv3DocumentSnapshotToOpenAPIv3DocumentSnapshotResponseBody(res.Next)
+	}
+	if res.Changes != nil {
+		body.Changes = make([]*OpenAPIv3EvaluationChangeResponseBody, len(res.Changes))
+		for i, val := range res.Changes {
+			if val == nil {
+				body.Changes[i] = nil
+				continue
+			}
+			body.Changes[i] = marshalDeploymentsOpenAPIv3EvaluationChangeToOpenAPIv3EvaluationChangeResponseBody(val)
+		}
+	} else {
+		body.Changes = []*OpenAPIv3EvaluationChangeResponseBody{}
+	}
+	if res.AffectedToolsets != nil {
+		body.AffectedToolsets = make([]*OpenAPIv3AffectedToolsetResponseBody, len(res.AffectedToolsets))
+		for i, val := range res.AffectedToolsets {
+			if val == nil {
+				body.AffectedToolsets[i] = nil
+				continue
+			}
+			body.AffectedToolsets[i] = marshalDeploymentsOpenAPIv3AffectedToolsetToOpenAPIv3AffectedToolsetResponseBody(val)
+		}
+	} else {
+		body.AffectedToolsets = []*OpenAPIv3AffectedToolsetResponseBody{}
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationResponseBody builds the HTTP response body from
+// the result of the "getDeploymentEvaluation" endpoint of the "deployments"
+// service.
+func NewGetDeploymentEvaluationResponseBody(res *deployments.GetDeploymentEvaluationResult) *GetDeploymentEvaluationResponseBody {
+	body := &GetDeploymentEvaluationResponseBody{
+		DeploymentID:     res.DeploymentID,
+		BaseDeploymentID: res.BaseDeploymentID,
+	}
+	if res.Documents != nil {
+		body.Documents = make([]*OpenAPIv3EvaluationResponseBody, len(res.Documents))
+		for i, val := range res.Documents {
+			if val == nil {
+				body.Documents[i] = nil
+				continue
+			}
+			body.Documents[i] = marshalDeploymentsOpenAPIv3EvaluationToOpenAPIv3EvaluationResponseBody(val)
+		}
+	} else {
+		body.Documents = []*OpenAPIv3EvaluationResponseBody{}
 	}
 	return body
 }
@@ -3202,6 +3800,302 @@ func NewGetDeploymentLogsGatewayErrorResponseBody(res *goa.ServiceError) *GetDep
 	return body
 }
 
+// NewEvaluateOpenAPIv3UnauthorizedResponseBody builds the HTTP response body
+// from the result of the "evaluateOpenAPIv3" endpoint of the "deployments"
+// service.
+func NewEvaluateOpenAPIv3UnauthorizedResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3UnauthorizedResponseBody {
+	body := &EvaluateOpenAPIv3UnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3ForbiddenResponseBody builds the HTTP response body from
+// the result of the "evaluateOpenAPIv3" endpoint of the "deployments" service.
+func NewEvaluateOpenAPIv3ForbiddenResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3ForbiddenResponseBody {
+	body := &EvaluateOpenAPIv3ForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3BadRequestResponseBody builds the HTTP response body
+// from the result of the "evaluateOpenAPIv3" endpoint of the "deployments"
+// service.
+func NewEvaluateOpenAPIv3BadRequestResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3BadRequestResponseBody {
+	body := &EvaluateOpenAPIv3BadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3NotFoundResponseBody builds the HTTP response body from
+// the result of the "evaluateOpenAPIv3" endpoint of the "deployments" service.
+func NewEvaluateOpenAPIv3NotFoundResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3NotFoundResponseBody {
+	body := &EvaluateOpenAPIv3NotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3ConflictResponseBody builds the HTTP response body from
+// the result of the "evaluateOpenAPIv3" endpoint of the "deployments" service.
+func NewEvaluateOpenAPIv3ConflictResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3ConflictResponseBody {
+	body := &EvaluateOpenAPIv3ConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3UnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "evaluateOpenAPIv3" endpoint of the
+// "deployments" service.
+func NewEvaluateOpenAPIv3UnsupportedMediaResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3UnsupportedMediaResponseBody {
+	body := &EvaluateOpenAPIv3UnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3InvalidResponseBody builds the HTTP response body from
+// the result of the "evaluateOpenAPIv3" endpoint of the "deployments" service.
+func NewEvaluateOpenAPIv3InvalidResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3InvalidResponseBody {
+	body := &EvaluateOpenAPIv3InvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3InvariantViolationResponseBody builds the HTTP response
+// body from the result of the "evaluateOpenAPIv3" endpoint of the
+// "deployments" service.
+func NewEvaluateOpenAPIv3InvariantViolationResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3InvariantViolationResponseBody {
+	body := &EvaluateOpenAPIv3InvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3UnexpectedResponseBody builds the HTTP response body
+// from the result of the "evaluateOpenAPIv3" endpoint of the "deployments"
+// service.
+func NewEvaluateOpenAPIv3UnexpectedResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3UnexpectedResponseBody {
+	body := &EvaluateOpenAPIv3UnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEvaluateOpenAPIv3GatewayErrorResponseBody builds the HTTP response body
+// from the result of the "evaluateOpenAPIv3" endpoint of the "deployments"
+// service.
+func NewEvaluateOpenAPIv3GatewayErrorResponseBody(res *goa.ServiceError) *EvaluateOpenAPIv3GatewayErrorResponseBody {
+	body := &EvaluateOpenAPIv3GatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getDeploymentEvaluation" endpoint of the
+// "deployments" service.
+func NewGetDeploymentEvaluationUnauthorizedResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationUnauthorizedResponseBody {
+	body := &GetDeploymentEvaluationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationForbiddenResponseBody builds the HTTP response
+// body from the result of the "getDeploymentEvaluation" endpoint of the
+// "deployments" service.
+func NewGetDeploymentEvaluationForbiddenResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationForbiddenResponseBody {
+	body := &GetDeploymentEvaluationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationBadRequestResponseBody builds the HTTP response
+// body from the result of the "getDeploymentEvaluation" endpoint of the
+// "deployments" service.
+func NewGetDeploymentEvaluationBadRequestResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationBadRequestResponseBody {
+	body := &GetDeploymentEvaluationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationNotFoundResponseBody builds the HTTP response body
+// from the result of the "getDeploymentEvaluation" endpoint of the
+// "deployments" service.
+func NewGetDeploymentEvaluationNotFoundResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationNotFoundResponseBody {
+	body := &GetDeploymentEvaluationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationConflictResponseBody builds the HTTP response body
+// from the result of the "getDeploymentEvaluation" endpoint of the
+// "deployments" service.
+func NewGetDeploymentEvaluationConflictResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationConflictResponseBody {
+	body := &GetDeploymentEvaluationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getDeploymentEvaluation" endpoint of
+// the "deployments" service.
+func NewGetDeploymentEvaluationUnsupportedMediaResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationUnsupportedMediaResponseBody {
+	body := &GetDeploymentEvaluationUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationInvalidResponseBody builds the HTTP response body
+// from the result of the "getDeploymentEvaluation" endpoint of the
+// "deployments" service.
+func NewGetDeploymentEvaluationInvalidResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationInvalidResponseBody {
+	body := &GetDeploymentEvaluationInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getDeploymentEvaluation" endpoint of
+// the "deployments" service.
+func NewGetDeploymentEvaluationInvariantViolationResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationInvariantViolationResponseBody {
+	body := &GetDeploymentEvaluationInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getDeploymentEvaluation" endpoint of the
+// "deployments" service.
+func NewGetDeploymentEvaluationUnexpectedResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationUnexpectedResponseBody {
+	body := &GetDeploymentEvaluationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDeploymentEvaluationGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getDeploymentEvaluation" endpoint of the
+// "deployments" service.
+func NewGetDeploymentEvaluationGatewayErrorResponseBody(res *goa.ServiceError) *GetDeploymentEvaluationGatewayErrorResponseBody {
+	body := &GetDeploymentEvaluationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetDeploymentPayload builds a deployments service getDeployment endpoint
 // payload.
 func NewGetDeploymentPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.GetDeploymentPayload {
@@ -3409,6 +4303,33 @@ func NewGetDeploymentLogsPayload(deploymentID string, cursor *string, apikeyToke
 	return v
 }
 
+// NewEvaluateOpenAPIv3Payload builds a deployments service evaluateOpenAPIv3
+// endpoint payload.
+func NewEvaluateOpenAPIv3Payload(body *EvaluateOpenAPIv3RequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.EvaluateOpenAPIv3Payload {
+	v := &deployments.EvaluateOpenAPIv3Payload{
+		AssetID: *body.AssetID,
+		Slug:    *body.Slug,
+		Name:    body.Name,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetDeploymentEvaluationPayload builds a deployments service
+// getDeploymentEvaluation endpoint payload.
+func NewGetDeploymentEvaluationPayload(deploymentID string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *deployments.GetDeploymentEvaluationPayload {
+	v := &deployments.GetDeploymentEvaluationPayload{}
+	v.DeploymentID = deploymentID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateDeploymentRequestBody runs the validations defined on
 // CreateDeploymentRequestBody
 func ValidateCreateDeploymentRequestBody(body *CreateDeploymentRequestBody) (err error) {
@@ -3481,6 +4402,18 @@ func ValidateEvolveRequestBody(body *EvolveRequestBody) (err error) {
 func ValidateRedeployRequestBody(body *RedeployRequestBody) (err error) {
 	if body.DeploymentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
+	}
+	return
+}
+
+// ValidateEvaluateOpenAPIv3RequestBody runs the validations defined on
+// EvaluateOpenAPIv3RequestBody
+func ValidateEvaluateOpenAPIv3RequestBody(body *EvaluateOpenAPIv3RequestBody) (err error) {
+	if body.AssetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	return
 }

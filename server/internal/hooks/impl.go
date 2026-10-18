@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -69,6 +70,7 @@ type Service struct {
 	authz              *authz.Engine
 	audit              *audit.Logger
 	cache              cache.Cache
+	ahpUploadLimiter   *ratelimit.Limiter
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
@@ -121,7 +123,7 @@ type authorizer interface {
 
 // SessionMetadata contains validated session information from the Logs endpoint.
 //
-// Beyond the Gram identity (UserID/GramOrgID/ProjectID) it carries the provider's
+// Beyond the Speakeasy identity (UserID/GramOrgID/ProjectID) it carries the provider's
 // own account identity, normalized into provider-agnostic fields, so personal vs
 // team AI-account usage can be attributed and tracked. For Claude these map from
 // organization.id, user.account_uuid, user.account_id, and the per-device user.id.
@@ -261,6 +263,7 @@ func NewService(
 	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
+	uploadLimitStore ratelimit.Store,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
@@ -293,6 +296,7 @@ func NewService(
 		authz:              authz,
 		audit:              auditLogger,
 		cache:              cacheAdapter,
+		ahpUploadLimiter:   ratelimit.New(uploadLimitStore, "ahp-upload", ratelimit.Rate{Tokens: ahpUploadBurst, Interval: ahpUploadTTL, Burst: ahpUploadBurst}, ratelimit.WithMetrics(meterProvider)),
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
