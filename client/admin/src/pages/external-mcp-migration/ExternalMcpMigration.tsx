@@ -94,6 +94,23 @@ function StatusBadge({
       </div>
     );
   }
+  if (candidate.warnings.length > 0) {
+    return (
+      <div className="grid gap-1">
+        <Badge
+          variant="outline"
+          className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+        >
+          Ready with warnings
+        </Badge>
+        <ul className="text-xs text-muted-foreground">
+          {candidate.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
   return <Badge variant="secondary">Ready</Badge>;
 }
 

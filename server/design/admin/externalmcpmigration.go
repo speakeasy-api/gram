@@ -13,7 +13,7 @@ const maxExternalMcpMigrationServers = 100
 
 var AdminExternalMcpMigrationCandidate = Type("AdminExternalMcpMigrationCandidate", func() {
 	Description("A live server backed by an external MCP attachment.")
-	Required("toolset_id", "organization_id", "organization_name", "organization_slug", "project_id", "project_name", "project_slug", "server_name", "blockers")
+	Required("toolset_id", "organization_id", "organization_name", "organization_slug", "project_id", "project_name", "project_slug", "server_name", "blockers", "warnings")
 
 	Attribute("toolset_id", String, "The toolset behind the server.", func() { Format(FormatUUID) })
 	Attribute("organization_id", String, "Organization ID.")
@@ -29,6 +29,7 @@ var AdminExternalMcpMigrationCandidate = Type("AdminExternalMcpMigrationCandidat
 	Attribute("sign_in_provider", String, "The server's user session issuer and the upstream authorization servers behind it. Absent when the server has none.")
 	Attribute("tool_calls", Int64, "Tool calls over the last tool_call_window_days. Absent when telemetry is unavailable.")
 	Attribute("blockers", ArrayOf(String), "Why the server cannot be migrated. Empty when it can.")
+	Attribute("warnings", ArrayOf(String), "What migrating the server drops or cannot carry over. Warnings do not stop it.")
 })
 
 var AdminListExternalMcpMigrationCandidatesResult = Type("AdminListExternalMcpMigrationCandidatesResult", func() {

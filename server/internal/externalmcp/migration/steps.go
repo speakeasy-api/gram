@@ -80,8 +80,8 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	if err != nil {
 		return outcome, fmt.Errorf("read locked toolset: %w", err)
 	}
-	issuerID := candidate.Row.UserSessionIssuerID.UUID
 	outcome.McpSlug = toolset.McpSlug.String
+	outcome.Warnings = append(outcome.Warnings, candidate.Warnings...)
 
 	// Lock order matches hostedmcp: custom domains, then the server's
 	// endpoints, then the server row, which the switch locks as it updates it.
@@ -137,14 +137,16 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		return outcome, fmt.Errorf("rekey server metadata: %w", err)
 	}
 
-	filled, err := queries.FillRemoteSessionResources(ctx, repo.FillRemoteSessionResourcesParams{
-		Resource: conv.ToPGText(remote.Url), UserSessionIssuerID: issuerID, ProjectID: projectID, OrganizationID: organizationID,
-	})
-	if err != nil {
-		return outcome, fmt.Errorf("fill remote session resources: %w", err)
-	}
-	if filled > 0 {
-		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Record the upstream URL on %d signed-in sessions", filled))
+	if hasUpstreamClient(candidate) {
+		filled, err := queries.FillRemoteSessionResources(ctx, repo.FillRemoteSessionResourcesParams{
+			Resource: conv.ToPGText(remote.Url), UserSessionIssuerID: candidate.Row.UserSessionIssuerID.UUID, ProjectID: projectID, OrganizationID: organizationID,
+		})
+		if err != nil {
+			return outcome, fmt.Errorf("fill remote session resources: %w", err)
+		}
+		if filled > 0 {
+			outcome.Actions = append(outcome.Actions, fmt.Sprintf("Record the upstream URL on %d signed-in sessions", filled))
+		}
 	}
 
 	disabled, err := queries.DisableToolset(ctx, repo.DisableToolsetParams{ID: toolset.ID, ProjectID: projectID})
@@ -179,6 +181,12 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	return outcome, nil
 }
 
+// hasUpstreamClient reports whether the server's sign-in provider has an
+// upstream client, and so upstream credentials to carry over.
+func hasUpstreamClient(candidate Candidate) bool {
+	return candidate.Row.UserSessionIssuerID.Valid && len(candidate.Row.RemoteSessionIssuerIds) > 0
+}
+
 // switchServer repoints the server row from the toolset to the remote source
 // in one statement and records the change. The row keeps its id, slug,
 // visibility, environment and network access, so its endpoint, plugin
@@ -202,14 +210,16 @@ func (m *Migrator) switchServer(ctx context.Context, tx pgx.Tx, principal urn.Pr
 	if switched != 1 {
 		return errNotCandidate
 	}
-	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{candidate.Row.UserSessionIssuerID.UUID}); err != nil {
-		return fmt.Errorf("resync upstream issuer: %w", err)
+	if candidate.Row.UserSessionIssuerID.Valid {
+		if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{candidate.Row.UserSessionIssuerID.UUID}); err != nil {
+			return fmt.Errorf("resync upstream issuer: %w", err)
+		}
 	}
 	after, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: toolset.ProjectID})
 	if err != nil {
 		return fmt.Errorf("read server after switch: %w", err)
 	}
-	if !after.RemoteSessionIssuerID.Valid {
+	if hasUpstreamClient(candidate) && !after.RemoteSessionIssuerID.Valid {
 		return fail("the sign-in provider's upstream authorization server could not be resolved for this project")
 	}
 	if err := m.audit.LogMcpServerUpdate(ctx, tx, audit.LogMcpServerUpdateEvent{

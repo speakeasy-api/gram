@@ -36,6 +36,10 @@ type Candidate struct {
 	// Blockers explain why the server cannot be migrated; empty when it can.
 	Blockers []string
 
+	// Warnings name what the migration drops or cannot carry over. They do
+	// not stop it.
+	Warnings []string
+
 	// ToolCalls counts the server's tool calls over the reporting window; nil
 	// when telemetry is unavailable.
 	ToolCalls *uint64
@@ -43,15 +47,9 @@ type Candidate struct {
 
 const (
 	blockerNoOrganization     = "its organization has no metadata record, so it is handled separately"
-	blockerNoIssuer           = "has no sign-in provider to reuse"
-	blockerExternalOAuth      = "uses an external OAuth server, which remote MCP servers do not support"
-	blockerOAuthProxy         = "uses an OAuth proxy, which remote MCP servers do not support"
-	blockerUserOAuthTokens    = "has stored OAuth proxy tokens, which remote MCP servers do not use" //nolint:gosec // a reason shown to staff, not a credential
-	blockerUserHeaders        = "users send their own credentials with each request; handle this server manually"
 	blockerManyAttachments    = "proxies more than one external MCP attachment"
 	blockerManyURLs           = "proxies more than one upstream URL"
 	blockerManyTransports     = "proxies upstreams over more than one transport"
-	blockerOtherTools         = "serves tools or resources beyond the external MCP attachment, which the switch would drop"
 	blockerVariations         = "uses tool variations, which the switch would drop"
 	blockerPrompts            = "has prompts, which the switch would drop"
 	blockerAssistants         = "is attached to an assistant through its toolset"
@@ -63,10 +61,12 @@ const (
 	blockerManyServers        = "has more than one server row"
 	blockerEndpoints          = "does not have exactly one address"
 	blockerServerIssuer       = "its server signs in through a different provider than its toolset"
-	blockerNoUpstreamIssuer   = "its sign-in provider has no upstream client"
 	blockerManyUpstreamIssuer = "its sign-in provider's clients use more than one upstream authorization server"
 	blockerSelfOwnedClient    = "its sign-in provider has a client that holds its own credentials"
 	blockerEMABindings        = "its sign-in provider has enterprise-managed authorization bindings"
+	warningExternalOAuth      = "uses an external OAuth server, which is not carried over; the server is left without sign-in"
+	warningOAuthProxy         = "uses an OAuth proxy, which is dropped; the server is left without sign-in"
+	warningOtherTools         = "serves tools or resources beyond the external MCP attachment, which are dropped"
 	blockerManyResources      = "its signed-in sessions record more than one upstream resource"
 	blockerSharedNonRemote    = "another server signs in through the same provider and is not a remote MCP server"
 	blockerSharedToolset      = "another enabled toolset signs in through the same provider"
@@ -100,35 +100,30 @@ func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 
 // assess derives a candidate's upstream URLs and blockers from its row.
 func assess(row repo.ListCandidatesRow) Candidate {
-	candidate := Candidate{Row: row, RemoteURL: "", ReplacementURL: "", Blockers: nil, ToolCalls: nil}
+	candidate := Candidate{Row: row, RemoteURL: "", ReplacementURL: "", Blockers: nil, Warnings: nil, ToolCalls: nil}
 	block := func(reason string) { candidate.Blockers = append(candidate.Blockers, reason) }
+	warn := func(reason string) { candidate.Warnings = append(candidate.Warnings, reason) }
 
 	if !row.HasOrganizationMetadata {
 		block(blockerNoOrganization)
 	}
-	if !row.UserSessionIssuerID.Valid || !row.UserSessionIssuerSlug.Valid {
-		block(blockerNoIssuer)
-	}
+	// Sign-in through an external OAuth server or an OAuth proxy does not carry
+	// over. The switched server keeps its user session issuer, if any, and
+	// reaches the upstream without upstream credentials.
 	if row.ExternalOauthServerID.Valid {
-		block(blockerExternalOAuth)
+		warn(warningExternalOAuth)
 	}
-	if row.OauthProxyServerID.Valid {
-		block(blockerOAuthProxy)
+	if row.OauthProxyServerID.Valid || row.HasUserOauthTokens {
+		warn(warningOAuthProxy)
 	}
-	if row.HasUserOauthTokens {
-		block(blockerUserOAuthTokens)
-	}
-	if row.DeclaresHeaders && !row.RequiresOauth {
-		block(blockerUserHeaders)
+	if row.ServesOtherTools {
+		warn(warningOtherTools)
 	}
 	if row.AttachmentCount != 1 {
 		block(blockerManyAttachments)
 	}
 	if len(row.TransportTypes) != 1 || !supportedTransport(row.TransportTypes[0]) {
 		block(blockerManyTransports)
-	}
-	if row.ServesOtherTools {
-		block(blockerOtherTools)
 	}
 	if row.ToolsetHasVariations || row.ServerHasVariations {
 		block(blockerVariations)
@@ -164,12 +159,10 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if row.ServerUserSessionIssuerID.Valid && row.ServerUserSessionIssuerID != row.UserSessionIssuerID {
 		block(blockerServerIssuer)
 	}
+	// A server without a sign-in provider, or whose provider has no upstream
+	// client, holds no upstream credentials, so there is nothing to carry over.
 	if row.UserSessionIssuerID.Valid {
-		switch len(row.RemoteSessionIssuerIds) {
-		case 0:
-			block(blockerNoUpstreamIssuer)
-		case 1:
-		default:
+		if len(row.RemoteSessionIssuerIds) > 1 {
 			block(blockerManyUpstreamIssuer)
 		}
 		if row.HasSelfOwnedClients {

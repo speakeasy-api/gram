@@ -111,7 +111,10 @@ type serverOptions struct {
 	headers       []byte
 	requiresOAuth bool
 	noIssuer      bool
+	noClient      bool
 	noWrapper     bool
+	// otherTool adds an HTTP tool beside the external MCP proxy tool.
+	otherTool bool
 	// sharedIssuer signs the server in through another server's issuer
 	// instead of creating its own.
 	sharedIssuer *fixtureServer
@@ -132,8 +135,12 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 		McpSlug: conv.ToPGText(opts.slug + "-mcp"), McpEnabled: true,
 	})
 	require.NoError(t, err)
+	toolURNs := []urn.Tool{toolURN}
+	if opts.otherTool {
+		toolURNs = append(toolURNs, urn.NewTool(urn.ToolKindHTTP, opts.slug, "extra"))
+	}
 	_, err = toolsets.CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
-		ToolsetID: toolset.ID, Version: 1, ToolUrns: []urn.Tool{toolURN}, ResourceUrns: []urn.Resource{}, PredecessorID: uuid.NullUUID{},
+		ToolsetID: toolset.ID, Version: 1, ToolUrns: toolURNs, ResourceUrns: []urn.Resource{}, PredecessorID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
 
@@ -155,12 +162,16 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 			UserSessionIssuerID: conv.ToNullUUID(issuer.ID), Slug: toolset.Slug, ProjectID: ti.projectID,
 		})
 		require.NoError(t, err)
+		server.toolset, server.issuerID = toolset, issuer.ID
+		if opts.noClient {
+			break
+		}
 		clientID, err := repo.New(ti.conn).SeedRemoteSessionClientFixture(ctx, repo.SeedRemoteSessionClientFixtureParams{
 			ProjectID: conv.ToNullUUID(ti.projectID), OrganizationID: conv.ToPGText(ti.organizationID),
 			Slug: opts.slug + "-upstream", IssuerUrl: "https://auth.example.com/" + opts.slug, UserSessionIssuerID: issuer.ID,
 		})
 		require.NoError(t, err)
-		server.toolset, server.issuerID, server.clientID = toolset, issuer.ID, clientID
+		server.clientID = clientID
 	}
 
 	if !opts.noWrapper {

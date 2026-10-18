@@ -53,6 +53,7 @@ func (s *Service) ListExternalMcpMigrationCandidates(ctx context.Context, _ *gen
 			SignInProvider:   conv.PtrEmpty(candidate.SignInProvider()),
 			ToolCalls:        toolCalls,
 			Blockers:         blockers,
+			Warnings:         nonNil(candidate.Warnings),
 		})
 	}
 	return &gen.AdminListExternalMcpMigrationCandidatesResult{

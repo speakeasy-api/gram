@@ -163,6 +163,47 @@ func TestRunCopiesHeaders(t *testing.T) {
 	require.NotEqual(t, "stored-value", headers[1].Value.String)
 }
 
+func TestRunMigratesServersWithoutUpstreamSignIn(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		opts    serverOptions
+		warning string
+	}{
+		{name: "no sign-in provider", opts: serverOptions{slug: "no-issuer", remoteURL: "https://mcp.example.com/mcp", noIssuer: true}},
+		{name: "sign-in provider without an upstream client", opts: serverOptions{slug: "no-client", remoteURL: "https://mcp.example.com/mcp", noClient: true}},
+		{name: "headers users send", opts: serverOptions{slug: "user-headers", remoteURL: "https://mcp.example.com/mcp", noIssuer: true, headers: []byte(`[{"name":"X-Api-Key"}]`)}},
+		{name: "other tools", opts: serverOptions{slug: "other-tools", remoteURL: "https://mcp.example.com/mcp", otherTool: true}, warning: "which are dropped"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMigrator(t)
+			server := seedServer(t, ctx, ti, tc.opts)
+			before := countIssuersAndClients(t, ctx, ti)
+
+			outcomes := migrate(t, ctx, ti, false, server)
+			require.Equal(t, migration.StatusMigrated, outcomes[0].Status, outcomes[0].Reason)
+			if tc.warning != "" {
+				require.True(t, containsSubstring(outcomes[0].Warnings, tc.warning), "warnings %q do not mention %q", outcomes[0].Warnings, tc.warning)
+			}
+
+			// The server keeps whatever sign-in provider it had and gains no
+			// upstream issuer, and nothing is created to sign in with.
+			switched := readServer(t, ctx, ti, server)
+			require.False(t, switched.ToolsetID.Valid)
+			require.Equal(t, conv.ToNullUUID(outcomes[0].RemoteMcpServerID), switched.RemoteMcpServerID)
+			require.Equal(t, server.toolset.UserSessionIssuerID, switched.UserSessionIssuerID)
+			if !tc.opts.otherTool {
+				require.False(t, switched.RemoteSessionIssuerID.Valid)
+			}
+			require.Equal(t, before, countIssuersAndClients(t, ctx, ti))
+		})
+	}
+}
+
 func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 	t.Parallel()
 
@@ -171,14 +212,6 @@ func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 		blocker string
 		seed    func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer
 	}{
-		{name: "no issuer", blocker: "no sign-in provider", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
-			t.Helper()
-			return seedServer(t, ctx, ti, serverOptions{slug: "no-issuer", remoteURL: "https://mcp.example.com/mcp", noIssuer: true})
-		}},
-		{name: "user headers without OAuth", blocker: "send their own credentials", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
-			t.Helper()
-			return seedServer(t, ctx, ti, serverOptions{slug: "user-headers", remoteURL: "https://mcp.example.com/mcp", headers: []byte(`[{"name":"X-Api-Key"}]`)})
-		}},
 		{name: "no server row", blocker: "no server row", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
 			t.Helper()
 			return seedServer(t, ctx, ti, serverOptions{slug: "legacy-only", remoteURL: "https://mcp.example.com/mcp", noWrapper: true})
@@ -274,7 +307,7 @@ func TestRunStopsAtFirstFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMigrator(t)
-	blocked := seedServer(t, ctx, ti, serverOptions{slug: "blocked", remoteURL: "https://mcp.example.com/mcp", noIssuer: true})
+	blocked := seedServer(t, ctx, ti, serverOptions{slug: "blocked", remoteURL: "https://mcp.example.com/mcp", noWrapper: true})
 	ready := seedServer(t, ctx, ti, serverOptions{slug: "ready", remoteURL: "https://mcp.example.com/mcp"})
 
 	outcomes := migrate(t, ctx, ti, false, blocked, ready)
