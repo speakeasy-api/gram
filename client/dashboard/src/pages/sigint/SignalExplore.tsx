@@ -4,6 +4,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useRunQuery } from "@/pages/explore/useRunQuery";
 import type { AnalyticsSignalCatalog } from "@gram/client/models/components/analyticssignalcatalog.js";
@@ -14,13 +15,14 @@ import {
   WINDOW_OPTIONS,
   signalPayload,
   type SignalControls,
+  type SignalChartMetric,
 } from "./explorationModel";
 import { SignalResults } from "./SignalResults";
 import { SignalAttributes } from "./SignalAttributes";
 
 export function SignalExplore(): JSX.Element {
   return (
-    <RequireScope scope="project:read" level="component">
+    <RequireScope scope="project:read" level="section">
       <SignalCatalog />
     </RequireScope>
   );
@@ -73,6 +75,7 @@ function SignalWorkbench({
   catalog: AnalyticsSignalCatalog;
 }): JSX.Element {
   const filters = useFilterState(SIGNAL_FILTERS);
+  const [metric, setMetric] = useState<SignalChartMetric>("matched_messages");
   const sensor =
     catalog.sensors.find((item) => item.id === filters.values.sensor) ??
     catalog.sensors[0]!;
@@ -146,12 +149,31 @@ function SignalWorkbench({
           />
         </Page.Toolbar.Leading>
         <Page.Toolbar.Actions>
+          <SegmentedControl
+            value={metric}
+            onChange={setMetric}
+            ariaLabel="Chart measurement"
+            options={[
+              {
+                value: "matched_messages",
+                label: "Matches",
+                tooltip: "Count of matching original messages",
+              },
+              {
+                value: "match_share",
+                label: "Share",
+                tooltip:
+                  "Matching messages divided by measured answers in each interval",
+              },
+            ]}
+          />
           <Button onClick={run} disabled={query.isFetching}>
             Run query
           </Button>
         </Page.Toolbar.Actions>
       </Page.Toolbar>
       <SignalResults
+        metric={metric}
         query={query}
         request={submitted}
         title={selectedName}

@@ -18,8 +18,13 @@ import type { Grain } from "@/pages/explore/exploreModel";
 import type { AnalyticsQueryResult } from "@gram/client/models/components/analyticsqueryresult.js";
 import type { AnalyticsQueryPayload } from "@gram/client/models/components/analyticsquerypayload.js";
 import { useAnalyticsSignalDefinition } from "@gram/client/react-query/analyticsSignalDefinition.js";
-import { useState } from "react";
-import { groupLabel, signalNumber, signalSeries } from "./explorationModel";
+import { useRef, useState } from "react";
+import {
+  groupLabel,
+  signalNumber,
+  signalSeries,
+  type SignalChartMetric,
+} from "./explorationModel";
 
 export function SignalResults({
   query,
@@ -27,6 +32,7 @@ export function SignalResults({
   title,
   sensorName,
   onRetry,
+  metric,
 }: {
   query: {
     data?: AnalyticsQueryResult;
@@ -38,8 +44,14 @@ export function SignalResults({
   title: string;
   sensorName: string;
   onRetry: () => void;
+  metric: SignalChartMetric;
 }): JSX.Element {
   const [definition, setDefinition] = useState<string | null>(null);
+  const details = useRef<HTMLDetailsElement>(null);
+  const metricLabel =
+    metric === "match_share"
+      ? "Share of measured answers"
+      : "Matching messages";
   const result = query.data?.signalResult;
   const summary = result?.summary;
   const dateOptions: Intl.DateTimeFormatOptions = {
@@ -166,15 +178,15 @@ export function SignalResults({
         ]}
       />
       <ChartCard
-        title={`Matching messages · ${result.metadata.step} intervals`}
+        title={`${metricLabel} · ${result.metadata.step} intervals`}
         chartId="signal-matches"
         expandedChart={null}
         onExpand={() => {}}
         expandable={false}
       >
         <ResultChart
-          seriesSet={signalSeries(query.data, "matched_messages")}
-          unit="count"
+          seriesSet={signalSeries(query.data, metric)}
+          unit={metric === "match_share" ? "ratio" : "count"}
           chartType="line"
           grain={result.metadata.step as Grain}
           height={240}
@@ -183,8 +195,8 @@ export function SignalResults({
           timeZone="UTC"
         />
         <p className="mt-3 text-sm text-muted-foreground">
-          Gaps mean no measured answer. Zero means an answered negative. Edge
-          intervals may cover only part of the interval.
+          Gaps mean no measured answer. Zero means an answered negative.
+          Triangles mark partial intervals at the edges of the selected window.
         </p>
       </ChartCard>
       {result.metadata.groupBy.length > 0 && (
@@ -202,7 +214,24 @@ export function SignalResults({
           include every group.
         </p>
       )}
-      <details className="border-t pt-4 text-sm">
+      {Number(summary.definition_count) > 1 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span>Multiple measured definitions contribute to this view.</span>
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={() => {
+              if (details.current) {
+                details.current.open = true;
+                details.current.scrollIntoView({ block: "nearest" });
+              }
+            }}
+          >
+            Inspect definitions
+          </Button>
+        </div>
+      )}
+      <details ref={details} className="border-t pt-4 text-sm">
         <summary className="cursor-pointer font-medium">
           Measurement details
         </summary>

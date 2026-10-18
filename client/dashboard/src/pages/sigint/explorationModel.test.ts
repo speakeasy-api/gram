@@ -18,6 +18,7 @@ describe("signal chart measurements", () => {
           time_bucket: "2026-10-01T00:00:00Z",
           series_id: "a",
           matched_messages: null,
+          partial: true,
         },
         {
           time_bucket: "2026-10-01T01:00:00Z",
@@ -60,5 +61,8 @@ describe("signal chart measurements", () => {
       0,
       2,
     ]);
+    expect(signalSeries(result, "matched_messages").partialBuckets).toEqual(
+      new Set(["2026-10-01T00:00:00Z"]),
+    );
   });
 });

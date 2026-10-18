@@ -89,6 +89,8 @@ export const WINDOW_OPTIONS = [
 
 export type SignalControls = FilterValues<typeof SIGNAL_FILTERS>;
 
+export type SignalChartMetric = "matched_messages" | "match_share";
+
 export function signalPayload(
   catalog: AnalyticsSignalCatalog,
   values: SignalControls,
@@ -155,7 +157,7 @@ export function signalSeries(
   const index = new Map(buckets.map((at, i) => [at, i]));
   const series = (result.signalResult?.groups ?? []).map((group) => ({
     label: groupLabel(group.group_values),
-    unit: metric.includes("share") ? "percent" : "count",
+    unit: metric.includes("share") ? "ratio" : "count",
     points: buckets.map((): number | null => null),
   }));
   const groups = new Map(
@@ -170,7 +172,12 @@ export function signalSeries(
     if (at !== undefined && group && typeof row[metric] === "number")
       group.points[at] = row[metric];
   }
-  return { buckets, series, hidden: 0 };
+  const partialBuckets = new Set(
+    result.rows
+      .filter((row) => row.partial === true)
+      .map((row) => String(row.time_bucket)),
+  );
+  return { buckets, series, hidden: 0, partialBuckets };
 }
 
 export function groupLabel(value: unknown): string {

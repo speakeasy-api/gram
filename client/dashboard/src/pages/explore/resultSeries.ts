@@ -30,6 +30,8 @@ interface Series {
 }
 
 export interface SeriesSet {
+  /** Requested-window edges that do not span a complete interval. */
+  partialBuckets?: Set<string>;
   /** Bucket starts, ISO 8601, ascending. */
   buckets: string[];
   series: Series[];

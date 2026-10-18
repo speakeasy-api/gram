@@ -86,7 +86,7 @@ export function ResultChart({
   const colors = useSeriesColors();
   const otherColor = useOtherSeriesColor();
   const isDark = useIsDarkTheme();
-  const { buckets, series } = seriesSet;
+  const { buckets, series, partialBuckets } = seriesSet;
   const stacked = isStacked(chartType);
   const bars = chartType === "bar" || chartType === "stacked_bar";
 
@@ -152,6 +152,10 @@ export function ResultChart({
           backgroundColor: chartType === "area" ? withAlpha(color, 0.2) : color,
           borderWidth: 1.5,
           pointRadius: !connectGaps || isSparse(one.points) ? 3 : 0,
+          pointStyle: (context) =>
+            partialBuckets?.has(buckets[context.dataIndex] ?? "")
+              ? "triangle"
+              : "circle",
           pointHoverRadius: 4,
           fill: chartType === "area",
           spanGaps: connectGaps,
@@ -164,9 +168,10 @@ export function ResultChart({
       bars,
       colors,
       otherColor,
-      buckets.length,
+      buckets,
       connectGaps,
       colorByIndex,
+      partialBuckets,
     ],
   );
 
@@ -190,7 +195,11 @@ export function ResultChart({
           callbacks: {
             title: (items) => {
               const iso = items[0]?.label;
-              return iso ? bucketTitle(iso, grain, timeZone) : "";
+              if (!iso) return "";
+              const partial = partialBuckets?.has(iso)
+                ? " · Partial interval"
+                : "";
+              return bucketTitle(iso, grain, timeZone) + partial;
             },
             label: (context) =>
               `${context.dataset.label}: ${formatMeasureValue(Number(context.parsed.y ?? 0), unit)}`,
@@ -233,6 +242,7 @@ export function ResultChart({
       zoomPluginOptions,
       stacked,
       timeZone,
+      partialBuckets,
     ],
   );
 
