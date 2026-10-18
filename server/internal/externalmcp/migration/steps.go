@@ -83,7 +83,8 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	outcome.Action = candidate.Action
 	if candidate.Action == ActionDelete {
 		outcome.McpSlug = toolset.McpSlug.String
-		return outcome, m.deleteInTx(ctx, tx, actor, toolset, &outcome)
+		err := m.deleteInTx(ctx, tx, actor, toolset, &outcome)
+		return outcome, err
 	}
 	outcome.McpSlug = toolset.McpSlug.String
 	outcome.Warnings = append(outcome.Warnings, candidate.Warnings...)
@@ -168,10 +169,9 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		return outcome, fmt.Errorf("count plugin entries: %w", err)
 	}
 	if entries > 0 {
-		if err := m.publication.Project(ctx, tx, organizationID, projectID, actor.UserID); err != nil {
-			return outcome, fmt.Errorf("request plugin publication: %w", err)
+		if err := m.requestPublication(ctx, tx, organizationID, projectID, actor, &outcome); err != nil {
+			return outcome, err
 		}
-		outcome.Actions = append(outcome.Actions, "Republish the project's plugins")
 	}
 
 	if err := m.audit.LogToolsetMigrateToRemoteMcp(ctx, tx, audit.LogToolsetMigrateToRemoteMcpEvent{

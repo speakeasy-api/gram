@@ -637,6 +637,9 @@ func TestDeleteToolsetLeavesServerMovedToRemoteBackend(t *testing.T) {
 	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: switched.ID})
 	require.NoError(t, err)
 	require.Equal(t, before.endpoints, endpoints)
+	kept, err := remotemcprepo.New(ti.conn).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: remote.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, remote, kept)
 }
 
 func TestDeleteToolsetConflictsWhenItsIDServerBelongsToAnotherToolset(t *testing.T) {

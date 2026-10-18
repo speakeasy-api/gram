@@ -12,10 +12,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// requestPublication asks for the project's plugins to be republished and
+// reports whether that was queued.
+func (m *Migrator) requestPublication(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, actor Actor, outcome *Outcome) error {
+	queued, err := m.publication.ProjectWithOutcome(ctx, tx, organizationID, projectID, actor.UserID)
+	if err != nil {
+		return fmt.Errorf("request plugin publication: %w", err)
+	}
+	if queued == plugins.ProjectPublicationEnqueued {
+		outcome.Actions = append(outcome.Actions, "Republish the project's plugins")
+	} else {
+		outcome.Warnings = append(outcome.Warnings, "the project's plugins were not queued for republishing; republish them from the dashboard")
+	}
+	return nil
+}
 
 // deleteInTx deletes a toolset left with nothing to migrate, taking the same
 // steps as the toolset delete API: its hosted server and that server's
@@ -53,6 +69,15 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 		return fmt.Errorf("detach assistant toolsets: %w", err)
 	}
 
+	// hostedmcp.Delete tombstones only a server the toolset still backs under
+	// its own id; one already migrated keeps working.
+	ownServer := false
+	if serverID, err := repo.New(tx).GetToolsetServerID(ctx, repo.GetToolsetServerIDParams{ToolsetID: conv.ToNullUUID(toolset.ID), ProjectID: toolset.ProjectID}); err == nil {
+		ownServer = serverID == toolset.ID
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("read toolset server: %w", err)
+	}
+
 	hosted, err := hostedmcp.Delete(ctx, tx, m.tracerProvider, m.audit, hostedmcp.Actor{UserID: actor.UserID, Email: actor.Email, System: ""}, toolset)
 	if err != nil {
 		return fmt.Errorf("delete hosted server: %w", err)
@@ -63,7 +88,7 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 	if len(hosted.DeletedRiskPolicies) > 0 {
 		return fail("risk policies are bound to its server; delete it from the dashboard instead")
 	}
-	if toolset.McpSlug.Valid && toolset.McpSlug.String != "" {
+	if ownServer && toolset.McpSlug.Valid && toolset.McpSlug.String != "" {
 		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Delete the server at /mcp/%s with its addresses and plugin entries", toolset.McpSlug.String))
 	}
 
@@ -96,10 +121,9 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 		outcome.Actions = append(outcome.Actions, fmt.Sprintf("Remove the toolset from %d plugin entries", len(detached)))
 	}
 	if carried || (toolset.McpEnabled && len(detached) > 0) {
-		if err := m.publication.Project(ctx, tx, toolset.OrganizationID, toolset.ProjectID, actor.UserID); err != nil {
-			return fmt.Errorf("request plugin publication: %w", err)
+		if err := m.requestPublication(ctx, tx, toolset.OrganizationID, toolset.ProjectID, actor, outcome); err != nil {
+			return err
 		}
-		outcome.Actions = append(outcome.Actions, "Republish the project's plugins")
 	}
 
 	if err := m.audit.LogToolsetDelete(ctx, tx, audit.LogToolsetDeleteEvent{

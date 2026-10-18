@@ -84,8 +84,8 @@ const (
 	blockerManyUpstreamIssuer = "its sign-in provider's clients use more than one upstream authorization server"
 	blockerSelfOwnedClient    = "its sign-in provider has a client that holds its own credentials"
 	blockerEMABindings        = "its sign-in provider has enterprise-managed authorization bindings"
-	warningExternalOAuth      = "uses an external OAuth server, which is not carried over; the server is left without sign-in"
-	warningOAuthProxy         = "uses an OAuth proxy, which is dropped; the server is left without sign-in"
+	warningExternalOAuth      = "uses an external OAuth server, which is not carried over; sign-in through it is dropped"
+	warningOAuthProxy         = "has an OAuth proxy or its stored tokens, which are dropped; sign-in through the proxy stops"
 	warningOtherTools         = "serves tools or resources beyond the external MCP attachment, which are dropped"
 	blockerManyResources      = "its signed-in sessions record more than one upstream resource"
 	blockerSharedNonRemote    = "another server signs in through the same provider and is not a remote MCP server"
@@ -129,6 +129,10 @@ func assess(row repo.ListCandidatesRow) Candidate {
 		candidate.DeleteReasons = reasons
 		if len(row.RemoteUrls) == 1 {
 			candidate.RemoteURL = row.RemoteUrls[0]
+		}
+		// Deleting does not unlink a Slack app; that stays a dashboard job.
+		if row.HasSlackApps {
+			block(blockerSlackApps)
 		}
 		return candidate
 	}

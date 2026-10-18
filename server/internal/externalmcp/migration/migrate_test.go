@@ -180,7 +180,7 @@ func TestRunMigratesServersWithoutUpstreamSignIn(t *testing.T) {
 		{name: "no sign-in provider", opts: serverOptions{slug: "no-issuer", remoteURL: "https://mcp.example.com/mcp", noIssuer: true}},
 		{name: "sign-in provider without an upstream client", opts: serverOptions{slug: "no-client", remoteURL: "https://mcp.example.com/mcp", noClient: true}},
 		{name: "headers users send", opts: serverOptions{slug: "user-headers", remoteURL: "https://mcp.example.com/mcp", noIssuer: true, headers: []byte(`[{"name":"X-Api-Key"}]`)}},
-		{name: "per-tool definitions", opts: serverOptions{slug: "per-tool", remoteURL: "https://mcp.example.com/mcp", noIssuer: true, perTool: true}},
+		{name: "per-tool definitions", opts: serverOptions{slug: "per-tool", remoteURL: "https://mcp.example.com/mcp", noIssuer: true, perTool: true, headers: []byte(`[{"name":"X-Api-Key"}]`)}},
 		{name: "other tools", opts: serverOptions{slug: "other-tools", remoteURL: "https://mcp.example.com/mcp", otherTool: true}, warning: "which are dropped"},
 	}
 	for _, tc := range cases {
@@ -209,6 +209,16 @@ func TestRunMigratesServersWithoutUpstreamSignIn(t *testing.T) {
 				require.False(t, switched.RemoteSessionIssuerID.Valid)
 			}
 			require.Equal(t, before, countIssuersAndClients(t, ctx, ti))
+
+			// Declared headers carry over as pass-throughs, whichever kind of
+			// definition declared them.
+			if tc.opts.headers != nil {
+				headers, err := repo.New(ti.conn).ListRemoteHeadersFixture(ctx, outcomes[0].RemoteMcpServerID)
+				require.NoError(t, err)
+				require.Len(t, headers, 1)
+				require.Equal(t, "X-Api-Key", headers[0].Name)
+				require.True(t, headers[0].ValueFromRequestHeader.Valid)
+			}
 		})
 	}
 }

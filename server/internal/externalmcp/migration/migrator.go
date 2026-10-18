@@ -168,6 +168,7 @@ func (m *Migrator) runOne(ctx context.Context, actor Actor, request Request, dry
 	// The transaction rolled back, so nothing it created exists.
 	outcome.RemoteMcpServerID = uuid.Nil
 	outcome.RemoteURL = ""
+	outcome.Actions = nil
 	var reason failure
 	switch {
 	case errors.As(err, &reason):

@@ -214,7 +214,7 @@ function countLabel(count: number, noun: string): string {
 function runLabel(migrating: number, deleting: number): string {
   if (deleting === 0) return `Migrate ${countLabel(migrating, "server")}`;
   if (migrating === 0) return `Delete ${countLabel(deleting, "server")}`;
-  return `Migrate ${countLabel(migrating, "server")} and delete ${deleting}`;
+  return `Migrate ${countLabel(migrating, "server")} and delete ${countLabel(deleting, "server")}`;
 }
 
 function MigrateDialog({
@@ -302,8 +302,9 @@ function MigrateDialog({
           <DialogDescription>
             A migrated server switches in place to a remote MCP server on its
             own sign-in provider and keeps its ID and address. A deleted one
-            loses its toolset, server, addresses and plugin entries. Servers run
-            one at a time and the run stops at the first failure.
+            loses its toolset and any server, addresses and plugin entries it
+            still owns; a server already migrated stays intact. Servers run one
+            at a time and the run stops at the first failure.
           </DialogDescription>
         </DialogHeader>
         {preview.isFetching && (
@@ -630,7 +631,11 @@ export function ExternalMcpMigration(): JSX.Element {
             >
               To delete ({toDelete})
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => select((c) => c.toolCalls === 0)}>
+            <DropdownMenuItem
+              onSelect={() =>
+                select((c) => c.action === "migrate" && c.toolCalls === 0)
+              }
+            >
               Ready with no recent calls
             </DropdownMenuItem>
             <DropdownMenuSeparator />

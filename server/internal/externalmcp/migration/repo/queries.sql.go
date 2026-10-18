@@ -359,6 +359,7 @@ SELECT
      -- clients and its organization's organization-level clients.
      AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
+     AND (rsi.project_id = t.project_id OR (rsi.project_id IS NULL AND rsi.organization_id = t.organization_id))
     WHERE link.user_session_issuer_id = t.user_session_issuer_id
   ), ARRAY[]::uuid[])::uuid[] AS remote_session_issuer_ids,
   COALESCE((
@@ -371,6 +372,7 @@ SELECT
      -- clients and its organization's organization-level clients.
      AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
+     AND (rsi.project_id = t.project_id OR (rsi.project_id IS NULL AND rsi.organization_id = t.organization_id))
     WHERE link.user_session_issuer_id = t.user_session_issuer_id
   ), ARRAY[]::text[])::text[] AS remote_issuer_names,
   EXISTS (
