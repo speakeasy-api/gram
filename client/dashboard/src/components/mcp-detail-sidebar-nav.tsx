@@ -34,7 +34,7 @@ import {
   MessageSquareText,
   Plug,
   Settings as SettingsIcon,
-  Sparkles,
+  Terminal,
   Users,
   Wrench,
 } from "lucide-react";
@@ -143,7 +143,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
           {
             key: "skills",
             title: "Skills",
-            Icon: Sparkles,
+            Icon: Terminal,
             href: mcpDetailTabHref(routes, toolsetSlug, "skills"),
             active: activeTab === "skills",
           },
