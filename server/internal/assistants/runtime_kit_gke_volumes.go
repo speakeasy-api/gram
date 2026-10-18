@@ -9,7 +9,9 @@ import (
 func kitMemoryVolume(name, limit string) (corev1.Volume, error) {
 	q, err := resource.ParseQuantity(limit)
 	if err != nil || q.Sign() <= 0 {
-		return corev1.Volume{}, fmt.Errorf("Kit %s requires a positive memory volume size", name)
+		return corev1.Volume{}, fmt.Errorf("kit %s requires a positive memory volume size", name)
 	}
-	return corev1.Volume{Name: name, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory, SizeLimit: &q}}}, nil
+	var source corev1.VolumeSource
+	source.EmptyDir = &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory, SizeLimit: &q}
+	return corev1.Volume{Name: name, VolumeSource: source}, nil
 }

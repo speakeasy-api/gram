@@ -16,6 +16,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+//nolint:exhaustive // Container resource budgets intentionally specify only CPU and memory.
 func kitGKEInput() KitGKEProvisionInput {
 	return KitGKEProvisionInput{
 		Identity: KitGKEIdentity{Namespace: "kit-test", AssistantID: "assistant-test", Lineage: "lineage-one", CompatibilityGeneration: "generation-one"},
@@ -36,6 +37,7 @@ func kitPodTemplate(t *testing.T, objects KitGKEObjects) corev1.PodTemplateSpec 
 	return pod
 }
 func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
+	t.Parallel()
 	in := kitGKEInput()
 	objects, err := RenderKitGKEProvision(in)
 	require.NoError(t, err)
@@ -97,8 +99,10 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.NotEqual(t, secret.Name, changed.Secret.GetName())
 }
 func TestKitGKEProvisionCreateOrderingAndFailure(t *testing.T) {
+	t.Parallel()
 	for _, failResource := range []string{"", "secrets", "sandboxtemplates", "sandboxclaims"} {
 		t.Run(failResource, func(t *testing.T) {
+			t.Parallel()
 			client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 			if failResource != "" {
 				client.PrependReactor("create", failResource, func(k8stesting.Action) (bool, runtime.Object, error) { return true, nil, errors.New("blocked") })
@@ -126,6 +130,7 @@ func TestKitGKEProvisionCreateOrderingAndFailure(t *testing.T) {
 	}
 }
 func TestKitGKEProvisionValidation(t *testing.T) {
+	t.Parallel()
 	cases := map[string]func(*KitGKEProvisionInput){
 		"legacy":                       func(in *KitGKEProvisionInput) { in.Name = "gram-asst" },
 		"missing command":              func(in *KitGKEProvisionInput) { in.Command = nil },
@@ -140,6 +145,7 @@ func TestKitGKEProvisionValidation(t *testing.T) {
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			in := kitGKEInput()
 			change(&in)
 			client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
@@ -161,7 +167,9 @@ type kitSnapshotVerifier func(context.Context, *unstructured.Unstructured, KitGK
 func (f kitSnapshotVerifier) VerifyAvailable(ctx context.Context, u *unstructured.Unstructured, b KitGKESnapshotBinding) error {
 	return f(ctx, u, b)
 }
+
 func TestKitGKESnapshotContracts(t *testing.T) {
+	t.Parallel()
 	in := kitGKEInput()
 	binding := KitGKESnapshotBinding{Identity: in.Identity, SourcePodName: "source-pod", SourcePodUID: "source-uid"}
 	pod := kitObject("Pod", "v1", binding.SourcePodName, in.Identity)
@@ -203,8 +211,10 @@ func TestKitGKESnapshotContracts(t *testing.T) {
 	objects, err := RenderKitGKEProvision(in)
 	require.NoError(t, err)
 	require.Equal(t, selected.GetName(), kitPodTemplate(t, objects).Annotations["podsnapshot.gke.io/ps-name"])
+	restoreInput := in
 	for _, field := range []string{"assistant", "namespace", "lineage", "generation", "uid", "pod"} {
 		t.Run(field, func(t *testing.T) {
+			t.Parallel()
 			bad := binding
 			switch field {
 			case "assistant":
@@ -220,15 +230,17 @@ func TestKitGKESnapshotContracts(t *testing.T) {
 			case "pod":
 				bad.SourcePodName = "other"
 			}
-			copied := in
+			copied := restoreInput
 			copied.RestoreSource = &bad
 			_, err := RenderKitGKEProvision(copied)
 			require.Error(t, err)
 		})
 	}
 	for _, label := range []string{"gram.ai/assistant-id", "gram.ai/runtime-version", "gram.ai/runtime-lineage", "gram.ai/compatibility-generation"} {
+		snapshot := selected.DeepCopy()
 		t.Run(label, func(t *testing.T) {
-			bad := selected.DeepCopy()
+			t.Parallel()
+			bad := snapshot
 			labels := bad.GetLabels()
 			labels[label] = "other"
 			bad.SetLabels(labels)
@@ -249,6 +261,7 @@ func TestKitGKESnapshotContracts(t *testing.T) {
 
 // Keep the test's API object construction exercised through the dynamic client.
 func TestKitGKEProvisionDoesNotOverwriteExistingSecret(t *testing.T) {
+	t.Parallel()
 	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 	in := kitGKEInput()
 	objects, err := RenderKitGKEProvision(in)
@@ -261,6 +274,7 @@ func TestKitGKEProvisionDoesNotOverwriteExistingSecret(t *testing.T) {
 }
 
 func TestKitGKERejectsUnboundedOrMutableProvisioning(t *testing.T) {
+	t.Parallel()
 	cases := map[string]func(*KitGKEProvisionInput){
 		"legacy prefix":    func(in *KitGKEProvisionInput) { in.Name = "gram-asst-kit" },
 		"mutable image":    func(in *KitGKEProvisionInput) { in.Image = "example.invalid/kit:latest" },
@@ -283,6 +297,7 @@ func TestKitGKERejectsUnboundedOrMutableProvisioning(t *testing.T) {
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			in := kitGKEInput()
 			change(&in)
 			client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
