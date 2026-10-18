@@ -19,7 +19,7 @@ export type RankedRow = {
   segments?: RankedRowSegment[];
 };
 
-export type RankedRowSegment = {
+type RankedRowSegment = {
   value: number;
   color: string;
   /** Resting fill strength; the parts tell apart by it, not by hue alone. */

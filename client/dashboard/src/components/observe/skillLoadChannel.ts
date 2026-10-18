@@ -34,7 +34,7 @@ export function skillLoadChannel(trace: {
  * hook" rather than an exact source, so it keeps matching whatever source the
  * server stamps on an MCP skill read.
  */
-export function loadedViaFilter(channel: SkillLoadChannel): {
+function loadedViaFilter(channel: SkillLoadChannel): {
   path: string;
   op: Operator;
   value: string;
