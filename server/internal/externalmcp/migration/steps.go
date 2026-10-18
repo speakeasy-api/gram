@@ -42,7 +42,7 @@ func lockAdmission(ctx context.Context, tx pgx.Tx, projectID uuid.UUID) error {
 // migrateInTx runs every step of one migration inside tx. Nothing is
 // committed here; the caller commits or, for a preview, rolls back.
 func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, request Request) (Outcome, error) {
-	outcome := Outcome{ToolsetID: request.ToolsetID, Status: "", Reason: "", McpSlug: "", McpServerID: uuid.Nil, RemoteMcpServerID: uuid.Nil, RemoteURL: "", Actions: nil, Warnings: nil}
+	outcome := Outcome{ToolsetID: request.ToolsetID, Action: "", Status: "", Reason: "", McpSlug: "", McpServerID: uuid.Nil, RemoteMcpServerID: uuid.Nil, RemoteURL: "", Actions: nil, Warnings: nil}
 	principal := urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID)
 
 	// The scope locks need the toolset's organization and project, which are
@@ -79,6 +79,11 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: request.ToolsetID, ProjectID: projectID})
 	if err != nil {
 		return outcome, fmt.Errorf("read locked toolset: %w", err)
+	}
+	outcome.Action = candidate.Action
+	if candidate.Action == ActionDelete {
+		outcome.McpSlug = toolset.McpSlug.String
+		return outcome, m.deleteInTx(ctx, tx, actor, toolset, &outcome)
 	}
 	outcome.McpSlug = toolset.McpSlug.String
 	outcome.Warnings = append(outcome.Warnings, candidate.Warnings...)

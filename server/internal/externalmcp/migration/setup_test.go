@@ -117,6 +117,8 @@ type serverOptions struct {
 	otherTool bool
 	// perTool seeds a per-tool (direct) definition instead of the proxy tool.
 	perTool bool
+	// mcpOff seeds the toolset with MCP turned off.
+	mcpOff bool
 	// sharedIssuer signs the server in through another server's issuer
 	// instead of creating its own.
 	sharedIssuer *fixtureServer
@@ -137,7 +139,7 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 	toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: ti.organizationID, ProjectID: ti.projectID,
 		Name: opts.slug, Slug: opts.slug, Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug: conv.ToPGText(opts.slug + "-mcp"), McpEnabled: true,
+		McpSlug: conv.ToPGText(opts.slug + "-mcp"), McpEnabled: !opts.mcpOff,
 	})
 	require.NoError(t, err)
 	toolURNs := []urn.Tool{toolURN}

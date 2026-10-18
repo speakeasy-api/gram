@@ -402,14 +402,14 @@ type UpdateSupportMatrixRequestBody struct {
 // PreviewExternalMcpMigrationRequestBody is the type of the "admin" service
 // "previewExternalMcpMigration" endpoint HTTP request body.
 type PreviewExternalMcpMigrationRequestBody struct {
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers" json:"servers" xml:"servers"`
 }
 
 // MigrateExternalMcpServersRequestBody is the type of the "admin" service
 // "migrateExternalMcpServers" endpoint HTTP request body.
 type MigrateExternalMcpServersRequestBody struct {
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers" json:"servers" xml:"servers"`
 }
 
@@ -20631,6 +20631,12 @@ type AdminExternalMcpMigrationCandidateResponseBody struct {
 	// Tool calls over the last tool_call_window_days. Absent when telemetry is
 	// unavailable.
 	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// What running the candidate does: migrate switches its server in place to a
+	// remote MCP server; delete removes the toolset and its server because nothing
+	// is left to migrate.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Why the candidate is deleted rather than migrated. Empty when it migrates.
+	DeleteReasons []string `form:"delete_reasons,omitempty" json:"delete_reasons,omitempty" xml:"delete_reasons,omitempty"`
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string `form:"blockers,omitempty" json:"blockers,omitempty" xml:"blockers,omitempty"`
 	// What migrating the server drops or cannot carry over. Warnings do not stop
@@ -20650,7 +20656,10 @@ type AdminExternalMcpMigrationRequestRequestBody struct {
 type AdminExternalMcpMigrationOutcomeResponseBody struct {
 	// The candidate's toolset.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// migrated and previewed completed every step; failed left the server
+	// What the run did, or would do, with the candidate. Absent when it was not
+	// attempted.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// migrated, deleted and previewed completed every step; failed left the server
 	// unchanged; not_attempted follows an earlier failure.
 	MigrationStatus *string `form:"migration_status,omitempty" json:"migration_status,omitempty" xml:"migration_status,omitempty"`
 	// Why the server failed or was not attempted.
@@ -64165,6 +64174,12 @@ func ValidateAdminExternalMcpMigrationCandidateResponseBody(body *AdminExternalM
 	if body.ServerName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("server_name", "body"))
 	}
+	if body.Action == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
+	}
+	if body.DeleteReasons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("delete_reasons", "body"))
+	}
 	if body.Blockers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("blockers", "body"))
 	}
@@ -64176,6 +64191,11 @@ func ValidateAdminExternalMcpMigrationCandidateResponseBody(body *AdminExternalM
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "migrate" || *body.Action == "delete") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"migrate", "delete"}))
+		}
 	}
 	return
 }
@@ -64205,9 +64225,14 @@ func ValidateAdminExternalMcpMigrationOutcomeResponseBody(body *AdminExternalMcp
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 	}
+	if body.Action != nil {
+		if !(*body.Action == "migrate" || *body.Action == "delete") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"migrate", "delete"}))
+		}
+	}
 	if body.MigrationStatus != nil {
-		if !(*body.MigrationStatus == "migrated" || *body.MigrationStatus == "previewed" || *body.MigrationStatus == "failed" || *body.MigrationStatus == "not_attempted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.migration_status", *body.MigrationStatus, []any{"migrated", "previewed", "failed", "not_attempted"}))
+		if !(*body.MigrationStatus == "migrated" || *body.MigrationStatus == "deleted" || *body.MigrationStatus == "previewed" || *body.MigrationStatus == "failed" || *body.MigrationStatus == "not_attempted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.migration_status", *body.MigrationStatus, []any{"migrated", "deleted", "previewed", "failed", "not_attempted"}))
 		}
 	}
 	if body.McpServerID != nil {

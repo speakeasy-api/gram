@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -100,9 +101,14 @@ func TestRunSwitchesServerInPlace(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, migrationsBefore+1, migrationsAfter)
 
-	candidates, err := ti.migrator.ListCandidates(ctx)
-	require.NoError(t, err)
-	require.Empty(t, candidates)
+	// The disabled toolset is listed again, to be deleted once the switch is
+	// confirmed; deleting it leaves the server alone.
+	leftover := findCandidate(t, ctx, ti, server)
+	require.Equal(t, migration.ActionDelete, leftover.Action)
+	require.True(t, containsSubstring(leftover.DeleteReasons, "already migrated"), "delete reasons %q", leftover.DeleteReasons)
+	deleted := migrate(t, ctx, ti, false, server)
+	require.Equal(t, migration.StatusDeleted, deleted[0].Status, deleted[0].Reason)
+	require.Equal(t, switched, readServer(t, ctx, ti, server))
 }
 
 func TestRunDialsTheRecordedSessionResource(t *testing.T) {
@@ -326,4 +332,76 @@ func containsSubstring(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func findCandidate(t *testing.T, ctx context.Context, ti *testInstance, server fixtureServer) migration.Candidate {
+	t.Helper()
+	candidates, err := ti.migrator.ListCandidates(ctx)
+	require.NoError(t, err)
+	for _, candidate := range candidates {
+		if candidate.Row.ToolsetID == server.toolset.ID {
+			return candidate
+		}
+	}
+	require.FailNow(t, "candidate not listed", "toolset %s", server.toolset.Slug)
+	return migration.Candidate{}
+}
+
+func TestRunDeletesToolsetsLeftWithNothingToMigrate(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		reason string
+		seed   func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer
+	}{
+		{name: "attachment retired from the active deployment", reason: "no longer on the project's active deployment", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
+			t.Helper()
+			server := seedServer(t, ctx, ti, serverOptions{slug: "retired", remoteURL: "https://mcp.example.com/mcp"})
+			_, err := repo.New(ti.conn).SeedCompletedDeploymentFixture(ctx, repo.SeedCompletedDeploymentFixtureParams{
+				ProjectID: ti.projectID, OrganizationID: ti.organizationID, IdempotencyKey: uuid.NewString(),
+			})
+			require.NoError(t, err)
+			return server
+		}},
+		{name: "MCP off with no server row", reason: "nothing serves it", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
+			t.Helper()
+			return seedServer(t, ctx, ti, serverOptions{slug: "unserved", remoteURL: "https://mcp.example.com/mcp", mcpOff: true, noWrapper: true})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMigrator(t)
+			server := tc.seed(t, ctx, ti)
+
+			candidate := findCandidate(t, ctx, ti, server)
+			require.Equal(t, migration.ActionDelete, candidate.Action)
+			require.True(t, containsSubstring(candidate.DeleteReasons, tc.reason), "delete reasons %q do not mention %q", candidate.DeleteReasons, tc.reason)
+			require.Empty(t, candidate.Blockers)
+
+			// A preview deletes nothing.
+			previewed := migrate(t, ctx, ti, true, server)
+			require.Equal(t, migration.StatusPreviewed, previewed[0].Status, previewed[0].Reason)
+			require.Equal(t, migration.ActionDelete, previewed[0].Action)
+			state, err := repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
+			require.NoError(t, err)
+			require.False(t, state.Deleted)
+
+			outcomes := migrate(t, ctx, ti, false, server)
+			require.Equal(t, migration.StatusDeleted, outcomes[0].Status, outcomes[0].Reason)
+			require.True(t, containsSubstring(outcomes[0].Actions, "Delete the toolset"), "actions %q", outcomes[0].Actions)
+			state, err = repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
+			require.NoError(t, err)
+			require.True(t, state.Deleted)
+
+			// The toolset's server and its address go with it.
+			_, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: server.toolset.ID, ProjectID: ti.projectID})
+			require.ErrorIs(t, err, pgx.ErrNoRows)
+			endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: ti.projectID, McpServerID: server.toolset.ID})
+			require.NoError(t, err)
+			require.Empty(t, endpoints)
+		})
+	}
 }

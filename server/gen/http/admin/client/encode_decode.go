@@ -22992,6 +22992,11 @@ func unmarshalAdminExternalMcpMigrationCandidateResponseBodyToAdminAdminExternal
 		ReplacementURL:   v.ReplacementURL,
 		SignInProvider:   v.SignInProvider,
 		ToolCalls:        v.ToolCalls,
+		Action:           *v.Action,
+	}
+	res.DeleteReasons = make([]string, len(v.DeleteReasons))
+	for i, val := range v.DeleteReasons {
+		res.DeleteReasons[i] = val
 	}
 	res.Blockers = make([]string, len(v.Blockers))
 	for i, val := range v.Blockers {
@@ -23033,6 +23038,7 @@ func marshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMi
 func unmarshalAdminExternalMcpMigrationOutcomeResponseBodyToAdminAdminExternalMcpMigrationOutcome(v *AdminExternalMcpMigrationOutcomeResponseBody) *admin.AdminExternalMcpMigrationOutcome {
 	res := &admin.AdminExternalMcpMigrationOutcome{
 		ToolsetID:         *v.ToolsetID,
+		Action:            v.Action,
 		MigrationStatus:   *v.MigrationStatus,
 		Reason:            v.Reason,
 		McpSlug:           v.McpSlug,

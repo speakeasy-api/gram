@@ -18,10 +18,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 )
 
-// Candidate is a live server backed by an external MCP attachment.
+// Action is what staff can do with a candidate.
+type Action string
+
+const (
+	// ActionMigrate switches the server in place to a remote MCP server.
+	ActionMigrate Action = "migrate"
+
+	// ActionDelete deletes the toolset and its server, for a toolset left with
+	// nothing to migrate.
+	ActionDelete Action = "delete"
+)
+
+// Candidate is a toolset backed by an external MCP attachment.
 type Candidate struct {
 	// Row is the candidate as stored.
 	Row repo.ListCandidatesRow
+
+	// Action is what running the candidate does.
+	Action Action
+
+	// DeleteReasons explain why the candidate is deleted rather than
+	// migrated; empty when it migrates.
+	DeleteReasons []string
 
 	// RemoteURL is the attachment's upstream URL, or empty when the server
 	// references several.
@@ -47,9 +66,11 @@ type Candidate struct {
 
 const (
 	blockerNoOrganization     = "its organization has no metadata record, so it is handled separately"
-	blockerManyAttachments    = "proxies more than one external MCP attachment"
-	blockerManyURLs           = "proxies more than one upstream URL"
-	blockerManyTransports     = "proxies upstreams over more than one transport"
+	deleteNotLive             = "MCP is off and it has no server row, so nothing serves it"
+	deleteMigrated            = "already migrated; its server now proxies a remote MCP server and keeps working"
+	deleteNotOnDeployment     = "its external MCP attachment is no longer on the project's active deployment"
+	deleteManyUpstreams       = "proxies more than one external MCP attachment, URL or transport"
+	blockerTransport          = "uses a transport remote MCP servers do not support"
 	blockerVariations         = "uses tool variations, which the switch would drop"
 	blockerPrompts            = "has prompts, which the switch would drop"
 	blockerAssistants         = "is attached to an assistant through its toolset"
@@ -99,9 +120,18 @@ func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 
 // assess derives a candidate's upstream URLs and blockers from its row.
 func assess(row repo.ListCandidatesRow) Candidate {
-	candidate := Candidate{Row: row, RemoteURL: "", ReplacementURL: "", Blockers: nil, Warnings: nil, ToolCalls: nil}
+	candidate := Candidate{Row: row, Action: ActionMigrate, DeleteReasons: nil, RemoteURL: "", ReplacementURL: "", Blockers: nil, Warnings: nil, ToolCalls: nil}
 	block := func(reason string) { candidate.Blockers = append(candidate.Blockers, reason) }
 	warn := func(reason string) { candidate.Warnings = append(candidate.Warnings, reason) }
+
+	if reasons := deleteReasons(row); len(reasons) > 0 {
+		candidate.Action = ActionDelete
+		candidate.DeleteReasons = reasons
+		if len(row.RemoteUrls) == 1 {
+			candidate.RemoteURL = row.RemoteUrls[0]
+		}
+		return candidate
+	}
 
 	if !row.HasOrganizationMetadata {
 		block(blockerNoOrganization)
@@ -118,11 +148,8 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if row.ServesOtherTools {
 		warn(warningOtherTools)
 	}
-	if row.AttachmentCount != 1 {
-		block(blockerManyAttachments)
-	}
-	if len(row.TransportTypes) != 1 || !supportedTransport(row.TransportTypes[0]) {
-		block(blockerManyTransports)
+	if !supportedTransport(row.TransportTypes[0]) {
+		block(blockerTransport)
 	}
 	if row.ToolsetHasVariations || row.ServerHasVariations {
 		block(blockerVariations)
@@ -175,10 +202,6 @@ func assess(row repo.ListCandidatesRow) Candidate {
 		}
 	}
 
-	if len(row.RemoteUrls) != 1 {
-		block(blockerManyURLs)
-		return candidate
-	}
 	candidate.RemoteURL = row.RemoteUrls[0]
 	replacement, err := replacementURL(candidate.RemoteURL, row.SessionResources)
 	if err != nil {
@@ -193,6 +216,25 @@ func assess(row repo.ListCandidatesRow) Candidate {
 		}
 	}
 	return candidate
+}
+
+// deleteReasons explain why a toolset is left with nothing to migrate. A
+// candidate with none proxies exactly one attachment, URL and transport on
+// its project's active deployment.
+func deleteReasons(row repo.ListCandidatesRow) []string {
+	var reasons []string
+	switch {
+	case row.MigratedInPlace:
+		return []string{deleteMigrated}
+	case !row.Live:
+		reasons = append(reasons, deleteNotLive)
+	}
+	if !row.OnActiveDeployment {
+		reasons = append(reasons, deleteNotOnDeployment)
+	} else if row.AttachmentCount != 1 || len(row.RemoteUrls) != 1 || len(row.TransportTypes) != 1 {
+		reasons = append(reasons, deleteManyUpstreams)
+	}
+	return reasons
 }
 
 // replacementURL is the URL the switched server dials. Existing upstream

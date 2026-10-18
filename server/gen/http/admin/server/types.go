@@ -402,14 +402,14 @@ type UpdateSupportMatrixRequestBody struct {
 // PreviewExternalMcpMigrationRequestBody is the type of the "admin" service
 // "previewExternalMcpMigration" endpoint HTTP request body.
 type PreviewExternalMcpMigrationRequestBody struct {
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 }
 
 // MigrateExternalMcpServersRequestBody is the type of the "admin" service
 // "migrateExternalMcpServers" endpoint HTTP request body.
 type MigrateExternalMcpServersRequestBody struct {
-	// Servers to migrate, in order.
+	// Servers to migrate or delete, in order.
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 }
 
@@ -20619,6 +20619,12 @@ type AdminExternalMcpMigrationCandidateResponseBody struct {
 	// Tool calls over the last tool_call_window_days. Absent when telemetry is
 	// unavailable.
 	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// What running the candidate does: migrate switches its server in place to a
+	// remote MCP server; delete removes the toolset and its server because nothing
+	// is left to migrate.
+	Action string `form:"action" json:"action" xml:"action"`
+	// Why the candidate is deleted rather than migrated. Empty when it migrates.
+	DeleteReasons []string `form:"delete_reasons" json:"delete_reasons" xml:"delete_reasons"`
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string `form:"blockers" json:"blockers" xml:"blockers"`
 	// What migrating the server drops or cannot carry over. Warnings do not stop
@@ -20631,7 +20637,10 @@ type AdminExternalMcpMigrationCandidateResponseBody struct {
 type AdminExternalMcpMigrationOutcomeResponseBody struct {
 	// The candidate's toolset.
 	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
-	// migrated and previewed completed every step; failed left the server
+	// What the run did, or would do, with the candidate. Absent when it was not
+	// attempted.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// migrated, deleted and previewed completed every step; failed left the server
 	// unchanged; not_attempted follows an earlier failure.
 	MigrationStatus string `form:"migration_status" json:"migration_status" xml:"migration_status"`
 	// Why the server failed or was not attempted.

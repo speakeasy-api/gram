@@ -52,6 +52,8 @@ func (s *Service) ListExternalMcpMigrationCandidates(ctx context.Context, _ *gen
 			ReplacementURL:   conv.PtrEmpty(candidate.ReplacementURL),
 			SignInProvider:   conv.PtrEmpty(candidate.SignInProvider()),
 			ToolCalls:        toolCalls,
+			Action:           string(candidate.Action),
+			DeleteReasons:    nonNil(candidate.DeleteReasons),
 			Blockers:         blockers,
 			Warnings:         nonNil(candidate.Warnings),
 		})
@@ -102,6 +104,7 @@ func (s *Service) runExternalMCPMigration(ctx context.Context, servers []*gen.Ad
 	for _, outcome := range outcomes {
 		views = append(views, &gen.AdminExternalMcpMigrationOutcome{
 			ToolsetID:         outcome.ToolsetID.String(),
+			Action:            conv.PtrEmpty(string(outcome.Action)),
 			MigrationStatus:   string(outcome.Status),
 			Reason:            conv.PtrEmpty(outcome.Reason),
 			McpSlug:           conv.PtrEmpty(outcome.McpSlug),

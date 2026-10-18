@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * previewExternalMcpMigration admin
  *
  * @remarks
- * Runs the migration of each server inside a transaction that is rolled back, reporting what would happen without changing anything.
+ * Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.
  */
 export function adminPreviewExternalMcpMigration(
   client: GramCore,
