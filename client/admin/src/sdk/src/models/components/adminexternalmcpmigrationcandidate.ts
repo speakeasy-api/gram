@@ -68,6 +68,10 @@ export type AdminExternalMcpMigrationCandidate = {
    * The toolset behind the server.
    */
   toolsetId: string;
+  /**
+   * What migrating the server drops or cannot carry over. Warnings do not stop it.
+   */
+  warnings: Array<string>;
 };
 
 /** @internal */
@@ -90,6 +94,7 @@ export const AdminExternalMcpMigrationCandidate$inboundSchema: z.ZodMiniType<
     sign_in_provider: z.optional(z.string()),
     tool_calls: z.optional(z.int()),
     toolset_id: z.string(),
+    warnings: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {

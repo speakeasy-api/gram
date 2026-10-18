@@ -22997,6 +22997,10 @@ func unmarshalAdminExternalMcpMigrationCandidateResponseBodyToAdminAdminExternal
 	for i, val := range v.Blockers {
 		res.Blockers[i] = val
 	}
+	res.Warnings = make([]string, len(v.Warnings))
+	for i, val := range v.Warnings {
+		res.Warnings[i] = val
+	}
 
 	return res
 }

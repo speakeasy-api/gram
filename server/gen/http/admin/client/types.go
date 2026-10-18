@@ -20633,6 +20633,9 @@ type AdminExternalMcpMigrationCandidateResponseBody struct {
 	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string `form:"blockers,omitempty" json:"blockers,omitempty" xml:"blockers,omitempty"`
+	// What migrating the server drops or cannot carry over. Warnings do not stop
+	// it.
+	Warnings []string `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
 }
 
 // AdminExternalMcpMigrationRequestRequestBody is used to define fields on
@@ -64164,6 +64167,9 @@ func ValidateAdminExternalMcpMigrationCandidateResponseBody(body *AdminExternalM
 	}
 	if body.Blockers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("blockers", "body"))
+	}
+	if body.Warnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warnings", "body"))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))

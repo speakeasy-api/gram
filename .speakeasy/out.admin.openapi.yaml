@@ -7707,6 +7707,11 @@ components:
           type: string
           description: The toolset behind the server.
           format: uuid
+        warnings:
+          type: array
+          items:
+            type: string
+          description: What migrating the server drops or cannot carry over. Warnings do not stop it.
       description: A live server backed by an external MCP attachment.
       required:
         - toolset_id
@@ -7718,6 +7723,7 @@ components:
         - project_slug
         - server_name
         - blockers
+        - warnings
     AdminExternalMcpMigrationOutcome:
       type: object
       properties:

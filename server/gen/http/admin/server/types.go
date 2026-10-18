@@ -20621,6 +20621,9 @@ type AdminExternalMcpMigrationCandidateResponseBody struct {
 	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string `form:"blockers" json:"blockers" xml:"blockers"`
+	// What migrating the server drops or cannot carry over. Warnings do not stop
+	// it.
+	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
 }
 
 // AdminExternalMcpMigrationOutcomeResponseBody is used to define fields on

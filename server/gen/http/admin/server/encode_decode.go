@@ -20646,6 +20646,14 @@ func marshalAdminAdminExternalMcpMigrationCandidateToAdminExternalMcpMigrationCa
 	} else {
 		res.Blockers = []string{}
 	}
+	if v.Warnings != nil {
+		res.Warnings = make([]string, len(v.Warnings))
+		for i, val := range v.Warnings {
+			res.Warnings[i] = val
+		}
+	} else {
+		res.Warnings = []string{}
+	}
 
 	return res
 }

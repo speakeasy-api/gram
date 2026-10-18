@@ -458,6 +458,9 @@ type AdminExternalMcpMigrationCandidate struct {
 	ToolCalls *int64
 	// Why the server cannot be migrated. Empty when it can.
 	Blockers []string
+	// What migrating the server drops or cannot carry over. Warnings do not stop
+	// it.
+	Warnings []string
 }
 
 // What happened, or in a preview what would happen, to one server.
