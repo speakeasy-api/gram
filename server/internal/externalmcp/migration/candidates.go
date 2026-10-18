@@ -55,7 +55,6 @@ const (
 	blockerAssistants         = "is attached to an assistant through its toolset"
 	blockerSlackApps          = "is attached to a Slack app through its toolset"
 	blockerToolsetPlugin      = "is in a plugin through its toolset rather than its server"
-	blockerCollections        = "is in an organization collection"
 	blockerGateway            = "is a member of a gateway"
 	blockerNoServer           = "has no server row; only the legacy toolset address serves it"
 	blockerManyServers        = "has more than one server row"
@@ -139,9 +138,6 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	}
 	if row.HasToolsetPluginEntries {
 		block(blockerToolsetPlugin)
-	}
-	if row.HasCollectionAttachments {
-		block(blockerCollections)
 	}
 	if row.InGateway {
 		block(blockerGateway)

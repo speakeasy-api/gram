@@ -335,11 +335,6 @@ SELECT
   EXISTS (SELECT 1 FROM plugin_servers AS ps WHERE ps.toolset_id = t.id AND ps.deleted IS FALSE)::boolean AS has_toolset_plugin_entries,
   EXISTS (
     SELECT 1
-    FROM organization_mcp_collection_server_attachments AS a
-    WHERE a.deleted IS FALSE AND (a.toolset_id = t.id OR a.mcp_server_id = wrapper.id)
-  )::boolean AS has_collection_attachments,
-  EXISTS (
-    SELECT 1
     FROM meta_mcp_server_members AS m
     WHERE m.deleted IS FALSE AND m.mcp_server_id = wrapper.id
   )::boolean AS in_gateway,
@@ -471,7 +466,6 @@ type ListCandidatesRow struct {
 	HasSlackApps                  bool
 	HasUserOauthTokens            bool
 	HasToolsetPluginEntries       bool
-	HasCollectionAttachments      bool
 	InGateway                     bool
 	RemoteSessionIssuerIds        []uuid.UUID
 	RemoteIssuerNames             []string
@@ -532,7 +526,6 @@ func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([
 			&i.HasSlackApps,
 			&i.HasUserOauthTokens,
 			&i.HasToolsetPluginEntries,
-			&i.HasCollectionAttachments,
 			&i.InGateway,
 			&i.RemoteSessionIssuerIds,
 			&i.RemoteIssuerNames,
