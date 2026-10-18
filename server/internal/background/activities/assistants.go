@@ -34,7 +34,7 @@ type ProcessAssistantThreadResult struct {
 	ProcessedAnyEvent bool
 	// BootstrappedRuntime is true when this run brought the v2 runtime row
 	// from `starting` to `active`. Cold v2 admit only fans out the first
-	// pending thread to avoid two thread workflows racing the Fly machine
+	// pending thread to avoid two thread workflows racing the runtime
 	// launch; the workflow signals the coordinator on this flag so the
 	// remaining pending threads get admitted against the now-active row.
 	BootstrappedRuntime bool

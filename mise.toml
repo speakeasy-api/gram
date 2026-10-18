@@ -314,7 +314,7 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ## Speakeasy Assistant runtime settings ##
 ########################################
 ## Where assistant runtimes run.
-## Allowed values: local, flyio, gke.
+## Allowed values: local, gke. Defaults to gke.
 ## Left unset here so `./zero` / `mise run zero:assistants` can tell "not
 ## configured" from an intentional override in mise.local.toml or the
 ## environment. When unset, that task writes local defaults:

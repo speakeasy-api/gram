@@ -11,18 +11,35 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 )
 
-func TestAssistantRuntimeConfigFromCLIAcceptsFlyProvider(t *testing.T) {
+func TestAssistantRuntimeConfigFromCLIAcceptsGKEProvider(t *testing.T) {
 	t.Parallel()
 
 	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
-		"assistant-runtime-provider": "flyio",
+		"assistant-runtime-provider": "gke",
 	})
 
 	serverURL := &url.URL{Scheme: "https", Host: "gram.example.com"}
 	cfg, err := assistantRuntimeConfigFromCLI(ctx, serverURL)
 	require.NoError(t, err)
-	require.Equal(t, assistants.RuntimeProviderFlyIO, cfg.Provider)
-	require.Equal(t, serverURL, cfg.Fly.ServerURL)
+	require.Equal(t, assistants.RuntimeProviderGKE, cfg.Provider)
+	require.Equal(t, serverURL, cfg.GKE.ServerURL)
+}
+
+func TestAssistantRuntimeConfigFromCLIDefaultsToGKE(t *testing.T) {
+	t.Setenv("GRAM_ASSISTANT_RUNTIME_PROVIDER", "")
+	for _, values := range []map[string]string{{}, {"assistant-runtime-provider": ""}} {
+		ctx := newAssistantRuntimeCLIContext(t, values)
+		cfg, err := assistantRuntimeConfigFromCLI(ctx, nil)
+		require.NoError(t, err)
+		require.Equal(t, assistants.RuntimeProviderGKE, cfg.Provider)
+	}
+}
+
+func TestAssistantRuntimeConfigFromCLIRejectsFlyProvider(t *testing.T) {
+	t.Parallel()
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{"assistant-runtime-provider": "flyio"})
+	_, err := assistantRuntimeConfigFromCLI(ctx, nil)
+	require.ErrorContains(t, err, "invalid assistant runtime provider: flyio")
 }
 
 func TestAssistantRuntimeConfigFromCLIRejectsUnknownProvider(t *testing.T) {
@@ -41,26 +58,26 @@ func TestAssistantRuntimeConfigFromCLIPrefersOverrideURL(t *testing.T) {
 	t.Parallel()
 
 	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
-		"assistant-runtime-provider":   assistants.RuntimeProviderFlyIO,
+		"assistant-runtime-provider":   assistants.RuntimeProviderGKE,
 		"assistant-runtime-server-url": "https://runtime.example.com",
 	})
 
 	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "gram.example.com"})
 	require.NoError(t, err)
-	require.Equal(t, "https://runtime.example.com", cfg.Fly.ServerURL.String())
+	require.Equal(t, "https://runtime.example.com", cfg.GKE.ServerURL.String())
 }
 
 func TestAssistantRuntimeConfigFromCLIFallsBackToServerURL(t *testing.T) {
 	t.Parallel()
 
 	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
-		"assistant-runtime-provider": assistants.RuntimeProviderFlyIO,
+		"assistant-runtime-provider": assistants.RuntimeProviderGKE,
 	})
 
 	serverURL := &url.URL{Scheme: "https", Host: "gram.example.com"}
 	cfg, err := assistantRuntimeConfigFromCLI(ctx, serverURL)
 	require.NoError(t, err)
-	require.Equal(t, serverURL, cfg.Fly.ServerURL)
+	require.Equal(t, serverURL, cfg.GKE.ServerURL)
 }
 
 func TestAssistantRuntimeConfigFromCLIAcceptsLocalProvider(t *testing.T) {
@@ -99,13 +116,13 @@ func TestAssistantRuntimeConfigFromCLIEnablesLocalInLocalEnvironment(t *testing.
 	t.Parallel()
 
 	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
-		"assistant-runtime-provider": assistants.RuntimeProviderFlyIO,
+		"assistant-runtime-provider": assistants.RuntimeProviderGKE,
 		"environment":                "local",
 	})
 
 	cfg, err := assistantRuntimeConfigFromCLI(ctx, &url.URL{Scheme: "https", Host: "localhost:8080"})
 	require.NoError(t, err)
-	require.Equal(t, assistants.RuntimeProviderFlyIO, cfg.Provider)
+	require.Equal(t, assistants.RuntimeProviderGKE, cfg.Provider)
 	// Locally created rows stay routable for cleanup even when targeting
 	// another backend.
 	require.True(t, cfg.Local.Enabled)
