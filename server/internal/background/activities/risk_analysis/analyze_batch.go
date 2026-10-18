@@ -114,10 +114,10 @@ func NewAnalyzeBatch(
 		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
 	if toolCallPub == nil {
-		toolCallPub = gcp.NewNoopPublisher[*riskv1.ToolCallAnalysis]()
+		return nil, errors.New("tool call analysis publisher is required")
 	}
 	if accountIdentityPub == nil {
-		accountIdentityPub = gcp.NewNoopPublisher[*riskv1.AccountIdentityAnalysis]()
+		return nil, errors.New("account identity analysis publisher is required")
 	}
 	recommended, err := CompileRecommended(celEng)
 	if err != nil {

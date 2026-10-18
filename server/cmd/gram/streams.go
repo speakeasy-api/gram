@@ -284,6 +284,11 @@ func newStreamsCommand() *cli.Command {
 			EnvVars: []string{"GRAM_SITE_URL"},
 		},
 		&cli.StringFlag{
+			Name:    "server-url",
+			Usage:   "The public URL of the server, trusted as a Speakeasy-hosted MCP host by the shadow MCP scanner",
+			EnvVars: []string{"GRAM_SERVER_URL"},
+		},
+		&cli.StringFlag{
 			Name:    "sigint-openrouter-api-key",
 			Usage:   "Platform OpenRouter inference key for sensor evaluation; unset leaves the receiver stopped unless sigint-ack-only is enabled",
 			EnvVars: []string{"GRAM_SIGINT_OPENROUTER_API_KEY"},
@@ -530,7 +535,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create risk meter publisher: %w", err)
 			}
 			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
-			shadowMCPClient := shadowmcp.NewClient(logger, replicaDB, cache.NewRedisCacheAdapter(redisClient), nil)
+			var serverURL *url.URL
+			if raw := c.String("server-url"); raw != "" {
+				serverURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("parse server url: %w", err)
+				}
+			}
+			shadowMCPClient := shadowmcp.NewClient(logger, replicaDB, cache.NewRedisCacheAdapter(redisClient), serverURL)
 			toolCallHandler := toolcall.NewHandler(
 				logger,
 				shadowmcpscan.NewScanner(
