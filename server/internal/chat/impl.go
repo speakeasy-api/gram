@@ -183,6 +183,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(mux, server)
 
 	o11y.AttachHandler(mux, "POST", "/chat/completions", oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/chat/models", oops.ErrHandle(service.logger, service.HandleModels).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/chat/turnstream", oops.ErrHandle(service.logger, service.HandleTurnStream).ServeHTTP)
 }
 
