@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ func AttachAHP(mux goahttp.Muxer, s *Service) error {
 		return err
 	}
 	mux.Handle("POST", "/ahp", h.ServeHTTP)
+	mux.Handle("POST", ahpUploadPath, s.ahpUploadHandler().ServeHTTP)
 	return nil
 }
 
@@ -52,7 +54,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.InterceptContext[ahp.UserMessageInboundEvent, ahp.UserMessageInboundCapabilities]) (ahpserver.UserMessageInboundReply, error) {
 				var reply ahpserver.UserMessageInboundReply
-				payload := ahpUserMessageInboundPayload(c.Event)
+				payload := ahpUserMessageInboundPayload(c.Event, s.ahpPromptAttachments(ctx, c.Event))
 				if payload == nil {
 					return reply, nil
 				}
@@ -203,7 +205,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				return err
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.ObserveContext[ahp.UserMessageInboundEvent]) error {
-				payload := ahpUserMessageInboundPayload(c.Event)
+				payload := ahpUserMessageInboundPayload(c.Event, s.ahpPromptAttachments(ctx, c.Event))
 				if payload == nil {
 					return nil
 				}
@@ -431,7 +433,9 @@ func ahpToolAfterPayload(e *ahp.ToolAfterEvent) *gen.IngestPayload {
 }
 
 // Only inbound user envelopes own prompt policy and transcript capture.
-func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent) *gen.IngestPayload {
+// Resolved attachments ride along as prompt attachments, so they persist
+// through the same path as transcript-derived hook attachments.
+func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent, attachments []*gen.HookPromptAttachmentEntry) *gen.IngestPayload {
 	var texts []string
 	for _, message := range e.Message.Messages {
 		if message.Role == "user" {
@@ -440,11 +444,23 @@ func ahpUserMessageInboundPayload(e *ahp.UserMessageInboundEvent) *gen.IngestPay
 			}
 		}
 	}
-	if len(texts) == 0 {
+	if len(texts) == 0 && len(attachments) == 0 {
 		return nil
 	}
 	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "prompt.submitted", e.Session, e.Turn.Value.ID)
-	payload.Data.Prompt = &gen.HookPromptData{Text: new(strings.Join(texts, "\n"))}
+	if len(texts) > 0 {
+		prompt := strings.Join(texts, "\n")
+		payload.Data.Prompt = &gen.HookPromptData{Text: &prompt}
+		// Link attachments to the prompt row this event persists.
+		sum := sha256.Sum256([]byte(strings.TrimSpace(prompt)))
+		promptSHA256 := hex.EncodeToString(sum[:])
+		for _, attachment := range attachments {
+			attachment.PromptSha256 = &promptSHA256
+		}
+	}
+	if len(attachments) > 0 {
+		payload.Data.PromptAttachments = attachments
+	}
 	return payload
 }
 

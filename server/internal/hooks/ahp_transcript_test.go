@@ -56,14 +56,14 @@ func TestAHPInboundPromptOwnership(t *testing.T) {
 	b, err := json.Marshal(raw)
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(b, &e))
-	p := ahpUserMessageInboundPayload(&e)
+	p := ahpUserMessageInboundPayload(&e, nil)
 	require.Equal(t, "prompt.submitted", p.Event.Type)
 	require.Equal(t, "incoming prompt", *p.Data.Prompt.Text)
 	// The wire schema currently allows only user messages. Keep the adapter
 	// filter explicit as defense in depth if a future SDK broadens that role.
 	for _, role := range []string{"system", "assistant"} {
 		e.Message.Messages[0].Role = ahp.UserMessageInboundEventMessageMessagesItemRole(role)
-		require.Nil(t, ahpUserMessageInboundPayload(&e))
+		require.Nil(t, ahpUserMessageInboundPayload(&e, nil))
 	}
 }
 
