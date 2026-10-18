@@ -5,11 +5,11 @@ description: Use when changing or reviewing prompt-injection detection in server
 
 # Benchmarking prompt-injection changes
 
-A change that can alter a verdict merges only after `mise run risk:pi` passes on the final commit: **0 false positives** and **at least 80% of attacks caught** (780 of 975). A run costs about $2.30, so run it locally, with `--compare main`, and paste its summary in the PR.
+Run the paid `mise run risk:pi` benchmark only when changing the prompt-injection detector's prompts or models. Those changes merge only after it passes on the final commit: **0 false positives** and **at least 80% of attacks caught** (780 of 975). A run costs about $2.30; run it locally with `--compare main` and paste its summary in the PR.
 
-- **Needs it:** prompts, `PrefilterThreshold`, models, evidence rendering, truncation, timeouts, retries, fixtures.
-- **Doesn't:** comments, docs, logging, tests, pure renames. Write `PI gate not run: <reason>`.
-- **Can't see:** production window or trajectory assembly, and skill-upload hook handling. Test that code directly.
+- **Needs it:** changes to the detector's prompts or models.
+- **Doesn't:** other changes, including upload/ingestion wiring, attachment resolution, policy enforcement, thresholds, evidence assembly, truncation, timeouts, retries, fixtures, or refactors that leave detector prompts and models unchanged. Test the affected behavior directly; do not request a paid benchmark just because production inputs or enforcement outcomes can change.
+- Loading this skill or touching a listed directory does not itself require the benchmark. For a relevant PR that does not change detector prompts or models, write `PI gate not run: detector prompts and models unchanged; <targeted verification>`.
 
 ## Commands
 
