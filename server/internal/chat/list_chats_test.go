@@ -954,9 +954,10 @@ func TestListChats_ClickHouseCutover(t *testing.T) {
 	require.Equal(t, 2, result.Total)
 	require.ElementsMatch(t, []string{hidden.String(), safe.String()}, []string{result.Chats[0].ID, result.Chats[1].ID})
 
-	minimumScore := 7
+	// min_risk_score is a live finding count threshold, independent of policy score.
+	minimumCount := 2
 	scored := defaultPayload()
-	scored.MinRiskScore = &minimumScore
+	scored.MinRiskScore = &minimumCount
 	result, err = ti.service.ListChats(ctx, scored)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Total)

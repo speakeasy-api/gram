@@ -228,7 +228,7 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 			return zero, fmt.Errorf("prepare project chat findings: %w", err)
 		}
 		if hasRiskFilter != "" {
-			riskChatIDs, err = findingsProject.QualifyingChatIDs(ctx, nil)
+			riskChatIDs, err = findingsProject.QualifyingChatIDs(ctx, 0)
 			if err != nil {
 				return zero, fmt.Errorf("filter project chats by findings: %w", err)
 			}

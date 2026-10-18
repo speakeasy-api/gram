@@ -20,6 +20,8 @@ type ChatFindingParams struct {
 	PolicyIDs []string
 	// ChatIDs optionally limits counts or anchors to known chats.
 	ChatIDs []string
+	// MinCount keeps only chats with at least this many live findings. Zero means no threshold.
+	MinCount uint64
 	// Limit bounds grouped count rows. Zero means no explicit limit.
 	Limit uint64
 }
@@ -69,6 +71,9 @@ func (q *Queries) ListChatFindingCounts(ctx context.Context, p ChatFindingParams
 		return nil, err
 	}
 	sb = sb.Where("chat_id != ''").Column("count() AS findings").GroupBy("chat_id").OrderBy("chat_id")
+	if p.MinCount > 0 {
+		sb = sb.Having("findings >= ?", p.MinCount)
+	}
 	if p.Limit > 0 {
 		sb = sb.Limit(p.Limit)
 	}

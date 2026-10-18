@@ -297,8 +297,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	sourceKind := conv.PtrValOr(payload.SourceKind, "")
 	excludeSourceKind := conv.PtrValOr(payload.ExcludeSourceKind, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
-	// -1 disables the Postgres count threshold. On the ClickHouse path a
-	// positive value is a minimum current policy score.
+	// -1 disables the live finding count threshold.
 	minRiskScore := int32(-1)
 	if payload.MinRiskScore != nil && *payload.MinRiskScore > 0 {
 		minRiskScore = conv.SafeInt32(*payload.MinRiskScore)
@@ -326,12 +325,11 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare chat findings").LogError(ctx, s.logger)
 		}
 		if hasRiskFilter != "" || minRiskScore > 0 {
-			var minimumScore *float64
+			var minCount uint64
 			if minRiskScore > 0 {
-				score := float64(minRiskScore)
-				minimumScore = &score
+				minCount = uint64(minRiskScore)
 			}
-			riskChatIDs, err = findingsProject.QualifyingChatIDs(ctx, minimumScore)
+			riskChatIDs, err = findingsProject.QualifyingChatIDs(ctx, minCount)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "filter chats by findings").LogError(ctx, s.logger)
 			}

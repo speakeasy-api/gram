@@ -100,20 +100,19 @@ func (r *Reader) ForProject(ctx context.Context, scope Scope) (*Project, error) 
 	return &Project{scope: scope, findings: r.findings, policies: active}, nil
 }
 
-func (p *Project) policyIDs(minimumScore *float64) []string {
+func (p *Project) policyIDs() []string {
 	ids := make([]string, 0, len(p.policies))
 	for _, policy := range p.policies {
-		if minimumScore == nil || policy.Score >= *minimumScore {
-			ids = append(ids, policy.ID.String())
-		}
+		ids = append(ids, policy.ID.String())
 	}
 	slices.Sort(ids)
 	return ids
 }
 
-// QualifyingChatIDs returns chats with a live finding under an eligible policy.
-func (p *Project) QualifyingChatIDs(ctx context.Context, minimumScore *float64) ([]uuid.UUID, error) {
-	policyIDs := p.policyIDs(minimumScore)
+// QualifyingChatIDs returns chats with at least minCount live findings under
+// eligible policies. A zero minCount means at least one.
+func (p *Project) QualifyingChatIDs(ctx context.Context, minCount uint64) ([]uuid.UUID, error) {
+	policyIDs := p.policyIDs()
 	if len(policyIDs) == 0 {
 		return []uuid.UUID{}, nil
 	}
@@ -122,6 +121,7 @@ func (p *Project) QualifyingChatIDs(ctx context.Context, minimumScore *float64) 
 		ProjectID:      p.scope.ProjectID.String(),
 		PolicyIDs:      policyIDs,
 		ChatIDs:        nil,
+		MinCount:       minCount,
 		Limit:          maxQualifyingChatCount + 1,
 	})
 	if err != nil {
@@ -144,7 +144,7 @@ func (p *Project) QualifyingChatIDs(ctx context.Context, minimumScore *float64) 
 // Counts returns live finding counts for the requested chats.
 func (p *Project) Counts(ctx context.Context, chatIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
 	counts := make(map[uuid.UUID]int64, len(chatIDs))
-	policyIDs := p.policyIDs(nil)
+	policyIDs := p.policyIDs()
 	if len(chatIDs) == 0 || len(policyIDs) == 0 {
 		return counts, nil
 	}
@@ -158,6 +158,7 @@ func (p *Project) Counts(ctx context.Context, chatIDs []uuid.UUID) (map[uuid.UUI
 		ProjectID:      p.scope.ProjectID.String(),
 		PolicyIDs:      policyIDs,
 		ChatIDs:        ids,
+		MinCount:       0,
 		Limit:          uint64(len(ids)),
 	})
 	if err != nil {
@@ -177,7 +178,7 @@ func (p *Project) Counts(ctx context.Context, chatIDs []uuid.UUID) (map[uuid.UUI
 
 // FindingAnchors returns live message and content part anchors for one chat.
 func (p *Project) FindingAnchors(ctx context.Context, chatID uuid.UUID) (Anchors, error) {
-	policyIDs := p.policyIDs(nil)
+	policyIDs := p.policyIDs()
 	if len(policyIDs) == 0 {
 		return Anchors{MessageIDs: []uuid.UUID{}, ContentPartIDs: []uuid.UUID{}}, nil
 	}
@@ -186,6 +187,7 @@ func (p *Project) FindingAnchors(ctx context.Context, chatID uuid.UUID) (Anchors
 		ProjectID:      p.scope.ProjectID.String(),
 		PolicyIDs:      policyIDs,
 		ChatIDs:        []string{chatID.String()},
+		MinCount:       0,
 		Limit:          0,
 	})
 	if err != nil {
