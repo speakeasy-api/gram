@@ -434,6 +434,7 @@ func buildAssistantRows(
 		WorkloadSource: workloadSource,
 		UserEmail:      request.UserEmail,
 		Provider:       response.Provider,
+		ModelProvider:  response.Provider,
 		HookHostname:   "",
 		AccountType:    "",
 		BillingMode:    "",

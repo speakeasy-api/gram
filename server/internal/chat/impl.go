@@ -3287,6 +3287,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 			WorkloadSource: workloadSource,
 			UserEmail:      row.userEmail,
 			Provider:       "",
+			ModelProvider:  "",
 			HookHostname:   "",
 			AccountType:    "",
 			BillingMode:    "",

@@ -493,6 +493,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 			WorkloadSource: metering.WorkloadSourceImport,
 			UserEmail:      event.Actor.UserEmail,
 			Provider:       codexProviderOpenAI,
+			ModelProvider:  codexProviderOpenAI,
 			HookHostname:   "",
 			AccountType:    complianceAccountTypeTeam,
 			BillingMode:    src.cfg.BillingMode,

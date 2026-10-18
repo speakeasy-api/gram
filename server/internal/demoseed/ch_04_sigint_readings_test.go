@@ -28,6 +28,7 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 	ids := make(map[uuid.UUID]struct{}, len(rows))
 	manualRuns := make(map[uuid.UUID]int)
 	streaming := 0
+	attributeValues := make(map[string]map[string]bool)
 	for _, row := range rows {
 		ids[row.ID] = struct{}{}
 		for _, id := range []uuid.UUID{row.ID, row.EvaluationAttemptID, row.ProjectID, row.SensorID} {
@@ -39,6 +40,17 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		require.NotEmpty(t, row.ResultType)
 		require.NotEmpty(t, row.Probabilities)
 		require.LessOrEqual(t, len(row.Attributes), chrepo.MaxAttributes)
+		for _, key := range []string{"model_name", "model_family", "model_provider", "department"} {
+			value, present := row.Attributes[key]
+			if present {
+				require.NotEmpty(t, value)
+				require.NotEqual(t, "<unset>", value)
+			}
+			if attributeValues[key] == nil {
+				attributeValues[key] = make(map[string]bool)
+			}
+			attributeValues[key][value] = true
+		}
 		require.GreaterOrEqual(t, row.InputMessageCount, uint8(1))
 		require.LessOrEqual(t, row.InputMessageCount, row.InputRequestedMessageCount)
 		require.False(t, row.EventOccurredAt.After(row.EvaluatedAt))
@@ -79,6 +91,10 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		}
 	}
 	require.Len(t, ids, len(rows), "reading ids must be unique")
+	for key, values := range attributeValues {
+		require.Contains(t, values, "", "%s must demonstrate unknown values", key)
+		require.GreaterOrEqual(t, len(values), 3, "%s must demonstrate breakdowns", key)
+	}
 	require.Equal(t, sigintReadingDays*3, streaming)
 	require.Len(t, manualRuns, sigintManualRuns)
 	for _, count := range manualRuns {

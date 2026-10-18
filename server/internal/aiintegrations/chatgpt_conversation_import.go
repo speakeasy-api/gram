@@ -425,6 +425,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 			WorkloadSource: metering.WorkloadSourceImport,
 			UserEmail:      event.Actor.UserEmail,
 			Provider:       codexProviderOpenAI,
+			ModelProvider:  codexProviderOpenAI,
 			HookHostname:   "",
 			AccountType:    complianceAccountTypeTeam,
 			BillingMode:    src.cfg.BillingMode,

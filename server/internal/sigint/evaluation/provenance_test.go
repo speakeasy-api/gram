@@ -97,7 +97,7 @@ func TestReadingPreservesStringAttributeSnapshots(t *testing.T) {
 	t.Parallel()
 	m := message()
 	snapshot := &conversationv1.MessageEvent_IngestionContext{}
-	snapshot.SetAttributes(map[string]string{"department": "example-team", "empty": ""})
+	snapshot.SetAttributes(map[string]string{"department": "example-team", "model_name": "anthropic/claude-opus-5", "model_family": "anthropic", "model_provider": "bedrock", "empty": ""})
 	m.SetIngestion(snapshot)
 	event := (&conversationInput{message: m, stored: storedMessage(m)}).Event()
 	snapshot.GetAttributes()["department"] = "changed"
@@ -116,5 +116,5 @@ func TestReadingPreservesStringAttributeSnapshots(t *testing.T) {
 	require.NoError(t, err)
 	decoded := &sigintv1.Reading{}
 	require.NoError(t, proto.Unmarshal(data, decoded))
-	require.Equal(t, map[string]string{"department": "example-team", "empty": ""}, decoded.GetAttributes())
+	require.Equal(t, map[string]string{"department": "example-team", "model_name": "anthropic/claude-opus-5", "model_family": "anthropic", "model_provider": "bedrock", "empty": ""}, decoded.GetAttributes())
 }

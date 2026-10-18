@@ -272,10 +272,48 @@ VALUES (
 -- name: GetMessagesForPublication :many
 -- Read authoritative identity and attribution in the write transaction.
 -- Content is fetched by consumers, never serialized into these events.
-SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed
-FROM chat_messages m
+-- A linked directory profile wins as a complete snapshot. Email fallback must
+-- identify exactly one active profile and must not contradict a known actor.
+WITH inputs AS (
+  SELECT input.id, (@observed_user_emails::text[])[input.ordinality] AS email
+  FROM UNNEST(@ids::uuid[]) WITH ORDINALITY AS input(id, ordinality)
+)
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model,
+  COALESCE(CASE WHEN jsonb_typeof(directory_user.attributes -> 'department_name') = 'string'
+    THEN BTRIM(directory_user.attributes ->> 'department_name') END, '')::text AS department
+FROM inputs input
+JOIN chat_messages m ON m.id = input.id AND m.project_id = @project_id::uuid
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
-WHERE m.project_id = @project_id::uuid AND m.id = ANY(@ids::uuid[])
+JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id::text
+LEFT JOIN LATERAL (
+  SELECT candidate.attributes
+  FROM (
+    SELECT d.attributes, 0 AS priority, d.workos_updated_at, d.updated_at, d.id
+    FROM directory_users d
+    WHERE d.organization_id = p.organization_id
+      AND d.user_id = NULLIF(m.user_id, '')
+      AND d.user_id IS NOT NULL
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+    UNION ALL
+    SELECT email_candidate.attributes, 1 AS priority,
+      email_candidate.workos_updated_at, email_candidate.updated_at, email_candidate.id
+    FROM (
+      SELECT d.attributes, d.user_id, d.workos_updated_at, d.updated_at, d.id,
+        COUNT(*) OVER () AS candidate_count
+      FROM directory_users d
+      WHERE d.organization_id = p.organization_id
+        AND input.email <> ''
+        AND LOWER(d.email) = input.email
+        AND d.deleted IS FALSE
+        AND d.workos_deleted IS FALSE
+    ) email_candidate
+    WHERE email_candidate.candidate_count = 1
+      AND (NULLIF(m.user_id, '') IS NULL OR email_candidate.user_id IS NULL OR email_candidate.user_id = m.user_id)
+  ) candidate
+  ORDER BY candidate.priority, candidate.workos_updated_at DESC, candidate.updated_at DESC, candidate.id
+  LIMIT 1
+) directory_user ON TRUE
 ORDER BY m.seq;
 
 -- name: UpsertCorrelatedChatMessage :one

@@ -10,6 +10,7 @@ import (
 
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 )
@@ -22,15 +23,19 @@ func (w *ChatMessageWriter) enqueueMessageEvents(ctx context.Context, tx repo.DB
 		return nil
 	}
 	ids := make([]uuid.UUID, len(writes))
+	emails := make([]string, len(writes))
 	metadata := make(map[uuid.UUID]MessageWrite, len(writes))
 	for i, write := range writes {
 		if write.Params.ProjectID != projectID {
 			return fmt.Errorf("publication project does not match message")
 		}
 		ids[i] = write.Params.ID
+		emails[i] = conv.NormalizeEmail(write.UserEmail)
 		metadata[write.Params.ID] = write
 	}
-	rows, err := repo.New(tx).GetMessagesForPublication(ctx, repo.GetMessagesForPublicationParams{ProjectID: projectID, Ids: ids})
+	rows, err := repo.New(tx).GetMessagesForPublication(ctx, repo.GetMessagesForPublicationParams{
+		ProjectID: projectID, OrganizationID: organizationID, Ids: ids, ObservedUserEmails: emails,
+	})
 	if err != nil {
 		return fmt.Errorf("load persisted messages for publication: %w", err)
 	}
@@ -86,6 +91,7 @@ func (w *ChatMessageWriter) enqueueMessageEvents(ctx context.Context, tx repo.DB
 			ingestion.SetBillingMode(write.BillingMode)
 		}
 		ingestion.SetReplayed(row.Replayed)
+		ingestion.SetAttributes(messageAttributes(conv.FromPGTextOrEmpty[string](row.Model), write.ModelProvider, row.Department))
 		event.SetIngestion(ingestion)
 		publications = append(publications, outbox.Message{Proto: event, PublicID: id, Attributes: map[string]string{
 			"type": event.GetType().String(), "role": row.Role, "source": ingestion.GetSource(),
@@ -103,5 +109,5 @@ func externalPublication(write ExternalMessageWrite) MessageWrite {
 	var params repo.CreateChatMessageParams
 	params.ID = write.Params.ID
 	params.ProjectID = write.Params.ProjectID
-	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode}
+	return MessageWrite{Params: params, BillingUserID: write.BillingUserID, AssistantID: uuid.Nil, WorkloadSource: write.WorkloadSource, UserEmail: write.UserEmail, Provider: write.Provider, ModelProvider: write.ModelProvider, HookHostname: write.HookHostname, AccountType: write.AccountType, BillingMode: write.BillingMode}
 }

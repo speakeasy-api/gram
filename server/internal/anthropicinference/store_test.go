@@ -336,6 +336,7 @@ func TestStorePreservesNativePolicyScopesAndIncomingMessageCount(t *testing.T) {
 		require.NotContains(t, byID, event.GetMessageId())
 		byID[event.GetMessageId()] = event
 		require.Equal(t, conversationv1.MessageEvent_TYPE_CREATED, event.GetType())
+		require.Equal(t, "anthropic", event.GetIngestion().GetAttributes()["model_provider"])
 	}
 	require.Len(t, byID, 4)
 	for i, message := range messages {
