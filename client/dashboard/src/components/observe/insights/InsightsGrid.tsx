@@ -17,7 +17,14 @@ import {
   useObserveLogsLink,
   type ObserveDeepLinkScope,
 } from "@/components/observe/observeDeepLink";
+import {
+  SKILL_LOAD_CHANNEL_LABELS,
+  splitSkillLoads,
+  type SkillLoadChannel,
+} from "@/components/observe/skillLoadChannel";
 import { buildToolUsageTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
+import { cn } from "@/lib/utils";
+import { Link } from "react-router";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import type { ToolUsageClientSummary } from "@gram/client/models/components/toolusageclientsummary.js";
 import type { ToolUsageTargetSummary } from "@gram/client/models/components/toolusagetargetsummary.js";
@@ -28,6 +35,22 @@ import type { ToolUsageUserSummary } from "@gram/client/models/components/toolus
 import { useEffect, useMemo, useState } from "react";
 
 type SectionState = { pending: boolean; error: boolean };
+
+/**
+ * The hook-reported share of each skill's loads, keyed by skill name. Present
+ * only where skills are served over MCP; without it the skill card stays a
+ * single total, as it was before skills could arrive any other way.
+ */
+export type SkillChannelCounts = SectionState & {
+  hookCounts: ReadonlyMap<string, number>;
+};
+
+// The MCP part is the stronger fill: it is the served path these cards exist to
+// show, and the two parts must differ in lightness, not hue alone.
+const SKILL_CHANNEL_OPACITY: Record<SkillLoadChannel, number> = {
+  mcp: 0.35,
+  hook: 0.12,
+};
 
 const SERVER_TARGET_TYPES = new Set([
   "hosted_mcp_server",
@@ -78,6 +101,7 @@ export function InsightsGrid({
   to,
   serverNameMappings,
   status,
+  skillChannels,
   onRangeSelect,
 }: {
   totals: ToolUsageTotals | undefined;
@@ -97,6 +121,7 @@ export function InsightsGrid({
     targetToolBreakdown: SectionState;
     targetTimeSeries: SectionState;
   };
+  skillChannels?: SkillChannelCounts;
   onRangeSelect?: (from: Date, to: Date) => void;
 }): JSX.Element {
   const logsLink = useObserveLogsLink();
@@ -247,12 +272,36 @@ export function InsightsGrid({
       }),
     }));
 
-  const skillRows: RankedRow[] = skills.map((target) => ({
-    id: `skill:${target.targetId}`,
-    label: target.targetLabel,
-    value: Number(target.eventCount),
-    href: logsLink({ targetTypes: ["skill"], toolName: target.targetId }),
-  }));
+  const skillSplit = skillChannels
+    ? splitSkillLoads(
+        skills.map((target) => ({
+          targetId: target.targetId,
+          eventCount: Number(target.eventCount),
+        })),
+        skillChannels.hookCounts,
+      )
+    : undefined;
+
+  const skillRows: RankedRow[] = skills.map((target) => {
+    const split = skillSplit?.bySkill.get(target.targetId);
+    return {
+      id: `skill:${target.targetId}`,
+      label: target.targetLabel,
+      value: Number(target.eventCount),
+      href: logsLink({ targetTypes: ["skill"], toolName: target.targetId }),
+      segments: split
+        ? (["mcp", "hook"] as const).map((channel) => ({
+            value: split[channel],
+            color: cardColors.skills,
+            opacity: SKILL_CHANNEL_OPACITY[channel],
+          }))
+        : undefined,
+    };
+  });
+  const skillChannelsPending =
+    status.targets.pending || (skillChannels?.pending ?? false);
+  const skillChannelsError =
+    status.targets.error || (skillChannels?.error ?? false);
 
   const clientRows: RankedRow[] = clients.map((client) => ({
     id: `client:${client.clientKey}`,
@@ -292,7 +341,12 @@ export function InsightsGrid({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div
+        className={cn(
+          "grid grid-cols-2 gap-4",
+          skillSplit ? "lg:grid-cols-5" : "lg:grid-cols-4",
+        )}
+      >
         <InsightCard
           title="Tool calls"
           href={logsLink()}
@@ -346,6 +400,21 @@ export function InsightsGrid({
             caption="active in this window"
           />
         </InsightCard>
+
+        {skillChannels && (
+          <InsightCard
+            title="Skill loads"
+            href={logsLink({ targetTypes: ["skill"] })}
+            loading={skillChannelsPending}
+            error={skillChannelsError}
+          >
+            <MetricSpark
+              value={(skillSplit?.totals.total ?? 0).toLocaleString()}
+              series={[]}
+              caption={`${(skillSplit?.totals.mcp ?? 0).toLocaleString()} over MCP · ${(skillSplit?.totals.hook ?? 0).toLocaleString()} from hooks`}
+            />
+          </InsightCard>
+        )}
       </div>
 
       <InsightCard
@@ -417,9 +486,47 @@ export function InsightsGrid({
         <InsightCard
           title="Most used skills"
           href={logsLink({ targetTypes: ["skill"] })}
-          loading={status.targets.pending}
-          error={status.targets.error}
+          loading={skillChannelsPending}
+          error={skillChannelsError}
         >
+          {skillChannels && skillRows.length > 0 && (
+            <div className="text-muted-foreground -mt-1 flex items-center gap-3 text-xs">
+              {(["mcp", "hook"] as const).map((channel) => {
+                const swatch = (
+                  <span
+                    aria-hidden
+                    className="size-2.5"
+                    style={{
+                      backgroundColor: cardColors.skills,
+                      opacity: SKILL_CHANNEL_OPACITY[channel] * 2,
+                    }}
+                  />
+                );
+                const href = logsLink({
+                  targetTypes: ["skill"],
+                  loadedVia: channel,
+                });
+                return href ? (
+                  <Link
+                    key={channel}
+                    to={href}
+                    className="hover:text-foreground inline-flex items-center gap-1 no-underline hover:underline"
+                  >
+                    {swatch}
+                    {SKILL_LOAD_CHANNEL_LABELS[channel]}
+                  </Link>
+                ) : (
+                  <span
+                    key={channel}
+                    className="inline-flex items-center gap-1"
+                  >
+                    {swatch}
+                    {SKILL_LOAD_CHANNEL_LABELS[channel]}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <RankedList
             color={cardColors.skills}
             rows={skillRows}

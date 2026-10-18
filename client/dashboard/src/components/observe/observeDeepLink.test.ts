@@ -170,6 +170,20 @@ describe("buildObserveHref", () => {
     );
   });
 
+  it("narrows skill loads to one channel through af", () => {
+    const href = buildObserveHref(LOGS, new URLSearchParams(), {
+      targetTypes: ["skill"],
+      toolName: "release-checklist",
+      loadedVia: "hook",
+    });
+    const params = new URLSearchParams(href.split("?")[1]);
+
+    expect(params.get("hookTypes")).toBe("skill");
+    expect(params.get("af")).toBe(
+      "gram.tool.name:eq:release-checklist,gram.event.source:eq:hook",
+    );
+  });
+
   it("returns the bare path when nothing is applied", () => {
     expect(buildObserveHref(LOGS, new URLSearchParams())).toBe(LOGS);
   });

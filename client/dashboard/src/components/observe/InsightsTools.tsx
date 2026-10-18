@@ -52,7 +52,12 @@ import { useCallback, useMemo } from "react";
 import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
-import { InsightsGrid } from "@/components/observe/insights/InsightsGrid";
+import {
+  InsightsGrid,
+  type SkillChannelCounts,
+} from "@/components/observe/insights/InsightsGrid";
+import { loadedViaLogFilter } from "@/components/observe/skillLoadChannel";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 
@@ -220,6 +225,48 @@ export function InsightsToolsContent(): JSX.Element {
     enabled: !roleFilterPending,
     throwOnError: false,
   });
+
+  // The hook-reported share of each skill's loads; the rest came over MCP.
+  // Only asked where skills are served over MCP, and only when skills are in
+  // the selection, since otherwise there is no skill card to split.
+  const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
+  const splitSkillChannels =
+    skillsOverMcpEnabled && selectedHookTypes.includes("skill");
+  const skillHookTargetsQuery = useQuery({
+    queryKey: ["tool-usage-targets", "skill-hook-loads", ...sharedQueryKey],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageTargets(client, {
+          getToolUsageSummaryPayload: {
+            ...summaryPayload,
+            targetTypes: ["skill"],
+            filters: [loadedViaLogFilter("hook")],
+          },
+        }),
+      ),
+    enabled: !roleFilterPending && splitSkillChannels,
+    throwOnError: false,
+  });
+  const skillChannels: SkillChannelCounts | undefined = useMemo(
+    () =>
+      splitSkillChannels
+        ? {
+            pending: skillHookTargetsQuery.isPending,
+            error: skillHookTargetsQuery.isError,
+            hookCounts: new Map(
+              (skillHookTargetsQuery.data?.targets ?? [])
+                .filter((target) => target.targetType === "skill")
+                .map((target) => [target.targetId, Number(target.eventCount)]),
+            ),
+          }
+        : undefined,
+    [
+      splitSkillChannels,
+      skillHookTargetsQuery.isPending,
+      skillHookTargetsQuery.isError,
+      skillHookTargetsQuery.data,
+    ],
+  );
 
   // Assemble the sections that have resolved into the summary shape the panels
   // already consume. Undefined until totals lands (which gates the shell);
@@ -415,6 +462,7 @@ export function InsightsToolsContent(): JSX.Element {
           summaryPending={summaryPending}
           summaryIsError={summaryIsError}
           sectionStatus={sectionStatus}
+          skillChannels={skillChannels}
           accountType={accountType}
           onAccountTypeChange={handleAccountTypeChange}
           onRefresh={refetch}
@@ -457,6 +505,7 @@ function HooksInnerContent({
   summaryPending,
   summaryIsError,
   sectionStatus,
+  skillChannels,
   accountType,
   onAccountTypeChange,
   onRefresh,
@@ -494,6 +543,7 @@ function HooksInnerContent({
   summaryPending: boolean;
   summaryIsError: boolean;
   sectionStatus: ToolUsageSectionStatus;
+  skillChannels?: SkillChannelCounts;
   accountType: string;
   onAccountTypeChange: (value: string) => void;
   onRefresh: () => void;
@@ -601,6 +651,7 @@ function HooksInnerContent({
                 summaryPending={summaryPending}
                 summaryIsError={summaryIsError}
                 sectionStatus={sectionStatus}
+                skillChannels={skillChannels}
                 onRangeSelect={onRangeSelect}
               />
             )}
@@ -619,6 +670,7 @@ function HooksAnalytics({
   summaryPending,
   summaryIsError,
   sectionStatus,
+  skillChannels,
   onRangeSelect,
 }: {
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
@@ -628,6 +680,7 @@ function HooksAnalytics({
   summaryPending: boolean;
   summaryIsError: boolean;
   sectionStatus: ToolUsageSectionStatus;
+  skillChannels?: SkillChannelCounts;
   onRangeSelect?: (from: Date, to: Date) => void;
 }) {
   return (
@@ -649,6 +702,7 @@ function HooksAnalytics({
         targetToolBreakdown: sectionStatus.targetToolBreakdown,
         targetTimeSeries: sectionStatus.targetTimeSeries,
       }}
+      skillChannels={skillChannels}
       onRangeSelect={onRangeSelect}
     />
   );

@@ -41,6 +41,14 @@ import {
 } from "@/components/observe/LogsFacetRail";
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { LogsTimelineStrip } from "@/components/observe/LogsTimelineStrip";
+import {
+  SKILL_LOAD_CHANNEL_LABELS,
+  selectedLoadedVia,
+  skillLoadChannel,
+  withLoadedVia,
+  type SkillLoadChannel,
+} from "@/components/observe/skillLoadChannel";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
 import { useSlugs } from "@/contexts/Sdk";
@@ -58,6 +66,7 @@ import {
   applyFilterAdd,
   type ActiveLogFilter,
 } from "@/pages/logs/log-filter-types";
+import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
@@ -179,6 +188,38 @@ export function LogsTools(): JSX.Element {
           } else {
             next.delete("client");
           }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
+  const selectedSkillChannel = useMemo(
+    () => selectedLoadedVia(attributeFilters),
+    [attributeFilters],
+  );
+  // One URL write for both params: two functional updates in the same tick
+  // each start from the same location, so the second would drop the first.
+  // Picking a channel also narrows the type to skills, since "loaded via"
+  // means nothing for a tool call and the event-source filter alone would let
+  // hosted tool calls through as "MCP".
+  const setLoadedVia = useCallback(
+    (channel: SkillLoadChannel | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          const serialized = serializeFilters(
+            withLoadedVia(parseFilters(prev.get("af")), channel),
+          );
+          if (serialized) {
+            next.set("af", serialized);
+          } else {
+            next.delete("af");
+          }
+          if (channel) next.set("hookTypes", "skill");
           return next;
         },
         { replace: true },
@@ -409,6 +450,22 @@ export function LogsTools(): JSX.Element {
           selected: selectedHookTypes.includes(option.value as ToolUsageType),
         })),
       },
+      ...(skillsOverMcpEnabled
+        ? [
+            {
+              id: "loaded_via",
+              label: "Loaded via",
+              // MCP before hooks: the served path is the one this filter is
+              // here to find.
+              keepValueOrder: true,
+              values: (["mcp", "hook"] as const).map((channel) => ({
+                value: channel,
+                label: SKILL_LOAD_CHANNEL_LABELS[channel],
+                selected: selectedSkillChannel === channel,
+              })),
+            },
+          ]
+        : []),
       {
         id: "source",
         label: "Agent",
@@ -476,9 +533,11 @@ export function LogsTools(): JSX.Element {
     selectedEmails,
     selectedHookTypes,
     selectedServerValues,
+    selectedSkillChannel,
     selectedSources,
     selectedStatuses,
     serverNameMappings,
+    skillsOverMcpEnabled,
   ]);
 
   const onFacetToggle = useCallback(
@@ -514,6 +573,10 @@ export function LogsTools(): JSX.Element {
         case "account_type":
           handleAccountTypeChange(nextSelected ? value : "");
           break;
+        case "loaded_via":
+          // One channel at a time: both together is the same as neither.
+          setLoadedVia(nextSelected ? (value as SkillLoadChannel) : null);
+          break;
         case "user":
           handleUserEmailSelectionChange(next(selectedEmails));
           break;
@@ -535,6 +598,7 @@ export function LogsTools(): JSX.Element {
       selectedSources,
       selectedStatuses,
       setClientKeys,
+      setLoadedVia,
     ],
   );
 
@@ -562,12 +626,16 @@ export function LogsTools(): JSX.Element {
         case "account_type":
           handleAccountTypeChange("");
           break;
+        case "loaded_via":
+          setLoadedVia(null);
+          break;
         case "user":
           handleUserEmailSelectionChange([]);
           break;
       }
     },
     [
+      setLoadedVia,
       handleAccountTypeChange,
       handleRoleSelectionChange,
       handleHookSourceSelectionChange,
@@ -1675,6 +1743,8 @@ function LogsToolsTraceRow({
 
   const statusConfig = getStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
+  const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
+  const skillChannel = skillsOverMcpEnabled ? skillLoadChannel(trace) : null;
   const userLabel = trace.userLabel || "—";
 
   return (
@@ -1785,7 +1855,7 @@ function LogsToolsTraceRow({
           </span>
         </div>
 
-        <div className="w-20 shrink-0">
+        <div className="flex w-20 shrink-0 items-center gap-1">
           <span
             title={targetConfig.label}
             className={cn(
@@ -1795,6 +1865,20 @@ function LogsToolsTraceRow({
           >
             {targetConfig.shortLabel}
           </span>
+          {skillChannel && (
+            // How the skill reached the agent. Uncoloured: the Skill badge
+            // beside it already carries the hue, and this only qualifies it.
+            <span
+              title={
+                skillChannel === "mcp"
+                  ? "Loaded over MCP from a server or gateway"
+                  : "Reported by an agent hook"
+              }
+              className="bg-muted text-muted-foreground inline-flex items-center px-1 py-0.5 font-mono text-[10px] tracking-wide uppercase"
+            >
+              {SKILL_LOAD_CHANNEL_LABELS[skillChannel]}
+            </span>
+          )}
         </div>
 
         <div className="flex min-w-[180px] flex-1 items-center gap-2 text-xs">
