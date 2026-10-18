@@ -426,12 +426,12 @@ export function ServedSkillsSection({
       <Page.Section.Body>
         {server.kind === "remote" && (
           // The remote backend proxies every MCP request to the upstream, so
-          // the Skills extension is not answered on this server's URL.
+          // the upstream's own skills pass through and Speakeasy's are not
+          // answered on this server's URL.
           <Alert variant="info" alignTop className="mb-4 text-sm">
-            Agents connected to this server don&apos;t load these skills over
-            MCP yet: Speakeasy passes every request on its URL straight to the
-            remote server. People get them by installing a plugin that includes
-            the server.
+            The remote server&apos;s own skills pass through to agents
+            unchanged. Skills attached here reach people through plugins, not
+            over this server&apos;s MCP connection.
           </Alert>
         )}
         {body}

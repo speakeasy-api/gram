@@ -531,10 +531,10 @@ describe("ServedSkillsSection for a remote server", () => {
     expect(screen.queryByText("Skill 1")).toBeNull();
   });
 
-  it("says agents on the server do not load the skills over MCP", () => {
+  it("says attached skills reach people through plugins, not over MCP", () => {
     renderTab(remote);
     expect(
-      screen.getByText(/don.t load these skills over MCP yet/),
+      screen.getByText(/not\s+over this server.s MCP connection/),
     ).toBeDefined();
   });
 
