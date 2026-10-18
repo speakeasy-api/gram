@@ -71,10 +71,9 @@ func (r *findingPolicyFilterResolver) filtersFor(ctx context.Context, message *r
 		ID:        policyID,
 		ProjectID: projectID,
 	})
+	// Not cached: on a read replica a missing row may be replication lag.
 	if errors.Is(err, pgx.ErrNoRows) {
-		filters := emptyFindingPolicyFilters()
-		r.cache.Add(key, filters)
-		return filters, nil
+		return emptyFindingPolicyFilters(), nil
 	}
 	if err != nil {
 		return emptyFindingPolicyFilters(), fmt.Errorf("get risk policy: %w", err)
