@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
+
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -47,6 +51,27 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get batch chat identities: %w", err)
+	}
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+	requestID := batchScanRequestID(args, "standard")
+	publishResults := make([]gcp.PublishResult, 0, len(rows))
+	for _, row := range rows {
+		publishResults = append(publishResults, a.accountIdentityPub.Publish(ctx, riskv1.AccountIdentityAnalysis_builder{
+			RequestId:         new(requestID.String()),
+			ChatMessageId:     new(row.EarliestMessageID.String()),
+			ChatId:            new(row.ChatID.String()),
+			ProjectId:         new(args.ProjectID.String()),
+			OrganizationId:    &args.OrganizationID,
+			RiskPolicyId:      new(args.RiskPolicyID.String()),
+			RiskPolicyVersion: &args.PolicyVersion,
+			CreatedAt:         &createdAt,
+			AccountType:       new(conv.FromPGTextOrEmpty[string](row.AccountType)),
+			Email:             new(conv.FromPGTextOrEmpty[string](row.Email)),
+			ApprovedDomains:   args.ApprovedEmailDomains,
+		}.Build()))
+	}
+	if err := drainPublishAcks(ctx, "publish account identity scan requests", publishResults); err != nil {
+		return nil, err
 	}
 
 	scanner := accountidentity.NewScanner()

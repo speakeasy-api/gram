@@ -82,6 +82,13 @@ func nilUUIDString(id uuid.UUID) *string {
 	return &value
 }
 
+func derefOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func batchRiskProvenance(args AnalyzeBatchArgs, msg batchMessage, executionPath, requestID string) metering.RiskProvenance {
 	chatMessageID := msg.ID
 	messageLinkReason := ""
@@ -221,6 +228,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	var promptInjectionErr error
 	var customErr error
+	var toolCallPublishErr error
 
 	if llmMode || llmShadow {
 		wg.Go(func() {
@@ -235,6 +243,22 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	legacyRuns := func(source string) bool {
 		return !llmMode || !llmanalyzer.Enforces(source)
 	}
+	if sources.Has(shadowmcp.SourceShadowMCP) ||
+		(legacyRuns(shadowmcp.SourceDestructiveTool) && sources.Has(shadowmcp.SourceDestructiveTool)) ||
+		(legacyRuns(SourceCLIDestructive) && sources.Has(SourceCLIDestructive)) {
+		wg.Go(func() {
+			toolCallPublishErr = a.publishToolCallScanRequests(
+				ctx,
+				args,
+				messages,
+				sources,
+				masks,
+				legacyRuns(shadowmcp.SourceDestructiveTool),
+				legacyRuns(SourceCLIDestructive),
+			)
+		})
+	}
+
 	if legacyRuns(SourceGitleaks) && sources.Has(SourceGitleaks) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourceGitleaks])
@@ -333,6 +357,10 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	if customErr != nil {
 		scanSpan.SetStatus(codes.Error, customErr.Error())
 		return nil, fmt.Errorf("custom rule scan: %w", customErr)
+	}
+	if toolCallPublishErr != nil {
+		scanSpan.SetStatus(codes.Error, toolCallPublishErr.Error())
+		return nil, fmt.Errorf("tool call scan dispatch: %w", toolCallPublishErr)
 	}
 	if ctx.Err() != nil {
 		err := fmt.Errorf("scan canceled: %w", ctx.Err())

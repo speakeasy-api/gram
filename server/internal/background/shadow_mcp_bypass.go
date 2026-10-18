@@ -2,10 +2,12 @@ package background
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 )
 
@@ -17,6 +19,11 @@ type shadowMCPPolicyBypassChecker struct {
 
 type policyBypassBatchEvaluator interface {
 	CanBypassBatch(ctx context.Context, inputs []risk.PolicyBypassEvaluation) map[risk.PolicyBypassEvaluation]bool
+}
+
+// NewShadowMCPPolicyBypassChecker applies stored policy bypass grants.
+func NewShadowMCPPolicyBypassChecker(logger *slog.Logger, db riskrepo.DBTX) shadowmcpscan.BypassChecker {
+	return &shadowMCPPolicyBypassChecker{evaluator: risk.NewPolicyBypassEvaluator(logger, db)}
 }
 
 func (c *shadowMCPPolicyBypassChecker) CanBypassShadowMCP(
