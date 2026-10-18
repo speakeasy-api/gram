@@ -59,6 +59,17 @@ func (c *singleUpstreamChainer) HasUsableCredential(_ context.Context, req ident
 	return c.usable && c.match(req)
 }
 
+func (c *singleUpstreamChainer) RefreshDecision(_ context.Context, req identitychaining.Request) identitychaining.RefreshVerdict {
+	if !c.match(req) {
+		return identitychaining.RefreshVerdict{Decision: identitychaining.RefreshNotChained, RemoteSessionIssuerID: uuid.Nil, Provider: "", Reason: ""}
+	}
+	return identitychaining.RefreshVerdict{Decision: identitychaining.RefreshServed, RemoteSessionIssuerID: c.issuer, Provider: "", Reason: ""}
+}
+
+func (c *singleUpstreamChainer) RetireConsentCredentials(context.Context, string, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
+	return nil
+}
+
 func (c *singleUpstreamChainer) CheckConsent(context.Context, identitychaining.Request, uuid.UUID) identitychaining.Outcome {
 	return identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonSuccess}
 }
