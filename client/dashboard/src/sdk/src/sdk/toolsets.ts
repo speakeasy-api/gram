@@ -109,7 +109,11 @@ export class Toolsets extends ClientSDK {
    * checkMCPSlugAvailability toolsets
    *
    * @remarks
-   * Check if a MCP slug is available
+   * Check if a MCP slug is taken in any scope (true means taken).
+   *
+   * Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
+   *
+   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
    */
   async checkMCPSlugAvailability(
     request: CheckMCPSlugAvailabilityRequest,
@@ -319,6 +323,10 @@ export class Toolsets extends ClientSDK {
    *
    * @remarks
    * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
+   *
+   * Deprecated: use mcpServers.update instead.
+   *
+   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
    */
   async setUserSessionIssuer(
     request: SetToolsetUserSessionIssuerRequest,
@@ -356,7 +364,7 @@ export class Toolsets extends ClientSDK {
    * updateExternalOAuthServer toolsets
    *
    * @remarks
-   * Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
+   * Change an attached external OAuth server between provider-hosted and Speakeasy-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
    */
   async updateExternalOAuthServer(
     request: UpdateExternalOAuthServerRequest,

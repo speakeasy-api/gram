@@ -600,7 +600,7 @@ func TestListChats_OrgAdmin_FilterByExternalUserID(t *testing.T) {
 }
 
 // TestListChats_OrgAdmin_FilterByUserID verifies that an org admin can narrow
-// results to a specific Gram user via the payload filter.
+// results to a specific Speakeasy user via the payload filter.
 func TestListChats_OrgAdmin_FilterByUserID(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)

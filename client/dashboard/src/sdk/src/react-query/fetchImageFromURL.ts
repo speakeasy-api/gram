@@ -54,7 +54,7 @@ export type FetchImageFromURLMutationError =
  * fetchImageFromURL assets
  *
  * @remarks
- * Fetch an image from a URL and upload it to Gram as an image asset.
+ * Fetch an image from a URL and upload it to Speakeasy as an image asset.
  */
 export function useFetchImageFromURLMutation(
   options?: MutationHookOptions<

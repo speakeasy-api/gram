@@ -76,6 +76,7 @@ func TestFindToolEntries_PreservesBuiltInPrecedence(t *testing.T) {
 		ExternalTool{
 			Executor:        &fixedDescriptorExecutor{descriptor: override},
 			RequiredFeature: "",
+			RequiredScope:   "",
 		},
 	)
 
@@ -111,6 +112,7 @@ func TestBuildToolsetsIncludesPlatformMCPReadToolset(t *testing.T) {
 			Name:        ToolNameListProjects,
 		}},
 		RequiredFeature: "",
+		RequiredScope:   "",
 	}
 
 	toolsets := BuildToolsets(ToolsetDependencies{
@@ -133,5 +135,5 @@ func TestPlatformToolsetIdentityIsStableAndDistinct(t *testing.T) {
 	assistantsID := PlatformToolsetID(AssistantsPlatformToolsetSlug)
 	require.Equal(t, assistantsID, PlatformToolsetID(AssistantsPlatformToolsetSlug))
 	require.NotEqual(t, assistantsID, PlatformToolsetID(ManagedAssistantPlatformToolsetSlug))
-	require.Equal(t, "Gram assistant tools", PlatformToolsetName(AssistantsPlatformToolsetSlug))
+	require.Equal(t, "Speakeasy assistant tools", PlatformToolsetName(AssistantsPlatformToolsetSlug))
 }

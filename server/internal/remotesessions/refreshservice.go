@@ -96,7 +96,7 @@ func (e *RefreshError) Is(target error) bool {
 		// again. Only a configuration change repairs it.
 		return target == ErrRemoteSessionMisconfigured
 	case remotesessionmetrics.RefreshOutcomeInternalError:
-		// Internal errors split on whether Gram raised a classified
+		// Internal errors split on whether Speakeasy raised a classified
 		// TokenRefreshError before or after the POST. A plain error is a
 		// database, cache, or response-decoding failure that clears on retry.
 		tokenErr, ok := errors.AsType[*TokenRefreshError](e.err)
@@ -401,13 +401,13 @@ func refreshClientLoadError(err error) error {
 //
 // The caller going away is checked before the transport marker because an
 // aborted POST surfaces as a transport error too, and it is neither the
-// upstream's fault nor Gram's. A deadline is the caller's own only when ctx
+// upstream's fault nor Speakeasy's. A deadline is the caller's own only when ctx
 // itself has expired; otherwise it was the POST's internal timeout, which is
 // the upstream not answering.
 //
 // invalid_grant and invalid_client are checked before the status-based
 // buckets because refresh clears the grant on either regardless of status,
-// and the metric describes what Gram did: a 429 or 5xx that also carried one
+// and the metric describes what Speakeasy did: a 429 or 5xx that also carried one
 // of them left the session without a refresh grant.
 func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics.RefreshOutcome {
 	var tokenErr *TokenRefreshError

@@ -221,7 +221,7 @@ func TestLogs_SingleAccountEnterpriseStaysTeam(t *testing.T) {
 // Path A improvement: once a provider org is shared by >= 2 distinct resolved
 // employees it is recognized as the company's enterprise org, so a later account
 // under that org is classified team even though its own email does not resolve to
-// a Gram member (the case email resolution alone would misclassify personal).
+// a Speakeasy member (the case email resolution alone would misclassify personal).
 func TestLogs_PromotesUnresolvedAccountUnderSharedEnterpriseOrg(t *testing.T) {
 	t.Parallel()
 
@@ -244,8 +244,8 @@ func TestLogs_PromotesUnresolvedAccountUnderSharedEnterpriseOrg(t *testing.T) {
 	claudeAccountSession(t, ctx, ti, "promote-ent-a", emailA, enterpriseOrg, "acct-promote-a", "device-promote-a", now)
 	claudeAccountSession(t, ctx, ti, "promote-ent-b", emailB, enterpriseOrg, "acct-promote-b", "device-promote-b", now.Add(time.Minute))
 
-	// A third account under the same org whose email does NOT resolve to a Gram
-	// member (e.g. an employee not yet provisioned in Gram). It is still team
+	// A third account under the same org whose email does NOT resolve to a Speakeasy
+	// member (e.g. an employee not yet provisioned in Speakeasy). It is still team
 	// because the org is a recognized enterprise org.
 	claudeAccountSession(t, ctx, ti, "promote-ent-c", "unprovisioned@example.com", enterpriseOrg, "acct-promote-c", "device-promote-c", now.Add(2*time.Minute))
 
@@ -541,7 +541,7 @@ func TestLogs_NoAccountIdentityDoesNotCreateUserAccount(t *testing.T) {
 // account_type onto the telemetry — even though no user_accounts entity can be
 // persisted (that entity keys on the absent UUID) — so the cost breakdown does
 // not park the whole org's spend under "(unset)". The email is deliberately NOT
-// provisioned in Gram: this is the corporate-gateway population that an email- or
+// provisioned in Speakeasy: this is the corporate-gateway population that an email- or
 // provider-org-based signal alone would miss.
 func TestLogs_ClassifiesCompanyCredentialSessionAsTeam(t *testing.T) {
 	t.Parallel()

@@ -2,15 +2,15 @@ import {
   autoGrain,
   completeFilters,
   completeMeasures,
+  drawnChart,
   hasChartShape,
   isChartType,
   isFilterOperator,
   isMeasureOp,
-  isRowsMode,
   MAX_LIMIT,
+  MAX_ROWS_LIMIT,
   measureAlias,
   queryDimensions,
-  type ChartType,
   type ExploreSpec,
   type FilterDraft,
   type MeasureDraft,
@@ -27,15 +27,6 @@ import {
 export interface WidgetState {
   query: Record<string, unknown>;
   visualization: Record<string, unknown>;
-}
-
-/**
- * The chart a spec is drawn with, as the server will check it. Rows draw only
- * as a table and a number tile is never broken down, whatever the builder's
- * controls were last left on, so that is what is saved.
- */
-function drawnChart(spec: ExploreSpec): ChartType {
-  return isRowsMode(spec) ? "table" : spec.chartType;
 }
 
 /** The query and visualization a widget stores for the builder's state. */
@@ -67,7 +58,11 @@ export function widgetFromSpec(spec: ExploreSpec): WidgetState {
         !rows && !timeseries && aliases.includes(spec.orderBy)
           ? [{ measure: spec.orderBy, direction: "desc" }]
           : [],
-      limit: timeseries ? MAX_LIMIT : spec.limit,
+      limit: timeseries
+        ? MAX_LIMIT
+        : rows
+          ? Math.min(spec.limit, MAX_ROWS_LIMIT)
+          : spec.limit,
     },
     visualization: { type: chart, options: {} },
   };

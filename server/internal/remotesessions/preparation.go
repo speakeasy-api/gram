@@ -10,10 +10,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 )
@@ -167,6 +169,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if in.ExpectedGeneration != b.Generation {
 			return preparationResult(b, issuer, client, PreparationStateConfigurationRequired), oops.E(oops.CodeConflict, nil, "binding generation changed; read current preparation before unlinking")
 		}
+		before := b
 		b.Generation++
 		b.State = conv.ToPGText(PreparationStateUnlinked)
 		b.RemoteSessionClientID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
@@ -177,6 +180,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		b, err = setPreparationBinding(ctx, q, b, previous)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+		}
+		if err := s.auditIdentityChainingTransition(ctx, tx, before, b, client); err != nil {
+			return nil, err
 		}
 		if err = tx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -206,7 +212,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	// Record explicit manual setup independently of automatic readiness.
 	manual := selected != uuid.Nil && (in.Mechanism == PreparationMechanismManual || in.Mechanism == "")
-	eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported)
+	eligibility := IssuerPreparationEligibility(issuer)
 	if !manual && eligibility != preparationEligible {
 		return preparationResult(b, issuer, client, eligibility), nil
 	}
@@ -221,7 +227,21 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			return preparationResult(b, issuer, client, preparationMissingGrantsState(client.GrantTypes)), nil
 		}
 	}
-	changed := preparationBindingState(b.State) == PreparationStateProviderRejection || selected != b.RemoteSessionClientID.UUID || preparationBindingState(b.State) == PreparationStateUnlinked || !slices.Equal(b.RequestedScopes, in.Scopes) || (in.ConfirmGrants != nil && (!samePreparationGrants(in.ConfirmGrants, client.GrantTypes) || preparationBindingGrantSource(b.GrantSource) != PreparationGrantSourceAdministratorDeclared)) || (in.Mechanism == PreparationMechanismCIMD && (!slices.Contains(client.GrantTypes, oauthwire.GrantTypeJWTBearer) || preparationBindingGrantSource(b.GrantSource) != PreparationGrantSourceCIMDPublished))
+	// Turn on snapshots scopes onto the binding, and chaining requests only
+	// that snapshot, OIDC-reserved scopes dropped. With a connection to follow,
+	// its set wins when it names a grantable scope, or when it is non-empty and
+	// the request names no grantable scope; otherwise, including an empty
+	// connection set, the request's scopes are recorded. DCR registrations
+	// always ask for the request's scopes.
+	var connection *ScopeResolution
+	if selected != uuid.Nil {
+		connection, err = ConnectionScopes(ctx, tx, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, ClientID: selected, Resource: in.Resource, Discover: s.resources != nil})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve identity chaining scopes").LogError(ctx, s.logger)
+		}
+	}
+	scopes := BindingScopes(connection, in.Scopes)
+	changed := preparationBindingState(b.State) == PreparationStateProviderRejection || selected != b.RemoteSessionClientID.UUID || preparationBindingState(b.State) == PreparationStateUnlinked || !SameBindingScopes(b.RequestedScopes, scopes.Scopes) || (in.ConfirmGrants != nil && (!samePreparationGrants(in.ConfirmGrants, client.GrantTypes) || preparationBindingGrantSource(b.GrantSource) != PreparationGrantSourceAdministratorDeclared)) || (in.Mechanism == PreparationMechanismCIMD && (!slices.Contains(client.GrantTypes, oauthwire.GrantTypeJWTBearer) || preparationBindingGrantSource(b.GrantSource) != PreparationGrantSourceCIMDPublished))
 	if changed && (b.RemoteSessionClientID.Valid || b.ClaimID.Valid || preparationBindingState(b.State) == PreparationStateUnlinked) && in.ExpectedGeneration != b.Generation {
 		return preparationResult(b, issuer, client, PreparationStateConfigurationRequired), nil
 	}
@@ -237,10 +257,11 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			return preparationResult(b, issuer, client, PreparationStateManualSetupRequired), nil
 		}
 		// Only mutate the returned binding once the request can be persisted.
+		before := b
 		if changed {
 			b.Generation++
 		}
-		b.RequestedScopes = in.Scopes
+		b.RequestedScopes = scopes.Scopes
 		b.State = conv.ToPGText(PreparationStateInProgress)
 		b.ClaimID = conv.ToNullUUID(uuid.New())
 		b.ClaimedAt = conv.ToPGTimestamptz(time.Now())
@@ -248,6 +269,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		b, err = setPreparationBinding(ctx, q, b, previous)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+		}
+		if err := s.auditIdentityChainingTransition(ctx, tx, before, b, client); err != nil {
+			return nil, err
 		}
 		if err = tx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -308,7 +332,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if (state == PreparationStateReady || state == PreparationStatePublishedAcceptanceUnverified) && !preparationClientConfigurationValid(ctx, q, client, issuer, org) {
 		return preparationResult(b, issuer, client, PreparationStateManualSetupRequired), nil
 	}
-	if client.Scope != nil {
+	// Only the request's scopes are checked: the connection's are what a
+	// sign-in through this client already requests.
+	if scopes.Source == remotesessionmetrics.ScopeSourcePreparationRequest && client.Scope != nil {
 		for _, scope := range in.Scopes {
 			if !slices.Contains(client.Scope, scope) {
 				return preparationResult(b, issuer, client, PreparationStateManualSetupRequired), nil
@@ -316,6 +342,13 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 	}
 	if !samePreparationGrants(grants, client.GrantTypes) {
+		// Publishing/modifying inherited registrations affects other projects and
+		// therefore requires organization-level authority in addition to project write.
+		if !client.ProjectID.Valid {
+			if err = s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
+				return nil, err
+			}
+		}
 		// CIMD grants are also the live interactive registration. Preparation
 		// must not disable login or refresh, even when selected as manual.
 		// Reject removal rather than silently broadening explicit confirmation.
@@ -341,13 +374,6 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if count > allowed {
 			return preparationResult(b, issuer, client, PreparationStateConfigurationRequired), nil
 		}
-		// Publishing/modifying inherited registrations affects other projects and
-		// therefore requires organization-level authority in addition to project write.
-		if !client.ProjectID.Valid {
-			if err = s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
-				return nil, err
-			}
-		}
 		client, err = q.SetEMAClientGrants(ctx, repo.SetEMAClientGrantsParams{ID: client.ID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org), GrantTypes: grants})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -358,10 +384,11 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	// All configuration-required exits above return the persisted generation
 	// and scopes, not a prospective transition that will be rolled back.
+	before := b
 	if changed {
 		b.Generation++
 	}
-	b.RequestedScopes = in.Scopes
+	b.RequestedScopes = scopes.Scopes
 	b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
 	b.State = conv.ToPGText(state)
 	b.GrantSource = conv.ToPGText(source)
@@ -371,8 +398,21 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
+	if err := s.auditIdentityChainingTransition(ctx, tx, before, b, client); err != nil {
+		return nil, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+	}
+	if !SameBindingScopes(before.RequestedScopes, b.RequestedScopes) {
+		s.logger.InfoContext(ctx, "recorded identity chaining scopes",
+			attr.SlogProjectID(project.String()),
+			attr.SlogOrganizationID(org),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogOAuthResource(b.Resource),
+			attr.SlogOAuthScope(strings.Join(b.RequestedScopes, " ")),
+			attr.SlogOAuthScopeSource(scopes.Source),
+		)
 	}
 	// The binding records registration evidence, not discovery eligibility.
 	// Reads apply these same gates and recover when discovery becomes eligible.

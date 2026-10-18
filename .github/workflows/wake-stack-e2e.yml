@@ -14,6 +14,10 @@ on:
       - .mise-tasks/pause.sh
       - .mise-tasks/wake.sh
       - .mise-tasks/park.mts
+      - .mise-tasks/park/**
+      - .mise-tasks/check/daemon*
+      - .mise-tasks/check/listeners.test.mts
+      - .mise-tasks/test/local-network.sh
       - .mise-tasks/ensure-stack.sh
       - .mise-tasks/idle-pause.sh
       - .mise-tasks/nuke.sh
@@ -24,8 +28,13 @@ on:
       - compose.yml
       - mise.toml
       - .mise-tasks/zero/remap-ports.mts
+      - .mise-tasks/zero/tailscale*
+      - .mise-tasks/zero/tls*
+      - zero
       - .mise-tasks/git/workinit.sh
       - .mise-tasks/start/worker.sh
+      - .mise-tasks/start/assistant-relay.mts
+      - .mise-tasks/assistants/relay.test.mts
       - .mise-tasks/git/worksync.sh
       - .mise-tasks/git/workboot.sh
       - .mise-tasks/test/wake-stack.sh
@@ -44,6 +53,7 @@ concurrency:
 
 jobs:
   wake-stack-e2e:
+    name: wake-stack-e2e
     # Booting the stack applies the Postgres migrations, and Atlas refuses to
     # apply a directory using `atlas:txtar` checks without a login. A fork PR
     # gets no secrets, so it would fail on that rather than on anything it
@@ -73,19 +83,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       # `./zero --agent` would otherwise pick the ClickHouse migration engine
       # by prompting for an Atlas Pro login, on a runner with nobody to ask.
@@ -117,6 +116,9 @@ jobs:
 
       - name: Test Temporal lifecycle
         run: mise run test:temporal
+
+      - name: Test local networking
+        run: mise run test:local-network
 
       - name: Test
         run: mise run test:wake-stack

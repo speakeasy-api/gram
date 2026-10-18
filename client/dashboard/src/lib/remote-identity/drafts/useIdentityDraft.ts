@@ -1,5 +1,4 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import type { Gram } from "@gram/client";
 import { slugify } from "@/lib/constants";
 import {
   deriveRemoteSessionIssuerNameFromUrl,
@@ -11,6 +10,7 @@ import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/re
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateSharedIssuerImpact } from "@/lib/remote-identity/model/upstreamRepointing";
 import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import {
   invalidateAllRemoteSessionIssuers,
@@ -28,7 +28,6 @@ import { toast } from "sonner";
 import {
   advertisedScopes,
   normalizeScopes,
-  preferredScopes,
   serverIdentityAuthMethod,
 } from "../model/clientConfiguration";
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
@@ -174,25 +173,6 @@ function sameSite(issuerHost: string, upstreamHost: string): boolean {
   return issuerHost === upstreamHost || upstreamHost.endsWith(`.${issuerHost}`);
 }
 
-// The probe only runs up front while a provider is being discovered. A server
-// that already matched one still needs the resource's scopes at save time, so
-// read them then. A failed probe is not fatal: the issuer's list is the
-// fallback preferredScopes already defines.
-async function protectedResourceScopes(
-  client: Gram,
-  remoteMcpServerId: string,
-): Promise<string[] | undefined> {
-  if (!remoteMcpServerId) return undefined;
-  try {
-    const result = await client.remoteMcp.discoverProtectedResourceMetadata({
-      discoverProtectedResourceMetadataRequestBody: { remoteMcpServerId },
-    });
-    return result.available ? result.metadata?.scopesSupported : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 type ProviderTierQuery = {
   issuers: RemoteSessionIssuer[];
   isLoading: boolean;
@@ -267,11 +247,16 @@ function displayUrl(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-function issuerDisplayName(issuer: RemoteSessionIssuer): string {
+/** An issuer's name, else its URL's host, else its slug; "" when none. */
+export function issuerDisplayName(
+  issuer: Pick<RemoteSessionIssuer, "issuer"> &
+    Partial<Pick<RemoteSessionIssuer, "name" | "slug">>,
+): string {
   return (
     issuer.name?.trim() ||
     deriveRemoteSessionIssuerNameFromUrl(issuer.issuer) ||
-    issuer.slug
+    issuer.slug ||
+    ""
   );
 }
 
@@ -303,6 +288,8 @@ export type UserIdentityDraft = {
   connected: boolean;
   /** The connected client, once the provider's client list has loaded. */
   connectedClient: ClientOption | null;
+  /** The connected client's id, known before the client list loads. */
+  connectedClientId: string | null;
   /** People signed in through the connected client; null while unknown. */
   signedIn: number | null;
   /** The server had a client and the operator cleared it. Save replaces it. */
@@ -761,6 +748,8 @@ export function useUserIdentityDraft({
           jwksUri: draft.jwksUri ?? undefined,
           scopesSupported: draft.scopesSupported ?? undefined,
           grantTypesSupported: draft.grantTypesSupported ?? undefined,
+          authorizationGrantProfilesSupported:
+            draft.authorizationGrantProfilesSupported ?? [],
           responseTypesSupported: draft.responseTypesSupported ?? undefined,
           tokenEndpointAuthMethodsSupported:
             draft.tokenEndpointAuthMethodsSupported ?? undefined,
@@ -789,20 +778,10 @@ export function useUserIdentityDraft({
 
       let clientConfiguration: ServerIdentityClientConfiguration | undefined;
       if (choice !== "existing") {
-        // A new client asks for what this server's protected resource
-        // advertises, exactly as the create flow does. Left empty, the server
-        // falls back to every scope the issuer advertises — the request that
-        // broke Salesforce logins. Scopes chosen for a manual client win.
-        const chosenScopes = manualNeeded ? scopes : [];
-        const requestedScopes =
-          chosenScopes.length > 0
-            ? chosenScopes
-            : preferredScopes(
-                prm.metadata?.scopesSupported ??
-                  resourceScopes ??
-                  (await protectedResourceScopes(client, remoteMcpServerId)),
-                selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
-              );
+        // Only scopes an operator picked for a manual client are stored. An
+        // automatic client sends none: the server discovers what to request
+        // at each sign-in, so nothing copied here can go stale.
+        const requestedScopes = manualNeeded ? scopes : [];
         const secret = manualNeeded ? clientSecret.trim() : "";
         clientConfiguration = {
           clientId: manualNeeded ? clientId.trim() : undefined,
@@ -867,6 +846,7 @@ export function useUserIdentityDraft({
         invalidateAllRemoteSessionIssuers(queryClient),
         invalidateAllRemoteSessionsCount(queryClient),
         invalidateAllGetRemoteMcpServerScopes(queryClient),
+        invalidateSharedIssuerImpact(queryClient),
       ]);
     },
     onError: (error: unknown) => {
@@ -933,6 +913,7 @@ export function useUserIdentityDraft({
 
     connected,
     connectedClient,
+    connectedClientId: connected ? linkedClientId : null,
     signedIn,
     cleared,
     clear: (): void => {

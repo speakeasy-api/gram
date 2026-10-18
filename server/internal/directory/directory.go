@@ -29,7 +29,7 @@ func NewService(db database.DBTX) *Service {
 	return &Service{db: db}
 }
 
-// GetUserProfile returns the current directory profile linked to a Gram user
+// GetUserProfile returns the current directory profile linked to a Speakeasy user
 // in an organization. When multiple active profiles are linked to the same
 // user, the most recently synchronized profile wins as a complete snapshot.
 func (s *Service) GetUserProfile(ctx context.Context, organizationID, userID string) (*UserProfile, error) {

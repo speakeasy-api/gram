@@ -44,6 +44,7 @@ type Client struct {
 	CreateOrganizationEndpoint                    goa.Endpoint
 	RearmTrialEndpoint                            goa.Endpoint
 	GetOrganizationStatsEndpoint                  goa.Endpoint
+	RepairInferenceKeyEndpoint                    goa.Endpoint
 	GetInferenceKeysEndpoint                      goa.Endpoint
 	SetInferenceKeyMonthlyLimitEndpoint           goa.Endpoint
 	GetInferenceSpendHistoryEndpoint              goa.Endpoint
@@ -76,6 +77,9 @@ type Client struct {
 	GetSupportCoverageEndpoint                    goa.Endpoint
 	DescribeMcpServerHealthEndpoint               goa.Endpoint
 	GetMcpServerToolCallsEndpoint                 goa.Endpoint
+	ListExternalMcpMigrationCandidatesEndpoint    goa.Endpoint
+	PreviewExternalMcpMigrationEndpoint           goa.Endpoint
+	MigrateExternalMcpServersEndpoint             goa.Endpoint
 	GetRegistryOktaCandidatesEndpoint             goa.Endpoint
 	ListRegistryOktaUnmappedEndpoint              goa.Endpoint
 	ListRegistryEntriesEndpoint                   goa.Endpoint
@@ -98,13 +102,16 @@ type Client struct {
 	CloneOnboardingPlaybookEndpoint               goa.Endpoint
 	GetOrganizationOnboardingPlaybookEndpoint     goa.Endpoint
 	AssignOrganizationOnboardingPlaybookEndpoint  goa.Endpoint
+	ListSignupOffersEndpoint                      goa.Endpoint
+	CreateSignupOfferEndpoint                     goa.Endpoint
+	UpdateSignupOfferEndpoint                     goa.Endpoint
 	GetStripeSubscriptionCandidateEndpoint        goa.Endpoint
 	SetStripeSubscriptionEndpoint                 goa.Endpoint
 	ListCustomerUsageEndpoint                     goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, getMcpServerToolCalls, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, getMcpServerToolCalls, listExternalMcpMigrationCandidates, previewExternalMcpMigration, migrateExternalMcpServers, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                                 login,
 		CallbackEndpoint:                              callback,
@@ -133,6 +140,7 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		CreateOrganizationEndpoint:                    createOrganization,
 		RearmTrialEndpoint:                            rearmTrial,
 		GetOrganizationStatsEndpoint:                  getOrganizationStats,
+		RepairInferenceKeyEndpoint:                    repairInferenceKey,
 		GetInferenceKeysEndpoint:                      getInferenceKeys,
 		SetInferenceKeyMonthlyLimitEndpoint:           setInferenceKeyMonthlyLimit,
 		GetInferenceSpendHistoryEndpoint:              getInferenceSpendHistory,
@@ -165,6 +173,9 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		GetSupportCoverageEndpoint:                    getSupportCoverage,
 		DescribeMcpServerHealthEndpoint:               describeMcpServerHealth,
 		GetMcpServerToolCallsEndpoint:                 getMcpServerToolCalls,
+		ListExternalMcpMigrationCandidatesEndpoint:    listExternalMcpMigrationCandidates,
+		PreviewExternalMcpMigrationEndpoint:           previewExternalMcpMigration,
+		MigrateExternalMcpServersEndpoint:             migrateExternalMcpServers,
 		GetRegistryOktaCandidatesEndpoint:             getRegistryOktaCandidates,
 		ListRegistryOktaUnmappedEndpoint:              listRegistryOktaUnmapped,
 		ListRegistryEntriesEndpoint:                   listRegistryEntries,
@@ -187,6 +198,9 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		CloneOnboardingPlaybookEndpoint:               cloneOnboardingPlaybook,
 		GetOrganizationOnboardingPlaybookEndpoint:     getOrganizationOnboardingPlaybook,
 		AssignOrganizationOnboardingPlaybookEndpoint:  assignOrganizationOnboardingPlaybook,
+		ListSignupOffersEndpoint:                      listSignupOffers,
+		CreateSignupOfferEndpoint:                     createSignupOffer,
+		UpdateSignupOfferEndpoint:                     updateSignupOffer,
 		GetStripeSubscriptionCandidateEndpoint:        getStripeSubscriptionCandidate,
 		SetStripeSubscriptionEndpoint:                 setStripeSubscription,
 		ListCustomerUsageEndpoint:                     listCustomerUsage,
@@ -799,6 +813,29 @@ func (c *Client) GetOrganizationStats(ctx context.Context, p *GetOrganizationSta
 		return
 	}
 	return ires.(*AdminOrganizationStats), nil
+}
+
+// RepairInferenceKey calls the "repairInferenceKey" endpoint of the "admin"
+// service.
+// RepairInferenceKey may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RepairInferenceKey(ctx context.Context, p *RepairInferenceKeyPayload) (res *AdminInferenceKeyRepairResult, err error) {
+	var ires any
+	ires, err = c.RepairInferenceKeyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminInferenceKeyRepairResult), nil
 }
 
 // GetInferenceKeys calls the "getInferenceKeys" endpoint of the "admin"
@@ -1551,6 +1588,78 @@ func (c *Client) GetMcpServerToolCalls(ctx context.Context, p *GetMcpServerToolC
 	return ires.(*AdminMcpServerToolCalls), nil
 }
 
+// ListExternalMcpMigrationCandidates calls the
+// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
+// ListExternalMcpMigrationCandidates may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListExternalMcpMigrationCandidates(ctx context.Context, p *ListExternalMcpMigrationCandidatesPayload) (res *AdminListExternalMcpMigrationCandidatesResult, err error) {
+	var ires any
+	ires, err = c.ListExternalMcpMigrationCandidatesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminListExternalMcpMigrationCandidatesResult), nil
+}
+
+// PreviewExternalMcpMigration calls the "previewExternalMcpMigration" endpoint
+// of the "admin" service.
+// PreviewExternalMcpMigration may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) PreviewExternalMcpMigration(ctx context.Context, p *PreviewExternalMcpMigrationPayload) (res *AdminExternalMcpMigrationResult, err error) {
+	var ires any
+	ires, err = c.PreviewExternalMcpMigrationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminExternalMcpMigrationResult), nil
+}
+
+// MigrateExternalMcpServers calls the "migrateExternalMcpServers" endpoint of
+// the "admin" service.
+// MigrateExternalMcpServers may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MigrateExternalMcpServers(ctx context.Context, p *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error) {
+	var ires any
+	ires, err = c.MigrateExternalMcpServersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminExternalMcpMigrationResult), nil
+}
+
 // GetRegistryOktaCandidates calls the "getRegistryOktaCandidates" endpoint of
 // the "admin" service.
 // GetRegistryOktaCandidates may return the following errors:
@@ -2055,6 +2164,75 @@ func (c *Client) AssignOrganizationOnboardingPlaybook(ctx context.Context, p *As
 		return
 	}
 	return ires.(*AdminOrganizationOnboardingPlaybook), nil
+}
+
+// ListSignupOffers calls the "listSignupOffers" endpoint of the "admin"
+// service.
+// ListSignupOffers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSignupOffers(ctx context.Context, p *ListSignupOffersPayload) (res *ListSignupOffersResult, err error) {
+	var ires any
+	ires, err = c.ListSignupOffersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSignupOffersResult), nil
+}
+
+// CreateSignupOffer calls the "createSignupOffer" endpoint of the "admin"
+// service.
+// CreateSignupOffer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateSignupOffer(ctx context.Context, p *CreateSignupOfferPayload) (res *AdminSignupOffer, err error) {
+	var ires any
+	ires, err = c.CreateSignupOfferEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminSignupOffer), nil
+}
+
+// UpdateSignupOffer calls the "updateSignupOffer" endpoint of the "admin"
+// service.
+// UpdateSignupOffer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateSignupOffer(ctx context.Context, p *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error) {
+	var ires any
+	ires, err = c.UpdateSignupOfferEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminSignupOffer), nil
 }
 
 // GetStripeSubscriptionCandidate calls the "getStripeSubscriptionCandidate"

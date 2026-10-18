@@ -35,7 +35,7 @@ When a change touches one of these areas, activate the matching skill as well:
 | New or changed lint rules (`glint` analyzers) or their fixtures                                                           | `glint`                           |
 | Recording or exposing audit events                                                                                        | `gram-audit-logging`              |
 | Features that surface data in the dashboard (demo and local seed data)                                                    | `gram-demo-seed`                  |
-| Gram Functions runner (`functions/`) or `server/internal/functions`                                                       | `gram-functions`                  |
+| Speakeasy Functions runner (`functions/`) or `server/internal/functions`                                                  | `gram-functions`                  |
 | Goa management endpoints under `/rpc/<service>.<method>`                                                                  | `gram-management-api`             |
 | Pub/Sub topics, publishers, or stream handlers                                                                            | `gram-pubsub`                     |
 | Scopes, grants, roles, or `authz.Engine.Require` checks                                                                   | `gram-rbac`                       |

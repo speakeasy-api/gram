@@ -4,6 +4,6 @@ export const RESOURCE_IDENTIFIER_EXPLAINER =
   "The identifier this server's own authorization server recognizes as its " +
   "audience (its RFC 9728 protected resource identifier). When set, user " +
   "credentials granted for this server are routed to it by resource match, " +
-  "required once a gateway holds credentials for several servers. Gram " +
+  "required once a gateway holds credentials for several servers. Speakeasy " +
   "never connects to this address. It is also the audience (aud) of signed " +
   "caller assertions. When blank, assertions use tunneled-mcp-server:<ID>.";

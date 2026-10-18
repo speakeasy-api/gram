@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { invalidateAllRiskPoliciesGet } from "@gram/client/react-query/riskPoliciesGet.js";
-import { invalidateAllRiskPoliciesStatus } from "@gram/client/react-query/riskPoliciesStatus.js";
 import {
   useRiskPoliciesUpdateMutation,
   type RiskPoliciesUpdateMutationVariables,
@@ -29,7 +28,6 @@ export function useTogglePolicyEnabled(): ReturnType<
     onSuccess: (policy) => {
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllRiskPoliciesGet(queryClient);
-      void invalidateAllRiskPoliciesStatus(queryClient);
       void invalidateAllRiskOverview(queryClient);
       toast.success(
         policy.enabled

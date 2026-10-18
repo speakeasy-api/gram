@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
+import { RoleLink } from "@/components/role-link";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -34,7 +35,7 @@ const REACHABLE_SHOWN = 8;
  *
  * A panel shows the first few of what can be hundreds, so its handoff has to
  * land on the same question rather than on the unfiltered catalogue. Without a
- * resolved Gram user id there is nothing to filter by, so the link falls back
+ * resolved Speakeasy user id there is nothing to filter by, so the link falls back
  * to the plain listing.
  */
 function reachHandoff(
@@ -206,7 +207,14 @@ export default function IdentityAccess(): JSX.Element {
               >
                 <span className="w-28 shrink-0">
                   <Badge variant="neutral" title={role.slug}>
-                    {role.name}
+                    {/* A role the roles list did not return has no page to open. */}
+                    <Badge.Text>
+                      <RoleLink
+                        roleId={rolesById.has(role.id) ? role.id : undefined}
+                      >
+                        {role.name}
+                      </RoleLink>
+                    </Badge.Text>
                   </Badge>
                 </span>
                 <span className="text-muted-foreground min-w-0 flex-1 text-xs">
@@ -306,10 +314,10 @@ export default function IdentityAccess(): JSX.Element {
             <IdentityPanelEmpty>
               {reachUserId
                 ? "No MCP servers are reachable by this identity."
-                : // The read is held off without a Gram user id, so there is no
+                : // The read is held off without a Speakeasy user id, so there is no
                   // answer to report — saying none would be a claim about
                   // someone's access made from a request never sent.
-                  "This identity resolves to no Gram user, so its reach cannot be read."}
+                  "This identity resolves to no Speakeasy user, so its reach cannot be read."}
             </IdentityPanelEmpty>
           ) : (
             servers
@@ -346,7 +354,7 @@ export default function IdentityAccess(): JSX.Element {
             <IdentityPanelEmpty>
               {reachUserId
                 ? "No skills are reachable by this identity."
-                : "This identity resolves to no Gram user, so its reach cannot be read."}
+                : "This identity resolves to no Speakeasy user, so its reach cannot be read."}
             </IdentityPanelEmpty>
           ) : (
             skills

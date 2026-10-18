@@ -1,7 +1,7 @@
 // Package mcpidentity carries trusted authentication provenance for MCP
 // requests. An Identity records how the serving surface established the
 // caller's identity, so downstream enforcement can distinguish an
-// authoritative acting Gram user from credentials that merely prove an
+// authoritative acting Speakeasy user from credentials that merely prove an
 // organization, a machine, or nothing at all.
 //
 // Only the code that validates a credential may stamp an Identity. It must
@@ -24,7 +24,7 @@ import (
 type Kind string
 
 const (
-	// KindUserSession marks a validated Gram user-session token whose subject
+	// KindUserSession marks a validated Speakeasy user-session token whose subject
 	// is a concrete user. This is the only kind that identifies an
 	// authoritative acting user.
 	KindUserSession Kind = "user_session"
@@ -50,7 +50,7 @@ const (
 	KindAssistant Kind = "assistant"
 
 	// KindChatSession marks a validated chat-session token minted for an
-	// embedded chat surface. Its claims may name a Gram user or an external
+	// embedded chat surface. Its claims may name a Speakeasy user or an external
 	// end-user for attribution, but the credential proves only the session,
 	// so it is never an authoritative acting user.
 	KindChatSession Kind = "chat_session"
@@ -65,20 +65,24 @@ const (
 // construct or mutate it; only a ValidatorBoundary can stamp one after its
 // owning authentication strategy accepts a credential.
 type Identity struct {
-	kind      Kind
-	userID    string
-	agentID   string
-	apiKeyID  string
-	expiresAt time.Time
+	kind       Kind
+	userID     string
+	agentID    string
+	apiKeyID   string
+	expiresAt  time.Time
+	sessionJTI string
 }
 
 // Kind returns the validated credential class.
 func (i Identity) Kind() Kind { return i.kind }
 
-// UserID returns the concrete Gram user ID for KindUserSession or
+// UserID returns the concrete Speakeasy user ID for KindUserSession or
 // KindConsentDiscovery. Other classes return empty. Check Kind before using
 // a user ID for runtime enforcement: consent proves discovery identity only.
 func (i Identity) UserID() string { return i.userID }
+
+// SessionJTI returns the identifier carried by the validated session token.
+func (i Identity) SessionJTI() string { return i.sessionJTI }
 
 // AgentID returns the authenticated agent ID, never its owner or authorizer.
 func (i Identity) AgentID() string { return i.agentID }
@@ -108,7 +112,7 @@ func (b *ValidatorBoundary) withIdentity(ctx context.Context, kind Kind, userID 
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: "", apiKeyID: "", expiresAt: time.Time{}})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
 }
 
 // StampValidatedSession records provenance from an opaque session proof returned
@@ -119,7 +123,7 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 		return ctx
 	}
 	subject := session.Subject()
-	identity := Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: session.ExpiresAt()}
+	identity := Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: session.ExpiresAt(), sessionJTI: session.JTI()}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		if subject.ID == "" {
@@ -145,12 +149,12 @@ func (b *ValidatorBoundary) StampAssistant(ctx context.Context) context.Context 
 	return b.withIdentity(ctx, KindAssistant, "")
 }
 
-// StampAPIKey records an accepted Gram API key.
+// StampAPIKey records an accepted Speakeasy API key.
 func (b *ValidatorBoundary) StampAPIKey(ctx context.Context, keyID string) context.Context {
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAPIKey, userID: "", agentID: "", apiKeyID: keyID, expiresAt: time.Time{}})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAPIKey, userID: "", agentID: "", apiKeyID: keyID, expiresAt: time.Time{}, sessionJTI: ""})
 }
 
 // StampChatSession records an accepted embedded-chat session token.
@@ -176,7 +180,7 @@ func (b *ValidatorBoundary) stampAgentID(ctx context.Context, agentID string) co
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: "", apiKeyID: "", expiresAt: time.Time{}})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
 }
 
 // StampConsentDiscovery records a user after the consent owner validates a live,
@@ -186,11 +190,11 @@ func (b *ValidatorBoundary) StampConsentDiscovery(ctx context.Context, userID st
 	if b == nil || !b.initialized || userID == "" || expiresAt.IsZero() || !expiresAt.After(time.Now()) {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindConsentDiscovery, userID: userID, agentID: "", apiKeyID: "", expiresAt: expiresAt})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindConsentDiscovery, userID: userID, agentID: "", apiKeyID: "", expiresAt: expiresAt, sessionJTI: ""})
 }
 
 // WithoutIdentity clears inherited provenance on entry to another authentication
 // surface. It leaves the context without an identity.
 func WithoutIdentity(ctx context.Context) context.Context {
-	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
 }

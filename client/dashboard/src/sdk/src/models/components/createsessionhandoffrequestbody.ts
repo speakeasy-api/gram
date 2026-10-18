@@ -11,7 +11,7 @@ export type CreateSessionHandoffRequestBody = {
    */
   content: string;
   /**
-   * Native harness session identifier the handoff was rendered from. Gram derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.
+   * Native harness session identifier the handoff was rendered from. Speakeasy derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.
    */
   sessionId: string;
   /**

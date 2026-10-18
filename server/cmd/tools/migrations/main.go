@@ -8,6 +8,8 @@
 //     confirmation.
 //   - pro-entitlements: PostgreSQL application-data backfill; see
 //     PRO_ENTITLEMENTS_BACKFILL.md. It defaults to a non-writing dry run.
+//   - hosted-mcp-wrappers: PostgreSQL application-data backfill; see
+//     HOSTED_MCP_WRAPPERS_MIGRATION.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -88,9 +90,11 @@ func run() int {
 		return runOpenRouterDisableCauses(args, os.Stdin, os.Stdout, os.Getenv)
 	case "pro-entitlements":
 		return runProEntitlements(args, os.Stdout, os.Getenv)
+	case "hosted-mcp-wrappers":
+		return runHostedMCPWrappers(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, hosted-mcp-wrappers)")
 		return 2
 	}
 }

@@ -74,6 +74,6 @@ func TestConfig_Defaults(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, 15*time.Second, llmanalyzer.DefaultTimeout)
-	require.Equal(t, 1024, llmanalyzer.DefaultMaxTokens)
+	require.Equal(t, 0, llmanalyzer.DefaultMaxTokens, "no max_tokens cap by default")
 	require.Equal(t, "risk-judge-9b", llmanalyzer.DefaultModel)
 }

@@ -71,7 +71,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		)
 		return &gen.CursorHookResult{
 			Permission:        new("deny"),
-			UserMessage:       new("Speakeasy hooks: unauthorized — check your Gram API key and project slug."),
+			UserMessage:       new("Speakeasy hooks: unauthorized — check your Speakeasy API key and project slug."),
 			AdditionalContext: nil,
 			AgentMessage:      nil,
 		}, nil

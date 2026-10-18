@@ -15,9 +15,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage remote_session_client records — credentials Gram uses when acting as
-// an OAuth client of a remote_session_issuer. client_secret_encrypted is never
-// returned.
+// Manage remote_session_client records — credentials Speakeasy uses when
+// acting as an OAuth client of a remote_session_issuer.
+// client_secret_encrypted is never returned.
 type Service interface {
 	// Explicit, tenant-scoped identity-chaining configuration. Mutations require
 	// project-write authorization; reads require project-read authorization. Does
@@ -38,8 +38,8 @@ type Service interface {
 	// client_secret obtained out-of-band from the upstream issuer.
 	CreateRemoteSessionClient(context.Context, *CreateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
 	// Register a remote_session_client in Client ID Metadata Document (CIMD) mode.
-	// Gram generates the client_id (the URL of a hosted client metadata document)
-	// and serves the document publicly; the client carries no secret and
+	// Speakeasy generates the client_id (the URL of a hosted client metadata
+	// document) and serves the document publicly; the client carries no secret and
 	// authenticates with token_endpoint_auth_method=none. The owning issuer must
 	// advertise client_id_metadata_document_supported.
 	CreateCimd(context.Context, *CreateCimdPayload) (res *types.RemoteSessionClient, err error)
@@ -155,7 +155,7 @@ type CreateRemoteSessionClientPayload struct {
 	UserSessionIssuerIds []string
 	// client_id supplied by the caller.
 	ClientID string
-	// client_secret supplied by the caller. Gram encrypts before persisting.
+	// client_secret supplied by the caller. Speakeasy encrypts before persisting.
 	ClientSecret *string
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
@@ -164,12 +164,25 @@ type CreateRemoteSessionClientPayload struct {
 	// the issuer identifier; token_endpoint is available for providers that
 	// require the token endpoint URL.
 	TokenEndpointAuthAudienceFormat *string
+	// Organization JSON Web Key Set to sign private_key_jwt assertions with.
+	// Required when token_endpoint_auth_method is private_key_jwt and optional
+	// otherwise, as with attachKeySet. Must belong to the caller's organization,
+	// which needs the customer-managed encryption keys entitlement.
+	JSONWebKeySetID *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// Who the upstream access credential belongs to, fixed at creation. subject
+	// (the default) means each caller connects their own upstream account through
+	// the client. self means the client obtains a credential for itself with the
+	// client_credentials grant and every caller shares it; it requires
+	// token_endpoint_auth_method client_secret_basic, client_secret_post (both
+	// with client_secret) or private_key_jwt (with json_web_key_set_id), and an
+	// issuer with a token_endpoint.
+	CredentialOwner string
 	// When the issuer reported issuing the client_id (RFC 7591
 	// client_id_issued_at). Omit to record the time of this call.
 	ClientIDIssuedAt *string
@@ -247,9 +260,34 @@ type IdentityChainingPreparation struct {
 	Resource         string
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	Scopes     []string
+	// Scopes recorded on the binding when identity chaining was turned on.
+	// Identity chaining requests exactly these, without OpenID Connect scopes;
+	// when that leaves none, an ID-JAG naming a scope outside these is rejected.
+	// Changes to the server connection apply only when identity chaining is
+	// prepared again.
+	Scopes []string
+	// Scopes preparing identity chaining again would record now, sorted: what an
+	// interactive sign-in through the selected client requests for this server, or
+	// the recorded scopes when the binding has no server connection to follow or
+	// the connection names only OpenID Connect scopes while the recorded ones name
+	// others. Returned by readEMA and prepareEMA when a client is selected.
+	ConnectionScopes []string
+	// True when connection_scopes differs from scopes; prepareEMA with the current
+	// expected_generation applies connection_scopes. Returned by readEMA and
+	// prepareEMA when a client is selected.
+	ScopesOutOfDate *bool
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string
+	// The EMA providers the vendor accepts, resolved for this endpoint. A provider
+	// vouches only where the endpoint's sign-in goes through it, so at most one is
+	// usable here; entries with unavailable_reason cannot serve. Returned by
+	// readEMA only.
+	EmaProviders *types.EMAProviderOrder
+	// When the vendor last accepted an assertion for this binding from a provider
+	// that can serve it now, so chaining has worked for it. Omitted when none is
+	// recorded for a usable provider or acceptance could not be read. Returned by
+	// readEMA only.
+	LastAcceptedAt *string
 }
 
 // ListRemoteSessionClientsPayload is the payload type of the
@@ -295,7 +333,16 @@ type PrepareEMAPayload struct {
 	Resource string
 	// Explicit selected client row ID; never inferred.
 	ClientID *string
-	// Requested scope tokens.
+	// The scopes this preparation request supplies, which a DCR registration
+	// always asks for. Turning identity chaining on records the server
+	// connection's scopes (what an interactive sign-in through the selected client
+	// requests) and ignores these, unless the client is not linked to the user
+	// session issuer, no single remote MCP server signing in directly through it
+	// serves the resource (a gateway member qualified through another sign-in
+	// issuer is not resolved), or the connection names only OpenID Connect scopes
+	// while these name others; then these are recorded, and a scope outside the
+	// client's registered scope reports manual_setup_required. With neither naming
+	// a scope, nothing is recorded and identity chaining requests no scope.
 	Scopes    []string
 	Mechanism string
 	// Explicit DCR authentication method.
@@ -348,7 +395,7 @@ type UpdateRemoteSessionClientPayload struct {
 	ProjectSlugInput *string
 	// The remote_session_client id.
 	ID string
-	// Rotate the client secret. Gram re-encrypts before persisting.
+	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string

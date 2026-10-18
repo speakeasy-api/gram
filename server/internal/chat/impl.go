@@ -2141,7 +2141,7 @@ func maybeInjectContextWindow(eventText string, getContextWindow func() int) (st
 
 // isFinalFrame reports whether an SSE chunk is OpenRouter's metadata/usage
 // frame — the trailing data event that carries the `usage` block before
-// `[DONE]`. We inject Gram metadata next to OpenRouter's so the two travel
+// `[DONE]`. We inject Speakeasy metadata next to OpenRouter's so the two travel
 // together rather than landing on the earlier finish_reason chunk.
 func isFinalFrame(obj map[string]json.RawMessage) bool {
 	usage, ok := obj["usage"]

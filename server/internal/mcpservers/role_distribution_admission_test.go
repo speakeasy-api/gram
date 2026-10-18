@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
@@ -14,12 +13,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -31,8 +27,7 @@ func TestUpdateMcpServer_EnableRoleDistributionRequiresApproval(t *testing.T) {
 	require.True(t, ok)
 	created, remoteID := createDisabledRemoteServer(t, ctx, ti, *ac.ProjectID, "Role distribution approval")
 	serverID := uuid.MustParse(created.ID)
-	flags := seedBlockedDirectRemoteDistribution(t, ctx, ti, serverID)
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, ac.ActiveOrganizationID, false)
+	seedBlockedDirectRemoteDistribution(t, ctx, ti, serverID)
 	seedEndpointFor(t, ctx, ti.conn, *ac.ProjectID, created.ID)
 
 	// The Default plugin has no audience, so only the role plugin needs approval.
@@ -40,14 +35,7 @@ func TestUpdateMcpServer_EnableRoleDistributionRequiresApproval(t *testing.T) {
 		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
 	})
 	require.NoError(t, err)
-	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID: uuid.New(), ProjectID: *ac.ProjectID, OrganizationID: ac.ActiveOrganizationID,
-		Name: "Blocking Shadow MCP", PolicyType: "standard", Sources: []string{shadowmcp.SourceShadowMCP},
-		PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil,
-		Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{},
-		AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{},
-	})
-	require.NoError(t, err)
+	seedBlockingShadowMCPPolicy(t, ctx, ti)
 	now := conv.ToPGTimestamptz(time.Now())
 	role, err := accessrepo.New(ti.conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID: ac.ActiveOrganizationID, WorkosSlug: "approval-role", WorkosName: "Approval role",

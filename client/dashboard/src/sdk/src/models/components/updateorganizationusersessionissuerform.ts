@@ -20,7 +20,7 @@ export type UpdateOrganizationUserSessionIssuerFormAuthnChallengeMode =
   ClosedEnum<typeof UpdateOrganizationUserSessionIssuerFormAuthnChallengeMode>;
 
 /**
- * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+ * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
  */
 export const UpdateOrganizationUserSessionIssuerFormClientIdMetadataAdmissionMode =
   {
@@ -29,7 +29,7 @@ export const UpdateOrganizationUserSessionIssuerFormClientIdMetadataAdmissionMod
     Open: "open",
   } as const;
 /**
- * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+ * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
  */
 export type UpdateOrganizationUserSessionIssuerFormClientIdMetadataAdmissionMode =
   ClosedEnum<
@@ -47,7 +47,7 @@ export type UpdateOrganizationUserSessionIssuerForm = {
     | UpdateOrganizationUserSessionIssuerFormAuthnChallengeMode
     | undefined;
   /**
-   * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+   * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
    */
   clientIdMetadataAdmissionMode?:
     | UpdateOrganizationUserSessionIssuerFormClientIdMetadataAdmissionMode
@@ -65,7 +65,7 @@ export type UpdateOrganizationUserSessionIssuerForm = {
    */
   slug?: string | undefined;
   /**
-   * Organization-level remote_session_client Gram uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. The resulting issuer and client must either both be configured or both be absent.
+   * Organization-level remote_session_client Speakeasy uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. The resulting issuer and client must either both be configured or both be absent.
    */
   trustedRemoteSessionClientId?: string | undefined;
   /**

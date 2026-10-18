@@ -11,7 +11,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 )
 
-// ErrUnsupportedAlgorithm is returned when a key signs with an algorithm Gram
+// ErrUnsupportedAlgorithm is returned when a key signs with an algorithm Speakeasy
 // does not publish. It is a misconfiguration rather than a fault, so callers
 // should surface it as a reportable outcome.
 var ErrUnsupportedAlgorithm = errors.New("kms key algorithm not supported")
@@ -20,13 +20,13 @@ var ErrUnsupportedAlgorithm = errors.New("kms key algorithm not supported")
 // version is asked to sign or export its public half.
 var ErrKeyVersionDisabled = errors.New("kms key version is disabled")
 
-// supportedAlgorithms are the JOSE signing algorithms Gram publishes and signs
+// supportedAlgorithms are the JOSE signing algorithms Speakeasy publishes and signs
 // with. Widening this set is an interoperability decision, not a mechanical one:
 // PS256 is optional in RFC 7518 and plenty of verifiers do not implement it.
 var supportedAlgorithms = []jose.SignatureAlgorithm{jose.RS256, jose.ES256}
 
 // joseAlgorithmByKMS maps GCP KMS asymmetric-sign algorithms onto their JOSE
-// equivalents. Algorithms Gram does not support are listed deliberately: naming
+// equivalents. Algorithms Speakeasy does not support are listed deliberately: naming
 // what a key actually is makes a misconfiguration self-explanatory. RSA-PSS
 // matters most here — PS256 and RS256 are both RSA over SHA-256, but PSS and
 // PKCS#1 v1.5 produce signatures no shared verifier accepts, so a PSS key
@@ -62,13 +62,13 @@ var joseAlgorithmByKMS = map[kmspb.CryptoKeyVersion_CryptoKeyVersionAlgorithm]jo
 func ParseSignatureAlgorithm(name string) (jose.SignatureAlgorithm, error) {
 	alg := jose.SignatureAlgorithm(name)
 	if !slices.Contains(supportedAlgorithms, alg) {
-		return "", fmt.Errorf("%w: %q; Gram supports %v", ErrUnsupportedAlgorithm, name, supportedAlgorithms)
+		return "", fmt.Errorf("%w: %q; Speakeasy supports %v", ErrUnsupportedAlgorithm, name, supportedAlgorithms)
 	}
 
 	return alg, nil
 }
 
-// joseAlgorithm maps a KMS key-version algorithm onto the JOSE algorithm Gram
+// joseAlgorithm maps a KMS key-version algorithm onto the JOSE algorithm Speakeasy
 // records, rejecting anything outside the supported set.
 func joseAlgorithm(kmsAlg kmspb.CryptoKeyVersion_CryptoKeyVersionAlgorithm) (jose.SignatureAlgorithm, error) {
 	alg, known := joseAlgorithmByKMS[kmsAlg]
@@ -77,7 +77,7 @@ func joseAlgorithm(kmsAlg kmspb.CryptoKeyVersion_CryptoKeyVersionAlgorithm) (jos
 	}
 
 	if !slices.Contains(supportedAlgorithms, alg) {
-		return "", fmt.Errorf("%w: key version signs with %s (JOSE %s); Gram supports %v", ErrUnsupportedAlgorithm, kmsAlg, alg, supportedAlgorithms)
+		return "", fmt.Errorf("%w: key version signs with %s (JOSE %s); Speakeasy supports %v", ErrUnsupportedAlgorithm, kmsAlg, alg, supportedAlgorithms)
 	}
 
 	return alg, nil

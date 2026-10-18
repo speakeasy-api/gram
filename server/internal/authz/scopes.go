@@ -49,6 +49,7 @@ const (
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
+	ScopeLogRead                 Scope = "log:read"
 	ScopeAgentRead               Scope = "agent:read"
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
@@ -121,6 +122,11 @@ var adminScopes = []Scope{
 	// handlers regardless. chat:write satisfies chat:read via scopeExpansions,
 	// so a session reviewer who should not be able to delete gets chat:read
 	// alone.
+	//
+	// log:read is likewise NOT a default for any system role: raw tool-call
+	// logs carry tool arguments, results, prompt text, and hook payloads from
+	// every member of a project, so viewing them must be granted explicitly per
+	// project. Neither project:* nor org:admin implies it.
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed
@@ -161,6 +167,7 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
 	ScopeChatWrite:               scopeVisibilityUserVisible,
+	ScopeLogRead:                 scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
@@ -282,6 +289,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyBlock:         nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
+	ScopeLogRead:                 nil,
 	ScopeAgentRead:               nil,
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
@@ -332,6 +340,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
+	ScopeLogRead:                 "",
 	ScopeAgentRead:               "",
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",

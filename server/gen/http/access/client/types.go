@@ -463,6 +463,10 @@ type SetAIToolDecisionResponseBody struct {
 // ListResourceAudienceResponseBody is the type of the "access" service
 // "listResourceAudience" endpoint HTTP response body.
 type ListResourceAudienceResponseBody struct {
+	// Live plugins containing this resource and assigned to an exact audience
+	// role. Omitted without plugin read and administrator access; not evidence of
+	// authorization or installation.
+	RolePlugins []*ResourceAudienceRolePluginResponseBody `json:"role_plugins,omitzero"`
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
@@ -473,6 +477,10 @@ type ListResourceAudienceResponseBody struct {
 // SetResourceAudienceResponseBody is the type of the "access" service
 // "setResourceAudience" endpoint HTTP response body.
 type SetResourceAudienceResponseBody struct {
+	// Live plugins containing this resource and assigned to an exact audience
+	// role. Omitted without plugin read and administrator access; not evidence of
+	// authorization or installation.
+	RolePlugins []*ResourceAudienceRolePluginResponseBody `json:"role_plugins,omitzero"`
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
@@ -7052,6 +7060,19 @@ type AIDetectionUserResponseBody struct {
 	LastSeen *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
 }
 
+// ResourceAudienceRolePluginResponseBody is used to define fields on response
+// body types.
+type ResourceAudienceRolePluginResponseBody struct {
+	// Exact role assigned to the plugin.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// Plugin ID.
+	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
+	// Plugin name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Plugin slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
 // ResourceAudienceEntryResponseBody is used to define fields on response body
 // types.
 type ResourceAudienceEntryResponseBody struct {
@@ -11452,7 +11473,7 @@ func NewSetAIToolDecisionResultOK(body *SetAIToolDecisionResponseBody) *access.S
 	v := &access.SetAIToolDecisionResult{
 		TargetID: *body.TargetID,
 	}
-	v.Access = unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(body.Access)
+	v.Access = unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(body.Access)
 
 	return v
 }
@@ -11612,6 +11633,16 @@ func NewSetAIToolDecisionGatewayError(body *SetAIToolDecisionGatewayErrorRespons
 func NewListResourceAudienceResourceAudienceResultOK(body *ListResourceAudienceResponseBody) *access.ResourceAudienceResult {
 	v := &access.ResourceAudienceResult{
 		Version: *body.Version,
+	}
+	if body.RolePlugins != nil {
+		v.RolePlugins = make([]*access.ResourceAudienceRolePlugin, len(body.RolePlugins))
+		for i, val := range body.RolePlugins {
+			if val == nil {
+				v.RolePlugins[i] = nil
+				continue
+			}
+			v.RolePlugins[i] = unmarshalResourceAudienceRolePluginResponseBodyToAccessResourceAudienceRolePlugin(val)
+		}
 	}
 	v.Entries = make([]*access.ResourceAudienceEntry, len(body.Entries))
 	for i, val := range body.Entries {
@@ -11780,6 +11811,16 @@ func NewListResourceAudienceGatewayError(body *ListResourceAudienceGatewayErrorR
 func NewSetResourceAudienceResourceAudienceResultOK(body *SetResourceAudienceResponseBody) *access.ResourceAudienceResult {
 	v := &access.ResourceAudienceResult{
 		Version: *body.Version,
+	}
+	if body.RolePlugins != nil {
+		v.RolePlugins = make([]*access.ResourceAudienceRolePlugin, len(body.RolePlugins))
+		for i, val := range body.RolePlugins {
+			if val == nil {
+				v.RolePlugins[i] = nil
+				continue
+			}
+			v.RolePlugins[i] = unmarshalResourceAudienceRolePluginResponseBodyToAccessResourceAudienceRolePlugin(val)
+		}
 	}
 	v.Entries = make([]*access.ResourceAudienceEntry, len(body.Entries))
 	for i, val := range body.Entries {
@@ -13681,6 +13722,13 @@ func ValidateListResourceAudienceResponseBody(body *ListResourceAudienceResponse
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
+	for _, e := range body.RolePlugins {
+		if e != nil {
+			if err2 := ValidateResourceAudienceRolePluginResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.Entries {
 		if e != nil {
 			if err2 := ValidateResourceAudienceEntryResponseBody(e); err2 != nil {
@@ -13699,6 +13747,13 @@ func ValidateSetResourceAudienceResponseBody(body *SetResourceAudienceResponseBo
 	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range body.RolePlugins {
+		if e != nil {
+			if err2 := ValidateResourceAudienceRolePluginResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	for _, e := range body.Entries {
 		if e != nil {
@@ -21861,8 +21916,8 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -21903,8 +21958,8 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 // ValidateRoleGrantRequestBody runs the validations defined on
 // RoleGrantRequestBody
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
-	if !(body.Scope == "org:read" || body.Scope == "org:blocked_read" || body.Scope == "org:admin" || body.Scope == "org:blocked_admin" || body.Scope == "project:read" || body.Scope == "project:blocked_read" || body.Scope == "project:write" || body.Scope == "project:blocked_write" || body.Scope == "mcp:read" || body.Scope == "mcp:blocked_read" || body.Scope == "mcp:write" || body.Scope == "mcp:blocked_write" || body.Scope == "mcp:connect" || body.Scope == "mcp:blocked_connect" || body.Scope == "environment:read" || body.Scope == "environment:blocked_read" || body.Scope == "environment:write" || body.Scope == "environment:blocked_write" || body.Scope == "skill:read" || body.Scope == "skill:blocked_read" || body.Scope == "skill:write" || body.Scope == "skill:blocked_write" || body.Scope == "assistant:read" || body.Scope == "assistant:blocked_read" || body.Scope == "assistant:write" || body.Scope == "assistant:blocked_write" || body.Scope == "plugin:write" || body.Scope == "plugin:blocked_write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "risk_policy:block" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:blocked_read" || body.Scope == "workload:write" || body.Scope == "workload:blocked_write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+	if !(body.Scope == "org:read" || body.Scope == "org:blocked_read" || body.Scope == "org:admin" || body.Scope == "org:blocked_admin" || body.Scope == "project:read" || body.Scope == "project:blocked_read" || body.Scope == "project:write" || body.Scope == "project:blocked_write" || body.Scope == "mcp:read" || body.Scope == "mcp:blocked_read" || body.Scope == "mcp:write" || body.Scope == "mcp:blocked_write" || body.Scope == "mcp:connect" || body.Scope == "mcp:blocked_connect" || body.Scope == "environment:read" || body.Scope == "environment:blocked_read" || body.Scope == "environment:write" || body.Scope == "environment:blocked_write" || body.Scope == "skill:read" || body.Scope == "skill:blocked_read" || body.Scope == "skill:write" || body.Scope == "skill:blocked_write" || body.Scope == "assistant:read" || body.Scope == "assistant:blocked_read" || body.Scope == "assistant:write" || body.Scope == "assistant:blocked_write" || body.Scope == "plugin:write" || body.Scope == "plugin:blocked_write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "risk_policy:block" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:blocked_read" || body.Scope == "workload:write" || body.Scope == "workload:blocked_write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 	}
 	for _, e := range body.Selectors {
 		if e != nil {
@@ -22061,8 +22116,8 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_eligible", "body"))
 	}
 	if body.Slug != nil {
-		if !(*body.Slug == "org:read" || *body.Slug == "org:blocked_read" || *body.Slug == "org:admin" || *body.Slug == "org:blocked_admin" || *body.Slug == "project:read" || *body.Slug == "project:blocked_read" || *body.Slug == "project:write" || *body.Slug == "project:blocked_write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:blocked_read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:blocked_write" || *body.Slug == "mcp:connect" || *body.Slug == "mcp:blocked_connect" || *body.Slug == "environment:read" || *body.Slug == "environment:blocked_read" || *body.Slug == "environment:write" || *body.Slug == "environment:blocked_write" || *body.Slug == "skill:read" || *body.Slug == "skill:blocked_read" || *body.Slug == "skill:write" || *body.Slug == "skill:blocked_write" || *body.Slug == "assistant:read" || *body.Slug == "assistant:blocked_read" || *body.Slug == "assistant:write" || *body.Slug == "assistant:blocked_write" || *body.Slug == "plugin:write" || *body.Slug == "plugin:blocked_write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass" || *body.Slug == "risk_policy:block" || *body.Slug == "chat:read" || *body.Slug == "chat:write" || *body.Slug == "agent:read" || *body.Slug == "agent:write" || *body.Slug == "agent:authorize" || *body.Slug == "agent:transfer" || *body.Slug == "workload:read" || *body.Slug == "workload:blocked_read" || *body.Slug == "workload:write" || *body.Slug == "workload:blocked_write" || *body.Slug == "org:device_agent_sync" || *body.Slug == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Slug == "org:read" || *body.Slug == "org:blocked_read" || *body.Slug == "org:admin" || *body.Slug == "org:blocked_admin" || *body.Slug == "project:read" || *body.Slug == "project:blocked_read" || *body.Slug == "project:write" || *body.Slug == "project:blocked_write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:blocked_read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:blocked_write" || *body.Slug == "mcp:connect" || *body.Slug == "mcp:blocked_connect" || *body.Slug == "environment:read" || *body.Slug == "environment:blocked_read" || *body.Slug == "environment:write" || *body.Slug == "environment:blocked_write" || *body.Slug == "skill:read" || *body.Slug == "skill:blocked_read" || *body.Slug == "skill:write" || *body.Slug == "skill:blocked_write" || *body.Slug == "assistant:read" || *body.Slug == "assistant:blocked_read" || *body.Slug == "assistant:write" || *body.Slug == "assistant:blocked_write" || *body.Slug == "plugin:write" || *body.Slug == "plugin:blocked_write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass" || *body.Slug == "risk_policy:block" || *body.Slug == "chat:read" || *body.Slug == "chat:write" || *body.Slug == "log:read" || *body.Slug == "agent:read" || *body.Slug == "agent:write" || *body.Slug == "agent:authorize" || *body.Slug == "agent:transfer" || *body.Slug == "workload:read" || *body.Slug == "workload:blocked_read" || *body.Slug == "workload:write" || *body.Slug == "workload:blocked_write" || *body.Slug == "org:device_agent_sync" || *body.Slug == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	if body.ResourceType != nil {
@@ -22120,13 +22175,13 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	for _, e := range body.SubScopes {
-		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "skill:read" || e == "skill:blocked_read" || e == "skill:write" || e == "skill:blocked_write" || e == "assistant:read" || e == "assistant:blocked_read" || e == "assistant:write" || e == "assistant:blocked_write" || e == "plugin:write" || e == "plugin:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass" || e == "risk_policy:block" || e == "chat:read" || e == "chat:write" || e == "agent:read" || e == "agent:write" || e == "agent:authorize" || e == "agent:transfer" || e == "workload:read" || e == "workload:blocked_read" || e == "workload:write" || e == "workload:blocked_write" || e == "org:device_agent_sync" || e == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "skill:read" || e == "skill:blocked_read" || e == "skill:write" || e == "skill:blocked_write" || e == "assistant:read" || e == "assistant:blocked_read" || e == "assistant:write" || e == "assistant:blocked_write" || e == "plugin:write" || e == "plugin:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass" || e == "risk_policy:block" || e == "chat:read" || e == "chat:write" || e == "log:read" || e == "agent:read" || e == "agent:write" || e == "agent:authorize" || e == "agent:transfer" || e == "workload:read" || e == "workload:blocked_read" || e == "workload:write" || e == "workload:blocked_write" || e == "org:device_agent_sync" || e == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -22481,6 +22536,24 @@ func ValidateAIDetectionUserResponseBody(body *AIDetectionUserResponseBody) (err
 	}
 	if body.LastSeen != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen", *body.LastSeen, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateResourceAudienceRolePluginResponseBody runs the validations defined
+// on ResourceAudienceRolePluginResponseBody
+func ValidateResourceAudienceRolePluginResponseBody(body *ResourceAudienceRolePluginResponseBody) (err error) {
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.PluginID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	return
 }

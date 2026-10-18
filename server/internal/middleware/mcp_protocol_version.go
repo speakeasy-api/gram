@@ -30,7 +30,7 @@ import (
 // non-conforming client actually sent is the diagnostic point. Non-MCP routes
 // are untouched.
 //
-// Gram is not the only reader: the remote MCP proxy forwards this header
+// Speakeasy is not the only reader: the remote MCP proxy forwards this header
 // upstream untouched, so nothing here may mutate it.
 func MCPProtocolVersionTelemetry(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +95,7 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// one-segment tail here is the endpoint itself.
 		return isEndpointSlug(tail)
 	case "platform-mcp":
-		// POST /platform-mcp is Gram's own platform MCP server
+		// POST /platform-mcp is Speakeasy's own platform MCP server
 		// (internal/platformmcp), served by the go-sdk's Streamable HTTP
 		// handler. It carries no slug — the bare path is the endpoint — and
 		// everything below it (/authorize, /token, /provider-setup) is OAuth or

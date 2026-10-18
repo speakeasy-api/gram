@@ -36,9 +36,29 @@ type LogJsonWebKeySetCreateEvent struct {
 
 	SetURN  urn.JsonWebKeySet
 	SetName string
+
+	// InternalSessionIssuer marks an organization's Speakeasy issuer set.
+	InternalSessionIssuer bool
+}
+
+// JsonWebKeySetAuditMetadata marks issuer sets, which customer key pages don't
+// list; other sets carry no metadata.
+type JsonWebKeySetAuditMetadata struct {
+	InternalSessionIssuer bool `json:"internal_session_issuer"`
+}
+
+func jsonWebKeySetMetadata(issuer bool) ([]byte, error) {
+	if !issuer {
+		return nil, nil
+	}
+	return marshalAuditPayload(JsonWebKeySetAuditMetadata{InternalSessionIssuer: true})
 }
 
 func (l *Logger) LogJsonWebKeySetCreate(ctx context.Context, dbtx repo.DBTX, event LogJsonWebKeySetCreateEvent) error {
+	metadata, err := jsonWebKeySetMetadata(event.InternalSessionIssuer)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", ActionJsonWebKeySetCreate, err)
+	}
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
@@ -55,7 +75,7 @@ func (l *Logger) LogJsonWebKeySetCreate(ctx context.Context, dbtx repo.DBTX, eve
 		SubjectDisplayName: conv.ToPGTextEmpty(event.SetName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
-		Metadata:       nil,
+		Metadata:       metadata,
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
@@ -76,6 +96,8 @@ type LogJsonWebKeySetUpdateEvent struct {
 
 	SetSnapshotBefore *JsonWebKeySetSnapshot
 	SetSnapshotAfter  *JsonWebKeySetSnapshot
+
+	InternalSessionIssuer bool
 }
 
 func (l *Logger) LogJsonWebKeySetUpdate(ctx context.Context, dbtx repo.DBTX, event LogJsonWebKeySetUpdateEvent) error {
@@ -89,6 +111,11 @@ func (l *Logger) LogJsonWebKeySetUpdate(ctx context.Context, dbtx repo.DBTX, eve
 	after, err := marshalAuditPayload(event.SetSnapshotAfter)
 	if err != nil {
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	metadata, err := jsonWebKeySetMetadata(event.InternalSessionIssuer)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
 	entry := repo.InsertAuditLogParams{
@@ -107,7 +134,7 @@ func (l *Logger) LogJsonWebKeySetUpdate(ctx context.Context, dbtx repo.DBTX, eve
 		SubjectDisplayName: conv.ToPGTextEmpty(event.SetName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
-		Metadata:       nil,
+		Metadata:       metadata,
 		BeforeSnapshot: before,
 		AfterSnapshot:  after,
 	}

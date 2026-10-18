@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
@@ -225,6 +226,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
+		ratelimit.NewRedisStore(redisClient),
 		nil,
 		nil,
 		authzEngine,

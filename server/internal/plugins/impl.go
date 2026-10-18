@@ -51,9 +51,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -89,7 +89,7 @@ type GitHubPublisher interface {
 	GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error)
 }
 
-// GitHubConfig holds the configured GitHub client and the Gram-owned org
+// GitHubConfig holds the configured GitHub client and the Speakeasy-owned org
 // where plugin repos are created. Nil means GitHub publishing is disabled.
 type GitHubConfig struct {
 	Client         GitHubPublisher
@@ -219,7 +219,7 @@ func NewService(
 		features:              features,
 		publisher:             publisher,
 		publicationRequests:   PublicationRequests{Enabled: false},
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: admission.NewGuard(),
 	}
 }
 
@@ -255,7 +255,7 @@ func NewPublisher(
 		// The publisher runs the publish workflow itself; it never signals one.
 		publisher:             nil,
 		publicationRequests:   PublicationRequests{Enabled: false},
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: admission.NewGuard(),
 	}
 }
 
@@ -326,13 +326,17 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 	if err != nil {
 		return nil, err
 	}
+	wrappers, err := canonicalWrapperIDs(ctx, s.repo, *ac.ProjectID, allServers...)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
+	}
 
 	plugins := make([]*gen.Plugin, 0, len(rows))
 	for _, r := range rows {
 		servers := serversByPlugin[r.ID]
 		genServers := make([]*gen.PluginServer, 0, len(servers))
 		for _, srv := range servers {
-			genServers = append(genServers, pluginServerToGen(srv))
+			genServers = append(genServers, pluginServerToGen(srv, wrappers))
 		}
 
 		plugins = append(plugins, &gen.Plugin{
@@ -486,9 +490,13 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 	if err != nil {
 		return nil, err
 	}
+	wrappers, err := canonicalWrapperIDs(ctx, s.repo, *ac.ProjectID, servers...)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
+	}
 
 	plugin := pluginRow.Plugin
-	result := pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug])
+	result := pluginToGen(plugin, servers, wrappers, assignments, compatibility[plugin.Slug])
 	result.ServerCount = &pluginRow.ServerCount
 	result.SkillCount = &pluginRow.SkillCount
 	result.AssignmentCount = &pluginRow.AssignmentCount
@@ -529,7 +537,7 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
 
 	plugin := created.Plugin
-	return pluginToGen(plugin, nil, nil, classifyAgentPlugin(PluginInfo{
+	return pluginToGen(plugin, nil, nil, nil, classifyAgentPlugin(PluginInfo{
 		Name: plugin.Name, Slug: plugin.Slug, Description: conv.FromPGTextOrEmpty[string](plugin.Description), Servers: nil, Skills: nil, AgentPluginsV1Issues: nil,
 	}).Compatible), nil
 }
@@ -604,7 +612,11 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 	if err != nil {
 		return nil, err
 	}
-	return s.filterPluginAudience(ctx, ac, pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug]))
+	wrappers, err := canonicalWrapperIDs(ctx, s.repo, *ac.ProjectID, servers...)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin servers").LogError(ctx, s.logger)
+	}
+	return s.filterPluginAudience(ctx, ac, pluginToGen(plugin, servers, wrappers, assignments, compatibility[plugin.Slug]))
 }
 
 func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPayload) error {
@@ -752,9 +764,6 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	if err != nil {
 		return nil, err
 	}
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	rollout, rolloutErr = s.distributionRollout(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
 	if backend.metaMcpServerID.Valid {
 		project, err := projectsrepo.New(s.db).GetProjectByID(ctx, *ac.ProjectID)
 		if err != nil {
@@ -827,6 +836,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		}
 	}
 
+	// Resolved before the transaction so flag latency never holds its locks.
+	serverKey := s.hostedServerKeyWrites(ctx, ac)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -855,14 +866,19 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 				displayName = gateway.Name
 			}
 		}
-		var admissionErr error
+		// Adding a server to a plugin is a write: an organization administrator's
+		// own addition is recorded as the Shadow MCP approval it stands for.
+		admissionCtx, admissionErr := admission.AdministratorWriteContext(ctx, s.authz, ac.ActiveOrganizationID)
+		if admissionErr != nil {
+			return nil, oops.E(oops.CodeUnavailable, admissionErr, "distribution approval could not be verified safely").LogError(ctx, s.logger)
+		}
 		if backend.metaMcpServerID.Valid {
-			admissionErr = s.distributionAdmission.CheckGatewayAttachment(ctx, tx, rollout, rolloutErr, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.metaMcpServerID.UUID)
+			admissionErr = s.distributionAdmission.CheckGatewayAttachment(admissionCtx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.metaMcpServerID.UUID)
 		} else {
-			admissionErr = s.distributionAdmission.CheckAttachment(ctx, tx, rollout, rolloutErr, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.mcpServerID.UUID)
+			admissionErr = s.distributionAdmission.CheckAttachment(admissionCtx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.mcpServerID.UUID)
 		}
 		if err := admissionErr; err != nil {
-			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrPrivateGatewayAudience) || errors.Is(err, admission.ErrDistributionDisabled) || errors.Is(err, admission.ErrUnavailable) {
+			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrPrivateGatewayAudience) || errors.Is(err, admission.ErrUnavailable) {
 				return nil, mapDistributionAdmissionError(err)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
@@ -880,6 +896,10 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		}
 		if exists {
 			return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
+		}
+		backend.toolsetID, backend.mcpServerID, err = hostedEntryKey(ctx, s.repo.WithTx(tx), *ac.ProjectID, backend.toolsetID, backend.mcpServerID, serverKey)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve plugin server key").LogError(ctx, s.logger)
 		}
 	}
 
@@ -940,13 +960,17 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
 	}
+	wrappers, err := canonicalWrapperIDs(ctx, s.repo.WithTx(tx), *ac.ProjectID, row)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load plugin server").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
 	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
 
-	return pluginServerToGen(row), nil
+	return pluginServerToGen(row, wrappers), nil
 }
 
 // serverBackend identifies exactly one backend of a plugin member.
@@ -957,6 +981,14 @@ type serverBackend struct {
 }
 
 func parseServerBackend(toolsetID, mcpServerID, metaMcpServerID *string) (serverBackend, error) {
+	// A hosted entry echoed from a read carries both ids, equal; it names the toolset.
+	if toolsetID != nil && mcpServerID != nil {
+		if t, err := uuid.Parse(*toolsetID); err == nil {
+			if m, err := uuid.Parse(*mcpServerID); err == nil && t == m {
+				mcpServerID = nil
+			}
+		}
+	}
 	count := 0
 	for _, id := range []*string{toolsetID, mcpServerID, metaMcpServerID} {
 		if id != nil && *id != "" {
@@ -1060,18 +1092,20 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 	}
 
 	if err := s.audit.LogPluginServerUpdate(ctx, tx, audit.LogPluginServerUpdateEvent{
-		OrganizationID:    ac.ActiveOrganizationID,
-		ProjectID:         *ac.ProjectID,
-		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName:  ac.Email,
-		ActorSlug:         nil,
-		PluginID:          plugin.ID,
-		PluginName:        plugin.Name,
-		PluginSlug:        plugin.Slug,
-		ServerID:          row.ID,
-		ServerDisplayName: row.DisplayName,
-		ServerPolicy:      row.Policy,
-		ServerSortOrder:   row.SortOrder,
+		OrganizationID:     ac.ActiveOrganizationID,
+		ProjectID:          *ac.ProjectID,
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:   ac.Email,
+		ActorSlug:          nil,
+		PluginID:           plugin.ID,
+		PluginName:         plugin.Name,
+		PluginSlug:         plugin.Slug,
+		ServerID:           row.ID,
+		ServerDisplayName:  row.DisplayName,
+		ServerPolicy:       row.Policy,
+		ServerSortOrder:    row.SortOrder,
+		McpServerURN:       nil,
+		PreviousToolsetURN: nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server update").LogError(ctx, s.logger)
 	}
@@ -1079,13 +1113,17 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
 	}
+	wrappers, err := canonicalWrapperIDs(ctx, s.repo.WithTx(tx), *ac.ProjectID, row)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load plugin server").LogError(ctx, s.logger)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
 	s.signalPublish(ctx, *ac.ProjectID, ac.UserID)
 
-	return pluginServerToGen(row), nil
+	return pluginServerToGen(row, wrappers), nil
 }
 
 func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePluginServerPayload) error {
@@ -1210,10 +1248,6 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.E(oops.CodeBadRequest, pluginassignments.ErrInvalid, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	rollout, rolloutErr = s.distributionRollout(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
-	ctx = roledelivery.WithProjectAdmission(ctx, ac.ActiveOrganizationID, *ac.ProjectID, rollout, rolloutErr)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -1235,17 +1269,18 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		ProjectID:        *ac.ProjectID,
 		PluginID:         pluginID,
 		PrincipalURNs:    payload.PrincipalUrns,
+		InstallModes:     payload.InstallModes,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(rollout, rolloutErr), BeforeReplace: nil, DeliveryGuard: s.distributionAdmission})
+	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(), BeforeReplace: nil, DeliveryGuard: s.distributionAdmission})
 	if err != nil {
 		switch {
 		case errors.Is(err, pluginassignments.ErrNotFound):
 			return nil, oops.C(oops.CodeNotFound)
 		case errors.Is(err, pluginassignments.ErrInvalid):
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin assignment")
-		case errors.Is(err, admission.ErrApprovalRequired), errors.Is(err, admission.ErrPrivateGatewayAudience), errors.Is(err, admission.ErrDistributionDisabled), errors.Is(err, admission.ErrUnavailable):
+		case errors.Is(err, admission.ErrApprovalRequired), errors.Is(err, admission.ErrPrivateGatewayAudience), errors.Is(err, admission.ErrUnavailable):
 			return nil, mapDistributionAdmissionError(err)
 		default:
 			return nil, oops.E(oops.CodeUnexpected, err, "set plugin assignments").LogError(ctx, s.logger)
@@ -2029,7 +2064,7 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 		return nil, fmt.Errorf("github publishing is not configured")
 	}
 
-	actorDisplayName := "Gram"
+	actorDisplayName := "Speakeasy"
 	result, err := s.publishProject(ctx, publishProjectInput{
 		ProjectID:        project.ProjectID,
 		ProjectName:      project.ProjectName,
@@ -3167,11 +3202,6 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "resolve gateway distribution project").LogError(ctx, s.logger)
 	}
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	if s.distributionAdmission != nil {
-		rollout, rolloutErr = s.distributionAdmission.Resolve(ctx, project.ID, project.Slug, project.ProjectSlug)
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin gateway distribution check").LogError(ctx, s.logger)
@@ -3185,12 +3215,6 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list active plugins").LogError(ctx, s.logger)
 	}
-	rows, err := lockedRepo.ListPluginsWithServersForProject(ctx, repo.ListPluginsWithServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with servers").LogError(ctx, s.logger)
-	}
-	// Remote MCP-backed (mcp_server) plugin servers are resolved separately
-	// and merged below until the AGE-1902 cutover.
 	mcpRows, err := lockedRepo.ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
@@ -3203,7 +3227,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		return nil, mapDistributionAdmissionError(admission.ErrUnavailable)
 	}
 	for _, gateway := range gatewayRows {
-		if err := s.distributionAdmission.CheckGatewayAttachment(ctx, tx, rollout, rolloutErr, project.ID, projectID, gateway.PluginID, gateway.GatewayID); err != nil {
+		if err := s.distributionAdmission.CheckGatewayAttachment(ctx, tx, project.ID, projectID, gateway.PluginID, gateway.GatewayID); err != nil {
 			return nil, mapDistributionAdmissionError(err)
 		}
 	}
@@ -3221,9 +3245,9 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		return nil, oops.E(oops.CodeUnexpected, err, "list Agent Plugins compatibility issues").LogError(ctx, s.logger)
 	}
 
-	// serverBuild carries the row's sort_order so the merged toolset- and
-	// mcp_server-backed servers can be re-sorted per plugin (the per-query SQL
-	// ordering is lost once the two result sets are combined).
+	// serverBuild carries the row's sort_order so the merged server and
+	// gateway entries can be re-sorted per plugin (the per-query SQL
+	// ordering is lost once the result sets are combined).
 	type serverBuild struct {
 		info      PluginServerInfo
 		sortOrder int32
@@ -3266,46 +3290,10 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		envConfigs[env.ToolsetID] = append(envConfigs[env.ToolsetID], ServerEnvConfig{VariableName: env.VariableName, DisplayName: env.HeaderDisplayName.String})
 	}
 
-	for _, r := range rows {
-		pb := ensurePlugin(r.PluginID, r.PluginName, r.PluginSlug, r.PluginDescription)
-
-		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
-			mcpBase := s.serverURL
-			if cd := conv.FromPGText[string](r.ToolsetCustomDomain); cd != nil {
-				mcpBase = fmt.Sprintf("https://%s", *cd)
-			}
-			if r.WrapperCount > 1 {
-				return nil, oops.E(oops.CodeUnexpected, nil, "ambiguous toolset MCP serving wrapper").LogError(ctx, s.logger)
-			}
-			mcpURL := fmt.Sprintf("%s/mcp/%s", mcpBase, *mcpSlug)
-			if r.WrapperCount == 1 {
-				mcpURL, err = packageMCPURL(r.WrapperNetworkAccessMode, mcpBase, *mcpSlug, r.PrivateDnsName.String, r.PrivateEndpointSlug)
-				if err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "resolve toolset plugin address").LogError(ctx, s.logger)
-				}
-			}
-			serverInfo := PluginServerInfo{
-				DisplayName: r.ServerDisplayName,
-				Policy:      r.ServerPolicy,
-				MCPURL:      mcpURL,
-				IsPublic:    r.ToolsetIsPublic,
-				IsOAuth:     r.ToolsetIsOauth,
-				IsUnproxied: false,
-				EnvConfigs:  nil,
-			}
-
-			if r.ToolsetIsPublic {
-				serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, envConfigs[r.ToolsetID.UUID]...)
-				if invalidEnvConfig[r.ToolsetID.UUID] {
-					pb.info.AgentPluginsV1Issues = append(pb.info.AgentPluginsV1Issues, "environment header is unresolved")
-				}
-			}
-
-			pb.servers = append(pb.servers, serverBuild{info: serverInfo, sortOrder: r.ServerSortOrder})
-		}
-	}
-
 	for _, m := range mcpRows {
+		if m.WrapperCount > 1 {
+			return nil, oops.E(oops.CodeUnexpected, nil, "ambiguous toolset MCP serving wrapper").LogError(ctx, s.logger)
+		}
 		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
 
 		// Classify from the authoritative backend signal (unproxied_url, set
@@ -3315,7 +3303,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		// only checks project ownership, not backend type), and mcp_servers'
 		// own backend-exclusivity check doesn't cover mcp_endpoints either.
 		// An unproxied-backed server's URL always wins so it's never routed
-		// through a Gram endpoint it can't actually be served from.
+		// through a Speakeasy endpoint it can't actually be served from.
 		mcpURL := ""
 		isOAuth := m.McpServerIsOauth
 		isUnproxied := false
@@ -3333,18 +3321,26 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		default:
 			// Custom-domain endpoints win on the public surface. The private
 			// surface is pinned to the ingress's configured namespace instead.
-			mcpBase := s.serverURL
-			if cd := conv.FromPGText[string](m.EndpointCustomDomain); cd != nil {
+			mcpBase, publicSlug, domain := s.serverURL, m.EndpointSlug, m.EndpointCustomDomain
+			if m.AddressSlug.Valid {
+				publicSlug, domain = m.AddressSlug.String, m.AddressCustomDomain
+			}
+			if cd := conv.FromPGText[string](domain); cd != nil {
 				mcpBase = fmt.Sprintf("https://%s", *cd)
 			}
-			mcpURL, err = packageMCPURL(m.NetworkAccessMode, mcpBase, m.EndpointSlug, m.PrivateDnsName.String, m.PrivateEndpointSlug)
+			mcpURL, err = packageMCPURL(m.NetworkAccessMode, mcpBase, publicSlug, m.PrivateDnsName.String, m.PrivateEndpointSlug)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "resolve MCP plugin address").LogError(ctx, s.logger)
 			}
 		}
 
-		// Environments are not yet wired to mcp_servers, so there are no
-		// public env configs to surface.
+		var serverEnv []ServerEnvConfig
+		if m.McpServerIsPublic && m.EnvToolsetID.Valid {
+			serverEnv = append(serverEnv, envConfigs[m.EnvToolsetID.UUID]...)
+			if invalidEnvConfig[m.EnvToolsetID.UUID] {
+				pb.info.AgentPluginsV1Issues = append(pb.info.AgentPluginsV1Issues, "environment header is unresolved")
+			}
+		}
 		pb.servers = append(pb.servers, serverBuild{
 			info: PluginServerInfo{
 				DisplayName: m.ServerDisplayName,
@@ -3353,7 +3349,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 				IsPublic:    m.McpServerIsPublic,
 				IsOAuth:     isOAuth,
 				IsUnproxied: isUnproxied,
-				EnvConfigs:  nil,
+				EnvConfigs:  serverEnv,
 			},
 			sortOrder: m.ServerSortOrder,
 		})
@@ -3407,9 +3403,9 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 
 	pluginInfos := make([]PluginInfo, 0, len(pluginMap))
 	for _, pb := range pluginMap {
-		// Re-sort the merged toolset- and mcp_server-backed servers by
-		// sort_order (then display name for a stable tiebreak) since combining
-		// the two query result sets discards their per-query ordering.
+		// Re-sort the merged server and gateway entries by sort_order (then
+		// display name for a stable tiebreak) since combining the query result
+		// sets discards their per-query ordering.
 		sort.SliceStable(pb.servers, func(i, j int) bool {
 			if pb.servers[i].sortOrder != pb.servers[j].sortOrder {
 				return pb.servers[i].sortOrder < pb.servers[j].sortOrder
@@ -3567,7 +3563,7 @@ func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, 
 
 // --- Conversion helpers ---
 
-func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.PluginAssignment, agentPluginsV1Compatible bool) *gen.Plugin {
+func pluginToGen(p repo.Plugin, servers []repo.PluginServer, wrappers map[uuid.UUID]bool, assignments []repo.PluginAssignment, agentPluginsV1Compatible bool) *gen.Plugin {
 	result := &gen.Plugin{
 		ID:                       p.ID.String(),
 		Name:                     p.Name,
@@ -3588,7 +3584,7 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.
 	if servers != nil {
 		genServers := make([]*gen.PluginServer, 0, len(servers))
 		for _, s := range servers {
-			genServers = append(genServers, pluginServerToGen(s))
+			genServers = append(genServers, pluginServerToGen(s, wrappers))
 		}
 		result.Servers = genServers
 	}
@@ -3604,7 +3600,41 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.
 	return result
 }
 
-func pluginServerToGen(s repo.PluginServer) *gen.PluginServer {
+// hostedServerKeyWrites reports whether this organization's hosted writes use the canonical server key; errors keep the toolset key.
+func (s *Service) hostedServerKeyWrites(ctx context.Context, ac *contextvalues.AuthContext) bool {
+	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.features, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+	}
+	return enabled
+}
+
+// canonicalWrapperIDs returns which of the servers' hosted backends are a live canonical wrapper in the project.
+func canonicalWrapperIDs(ctx context.Context, q *repo.Queries, projectID uuid.UUID, servers ...repo.PluginServer) (map[uuid.UUID]bool, error) {
+	ids := make([]uuid.UUID, 0, len(servers))
+	for _, srv := range servers {
+		switch {
+		case srv.ToolsetID.Valid:
+			ids = append(ids, srv.ToolsetID.UUID)
+		case srv.McpServerID.Valid:
+			ids = append(ids, srv.McpServerID.UUID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	found, err := q.ListCanonicalWrapperIDs(ctx, repo.ListCanonicalWrapperIDsParams{ProjectID: projectID, Ids: ids})
+	if err != nil {
+		return nil, fmt.Errorf("list canonical wrapper ids: %w", err)
+	}
+	wrappers := make(map[uuid.UUID]bool, len(found))
+	for _, id := range found {
+		wrappers[id] = true
+	}
+	return wrappers, nil
+}
+
+func pluginServerToGen(s repo.PluginServer, wrappers map[uuid.UUID]bool) *gen.PluginServer {
 	result := &gen.PluginServer{
 		ID:              s.ID.String(),
 		ToolsetID:       nil,
@@ -3628,6 +3658,11 @@ func pluginServerToGen(s repo.PluginServer) *gen.PluginServer {
 		id := s.MetaMcpServerID.UUID.String()
 		result.MetaMcpServerID = &id
 	}
+	// A hosted entry reports both ids under either key; a canonical wrapper shares its toolset's id.
+	if hosted := conv.Ternary(s.ToolsetID.Valid, s.ToolsetID, s.McpServerID); hosted.Valid && wrappers[hosted.UUID] {
+		toolsetID, mcpServerID := hosted.UUID.String(), hosted.UUID.String()
+		result.ToolsetID, result.McpServerID = &toolsetID, &mcpServerID
+	}
 	return result
 }
 
@@ -3635,6 +3670,7 @@ func pluginAssignmentToGen(a repo.PluginAssignment) *gen.PluginAssignment {
 	return &gen.PluginAssignment{
 		ID:           a.ID.String(),
 		PrincipalUrn: a.PrincipalUrn,
+		InstallMode:  string(installmode.FromStored(a.InstallMode)),
 		CreatedAt:    formatTime(a.CreatedAt),
 	}
 }

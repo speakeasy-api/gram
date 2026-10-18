@@ -6,7 +6,6 @@
 SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
 ORDER BY principal_urn, scope;
 
@@ -16,7 +15,6 @@ ORDER BY principal_urn, scope;
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND principal_urn = ANY(@principal_urns::text[]);
 
 -- name: ListPrincipalGrantsByResource :many
@@ -24,7 +22,6 @@ WHERE organization_id = @organization_id
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text,
@@ -40,7 +37,6 @@ ORDER BY principal_urn;
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text
@@ -50,25 +46,20 @@ ORDER BY principal_urn;
 
 -- name: UpsertPrincipalGrant :one
 -- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
--- any legacy effect is normalized to the allow-only NULL representation.
+-- the existing row is kept and its updated_at is bumped.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
-  effect = NULL,
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
 
 -- name: InsertPrincipalGrantIfAbsent :execrows
--- Creates a single grant row, leaves existing allow rows untouched, and converts
--- a conflicting legacy effect row to the allow-only NULL representation.
+-- Creates a single grant row and leaves an existing identical row untouched.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
-DO UPDATE SET
-  effect = NULL,
-  updated_at = clock_timestamp()
-WHERE principal_grants.effect IS NOT NULL;
+DO NOTHING;
 
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
@@ -1107,7 +1098,6 @@ WITH user_grants AS (
     (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
-    AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY(@principal_urns::text[])
     AND pg.scope IN (
       'mcp:connect', 'mcp:read', 'mcp:write',
@@ -1186,7 +1176,6 @@ WITH user_grants AS (
     (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
-    AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY(@principal_urns::text[])
     AND pg.scope IN (
       'skill:read', 'skill:write',

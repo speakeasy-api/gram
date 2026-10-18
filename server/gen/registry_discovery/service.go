@@ -15,9 +15,9 @@ import (
 )
 
 // Authenticated discovery-only preview. Current records only: no version
-// history, incremental synchronization or mirror guarantees. Uses Gram
+// history, incremental synchronization or mirror guarantees. Uses Speakeasy
 // credentials, not generic-client OAuth. Discovery errors use the pinned
-// standard error envelope; authorization uses Gram security.
+// standard error envelope; authorization uses Speakeasy security.
 type Service interface {
 	// DiscoverServers implements discoverServers.
 	DiscoverServers(context.Context, *DiscoverServersPayload) (res *RegistryDiscoveryPage, err error)

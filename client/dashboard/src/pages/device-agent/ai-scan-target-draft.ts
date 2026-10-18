@@ -170,7 +170,7 @@ function gatewayListProblem(
 }
 
 // callsGateway mirrors the server's aitargets.CallsGateway: which categories
-// ever reach Gram's MCP gateway, and so which ones it is meaningful to name a
+// ever reach Speakeasy's MCP gateway, and so which ones it is meaningful to name a
 // caller for. An open model run locally never connects.
 export function callsGateway(category: TargetCategory): boolean {
   return category === "harness" || category === "assistant";
@@ -240,7 +240,7 @@ export function validateDraft(draft: Draft): DraftErrors {
       "Use an Info.plist key made of letters and digits only";
   }
 
-  // A harness and an assistant both reach Gram's MCP gateway, so both may
+  // A harness and an assistant both reach Speakeasy's MCP gateway, so both may
   // carry matchers. An open model never does, and its draft never holds any:
   // withCategory drops them on the switch and draftToUpsertBody sends none.
   // There is nothing to check for it, and nowhere to show a finding, since

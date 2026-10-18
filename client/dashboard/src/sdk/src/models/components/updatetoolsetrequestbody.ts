@@ -7,7 +7,9 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * Where the hosted MCP is accessible: public_only, dual, or private_only
+ * Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only
+ *
+ * @deprecated enum: Use mcpServers.update instead.
  */
 export const UpdateToolsetRequestBodyNetworkAccessMode = {
   PublicOnly: "public_only",
@@ -15,7 +17,9 @@ export const UpdateToolsetRequestBodyNetworkAccessMode = {
   PrivateOnly: "private_only",
 } as const;
 /**
- * Where the hosted MCP is accessible: public_only, dual, or private_only
+ * Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only
+ *
+ * @deprecated enum: Use mcpServers.update instead.
  */
 export type UpdateToolsetRequestBodyNetworkAccessMode = ClosedEnum<
   typeof UpdateToolsetRequestBodyNetworkAccessMode
@@ -23,7 +27,9 @@ export type UpdateToolsetRequestBodyNetworkAccessMode = ClosedEnum<
 
 export type UpdateToolsetRequestBody = {
   /**
-   * The ID of the custom domain to use for the toolset
+   * Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset
+   *
+   * @deprecated field: Use mcpEndpoints.create or mcpEndpoints.update instead.
    */
   customDomainId?: string | undefined;
   /**
@@ -35,15 +41,21 @@ export type UpdateToolsetRequestBody = {
    */
   description?: string | undefined;
   /**
-   * Whether the toolset is enabled for MCP
+   * Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP
+   *
+   * @deprecated field: Use mcpServers.update instead.
    */
   mcpEnabled?: boolean | undefined;
   /**
-   * Whether the toolset is public in MCP
+   * Deprecated: use mcpServers.update. Whether the toolset is public in MCP
+   *
+   * @deprecated field: Use mcpServers.update instead.
    */
   mcpIsPublic?: boolean | undefined;
   /**
-   * The slug of the MCP to use for the toolset
+   * Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset
+   *
+   * @deprecated field: Use mcpEndpoints.create or mcpEndpoints.update instead.
    */
   mcpSlug?: string | undefined;
   /**
@@ -51,7 +63,9 @@ export type UpdateToolsetRequestBody = {
    */
   name?: string | undefined;
   /**
-   * Where the hosted MCP is accessible: public_only, dual, or private_only
+   * Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only
+   *
+   * @deprecated field: Use mcpServers.update instead.
    */
   networkAccessMode?: UpdateToolsetRequestBodyNetworkAccessMode | undefined;
   /**

@@ -51,6 +51,20 @@ export const AuthnChallengeMode = {
 export type AuthnChallengeMode = ClosedEnum<typeof AuthnChallengeMode>;
 
 /**
+ * Which OAuth authorization server the issuer's MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).
+ */
+export const AuthorizationServerMode = {
+  Endpoint: "endpoint",
+  Shared: "shared",
+} as const;
+/**
+ * Which OAuth authorization server the issuer's MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).
+ */
+export type AuthorizationServerMode = ClosedEnum<
+  typeof AuthorizationServerMode
+>;
+
+/**
  * custom, or project_default_idp for the auto-provisioned issuer of private servers.
  */
 export const Classification = {
@@ -91,6 +105,10 @@ export type AdminMcpServerHealthUserSessionIssuer = {
    */
   authnChallengeMode: AuthnChallengeMode;
   /**
+   * Which OAuth authorization server the issuer's MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).
+   */
+  authorizationServerMode: AuthorizationServerMode;
+  /**
    * custom, or project_default_idp for the auto-provisioned issuer of private servers.
    */
   classification: Classification;
@@ -103,6 +121,10 @@ export type AdminMcpServerHealthUserSessionIssuer = {
    * The user session issuer ID.
    */
   id: string;
+  /**
+   * Whether a shared authorization server's issuer URL is pinned, so it stays the same if the deployment's hosts change.
+   */
+  issuerUrlPinned: boolean;
   /**
    * Other live servers in the project that share this issuer.
    */
@@ -144,6 +166,11 @@ export const AuthnChallengeMode$inboundSchema: z.ZodMiniEnum<
 > = z.enum(AuthnChallengeMode);
 
 /** @internal */
+export const AuthorizationServerMode$inboundSchema: z.ZodMiniEnum<
+  typeof AuthorizationServerMode
+> = z.enum(AuthorizationServerMode);
+
+/** @internal */
 export const Classification$inboundSchema: z.ZodMiniEnum<
   typeof Classification
 > = z.enum(Classification);
@@ -161,6 +188,7 @@ export const AdminMcpServerHealthUserSessionIssuer$inboundSchema: z.ZodMiniType<
   z.object({
     attachment_scope: AttachmentScope$inboundSchema,
     authn_challenge_mode: AuthnChallengeMode$inboundSchema,
+    authorization_server_mode: AuthorizationServerMode$inboundSchema,
     classification: Classification$inboundSchema,
     client_id_metadata_admission_mode: z.optional(
       ClientIdMetadataAdmissionMode$inboundSchema,
@@ -170,6 +198,7 @@ export const AdminMcpServerHealthUserSessionIssuer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    issuer_url_pinned: z.boolean(),
     other_servers_using_issuer: z.array(
       AdminMcpServerHealthServerRef$inboundSchema,
     ),
@@ -188,8 +217,10 @@ export const AdminMcpServerHealthUserSessionIssuer$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "attachment_scope": "attachmentScope",
       "authn_challenge_mode": "authnChallengeMode",
+      "authorization_server_mode": "authorizationServerMode",
       "client_id_metadata_admission_mode": "clientIdMetadataAdmissionMode",
       "created_at": "createdAt",
+      "issuer_url_pinned": "issuerUrlPinned",
       "other_servers_using_issuer": "otherServersUsingIssuer",
       "remote_session_clients": "remoteSessionClients",
       "session_duration_hours": "sessionDurationHours",

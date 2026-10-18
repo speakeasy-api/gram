@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
+import { ExternalLinkButton } from "@/components/ExternalLinkButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,7 +48,7 @@ const STRIPE_SUBSCRIPTION_ID = /^sub_[A-Za-z0-9_]+$/;
 const MAX_STRIPE_SUBSCRIPTION_ID_LENGTH = 255;
 
 const MISSING_CUSTOMER_NOTE =
-  "Set a Stripe customer ID before recording a subscription. Gram checks that the subscription belongs to that customer.";
+  "Set a Stripe customer ID before recording a subscription. Speakeasy checks that the subscription belongs to that customer.";
 
 function ConfirmationDetail({
   label,
@@ -207,11 +208,19 @@ export function SetStripeSubscription({
 
   if (hasValue(org.stripe_subscription_id)) {
     return (
-      <CopyValue
-        label="Stripe subscription ID"
-        value={org.stripe_subscription_id}
-        className="text-sm"
-      />
+      <span className="flex min-w-0 items-center gap-1">
+        <CopyValue
+          label="Stripe subscription ID"
+          value={org.stripe_subscription_id}
+          className="text-sm"
+        />
+        {org.stripe_subscription_dashboard_url ? (
+          <ExternalLinkButton
+            href={org.stripe_subscription_dashboard_url}
+            label="Open subscription in Stripe"
+          />
+        ) : null}
+      </span>
     );
   }
 
@@ -269,7 +278,7 @@ export function SetStripeSubscription({
               <DialogTitle>Set Stripe subscription ID</DialogTitle>
               <DialogDescription>
                 This records the initial Stripe subscription for a PAYG
-                organization. Gram verifies the subscription belongs to{" "}
+                organization. Speakeasy verifies the subscription belongs to{" "}
                 {org.stripe_customer_id}. It cannot replace a subscription that
                 is already set.
               </DialogDescription>

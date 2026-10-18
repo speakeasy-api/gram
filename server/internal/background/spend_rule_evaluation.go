@@ -154,7 +154,7 @@ func SpendRuleOrgEvaluationWorkflowDebounced(ctx workflow.Context, organizationI
 }
 
 // SpendRuleActorEvaluationWorkflow refreshes one actor's spend cache. Signals
-// are keyed by stable Gram user ID; email remains optional metadata the
+// are keyed by stable Speakeasy user ID; email remains optional metadata the
 // activity can use when loading ClickHouse spend.
 func SpendRuleActorEvaluationWorkflow(ctx workflow.Context, signal spendrules.ActorEvaluationSignal) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{

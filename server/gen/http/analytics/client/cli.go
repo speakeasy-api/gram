@@ -23,7 +23,7 @@ func BuildQueryPayload(analyticsQueryBody string, analyticsQuerySessionToken str
 	{
 		err = json.Unmarshal([]byte(analyticsQueryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dataset\": \"sessions\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"hour\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"tool_calls\",\n            \"field\": \"tool_call_count\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"tool_calls\"\n         }\n      ],\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dataset\": \"tool_calls\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"hour\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"total_ms\",\n            \"field\": \"duration_ms\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"total_ms\"\n         }\n      ],\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -167,7 +167,7 @@ func BuildDimensionValuesPayload(analyticsDimensionValuesBody string, analyticsD
 	{
 		err = json.Unmarshal([]byte(analyticsDimensionValuesBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dataset\": \"sessions\",\n      \"dimension\": \"model\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dataset\": \"tool_calls\",\n      \"dimension\": \"tool_name\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))

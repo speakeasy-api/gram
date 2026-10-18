@@ -33,7 +33,7 @@ const maxForwardAttempts = 3
 // separate MCP and authorization-server origins therefore need a local reverse
 // proxy at that URL to route both services by path.
 //
-// This is the transport for Gram's back-channel calls to authorization
+// This is the transport for Speakeasy's back-channel calls to authorization
 // servers that sit inside a customer network (token exchange, refresh,
 // revocation, dynamic client registration). The MCP serving path has its own
 // tunnel transport in the reverse proxy; this one exists for plain

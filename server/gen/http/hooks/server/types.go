@@ -1939,7 +1939,7 @@ type HookIngestSessionRequestBody struct {
 
 // HookIngestEventRequestBody is used to define fields on request body types.
 type HookIngestEventRequestBody struct {
-	// Canonical Gram hook event type.
+	// Canonical Speakeasy hook event type.
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// RFC3339 timestamp from the local agent. Defaults to receive time when absent.
 	OccurredAt *string `form:"occurred_at,omitempty" json:"occurred_at,omitempty" xml:"occurred_at,omitempty"`

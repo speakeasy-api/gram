@@ -24,6 +24,10 @@ type Client struct {
 	// listPlatforms endpoint.
 	ListPlatformsDoer goahttp.Doer
 
+	// GetCustomFlows Doer is the HTTP client used to make requests to the
+	// getCustomFlows endpoint.
+	GetCustomFlowsDoer goahttp.Doer
+
 	// ListTokenEndpoints Doer is the HTTP client used to make requests to the
 	// listTokenEndpoints endpoint.
 	ListTokenEndpointsDoer goahttp.Doer
@@ -75,6 +79,7 @@ func NewClient(
 	return &Client{
 		ListDoer:               doer,
 		ListPlatformsDoer:      doer,
+		GetCustomFlowsDoer:     doer,
 		ListTokenEndpointsDoer: doer,
 		RegisterIssuerDoer:     doer,
 		UpdateIssuerDoer:       doer,
@@ -133,6 +138,30 @@ func (c *Client) ListPlatforms() goa.Endpoint {
 		resp, err := c.ListPlatformsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "listPlatforms", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetCustomFlows returns an endpoint that makes HTTP requests to the
+// workloadIdentities service getCustomFlows server.
+func (c *Client) GetCustomFlows() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetCustomFlowsRequest(c.encoder)
+		decodeResponse = DecodeGetCustomFlowsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetCustomFlowsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetCustomFlowsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "getCustomFlows", err)
 		}
 		return decodeResponse(resp)
 	}

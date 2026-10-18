@@ -55,7 +55,7 @@ export type GetToolUsageSummaryPayload = {
    */
   accountType?: string | undefined;
   /**
-   * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
+   * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include
    */
   clientKeys?: Array<string> | undefined;
   /**

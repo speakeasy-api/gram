@@ -8,7 +8,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Result of a live probe that Gram can assume the identity the credential names.
+ * Result of a live probe that Speakeasy can assume the identity the credential names.
  */
 export type VerifyCredentialResult = {
   /**
@@ -20,7 +20,7 @@ export type VerifyCredentialResult = {
    */
   principal?: string | undefined;
   /**
-   * Whether Gram could assume the credential's identity.
+   * Whether Speakeasy could assume the credential's identity.
    */
   verified: boolean;
 };

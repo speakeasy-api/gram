@@ -31,7 +31,7 @@ Add a new `Method` to the appropriate service. Here's the basic structure:
 
 ```go
 var _ = Service("resource", func() {
-    Description("Manages resources in Gram.")
+    Description("Manages resources in Speakeasy.")
 
     // these are shared between all endpoints in this service
     Security(security.ByKey, func() {

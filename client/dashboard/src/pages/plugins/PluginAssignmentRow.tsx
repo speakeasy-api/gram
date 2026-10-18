@@ -1,4 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
+import { RoleLink } from "@/components/role-link";
 import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
@@ -87,7 +88,11 @@ export function PluginAssignmentRow({
           {/* Block-level span, not a div: IdentityLink falls back to a
               <span> wrapper for principals that name no one person. */}
           <Text as="span" className="block truncate font-medium">
-            {label}
+            {kind === "role" ? (
+              <RoleLink principalUrn={urn}>{label}</RoleLink>
+            ) : (
+              label
+            )}
           </Text>
         </IdentityLink>
         {description && (

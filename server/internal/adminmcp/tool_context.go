@@ -45,7 +45,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 			workflows = append(workflows, "inspect current-cycle organization usage estimate")
 		}
 		if coverageReadsAvailable {
-			workflows = append(workflows, "inspect which agent surfaces Gram observes for an organization")
+			workflows = append(workflows, "inspect which agent surfaces Speakeasy observes for an organization")
 		}
 		if issuerReadsAvailable {
 			workflows = append(workflows, "inspect global issuers and bounded duplicate/migration preflights")
@@ -80,14 +80,12 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		operations := []WriteOperation{}
 		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil {
 			for _, op := range runtime.writes.writes.EnabledOperations() {
-				if runtime.writes.writers[op] != nil {
+				if runtime.writes.implements(op) {
 					operations = append(operations, op)
 				}
 			}
 		}
-		if len(operations) > 0 {
-			workflows = append(workflows, "prepare enabled exact staff changes for separate browser approval, execute approved proposals and inspect receipts")
-		}
+		workflows = append(workflows, writeWorkflows(operations)...)
 		return nil, AdminContext{
 			Email:           principal.Email,
 			ReadOnly:        len(operations) == 0,
@@ -96,4 +94,17 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 			Workflows:       workflows,
 		}, nil
 	})
+}
+
+// writeWorkflows describes the enabled writes. Most are proposals that need
+// separate browser approval; a direct write applies as soon as it is called.
+func writeWorkflows(operations []WriteOperation) []string {
+	workflows := []string{}
+	if slices.ContainsFunc(operations, func(op WriteOperation) bool { return !op.direct() }) {
+		workflows = append(workflows, "prepare enabled exact staff changes for separate browser approval, execute approved proposals and inspect receipts")
+	}
+	if slices.Contains(operations, OperationUploadPlatformImage) {
+		workflows = append(workflows, "create single-use image upload URLs directly, without browser approval; uploaded images are public and persist immediately")
+	}
+	return workflows
 }

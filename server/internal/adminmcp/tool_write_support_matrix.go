@@ -397,7 +397,7 @@ func (s *supportMatrixWriter) execution(_ writeAuthority) ProposalExecution {
 }
 
 func (s *supportMatrixWriter) registerPrepare(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_update_support_matrix", Title: "Prepare Global Support Matrix Update", Description: "Prepare bounded changes to existing global mapping or reference entries only. Use stable IDs and the exact revision from get_support_matrix_entry. Only supplied fields change; all other entries, notes, conditions, and verification flags are preserved. The before/after preview includes only supplied fields and is stored for separate same-staff approval. Does not create catalogue entries or modify issuers. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true)}}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareSupportMatrixInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	addProposalTool(server, &mcp.Tool{Name: "prepare_update_support_matrix", Title: "Prepare Global Support Matrix Update", Description: "Prepare bounded changes to existing global mapping or reference entries only. Use stable IDs and the exact revision from get_support_matrix_entry. Only supplied fields change; all other entries, notes, conditions, and verification flags are preserved. The before/after preview includes only supplied fields and is stored for separate same-staff approval. Does not create catalogue entries or modify issuers. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true)}}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareSupportMatrixInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := s.prepare(ctx, input)
 		return nil, out, err
 	})

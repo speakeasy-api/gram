@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -212,4 +213,43 @@ func TestLogger_WritesAuditLogAndOutboxEntry(t *testing.T) {
 	outboxCountAfter, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationWebhooksV1.EventType()))
 	require.NoError(t, err)
 	require.Equal(t, outboxCountBefore+1, outboxCountAfter)
+}
+
+func TestLogger_WithoutOutboxRecordsAuditRowOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+
+	orgID := uuid.New().String()
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Test Org",
+		Slug:        "test-org-" + orgID[:8],
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	assetID, err := uuid.NewV7()
+	require.NoError(t, err)
+	err = audit.NewLogger(audit.WithoutOutbox()).LogAssetCreate(ctx, conn, audit.LogAssetCreateEvent{
+		OrganizationID: orgID,
+		ProjectID:      uuid.NullUUID{},
+		Actor:          urn.NewSystemPrincipal("audit-test-backfill"),
+		AssetURN:       urn.NewAsset(urn.AssetKindImage, assetID),
+		AssetName:      "Test Asset",
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionAssetCreate)
+	require.NoError(t, err)
+	require.Equal(t, assetID.String(), record.SubjectID)
+
+	_, err = auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
+		OrganizationID: orgID,
+		EventType:      string(events.AssetV1.EventType()),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }

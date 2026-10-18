@@ -85,7 +85,7 @@ export type UserSession = {
    */
   subjectDisplayName?: string | undefined;
   /**
-   * Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
+   * Avatar URL for the subject when it resolves to a Speakeasy user with one. Null for API key and anonymous subjects, and for users who have no photo.
    */
   subjectPhotoUrl?: string | undefined;
   /**
@@ -98,7 +98,7 @@ export type UserSession = {
   subjectUrn: string;
   updatedAt: Date;
   /**
-   * The upstream providers Gram holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.
+   * The upstream providers Speakeasy holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Speakeasy-native tools. A session can have several: an issuer may have more than one remote_session_client attached.
    */
   upstreams: Array<UserSessionUpstream>;
   /**
