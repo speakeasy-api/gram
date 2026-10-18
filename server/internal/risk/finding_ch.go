@@ -14,11 +14,13 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
+	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -47,27 +49,30 @@ type RiskFindingInserter interface {
 // read time: rows share their deterministic id and the read paths resolve
 // each id to one winning copy.
 type FindingCHWriter struct {
-	logger        *slog.Logger
-	metrics       *metrics
-	inserter      RiskFindingInserter
-	fingerprinter Fingerprinter
+	logger         *slog.Logger
+	metrics        *metrics
+	inserter       RiskFindingInserter
+	fingerprinter  Fingerprinter
+	builtinPresets *presetlib.Library
 
-	exclusions *FindingExclusionResolver
-
+	exclusions    *FindingExclusionResolver
+	policyFilters *findingPolicyFilterResolver
 	// db backs the per-batch chat-message attribution read. A read replica is
 	// fine because attribution is best-effort enrichment.
 	db repo.DBTX
 }
 
-func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter) *FindingCHWriter {
+func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter, builtinPresets *presetlib.Library) *FindingCHWriter {
 	logger = logger.With(attr.SlogComponent("finding-ch-writer"))
 	return &FindingCHWriter{
-		logger:        logger,
-		metrics:       newMetrics(meterProvider, logger),
-		inserter:      inserter,
-		fingerprinter: fingerprinter,
-		exclusions:    NewFindingExclusionResolver(db),
-		db:            db,
+		logger:         logger,
+		metrics:        newMetrics(meterProvider, logger),
+		inserter:       inserter,
+		fingerprinter:  fingerprinter,
+		builtinPresets: builtinPresets,
+		exclusions:     NewFindingExclusionResolver(db),
+		policyFilters:  newFindingPolicyFilterResolver(db),
+		db:             db,
 	}
 }
 
@@ -99,6 +104,7 @@ func (w *FindingCHWriter) HandleBatchWithResult(ctx context.Context, batch []gcp
 func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.Finding) ([]error, error) {
 	logger := w.logger
 	failed := make([]error, len(messages))
+	missingPolicies := make(map[findingPolicyFilterKey]struct{})
 
 	// Cache per-tenant derived keys for the lifetime of this batch so repeated
 	// findings from the same org don't each re-run HKDF.
@@ -169,6 +175,22 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 				eventKind = chrepo.EventKindSuppression
 			} else {
 				eventKind = chrepo.EventKindFinding
+			}
+		}
+
+		// Suppression state events must land even when the original finding is now filtered.
+		if !deadLetter && eventKind == chrepo.EventKindFinding {
+			filters, err := w.policyFilters.filtersFor(ctx, message, missingPolicies)
+			if err != nil {
+				return nil, fmt.Errorf("resolve finding policy filters: %w", err)
+			}
+			switch {
+			case filters.disabledRules.Contains(message.GetRuleId()):
+				w.metrics.RecordFindingCHFiltered(ctx, "disabled_rule")
+				continue
+			case filters.builtinPresetsEnabled && risk_analysis.IsBuiltinFalsePositive(w.builtinPresets, message.GetSource(), message.GetRuleId(), match):
+				w.metrics.RecordFindingCHFiltered(ctx, "builtin_preset")
+				continue
 			}
 		}
 
