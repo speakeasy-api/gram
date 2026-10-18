@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -20,11 +21,11 @@ func TestFetchPreservesSupportedMetadata(t *testing.T) {
 	second := fmt.Sprintf(`{"id":%q,"context_length":64000}`, ids[0])
 	body := `{"data":[` + first + `,{"id":"unsupported/model","context_length":999},` + second + `],"future_envelope":{"version":2}}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/api/v1/models", r.URL.Path)
-		require.Empty(t, r.URL.RawQuery)
-		require.Empty(t, r.Header.Get("Authorization"))
-		require.Equal(t, "application/json", r.Header.Get("Accept"))
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/api/v1/models", r.URL.Path)
+		assert.Empty(t, r.URL.RawQuery)
+		assert.Empty(t, r.Header.Get("Authorization"))
+		assert.Equal(t, "application/json", r.Header.Get("Accept"))
 		_, _ = w.Write([]byte(body))
 	}))
 	defer server.Close()
@@ -49,9 +50,9 @@ func TestFetchReturnsEverySupportedUpstreamEntry(t *testing.T) {
 	}
 	entries = append(entries, map[string]string{"id": "unsupported/model"})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1/models", r.URL.Path)
-		require.Equal(t, http.MethodGet, r.Method)
-		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"data": entries}))
+		assert.Equal(t, "/v1/models", r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"data": entries}))
 	}))
 	defer server.Close()
 	got, err := modelcatalog.Fetch(t.Context(), server.Client(), server.URL, openrouter.IsModelAllowed)
