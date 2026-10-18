@@ -47,11 +47,7 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		if len(results[i].Findings) == 0 {
 			continue
 		}
-		ev := judgemessage.Render(judgeMessages[i])
-		for j := range results[i].Findings {
-			results[i].Findings[j].Match = ev
-			results[i].Findings[j].EndPos = len(ev)
-		}
+		scanners.SetEventMatch(results[i].Findings, judgemessage.Render(judgeMessages[i]))
 	}
 	requestID := batchScanRequestID(args, "standard").String()
 

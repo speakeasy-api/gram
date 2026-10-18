@@ -74,8 +74,12 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 	}
 
 	startedAt := time.Now().UTC()
-	result, verdict := scanner.ScanWithVerdict(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, promptPolicyJudgeMessage(m))
+	jm := promptPolicyJudgeMessage(m)
+	result, verdict := scanner.ScanWithVerdict(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, jm)
 	findings := result.Findings
+	if len(findings) > 0 {
+		scanners.SetEventMatch(findings, judgemessage.Render(jm))
+	}
 
 	_, _, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),

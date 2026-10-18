@@ -30,11 +30,7 @@ func setEventMatch(findings []scanners.Finding, msg batchMessage) {
 	if len(findings) == 0 {
 		return
 	}
-	ev := judgemessage.Render(batchJudgeMessage(msg))
-	for j := range findings {
-		findings[j].Match = ev
-		findings[j].EndPos = len(ev)
-	}
+	scanners.SetEventMatch(findings, judgemessage.Render(batchJudgeMessage(msg)))
 }
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch.

@@ -10,6 +10,7 @@ import (
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -109,6 +110,33 @@ func TestHandle_PublishesPromptPolicyFinding(t *testing.T) {
 	require.Equal(t, int64(3), f.GetRiskPolicyVersion())
 	require.NotEmpty(t, f.GetId())
 	require.InDelta(t, 0.88, f.GetConfidence(), 0.0001)
+	require.Equal(t, judgemessage.Render(judgemessage.New("user_message", "", "delete production")), f.GetMatch())
+}
+
+func TestHandle_ToolRequestPublishesRenderedEventMatch(t *testing.T) {
+	t.Parallel()
+
+	pub, published := capturingPub(t)
+	evaluator := func(_ context.Context, _ promptpolicy.Input) (*promptpolicy.Verdict, error) {
+		return &promptpolicy.Verdict{Matched: true, Confidence: 0.9, Rationale: "matched", CostUSD: 0, PromptTokens: 0, CompletionTokens: 0, TotalTokens: 0, STokens: 1, Completed: true, Model: "test", Provider: "test"}, nil
+	}
+	realScanner := promptpolicy.NewScanner(testenv.NewLogger(t), evaluator)
+	h := promptpolicy.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, nil, pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+
+	req := newRequest("")
+	req.SetMessageType("tool_request")
+	req.SetToolCalls([]*riskv1.PromptPolicyAnalysis_ToolCall{
+		riskv1.PromptPolicyAnalysis_ToolCall_builder{Name: new("db:drop"), Arguments: new(`{"table":"users"}`)}.Build(),
+	})
+	require.NoError(t, h.Handle(t.Context(), req, gcp.MessageMetadata{}))
+
+	want := judgemessage.Render(judgemessage.NewForToolCalls([]judgemessage.ToolCall{
+		judgemessage.NewToolCall("db:drop", `{"table":"users"}`),
+	}))
+	require.Len(t, *published, 1)
+	f := (*published)[0]
+	require.Equal(t, want, f.GetMatch())
+	require.Equal(t, int32(len(want)), f.GetEndPos())
 }
 
 func TestHandle_CleanPromptPolicyContentPublishesNothing(t *testing.T) {
