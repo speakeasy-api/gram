@@ -20,7 +20,8 @@ func TestEntryWireMatchesSpecShape(t *testing.T) {
 	entry := mcpskills.Entry{
 		SkillID:   uuid.New(),
 		VersionID: uuid.New(),
-		PluginID:  uuid.New(),
+		ProjectID: uuid.New(),
+		LinkID:    uuid.New(),
 		Name:      "git-workflow",
 		Content:   content,
 		RawSHA256: hex.EncodeToString(digest[:]),
@@ -57,7 +58,7 @@ func TestEntryDigestIsLowercaseHex(t *testing.T) {
 	t.Parallel()
 
 	entry := mcpskills.Entry{
-		SkillID: uuid.Nil, VersionID: uuid.Nil, PluginID: uuid.Nil, Name: "x", Content: "", Frontmatter: nil, Pinned: false,
+		SkillID: uuid.Nil, ProjectID: uuid.Nil, VersionID: uuid.Nil, LinkID: uuid.Nil, Name: "x", Content: "", Frontmatter: nil, Pinned: false,
 		RawSHA256: "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
 	}
 	require.Equal(t, "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", entry.Digest())
@@ -67,7 +68,7 @@ func TestEntrySizeCountsBytes(t *testing.T) {
 	t.Parallel()
 
 	entry := mcpskills.Entry{
-		SkillID: uuid.Nil, VersionID: uuid.Nil, PluginID: uuid.Nil, Name: "x", Content: "héllo", RawSHA256: "", Frontmatter: nil, Pinned: false,
+		SkillID: uuid.Nil, ProjectID: uuid.Nil, VersionID: uuid.Nil, LinkID: uuid.Nil, Name: "x", Content: "héllo", RawSHA256: "", Frontmatter: nil, Pinned: false,
 	}
 	require.Equal(t, 6, entry.Size())
 	require.Equal(t, 6, entry.Wire().Resources[0].Size)
@@ -85,7 +86,7 @@ func TestEntryCheckFrontmatterName(t *testing.T) {
 	t.Parallel()
 
 	base := mcpskills.Entry{
-		SkillID: uuid.New(), VersionID: uuid.New(), PluginID: uuid.New(),
+		SkillID: uuid.New(), ProjectID: uuid.New(), VersionID: uuid.New(), LinkID: uuid.New(),
 		Name: "refunds", Content: "", RawSHA256: "", Frontmatter: nil, Pinned: false,
 	}
 

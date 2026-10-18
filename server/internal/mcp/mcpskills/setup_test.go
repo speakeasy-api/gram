@@ -18,13 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var infra *testenv.Environment
@@ -44,13 +44,14 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// fixture is one organization with one project and one hosted toolset, the
-// endpoint every resolution in a test is scoped to.
+// fixture is one organization with one project, one member caller, and one
+// MCP server fronting a hosted toolset: the surface every resolution in a
+// test is scoped to unless it names another.
 type fixture struct {
 	conn           *pgxpool.Pool
 	organizationID string
 	projectID      uuid.UUID
-	toolsetID      uuid.UUID
+	serverID       uuid.UUID
 	resolver       *mcpskills.Resolver
 }
 
@@ -76,11 +77,12 @@ func newFixture(t *testing.T) (context.Context, *fixture) {
 		conn:           conn,
 		organizationID: organizationID,
 		projectID:      uuid.Nil,
-		toolsetID:      uuid.Nil,
+		serverID:       uuid.Nil,
 		resolver:       mcpskills.NewResolver(testenv.NewLogger(t), conn),
 	}
 	f.projectID = createProject(t, ctx, f, "mcpskills-"+uuid.NewString()[:8])
-	f.toolsetID = createToolset(t, ctx, f, f.projectID, "served-toolset")
+	f.serverID = createServer(t, ctx, f, f.projectID, "served")
+	addMember(t, ctx, f, testUserID, testUserEmail)
 	return ctx, f
 }
 
@@ -105,18 +107,44 @@ func createToolset(t *testing.T, ctx context.Context, f *fixture, projectID uuid
 	return toolset.ID
 }
 
-// createFrontingServer gives the fixture toolset an mcp_servers row, which is
-// what a plugin references when it contains the server rather than the
-// toolset.
-func createFrontingServer(t *testing.T, ctx context.Context, f *fixture) uuid.UUID {
+// createServer creates an MCP server fronting a new hosted toolset in the
+// project, the stored row an mcp_server link names.
+func createServer(t *testing.T, ctx context.Context, f *fixture, projectID uuid.UUID, slug string) uuid.UUID {
 	t.Helper()
 
+	toolsetID := createToolset(t, ctx, f, projectID, slug+"-toolset")
 	server, err := mcpserversrepo.New(f.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: uuid.New(), ProjectID: f.projectID, Name: conv.ToPGText("served"), Slug: conv.ToPGText("served"),
-		ToolsetID: conv.ToNullUUID(f.toolsetID), Visibility: visibility.Private,
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug),
+		ToolsetID: conv.ToNullUUID(toolsetID), Visibility: visibility.Private,
 	})
 	require.NoError(t, err)
 	return server.ID
+}
+
+func createMetaServer(t *testing.T, ctx context.Context, f *fixture, name string) uuid.UUID {
+	t.Helper()
+
+	server, err := metamcprepo.New(f.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID: f.organizationID, ProjectID: f.projectID, Name: name,
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Visibility: "private", NetworkAccessMode: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	return server.ID
+}
+
+// addMember creates a user and gives them an active membership in the
+// fixture organization, which is what makes them a skill recipient.
+func addMember(t *testing.T, ctx context.Context, f *fixture, userID, email string) {
+	t.Helper()
+
+	_, err := usersrepo.New(f.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: userID, Email: email, DisplayName: "Member", PhotoUrl: pgtype.Text{}, Admin: false,
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(f.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: f.organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
 }
 
 func skillContent(name, description string) string {
@@ -152,76 +180,36 @@ func addVersion(t *testing.T, ctx context.Context, f *fixture, projectID, skillI
 	return version.ID
 }
 
-func createPlugin(t *testing.T, ctx context.Context, f *fixture, projectID uuid.UUID, slug string) uuid.UUID {
+// link links a skill in projectID to target, pinned when pinnedVersionID is
+// non-nil, and returns the link's id.
+func link(t *testing.T, ctx context.Context, f *fixture, projectID, skillID uuid.UUID, target mcpskills.Target, pinnedVersionID *uuid.UUID) uuid.UUID {
 	t.Helper()
 
-	plugin, err := pluginsrepo.New(f.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
-		OrganizationID: f.organizationID, ProjectID: projectID, Name: slug, Slug: slug, Description: pgtype.Text{},
+	linkID, err := mcpskills.CreateLink(ctx, f.conn, mcpskills.NewLink{
+		OrganizationID: f.organizationID, ProjectID: projectID, SkillID: skillID,
+		PinnedVersionID: pinnedVersionID, Target: target, CreatedByUserID: testUserID,
 	})
 	require.NoError(t, err)
-	return plugin.ID
+	return linkID
 }
 
-func containToolset(t *testing.T, ctx context.Context, f *fixture, pluginID, toolsetID uuid.UUID) uuid.UUID {
-	t.Helper()
-
-	member, err := pluginsrepo.New(f.conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: pluginID, ToolsetID: conv.ToNullUUID(toolsetID), McpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		DisplayName: "toolset", Policy: "required", SortOrder: 0,
-	})
-	require.NoError(t, err)
-	return member.ID
-}
-
-func containMCPServer(t *testing.T, ctx context.Context, f *fixture, pluginID, serverID uuid.UUID) {
-	t.Helper()
-
-	_, err := pluginsrepo.New(f.conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: pluginID, ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpServerID: conv.ToNullUUID(serverID),
-		DisplayName: "server", Policy: "required", SortOrder: 0,
-	})
-	require.NoError(t, err)
-}
-
-func assign(t *testing.T, ctx context.Context, f *fixture, pluginID uuid.UUID, principalURN string) {
-	t.Helper()
-
-	_, err := pluginsrepo.New(f.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
-		OrganizationID: f.organizationID, PrincipalUrn: principalURN, InstallMode: "default", PluginID: pluginID,
-	})
-	require.NoError(t, err)
-}
-
-func distribute(t *testing.T, ctx context.Context, f *fixture, projectID, skillID, pluginID uuid.UUID, pinnedVersionID uuid.NullUUID) {
-	t.Helper()
-
-	_, err := skillsrepo.New(f.conn).CreateSkillDistribution(ctx, skillsrepo.CreateSkillDistributionParams{
-		ProjectID: projectID, SkillID: skillID, PluginID: conv.ToNullUUID(pluginID),
-		AssistantID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PinnedVersionID: pinnedVersionID,
-		Channel: "plugin", CreatedByUserID: testUserID,
-	})
-	require.NoError(t, err)
-}
-
-// servedSkill stands up the common case: one skill with one version,
-// distributed through a plugin that contains the fixture toolset and is
-// assigned to principalURN.
-func servedSkill(t *testing.T, ctx context.Context, f *fixture, name, principalURN string) (skillID, versionID, pluginID uuid.UUID) {
+// servedSkill stands up the common case: one skill with one version, linked
+// to the fixture server and tracking its latest version.
+func servedSkill(t *testing.T, ctx context.Context, f *fixture, name string) (skillID, versionID, linkID uuid.UUID) {
 	t.Helper()
 
 	skillID = createSkill(t, ctx, f, f.projectID, name)
 	versionID = addVersion(t, ctx, f, f.projectID, skillID, skillContent(name, "Serves "+name+"."))
-	pluginID = createPlugin(t, ctx, f, f.projectID, name+"-plugin")
-	containToolset(t, ctx, f, pluginID, f.toolsetID)
-	assign(t, ctx, f, pluginID, principalURN)
-	distribute(t, ctx, f, f.projectID, skillID, pluginID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-	return skillID, versionID, pluginID
+	linkID = link(t, ctx, f, f.projectID, skillID, mcpskills.MCPServerTarget(f.serverID), nil)
+	return skillID, versionID, linkID
 }
 
-func emailPrincipal(email string) string {
-	return urn.NewPrincipal(urn.PrincipalTypeEmail, email).String()
+// scope resolves the fixture server for the fixture's member caller.
+func (f *fixture) scope() mcpskills.Scope {
+	return f.scopeFor(mcpskills.MCPServerTarget(f.serverID))
 }
 
-func (f *fixture) scope(principals ...string) mcpskills.Scope {
-	return mcpskills.Scope{ProjectID: f.projectID, ToolsetID: f.toolsetID, MCPServerID: nil, PrincipalURNs: principals}
+// scopeFor resolves target for the fixture's member caller.
+func (f *fixture) scopeFor(target mcpskills.Target) mcpskills.Scope {
+	return mcpskills.Scope{OrganizationID: f.organizationID, Target: target, MemberMCPServerIDs: nil, UserID: testUserID}
 }

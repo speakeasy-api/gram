@@ -9,6 +9,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type McpSkillLink struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: confidential
+	PinnedVersionID uuid.NullUUID
+	// @access: confidential
+	TargetKind string
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	MetaMcpServerID uuid.NullUUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type SkillObservation struct {
 	// @access: confidential
 	ID uuid.UUID
