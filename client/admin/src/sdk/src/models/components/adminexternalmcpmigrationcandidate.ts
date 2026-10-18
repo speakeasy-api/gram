@@ -10,14 +10,14 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset and its server because nothing is left to migrate.
+ * What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.
  */
 export const Action = {
   Migrate: "migrate",
   Delete: "delete",
 } as const;
 /**
- * What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset and its server because nothing is left to migrate.
+ * What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.
  */
 export type Action = ClosedEnum<typeof Action>;
 
@@ -26,7 +26,7 @@ export type Action = ClosedEnum<typeof Action>;
  */
 export type AdminExternalMcpMigrationCandidate = {
   /**
-   * What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset and its server because nothing is left to migrate.
+   * What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.
    */
   action: Action;
   /**

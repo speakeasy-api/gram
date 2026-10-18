@@ -460,8 +460,9 @@ type AdminExternalMcpMigrationCandidate struct {
 	// unavailable.
 	ToolCalls *int64
 	// What running the candidate does: migrate switches its server in place to a
-	// remote MCP server; delete removes the toolset and its server because nothing
-	// is left to migrate.
+	// remote MCP server; delete removes the toolset because nothing is left to
+	// migrate, along with any server, addresses and plugin entries it still owns.
+	// A server already migrated in place is kept and keeps working.
 	Action string
 	// Why the candidate is deleted rather than migrated. Empty when it migrates.
 	DeleteReasons []string
@@ -479,12 +480,15 @@ type AdminExternalMcpMigrationOutcome struct {
 	// What the run did, or would do, with the candidate. Absent when it was not
 	// attempted.
 	Action *string
-	// migrated, deleted and previewed completed every step; failed left the server
+	// migrated, deleted and previewed completed every step; deleted removed the
+	// toolset and any server it still owned, so mcp_server_id,
+	// remote_mcp_server_id and remote_url are absent; failed left the server
 	// unchanged; not_attempted follows an earlier failure.
 	MigrationStatus string
 	// Why the server failed or was not attempted.
 	Reason *string
-	// The server's /mcp/<slug> address, which does not change.
+	// The server's /mcp/<slug> address. Migrating keeps it; deleting a server the
+	// toolset still owns removes it.
 	McpSlug *string
 	// The server, which keeps its ID.
 	McpServerID *string

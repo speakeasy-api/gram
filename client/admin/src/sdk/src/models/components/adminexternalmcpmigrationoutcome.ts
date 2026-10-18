@@ -24,7 +24,7 @@ export type AdminExternalMcpMigrationOutcomeAction = ClosedEnum<
 >;
 
 /**
- * migrated, deleted and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
+ * migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
  */
 export const MigrationStatus = {
   Migrated: "migrated",
@@ -34,7 +34,7 @@ export const MigrationStatus = {
   NotAttempted: "not_attempted",
 } as const;
 /**
- * migrated, deleted and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
+ * migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
  */
 export type MigrationStatus = ClosedEnum<typeof MigrationStatus>;
 
@@ -55,11 +55,11 @@ export type AdminExternalMcpMigrationOutcome = {
    */
   mcpServerId?: string | undefined;
   /**
-   * The server's /mcp/<slug> address, which does not change.
+   * The server's /mcp/<slug> address. Migrating keeps it; deleting a server the toolset still owns removes it.
    */
   mcpSlug?: string | undefined;
   /**
-   * migrated, deleted and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
+   * migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
    */
   migrationStatus: MigrationStatus;
   /**

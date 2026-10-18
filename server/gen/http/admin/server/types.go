@@ -20620,8 +20620,9 @@ type AdminExternalMcpMigrationCandidateResponseBody struct {
 	// unavailable.
 	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// What running the candidate does: migrate switches its server in place to a
-	// remote MCP server; delete removes the toolset and its server because nothing
-	// is left to migrate.
+	// remote MCP server; delete removes the toolset because nothing is left to
+	// migrate, along with any server, addresses and plugin entries it still owns.
+	// A server already migrated in place is kept and keeps working.
 	Action string `form:"action" json:"action" xml:"action"`
 	// Why the candidate is deleted rather than migrated. Empty when it migrates.
 	DeleteReasons []string `form:"delete_reasons" json:"delete_reasons" xml:"delete_reasons"`
@@ -20640,12 +20641,15 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 	// What the run did, or would do, with the candidate. Absent when it was not
 	// attempted.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
-	// migrated, deleted and previewed completed every step; failed left the server
+	// migrated, deleted and previewed completed every step; deleted removed the
+	// toolset and any server it still owned, so mcp_server_id,
+	// remote_mcp_server_id and remote_url are absent; failed left the server
 	// unchanged; not_attempted follows an earlier failure.
 	MigrationStatus string `form:"migration_status" json:"migration_status" xml:"migration_status"`
 	// Why the server failed or was not attempted.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	// The server's /mcp/<slug> address, which does not change.
+	// The server's /mcp/<slug> address. Migrating keeps it; deleting a server the
+	// toolset still owns removes it.
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// The server, which keeps its ID.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`

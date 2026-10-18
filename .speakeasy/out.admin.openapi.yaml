@@ -7662,7 +7662,7 @@ components:
       properties:
         action:
           type: string
-          description: 'What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset and its server because nothing is left to migrate.'
+          description: 'What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.'
           enum:
             - migrate
             - delete
@@ -7757,10 +7757,10 @@ components:
           format: uuid
         mcp_slug:
           type: string
-          description: The server's /mcp/<slug> address, which does not change.
+          description: The server's /mcp/<slug> address. Migrating keeps it; deleting a server the toolset still owns removes it.
         migration_status:
           type: string
-          description: migrated, deleted and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
+          description: migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
           enum:
             - migrated
             - deleted
