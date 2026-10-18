@@ -13,12 +13,12 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// SetMCPServerURL sets the public Gram server origin that platform-domain MCP
+// SetMCPServerURL sets the public Speakeasy server origin that platform-domain MCP
 // URLs are built on.
 func (s *Service) SetMCPServerURL(serverURL *url.URL) { s.mcpServerURL = serverURL }
 
@@ -130,7 +130,7 @@ func (s *Service) primaryEndpointURL(rows []repo.AdminListProjectMcpServerRowsRo
 		}
 	}
 
-	primary := mcpendpoints.PrimaryEndpoint(endpoints)
+	primary := endpointaddr.PrimaryEndpoint(endpoints)
 	if primary == nil {
 		return nil
 	}
@@ -142,7 +142,7 @@ func (s *Service) primaryEndpointURL(rows []repo.AdminListProjectMcpServerRowsRo
 	case domain == "":
 		return nil
 	}
-	u, err := mcpendpoints.EndpointURL(primary, domain, serverURL)
+	u, err := endpointaddr.EndpointURL(primary, domain, serverURL)
 	if err != nil {
 		return nil
 	}

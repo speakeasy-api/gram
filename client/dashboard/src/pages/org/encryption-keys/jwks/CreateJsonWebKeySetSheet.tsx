@@ -1,7 +1,4 @@
-import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import {
   Sheet,
   SheetContent,
@@ -9,87 +6,53 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Stack } from "@/components/ui/Stack";
-import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
-import { useCreateJsonWebKeySetMutation } from "@gram/client/react-query/createJsonWebKeySet";
-import { invalidateAllListJsonWebKeySets } from "@gram/client/react-query/listJsonWebKeySets";
-import { useQueryClient } from "@tanstack/react-query";
+import type { JSONWebKeySet } from "@gram/client/models/components/jsonwebkeyset.js";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ExternalKeySelect } from "./ExternalKeySelect";
+import { KeySetSetupSteps } from "./KeySetSetupSteps";
 
-// CreateJsonWebKeySetSheet creates a signing key set from a KMS key. One request
-// does the whole setup: the server reads the key's public half from the
-// customer's KMS, creates the set, and publishes that key as the set's active
+// CreateJsonWebKeySetSheet sets up a signing key set from a KMS key, walking
+// through the cloud side first: a service account Speakeasy impersonates and
+// its grant on the key ring. Creating the set publishes the key as its active
 // signing key, so the set is ready for verifiers as soon as the sheet closes.
 export function CreateJsonWebKeySetSheet({
   open,
   onOpenChange,
   isCurrentOrganization,
+  onCreated,
+  defaultName = "",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isCurrentOrganization: () => boolean;
+  /**
+   * Hands the new set back instead of going to its page, for a flow that
+   * opened the sheet to pick the set it creates.
+   */
+  onCreated?: (set: JSONWebKeySet) => void;
+  defaultName?: string;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const queryClient = useQueryClient();
-
-  const [name, setName] = useState("");
-  const [externalKeyId, setExternalKeyId] = useState("");
-
-  const createMutation = useCreateJsonWebKeySetMutation({
-    onSuccess: async (created) => {
-      if (!isCurrentOrganization()) return;
-      await invalidateAllListJsonWebKeySets(queryClient);
-      if (!isCurrentOrganization()) return;
-      toast.success("Signing key set created");
-      onOpenChange(false);
-      orgRoutes.signingKeySets.setDetail.keys.goTo(created.id);
-    },
-    onError: (error) => {
-      if (!isCurrentOrganization()) return;
-      console.error("Create signing key set failed", error);
-    },
-  });
-
-  const submitting = createMutation.isPending;
-  const submitError = createMutation.error
-    ? createMutation.error instanceof Error && createMutation.error.message
-      ? createMutation.error.message
-      : "An unexpected error occurred. Please try again."
-    : null;
-  const { reset: resetCreateMutation } = createMutation;
-
-  // Reset transient state whenever the sheet is reopened so a prior draft never
-  // leaks into a new creation.
+  // Remounts the steps on every open so a prior draft never leaks into a new
+  // setup; what was connected or registered is offered again from the lists.
+  const [session, setSession] = useState(0);
   useEffect(() => {
-    if (!open) return;
-    setName("");
-    setExternalKeyId("");
-    resetCreateMutation();
-  }, [open, resetCreateMutation]);
+    if (open) setSession((current) => current + 1);
+  }, [open]);
 
-  const submittable = name.trim().length > 0 && externalKeyId.length > 0;
-
-  const handleSubmit = () => {
-    if (!submittable || submitting) return;
-    createMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
-      request: {
-        createJSONWebKeySetForm: {
-          name: name.trim(),
-          externalKeyId,
-        },
-      },
-    });
+  const handleCreated = (created: JSONWebKeySet) => {
+    toast.success("Signing key set created");
+    onOpenChange(false);
+    if (onCreated) onCreated(created);
+    else orgRoutes.signingKeySets.setDetail.keys.goTo(created.id);
   };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-[560px] flex-col sm:max-w-[560px]"
+        className="flex w-[680px] flex-col sm:max-w-[680px]"
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
@@ -97,59 +60,30 @@ export function CreateJsonWebKeySetSheet({
           </SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-          <Text small muted>
-            A JSON Web Key Set (JWKS) is the published collection of public keys
-            that identity providers and MCP servers use to verify tokens
-            Speakeasy signs. The private half never leaves your KMS.
-          </Text>
-
-          <Stack gap={4}>
-            <Stack gap={2}>
-              <Label className="text-muted-foreground text-xs">Name</Label>
-              <Input
-                value={name}
-                onChange={setName}
-                placeholder="Production signing keys"
-              />
-            </Stack>
-
-            <ExternalKeySelect
-              value={externalKeyId}
-              onChange={setExternalKeyId}
-              disabled={submitting}
-            />
-            <Text small muted>
-              Creating the set publishes this key straight away as its active
-              signing key. Speakeasy reads the key&apos;s public half from your
-              KMS to do so, so the key&apos;s credential has to work now, not
-              later.
-            </Text>
-          </Stack>
-
-          {submitError && (
-            <Alert variant="error" dismissible={false}>
-              {submitError}
-            </Alert>
+        <KeySetSetupSteps
+          key={session}
+          defaultName={defaultName || "Production signing keys"}
+          onCreated={handleCreated}
+          isCurrentOrganization={isCurrentOrganization}
+          footer={(action) => (
+            <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
+              <Button
+                variant="secondary"
+                disabled={action.pending}
+                onClick={() => onOpenChange(false)}
+              >
+                <Button.Text>Cancel</Button.Text>
+              </Button>
+              <Button
+                variant="primary"
+                disabled={action.disabled}
+                onClick={action.run}
+              >
+                <Button.Text>{action.label}</Button.Text>
+              </Button>
+            </SheetFooter>
           )}
-        </div>
-
-        <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
-          <Button
-            variant="secondary"
-            disabled={submitting}
-            onClick={() => onOpenChange(false)}
-          >
-            <Button.Text>Cancel</Button.Text>
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!submittable || submitting}
-            onClick={handleSubmit}
-          >
-            <Button.Text>{submitting ? "Creating…" : "Create"}</Button.Text>
-          </Button>
-        </SheetFooter>
+        />
       </SheetContent>
     </Sheet>
   );

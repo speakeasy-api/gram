@@ -58,7 +58,7 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 
 	// Sequential, not subtests: features share one organisation so each
 	// run can check that the other features are left alone.
-	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureSSO, productfeatures.FeatureSCIM}
+	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureSSO, productfeatures.FeatureSCIM}
 	// New organizations already enable role distribution by default. Start both
 	// exact targets from the same off state for this approval lifecycle test.
 	for _, orgID := range []string{f.orgA, f.orgB} {

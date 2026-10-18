@@ -30,7 +30,7 @@ func validQuery() map[string]any {
 		"window":     "7d",
 		"grain":      "day",
 		"dimensions": []any{"user"},
-		"measures":   []any{map[string]any{"op": "count"}, map[string]any{"op": "sum", "field": "tool_call_count", "alias": "tool_calls"}},
+		"measures":   []any{map[string]any{"op": "count"}, map[string]any{"op": "sum", "field": "duration_ms", "alias": "total_ms"}},
 		"filters":    []any{map[string]any{"field": "surface", "operator": "in", "values": []any{"claude-code"}}},
 		"limit":      50,
 	}
@@ -46,7 +46,7 @@ func chart(chartType widgets.ChartType) map[string]any {
 }
 
 func createPayload(name string, query, visualization map[string]any) *gen.CreateWidgetPayload {
-	return &gen.CreateWidgetPayload{Name: name, Description: nil, Dataset: "sessions", Query: query, Visualization: visualization, SessionToken: nil, ProjectSlugInput: nil}
+	return &gen.CreateWidgetPayload{Name: name, Description: nil, Dataset: "tool_calls", Query: query, Visualization: visualization, SessionToken: nil, ProjectSlugInput: nil}
 }
 
 func TestCreateWidget(t *testing.T) {
@@ -65,7 +65,7 @@ func TestCreateWidget(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "Tool calls by user", created.Name)
 		require.Equal(t, &description, created.Description)
-		require.Equal(t, "sessions", created.Dataset)
+		require.Equal(t, "tool_calls", created.Dataset)
 		require.Equal(t, ti.projectID.String(), created.ProjectID)
 		require.NotNil(t, created.CreatedByUserID)
 		require.Equal(t, ti.userID, *created.CreatedByUserID)
@@ -94,6 +94,23 @@ func TestCreateWidget(t *testing.T) {
 		ctx, ti := newTestService(t)
 		_, err := ti.service.CreateWidget(ctx, createPayload("new chart", validQuery(), map[string]any{"type": "heatmap"}))
 		require.NoError(t, err, "the client owns the chart vocabulary")
+	})
+
+	t.Run("it saves a distinct count over a dimension and refuses one over a measure", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		query := validQuery()
+		query["measures"] = []any{map[string]any{"op": "count_distinct", "field": "user", "alias": "people"}}
+		created, err := ti.service.CreateWidget(ctx, createPayload("people", query, barChart()))
+		require.NoError(t, err)
+		require.Nil(t, created.InvalidReason)
+
+		query = validQuery()
+		query["measures"] = []any{map[string]any{"op": "count_distinct", "field": "duration_ms"}}
+		_, err = ti.service.CreateWidget(ctx, createPayload("distinct counts", query, barChart()))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "unsupported_aggregation")
+		require.ErrorContains(t, err, "measures[0].op")
 	})
 
 	t.Run("it rejects a query the catalog cannot plan, naming the field", func(t *testing.T) {
@@ -164,6 +181,10 @@ func TestCreateWidget(t *testing.T) {
 			{name: "a ranking with nothing to rank by", query: withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{}), chart: widgets.ChartRanked, reason: "at least one dimension"},
 			{name: "a number over time buckets", query: withQuery(validQuery(), "dimensions", []any{}), chart: widgets.ChartNumber, reason: "no grain"},
 			{name: "a ranking over time buckets", query: validQuery(), chart: widgets.ChartRanked, reason: "no grain"},
+			{name: "a stacked bar with no grain", query: withQuery(validQuery(), "grain", "none"), chart: widgets.ChartStackedBar, reason: "timeseries"},
+			{name: "a stacked area of rows", query: rowsQuery(), chart: widgets.ChartStackedArea, reason: "timeseries"},
+			{name: "a stacked bar of two measures", query: validQuery(), chart: widgets.ChartStackedBar, reason: "one measure"},
+			{name: "a stacked area of averages", query: withQuery(validQuery(), "measures", []any{map[string]any{"op": "avg", "field": "duration_ms", "alias": "avg_ms"}}), chart: widgets.ChartStackedArea, reason: "count or a sum"},
 		}
 		for _, tc := range cases {
 			_, err := ti.service.CreateWidget(ctx, createPayload(tc.name, tc.query, chart(tc.chart)))
@@ -178,11 +199,23 @@ func TestCreateWidget(t *testing.T) {
 		_, err := ti.service.CreateWidget(ctx, createPayload("rows", rowsQuery(), chart(widgets.ChartTable)))
 		require.NoError(t, err)
 
-		for _, chartType := range []widgets.ChartType{widgets.ChartLine, widgets.ChartArea, widgets.ChartBar, widgets.ChartNumber, widgets.ChartRanked} {
+		for _, chartType := range []widgets.ChartType{widgets.ChartLine, widgets.ChartArea, widgets.ChartBar, widgets.ChartStackedBar, widgets.ChartStackedArea, widgets.ChartNumber, widgets.ChartRanked} {
 			_, err := ti.service.CreateWidget(ctx, createPayload("rows as "+string(chartType), rowsQuery(), chart(chartType)))
 			requireOopsCode(t, err, oops.CodeBadRequest)
 			require.ErrorContains(t, err, "unsatisfiable", chartType)
 		}
+	})
+
+	t.Run("it draws a stack over a bucketed breakdown", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		oneCount := withQuery(validQuery(), "measures", []any{map[string]any{"op": "count"}})
+		created, err := ti.service.CreateWidget(ctx, createPayload("calls by server", oneCount, chart(widgets.ChartStackedBar)))
+		require.NoError(t, err)
+		require.Equal(t, "stacked_bar", created.Visualization["type"])
+		oneSum := withQuery(validQuery(), "measures", []any{map[string]any{"op": "sum", "field": "duration_ms", "alias": "total_ms"}})
+		_, err = ti.service.CreateWidget(ctx, createPayload("time by server", oneSum, chart(widgets.ChartStackedArea)))
+		require.NoError(t, err)
 	})
 
 	t.Run("it ranks by more than one dimension", func(t *testing.T) {
@@ -230,7 +263,7 @@ func TestCreateWidget(t *testing.T) {
 
 		// Decoded the way the HTTP server decodes it, since calling the
 		// service directly would skip request decoding.
-		body := `{"name":"big","dataset":"sessions",` +
+		body := `{"name":"big","dataset":"tool_calls",` +
 			`"query":{"window":"7d","grain":"day","dimensions":["user"],"measures":[{"op":"count"}],"limit":50},` +
 			`"visualization":{"type":"bar","options":{"seed":9007199254740993}}}`
 		req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/rpc/widgets.create", strings.NewReader(body))
@@ -311,6 +344,16 @@ func TestListAndGetWidgets(t *testing.T) {
 	require.NotNil(t, gotUnknown.InvalidReason)
 	require.Contains(t, *gotUnknown.InvalidReason, `"from"`)
 
+	removed, err := widgetsrepo.New(ti.conn).CreateWidget(t.Context(), widgetsrepo.CreateWidgetParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
+		Name: "sessions", Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions", Query: []byte(`{"window":"7d","measures":[{"op":"count"}]}`), Visualization: []byte(`{"type":"table"}`),
+	})
+	require.NoError(t, err)
+	gotRemoved, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: removed.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.NotNil(t, gotRemoved.InvalidReason)
+	require.Contains(t, *gotRemoved.InvalidReason, "unknown_dataset")
+
 	_, err = ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: uuid.NewString(), SessionToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
@@ -330,12 +373,12 @@ func TestUpdateWidget(t *testing.T) {
 		before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWidgetUpdate)
 		require.NoError(t, err)
 
-		updated, err := ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "after", Description: nil, Dataset: "tool_calls",
-			Query:         map[string]any{"window": "24h", "dimensions": []any{"tool_name", "status"}, "ungrouped": true},
+		updated, err := ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "after", Description: nil, Dataset: "skills",
+			Query:         map[string]any{"window": "24h", "dimensions": []any{"skill", "status"}, "ungrouped": true},
 			Visualization: chart(widgets.ChartTable), SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
 		require.Equal(t, "after", updated.Name)
-		require.Equal(t, "tool_calls", updated.Dataset)
+		require.Equal(t, "skills", updated.Dataset)
 		require.Equal(t, true, updated.Query["ungrouped"])
 		require.Equal(t, string(widgets.ChartTable), updated.Visualization["type"])
 
@@ -357,7 +400,7 @@ func TestUpdateWidget(t *testing.T) {
 		created, err := ti.service.CreateWidget(ownerCtx, createPayload("mine", validQuery(), barChart()))
 		require.NoError(t, err)
 
-		updated, err := ti.service.UpdateWidget(ownerCtx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "still mine", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+		updated, err := ti.service.UpdateWidget(ownerCtx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "still mine", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
 		require.Equal(t, "still mine", updated.Name)
 	})
@@ -369,7 +412,7 @@ func TestUpdateWidget(t *testing.T) {
 		require.NoError(t, err)
 
 		otherCtx := asMember(t, ctx, ti, "user_other_"+uuid.NewString())
-		_, err = ti.service.UpdateWidget(otherCtx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "hijacked", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+		_, err = ti.service.UpdateWidget(otherCtx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "hijacked", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeForbidden)
 
 		got, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
@@ -377,7 +420,7 @@ func TestUpdateWidget(t *testing.T) {
 		require.Equal(t, "theirs", got.Name, "a refused update changes nothing")
 
 		writerCtx := asMember(t, ctx, ti, "user_writer_"+uuid.NewString(), authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()))
-		updated, err := ti.service.UpdateWidget(writerCtx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "edited", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+		updated, err := ti.service.UpdateWidget(writerCtx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "edited", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
 		require.Equal(t, "edited", updated.Name)
 	})
@@ -387,7 +430,7 @@ func TestUpdateWidget(t *testing.T) {
 		ctx, ti := newTestService(t)
 		created, err := ti.service.CreateWidget(ctx, createPayload("before", validQuery(), barChart()))
 		require.NoError(t, err)
-		_, err = ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "x", Description: nil, Dataset: "sessions",
+		_, err = ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "x", Description: nil, Dataset: "tool_calls",
 			Query: rowsQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "timeseries")
@@ -396,13 +439,13 @@ func TestUpdateWidget(t *testing.T) {
 	t.Run("it reports an unknown or deleted widget as not found", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
-		_, err := ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: uuid.NewString(), Name: "x", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+		_, err := ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: uuid.NewString(), Name: "x", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeNotFound)
 
 		created, err := ti.service.CreateWidget(ctx, createPayload("gone", validQuery(), barChart()))
 		require.NoError(t, err)
 		require.NoError(t, ti.service.DeleteWidget(ctx, &gen.DeleteWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil}))
-		_, err = ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "x", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+		_, err = ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "x", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeNotFound)
 		err = ti.service.DeleteWidget(ctx, &gen.DeleteWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeNotFound)
@@ -518,7 +561,7 @@ func TestDeleteWidget(t *testing.T) {
 
 // insertBrokenWidget stores a widget the catalog no longer accepts, as a
 // catalog change would leave behind: it asks for a dimension, "department",
-// the sessions dataset does not have.
+// the tool_calls dataset does not have.
 func insertBrokenWidget(t *testing.T, ti *testInstance) widgetsrepo.Widget {
 	t.Helper()
 	stale, err := json.Marshal(map[string]any{"window": "7d", "dimensions": []string{"department"}, "measures": []map[string]any{{"op": "count"}}})
@@ -526,13 +569,13 @@ func insertBrokenWidget(t *testing.T, ti *testInstance) widgetsrepo.Widget {
 	return insertStoredWidget(t, ti, "stale", stale)
 }
 
-// insertStoredWidget writes a sessions table widget straight to the
+// insertStoredWidget writes a tool_calls table widget straight to the
 // database, since the service refuses a query it cannot plan.
 func insertStoredWidget(t *testing.T, ti *testInstance, name string, query []byte) widgetsrepo.Widget {
 	t.Helper()
 	row, err := widgetsrepo.New(ti.conn).CreateWidget(t.Context(), widgetsrepo.CreateWidgetParams{
 		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
-		Name: name, Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions", Query: query, Visualization: []byte(`{"type":"table"}`),
+		Name: name, Description: pgtype.Text{String: "", Valid: false}, Dataset: "tool_calls", Query: query, Visualization: []byte(`{"type":"table"}`),
 	})
 	require.NoError(t, err)
 	return row
@@ -589,7 +632,7 @@ func TestWidgetDashboards(t *testing.T) {
 	require.Len(t, listed.Widgets, 1)
 	require.Equal(t, got.Dashboards, listed.Widgets[0].Dashboards)
 
-	updated, err := ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "renamed", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+	updated, err := ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "renamed", Description: nil, Dataset: "tool_calls", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, got.Dashboards, updated.Dashboards, "an edit says where it reached")
 

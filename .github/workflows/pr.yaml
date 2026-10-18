@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  id-token: write
   contents: read
 
 env:
@@ -27,7 +26,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: "read"
-      pull-requests: read
+      pull-requests: read # paths-filter lists the pull request files
     outputs:
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
@@ -91,113 +90,129 @@ jobs:
           STACKED_SERVER: ${{ steps.stacked.outputs.server }}
           STACKED_CLIENT: ${{ steps.stacked.outputs.client }}
           STACKED_PYSTREAMS: ${{ steps.stacked.outputs.pystreams }}
+          STEPS_FILTER_OUTPUTS_SERVER: ${{ steps.filter.outputs.server }}
+          STEPS_FILTER_OUTPUTS_CLIENT: ${{ steps.filter.outputs.client }}
+          STEPS_FILTER_OUTPUTS_CLI: ${{ steps.filter.outputs.cli }}
+          STEPS_FILTER_OUTPUTS_HOOKS: ${{ steps.filter.outputs.hooks }}
+          STEPS_FILTER_OUTPUTS_FUNCTIONS: ${{ steps.filter.outputs.functions }}
+          STEPS_FILTER_OUTPUTS_TSFRAMEWORK: ${{ steps.filter.outputs.tsframework }}
+          STEPS_FILTER_OUTPUTS_MIGRATIONS: ${{ steps.filter.outputs.migrations }}
+          STEPS_FILTER_OUTPUTS_PLOG: ${{ steps.filter.outputs.plog }}
+          STEPS_FILTER_OUTPUTS_GLINT: ${{ steps.filter.outputs.glint }}
+          STEPS_FILTER_OUTPUTS_INFRA: ${{ steps.filter.outputs.infra }}
+          STEPS_FILTER_OUTPUTS_PYSTREAMS: ${{ steps.filter.outputs.pystreams }}
+          STEPS_FILTER_OUTPUTS_SDK: ${{ steps.filter.outputs.sdk }}
+          STEPS_FILTER_OUTPUTS_SDK_GEN: ${{ steps.filter.outputs.sdk-gen }}
+          STEPS_FILTER_OUTPUTS_WEBHOOKS_CATALOG: ${{ steps.filter.outputs.webhooks-catalog }}
+          STEPS_FILTER_OUTPUTS_OTEL_COLLECTOR: ${{ steps.filter.outputs.otel-collector }}
+          STEPS_FILTER_OUTPUTS_TUNNEL: ${{ steps.filter.outputs.tunnel }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_SERVER" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_SERVER}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_SERVER" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_CLIENT" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_CLIENT}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_CLIENT" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
             echo "Client jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.cli }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_CLI}" == "true" || "${GITHUB_REF}" ==  "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "cli=true" >> $GITHUB_OUTPUT
             echo "CLI jobs will run."
           else
             echo "CLI jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.hooks }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_HOOKS}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "hooks=true" >> $GITHUB_OUTPUT
             echo "Hooks jobs will run."
           else
             echo "Hooks jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_FUNCTIONS}" == "true" || "${GITHUB_REF}" ==  "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "functions=true" >> $GITHUB_OUTPUT
             echo "Functions jobs will run."
           else
             echo "Functions jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.tsframework }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_TSFRAMEWORK}" == "true" || "${GITHUB_REF}" ==  "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "tsframework=true" >> $GITHUB_OUTPUT
             echo "TypeScript framework jobs will run."
           else
             echo "TypeScript framework jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.migrations }}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_MIGRATIONS}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "migrations=true" >> $GITHUB_OUTPUT
             echo "Migrations jobs will run."
           else
             echo "Migrations jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_PLOG}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "plog=true" >> $GITHUB_OUTPUT
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.glint }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_GLINT}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "glint=true" >> $GITHUB_OUTPUT
             echo "glint jobs will run."
           else
             echo "glint jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.infra }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_INFRA}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "infra=true" >> $GITHUB_OUTPUT
             echo "Infra jobs will run."
           else
             echo "Infra jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_PYSTREAMS" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_PYSTREAMS}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_PYSTREAMS" == "true" ]]; then
             echo "pystreams=true" >> $GITHUB_OUTPUT
             echo "Pystreams jobs will run."
           else
             echo "Pystreams jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_SDK}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk=true" >> $GITHUB_OUTPUT
             echo "SDK jobs will run."
           else
             echo "SDK jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_SDK_GEN}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk-gen=true" >> $GITHUB_OUTPUT
             echo "SDK generation check will run."
           else
             echo "SDK generation check will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.webhooks-catalog }}" == "true" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_WEBHOOKS_CATALOG}" == "true" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "webhooks-catalog=true" >> $GITHUB_OUTPUT
             echo "Webhooks catalog breaking-change check will run."
           else
             echo "Webhooks catalog breaking-change check will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.otel-collector }}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_OTEL_COLLECTOR}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "otel-collector=true" >> $GITHUB_OUTPUT
             echo "OTel collector jobs will run."
           else
             echo "OTel collector jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.tunnel }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_TUNNEL}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "tunnel=true" >> $GITHUB_OUTPUT
             echo "Tunnel jobs will run."
           else
@@ -236,8 +251,63 @@ jobs:
           [[ "$PYSTREAMS" == "true" ]] || add gram-pystreams pystreams
           echo "components=$components" >> "$GITHUB_OUTPUT"
 
+  # The single writer of the Go module cache (see the go-mod-cache composite
+  # action). No job depends on it.
+  go-module-cache:
+    name: Populate Go module cache
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Check for existing Go module cache
+        id: lookup
+        uses: $/.github/workflows/composite/go-mod-cache
+        with:
+          lookup-only: true
+
+      # Fetches every module the Go jobs need, including the test dependencies
+      # `go mod tidy` loads and the custom golangci-lint build's dependencies
+      # (it has no download-only mode).
+      - name: Download Go modules
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          retry() {
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              echo "::warning::'$*' failed (attempt $attempt/3)"
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
+          retry go mod download
+          retry go -C glint mod download
+          retry mise run go:tidy
+          (cd server && retry golangci-lint custom)
+
+      - name: Save Go module cache
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.lookup.outputs.key }}
+          path: ${{ steps.lookup.outputs.path }}
+
   preview-image-tags:
+    name: preview-image-tags
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      id-token: write # Google Cloud workload identity federation
     needs: changes
     # Preview environments deploy images tagged pr-<number>-<8-char head sha>
     # for every PR head commit. Components with changes get that tag from
@@ -281,7 +351,7 @@ jobs:
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
 
       - name: Tag preview image
-        uses: ./.github/workflows/composite/tag-preview-images
+        uses: $/.github/workflows/composite/tag-preview-images
         with:
           registry: ${{ env.REGISTRY }}
           image-owner: ${{ env.DOCKER_REPOSITORY_OWNER }}
@@ -339,13 +409,23 @@ jobs:
       - name: Check formatting
         run: hk check --all
 
+      # Blocks added lines that use the old product name; see lint:brand.
+      - name: Check product naming
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: mise run lint:brand --base "origin/${BASE_REF}"
+
       - name: Prune aube store
         if: success()
         run: aube store prune
 
   docker-build-server:
+    name: docker-build-server
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, server-build-lint]
+    permissions:
+      contents: read
+      id-token: write # Google Cloud workload identity federation
+    needs: [changes, server-build]
     if: needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 4
@@ -386,7 +466,7 @@ jobs:
           exit 1
       - name: Build and Push Registry image to GCR
         id: build
-        uses: ./.github/workflows/composite/build-push
+        uses: $/.github/workflows/composite/build-push
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -402,13 +482,19 @@ jobs:
             GIT_USERNAME=speakeasybot
       - name: Pull and Run Image
         run: |
-          echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
-          docker pull ${{ steps.build.outputs.image-tag }}
+          echo "Pulling image: ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}"
+          docker pull ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}
           echo "Running image..."
-          docker run --rm ${{ steps.build.outputs.image-tag }} version
+          docker run --rm ${STEPS_BUILD_OUTPUTS_IMAGE_TAG} version
+        env:
+          STEPS_BUILD_OUTPUTS_IMAGE_TAG: ${{ steps.build.outputs.image-tag }}
 
   docker-build-pystreams:
+    name: docker-build-pystreams
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      id-token: write # Google Cloud workload identity federation
     needs: [changes]
     if: needs.changes.outputs.pystreams == 'true'
     steps:
@@ -442,7 +528,7 @@ jobs:
           exit 1
       - name: Build and Push Registry image to GCR
         id: build
-        uses: ./.github/workflows/composite/build-push
+        uses: $/.github/workflows/composite/build-push
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -459,18 +545,24 @@ jobs:
           cache-key: gram/pystreams-image
       - name: Pull and Run Image
         run: |
-          echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
-          docker pull ${{ steps.build.outputs.image-tag }}
+          echo "Pulling image: ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}"
+          docker pull ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}
           echo "Running image..."
-          docker run --rm ${{ steps.build.outputs.image-tag }} --help
+          docker run --rm ${STEPS_BUILD_OUTPUTS_IMAGE_TAG} --help
+        env:
+          STEPS_BUILD_OUTPUTS_IMAGE_TAG: ${{ steps.build.outputs.image-tag }}
 
   assistant-runtime-image:
+    name: assistant-runtime-image
     # TEMPORARY: on GitHub-hosted runners (and so on upstream checkout/buildx/
     # build-push actions) because Blacksmith runners cannot reach the Ubuntu apt
     # mirrors, which breaks the musl toolchain install below. Move back to
     # blacksmith-4vcpu-ubuntu-2404 (and the useblacksmith/* actions) once their
     # egress is fixed, or once the musl toolchain no longer comes from apt.
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # Google Cloud workload identity federation
     needs: [changes]
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
     env:
@@ -482,9 +574,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Mise
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        # Caches restored here also feed the image this job publishes. On
+        # main they can only come from main's own runs: GitHub scopes caches
+        # that PR runs write to the PR's ref, so a PR cannot poison them.
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
         with:
           minimum_release_age: 1d
           install: true
@@ -501,7 +598,8 @@ jobs:
           sudo apt-get install -y -qq --no-install-recommends musl-tools
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        # Same cache scoping as Setup Mise above.
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
         with:
           target: ${{ env.RUNNER_TARGET }}
           rust-src-dir: agents/runner
@@ -512,23 +610,26 @@ jobs:
 
       - name: Build assistant runner
         run: |
-          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${{ env.RUNNER_TARGET }}
-          mkdir -p ${{ env.RUNNER_BINARY_DIR }}
-          cp agents/runner/target/${{ env.RUNNER_TARGET }}/release/gram-assistant-runner ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner
+          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${RUNNER_TARGET}
+          mkdir -p ${RUNNER_BINARY_DIR}
+          cp agents/runner/target/${RUNNER_TARGET}/release/gram-assistant-runner ${RUNNER_BINARY_DIR}/gram-assistant-runner
 
       - name: Smoke test assistant runner binary
         run: |
-          file -b ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
+          file -b ${RUNNER_BINARY_DIR}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
             || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
-          ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner --help
+          ${RUNNER_BINARY_DIR}/gram-assistant-runner --help
 
       - name: Generate preview tag
         id: assistant-preview-tag
         shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
-            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
+            SHORT_SHA=$(echo "${PR_HEAD_SHA}" | cut -c1-8)
+            echo "tag=pr-${PR_NUMBER}-${SHORT_SHA}" >> $GITHUB_OUTPUT
             echo "enabled=true" >> $GITHUB_OUTPUT
           else
             echo "tag=" >> $GITHUB_OUTPUT
@@ -614,6 +715,7 @@ jobs:
           labels: ${{ steps.assistantMetaGcr.outputs.labels }}
 
   otel-collector:
+    name: otel-collector
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.otel-collector == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && !github.event.pull_request.head.repo.fork))
@@ -621,29 +723,19 @@ jobs:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
+      # No caches in this job: it publishes the collector image.
       - name: Setup Mise
         uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
-          cache: true
+          cache: false
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache aube store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_AUBE_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_AUBE_KEY }}
-            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
-          path: |
-            ${{ env.AUBE_STORE_PATH }}
-
-      # fly:init-runner is a .mts task that imports zx from the workspace.
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
@@ -653,9 +745,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
           FLY_IMAGE: ${{ vars.FLY_OTEL_COLLECTOR_IMAGE_DEV }}
+          FLY_ORG_DEV: ${{ secrets.FLY_ORG_DEV }}
         run: |
           mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_DEV }} \
+            --org ${FLY_ORG_DEV} \
             --image $FLY_IMAGE \
             --force
 
@@ -665,9 +758,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
           FLY_IMAGE: ${{ vars.FLY_OTEL_COLLECTOR_IMAGE_PROD }}
+          FLY_ORG_PROD: ${{ secrets.FLY_ORG_PROD }}
         run: |
           mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_PROD }} \
+            --org ${FLY_ORG_PROD} \
             --image $FLY_IMAGE \
             --force
 
@@ -710,10 +804,12 @@ jobs:
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+          STEPS_COLLECTORFLYCREATEDEV_OUTPUTS_FLYAPPNAME: ${{ steps.collectorFlyCreateDev.outputs.flyAppName }}
+          STEPS_COLLECTORFLYCREATEDEV_OUTPUTS_FLYAPPREGISTRY: ${{ steps.collectorFlyCreateDev.outputs.flyAppRegistry }}
         run: |
           fly deploy \
-            --app ${{ steps.collectorFlyCreateDev.outputs.flyAppName }} \
-            --image ${{ steps.collectorFlyCreateDev.outputs.flyAppRegistry }}:sha-${{ github.sha }} \
+            --app ${STEPS_COLLECTORFLYCREATEDEV_OUTPUTS_FLYAPPNAME} \
+            --image ${STEPS_COLLECTORFLYCREATEDEV_OUTPUTS_FLYAPPREGISTRY}:sha-${GITHUB_SHA} \
             --config otel-collector/fly.toml \
             --yes
 
@@ -747,10 +843,12 @@ jobs:
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+          STEPS_COLLECTORFLYCREATEPROD_OUTPUTS_FLYAPPNAME: ${{ steps.collectorFlyCreateProd.outputs.flyAppName }}
+          STEPS_COLLECTORFLYCREATEPROD_OUTPUTS_FLYAPPREGISTRY: ${{ steps.collectorFlyCreateProd.outputs.flyAppRegistry }}
         run: |
           fly deploy \
-            --app ${{ steps.collectorFlyCreateProd.outputs.flyAppName }} \
-            --image ${{ steps.collectorFlyCreateProd.outputs.flyAppRegistry }}:sha-${{ github.sha }} \
+            --app ${STEPS_COLLECTORFLYCREATEPROD_OUTPUTS_FLYAPPNAME} \
+            --image ${STEPS_COLLECTORFLYCREATEPROD_OUTPUTS_FLYAPPREGISTRY}:sha-${GITHUB_SHA} \
             --config otel-collector/fly.toml \
             --yes
 
@@ -877,10 +975,10 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: write # Atlas posts its migration lint report on the pull request
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
         env:
           POSTGRES_DB: dev
           POSTGRES_PASSWORD: pass
@@ -986,13 +1084,12 @@ jobs:
       (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
     permissions:
       contents: read
-      pull-requests: write
     concurrency:
       group: atlas-push-${{ github.ref }}
       cancel-in-progress: true
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
         env:
           POSTGRES_DB: dev
           POSTGRES_PASSWORD: pass
@@ -1022,12 +1119,15 @@ jobs:
 
       - name: Generate tag
         id: tag
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
-            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
+            SHORT_SHA=$(echo "${PR_HEAD_SHA}" | cut -c1-8)
+            echo "tag=pr-${PR_NUMBER}-${SHORT_SHA}" >> $GITHUB_OUTPUT
           else
-            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
             echo "tag=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
           fi
 
@@ -1060,7 +1160,7 @@ jobs:
     if: needs.changes.outputs.webhooks-catalog == 'true' && github.event_name == 'pull_request'
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: write # posts review comments on breaking changes
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -1084,9 +1184,11 @@ jobs:
         if: hashFiles('breaking-changes.md') != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           jq -n \
-            --arg commit_id "${{ github.event.pull_request.head.sha }}" \
+            --arg commit_id "${PR_HEAD_SHA}" \
             --rawfile body breaking-changes.md \
             '{
               commit_id: $commit_id,
@@ -1095,7 +1197,7 @@ jobs:
               body: $body
             }' \
             | gh api \
-                "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments" \
+                "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/comments" \
                 --method POST \
                 --input -
 
@@ -1105,7 +1207,61 @@ jobs:
           cat breaking-changes.md
           exit 1
 
-  server-build-lint:
+  # Builds and uploads the server binary on its own so docker-build-server,
+  # and the preview environments waiting on its image, do not wait minutes for
+  # lint and codegen checks. ci-gate still requires server-checks.
+  server-build:
+    name: server-build
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    env:
+      GOMAXPROCS: 16
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
+
+      - name: Compute runtime image content hash
+        id: assistant-runtime-hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$(mise run hash:assistant-runtime-image)
+          if [ -z "$hash" ]; then
+            echo "runtime image hash is empty" >&2
+            exit 1
+          fi
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          GRAM_ASSISTANT_RUNTIME_IMAGE_HASH: ${{ steps.assistant-runtime-hash.outputs.hash }}
+        run: mise run build:server --readonly
+
+      - name: Build tunnel gateway
+        run: mise run build:tunnel-gateway --readonly
+
+      - name: Upload server build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-bin
+          path: server/bin
+          retention-days: 2
+
+  server-checks:
+    name: server-checks
     runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
@@ -1113,7 +1269,7 @@ jobs:
       GOMAXPROCS: 16
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
         env:
           POSTGRES_USER: gram
           POSTGRES_PASSWORD: gram
@@ -1138,39 +1294,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
-
-      - name: Compute runtime image content hash
-        id: assistant-runtime-hash
-        shell: bash
-        run: |
-          set -euo pipefail
-          hash=$(mise run hash:assistant-runtime-image)
-          if [ -z "$hash" ]; then
-            echo "runtime image hash is empty" >&2
-            exit 1
-          fi
-          echo "hash=$hash" >> "$GITHUB_OUTPUT"
-
-      - name: Build
-        env:
-          GRAM_ASSISTANT_RUNTIME_IMAGE_HASH: ${{ steps.assistant-runtime-hash.outputs.hash }}
-        run: mise run build:server --readonly
-
-      - name: Build tunnel gateway
-        run: mise run build:tunnel-gateway --readonly
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Test CI tooling
         run: mise run test:ci
@@ -1182,13 +1307,6 @@ jobs:
           # Skips a JSONSchema fetch from golangci-lint.run on every run.
           verify: false
           working-directory: server
-
-      - name: Upload server build
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: server-bin
-          path: server/bin
-          retention-days: 2
 
       - name: Install Go tools
         run: go install tool
@@ -1242,16 +1360,8 @@ jobs:
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Cache uv
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1263,14 +1373,18 @@ jobs:
           path: ${{ env.UV_CACHE_DIR }}
 
       - name: Fetch base branch
-        run: git fetch --depth=1 origin "${{ github.base_ref || 'main' }}"
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: git fetch --depth=1 origin "${BASE_REF}"
 
       # buf breaking against the PR base is what catches a wire-incompatible
       # proto change (field renumbering, type change) that would corrupt
       # already published messages. Stacked PRs compare against their feature
       # base; that base's own PR re-checks the full stack against main.
       - name: Lint proto files
-        run: mise run lint:infra --against ".git#ref=origin/${{ github.base_ref || 'main' }}"
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: mise run lint:infra --against ".git#ref=origin/${BASE_REF}"
 
       # gram-infra only. --all-packages would pull in pystreams, whose spaCy
       # model is a 400MB wheel fetched from a github.com release on every run.
@@ -1334,6 +1448,7 @@ jobs:
         run: uv cache prune --ci
 
   cli-build-lint:
+    name: cli-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.cli == 'true'
@@ -1341,7 +1456,7 @@ jobs:
       GOMAXPROCS: 4
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
         env:
           POSTGRES_USER: gram
           POSTGRES_PASSWORD: gram
@@ -1366,19 +1481,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Build
         run: mise run build:cli --readonly
@@ -1406,6 +1510,7 @@ jobs:
         run: mise run git:porcelain
 
   hooks-build-test:
+    name: hooks-build-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.hooks == 'true'
@@ -1424,19 +1529,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Build
         run: mise run build:hooks --readonly
@@ -1451,6 +1545,7 @@ jobs:
         run: mise run git:porcelain
 
   glint-test:
+    name: glint-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.glint == 'true'
@@ -1469,19 +1564,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Test
         run: mise run test:glint
@@ -1493,6 +1577,7 @@ jobs:
         run: mise run git:porcelain
 
   plog-build-lint:
+    name: plog-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.plog == 'true'
@@ -1511,19 +1596,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Install Go tools
         run: go install tool
@@ -1559,7 +1633,7 @@ jobs:
       # the rest of the suite.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     env:
       GOMAXPROCS: 8
       # The runner VM is destroyed after the job, and the reaper is the one
@@ -1579,19 +1653,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Install Go deps
         run: mise run install:go
@@ -1599,17 +1662,63 @@ jobs:
       - name: Install discovery wire-test dependencies on its shard
         shell: bash
         run: |
-          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${{ matrix.shard }}/${{ strategy.job-total }}" -tags=inv.debug ./...)
+          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" -tags=inv.debug ./...)
           if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
             aube install --frozen-lockfile --filter . --filter 'dashboard...'
           fi
+        env:
+          STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
+          MATRIX_SHARD: ${{ matrix.shard }}
 
       - name: Test
+        id: test
         # Each package can launch Postgres, Redis, and ClickHouse concurrently.
         # Bound package concurrency so eight race-enabled binaries plus their
         # containers do not compete for this runner's eight CPUs during startup.
         # Keep within-package parallelism and race detection; do not retry failures.
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} -p=2 -race -tags=inv.debug ./...
+        # In the merge queue and on main, a failure here is judged by the
+        # flaky-test gate below, which fails the job unless every failing test
+        # is tracked as flaky in Linear. Elsewhere (PR branches, manual runs on
+        # other branches) a failure fails the job as before: those runs mix
+        # flakes with the branch's own breakage.
+        continue-on-error: ${{ github.event_name == 'merge_group' || github.ref == 'refs/heads/main' }}
+        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} -p=2 -race -tags=inv.debug ./...
+        env:
+          STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
+          MATRIX_SHARD: ${{ matrix.shard }}
+          # Alongside junit-report.xml, gotestsum writes only the pass, skip,
+          # and fail events of 'go test -json' (no output lines) to this file,
+          # relative to server/. Each event carries its time and elapsed.
+          GOTESTSUM_JSONFILE_TIMING_EVENTS: test-timings.json
+
+      - name: Upload test timings
+        # Uploaded even when tests fail or the job is cancelled, so slow and
+        # failing runs can be ranked too. Re-running a job replaces its shard's
+        # artifact. Read with 'gotestsum tool slowest --jsonfile
+        # test-timings.json'; 'mise run ci:shard-timings' turns the JUnit
+        # reports of recent main runs into ci/cmd/shard/timings.txt.
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-test-timings-shard-${{ matrix.shard }}
+          path: |
+            server/junit-report.xml
+            server/test-timings.json
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 30
+
+      - name: Let tracked flaky tests through
+        # Passes only when every failure is an open flaky-test ticket (see
+        # ci/cmd/flaky). A failing candidate is quarantined and handed to the
+        # autopilot queue. Without LINEAR_API_KEY this always fails.
+        if: steps.test.outcome == 'failure'
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: >-
+          go run github.com/speakeasy-api/gram/ci/cmd/flaky gate
+          -junit server/junit-report.xml
+          -run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -1617,6 +1726,7 @@ jobs:
   # sharded server-test job skips it; this job is its only runner and reports
   # as its own required check so a failure is immediately attributable.
   demo-seed-safety:
+    name: demo-seed-safety
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
@@ -1636,19 +1746,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Install Go deps
         run: mise run install:go
@@ -1657,7 +1756,11 @@ jobs:
         run: mise run test:server -race -count=1 -tags=demoseed_safety ./internal/demoseed/...
 
   docker-build-client:
+    name: docker-build-client
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      id-token: write # Google Cloud workload identity federation
     needs: [changes]
     # Build the dashboard and admin docker images when server OR client changes
     # exist (the dashboard image is needed for preview environments)
@@ -1713,7 +1816,7 @@ jobs:
       - name: Upload source maps to DataDog
         env:
           DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
-        run: mise run datadog:sourcemaps --git-sha "${{ github.sha }}"
+        run: mise run datadog:sourcemaps --git-sha "${GITHUB_SHA}"
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -1740,7 +1843,7 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
-      # The Gram admin dashboard. It ships as its own image because it is
+      # The Speakeasy admin dashboard. It ships as its own image because it is
       # served from the admin origin (same host as the admin API) rather than
       # the app origin. The `pnpm build` step above already produced its dist,
       # so this only packages it; it needs no CDN asset upload.
@@ -1753,7 +1856,7 @@ jobs:
       # CDN bucket.
       - name: Build and Push Admin Dashboard image to GCR
         id: build-admin-dashboard
-        uses: ./.github/workflows/composite/build-push
+        uses: $/.github/workflows/composite/build-push
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -1768,7 +1871,7 @@ jobs:
 
       - name: Build and Push Registry image to GCR
         id: build
-        uses: ./.github/workflows/composite/build-push
+        uses: $/.github/workflows/composite/build-push
         with:
           hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -1788,6 +1891,9 @@ jobs:
   upload-dashboard-assets:
     name: Upload dashboard assets to CDN bucket (${{ matrix.environment }})
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      id-token: write # Google Cloud workload identity federation
     needs: [docker-build-client]
     # Syncs the dist/assets the dashboard image was built from (via artifact,
     # not a rebuild) into the private GCS buckets that will become the CDN
@@ -1805,13 +1911,7 @@ jobs:
       matrix:
         include:
           - environment: dev
-            bucket_secret: ASSET_BUCKET_DEV
-            workload_identity_provider_secret: GCP_WORKLOAD_IDENTITY_PROVIDER_DEV
-            service_account_secret: ASSET_BUCKET_SERVICE_ACCOUNT_DEV
           - environment: prod
-            bucket_secret: ASSET_BUCKET_PROD
-            workload_identity_provider_secret: GCP_WORKLOAD_IDENTITY_PROVIDER_PROD
-            service_account_secret: ASSET_BUCKET_SERVICE_ACCOUNT_PROD
     steps:
       - name: Download built assets artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1822,15 +1922,18 @@ jobs:
       - id: "auth"
         name: "Authenticate to Google Cloud"
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        # Each secret is named outright: indexing secrets[...] with a matrix
+        # value would load the whole secrets context into the runner. Of each
+        # pair of expansions below, the one for the other environment is empty.
         with:
-          workload_identity_provider: ${{ secrets[matrix.workload_identity_provider_secret] }}
-          service_account: ${{ secrets[matrix.service_account_secret] }}
+          workload_identity_provider: ${{ matrix.environment == 'dev' && secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_DEV || '' }}${{ matrix.environment == 'prod' && secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD || '' }}
+          service_account: ${{ matrix.environment == 'dev' && secrets.ASSET_BUCKET_SERVICE_ACCOUNT_DEV || '' }}${{ matrix.environment == 'prod' && secrets.ASSET_BUCKET_SERVICE_ACCOUNT_PROD || '' }}
 
       - name: Upload assets to bucket
         uses: google-github-actions/upload-cloud-storage@6397bd7208e18d13ba2619ee21b9873edc94427a # v3.0.0
         with:
           path: dist/assets
-          destination: ${{ secrets[matrix.bucket_secret] }}/assets
+          destination: ${{ matrix.environment == 'dev' && secrets.ASSET_BUCKET_DEV || '' }}${{ matrix.environment == 'prod' && secrets.ASSET_BUCKET_PROD || '' }}/assets
           parent: false
           # Resumable sessions flake under high concurrency ("offset is lower
           # than the number of bytes written"); these files are small enough
@@ -1846,6 +1949,7 @@ jobs:
             cache-control: public, max-age=31536000, immutable
 
   client-build-lint:
+    name: client-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: |
@@ -1913,6 +2017,7 @@ jobs:
         run: aube store prune
 
   client-test:
+    name: client-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: |
@@ -2001,6 +2106,11 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
+      # The hooks-go target's compile step resolves the root Go module's
+      # dependencies, including test dependencies.
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
+
       - name: Test generated artifact conflict resolution
         run: mise run test:gen-resolve
 
@@ -2028,6 +2138,7 @@ jobs:
         run: aube store prune
 
   functions-build-host:
+    name: functions-build-host
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.functions == 'true'
@@ -2047,16 +2158,8 @@ jobs:
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -2097,7 +2200,7 @@ jobs:
       - name: Test Go server
         run: mise run test:functions
 
-      - name: Build Gram Functions host
+      - name: Build Speakeasy Functions host
         env:
           MELANGE_PRIVATE_KEY: ${{ secrets.MELANGE_PRIVATE_KEY }}
         run: |
@@ -2125,6 +2228,7 @@ jobs:
         run: aube store prune
 
   functions-image:
+    name: functions-image
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, functions-build-host]
     if: needs.changes.outputs.functions == 'true'
@@ -2174,6 +2278,8 @@ jobs:
         id: apko
         env:
           MELANGE_PUBLIC_KEY: ${{ vars.MELANGE_PUBLIC_KEY }}
+          MATRIX_APKO_CONFIG: ${{ matrix.apko-config }}
+          MATRIX_RUNTIME: ${{ matrix.runtime }}
         run: |
           KEY_DIR=$(mktemp -d)
           KEY_FILE="$KEY_DIR/melange-signing-key.rsa.pub"
@@ -2181,16 +2287,19 @@ jobs:
 
           mise run build:functions-image \
             --melange-public-key "$KEY_FILE" \
-            --apko-config ${{ matrix.apko-config }} \
-            --image "apko-${{ matrix.runtime }}:${{ github.sha }}" \
-            --tarball-name ${{ matrix.runtime }} \
-            --out oci/${{ matrix.runtime }}
+            --apko-config ${MATRIX_APKO_CONFIG} \
+            --image "apko-${MATRIX_RUNTIME}:${GITHUB_SHA}" \
+            --tarball-name ${MATRIX_RUNTIME} \
+            --out oci/${MATRIX_RUNTIME}
 
       - name: Run safety checks
         run: |
           mise run test:apko-functions \
-            --image ${{ steps.apko.outputs.image }} \
-            --tarball ${{ steps.apko.outputs.tarball }}
+            --image ${STEPS_APKO_OUTPUTS_IMAGE} \
+            --tarball ${STEPS_APKO_OUTPUTS_TARBALL}
+        env:
+          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
+          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
 
       - name: "[DEV] Create fly app"
         id: flyCreateDev
@@ -2199,9 +2308,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
           FLY_IMAGE: ${{ vars.FLY_IMAGE_DEV }}
+          FLY_ORG_DEV: ${{ secrets.FLY_ORG_DEV }}
         run: |
           mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_DEV }} \
+            --org ${FLY_ORG_DEV} \
             --image $FLY_IMAGE \
             --force
 
@@ -2212,9 +2322,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
           FLY_IMAGE: ${{ vars.FLY_IMAGE_PROD }}
+          FLY_ORG_PROD: ${{ secrets.FLY_ORG_PROD }}
         run: |
           mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_PROD }} \
+            --org ${FLY_ORG_PROD} \
             --image $FLY_IMAGE \
             --force
 
@@ -2249,13 +2360,17 @@ jobs:
         run: |
           set -x
 
-          echo "Loading image from tarball: ${{ steps.apko.outputs.tarball }}"
-          docker image load -i ${{ steps.apko.outputs.tarball }}
+          echo "Loading image from tarball: ${STEPS_APKO_OUTPUTS_TARBALL}"
+          docker image load -i ${STEPS_APKO_OUTPUTS_TARBALL}
 
-          TAGS="${{ steps.meta.outputs.tags }}"
+          TAGS="${STEPS_META_OUTPUTS_TAGS}"
           for TAG in $TAGS; do
-            docker tag "${{ steps.apko.outputs.image }}-amd64" "$TAG"
+            docker tag "${STEPS_APKO_OUTPUTS_IMAGE}-amd64" "$TAG"
           done
+        env:
+          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
+          STEPS_META_OUTPUTS_TAGS: ${{ steps.meta.outputs.tags }}
+          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
 
       - parallel:
           - name: "[DEV] Push images"
@@ -2311,6 +2426,7 @@ jobs:
         run: aube store prune
 
   ts-framework-test:
+    name: ts-framework-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.tsframework == 'true'
@@ -2425,7 +2541,8 @@ jobs:
     needs:
       - changes
       - format-check
-      - server-build-lint
+      - server-build
+      - server-checks
       - server-test
       - demo-seed-safety
       - docker-build-server
@@ -2478,7 +2595,7 @@ jobs:
   svix-sync-webhooks:
     name: Sync webhook event types to Svix
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [server-build-lint]
+    needs: [server-checks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       SVIX_OPENAPI_FILE: server/internal/outbox/events/catalog_gen.yaml
@@ -2511,7 +2628,7 @@ jobs:
         upload-dashboard-assets,
       ]
     permissions:
-      pull-requests: write
+      pull-requests: write # adds the preview label
     # Only on PR creation, so a manually removed label stays removed. Waits
     # for every preview image tag, or the preview polls for missing images.
     if: >-
@@ -2540,6 +2657,7 @@ jobs:
         run: gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label preview
 
   dispatch-release:
+    name: dispatch-release
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs:
       [
@@ -2570,6 +2688,10 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram-infra
+          # Dispatches gram-infra's Prepare Release workflow; gh reads the
+          # repository's default branch first.
+          permission-actions: write
+          permission-contents: read
       - name: Dispatch prepare-release
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
@@ -2577,7 +2699,7 @@ jobs:
           gh workflow run "Prepare Release" \
             -R speakeasy-api/gram-infra \
             -f environment=dev \
-            -f commit_hash=${{ github.sha }}
+            -f commit_hash=${GITHUB_SHA}
 
   tunnel-agent:
     name: Tunnel agent

@@ -7,7 +7,7 @@ import (
 )
 
 var _ = Service("telemetry", func() {
-	Description("Fetch telemetry data for tools in Gram.")
+	Description("Fetch telemetry data for tools in Speakeasy.")
 
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -1081,7 +1081,7 @@ var TelemetryFilter = Type("TelemetryFilter", func() {
 	Attribute("function_id", String, "Function ID filter", func() {
 		Format(FormatUUID)
 	})
-	Attribute("gram_urn", String, "Gram URN filter (single URN, use gram_urns for multiple)")
+	Attribute("gram_urn", String, "Speakeasy URN filter (single URN, use gram_urns for multiple)")
 })
 
 var SearchLogsFilter = Type("SearchLogsFilter", func() {
@@ -1101,7 +1101,7 @@ var SearchLogsFilter = Type("SearchLogsFilter", func() {
 		Enum("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
 	})
 	Attribute("service_name", String, "Service name filter")
-	Attribute("gram_urns", ArrayOf(String), "Gram URN filter (one or more URNs)")
+	Attribute("gram_urns", ArrayOf(String), "Speakeasy URN filter (one or more URNs)")
 	Attribute("gram_chat_id", String, "Chat ID filter")
 	Attribute("user_id", String, "User ID filter")
 	Attribute("external_user_id", String, "External user ID filter")
@@ -1241,7 +1241,7 @@ var ToolCallSummary = Type("ToolCallSummary", func() {
 	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("log_count", UInt64, "Total number of logs in this tool call")
 	Attribute("http_status_code", Int32, "HTTP status code (if applicable)")
-	Attribute("gram_urn", String, "Gram URN associated with this tool call")
+	Attribute("gram_urn", String, "Speakeasy URN associated with this tool call")
 	Attribute("tool_name", String, "Tool name (from attributes.gram.tool.name)")
 	Attribute("tool_source", String, "Tool call source (from attributes.gram.tool_call.source)")
 	Attribute("event_source", String, "Event source (from attributes.gram.event.source)")
@@ -1268,7 +1268,7 @@ var SearchChatsFilter = Type("SearchChatsFilter", func() {
 	Attribute("deployment_id", String, "Deployment ID filter", func() {
 		Format(FormatUUID)
 	})
-	Attribute("gram_urn", String, "Gram URN filter (single URN, use gram_urns for multiple)")
+	Attribute("gram_urn", String, "Speakeasy URN filter (single URN, use gram_urns for multiple)")
 	Attribute("user_id", String, "User ID filter")
 	Attribute("external_user_id", String, "External user ID filter")
 })
@@ -1627,7 +1627,7 @@ var UserAccountType = Type("UserAccount", func() {
 	Description("A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.")
 
 	Attribute("id", String, "Account record id (user_accounts.id); used to scope chat/session views to this account")
-	Attribute("user_id", String, "Gram user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member")
+	Attribute("user_id", String, "Speakeasy user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member")
 	Attribute("provider", String, "AI provider the account belongs to ('anthropic', 'openai', 'cursor')")
 	Attribute("email", String, "Email associated with the account; may differ from the user's work email for personal accounts")
 	Attribute("account_type", String, "'team' (enterprise) or 'personal' (individual); empty when not yet classified")
@@ -2561,7 +2561,7 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
-	Attribute("client_keys", ArrayOf(String), "MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include")
+	Attribute("client_keys", ArrayOf(String), "MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
 	// The same three narrowing inputs the trace listing takes. Without them the
 	// summary cards and the timeline answer for the whole window while the rows
@@ -2662,10 +2662,10 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
-	Attribute("client_keys", ArrayOf(String), "MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include")
+	Attribute("client_keys", ArrayOf(String), "MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.")
 	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to include (error, success, blocked, pending). Empty means all.")
-	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.")
+	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Speakeasy URN, conversation ID, and trigger instance ID.")
 	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 	Attribute("cursor", String, "Cursor for pagination")
 	Attribute("sort", String, "Sort order", func() {
@@ -2698,7 +2698,7 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 	Attribute("log_group", ToolUsageTraceLogGroup, "How the frontend should fetch child logs for this row")
 	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds as a string for JavaScript integer safety")
 	Attribute("log_count", UInt64, "Number of logs in the trace")
-	Attribute("gram_urn", String, "Gram URN associated with the trace")
+	Attribute("gram_urn", String, "Speakeasy URN associated with the trace")
 	Attribute("tool_name", String, "Tool name shown in the row")
 	Attribute("target_type", ToolUsageTargetType, "Specific kind of tool usage target")
 	Attribute("target_kind", ToolUsageTargetKind, "Display grouping for the target")
@@ -3222,7 +3222,7 @@ var HookTraceSummary = Type("HookTraceSummary", func() {
 		Enum("success", "failure", "pending", "blocked")
 	})
 	Attribute("block_reason", String, "Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)")
-	Attribute("gram_urn", String, "Gram URN associated with this hook trace")
+	Attribute("gram_urn", String, "Speakeasy URN associated with this hook trace")
 	Attribute("tool_name", String, "Tool name (from materialized column)")
 	Attribute("tool_source", String, "Tool call source (from materialized column)")
 	Attribute("event_source", String, "Event source (from materialized column)")

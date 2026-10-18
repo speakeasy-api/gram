@@ -381,7 +381,7 @@ func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
 }
 
 // The lockdown binds at key resolution, so a disabled key must never reach a
-// completion. This is what turns a demotion into an error Gram can explain.
+// completion. This is what turns a demotion into an error Speakeasy can explain.
 func TestDisableAPIKey_PersistsAdminLockBeforeFailedReconciliation(t *testing.T) {
 	t.Parallel()
 

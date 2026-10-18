@@ -7,11 +7,11 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ExternalOAuthServerForm = {
   /**
-   * Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.
+   * Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Speakeasy fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.
    */
   authorizationServerIssuer?: string | undefined;
   /**
-   * JSON object metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+   * JSON object metadata for Speakeasy-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
    */
   metadata?: any | undefined;
   /**

@@ -14,7 +14,7 @@ We follow the **wide event** (or "wide structured log") pattern. Instead of scat
 - [ClickHouse — Schema Design for Observability](https://clickhouse.com/docs/use-cases/observability/schema-design)
 - [ClickHouse — Working with Time Series Data](https://clickhouse.com/blog/working-with-time-series-data-and-functions-ClickHouse)
 
-### How it works in Gram
+### How it works in Speakeasy
 
 Each telemetry log row in `telemetry_logs` contains:
 
@@ -63,13 +63,13 @@ The table below shows representative keys from each category. See `conventions.g
 | **User**                 | `user.id`                                                                                                                                                     | [General semconv](https://opentelemetry.io/docs/specs/semconv/general/attributes/) |
 | **Error**                | `error.message`, `exception.stacktrace`                                                                                                                       | [Error semconv](https://opentelemetry.io/docs/specs/semconv/exceptions/)           |
 
-### Custom Gram keys (`gram.*`)
+### Custom Speakeasy keys (`gram.*`)
 
-The `gram.*` prefix is used for attributes that are **Gram system-generated** — they identify internal Gram concepts that have no OTel equivalent. These are not fallbacks; they are explicitly namespaced to make it clear the attribute originates from the Gram platform.
+The `gram.*` prefix is used for attributes that are **Speakeasy system-generated** — they identify internal Speakeasy concepts that have no OTel equivalent. These are not fallbacks; they are explicitly namespaced to make it clear the attribute originates from the Speakeasy platform.
 
 | Key                      | Description                                            |
 | ------------------------ | ------------------------------------------------------ |
-| `gram.project.id`        | Gram project UUID                                      |
+| `gram.project.id`        | Speakeasy project UUID                                 |
 | `gram.deployment.id`     | Deployment UUID                                        |
 | `gram.function.id`       | Serverless function UUID                               |
 | `gram.tool.urn`          | Tool URN (e.g., `tools:function:my-source:my-tool`)    |

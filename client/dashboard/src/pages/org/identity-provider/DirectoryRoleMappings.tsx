@@ -49,22 +49,22 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { attributeMemberCount } from "@/pages/access/directorySourcesForRole";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import type { SetDirectoryRoleMappingsForm } from "@gram/client/models/components/setdirectoryrolemappingsform.js";
-
-import {
-  invalidateAllDirectoryRoleMappings,
-  useDirectoryRoleMappings,
-} from "@gram/client/react-query/directoryRoleMappings.js";
 import {
   mutationKeyDeleteDirectoryRoleMapping,
   useDeleteDirectoryRoleMappingMutation,
 } from "@gram/client/react-query/deleteDirectoryRoleMapping.js";
+import {
+  invalidateAllDirectoryRoleMappings,
+  useDirectoryRoleMappings,
+} from "@gram/client/react-query/directoryRoleMappings.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
@@ -76,7 +76,9 @@ import { useSyncDirectoryGroupsMutation } from "@gram/client/react-query/syncDir
 import {
   finishCreateRoleFlow,
   availableRoleName,
+  type MappingSource,
   pendingMappingFromParams,
+  sourceRoleUrns,
   startCreateRoleFlow,
 } from "./directoryMappingFlow";
 
@@ -89,9 +91,10 @@ type SourceRow = {
   key: string;
   label: string;
   detail: string;
-  /** Gram members in the source, shown as faces in place of the detail. */
+  /** Speakeasy members in the source, shown as faces in place of the detail. */
   members?: FacepileMember[];
-  form: Omit<SetDirectoryRoleMappingsForm, "roleUrns">;
+  form: MappingSource;
+  /** Every live mapping from this source, one per role it grants. */
   mappings: DirectoryRoleMapping[];
 };
 
@@ -99,8 +102,9 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function memberLabel(count: number): string {
-  return `${count} ${count === 1 ? "user" : "users"}`;
+/** Undefined means the count is not known. */
+function memberLabel(count: number | undefined): string {
+  return count === undefined ? "—" : pluralize(count, "user");
 }
 
 function groupRows(
@@ -143,12 +147,6 @@ function attributeMappingRows(
   data: ListDirectoryRoleMappingsResult,
 ): SourceRow[] {
   const rows = new Map<string, SourceRow>();
-  const attributes = new Map(
-    data.attributes.map((attribute) => [
-      JSON.stringify([attribute.key, attribute.value]),
-      attribute,
-    ]),
-  );
   for (const mapping of data.mappings) {
     if (mapping.sourceKind !== "attribute") continue;
     const key = mapping.attributeKey ?? "";
@@ -159,11 +157,10 @@ function attributeMappingRows(
       existing.mappings.push(mapping);
       continue;
     }
-    const option = attributes.get(sourceKey);
     rows.set(sourceKey, {
       key: sourceKey,
       label: `${key} = ${value}`,
-      detail: memberLabel(option?.memberCount ?? 0),
+      detail: memberLabel(attributeMemberCount(data, key, value)),
       form: {
         sourceKind: "attribute",
         attributeKey: key,
@@ -176,7 +173,7 @@ function attributeMappingRows(
 }
 
 /**
- * Maps directory groups to Gram roles, with attribute values as a secondary
+ * Maps directory groups to Speakeasy roles, with attribute values as a secondary
  * option for directories whose groups don't fit. Every group is a row with its
  * own role picker; picking a role saves it. Members who match get that role on
  * top of the roles assigned to them directly. Render it only for org admins:
@@ -220,6 +217,8 @@ export function DirectoryRoleMappings({
   // trip ends only once the save succeeds; a failed save keeps it so a reload
   // retries. Only a round trip this tab started can get here.
   const [params, setParams] = useSearchParams();
+  // Wait for fresh mappings so the save is guarded by the source's current
+  // roles: a source changed while this tab was away is refused, not replaced.
   const pending =
     data && isFetchedAfterMount && !isFetching && !isError
       ? pendingMappingFromParams(params, data.mappings)
@@ -632,17 +631,7 @@ function RolePicker({
   const changeRole = async (roleUrn: string) => {
     setPreparing(true);
     try {
-      const mappings = await refreshMappings();
-      const current = mappings
-        .filter((mapping) =>
-          row.form.sourceKind === "group"
-            ? mapping.sourceKind === "group" &&
-              mapping.directoryGroupId === row.form.directoryGroupId
-            : mapping.sourceKind === "attribute" &&
-              mapping.attributeKey === row.form.attributeKey &&
-              mapping.attributeValue === row.form.attributeValue,
-        )
-        .map((mapping) => mapping.roleUrn);
+      const current = sourceRoleUrns(await refreshMappings(), row.form);
       save.mutate({
         request: {
           setDirectoryRoleMappingsForm: {

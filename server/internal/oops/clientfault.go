@@ -5,7 +5,7 @@ import "slices"
 import "errors"
 
 // ClientFaulter is implemented by error types that can attribute themselves to
-// the caller rather than to Gram or an upstream service: arguments naming a
+// the caller rather than to Speakeasy or an upstream service: arguments naming a
 // resource that does not exist, a payload an upstream rejected as malformed, or
 // a credential whose scopes were never granted. Such an outcome is the expected
 // answer to the request that was made, not a fault to page on.
@@ -13,7 +13,7 @@ import "errors"
 // Error boundaries consult it through IsClientFault to pick a severity: a
 // caller fault is answered with a 4xx and logged at warn, keeping error-level
 // logs and errored spans — the signals error-rate monitors and SLOs key on —
-// for failures Gram or an upstream is responsible for. High-volume caller
+// for failures Speakeasy or an upstream is responsible for. High-volume caller
 // mistakes would otherwise mask genuine regressions in the same component.
 type ClientFaulter interface {
 	// ClientFault reports whether this particular error value is the caller's

@@ -21,7 +21,7 @@ const defaultOrganizationSearchLimit = 10
 
 var organizationTrialStates = []string{"running", "ending_soon", "expired", "demoted", "converted", "none"}
 
-var organizationSortColumns = []string{"name", "slug", "account_type", "member_count", "created_at", "disabled_at", "trial_ends_at"}
+var organizationSortColumns = []string{"name", "slug", "account_type", "account_tier", "member_count", "created_at", "disabled_at", "trial_ends_at"}
 
 func organizationSearchPayload(input FindOrganizationsInput) (*gen.ListOrganizationsPayload, error) {
 	query := strings.TrimSpace(input.Query)

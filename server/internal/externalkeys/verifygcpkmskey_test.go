@@ -97,7 +97,7 @@ func TestVerifyGcpKmsKey_PersistsNothing(t *testing.T) {
 	require.Equal(t, key.UpdatedAt, after.UpdatedAt)
 }
 
-// A healthy key that signs with something other than what Gram recorded is fatal
+// A healthy key that signs with something other than what Speakeasy recorded is fatal
 // even though nothing is broken on the provider's side: signing RS256 with an
 // ES256 key mints tokens no verifier accepts.
 func TestVerifyGcpKmsKey_AlgorithmMismatch(t *testing.T) {
@@ -189,7 +189,7 @@ func TestVerifyGcpKmsKey_KeyNotFound(t *testing.T) {
 	require.Equal(t, "key_not_found", result.ProbeOutcome)
 }
 
-// Failing to build the client is Gram's problem, not the customer's, so it is a
+// Failing to build the client is Speakeasy's problem, not the customer's, so it is a
 // request error rather than a "not verified" result that would blame their
 // configuration.
 func TestVerifyGcpKmsKey_ClientBuildFailureIsRequestError(t *testing.T) {
@@ -238,8 +238,8 @@ func TestVerifyGcpKmsKey_IdentityNotAssumable(t *testing.T) {
 	require.Equal(t, 0, ti.kms.Closed(), "must not build a client for an identity it could not assume")
 }
 
-// An empty impersonation target would authenticate as Gram's own ambient
-// identity, which reports on a key Gram reaches by itself rather than on the
+// An empty impersonation target would authenticate as Speakeasy's own ambient
+// identity, which reports on a key Speakeasy reaches by itself rather than on the
 // customer's configuration.
 func TestVerifyGcpKmsKey_LegacyCredentialWithoutTarget(t *testing.T) {
 	t.Parallel()
@@ -294,7 +294,7 @@ func TestVerifyGcpKmsKey_LegacyWifCredential(t *testing.T) {
 
 // The write-time screen postdates the rows it screens, so verify re-runs it.
 // Without that, a credential created before it could name a service account in
-// Gram's own project and turn this endpoint into an inventory oracle for Gram's
+// Speakeasy's own project and turn this endpoint into an inventory oracle for Speakeasy's
 // own KMS: the caller supplies the resource name.
 func TestVerifyGcpKmsKey_RescreensTargetInGramProject(t *testing.T) {
 	t.Parallel()
@@ -403,7 +403,7 @@ func TestVerifyGcpKmsKey_NotFound(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-// An aws_kms key is a real record, but this endpoint cannot probe it: Gram holds
+// An aws_kms key is a real record, but this endpoint cannot probe it: Speakeasy holds
 // no AWS identity to assume a customer role from.
 func TestVerifyGcpKmsKey_AwsKeyNotFound(t *testing.T) {
 	t.Parallel()

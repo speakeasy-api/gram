@@ -131,12 +131,12 @@ func (x InboundLogRecord_SeverityNumber) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// InboundLogRecord represents an OTLP log record received by Gram's ingest edge.
+// InboundLogRecord represents an OTLP log record received by Speakeasy's ingest edge.
 //
 // NOTICE: THIS IS A CARBON COPY OF `./log_record.proto` AND MUST BE KEPT IN SYNC.
 //
 // It is a wire-compatible superset of opentelemetry.proto.logs.v1.LogRecord.
-// OTLP fields retain their exact field numbers and wire types. Gram additions
+// OTLP fields retain their exact field numbers and wire types. Speakeasy additions
 // live at 1000+, where an OTLP parser treats them as unknown fields.
 type InboundLogRecord struct {
 	state                             protoimpl.MessageState                 `protogen:"opaque.v1"`

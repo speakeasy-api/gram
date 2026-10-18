@@ -1,6 +1,6 @@
 // serve_meta_test.go verifies MCP protocol termination for meta-MCP-backed
 // /mcp/{slug} endpoints: 2026-07-28 initialize and server/discover, the fixed
-// four-tool contract, per-request protocol-version declarations, the issuer
+// tool contract, per-request protocol-version declarations, the issuer
 // gate, and the no-/x/mcp-exposure rule.
 package mcp_test
 
@@ -169,7 +169,7 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	// makeInitializeBody requests 2025-03-26; a supported requested revision
 	// is echoed, not upgraded — this is what lets mainstream clients connect.
 	require.Equal(t, mcpversions.Version20250326, result.ProtocolVersion)
-	require.Equal(t, "Gram Gateway", result.ServerInfo.Name)
+	require.Equal(t, "Speakeasy Gateway", result.ServerInfo.Name)
 	// Instructions are deliberately generic: the member inventory belongs to
 	// list_servers, so neither the meta server's name nor its members appear.
 	require.Contains(t, result.Instructions, "list_servers")
@@ -306,10 +306,10 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 	for _, tool := range result.Tools {
 		names = append(names, tool.Name)
 	}
-	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool"}, names)
+	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool", "connection_status"}, names)
 
 	// The contract consults neither the endpoint nor the meta server, so every
-	// caller receives these same four tools.
+	// caller receives these same tools.
 	requireCacheHints(t, envelope["result"], "public")
 }
 
@@ -729,9 +729,7 @@ func TestWellKnown_MetaEndpoint_NoIssuer_NotFound(t *testing.T) {
 // have no per-tool picker (member tool catalogs land with the AGE-3291
 // runtime), so the transport answers NotFound — not the BadRequest a
 // missing-consent-headers request would otherwise get, and never the
-// "neither toolset nor mcp server backend" 500. The test harness enables the
-// consent_tool_filtering feature for the org, so the filtering gate is not
-// what produces the 404 here.
+// "neither toolset nor mcp server backend" 500.
 func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
 	t.Parallel()
 

@@ -1,12 +1,13 @@
+import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import { GramError } from "@gram/admin-client/models/errors/gramerror";
 
 import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
 
 export { isRedirectingToLogin } from "@/lib/gramAdminClient";
 
-// Gram admin API client.
+// Speakeasy admin API client.
 //
-// This app is served from the same origin as the Gram admin API (the admin
+// This app is served from the same origin as the Speakeasy admin API (the admin
 // Ingress puts both behind one host), so every path below is relative
 // and the `gram_admin` session cookie rides along as a first-party cookie.
 //
@@ -158,7 +159,7 @@ async function gramAdminSend(path: string, init?: RequestInit): Promise<void> {
 
 // Identity of the admin operator that owns the current session. The backend
 // reads it from the OIDC session record, so it names the identity-provider
-// account that signed in to this app, not any Gram customer account.
+// account that signed in to this app, not any Speakeasy customer account.
 export type AdminSessionInfo = {
   email: string;
   name?: string;
@@ -267,6 +268,10 @@ export type AdminOrganization = {
   workos_dashboard_url?: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
+  // Absent unless the matching Stripe ID is set and the deployment has a
+  // Stripe API key that says which dashboard mode the IDs belong to.
+  stripe_customer_dashboard_url?: string;
+  stripe_subscription_dashboard_url?: string;
   whitelisted: boolean;
   disabled_at?: string;
   trial_state?: TrialState;
@@ -620,22 +625,6 @@ export function listOrganizationMembers(
   );
 }
 
-type AdminInferenceKeyResponse = {
-  key_type: string;
-  credits_used: number;
-  monthly_credits: number;
-  disabled: boolean;
-  disable_causes?: string[];
-  disable_causes_classified: boolean;
-};
-
-export type AdminInferenceKey = Omit<
-  AdminInferenceKeyResponse,
-  "disable_causes"
-> & {
-  disable_causes: string[] | null;
-};
-
 export type AdminChatAnalysisJudge = "work_units" | "business_memory";
 
 export type AdminOrganizationChatAnalysisSettings = {
@@ -694,27 +683,12 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
-export async function getInferenceKeys(
-  organizationID: string,
-): Promise<AdminInferenceKey[]> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  const keys = await gramAdminFetch<AdminInferenceKeyResponse[]>(
-    `/admin/organization.inferenceKeys?${qs}`,
-  );
-  return keys.map((key) => ({
-    ...key,
-    disable_causes: key.disable_causes_classified
-      ? (key.disable_causes ?? [])
-      : null,
-  }));
-}
+export type AdminInferenceKeyType = RepairInferenceKeyRequestBody["keyType"];
 
-export type AdminInferenceKeyType = "chat" | "internal";
-
-export type AdminInferenceKeyLimit = Pick<
-  AdminInferenceKey,
-  "key_type" | "monthly_credits"
->;
+export type AdminInferenceKeyLimit = {
+  key_type: string;
+  monthly_credits: number;
+};
 
 export function setInferenceKeyMonthlyLimit(input: {
   organizationID: string;

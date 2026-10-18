@@ -47,10 +47,10 @@ describe("RecordHeader", () => {
 
     const button = screen.getByRole("button", { name: /Open in Dashboard/ });
     expect(button.textContent).toBe(
-      "Open in Dashboard (opens in the Gram dashboard)",
+      "Open in Dashboard (opens in the Speakeasy dashboard)",
     );
     expect(button.querySelector(".sr-only")?.textContent).toBe(
-      " (opens in the Gram dashboard)",
+      " (opens in the Speakeasy dashboard)",
     );
   });
 

@@ -20,6 +20,10 @@ type Client struct {
 	// Get Doer is the HTTP client used to make requests to the get endpoint.
 	GetDoer goahttp.Doer
 
+	// GetGateway Doer is the HTTP client used to make requests to the getGateway
+	// endpoint.
+	GetGatewayDoer goahttp.Doer
+
 	// SendInvite Doer is the HTTP client used to make requests to the sendInvite
 	// endpoint.
 	SendInviteDoer goahttp.Doer
@@ -43,6 +47,10 @@ type Client struct {
 	// RemoveUser Doer is the HTTP client used to make requests to the removeUser
 	// endpoint.
 	RemoveUserDoer goahttp.Doer
+
+	// RevokeMemberSignIns Doer is the HTTP client used to make requests to the
+	// revokeMemberSignIns endpoint.
+	RevokeMemberSignInsDoer goahttp.Doer
 
 	// EnableWebhooks Doer is the HTTP client used to make requests to the
 	// enableWebhooks endpoint.
@@ -106,12 +114,14 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GetDoer:                                doer,
+		GetGatewayDoer:                         doer,
 		SendInviteDoer:                         doer,
 		RevokeInviteDoer:                       doer,
 		UpdateInviteRoleDoer:                   doer,
 		ListInvitesDoer:                        doer,
 		ListUsersDoer:                          doer,
 		RemoveUserDoer:                         doer,
+		RevokeMemberSignInsDoer:                doer,
 		EnableWebhooksDoer:                     doer,
 		DisableWebhooksDoer:                    doer,
 		CreatePortalSessionDoer:                doer,
@@ -149,6 +159,30 @@ func (c *Client) Get() goa.Endpoint {
 		resp, err := c.GetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "get", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGateway returns an endpoint that makes HTTP requests to the organizations
+// service getGateway server.
+func (c *Client) GetGateway() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGatewayRequest(c.encoder)
+		decodeResponse = DecodeGetGatewayResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGatewayRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGatewayDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "getGateway", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -293,6 +327,30 @@ func (c *Client) RemoveUser() goa.Endpoint {
 		resp, err := c.RemoveUserDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "removeUser", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeMemberSignIns returns an endpoint that makes HTTP requests to the
+// organizations service revokeMemberSignIns server.
+func (c *Client) RevokeMemberSignIns() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeMemberSignInsRequest(c.encoder)
+		decodeResponse = DecodeRevokeMemberSignInsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeMemberSignInsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeMemberSignInsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "revokeMemberSignIns", err)
 		}
 		return decodeResponse(resp)
 	}

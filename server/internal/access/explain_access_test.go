@@ -126,6 +126,67 @@ func explainAccess(t *testing.T, ctx context.Context, ti *testInstance, serverID
 	return result
 }
 
+func TestEvaluateEffectiveMCPAccessMatchesDashboardDecisions(t *testing.T) {
+	t.Parallel()
+
+	serverID, projectID := "server-1", "project-1"
+	role := "role:organization:role-1"
+	user := "user:user-1"
+	held := func(principal string, grant authz.Grant) authz.Grant {
+		grant.PrincipalUrn = principal
+		return grant
+	}
+	narrowed := func(scope authz.Scope, resourceID, tool string) authz.Grant {
+		selector := authz.NewSelector(scope, resourceID)
+		selector[authz.SelectorKeyTool] = tool
+		return authz.NewGrantWithSelector(scope, selector)
+	}
+
+	tests := []struct {
+		name   string
+		grants []authz.Grant
+		want   EffectiveMCPAccess
+	}{
+		{name: "none", grants: nil, want: EffectiveMCPAccess{ToolAccess: explainedToolAccessNone}},
+		{name: "broad connect", grants: []authz.Grant{held(role, authz.NewGrant(authz.ScopeMCPConnect, serverID))}, want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessAll}},
+		{name: "narrowed connect", grants: []authz.Grant{held(role, narrowed(authz.ScopeMCPConnect, serverID, "list_tasks"))}, want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessSome}},
+		{name: "narrowed block", grants: []authz.Grant{
+			held(role, authz.NewGrant(authz.ScopeMCPConnect, serverID)),
+			held(role, narrowed(authz.ScopeMCPBlockedConnect, serverID, "delete_task")),
+		}, want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessSome}},
+		{name: "unrelated block", grants: []authz.Grant{
+			held(role, authz.NewGrant(authz.ScopeMCPConnect, serverID)),
+			held(role, narrowed(authz.ScopeMCPBlockedConnect, "server-2", "delete_task")),
+		}, want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessAll}},
+		{name: "direct tool grant overrides inherited tool block", grants: []authz.Grant{
+			held(role, authz.NewGrant(authz.ScopeMCPConnect, serverID)),
+			held(role, narrowed(authz.ScopeMCPBlockedConnect, serverID, "delete_task")),
+			held(user, narrowed(authz.ScopeMCPConnect, serverID, "delete_task")),
+		}, want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessAll}},
+		{name: "probe tool collision does not hide disposition block", grants: func() []authz.Grant {
+			block := authz.NewSelector(authz.ScopeMCPBlockedConnect, serverID)
+			block[authz.SelectorKeyDisposition] = authz.DispositionDestructive
+			return []authz.Grant{
+				held(role, authz.NewGrant(authz.ScopeMCPConnect, serverID)),
+				held(role, authz.NewGrantWithSelector(authz.ScopeMCPBlockedConnect, block)),
+				held(user, narrowed(authz.ScopeMCPConnect, serverID, explainedProbeTool)),
+			}
+		}(), want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessSome}},
+		{name: "view and manage", grants: []authz.Grant{
+			held(role, authz.NewGrant(authz.ScopeMCPRead, serverID)),
+			held(role, authz.NewGrant(authz.ScopeMCPWrite, serverID)),
+		}, want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessAll, CanView: true, CanManage: true}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			actual, err := EvaluateEffectiveMCPAccess(test.grants, serverID, projectID)
+			require.NoError(t, err)
+			require.Equal(t, test.want, actual)
+		})
+	}
+}
+
 func TestService_ExplainResourceAccess_BlockFromMappedRoleWins(t *testing.T) {
 	t.Parallel()
 

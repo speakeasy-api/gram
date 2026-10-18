@@ -11,8 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -29,7 +31,7 @@ import (
 
 const turnUserResource = "https://api.example/mcp"
 
-func TestPrincipalCredentialsUseTheirAuthorizersUpstreamSessions(t *testing.T) {
+func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "execution_credentials")
 	require.NoError(t, err)
@@ -38,7 +40,7 @@ func TestPrincipalCredentialsUseTheirAuthorizersUpstreamSessions(t *testing.T) {
 	seedProjectRead(t, db, "user-1", project)
 	seedProjectRead(t, db, "user-2", project)
 	core := newProvisioningCore(t, db)
-	assistant, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Credentials", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
+	assistant, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Credentials", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
 	_, err = toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: true})
 	require.NoError(t, err)
@@ -49,7 +51,7 @@ func TestPrincipalCredentialsUseTheirAuthorizersUpstreamSessions(t *testing.T) {
 	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
-	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
+	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
 
 	enc := testenv.NewEncryptionClient(t)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
@@ -74,9 +76,17 @@ func TestPrincipalCredentialsUseTheirAuthorizersUpstreamSessions(t *testing.T) {
 		require.NoError(t, err)
 		return authed
 	}
-	agentSubject := urn.NewAgentSubject(uuid.MustParse(*assistant.AgentID))
 	resolve := func(caller context.Context) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-		return sessions.ResolveAccessTokens(caller, project, "org-test", issuer.ID, agentSubject)
+		t.Helper()
+		actor, ok := contextvalues.AuthenticatedActor(caller)
+		require.True(t, ok)
+		subject := urn.NewAgentSubject(uuid.MustParse(*assistant.AgentID))
+		if actor.Type == urn.PrincipalTypeWorkload {
+			issuerID, externalSubject, err := actor.Workload()
+			require.NoError(t, err)
+			subject = urn.NewWorkloadSubject(issuerID, externalSubject)
+		}
+		return sessions.ResolveAccessTokens(caller, project, "org-test", issuer.ID, subject)
 	}
 	callers := map[string]context.Context{}
 	for _, user := range []string{"user-1", "user-2"} {
@@ -96,11 +106,36 @@ func TestPrincipalCredentialsUseTheirAuthorizersUpstreamSessions(t *testing.T) {
 	}
 
 	workload := authenticate(sourceKindCron, `{}`)
-	_, err = resolve(workload)
-	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "a credential with no authorizer never uses anyone's session")
+	tokens, err := resolve(workload)
+	require.NoError(t, err)
+	require.Equal(t, "private-user-1", tokens[upstream.ID].Token, "cron uses the assigned agent owner's session")
+	credential, ok := principalcredential.FromContext(workload)
+	require.True(t, ok)
+	require.Equal(t, urn.PrincipalTypeWorkload, credential.Credential.Principal.Type)
+	require.Empty(t, credential.Credential.AuthorizerUserID, "using the owner's upstream session does not impersonate the owner")
+	actor, ok := contextvalues.AuthenticatedActor(workload)
+	require.True(t, ok)
+	require.Equal(t, urn.PrincipalTypeWorkload, actor.Type)
+	tokens, err = resolve(authenticate(sourceKindCron, `{}`))
+	require.NoError(t, err)
+	require.Equal(t, "private-user-1", tokens[upstream.ID].Token, "the next scheduled turn also uses the owner's session")
+
+	agents := agentsrepo.New(db)
+	_, err = agents.TransferAgent(ctx, agentsrepo.TransferAgentParams{OrganizationID: "org-test", ID: uuid.MustParse(*assistant.AgentID), OwnerUserID: "user-2"})
+	require.NoError(t, err)
+	tokens, err = resolve(workload)
+	require.NoError(t, err)
+	require.Equal(t, "private-user-2", tokens[upstream.ID].Token, "an existing workload credential follows the current agent owner, not the assistant creator")
+	_, err = agents.TransferAgent(ctx, agentsrepo.TransferAgentParams{OrganizationID: "org-test", ID: uuid.MustParse(*assistant.AgentID), OwnerUserID: "user-1"})
+	require.NoError(t, err)
 
 	_, err = q.SoftDeleteRemoteSessionBySubjectAndClient(ctx, remoterepo.SoftDeleteRemoteSessionBySubjectAndClientParams{SubjectUrn: urn.NewUserSubject("user-2"), RemoteSessionClientID: client.ID, UserSessionIssuerID: issuer.ID, ProjectID: project, OrganizationID: "org-test"})
 	require.NoError(t, err)
 	_, err = resolve(callers["user-2"])
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "missing consent never falls back to the owner's session")
+
+	_, err = q.SoftDeleteRemoteSessionBySubjectAndClient(ctx, remoterepo.SoftDeleteRemoteSessionBySubjectAndClientParams{SubjectUrn: urn.NewUserSubject("user-1"), RemoteSessionClientID: client.ID, UserSessionIssuerID: issuer.ID, ProjectID: project, OrganizationID: "org-test"})
+	require.NoError(t, err)
+	_, err = resolve(workload)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "revoking the owner's session also revokes cron upstream access")
 }

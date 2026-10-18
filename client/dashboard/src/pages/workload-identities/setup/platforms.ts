@@ -133,7 +133,8 @@ function toSetupBlock(block: WorkloadPlatformBlock): SetupBlock[] {
   }
 }
 
-function optional(value: string): string | undefined {
+/** An empty string, which the server sends for an unset field, as absent. */
+export function optional(value: string): string | undefined {
   return value === "" ? undefined : value;
 }
 

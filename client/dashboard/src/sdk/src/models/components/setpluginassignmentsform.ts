@@ -4,8 +4,20 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+export const InstallModes = {
+  Required: "required",
+  Default: "default",
+  Available: "available",
+} as const;
+export type InstallModes = ClosedEnum<typeof InstallModes>;
 
 export type SetPluginAssignmentsForm = {
+  /**
+   * Install mode per principal URN in principal_urns. A principal missing from this map keeps its current mode, or gets `default` when it is newly assigned.
+   */
+  installModes?: { [k: string]: InstallModes } | undefined;
   pluginId: string;
   /**
    * List of principal URNs to assign.
@@ -14,7 +26,12 @@ export type SetPluginAssignmentsForm = {
 };
 
 /** @internal */
+export const InstallModes$outboundSchema: z.ZodMiniEnum<typeof InstallModes> = z
+  .enum(InstallModes);
+
+/** @internal */
 export type SetPluginAssignmentsForm$Outbound = {
+  install_modes?: { [k: string]: string } | undefined;
   plugin_id: string;
   principal_urns: Array<string>;
 };
@@ -25,11 +42,13 @@ export const SetPluginAssignmentsForm$outboundSchema: z.ZodMiniType<
   SetPluginAssignmentsForm
 > = z.pipe(
   z.object({
+    installModes: z.optional(z.record(z.string(), InstallModes$outboundSchema)),
     pluginId: z.string(),
     principalUrns: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      installModes: "install_modes",
       pluginId: "plugin_id",
       principalUrns: "principal_urns",
     });

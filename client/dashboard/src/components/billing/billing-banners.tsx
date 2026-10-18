@@ -153,7 +153,7 @@ export function PaygCapReachedBanners(): JSX.Element | null {
   );
 }
 
-// Checkout converts the product trial in Gram immediately, while Stripe can
+// Checkout converts the product trial in Speakeasy immediately, while Stripe can
 // keep the resulting subscription trialing until the paid period begins. The
 // session alone therefore cannot decide whether raising a cap is available.
 function PaygCapReachedBannersBody(): JSX.Element | null {

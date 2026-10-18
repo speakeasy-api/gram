@@ -34,6 +34,18 @@ type Client struct {
 	// updateIssuer endpoint.
 	UpdateIssuerDoer goahttp.Doer
 
+	// ListMcpServers Doer is the HTTP client used to make requests to the
+	// listMcpServers endpoint.
+	ListMcpServersDoer goahttp.Doer
+
+	// GetAuthenticationHostImpact Doer is the HTTP client used to make requests to
+	// the getAuthenticationHostImpact endpoint.
+	GetAuthenticationHostImpactDoer goahttp.Doer
+
+	// SetAuthenticationHost Doer is the HTTP client used to make requests to the
+	// setAuthenticationHost endpoint.
+	SetAuthenticationHostDoer goahttp.Doer
+
 	// GetIssuerDeletePreflight Doer is the HTTP client used to make requests to
 	// the getIssuerDeletePreflight endpoint.
 	GetIssuerDeletePreflightDoer goahttp.Doer
@@ -91,24 +103,27 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateIssuerDoer:              doer,
-		ListIssuersDoer:               doer,
-		GetIssuerDoer:                 doer,
-		UpdateIssuerDoer:              doer,
-		GetIssuerDeletePreflightDoer:  doer,
-		DeleteIssuerDoer:              doer,
-		MoveIssuerDoer:                doer,
-		GetIssuerMigratePreflightDoer: doer,
-		MigrateIssuerDoer:             doer,
-		CreateCimdClientDoer:          doer,
-		ListCimdClientsDoer:           doer,
-		GetCimdClientDoer:             doer,
-		DeleteCimdClientDoer:          doer,
-		RestoreResponseBody:           restoreBody,
-		scheme:                        scheme,
-		host:                          host,
-		decoder:                       dec,
-		encoder:                       enc,
+		CreateIssuerDoer:                doer,
+		ListIssuersDoer:                 doer,
+		GetIssuerDoer:                   doer,
+		UpdateIssuerDoer:                doer,
+		ListMcpServersDoer:              doer,
+		GetAuthenticationHostImpactDoer: doer,
+		SetAuthenticationHostDoer:       doer,
+		GetIssuerDeletePreflightDoer:    doer,
+		DeleteIssuerDoer:                doer,
+		MoveIssuerDoer:                  doer,
+		GetIssuerMigratePreflightDoer:   doer,
+		MigrateIssuerDoer:               doer,
+		CreateCimdClientDoer:            doer,
+		ListCimdClientsDoer:             doer,
+		GetCimdClientDoer:               doer,
+		DeleteCimdClientDoer:            doer,
+		RestoreResponseBody:             restoreBody,
+		scheme:                          scheme,
+		host:                            host,
+		decoder:                         dec,
+		encoder:                         enc,
 	}
 }
 
@@ -203,6 +218,79 @@ func (c *Client) UpdateIssuer() goa.Endpoint {
 		resp, err := c.UpdateIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "updateIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMcpServers returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service listMcpServers server.
+func (c *Client) ListMcpServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMcpServersRequest(c.encoder)
+		decodeResponse = DecodeListMcpServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMcpServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMcpServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "listMcpServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetAuthenticationHostImpact returns an endpoint that makes HTTP requests to
+// the organizationUserSessionIssuers service getAuthenticationHostImpact
+// server.
+func (c *Client) GetAuthenticationHostImpact() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetAuthenticationHostImpactRequest(c.encoder)
+		decodeResponse = DecodeGetAuthenticationHostImpactResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetAuthenticationHostImpactRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetAuthenticationHostImpactDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "getAuthenticationHostImpact", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetAuthenticationHost returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service setAuthenticationHost server.
+func (c *Client) SetAuthenticationHost() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetAuthenticationHostRequest(c.encoder)
+		decodeResponse = DecodeSetAuthenticationHostResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetAuthenticationHostRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetAuthenticationHostDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "setAuthenticationHost", err)
 		}
 		return decodeResponse(resp)
 	}

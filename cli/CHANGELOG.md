@@ -1,5 +1,17 @@
 # cli
 
+## 0.19.2
+
+### Patch Changes
+
+- a652184: The `install` commands with `--toolset` now read the MCP server URL from the server's platform endpoint when the toolset does not report an MCP slug, and keep the toolset's MCP slug URL otherwise. Toolsets with no MCP URL now report an error instead of writing an unroutable organization/project/environment URL or crashing when the toolset has no default environment.
+
+## 0.19.1
+
+### Patch Changes
+
+- 35b67b5: User-facing text now names the product Speakeasy instead of Gram across the dashboard, admin dashboard, CLI help and output, server error messages, consent pages, MCP server info, and API descriptions. HTTP header names, environment variables, package names, and code identifiers are unchanged.
+
 ## 0.19.0
 
 ### Minor Changes

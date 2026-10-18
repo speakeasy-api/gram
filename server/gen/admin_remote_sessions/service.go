@@ -54,7 +54,7 @@ type Service interface {
 	// Re-fetch an existing global remote_session_issuer's RFC 8414 metadata
 	// document and persist the discovered values. Keyed by issuer id. Only RFC
 	// 8414-derived columns are written — endpoints, the *_supported arrays,
-	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// client_id_metadata_document_supported, and the documentation URLs. Speakeasy
 	// behavior and display fields (oidc, passthrough, name, slug, logo, client
 	// setup documentation) are left alone. Requires platform admin.
 	RefreshGlobalIssuerMetadata(context.Context, *RefreshGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
@@ -128,7 +128,7 @@ type CreateGlobalClientPayload struct {
 	RemoteSessionIssuerID string
 	// client_id supplied by the caller.
 	ClientID string
-	// client_secret supplied by the caller. Gram encrypts before persisting.
+	// client_secret supplied by the caller. Speakeasy encrypts before persisting.
 	ClientSecret *string
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
@@ -486,7 +486,7 @@ type UpdateGlobalClientPayload struct {
 	SessionToken *string
 	// The remote_session_client id.
 	ID string
-	// Rotate the client secret. Gram re-encrypts before persisting.
+	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string

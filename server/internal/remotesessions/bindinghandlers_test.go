@@ -123,7 +123,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 		if session.ID == mine.ID.String() {
 			require.Equal(t, session, candidates.Items[0])
 		} else if session.ID == theirs.ID.String() {
-			require.Nil(t, session.UpstreamEmail, "unknown upstream identity is never inferred from the Gram subject")
+			require.Nil(t, session.UpstreamEmail, "unknown upstream identity is never inferred from the Speakeasy subject")
 			require.Nil(t, session.UpstreamDisplayName)
 			require.Nil(t, session.IdentitySource)
 		}

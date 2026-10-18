@@ -1,6 +1,6 @@
 // Package urls holds validation helpers for URLs that arrive from outside
-// Gram — request payloads, upstream metadata documents, and other untrusted
-// sources — and that Gram stores, dials, or renders as a link.
+// Speakeasy — request payloads, upstream metadata documents, and other untrusted
+// sources — and that Speakeasy stores, dials, or renders as a link.
 package urls
 
 import (
@@ -39,7 +39,7 @@ func IsAbsoluteHTTPS(raw string) bool {
 	return u.Scheme == "https" && u.Hostname() != "" && u.User == nil
 }
 
-// IsAbsoluteHTTPSOrLoopback reports whether raw is an absolute URL that Gram may
+// IsAbsoluteHTTPSOrLoopback reports whether raw is an absolute URL that Speakeasy may
 // send credentials to: HTTPS to any host, or plain HTTP to loopback.
 //
 // The loopback exemption does not weaken the guarantee IsAbsoluteHTTPS exists

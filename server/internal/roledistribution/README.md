@@ -57,8 +57,8 @@ Verified on 2026-10-02 with **Claude Code 2.1.287 on macOS**, using a local
 marketplace and normal `claude plugin marketplace add` / `claude plugin install`
 commands in an isolated `CLAUDE_CONFIG_DIR` and empty workspace. Two synthetic
 plugins, `engineering` and `on-call`, each declared the same `shared-server` key
-and identical HTTP endpoint in `.mcp.json`, matching Gram's Claude package shape.
-The endpoint was a loopback MCP test server, not a deployed Gram server.
+and identical HTTP endpoint in `.mcp.json`, matching Speakeasy's Claude package shape.
+The endpoint was a loopback MCP test server, not a deployed Speakeasy server.
 
 Observed:
 
@@ -75,7 +75,7 @@ Thus this client/version deduplicated the identical configurations in its MCP
 listing; removing the displayed plugin did not prevent discovery through the
 remaining plugin. This does not establish which plugin wins in other install
 orders or a universal deduplication rule. Tool invocation, interactive UI,
-authenticated Gram endpoints, differing names/headers, remote marketplace refresh,
+authenticated Speakeasy endpoints, differing names/headers, remote marketplace refresh,
 Cursor, and Claude Desktop/Cowork were not verified by this check. Do not infer
 those behaviors from package generation or this CLI result.
 

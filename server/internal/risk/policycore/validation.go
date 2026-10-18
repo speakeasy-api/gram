@@ -294,7 +294,7 @@ func ValidatePolicyType(policyType string) error {
 	}
 }
 
-// knownCategory reports whether the category is one Gram defines.
+// knownCategory reports whether the category is one Speakeasy defines.
 func knownCategory(category categories.Category) bool {
 	return slices.ContainsFunc(categories.All(), func(def categories.Definition) bool {
 		return def.Category == category

@@ -16,8 +16,10 @@ export type AgentProviderIconKind =
   | "hermes"
   | "devin"
   | "mistral"
+  | "microsoft-copilot"
   | "copilot"
   | "gemini"
+  | "antigravity"
   | "glean"
   | "bedrock"
   | "catchall"
@@ -86,12 +88,13 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   }
   if (normalizedSource?.includes("devin")) return "devin";
   if (normalizedSource?.includes("mistral")) return "mistral";
-  if (
-    normalizedSource?.includes("copilot") ||
-    normalizedSource?.includes("microsoft")
-  ) {
+  // Microsoft Copilot is a separate product from GitHub's coding agent.
+  // Check its explicit source first, before the generic Copilot aliases.
+  if (normalizedSource?.includes("microsoft")) return "microsoft-copilot";
+  if (normalizedSource?.includes("copilot")) {
     return "copilot";
   }
+  if (normalizedSource?.includes("antigravity")) return "antigravity";
   if (normalizedSource === "google" || normalizedSource?.includes("gemini")) {
     return "gemini";
   }

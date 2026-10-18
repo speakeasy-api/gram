@@ -12,6 +12,7 @@ from pystreams.risk.scanner import (
     Detection,
     ProcessPoolScanner,
     Recognized,
+    ScanInputError,
     ScanSlotTimeout,
     ThreadScanner,
     _AsyncCloseable,
@@ -57,6 +58,28 @@ class FakeAnalyzer:
 
 def _scanner(analyzer: FakeAnalyzer) -> ThreadScanner:
     return ThreadScanner(analyzer)
+
+
+class _RejectingAnalyzer(FakeAnalyzer):
+    def analyze(
+        self,
+        *,
+        text: str,
+        entities: list[str] | None,
+        language: str,
+        score_threshold: float,
+    ) -> list[Recognized]:
+        raise ValueError(f"no recognizer for {text}")
+
+
+async def test_analyzer_value_error_becomes_scan_input_error_without_content():
+    secret = "my ssn is 123-45-6789"
+
+    with pytest.raises(ScanInputError) as exc_info:
+        await _scanner(_RejectingAnalyzer()).scan(secret, ["US_SSN"], 0.5)
+
+    assert str(exc_info.value) == "ValueError"
+    assert secret not in repr(exc_info.value)
 
 
 async def test_maps_recognizer_results_to_detections():

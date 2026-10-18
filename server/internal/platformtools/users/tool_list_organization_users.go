@@ -25,7 +25,7 @@ func (s *ListOrganizationUsers) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "users",
 		HandlerName: "list_organization_users",
 		Name:        "platform_list_organization_users",
-		Description: "List the Gram users linked to the current organization (the internal directory the assistant resolves names against).",
+		Description: "List the Speakeasy users linked to the current organization (the internal directory the assistant resolves names against).",
 		InputSchema: core.BuildInputSchema[listOrganizationUsersInput](),
 		Variables:   nil,
 		Annotations: core.ReadOnlyAnnotations(),

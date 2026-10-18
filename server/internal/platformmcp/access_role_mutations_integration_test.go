@@ -2,12 +2,10 @@ package platformmcp
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -26,22 +24,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type roleAdmissionOutsideTransactionFlags struct {
-	feature.Provider
-	t         *testing.T
-	db        *pgxpool.Pool
-	evaluated bool
+// countingRoleBackend counts the provider reconciliations a role write sends
+// after its receipt commits.
+type countingRoleBackend struct {
+	*access.RoleManager
+	identityReconciles int
+	memberReconciles   int
 }
 
-func (f *roleAdmissionOutsideTransactionFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
-	f.t.Helper()
-	f.evaluated = true
-	require.Zero(f.t, f.db.Stat().AcquiredConns(), "role admission must resolve before opening the mutation transaction")
-	evaluation, err := feature.EvaluateFlag(ctx, f.Provider, flag, distinctID, groups)
-	if err != nil {
-		return evaluation, fmt.Errorf("evaluate role admission flag: %w", err)
-	}
-	return evaluation, nil
+func (b *countingRoleBackend) ReconcileRoleIdentity(ctx context.Context, workosOrgID, slug, name, description string, create bool) {
+	b.identityReconciles++
+	b.RoleManager.ReconcileRoleIdentity(ctx, workosOrgID, slug, name, description, create)
+}
+
+func (b *countingRoleBackend) ReconcileMemberRoles(ctx context.Context, reconciliation access.MemberRoleReconciliation) {
+	b.memberReconciles++
+	b.RoleManager.ReconcileMemberRoles(ctx, reconciliation)
 }
 
 func TestAccessRoleMutationsCreateWithoutGrantsAndReplay(t *testing.T) {
@@ -64,8 +62,7 @@ func TestAccessRoleMutationsCreateWithoutGrantsAndReplay(t *testing.T) {
 	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
 	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
-	admissionFlags := &roleAdmissionOutsideTransactionFlags{Provider: flags, t: t, db: conn, evaluated: false}
-	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard(admissionFlags, nil))
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard())
 	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
 	require.NoError(t, err)
 
@@ -128,9 +125,9 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
 	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
-	admissionFlags := &roleAdmissionOutsideTransactionFlags{Provider: flags, t: t, db: conn, evaluated: false}
-	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard(admissionFlags, nil))
-	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard())
+	backend := &countingRoleBackend{RoleManager: manager, identityReconciles: 0, memberReconciles: 0}
+	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", backend)
 	require.NoError(t, err)
 
 	createAuditsBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessRoleCreate)
@@ -172,6 +169,18 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	createAuditsReplayed, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessRoleCreate)
 	require.NoError(t, err)
 	require.Equal(t, createAuditsAfter, createAuditsReplayed)
+	require.Equal(t, 2, backend.identityReconciles, "a replay within the allowance re-runs reconciliation, so a failed sync recovers")
+
+	// The replay itself stays free once the allowance is spent, but its
+	// provider reconciliation is charged, so a retry loop cannot send
+	// unbounded provider work.
+	restore := withSpentBudget(t, &service.budget)
+	spent, err := service.Create(ctx, principal, createInput)
+	require.NoError(t, err, "a replay must not be refused over a spent allowance")
+	require.True(t, spent.Receipt.Replayed)
+	require.Equal(t, 2, backend.identityReconciles, "a replay over a spent allowance must not reconcile again")
+	require.Equal(t, "rate_limited", spent.Reconciliation, "the skipped reconciliation is reported")
+	restore()
 
 	projectSelector := authz.NewSelector(authz.ScopeProjectRead, project.ID.String())
 	encodedProjectSelector, err := projectSelector.MarshalJSON()
@@ -205,7 +214,6 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 		IdempotencyKey: "update-mcp-operators", Confirmed: true,
 	})
 	require.NoError(t, err)
-	require.True(t, admissionFlags.evaluated, "role update must exercise admission preparation")
 	require.False(t, updated.Receipt.Replayed)
 	require.Equal(t, "complete", updated.Reconciliation)
 	require.NotEqual(t, current.Version, updated.Role.Version)

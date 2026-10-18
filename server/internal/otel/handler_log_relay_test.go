@@ -20,8 +20,11 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -382,7 +385,14 @@ func TestLogRelayExportRedactsSensitiveContentWithoutMutatingSource(t *testing.T
 		relayTestLogAttribute("gen_ai.output.messages", "output"),
 		relayTestLogAttribute("user_prompt", "user"),
 		relayTestLogAttribute("prompt", "prompt"),
+		// The column enrichers' copies of the words and the person are
+		// redacted with their sources, so an exclude destination gets
+		// neither spelling.
+		relayTestLogAttribute(string(enrich.AgentTextKey), "prompt"),
+		relayTestLogAttribute(string(enrich.AgentUserEmailKey), "person@example.com"),
+		relayTestLogAttribute(string(enrich.AgentExternalUserIDKey), "user-1"),
 		relayTestLogAttribute("model", "preserved"),
+		relayTestLogAttribute(string(enrich.AgentModelKey), "preserved"),
 	})
 	before := proto.Clone(record)
 
@@ -391,13 +401,14 @@ func TestLogRelayExportRedactsSensitiveContentWithoutMutatingSource(t *testing.T
 	require.True(t, proto.Equal(before, record))
 
 	converted := request.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0]
-	require.Len(t, converted.GetAttributes(), 5)
-	for _, attribute := range converted.GetAttributes()[:4] {
-		require.Equal(t, redactedSensitiveDataValue, attribute.GetValue().GetStringValue())
+	require.Len(t, converted.GetAttributes(), 9)
+	for _, attribute := range converted.GetAttributes()[:7] {
+		require.Equal(t, redactedSensitiveDataValue, attribute.GetValue().GetStringValue(), attribute.GetKey())
 	}
 	require.Equal(t, redactedSensitiveDataValue, converted.GetBody().GetStringValue())
-	require.Equal(t, "model", converted.GetAttributes()[4].GetKey())
-	require.Equal(t, "preserved", converted.GetAttributes()[4].GetValue().GetStringValue())
+	for _, attribute := range converted.GetAttributes()[7:] {
+		require.Equal(t, "preserved", attribute.GetValue().GetStringValue(), attribute.GetKey())
+	}
 }
 
 func TestLogRelayExportIncludesSensitiveContent(t *testing.T) {
@@ -524,4 +535,34 @@ func relayRequestLogEventNames(request *collectorlogsv1.ExportLogsServiceRequest
 		}
 	}
 	return names
+}
+
+func TestLogRelayHandlerLeavesGatewayToolCallRecordsToTheToolCallRelay(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+	reader, meterProvider := readableMeter(t)
+	handler := newLogRelayTestHandler(t, meterProvider)
+	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, nil, true)
+
+	gatewayScope := relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), dialect.GatewayLogScope)
+	gateway := relayTestLogRecord("execute_tool", testLogOrganizationID, testLogProjectID, 0)
+	gateway.SetAttributes([]*otelv1.LogRecord_KeyValue{gatewayScope})
+	producer := relayTestLogRecord("api_request", testLogOrganizationID, testLogProjectID, 0)
+	producer.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.anthropic.claude_code.events"),
+	})
+
+	messages, failures := logRelayTestMessages(gateway, producer)
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+
+	requests := capture.snapshot()
+	require.Len(t, requests, 1)
+	require.Equal(t, []string{"api_request"}, relayRequestLogBodies(requests[0].request))
+	require.Equal(t, int64(1), agentEventCount(t, reader, meterLogRelayRecordsDropped, attr.ReasonKey, string(relayReasonExcluded)))
 }

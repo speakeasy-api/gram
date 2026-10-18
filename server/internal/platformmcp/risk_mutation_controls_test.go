@@ -147,6 +147,9 @@ func TestRiskMutationAdmissionConnectionlessAssistantUsesOrganizationBudget(t *t
 
 	require.NoError(t, err)
 	require.Equal(t, project, resolved)
+	require.Empty(t, organization.keys, "admission alone never charges: a replay must stay free")
+
+	require.NoError(t, controls.Charge(principal)(t.Context()))
 	require.Equal(t, []string{"organization"}, organization.keys)
 }
 
@@ -251,13 +254,6 @@ func TestRiskVersionTokensAreOpaqueAndStateSensitive(t *testing.T) {
 	require.Equal(t, token, canonical, "canonical ordering must include the complete detection scope state")
 	require.NotContains(t, token, prompt)
 	require.True(t, codec.ValidPolicyVersion(state, token))
-	pending, total := int64(3), int64(10)
-	progressOnly := state
-	progressOnly.Policy.PendingMessages = &pending
-	progressOnly.Policy.TotalMessages = &total
-	progressToken, err := codec.PolicyVersion(progressOnly)
-	require.NoError(t, err)
-	require.Equal(t, token, progressToken, "read-time analysis progress is not policy concurrency state")
 	policy.Enabled = true
 	require.False(t, codec.ValidPolicyVersion(RiskPolicyVersionState{Policy: policy, AnalyzerConfig: state.AnalyzerConfig, AllowedURLGrants: state.AllowedURLGrants, BlockedURLGrants: state.BlockedURLGrants, StandingDecisionState: state.StandingDecisionState}, token))
 	grantChanged := state

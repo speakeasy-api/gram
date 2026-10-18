@@ -1,11 +1,11 @@
 // Package shadowmcpscan is the single home for the shadow-MCP scanner. It flags
-// MCP-routed tool calls that did not go to a Gram-hosted MCP server, and
+// MCP-routed tool calls that did not go to a Speakeasy-hosted MCP server, and
 // converts each into the shared scanners.Finding domain type.
 //
 // The scanner decides from provenance first. Every MCP-routed hook event
 // records the server it resolved (`gram.mcp.match` / `gram.mcp.server_url`),
 // and one batch-wide ProvenanceLookup replays those values back per tool call.
-// A call whose provenance resolves to a Gram-hosted host is clean; one that
+// A call whose provenance resolves to a Speakeasy-hosted host is clean; one that
 // resolves to anything else — a third-party URL or a local stdio command — is
 // flagged. This is the same question the realtime hook guard answers, so the
 // two paths agree on a call by construction.
@@ -13,7 +13,7 @@
 // When provenance does not resolve — the hook log has not landed yet, the
 // sender never resolved a server, or the sender's recorded tool-call id is not
 // what its trace id derives from — the scanner falls back to the legacy
-// signature check: the x-gram-toolset-id constant Gram injects into tool
+// signature check: the x-gram-toolset-id constant Speakeasy injects into tool
 // schemas and callers echo back. The fallback preserves today's behaviour for
 // senders provenance cannot yet cover, and is meant to be deleted once the
 // measured unresolved rate justifies it.
@@ -42,7 +42,7 @@ import (
 const Source = shadowmcp.SourceShadowMCP
 
 // Rule is the canonical rule id emitted for every shadow_mcp finding. The
-// detection mechanism (non-Gram URL, stdio server, missing toolset id, ...) is
+// detection mechanism (non-Speakeasy URL, stdio server, missing toolset id, ...) is
 // implementation detail kept in logs; the rule id describes the risk itself.
 const Rule = "shadow_mcp"
 
@@ -62,7 +62,7 @@ const (
 	ResolutionUnresolved = "unresolved"
 )
 
-// Validator enforces that a Gram-hosted tool call carries a valid
+// Validator enforces that a Speakeasy-hosted tool call carries a valid
 // x-gram-toolset-id resolving to a toolset in the caller's organization.
 // *shadowmcp.Client satisfies it. The bool return is true when the call is
 // denied (fails validation). Used only for calls provenance could not resolve.
@@ -70,7 +70,7 @@ type Validator interface {
 	ValidateToolsetCall(ctx context.Context, toolInput any, toolName string, orgID string) (string, bool)
 }
 
-// HostedChecker resolves the hosts that count as Gram-hosted for an
+// HostedChecker resolves the hosts that count as Speakeasy-hosted for an
 // organization, on top of the built-in ones. *shadowmcp.Client satisfies it.
 //
 // Resolving hosts rather than classifying one URL at a time keeps the
@@ -137,7 +137,7 @@ type findingCandidate struct {
 	bypassRequest *BypassRequest
 }
 
-// Scanner flags MCP tool calls that did not reach a Gram-hosted server. It is
+// Scanner flags MCP tool calls that did not reach a Speakeasy-hosted server. It is
 // safe for concurrent use so long as its dependencies are.
 type Scanner struct {
 	logger     *slog.Logger
@@ -176,7 +176,7 @@ func NewScanner(logger *slog.Logger, validator Validator, hosted HostedChecker, 
 }
 
 // Scan returns a Finding for each MCP tool call that did not reach a
-// Gram-hosted server, one findings slice per input message (positionally
+// Speakeasy-hosted server, one findings slice per input message (positionally
 // aligned with messages).
 func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, policyID uuid.UUID, messages []Message) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
@@ -192,7 +192,7 @@ func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, p
 	// is a database round-trip whose result is invariant for the organization,
 	// and a batch can hold hundreds of calls.
 	//
-	// A failure here means we cannot tell a Gram host from a third-party one,
+	// A failure here means we cannot tell a Speakeasy host from a third-party one,
 	// so every call takes the unresolved path rather than being judged against
 	// an incomplete host list. Judging anyway would classify calls to an org's
 	// own verified custom domain as shadow MCP and persist that as findings.
@@ -291,8 +291,8 @@ func (s *Scanner) scanCall(ctx context.Context, orgID string, userID string, cal
 			s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionHosted)
 			return nil
 		}
-		// A resolved non-Gram URL, or a stdio server that does not front a
-		// Gram URL. Both are shadow MCP by the same rule the realtime guard
+		// A resolved non-Speakeasy URL, or a stdio server that does not front a
+		// Speakeasy URL. Both are shadow MCP by the same rule the realtime guard
 		// applies.
 		s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionShadow)
 		finding := s.finding(call, match)
@@ -433,18 +433,18 @@ func resolvedServerIdentity(prov telemetryrepo.MCPProvenance, serverPrefix strin
 	return match, true
 }
 
-// isHostedIdentity reports whether a resolved server identity points at Gram.
+// isHostedIdentity reports whether a resolved server identity points at Speakeasy.
 //
 // The identity is tested directly, then — when it is a stdio launch command
 // that proxies through `mcp-remote` — the URL that invocation targets is
-// tested too. Gram's own install snippet for OAuth-backed servers is exactly
+// tested too. Speakeasy's own install snippet for OAuth-backed servers is exactly
 // that shape (`npx mcp-remote@<version> https://app.getgram.ai/mcp/<slug>`),
-// so treating every stdio server as shadow would flag calls to Gram's own
-// servers whenever a customer installed them the way Gram told them to.
+// so treating every stdio server as shadow would flag calls to Speakeasy's own
+// servers whenever a customer installed them the way Speakeasy told them to.
 //
-// Only the proxy's target counts, never any Gram URL appearing somewhere in
+// Only the proxy's target counts, never any Speakeasy URL appearing somewhere in
 // the command. Accepting an arbitrary argument would let a local shadow server
-// clear the check by carrying an unrelated Gram URL (`npx @evil/mcp --docs
+// clear the check by carrying an unrelated Speakeasy URL (`npx @evil/mcp --docs
 // https://app.getgram.ai/...`), which is a single flag's worth of evasion.
 //
 // The hosted check is never gated on the identity parsing as a URL: it already
@@ -488,8 +488,8 @@ func mcpRemoteTarget(command string) (string, bool) {
 //
 // The scope is deliberately significant. Accepting any package whose last path
 // segment is "mcp-remote" would let `@evil/mcp-remote` — a package that can
-// connect anywhere — launder a Gram URL argument into a hosted verdict.
-// Unscoped mcp-remote is the only package Gram's own install snippets emit, so
+// connect anywhere — launder a Speakeasy URL argument into a hosted verdict.
+// Unscoped mcp-remote is the only package Speakeasy's own install snippets emit, so
 // a fork has to be added here explicitly to be trusted.
 func isMCPRemoteSpec(field string) bool {
 	name, _, _ := strings.Cut(field, "@")

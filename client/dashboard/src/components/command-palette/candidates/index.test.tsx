@@ -250,10 +250,12 @@ vi.mock("@/routes", () => ({
     environments: { environment: { goTo: vi.fn() } },
     deployments: { deployment: { goTo: vi.fn() } },
     policyCenter: { href: () => "/acme/projects/default/policy-center" },
-    shadowMCP: {
-      href: () => "/acme/projects/default/shadow-mcp",
-      detail: {
-        href: (slug: string) => `/acme/projects/default/shadow-mcp/${slug}`,
+    shadowAI: {
+      mcps: {
+        detail: {
+          href: (slug: string) =>
+            `/acme/projects/default/shadow-ai/mcps/${slug}`,
+        },
       },
     },
     identities: {
@@ -484,6 +486,30 @@ describe("useMcpServerCandidates", () => {
         action: expect.objectContaining({ label: "Undo" }),
       }),
     );
+  });
+
+  it("sends hosted server enables to the toolset page", async () => {
+    mocks.scopes = ["mcp:write"];
+    mocks.toolsets = [
+      { id: "toolset-1", name: "Hosted", slug: "hosted", mcpIsPublic: true },
+    ];
+    mocks.mcpServers = [
+      {
+        ...HOSTED_ROW,
+        id: "toolset-1",
+        environmentId: undefined,
+        visibility: "disabled",
+      },
+    ];
+    mocks.updateMcpServer.mockResolvedValue({});
+    const { result } = renderCandidates();
+    const [hosted] = byKind(result.current, "mcp_server");
+
+    await act(async () => {
+      await hosted?.run("enable");
+    });
+    expect(mocks.updateMcpServer).not.toHaveBeenCalled();
+    expect(mocks.goToToolsetDetails).toHaveBeenCalledWith("hosted");
   });
 
   // A hosted server is granted under its toolset id (the server resolves the

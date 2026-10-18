@@ -103,6 +103,8 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// version, so they resolve to the unversioned default.
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
+		mcpEndpointID:         nil,
+		attributionServerID:   nil,
 		wrapperRBACResourceID: "",
 		wrapperIsPublic:       nil,
 		metaMcpServerID:       "",

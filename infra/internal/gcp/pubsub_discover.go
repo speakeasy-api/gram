@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -85,6 +86,10 @@ type DesiredSubscription struct {
 	DeadLetterTopic     string
 	MaxDeliveryAttempts int32
 	ProtoMessage        string
+
+	// Storage is non-nil only for storage-owned consumers. A nil value denotes
+	// an ordinary application subscription.
+	Storage *DesiredStorage
 }
 
 func DiscoverPubSub(descriptorBytes []byte) ([]DesiredTopic, []DesiredSubscription, error) {
@@ -113,7 +118,15 @@ func DiscoverPubSub(descriptorBytes []byte) ([]DesiredTopic, []DesiredSubscripti
 		return nil, nil, walkErr
 	}
 
-	return dedupeAndValidate(topics, subs)
+	topics, subs, err = dedupeAndValidate(topics, subs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := validateStorageSubscriptions(files, topics, subs); err != nil {
+		return nil, nil, err
+	}
+
+	return topics, subs, nil
 }
 
 func collectFromMessages(messages protoreflect.MessageDescriptors, topics *[]DesiredTopic, subs *[]DesiredSubscription) error {
@@ -122,9 +135,13 @@ func collectFromMessages(messages protoreflect.MessageDescriptors, topics *[]Des
 
 		topicOptions, hasTopic := TopicOptionsFromMessage(message)
 		subOptions, hasSub := SubscriptionOptionsFromMessage(message)
+		storageOptions, hasStorage := StorageOptionsFromMessage(message)
 
 		if hasTopic && hasSub {
 			return fmt.Errorf("message %s declares both a topic and a subscription option; declare them on separate marker messages", message.FullName())
+		}
+		if hasStorage && (hasTopic || hasSub) {
+			return fmt.Errorf("message %s declares storage_subscription together with topic or subscription; declare them on separate marker messages", message.FullName())
 		}
 
 		if hasTopic {
@@ -133,6 +150,14 @@ func collectFromMessages(messages protoreflect.MessageDescriptors, topics *[]Des
 
 		if hasSub {
 			*subs = append(*subs, desiredSubscriptionFromOptions(message, subOptions))
+		}
+		if hasStorage {
+			sub, err := desiredStorageSubscription(message, storageOptions)
+			if err != nil {
+				return fmt.Errorf("storage subscription %s: %w", message.FullName(), err)
+			}
+
+			*subs = append(*subs, sub)
 		}
 
 		if err := collectFromMessages(message.Messages(), topics, subs); err != nil {
@@ -188,7 +213,7 @@ func messageDeprecated(message protoreflect.MessageDescriptor) bool {
 	return options.GetDeprecated()
 }
 
-func ResolveSubscriptionName(message protoreflect.MessageDescriptor, opts *pubsubv1.SubscriptionOptions) string {
+func ResolveSubscriptionName(message protoreflect.MessageDescriptor, opts interface{ GetName() string }) string {
 	name := strings.TrimSpace(opts.GetName())
 	if name == "" {
 		name = string(message.FullName())
@@ -235,7 +260,22 @@ func desiredTopicFromOptions(message protoreflect.MessageDescriptor, topicOption
 	}
 }
 
-func desiredSubscriptionFromOptions(message protoreflect.MessageDescriptor, subOptions *pubsubv1.SubscriptionOptions) DesiredSubscription {
+// subscriptionOptions is the shared transport contract of application and
+// storage subscriptions. Their protobuf options and runtime ownership differ.
+type subscriptionOptions interface {
+	GetName() string
+	GetTopic() string
+	GetLabels() map[string]string
+	GetRetention() *durationpb.Duration
+	GetRetainAckedMessages() bool
+	GetAckDeadline() *durationpb.Duration
+	GetExpirationTtl() *durationpb.Duration
+	GetRetryPolicy() *pubsubv1.RetryPolicy
+	GetFilter() string
+	GetDeadLetter() *pubsubv1.DeadLetterPolicy
+}
+
+func desiredSubscriptionFromOptions(message protoreflect.MessageDescriptor, subOptions subscriptionOptions) DesiredSubscription {
 	inlabels := subOptions.GetLabels()
 	labels := make(map[string]string, len(inlabels)+1)
 	maps.Copy(labels, inlabels)
@@ -260,6 +300,7 @@ func desiredSubscriptionFromOptions(message protoreflect.MessageDescriptor, subO
 		DeadLetterTopic:     "",
 		MaxDeliveryAttempts: 0,
 		ProtoMessage:        string(message.FullName()),
+		Storage:             nil,
 	}
 
 	if rp := subOptions.GetRetryPolicy(); rp != nil {

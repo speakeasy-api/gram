@@ -1,6 +1,6 @@
 # Type
 
-Canonical Gram hook event type.
+Canonical Speakeasy hook event type.
 
 ## Example Usage
 

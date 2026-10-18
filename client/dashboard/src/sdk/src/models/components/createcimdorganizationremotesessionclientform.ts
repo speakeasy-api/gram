@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.
+ * Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Speakeasy generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.
  */
 export type CreateCimdOrganizationRemoteSessionClientForm = {
   /**

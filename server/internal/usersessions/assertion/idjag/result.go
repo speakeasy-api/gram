@@ -6,9 +6,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Result is an accepted Gram user subject and its verified grant claims.
+// Result is an accepted Speakeasy user subject and its verified grant claims.
 type Result struct {
-	// Subject identifies the resolved Gram user.
+	// Subject identifies the resolved Speakeasy user.
 	Subject urn.SessionSubject
 	// TrustedIssuerID identifies the issuer that authenticated the assertion.
 	TrustedIssuerID uuid.UUID

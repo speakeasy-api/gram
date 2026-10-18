@@ -76,6 +76,16 @@ func TestValidateTrustedIdentityProviderClientRejectsPublicClient(t *testing.T) 
 	require.ErrorContains(t, err, "not eligible")
 }
 
+func TestValidateTrustedIdentityProviderClientRejectsSelfClient(t *testing.T) {
+	t.Parallel()
+
+	client, issuer := trustedIdentityProviderPair()
+	client.CredentialOwner = string(remotesessions.CredentialOwnerSelf)
+
+	err := remotesessions.ValidateTrustedIdentityProviderClient(client, issuer)
+	require.ErrorContains(t, err, "credential_owner self")
+}
+
 func TestValidateTrustedIdentityProviderClientAllowsPrivateKeyJWT(t *testing.T) {
 	t.Parallel()
 

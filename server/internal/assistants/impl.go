@@ -28,7 +28,6 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -45,7 +44,6 @@ type Service struct {
 	signaler                  WorkflowSignaler
 	bootstrapLimiter          *ratelimit.Limiter
 	bootstrapAggregateLimiter *ratelimit.Limiter
-	features                  feature.Provider
 }
 
 var (
@@ -64,7 +62,6 @@ func NewService(
 	core *ServiceCore,
 	signaler WorkflowSignaler,
 	bootstrapStore ratelimit.Store,
-	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assistants"))
 	return &Service{
@@ -80,23 +77,7 @@ func NewService(
 		bootstrapLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap",
 			ratelimit.PerMinute(bootstrapRatePerMin).WithBurst(bootstrapRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
-		features: features,
 	}
-}
-
-// ErrIdentityProvisioningDisabled reports that the organization has not been
-// rolled into assistant workload identity provisioning.
-var ErrIdentityProvisioningDisabled = errors.New("assistant workload identity is not enabled for this organization")
-
-// identityProvisioningEnabled reports whether new assistants in the caller's
-// organization get a dedicated agent. It gates provisioning only: assistants
-// that already have one keep resolving and running when it is off.
-func (s *Service) identityProvisioningEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate assistant identity provisioning flag", attr.SlogError(err))
-	}
-	return evaluation == feature.EvaluationEnabled
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -193,7 +174,8 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "create assistant requires a user identity").LogError(ctx, s.logger)
 	}
-	if err := s.requireAttachmentAccess(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers); err != nil {
+	canEnableMCP, err := s.requireAttachmentAccess(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers)
+	if err != nil {
 		return nil, err
 	}
 	record, err := s.core.CreateAssistant(
@@ -209,7 +191,8 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		normalizeWarmTTLSeconds(payload.WarmTTLSeconds),
 		normalizeMaxConcurrency(payload.MaxConcurrency),
 		conv.PtrValOrEmpty(payload.Status, StatusActive),
-		s.identityProvisioningEnabled(ctx, authCtx),
+		true,
+		canEnableMCP,
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "create assistant")
@@ -235,7 +218,8 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		return nil, err
 	}
 
-	if err := s.requireAttachmentAccess(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers); err != nil {
+	canEnableMCP, err := s.requireAttachmentAccess(ctx, *authCtx.ProjectID, payload.Toolsets, payload.McpServers)
+	if err != nil {
 		return nil, err
 	}
 	record, err := s.core.UpdateAssistant(
@@ -250,6 +234,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 		payload.WarmTTLSeconds,
 		payload.MaxConcurrency,
 		payload.Status,
+		canEnableMCP,
 	)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "update assistant")
@@ -473,7 +458,7 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 		return nil, oops.E(oops.CodeUnauthorized, nil, "the project assistant requires a user identity").LogError(ctx, s.logger)
 	}
 
-	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, s.identityProvisioningEnabled(ctx, authCtx))
+	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, true)
 	if err != nil {
 		if errors.Is(err, ErrManagedAssistantNameTaken) {
 			return nil, oops.E(oops.CodeConflict, err, "an assistant with the project assistant's name already exists — rename it to enable the built-in assistant").LogError(ctx, s.logger)
@@ -490,20 +475,40 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 
 // requireAttachmentAccess requires mcp:connect on every toolset and MCP server
 // a write attaches, so an assistant grant cannot widen the MCP servers an
-// assistant reaches beyond what the caller could connect to.
-func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UUID, toolsets []*types.AssistantToolsetRef, mcpServers []*types.AssistantMCPServerRef) error {
+// assistant reaches beyond what the caller could connect to. It returns which
+// of them the caller may turn MCP on for (mcp:write); the write decides under
+// its row locks whether that is needed.
+func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UUID, toolsets []*types.AssistantToolsetRef, mcpServers []*types.AssistantMCPServerRef) (func(uuid.UUID) bool, error) {
 	ids, err := s.core.AttachmentTargetIDs(ctx, projectID, toolsets, mcpServers)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolve assistant attachments").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve assistant attachments").LogError(ctx, s.logger)
 	}
 	if len(ids) == 0 {
-		return nil
+		return nil, nil
 	}
-	checks := make([]authz.Check, len(ids))
+	connectChecks := make([]authz.Check, len(ids))
+	writeChecks := make([]authz.Check, len(ids))
 	for i, id := range ids {
-		checks[i] = authz.MCPCheck(authz.ScopeMCPConnect, id.String(), projectID.String())
+		connectChecks[i] = authz.MCPCheck(authz.ScopeMCPConnect, id.String(), projectID.String())
+		writeChecks[i] = authz.MCPCheck(authz.ScopeMCPWrite, id.String(), projectID.String())
 	}
-	return s.authz.Require(ctx, checks...)
+	if err := s.authz.Require(ctx, connectChecks...); err != nil {
+		return nil, err
+	}
+	writable, err := s.authz.Filter(ctx, writeChecks)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[uuid.UUID]struct{}, len(writable))
+	for _, id := range writable {
+		if parsed, parseErr := uuid.Parse(id); parseErr == nil {
+			allowed[parsed] = struct{}{}
+		}
+	}
+	return func(id uuid.UUID) bool {
+		_, ok := allowed[id]
+		return ok
+	}, nil
 }
 
 func (s *Service) Kind() string {
@@ -525,7 +530,7 @@ func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
 }
 
 // startRuntimeWarmup eagerly boots the assistant's runtime so the first turn
-// doesn't pay the Fly cold-start cost. It rides the standard turn machinery:
+// doesn't pay the runtime cold-start cost. It rides the standard turn machinery:
 // an event-less warmup thread reserves the runtime row, and its thread
 // workflow runs Ensure, coordinator kicks and the warm window exactly as a
 // turn would. Best-effort: a failure here never fails the request — the
@@ -575,6 +580,8 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeForbidden, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrActorIneligible):
 		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
+	case errors.Is(err, errMCPEnableForbidden):
+		return oops.E(oops.CodeForbidden, err, "%s", errMCPEnableForbidden.Error()).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
 		return oops.E(oops.CodeBadRequest, err, "%s", message).LogError(ctx, logger)
 	default:
@@ -592,9 +599,6 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	}
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "upgrade assistant identity requires a user identity").LogWarn(ctx, s.logger)
-	}
-	if !s.identityProvisioningEnabled(ctx, authCtx) {
-		return nil, oops.E(oops.CodeForbidden, ErrIdentityProvisioningDisabled, "assistant workload identity is not enabled for this organization").LogWarn(ctx, s.logger)
 	}
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {

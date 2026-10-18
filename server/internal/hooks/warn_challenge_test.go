@@ -378,7 +378,7 @@ func TestIngest_CanonicalAcknowledgedPermissionWarn_StillRunsShadowMCPGuard(t *t
 			CallFingerprint: "canonical-perm-warn-shadow",
 		},
 		// A shadow-MCP blocking policy is enabled; with no bypass grant and a
-		// non-Gram-hosted server the guard must deny.
+		// non-Speakeasy-hosted server the guard must deny.
 		shadowPolicy: &risk.ShadowMCPPolicy{ID: uuid.NewString(), Name: "shadow guard"},
 	}
 

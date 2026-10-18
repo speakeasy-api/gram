@@ -36,7 +36,7 @@ func newMCPAuthTestService(t *testing.T, conn *pgxpool.Pool) *Service {
 		conn,
 		guardianPolicy,
 		testenv.NewEncryptionClient(t),
-		testRuntimeBackend{backend: runtimeBackendFlyIO},
+		testRuntimeBackend{backend: runtimeBackendGKE},
 		nil,
 		nil,
 		nil,
@@ -102,7 +102,7 @@ func TestGetOrRegisterMCPAuthClientReusesRegistration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "stable-secret", secret)
 	request := <-requests
-	require.Equal(t, "Gram Assistant "+assistantID.String(), request.ClientName)
+	require.Equal(t, "Speakeasy Assistant "+assistantID.String(), request.ClientName)
 	require.Equal(t, []string{redirectURI}, request.RedirectURIs)
 
 	deleteTx := testenv.BeginTx(t, t.Context(), conn)

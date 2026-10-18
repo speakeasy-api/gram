@@ -17,7 +17,27 @@ const DIRECTORY_MAPPING_FLOW = "directory-mapping";
 const FLOW_PARAM = "mapping";
 const STORAGE_PREFIX = "gram.directoryRoleMappingFlow.";
 
-type MappingSource = Omit<SetDirectoryRoleMappingsForm, "roleUrns">;
+export type MappingSource = Omit<
+  SetDirectoryRoleMappingsForm,
+  "roleUrns" | "expectedRoleUrns"
+>;
+
+/** Every role currently mapped from `source`, used as the stale-write guard. */
+export function sourceRoleUrns(
+  mappings: DirectoryRoleMapping[],
+  source: MappingSource,
+): string[] {
+  return mappings
+    .filter((mapping) =>
+      source.sourceKind === "group"
+        ? mapping.sourceKind === "group" &&
+          mapping.directoryGroupId === source.directoryGroupId
+        : mapping.sourceKind === "attribute" &&
+          mapping.attributeKey === source.attributeKey &&
+          mapping.attributeValue === source.attributeValue,
+    )
+    .map((mapping) => mapping.roleUrn);
+}
 
 type FlowRecord = {
   source: MappingSource;
@@ -92,7 +112,11 @@ export function completeCreateRoleFlow(
   return new URLSearchParams({ [FLOW_PARAM]: key });
 }
 
-/** The mapping to save on return, once the editor recorded a created role. */
+/**
+ * The mapping to save on return, once the editor recorded a created role. The
+ * new role is added to the source's current roles, guarded by the roles mapped
+ * now so a source another tab changed is refused rather than overwritten.
+ */
 export function pendingMappingFromParams(
   params: URLSearchParams,
   mappings: DirectoryRoleMapping[] = [],
@@ -100,16 +124,7 @@ export function pendingMappingFromParams(
   const key = params.get(FLOW_PARAM);
   const record = key ? readRecord(key) : undefined;
   if (!key || !record?.roleUrn) return undefined;
-  const existingRoles = mappings
-    .filter((mapping) =>
-      record.source.sourceKind === "group"
-        ? mapping.sourceKind === "group" &&
-          mapping.directoryGroupId === record.source.directoryGroupId
-        : mapping.sourceKind === "attribute" &&
-          mapping.attributeKey === record.source.attributeKey &&
-          mapping.attributeValue === record.source.attributeValue,
-    )
-    .map((mapping) => mapping.roleUrn);
+  const existingRoles = sourceRoleUrns(mappings, record.source);
   return {
     key,
     form: {

@@ -97,7 +97,7 @@ describe("connectionState", () => {
     ).toBe("expiring");
   });
 
-  // The inbound leg being healthy says nothing about whether Gram can still
+  // The inbound leg being healthy says nothing about whether Speakeasy can still
   // reach the upstream — this is the case a session-only view cannot express.
   it("reports needs_reauth when an upstream has lost its grant", () => {
     const broken = session({

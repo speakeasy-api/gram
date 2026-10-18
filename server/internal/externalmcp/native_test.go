@@ -56,6 +56,51 @@ func TestNativeList(t *testing.T) {
 	require.False(t, source.options[0].IncludeDeleted)
 }
 
+// Native capability metadata controls listing eligibility, not live OAuth readiness.
+func TestNativeListSupportsDcr(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		catalog map[string]any
+		pulse   bool
+		want    bool
+	}{
+		{name: "native true", catalog: map[string]any{"supportsDcr": true}, want: true},
+		{name: "native false", catalog: map[string]any{"supportsDcr": false}},
+		{name: "native false overrides Pulse", catalog: map[string]any{"supportsDcr": false}, pulse: true},
+		{name: "missing native metadata falls back to Pulse", pulse: true, want: true},
+		{name: "missing native field falls back to Pulse", catalog: map[string]any{}, pulse: true, want: true},
+		{name: "no capability metadata"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var record map[string]any
+			require.NoError(t, json.Unmarshal([]byte(nativeRecord), &record))
+			meta := nativeTestMap(t, record["_meta"])
+			if tc.catalog != nil {
+				meta["com.speakeasy.ai/catalog"] = tc.catalog
+			}
+			if tc.pulse {
+				version := nativeTestMap(t, meta["com.pulsemcp/server-version"])
+				remote := nativeTestMap(t, version["remotes[0]"])
+				remote["authOptions"] = []any{map[string]any{
+					"type": "oauth",
+					"detail": map[string]any{
+						"authorizationServerMetadata": map[string]any{"registration_endpoint": "https://example.com/register"},
+					},
+				}}
+			}
+			raw, err := json.Marshal(record)
+			require.NoError(t, err)
+			source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{raw}}}}
+			result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{})
+			require.NoError(t, err)
+			require.Len(t, result.Servers, 1)
+			require.Equal(t, tc.want, result.Servers[0].SupportsDcr)
+		})
+	}
+}
+
 func TestNativeDetailsRetainedRemoteSelection(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

@@ -112,6 +112,44 @@ describe("create role round trip", () => {
     ).toBe("");
   });
 
+  it("guards the addition with the source's current roles", () => {
+    const back = completeCreateRoleFlow(
+      startCreateRoleFlow(
+        {
+          sourceKind: "attribute",
+          attributeKey: "department",
+          attributeValue: "Sales",
+        },
+        "Sales",
+      ),
+      "role:organization:new",
+    );
+    const mapping = (
+      roleUrn: string,
+      attributeValue: string,
+    ): DirectoryRoleMapping => ({
+      id: roleUrn,
+      sourceKind: "attribute",
+      attributeKey: "department",
+      attributeValue,
+      roleUrn,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+    expect(
+      pendingMappingFromParams(back, [
+        mapping("role:organization:old", "Sales"),
+        mapping("role:organization:other", "Engineering"),
+      ])?.form,
+    ).toEqual({
+      sourceKind: "attribute",
+      attributeKey: "department",
+      attributeValue: "Sales",
+      roleUrns: ["role:organization:old", "role:organization:new"],
+      expectedRoleUrns: ["role:organization:old"],
+    });
+  });
+
   it("does not map before the editor records a created role", () => {
     const toEditor = startCreateRoleFlow(
       { sourceKind: "group", directoryGroupId: "group-1" },

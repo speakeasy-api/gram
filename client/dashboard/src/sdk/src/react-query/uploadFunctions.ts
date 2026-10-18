@@ -54,7 +54,7 @@ export type UploadFunctionsMutationError =
  * uploadFunctions assets
  *
  * @remarks
- * Upload functions to Gram.
+ * Upload functions to Speakeasy.
  */
 export function useUploadFunctionsMutation(
   options?: MutationHookOptions<

@@ -254,7 +254,7 @@ demo_resource_attrs() {
 # Codex is configured through config.toml rather than the environment. A named
 # profile is layered over the developer's own config, which keeps their
 # provider, auth and model working while replacing the whole `[otel]` block
-# rather than merging into it — their block routinely points at a real Gram
+# rather than merging into it — their block routinely points at a real Speakeasy
 # project with a live key, and none of it survives this. The credential lives
 # here rather than in a -c override so it stays out of the process arguments,
 # where any local user could read it off `ps` for the length of the run.
@@ -434,7 +434,7 @@ run_turn() {
 
 curl -skf -o /dev/null "${GRAM_SERVER_URL}/health" 2>/dev/null ||
   curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs" 2>/dev/null | grep -qE '^[0-9]' ||
-  fail "the Gram server is not answering on ${GRAM_SERVER_URL} — run \`mise run start\` first"
+  fail "the Speakeasy server is not answering on ${GRAM_SERVER_URL} — run \`mise run start\` first"
 
 # Anything the machine cannot run is dropped rather than fatal: a developer
 # with only one of these installed still gets a populated dashboard, just with

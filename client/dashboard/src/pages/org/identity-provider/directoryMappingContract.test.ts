@@ -1,11 +1,12 @@
-import { Gram } from "@gram/client";
-import { HTTPClient } from "@gram/client/lib/http.js";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   completeCreateRoleFlow,
   pendingMappingFromParams,
   startCreateRoleFlow,
 } from "./directoryMappingFlow";
+
+import { Gram } from "@gram/client";
+import { HTTPClient } from "@gram/client/lib/http.js";
 
 afterEach(() => window.sessionStorage.clear());
 
@@ -30,62 +31,57 @@ function recordingClient() {
 }
 
 describe("directory mapping SDK contract", () => {
-  it("keeps legacy singleton requests on the guarded endpoint", async () => {
-    const { client, requests } = recordingClient();
-    await expect(
-      client.access.setDirectoryRoleMapping({
-        setDirectoryRoleMappingForm: {
-          sourceKind: "attribute",
-          attributeKey: "department",
-          attributeValue: "Engineering",
-          roleUrn: "role:global:admin",
-        },
-      }),
-    ).rejects.toMatchObject({ statusCode: 409 });
-    expect(requests).toHaveLength(1);
-    expect(new URL(requests[0]!.url).pathname).toBe(
-      "/rpc/access.setDirectoryRoleMapping",
-    );
-    expect(await requests[0]!.json()).toEqual({
-      source_kind: "attribute",
-      attribute_key: "department",
-      attribute_value: "Engineering",
-      role_urn: "role:global:admin",
-    });
-  });
-
-  it("sends the create-role return precondition and surfaces conflicts", async () => {
-    const { client, requests } = recordingClient();
-    const form = pendingMappingFromParams(
-      completeCreateRoleFlow(
-        startCreateRoleFlow(
-          {
-            sourceKind: "attribute",
-            attributeKey: "department",
-            attributeValue: "Engineering",
-          },
-          "Engineering",
-        ),
-        "role:global:admin",
-      ),
-    )!.form;
-    await expect(
-      client.access.setDirectoryRoleMappings({
-        setDirectoryRoleMappingsForm: form,
-      }),
-    ).rejects.toMatchObject({ statusCode: 409 });
-    expect(requests).toHaveLength(1);
-    expect(new URL(requests[0]!.url).pathname).toBe(
-      "/rpc/access.setDirectoryRoleMappings",
-    );
-    expect(await requests[0]!.json()).toEqual({
-      source_kind: "attribute",
-      attribute_key: "department",
-      attribute_value: "Engineering",
-      expected_role_urns: [],
-      role_urns: ["role:global:admin"],
-    });
-  });
+  it.each(["chip edit", "create-role return"])(
+    "sends a %s as a guarded set write and surfaces conflicts",
+    async (flow) => {
+      const { client, requests } = recordingClient();
+      const source = {
+        sourceKind: "attribute" as const,
+        attributeKey: "department",
+        attributeValue: "Engineering",
+      };
+      const roleUrn = "role:global:admin";
+      const previous = "role:organization:previous";
+      const form =
+        flow === "chip edit"
+          ? {
+              ...source,
+              roleUrns: [previous, roleUrn],
+              expectedRoleUrns: [previous],
+            }
+          : pendingMappingFromParams(
+              completeCreateRoleFlow(
+                startCreateRoleFlow(source, "Engineering"),
+                roleUrn,
+              ),
+              [
+                {
+                  id: "mapping-1",
+                  ...source,
+                  roleUrn: previous,
+                  createdAt: new Date(0),
+                  updatedAt: new Date(0),
+                },
+              ],
+            )!.form;
+      await expect(
+        client.access.setDirectoryRoleMappings({
+          setDirectoryRoleMappingsForm: form,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+      expect(requests).toHaveLength(1);
+      expect(new URL(requests[0]!.url).pathname).toBe(
+        "/rpc/access.setDirectoryRoleMappings",
+      );
+      expect(await requests[0]!.json()).toEqual({
+        source_kind: "attribute",
+        attribute_key: "department",
+        attribute_value: "Engineering",
+        role_urns: [previous, roleUrn],
+        expected_role_urns: [previous],
+      });
+    },
+  );
 
   it.each([undefined, [], ["role:global:admin"]])(
     "preserves optional expected sets on the wire: %j",

@@ -37,8 +37,8 @@ type OrganizationCoverage struct {
 func registerCoverageTools(server *mcp.Server, organizations OrganizationReader, coverage CoverageReader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_organization_support_coverage",
-		Title:       "What Gram Observes for an Organization",
-		Description: "Report which consuming surfaces (Claude Code, Claude Chat, Cowork, Codex, Cursor, other agents) Gram has evidence for in an exact organization, across session activity, policy enforcement, identity attribution, token usage and shadow MCP. A cell reporting no evidence means nothing was observed, not that the surface is unsupported.",
+		Title:       "What Speakeasy Observes for an Organization",
+		Description: "Report which consuming surfaces (Claude Code, Claude Chat, Cowork, Codex, Cursor, other agents) Speakeasy has evidence for in an exact organization, across session activity, policy enforcement, identity attribution, token usage and shadow MCP. A cell reporting no evidence means nothing was observed, not that the surface is unsupported.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, OrganizationCoverage, error) {
 		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)

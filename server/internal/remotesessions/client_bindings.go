@@ -75,16 +75,22 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 // clients (project_id NULL) belonging to organizationID and global catalog
 // clients. Every tier requires an explicit issuer link. Used by consent
 // rendering and token resolution.
+//
+// organizationWide admits the clients of every live project in the
+// organization instead of projectID's alone, for an organization-level
+// issuer only.
 func (m *ChallengeManager) listRemoteSessionClientRowsForUserSessionIssuer(
 	ctx context.Context,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
+	organizationWide bool,
 ) ([]repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
 	rows, err := repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(projectID),
 		OrganizationID:      conv.ToPGText(organizationID),
+		OrganizationWide:    organizationWide,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients for user_session_issuer: %w", err)

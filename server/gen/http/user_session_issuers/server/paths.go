@@ -27,6 +27,11 @@ func GetUserSessionIssuerUserSessionIssuersPath() string {
 	return "/rpc/userSessionIssuers.get"
 }
 
+// GetAttachImpactUserSessionIssuersPath returns the URL path to the userSessionIssuers service getAttachImpact HTTP endpoint.
+func GetAttachImpactUserSessionIssuersPath() string {
+	return "/rpc/userSessionIssuers.getAttachImpact"
+}
+
 // DeleteUserSessionIssuerUserSessionIssuersPath returns the URL path to the userSessionIssuers service deleteUserSessionIssuer HTTP endpoint.
 func DeleteUserSessionIssuerUserSessionIssuersPath() string {
 	return "/rpc/userSessionIssuers.delete"

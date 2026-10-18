@@ -11,7 +11,7 @@ import (
 // StubResolverPrincipal is the ambient principal NewStubResolver reports when no
 // impersonation target is named. It is a service account in a project of its
 // own, distinct from any target a test is likely to use, so callers that screen
-// impersonation targets against Gram's own project behave as they would in
+// impersonation targets against Speakeasy's own project behave as they would in
 // production rather than accidentally matching.
 const StubResolverPrincipal = "gram@gram-stub.iam.gserviceaccount.com"
 

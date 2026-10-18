@@ -20,7 +20,7 @@ var (
 )
 
 // NormalizeOktaOrgURL validates an administrator-supplied Okta org URL and
-// returns its canonical origin form. The value becomes the issuer Gram
+// returns its canonical origin form. The value becomes the issuer Speakeasy
 // discovers and the audience it signs client assertions for, so anything
 // beyond an https origin on an Okta-owned host is refused, except an admin
 // console URL (acme-admin.okta.com/admin/...), which resolves to its org.

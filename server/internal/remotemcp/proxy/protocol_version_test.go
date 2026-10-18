@@ -60,7 +60,7 @@ func postSpanAttributes(t *testing.T, recorder *tracetest.SpanRecorder) map[stri
 // initialize-response path exists for: the client asks for a newer revision and
 // the upstream answers with an older one. Both values land on the proxy's own
 // span so the downgrade is attributable to the upstream leg rather than reading
-// as though Gram pinned the version.
+// as though Speakeasy pinned the version.
 func TestProxy_Post_RecordsUpstreamDowngradeOnProxySpan(t *testing.T) {
 	t.Parallel()
 

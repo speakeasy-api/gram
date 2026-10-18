@@ -1,10 +1,12 @@
+import { Checkbox } from "@/components/ui/Checkbox";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { authPageHref } from "@/lib/safe-external-url";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useForm } from "@tanstack/react-form";
+import { useState } from "react";
 import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
-import { SigninErrorNotice } from "./auth-errors";
+import { AuthErrorText, SigninErrorNotice } from "./auth-errors";
 import { normalizeOrgName, validateOrgName } from "./org-name";
 
 // Mirrors the server's validateSignupEmail. WorkOS verifies the address and
@@ -25,6 +27,11 @@ function validateEmail(value: string): string | undefined {
   return undefined;
 }
 
+function validateTerms(value: boolean): string | undefined {
+  if (value) return undefined;
+  return "You must agree to the Terms of Service to continue";
+}
+
 /** First error string for a field, or undefined. */
 function firstError(errors: unknown[]): string | undefined {
   const error = errors.find(Boolean);
@@ -33,19 +40,26 @@ function firstError(errors: unknown[]): string | undefined {
 
 export function SignUpPanel({
   redirectTo,
+  partnerCode: initialPartnerCode = "",
 }: {
   redirectTo?: string | null;
+  partnerCode?: string;
 }): JSX.Element {
   const telemetry = useTelemetry();
+  const [partnerCode] = useState(initialPartnerCode);
   const form = useForm({
-    defaultValues: { email: "", companyName: "" },
+    defaultValues: { email: "", companyName: "", acceptedTerms: false },
     onSubmit: ({ value }) => {
+      if (partnerCode.length > 80) return;
+      const submittedPartnerCode = partnerCode.trim();
       // The server has no identity until the identity provider answers, so it
       // can't count this attempt — only the client sees it. Firing here joins
       // signup_started to the server's new_org_created for a real conversion rate.
       telemetry.capture("onboarding_event", {
         action: "signup_started",
         created_via: "signup",
+        accepted_terms: value.acceptedTerms,
+        ...(submittedPartnerCode ? { partner_code: submittedPartnerCode } : {}),
       });
 
       // The org itself is created server-side during the auth callback. The
@@ -59,6 +73,7 @@ export function SignUpPanel({
           redirectTo ?? null,
           normalizeOrgName(value.companyName),
           value.email.trim(),
+          submittedPartnerCode,
         ),
       );
     },
@@ -95,10 +110,18 @@ export function SignUpPanel({
       >
         <div className="flex flex-col gap-1">
           <p className="auth-mono text-[16px] tracking-[0.06em]">Sign up</p>
-          <p className="auth-mono-text text-[12px] text-(--muted-strong)">
-            Get a 14-day trial of the full control plane.
-          </p>
+          {!partnerCode.trim() && (
+            <p className="auth-mono-text text-[12px] text-(--muted-strong)">
+              Get a 14-day trial of the full control plane.
+            </p>
+          )}
         </div>
+
+        {partnerCode.length > 80 && (
+          <AuthErrorText>
+            Partner code must be 80 characters or fewer.
+          </AuthErrorText>
+        )}
 
         {/* Field and CTA share one subscription: `form.state` is a plain getter
             onto the store, so only `Subscribe` (and `field.state` inside
@@ -213,6 +236,61 @@ export function SignUpPanel({
                 }}
               </form.Field>
 
+              <form.Field
+                name="acceptedTerms"
+                validators={{
+                  onChange: ({ value }) => validateTerms(value),
+                  onSubmit: ({ value }) => validateTerms(value),
+                }}
+              >
+                {(field) => {
+                  const error = firstError(field.state.meta.errors);
+                  return (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          id={field.name}
+                          name={field.name}
+                          checked={field.state.value}
+                          onCheckedChange={(checked) =>
+                            field.handleChange(checked === true)
+                          }
+                          onBlur={field.handleBlur}
+                          aria-required="true"
+                          aria-invalid={error ? true : undefined}
+                          aria-describedby={
+                            error ? `${field.name}-error` : undefined
+                          }
+                          className="mt-0.5"
+                        />
+                        <label
+                          htmlFor={field.name}
+                          className="text-[14px] leading-5 text-(--muted-strong)"
+                        >
+                          I agree to the Speakeasy{" "}
+                          <a
+                            href="https://www.speakeasy.com/terms"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-(--link) underline hover:text-(--focus)"
+                          >
+                            Terms of Service
+                          </a>
+                        </label>
+                      </div>
+                      {error && (
+                        <p
+                          id={`${field.name}-error`}
+                          className="mt-0.5 text-[12px] leading-[1.45] text-destructive"
+                        >
+                          {error}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
+              </form.Field>
+
               {/* No spinner: the handoff is a top-level navigation, not an
                   awaited promise, so isSubmitting flips back before the browser
                   leaves the page and a spinner would flash for a few frames at
@@ -226,7 +304,12 @@ export function SignUpPanel({
                   WorkOS — email and password among them. */}
               <button
                 type="submit"
-                disabled={!canSubmit || isSubmitting || isSubmitted}
+                disabled={
+                  !canSubmit ||
+                  isSubmitting ||
+                  isSubmitted ||
+                  partnerCode.length > 80
+                }
                 className={cn(
                   AUTH_BUTTON_CLASSES,
                   "mx-auto px-[22px] disabled:cursor-not-allowed disabled:opacity-50",
@@ -246,7 +329,7 @@ export function SignUpPanel({
       <p className="mt-2 text-[14px] text-(--muted-strong)">
         Already have an account?{" "}
         <Link
-          to={authPageHref("/login", redirectTo)}
+          to={authPageHref("/login", redirectTo, partnerCode)}
           className="text-(--link) underline hover:text-(--focus)"
         >
           Log in

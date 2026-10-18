@@ -1,7 +1,7 @@
 // upstreamrevoke_e2e_test.go drives the RFC 7009 client side against a live
 // dev-idp acting as the upstream authorization server.
 //
-// The httptest-based tests in upstreamrevoke_test.go assert what Gram *sends* —
+// The httptest-based tests in upstreamrevoke_test.go assert what Speakeasy *sends* —
 // a spy records the form and stops there. That leaves the half that actually
 // matters unproven: whether a real authorization server accepts the request and
 // treats the credential as dead afterwards. A spy will happily record a
@@ -12,7 +12,7 @@
 // stamped across the call. That before/after delta is proof the revocation
 // landed, not proof we formatted it nicely. Each test also reads the revocation
 // endpoint out of dev-idp's RFC 8414 metadata document rather than hardcoding a
-// path, so drift between what issuers advertise and what Gram calls shows up
+// path, so drift between what issuers advertise and what Speakeasy calls shows up
 // here.
 
 package remotesessions_test
@@ -79,8 +79,8 @@ func requireTokenActive(t *testing.T, ctx context.Context, inst *devidptest.Inst
 	t.Helper()
 
 	found, revoked := tokenRevokedAt(t, ctx, inst, token)
-	require.True(t, found, "token should exist in dev-idp before Gram revokes it")
-	require.False(t, revoked, "token should still be live before Gram revokes it")
+	require.True(t, found, "token should exist in dev-idp before Speakeasy revokes it")
+	require.False(t, revoked, "token should still be live before Speakeasy revokes it")
 }
 
 func requireTokenRevoked(t *testing.T, ctx context.Context, inst *devidptest.Instance, token string) {
@@ -88,11 +88,11 @@ func requireTokenRevoked(t *testing.T, ctx context.Context, inst *devidptest.Ins
 
 	found, revoked := tokenRevokedAt(t, ctx, inst, token)
 	require.True(t, found, "dev-idp must still hold the row — revocation stamps it, it does not delete it")
-	require.True(t, revoked, "dev-idp must have stamped revoked_at after Gram's RFC 7009 call")
+	require.True(t, revoked, "dev-idp must have stamped revoked_at after Speakeasy's RFC 7009 call")
 }
 
 // seedDevIdpRefreshToken inserts a refresh token the dev-idp will honour, and
-// returns the opaque string so the Gram-side session can be seeded to wrap it.
+// returns the opaque string so the Speakeasy-side session can be seeded to wrap it.
 func seedDevIdpRefreshToken(t *testing.T, ctx context.Context, inst *devidptest.Instance, token string) {
 	t.Helper()
 
@@ -115,7 +115,7 @@ func TestRevokeRemoteSession_E2E_DevIdpDropsRefreshToken(t *testing.T) {
 	ctx, ti := newTestService(t)
 	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil})
 
-	// The Gram-side fixture derives its refresh-token string from the slug, so
+	// The Speakeasy-side fixture derives its refresh-token string from the slug, so
 	// the dev-idp row has to use the same value to be the same credential.
 	slug := "e2e-devidp-refresh"
 	refreshToken := slug + "-refresh"
