@@ -120,10 +120,6 @@ Migration rules live in the `postgresql` skill (`.agents/skills/postgresql/SKILL
 
 Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-temporal/SKILL.md`). Activate it any time you touch `server/internal/background/`, add a Temporal schedule, signal, or workflow start, or make anything react to chat messages, tool calls, MCP requests, or other per-row events.
 
-### Prompt injection detection
-
-Any change that can alter a prompt-injection verdict must pass `mise run risk:pi` locally before merge: 0 false positives and at least 80% of all attacks caught. With `--compare main` it also compares the change with main, case by case. No CI job runs it, because it calls paid models. Activate the `benchmarking-prompt-injection` skill (`.agents/skills/benchmarking-prompt-injection/SKILL.md`) only when changing or reviewing the detector's prompts or model selection, or when explicitly asked to run, investigate, or maintain its `risk:pi` benchmark, results, or fixtures. Do not activate it for hook or upload handling, attachment ingestion, policy enforcement, evidence assembly, or other changes that leave detector prompts and models unchanged unless the task explicitly concerns the benchmark.
-
 ### Platform MCP
 
 The Platform MCP is a first-party product surface under `server/internal/platformmcp/`. When adding or changing backend APIs, dashboard workflows, permissions, or user-facing product capabilities, explicitly assess whether an existing Platform MCP tool must change or a new outcome-oriented tool should be added. Keep tool schemas, descriptions, authorization, audiences, server instructions, tests, and shipped Platform MCP skills in sync with the product behavior. Activate the `maintaining-platform-mcp` skill (`.agents/skills/maintaining-platform-mcp/SKILL.md`) for this assessment and any Platform MCP implementation. Use `authoring-platform-mcp-skills` as well when changing workflows under `server/internal/plugins/platform_mcp_skills/`.
