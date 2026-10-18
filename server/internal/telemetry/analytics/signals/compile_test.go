@@ -64,3 +64,12 @@ func TestSelectionRejectsAmbiguousPopulations(t *testing.T) {
 	require.Contains(t, plan.Prepared.SQL, "arraySlice(signal_probabilities, 2)")
 	require.NotContains(t, plan.Prepared.SQL, "expected_index")
 }
+
+func TestSelectorsRespectByteBudgetWithExplicitGroups(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	ctx := Context{OrganizationID: "example-org", ProjectID: uuid.NewString(), From: now.Add(-time.Hour), To: now, Now: now, Step: "hour"}
+	request := Request{Selection: Selection{SensorID: uuid.NewString(), SignalID: uuid.NewString(), Threshold: 0.5}, Groups: 2, Filters: []Filter{{Dimension: Dimension{Attribute: "team"}, Operator: "equals", Values: []string{strings.Repeat("x", MaxSelectorBytes)}}}}
+	_, err := Compile(ctx, request)
+	require.ErrorContains(t, err, "64 KiB")
+}

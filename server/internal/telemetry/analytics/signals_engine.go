@@ -2,6 +2,8 @@ package analytics
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +46,15 @@ type SignalMetadata struct {
 	// QueriedAt is query time, not a replayable historical snapshot.
 	QueriedAt string `json:"queried_at"`
 
+	// From is the inclusive activity-window boundary, including partial edges.
+	From string `json:"from"`
+
+	// To is the exclusive activity-window boundary.
+	To string `json:"to"`
+
+	// Filters retains the measured cohort for interpreting exported results.
+	Filters []signalquery.Filter `json:"filters"`
+
 	// Snapshot states that live latest-attempt reads may change on requery.
 	Snapshot string `json:"snapshot"`
 
@@ -75,7 +86,7 @@ type SignalResult struct {
 	Groups []Row `json:"groups"`
 
 	// Rows contains all selected buckets, including explicitly unknown gaps.
-	Rows []Row `json:"rows"`
+	Rows []Row `json:"-"`
 }
 
 // SignalQuery executes the canonical semantic compiler through the shared runner.
@@ -126,10 +137,12 @@ func (e *Engine) SignalQuery(ctx context.Context, tenant Tenant, window Window, 
 			Step: plan.Context.Step, PhysicalResolution: "canonical", TimeAxis: "event_occurred_at", Unit: "original_message",
 			Population: "answered original-message readings that measured the selected signal or ordered level",
 			Coverage:   "unknown", QueriedAt: plan.Context.Now.Format(time.RFC3339Nano), Snapshot: "live", Exact: true,
-			SeriesComplete: true, GroupsTruncated: false, GroupBy: plan.Request.GroupBy, PointBudget: plan.Request.Points,
+			From: plan.Context.From.Format(time.RFC3339Nano), To: plan.Context.To.Format(time.RFC3339Nano), Filters: append([]signalquery.Filter{}, plan.Request.Filters...),
+			SeriesComplete: true, GroupsTruncated: false, GroupBy: append([]signalquery.Dimension{}, plan.Request.GroupBy...), PointBudget: plan.Request.Points,
 		}, Summary: nil, Groups: make([]Row, 0, plan.Request.Groups), Rows: []Row{},
 	}
 	keys := make([]string, 0, plan.Request.Groups)
+	seriesIDs := make(map[string]string, plan.Request.Groups)
 	if plan.Request.Trigger == "stream" {
 		result.Metadata.RunID = ""
 	}
@@ -155,6 +168,11 @@ func (e *Engine) SignalQuery(ctx context.Context, tenant Tenant, window Window, 
 		if err := normalizeSignalRow(row); err != nil {
 			return nil, err
 		}
+		seriesID, ok := row["series_id"].(string)
+		if !ok {
+			return nil, fmt.Errorf("signal series has no display identity")
+		}
+		seriesIDs[key] = seriesID
 		result.Groups = append(result.Groups, row)
 	}
 	if len(keys) == 0 {
@@ -191,7 +209,9 @@ func (e *Engine) SignalQuery(ctx context.Context, tenant Tenant, window Window, 
 			row["bucket_end"] = next.Format(time.RFC3339Nano)
 			row["partial"] = at.Before(plan.Context.From) || next.After(plan.Context.To)
 			row["observed"] = present
-			if err := normalizeSignalRow(row); err != nil {
+			row["series_id"] = seriesIDs[key]
+			delete(row, "group_key")
+			if err := normalizeSignalMeasures(row); err != nil {
 				return nil, err
 			}
 			result.Rows = append(result.Rows, row)
@@ -215,7 +235,7 @@ func signalFailure(err error) error {
 	}
 	if exception, ok := errors.AsType[*clickhouse.Exception](err); ok {
 		switch exception.Code {
-		case 158, 159, 241:
+		case 158, 159, 241, 307, 396:
 			return newError(ErrLimitExceeded, signalquery.Dataset, "window", "", "this range exceeds the interactive read budget; choose a shorter time range")
 		}
 	}
@@ -240,7 +260,8 @@ func normalizeSignalRow(row Row) error {
 			values[i] = pair[1]
 		}
 	}
-	row["series_id"], row["group_values"] = key, values
+	hash := sha256.Sum256([]byte(key))
+	row["series_id"], row["group_values"] = hex.EncodeToString(hash[:]), values
 	delete(row, "group_key")
 	delete(row, "is_total")
 	return normalizeSignalMeasures(row)

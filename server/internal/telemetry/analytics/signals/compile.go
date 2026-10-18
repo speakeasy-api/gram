@@ -19,24 +19,17 @@ const settings = ` SETTINGS do_not_merge_across_partitions_select_final = 1,
  optimize_move_to_prewhere_if_final = 0, max_execution_time = 5,
  timeout_before_checking_execution_speed = 0, max_rows_to_read = 25000000,
  max_bytes_to_read = 4000000000, max_memory_usage = 1000000000,
- max_result_rows = 10002, result_overflow_mode = 'throw'`
+ max_result_rows = 10002, max_result_bytes = 16000000, result_overflow_mode = 'throw'`
 
 // Compile validates and compiles exact, key-qualified canonical reads.
 func Compile(ctx Context, request Request) (*Plan, error) {
-	if err := validate(&ctx, &request); err != nil {
+	if err := validateScope(&ctx, &request); err != nil {
 		return nil, err
 	}
-	source := sql.Select("id", "event_id", "event_occurred_at", "conversation_id", "conversation_role", "source", "actor_user_id", "assistant_id", "attributes", "status", "definition_hash", "configured_model", "compiler_version", "input_strategy", "inserted_at", "result_type", "selected_signal_id", "probabilities.signal_id AS signal_ids", "probabilities.probability AS signal_probabilities").
-		From("sigint_readings_v2 FINAL").
-		Where("organization_id = ? AND project_id = toUUID(?)", ctx.OrganizationID, ctx.ProjectID).
-		Where("trigger_kind = ? AND run_id = toUUID(?) AND sensor_id = toUUID(?)", request.Trigger, request.RunID, request.Selection.SensorID).
-		Where("event_occurred_at >= fromUnixTimestamp64Nano(?) AND event_occurred_at < fromUnixTimestamp64Nano(?)", ctx.From.UnixNano(), ctx.To.UnixNano()).
-		Where("addYears(toDateTime(evaluation_requested_at, 'UTC'), 2) > fromUnixTimestamp64Nano(?)", ctx.Now.UnixNano()).
-		Where("event_kind = 'conversation.message'").
-		Where("(conversation_capture_kind = 'original' OR (conversation_capture_kind = '' AND conversation_generation = 0))")
-	if request.Trigger == "manual" && ctx.RequestedAt != nil {
-		source = source.Where("evaluation_requested_at = fromUnixTimestamp64Nano(?)", ctx.RequestedAt.UnixNano())
+	if err := validateSelection(request.Selection); err != nil {
+		return nil, err
 	}
+	source := canonicalSource(ctx, request)
 	prepared := sql.Select("*").FromSelect(source, "winners")
 	for _, filter := range request.Filters {
 		expression, args := dimension(filter.Dimension)
@@ -154,7 +147,7 @@ func build(builder squirrel.SelectBuilder, bounded bool) (Query, error) {
 	return Query{SQL: query, Args: args}, nil
 }
 
-func validate(ctx *Context, request *Request) error {
+func validateScope(ctx *Context, request *Request) error {
 	invalid := func(field, message string) error { return &Error{Field: field, Message: message} }
 	if _, err := uuid.Parse(ctx.ProjectID); err != nil || ctx.OrganizationID == "" {
 		return invalid("project", "an authorized organization and project are required")
@@ -164,17 +157,6 @@ func validate(ctx *Context, request *Request) error {
 	}
 	if _, err := uuid.Parse(request.Selection.SensorID); err != nil || request.Selection.SensorID == uuid.Nil.String() {
 		return invalid("selection.sensor_id", "name one sensor by its UUID")
-	}
-	if request.Selection.MinimumLevel != nil {
-		if request.Selection.SignalID != "" || *request.Selection.MinimumLevel < 0 || *request.Selection.MinimumLevel > 9 {
-			return invalid("selection.minimum_level", "choose one zero-based ordered level (0–9), without signal_id")
-		}
-	} else if id, err := uuid.Parse(request.Selection.SignalID); err != nil || id == uuid.Nil {
-		return invalid("selection.signal_id", "name a signal or choose an ordered minimum_level")
-	}
-	threshold := request.Selection.Threshold
-	if math.IsNaN(threshold) || math.IsInf(threshold, 0) || threshold <= 0 || threshold > 1 {
-		return invalid("selection.threshold", "choose an explicit probability threshold greater than zero and at most one")
 	}
 	if request.Trigger == "" {
 		request.Trigger = "stream"
@@ -198,13 +180,19 @@ func validate(ctx *Context, request *Request) error {
 		return invalid("dimensions", "use at most three groupings and twenty filters")
 	}
 	seen := map[Dimension]bool{}
+	selectorBytes := 0
 	for _, group := range request.GroupBy {
+		selectorBytes += len(group.Attribute)
 		if !validDimension(group) || seen[group] {
 			return invalid("group_by", "use unique system dimensions or nonempty attribute keys of at most 256 bytes")
 		}
 		seen[group] = true
 	}
 	for _, filter := range request.Filters {
+		selectorBytes += len(filter.Dimension.Attribute)
+		for _, value := range filter.Values {
+			selectorBytes += len(value)
+		}
 		if !validDimension(filter.Dimension) {
 			return invalid("filters", "unknown dimension")
 		}
@@ -220,6 +208,9 @@ func validate(ctx *Context, request *Request) error {
 		default:
 			return invalid("filters.operator", "choose equals, in, exists or missing")
 		}
+	}
+	if selectorBytes > MaxSelectorBytes {
+		return invalid("filters", "attribute selectors exceed the 64 KiB query budget")
 	}
 	if request.Groups == 0 {
 		request.Groups = DefaultGroups
@@ -250,6 +241,64 @@ func validate(ctx *Context, request *Request) error {
 	}
 	ctx.From, ctx.To, ctx.Now = ctx.From.UTC(), ctx.To.UTC(), ctx.Now.UTC()
 	return nil
+}
+
+func validateSelection(selection Selection) error {
+	if selection.MinimumLevel != nil {
+		if selection.SignalID != "" || *selection.MinimumLevel < 0 || *selection.MinimumLevel > 9 {
+			return &Error{Field: "selection.minimum_level", Message: "choose one zero-based ordered level (0–9), without signal_id"}
+		}
+	} else if id, err := uuid.Parse(selection.SignalID); err != nil || id == uuid.Nil {
+		return &Error{Field: "selection.signal_id", Message: "name a signal or choose an ordered minimum_level"}
+	}
+	if math.IsNaN(selection.Threshold) || math.IsInf(selection.Threshold, 0) || selection.Threshold <= 0 || selection.Threshold > 1 {
+		return &Error{Field: "selection.threshold", Message: "choose an explicit probability threshold greater than zero and at most one"}
+	}
+	return nil
+}
+
+func canonicalSource(ctx Context, request Request) squirrel.SelectBuilder {
+	source := sql.Select("id", "event_id", "event_occurred_at", "conversation_id", "conversation_role", "source", "actor_user_id", "assistant_id", "attributes", "status", "definition_hash", "configured_model", "compiler_version", "input_strategy", "inserted_at", "result_type", "selected_signal_id", "probabilities.signal_id AS signal_ids", "probabilities.probability AS signal_probabilities").
+		From("sigint_readings_v2 FINAL").
+		Where("organization_id = ? AND project_id = toUUID(?)", ctx.OrganizationID, ctx.ProjectID).
+		Where("trigger_kind = ? AND run_id = toUUID(?) AND sensor_id = toUUID(?)", request.Trigger, request.RunID, request.Selection.SensorID).
+		Where("event_occurred_at >= fromUnixTimestamp64Nano(?) AND event_occurred_at < fromUnixTimestamp64Nano(?)", ctx.From.UnixNano(), ctx.To.UnixNano()).
+		Where("addYears(toDateTime(evaluation_requested_at, 'UTC'), 2) > fromUnixTimestamp64Nano(?)", ctx.Now.UnixNano()).
+		Where("event_kind = 'conversation.message'").
+		Where("conversation_capture_kind = 'original'")
+	if request.Trigger == "manual" && ctx.RequestedAt != nil {
+		source = source.Where("evaluation_requested_at = fromUnixTimestamp64Nano(?)", ctx.RequestedAt.UnixNano())
+	}
+	return source
+}
+
+// CompileValues discovers keys or values from winning snapshots, including absence.
+func CompileValues(ctx Context, scope Scope, name, attribute string, limit int) (Query, error) {
+	request := Request{Selection: Selection{SensorID: scope.SensorID, SignalID: "", MinimumLevel: nil, Threshold: 0}, Trigger: scope.Trigger, RunID: scope.RunID, GroupBy: nil, Filters: nil, Groups: 1, Points: MaxPoints}
+	ctx.Step = "auto"
+	if err := validateScope(&ctx, &request); err != nil {
+		return Query{}, err
+	}
+	if limit < 1 || limit > 200 {
+		return Query{}, &Error{Field: "limit", Message: "choose 1–200 values"}
+	}
+	q := sql.Select().FromSelect(canonicalSource(ctx, request), "winners")
+	if name == "attribute_keys" && attribute == "" {
+		q = q.Column("arrayJoin(mapKeys(attributes)) AS value").Column("toUInt8(1) AS present")
+	} else {
+		d := Dimension{Field: name, Attribute: ""}
+		if name == "attribute" {
+			d = Dimension{Field: "", Attribute: attribute}
+		} else if attribute != "" {
+			return Query{}, &Error{Field: "attribute", Message: "attribute keys require dimension=attribute"}
+		}
+		if !validDimension(d) {
+			return Query{}, &Error{Field: "dimension", Message: "choose a system dimension, attribute_keys, or attribute with an exact key"}
+		}
+		expr, args := dimension(d)
+		q = q.Column("tupleElement("+expr+", 2) AS value", args...).Column("tupleElement("+expr+", 1) AS present", args...)
+	}
+	return build(q.Column("count() AS n").GroupBy("value", "present").OrderBy("n DESC", "present DESC", "value ASC").Suffix(fmt.Sprintf("LIMIT %d", limit)), true)
 }
 
 var systemDimensions = map[string]string{"source": "source", "role": "conversation_role", "actor": "actor_user_id", "assistant": "toString(assistant_id)", "definition": "definition_hash"}

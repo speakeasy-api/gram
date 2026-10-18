@@ -20,6 +20,9 @@ const (
 	MaxFilters = 20
 	// MaxValues bounds one inclusion filter.
 	MaxValues = 100
+
+	// MaxSelectorBytes bounds query construction and echoed cohort metadata to 64 KiB.
+	MaxSelectorBytes = 64 << 10
 )
 
 // Dimension identifies a typed system dimension or an arbitrary string label.
@@ -80,6 +83,18 @@ type Request struct {
 
 	// Points bounds the total number of complete chart points.
 	Points int `json:"points,omitempty"`
+}
+
+// Scope selects readings for attribute discovery without inventing a match rule.
+type Scope struct {
+	// SensorID is the required contributing sensor.
+	SensorID string `json:"sensor_id"`
+
+	// Trigger is stream or manual.
+	Trigger string `json:"trigger,omitempty"`
+
+	// RunID is required only for manual evaluation.
+	RunID string `json:"run_id,omitempty"`
 }
 
 // Context binds authorization and clocks outside the caller's label namespace.

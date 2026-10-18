@@ -18,6 +18,9 @@ original captured messages, not tasks, time spent or independent defects.
   not summed. Whole-window totals include groups outside the top selection.
 - Missing attributes differ from present empty strings. Unknown time buckets
   contain null matches/rates, while answered negative buckets contain zeroes.
+- Original-message measurements require explicit original capture provenance.
+  Unknown lineage, including readings predating that capture, remains outside
+  this measured population.
 - Output intervals are UTC minutes, hours, days, Monday weeks and calendar months.
   First/last partial buckets are marked. `auto` budgets complete series across
   selected groups; explicit overly fine intervals are refused.

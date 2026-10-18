@@ -39,8 +39,11 @@ func TestSignalCanonicalQueriesResolveAttemptsBeforeFiltering(t *testing.T) {
 	require.NoError(t, chrepo.New(conn).InsertReadings(t.Context(), []chrepo.ReadingRow{other}))
 	foreign := row
 	foreign.ID, foreign.OrganizationID, foreign.ProjectID = uuid.New(), "another-org", uuid.New()
-	foreign.ConversationCaptureKind = ""
+	foreign.ConversationCaptureKind = "original"
 	require.NoError(t, chrepo.New(conn).InsertReadings(t.Context(), []chrepo.ReadingRow{foreign}))
+	unknown := other
+	unknown.ID, unknown.EventID, unknown.ConversationCaptureKind = uuid.New(), uuid.NewString(), ""
+	require.NoError(t, chrepo.New(conn).InsertReadings(t.Context(), []chrepo.ReadingRow{unknown}))
 	selection := signalquery.Request{Selection: signalquery.Selection{SensorID: sensor.String(), SignalID: signal.String(), Threshold: 0.5}, Filters: []signalquery.Filter{{Dimension: signalquery.Dimension{Attribute: "department"}, Operator: "equals", Values: []string{"engineering"}}}}
 	plan, err := signalquery.Compile(signalquery.Context{OrganizationID: org, ProjectID: project.String(), From: now.Add(-2 * time.Hour), To: now, Now: now, Step: "minute"}, selection)
 	require.NoError(t, err)
@@ -66,8 +69,9 @@ func TestSignalCanonicalQueriesResolveAttemptsBeforeFiltering(t *testing.T) {
 	require.Equal(t, "unknown", result.Metadata.Coverage)
 	require.Len(t, result.Rows, signalquery.BucketCount(now.Add(-2*time.Hour), now, "minute"))
 	observed := 0
+	require.Equal(t, []any{"engineering"}, result.Groups[0]["group_values"])
 	for _, point := range result.Rows {
-		require.Equal(t, []any{"engineering"}, point["group_values"])
+		require.Equal(t, result.Groups[0]["series_id"], point["series_id"])
 		if point["observed"] == true {
 			observed++
 			require.EqualValues(t, 0, point["matched_messages"], "an answered negative is a supported zero")
