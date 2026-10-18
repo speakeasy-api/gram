@@ -40,6 +40,7 @@ message PromptInjectionAnalysis {
   // untrusted content and are never included in the published finding match.
   string prior_user_request = 16;
   string recent_untrusted_content = 17;
+  bool run_judge = 28;
 
   message ToolCall {
     string name = 1;

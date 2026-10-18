@@ -1292,6 +1292,7 @@ pubsub:
           string external_conversation_id = 27;
           string prior_user_request = 16;
           string recent_untrusted_content = 17;
+          bool run_judge = 28;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -1332,6 +1333,7 @@ pubsub:
           string hook_source = 24;
           string policy_link_reason = 25;
           string external_conversation_id = 26;
+          bool run_judge = 27;
           message ToolCall {
             string name = 1;
             string arguments = 2;
