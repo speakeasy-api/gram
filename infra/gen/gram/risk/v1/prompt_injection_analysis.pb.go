@@ -48,9 +48,9 @@ type PromptInjectionAnalysis struct {
 	xxx_hidden_HookSource              *string                              `protobuf:"bytes,23,opt,name=hook_source,json=hookSource"`
 	xxx_hidden_PolicyLinkReason        *string                              `protobuf:"bytes,26,opt,name=policy_link_reason,json=policyLinkReason"`
 	xxx_hidden_ExternalConversationId  *string                              `protobuf:"bytes,27,opt,name=external_conversation_id,json=externalConversationId"`
+	xxx_hidden_RunJudge                bool                                 `protobuf:"varint,28,opt,name=run_judge,json=runJudge"`
 	xxx_hidden_PriorUserRequest        *string                              `protobuf:"bytes,16,opt,name=prior_user_request,json=priorUserRequest"`
 	xxx_hidden_RecentUntrustedContent  *string                              `protobuf:"bytes,17,opt,name=recent_untrusted_content,json=recentUntrustedContent"`
-	xxx_hidden_RunJudge                bool                                 `protobuf:"varint,28,opt,name=run_judge,json=runJudge"`
 	XXX_raceDetectHookData             protoimpl.RaceDetectHookData
 	XXX_presence                       [1]uint32
 	unknownFields                      protoimpl.UnknownFields
@@ -322,6 +322,13 @@ func (x *PromptInjectionAnalysis) GetExternalConversationId() string {
 	return ""
 }
 
+func (x *PromptInjectionAnalysis) GetRunJudge() bool {
+	if x != nil {
+		return x.xxx_hidden_RunJudge
+	}
+	return false
+}
+
 func (x *PromptInjectionAnalysis) GetPriorUserRequest() string {
 	if x != nil {
 		if x.xxx_hidden_PriorUserRequest != nil {
@@ -340,13 +347,6 @@ func (x *PromptInjectionAnalysis) GetRecentUntrustedContent() string {
 		return ""
 	}
 	return ""
-}
-
-func (x *PromptInjectionAnalysis) GetRunJudge() bool {
-	if x != nil {
-		return x.xxx_hidden_RunJudge
-	}
-	return false
 }
 
 func (x *PromptInjectionAnalysis) SetRequestId(v string) {
@@ -473,18 +473,18 @@ func (x *PromptInjectionAnalysis) SetExternalConversationId(v string) {
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 28)
 }
 
+func (x *PromptInjectionAnalysis) SetRunJudge(v bool) {
+	x.xxx_hidden_RunJudge = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 28)
+}
+
 func (x *PromptInjectionAnalysis) SetPriorUserRequest(v string) {
 	x.xxx_hidden_PriorUserRequest = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 28)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 26, 28)
 }
 
 func (x *PromptInjectionAnalysis) SetRecentUntrustedContent(v string) {
 	x.xxx_hidden_RecentUntrustedContent = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 26, 28)
-}
-
-func (x *PromptInjectionAnalysis) SetRunJudge(v bool) {
-	x.xxx_hidden_RunJudge = v
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 27, 28)
 }
 
@@ -656,21 +656,21 @@ func (x *PromptInjectionAnalysis) HasExternalConversationId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 24)
 }
 
-func (x *PromptInjectionAnalysis) HasPriorUserRequest() bool {
+func (x *PromptInjectionAnalysis) HasRunJudge() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 25)
 }
 
-func (x *PromptInjectionAnalysis) HasRecentUntrustedContent() bool {
+func (x *PromptInjectionAnalysis) HasPriorUserRequest() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 26)
 }
 
-func (x *PromptInjectionAnalysis) HasRunJudge() bool {
+func (x *PromptInjectionAnalysis) HasRecentUntrustedContent() bool {
 	if x == nil {
 		return false
 	}
@@ -797,19 +797,19 @@ func (x *PromptInjectionAnalysis) ClearExternalConversationId() {
 	x.xxx_hidden_ExternalConversationId = nil
 }
 
-func (x *PromptInjectionAnalysis) ClearPriorUserRequest() {
+func (x *PromptInjectionAnalysis) ClearRunJudge() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 25)
+	x.xxx_hidden_RunJudge = false
+}
+
+func (x *PromptInjectionAnalysis) ClearPriorUserRequest() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 26)
 	x.xxx_hidden_PriorUserRequest = nil
 }
 
 func (x *PromptInjectionAnalysis) ClearRecentUntrustedContent() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 26)
-	x.xxx_hidden_RecentUntrustedContent = nil
-}
-
-func (x *PromptInjectionAnalysis) ClearRunJudge() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 27)
-	x.xxx_hidden_RunJudge = false
+	x.xxx_hidden_RecentUntrustedContent = nil
 }
 
 type PromptInjectionAnalysis_builder struct {
@@ -842,11 +842,11 @@ type PromptInjectionAnalysis_builder struct {
 	PolicyLinkReason *string
 	// Raw external conversation ID; independent of the persisted Speakeasy chat_id.
 	ExternalConversationId *string
+	RunJudge               *bool
 	// Bounded causal evidence captured when the event is read. These fields are
 	// untrusted content and are never included in the published finding match.
 	PriorUserRequest       *string
 	RecentUntrustedContent *string
-	RunJudge               *bool
 }
 
 func (b0 PromptInjectionAnalysis_builder) Build() *PromptInjectionAnalysis {
@@ -950,17 +950,17 @@ func (b0 PromptInjectionAnalysis_builder) Build() *PromptInjectionAnalysis {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 28)
 		x.xxx_hidden_ExternalConversationId = b.ExternalConversationId
 	}
-	if b.PriorUserRequest != nil {
+	if b.RunJudge != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 28)
+		x.xxx_hidden_RunJudge = *b.RunJudge
+	}
+	if b.PriorUserRequest != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 26, 28)
 		x.xxx_hidden_PriorUserRequest = b.PriorUserRequest
 	}
 	if b.RecentUntrustedContent != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 26, 28)
-		x.xxx_hidden_RecentUntrustedContent = b.RecentUntrustedContent
-	}
-	if b.RunJudge != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 27, 28)
-		x.xxx_hidden_RunJudge = *b.RunJudge
+		x.xxx_hidden_RecentUntrustedContent = b.RecentUntrustedContent
 	}
 	return m0
 }
@@ -1114,10 +1114,10 @@ const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\vhook_source\x18\x17 \x01(\tR\n" +
 	"hookSource\x12,\n" +
 	"\x12policy_link_reason\x18\x1a \x01(\tR\x10policyLinkReason\x128\n" +
-	"\x18external_conversation_id\x18\x1b \x01(\tR\x16externalConversationId\x12,\n" +
+	"\x18external_conversation_id\x18\x1b \x01(\tR\x16externalConversationId\x12\x1b\n" +
+	"\trun_judge\x18\x1c \x01(\bR\brunJudge\x12,\n" +
 	"\x12prior_user_request\x18\x10 \x01(\tR\x10priorUserRequest\x128\n" +
-	"\x18recent_untrusted_content\x18\x11 \x01(\tR\x16recentUntrustedContent\x12\x1b\n" +
-	"\trun_judge\x18\x1c \x01(\bR\brunJudge\x1a<\n" +
+	"\x18recent_untrusted_content\x18\x11 \x01(\tR\x16recentUntrustedContent\x1a<\n" +
 	"\bToolCall\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\targuments\x18\x02 \x01(\tR\targuments:\n" +

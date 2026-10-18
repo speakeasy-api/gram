@@ -60,7 +60,7 @@ func NewAsyncScanHandlerMetrics(meterProvider metric.MeterProvider, logger *slog
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners")
 	handledMessages, err := meter.Int64Counter(
 		meterAsyncScanHandlerMessages,
-		metric.WithDescription("Total async risk scan messages handled by scanner, engine, gate decision, and outcome"),
+		metric.WithDescription("Total async risk scan messages handled by scanner, engine, selection reason, and outcome"),
 		metric.WithUnit("{message}"),
 	)
 	if err != nil {
