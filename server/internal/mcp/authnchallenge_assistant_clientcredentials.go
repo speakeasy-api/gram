@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -110,7 +111,7 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 		Scope       string `json:"scope"`
 	}{result.AccessToken, "Bearer", int64(lifetime / time.Second), rawScopes[0]})
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal assistant workload token response: %w", err)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth assistant workload token issued", client.ClientID, presentedAuthMethod, "client_credentials", "issued")
 	return writeTokenSuccess(ctx, w, logger, body)
