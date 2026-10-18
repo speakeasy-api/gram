@@ -1,4 +1,4 @@
-h1:5RQ6lkubG4E/L9OJo8WgX8T70B2w0LAOrmb2A6LHnVQ=
+h1:Tbxi5fkVVa8KGACdMXrocon2TBDnC2vgsYeo9TBzSco=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -474,3 +474,4 @@ h1:5RQ6lkubG4E/L9OJo8WgX8T70B2w0LAOrmb2A6LHnVQ=
 20261015185547_promotion_ledger_signup_offers.sql h1:vYR6/rG62LpP+MvSq6oR5Nc69PRGJ4VH4ZvOnCJnzxs=
 20261016170611_user-session-consent-resources.sql h1:BdRdLxrrRfX+3MlF4VeXNRzyNvNBK2GpOiVIug0Ovok=
 20261016182740_consent-resources-consent-id-index.sql h1:+YR3EnqZjHBoKgvSfuZpfgtRSfYekGBb72qwcSnJlzE=
+20261018192032_mcp-skill-links.sql h1:l7xyZOY6eheMYJm2q3vGXBqfe/ATqwtG6nflNmS/OuU=
