@@ -115,6 +115,8 @@ type serverOptions struct {
 	noWrapper     bool
 	// otherTool adds an HTTP tool beside the external MCP proxy tool.
 	otherTool bool
+	// perTool seeds a per-tool (direct) definition instead of the proxy tool.
+	perTool bool
 	// sharedIssuer signs the server in through another server's issuer
 	// instead of creating its own.
 	sharedIssuer *fixtureServer
@@ -123,9 +125,12 @@ type serverOptions struct {
 func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts serverOptions) fixtureServer {
 	t.Helper()
 
-	toolURN := urn.NewTool(urn.ToolKindExternalMCP, opts.slug, "proxy")
+	toolURN, toolType := urn.NewTool(urn.ToolKindExternalMCP, opts.slug, "proxy"), "proxy"
+	if opts.perTool {
+		toolURN, toolType = urn.NewTool(urn.ToolKindExternalMCP, opts.slug, "search"), "direct"
+	}
 	require.NoError(t, repo.New(ti.conn).SeedExternalMCPProxyFixture(ctx, repo.SeedExternalMCPProxyFixtureParams{
-		DeploymentID: ti.deploymentID, Slug: opts.slug, ToolUrn: toolURN.String(), RemoteUrl: opts.remoteURL, RequiresOauth: opts.requiresOAuth, HeaderDefinitions: opts.headers,
+		DeploymentID: ti.deploymentID, Slug: opts.slug, ToolUrn: toolURN.String(), RemoteUrl: opts.remoteURL, Type: toolType, RequiresOauth: opts.requiresOAuth, HeaderDefinitions: opts.headers,
 	}))
 
 	toolsets := toolsetsrepo.New(ti.conn)

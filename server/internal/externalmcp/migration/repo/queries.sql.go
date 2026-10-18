@@ -252,7 +252,7 @@ proxy_definitions AS (
   JOIN external_mcp_tool_definitions AS etd ON etd.tool_urn = tool_urn.value
   JOIN external_mcp_attachments AS ea ON ea.id = etd.external_mcp_attachment_id
   WHERE ea.deployment_id = ad.id
-    AND etd.type = 'proxy'
+    AND etd.type IN ('proxy', 'direct')
     AND etd.deleted IS FALSE
     AND ea.deleted IS FALSE
 ),
@@ -483,11 +483,12 @@ type ListCandidatesRow struct {
 	OtherRemoteUrlsOnIssuer       []string
 }
 
-// Live servers whose latest toolset version references a proxy tool from an
-// external MCP attachment on the project's active deployment, across every
-// organization, with what the migration needs to decide whether each one can
-// switch in place. A server is live when its toolset is MCP-enabled or fronted
-// by a live mcp_servers row. Pass toolset_ids to narrow the scan.
+// Live servers whose latest toolset version references a proxy tool, or the
+// per-tool (direct) tools, of an external MCP attachment on the project's active
+// deployment, across every organization, with what the migration needs to
+// decide whether each one can switch in place. A server is live when its toolset
+// is MCP-enabled or fronted by a live mcp_servers row. Pass toolset_ids to
+// narrow the scan.
 func (q *Queries) ListCandidates(ctx context.Context, toolsetIds []uuid.UUID) ([]ListCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listCandidates, toolsetIds)
 	if err != nil {
@@ -574,7 +575,7 @@ CROSS JOIN LATERAL unnest(lv.tool_urns) AS tool_urn(value)
 JOIN external_mcp_tool_definitions AS etd ON etd.tool_urn = tool_urn.value
 JOIN external_mcp_attachments AS ea ON ea.id = etd.external_mcp_attachment_id
 JOIN active_deployment AS ad ON ad.id = ea.deployment_id
-WHERE etd.type = 'proxy' AND etd.deleted IS FALSE AND ea.deleted IS FALSE
+WHERE etd.type IN ('proxy', 'direct') AND etd.deleted IS FALSE AND ea.deleted IS FALSE
 ORDER BY ea.slug, etd.tool_urn
 `
 
@@ -589,7 +590,7 @@ type ListHeaderDefinitionsRow struct {
 	HeaderDefinitions []byte
 }
 
-// The proxy tool definitions behind a toolset on its project's active
+// The proxy and per-tool definitions behind a toolset on its project's active
 // deployment, with their attachment's slug, for copying headers.
 func (q *Queries) ListHeaderDefinitions(ctx context.Context, arg ListHeaderDefinitionsParams) ([]ListHeaderDefinitionsRow, error) {
 	rows, err := q.db.Query(ctx, listHeaderDefinitions, arg.ProjectID, arg.ToolsetID)
@@ -776,17 +777,18 @@ func (q *Queries) SeedEmaBindingFixture(ctx context.Context, arg SeedEmaBindingF
 const seedExternalMCPProxyFixture = `-- name: SeedExternalMCPProxyFixture :exec
 WITH attachment AS (
   INSERT INTO external_mcp_attachments (deployment_id, name, slug, registry_server_specifier)
-  VALUES ($5, $6, $6, $6)
+  VALUES ($6, $7, $7, $7)
   RETURNING id
 )
 INSERT INTO external_mcp_tool_definitions (external_mcp_attachment_id, tool_urn, remote_url, transport_type, type, requires_oauth, header_definitions)
-SELECT id, $1, $2, 'streamable-http', 'proxy', $3, $4::jsonb
+SELECT id, $1, $2, 'streamable-http', $3, $4, $5::jsonb
 FROM attachment
 `
 
 type SeedExternalMCPProxyFixtureParams struct {
 	ToolUrn           string
 	RemoteUrl         string
+	Type              string
 	RequiresOauth     bool
 	HeaderDefinitions []byte
 	DeploymentID      uuid.UUID
@@ -797,6 +799,7 @@ func (q *Queries) SeedExternalMCPProxyFixture(ctx context.Context, arg SeedExter
 	_, err := q.db.Exec(ctx, seedExternalMCPProxyFixture,
 		arg.ToolUrn,
 		arg.RemoteUrl,
+		arg.Type,
 		arg.RequiresOauth,
 		arg.HeaderDefinitions,
 		arg.DeploymentID,

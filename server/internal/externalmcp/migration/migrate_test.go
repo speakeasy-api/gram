@@ -174,6 +174,7 @@ func TestRunMigratesServersWithoutUpstreamSignIn(t *testing.T) {
 		{name: "no sign-in provider", opts: serverOptions{slug: "no-issuer", remoteURL: "https://mcp.example.com/mcp", noIssuer: true}},
 		{name: "sign-in provider without an upstream client", opts: serverOptions{slug: "no-client", remoteURL: "https://mcp.example.com/mcp", noClient: true}},
 		{name: "headers users send", opts: serverOptions{slug: "user-headers", remoteURL: "https://mcp.example.com/mcp", noIssuer: true, headers: []byte(`[{"name":"X-Api-Key"}]`)}},
+		{name: "per-tool definitions", opts: serverOptions{slug: "per-tool", remoteURL: "https://mcp.example.com/mcp", noIssuer: true, perTool: true}},
 		{name: "other tools", opts: serverOptions{slug: "other-tools", remoteURL: "https://mcp.example.com/mcp", otherTool: true}, warning: "which are dropped"},
 	}
 	for _, tc := range cases {
@@ -188,6 +189,8 @@ func TestRunMigratesServersWithoutUpstreamSignIn(t *testing.T) {
 			require.Equal(t, migration.StatusMigrated, outcomes[0].Status, outcomes[0].Reason)
 			if tc.warning != "" {
 				require.True(t, containsSubstring(outcomes[0].Warnings, tc.warning), "warnings %q do not mention %q", outcomes[0].Warnings, tc.warning)
+			} else {
+				require.False(t, containsSubstring(outcomes[0].Warnings, "dropped"), "warnings %q", outcomes[0].Warnings)
 			}
 
 			// The server keeps whatever sign-in provider it had and gains no

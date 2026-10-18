@@ -1,9 +1,10 @@
 -- name: ListCandidates :many
--- Live servers whose latest toolset version references a proxy tool from an
--- external MCP attachment on the project's active deployment, across every
--- organization, with what the migration needs to decide whether each one can
--- switch in place. A server is live when its toolset is MCP-enabled or fronted
--- by a live mcp_servers row. Pass toolset_ids to narrow the scan.
+-- Live servers whose latest toolset version references a proxy tool, or the
+-- per-tool (direct) tools, of an external MCP attachment on the project's active
+-- deployment, across every organization, with what the migration needs to
+-- decide whether each one can switch in place. A server is live when its toolset
+-- is MCP-enabled or fronted by a live mcp_servers row. Pass toolset_ids to
+-- narrow the scan.
 WITH active_deployments AS (
   SELECT DISTINCT ON (d.project_id) d.project_id, d.id
   FROM deployments AS d
@@ -68,7 +69,7 @@ proxy_definitions AS (
   JOIN external_mcp_tool_definitions AS etd ON etd.tool_urn = tool_urn.value
   JOIN external_mcp_attachments AS ea ON ea.id = etd.external_mcp_attachment_id
   WHERE ea.deployment_id = ad.id
-    AND etd.type = 'proxy'
+    AND etd.type IN ('proxy', 'direct')
     AND etd.deleted IS FALSE
     AND ea.deleted IS FALSE
 ),
@@ -253,7 +254,7 @@ LEFT JOIN LATERAL (
 ORDER BY organization_name, p.name, t.name, t.id;
 
 -- name: ListHeaderDefinitions :many
--- The proxy tool definitions behind a toolset on its project's active
+-- The proxy and per-tool definitions behind a toolset on its project's active
 -- deployment, with their attachment's slug, for copying headers.
 WITH active_deployment AS (
   SELECT d.id
@@ -276,7 +277,7 @@ CROSS JOIN LATERAL unnest(lv.tool_urns) AS tool_urn(value)
 JOIN external_mcp_tool_definitions AS etd ON etd.tool_urn = tool_urn.value
 JOIN external_mcp_attachments AS ea ON ea.id = etd.external_mcp_attachment_id
 JOIN active_deployment AS ad ON ad.id = ea.deployment_id
-WHERE etd.type = 'proxy' AND etd.deleted IS FALSE AND ea.deleted IS FALSE
+WHERE etd.type IN ('proxy', 'direct') AND etd.deleted IS FALSE AND ea.deleted IS FALSE
 ORDER BY ea.slug, etd.tool_urn;
 
 -- name: LockToolset :one
@@ -375,7 +376,7 @@ WITH attachment AS (
   RETURNING id
 )
 INSERT INTO external_mcp_tool_definitions (external_mcp_attachment_id, tool_urn, remote_url, transport_type, type, requires_oauth, header_definitions)
-SELECT id, @tool_urn, @remote_url, 'streamable-http', 'proxy', @requires_oauth, sqlc.narg('header_definitions')::jsonb
+SELECT id, @tool_urn, @remote_url, 'streamable-http', @type, @requires_oauth, sqlc.narg('header_definitions')::jsonb
 FROM attachment;
 
 -- name: SeedRemoteSessionClientFixture :one

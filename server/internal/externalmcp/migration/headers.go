@@ -59,6 +59,8 @@ func (m *Migrator) planHeaders(ctx context.Context, tx pgx.Tx, toolset toolsetsr
 
 	definitions := make([]externalmcp.HeaderDefinition, 0)
 	passThrough := make([]externalmcp.HeaderDefinition, 0)
+	// Per-tool definitions repeat their attachment's header declarations.
+	declaredOnce := map[string]bool{}
 	for _, row := range rows {
 		var declared []headerDefinition
 		if len(row.HeaderDefinitions) > 0 {
@@ -68,6 +70,10 @@ func (m *Migrator) planHeaders(ctx context.Context, tx pgx.Tx, toolset toolsetsr
 		}
 		for _, header := range declared {
 			definition := externalmcp.HeaderDefinition{Name: strcase.ToSNAKE(row.AttachmentSlug + "_" + header.Name), HeaderName: header.Name}
+			if declaredOnce[definition.Name] {
+				continue
+			}
+			declaredOnce[definition.Name] = true
 			definitions = append(definitions, definition)
 			if row.RequiresOauth && strings.EqualFold(strings.TrimSpace(header.Name), "Authorization") {
 				continue
