@@ -29,20 +29,18 @@ const (
 	assistantRuntimeJanitorCatchupWindow = AssistantRuntimeJanitorInterval - time.Second
 
 	// AssistantRuntimeJanitorBatchSize caps rows reaped per sweep. Each row
-	// makes backend API calls; per-call timeouts bound each
-	// call so the sweep can never wedge on a single row.
+	// makes backend API calls. GKE bounds individual delete calls; local
+	// Docker cleanup relies on activity-context cancellation.
 	AssistantRuntimeJanitorBatchSize int32 = 200
 
 	// assistantRuntimeJanitorActivityTimeout is the upper bound on a single
-	// sweep, sized for the pathological case where every row in the batch
-	// hits the per-call backend timeout on every call. Liveness is enforced
-	// by the heartbeat timeout, not this
-	// ceiling.
+	// sweep. The heartbeat timeout detects a stalled sweep sooner; local
+	// cleanup commands stop when the activity context is canceled.
 	assistantRuntimeJanitorActivityTimeout = 6 * time.Hour
 
-	// assistantRuntimeJanitorHeartbeatTimeout must comfortably exceed the
-	// worst-case time the reap loop can spend on a single row. Each row
-	// uses bounded backend cleanup calls.
+	// assistantRuntimeJanitorHeartbeatTimeout allows normal per-row GKE
+	// cleanup calls to finish before detecting a stalled sweep. It is not a
+	// per-call deadline for local Docker cleanup.
 	assistantRuntimeJanitorHeartbeatTimeout = 3 * time.Minute
 
 	// AssistantRuntimeJanitorInactivityThreshold is the quiet period an
