@@ -51,7 +51,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
-	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
+	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
 
 	enc := testenv.NewEncryptionClient(t)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)

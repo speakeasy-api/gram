@@ -166,9 +166,7 @@ var errAssistantValidation = errors.New("assistant validation")
 
 // idleExpiringRuntimeBackends stop a runtime once its warm window lapses. A
 // cold admit on these is seconds (a GKE warm-pool claim, a local container
-// start). Every other backend keeps its runtime until the assistant is
-// deleted: a Fly cold admit costs minutes, which expiring would put in front
-// of most turns.
+// start). Unrecognized backends are left untouched.
 var idleExpiringRuntimeBackends = []string{runtimeBackendGKE, runtimeBackendLocal}
 
 // configuredIdleExpiringBackends narrows idleExpiringRuntimeBackends to the
@@ -396,7 +394,7 @@ type ProcessThreadEventsResult struct {
 	// BootstrappedRuntime signals that this call transitioned the v2 runtime
 	// row from `starting` to `active`. v2 admit only fans out the first
 	// pending thread when reserving a fresh row (Ensure has no per-row CAS,
-	// so concurrent ensures would race the Fly machine launch). The
+	// so concurrent ensures would race the runtime launch). The
 	// workflow signals the coordinator on this flag so the remaining
 	// pending threads get admitted against the now-active row.
 	BootstrappedRuntime bool
@@ -1867,7 +1865,7 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 		return fmt.Errorf("commit delete assistant tx: %w", err)
 	}
 
-	// Best-effort: tear down per-assistant backend resources (e.g. Fly app)
+	// Best-effort: tear down per-assistant backend resources (e.g. sandbox claim)
 	// inline so the common case does not wait for the janitor. Failures here
 	// must not roll back the soft-delete; the long-inactivity janitor is the
 	// safety net.
@@ -1900,8 +1898,8 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 
 // ReapAssistantRuntimesResult summarises the outcome of one reap pass —
 // counted at the runtime-row level, not the backend-app level. A row whose
-// backend resource was already gone (404 from the Fly API, no in-memory
-// state for local) still counts as Reaped.
+// backend resource was already gone (a missing sandbox claim or local
+// container) still counts as Reaped.
 type ReapAssistantRuntimesResult struct {
 	Reaped int
 	Errors int
@@ -1909,7 +1907,7 @@ type ReapAssistantRuntimesResult struct {
 
 // ReapAssistantRuntimes tears down backend resources for every runtime row
 // belonging to the given assistant that still carries metadata. Used by the
-// assistant-delete handler so a deletion cleans up the corresponding Fly app
+// assistant-delete handler so a deletion cleans up the corresponding backend resources
 // without waiting for the janitor.
 func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assistantID uuid.UUID) (ReapAssistantRuntimesResult, error) {
 	rows, err := assistantrepo.New(s.db).ListAssistantRuntimesForReap(ctx, assistantrepo.ListAssistantRuntimesForReapParams{
@@ -1972,7 +1970,7 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 	rows, err := assistantrepo.New(s.db).ListInactiveAssistantRuntimesForReap(ctx, assistantrepo.ListInactiveAssistantRuntimesForReapParams{
 		InactiveBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.InactivityThreshold)),
 		// Also collect runtimes parked on a backend we no longer target so a
-		// provider switch (e.g. flyio -> gke) drains the old backend lazily as
+		// provider switch (e.g. local -> gke) drains the old backend lazily as
 		// assistants go idle, without an admission-path teardown.
 		TargetBackend: s.runtime.Backend(),
 		StoppedState:  runtimeStateStopped,
@@ -2017,9 +2015,8 @@ type ReapStoppedAssistantRuntimesParams struct {
 
 // ReapStoppedAssistantRuntimes drives the per-thread janitor. It collects
 // runtime rows whose own updated_at has aged past StoppedTTL, regardless of
-// sibling activity on the same assistant. The Fly machine for each row is
-// destroyed; the surrounding app stays in place so the next admit for the
-// same thread can cold-launch into it and keep its IP and secrets.
+// sibling activity on the same assistant. Each backend tears down the
+// stopped runtime resource before its row is marked reaped.
 func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params ReapStoppedAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.StoppedTTL <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("stopped TTL must be positive")
@@ -2079,8 +2076,8 @@ type RecycleAssistantRuntimeImagesParams struct {
 // the currently configured runtime image, so deploys absorb the image-pull +
 // reboot cost while runtimes are idle instead of the next turn paying it.
 // Busy or failed rows are not chased — the per-admission path catches them
-// lazily. The roll mechanism is the backend's RecycleImage: Fly updates the
-// machine in place; GKE deletes the claim and re-claims a warm-pool pod. An
+// lazily. The roll mechanism is the backend's RecycleImage: GKE deletes the
+// claim and re-claims a warm-pool pod. An
 // active-but-regularly-used runtime never goes idle long enough for the
 // inactivity janitor to reap it, so without this sweep it would stay on its
 // admission-time image across deploys indefinitely.
@@ -2187,11 +2184,10 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 
 // reapStoppedRuntimeRow tears down the machine first and only flips the row
 // to `reaped` once the destroy call returns. Inverting the order would orphan
-// the machine if the Fly call hits a transient error: a row marked `reaped`
-// with `machine_id` cleared no longer matches `ListStoppedRuntimesForReap`,
-// so the next sweep cannot retry — and the whole-assistant 7d janitor cannot
-// either, because it inherits the same cleared metadata. The narrow window
-// where a racing warm-resume admit copies this row's `machine_id` before
+// the machine if the backend call hits a transient error: a row marked `reaped`
+// no longer matches `ListStoppedRuntimesForReap`, so the next sweep cannot
+// retry until the whole-assistant inactivity janitor runs. The narrow window
+// where a racing warm-resume admit copies this row's resource metadata before
 // destroy is bounded by `ListStoppedRuntimesForReap`'s per-thread NOT EXISTS
 // guard, which excludes any row whose thread already has a fresher
 // starting/active sibling. Returns true on success (including idempotent
@@ -2633,10 +2629,10 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		AssistantID: assistant.ID,
 	})
 	// When the runtime row is freshly reserved here, only admit the first
-	// thread. The Fly Ensure path has no CAS or lock around machine launch:
+	// thread. Backend provisioning must not race across concurrent ensures:
 	// fanning out all pending threads against a `starting` row lets two
 	// thread workflows race their Ensure activities and launch separate
-	// machines, with only one app/machine recorded in
+	// resources, with only one resource recorded in
 	// backend_metadata_json. The first admitted thread brings the runtime
 	// to `active`; subsequent admits fall through the lookup with row in
 	// active state and admit the rest.
@@ -3778,7 +3774,7 @@ func (s *ServiceCore) expireRuntime(ctx context.Context, runtimeRecord assistant
 // and hydrates the records ProcessThreadEvents needs. The runtime row is
 // keyed on (project_id, assistant_id) and serves every thread under the
 // assistant; AssistantThreadID on the returned record is uuid.Nil so the
-// Fly backend dispatches to /threads/{id}/turn.
+// runner client dispatches to /threads/{id}/turn.
 func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID uuid.UUID) (assistantThreadRecord, assistantRecord, assistantRuntimeRecord, error) {
 	row, err := assistantrepo.New(s.db).LoadThreadContextV2(ctx, assistantrepo.LoadThreadContextV2Params{
 		ThreadID:      threadID,

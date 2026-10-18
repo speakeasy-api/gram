@@ -89,7 +89,7 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
-	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
+	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), project.String())
 
 	turn := func(source, payload string) string {
@@ -197,7 +197,7 @@ func TestUnmigratedAssistantDispatchKeepsOriginalToken(t *testing.T) {
 	manager := assistanttokens.New("legacy-test-secret", db, nil, nil, nil)
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
-	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
+	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
 	_, err = core.processEventTurn(t.Context(), assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: id, SourceKind: sourceKindCron}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "legacy-token", NormalizedPayloadJSON: []byte(`{}`)})
 	require.NoError(t, err)
 	require.False(t, assistanttokens.IsRuntimeCredential(*dispatched.Load()))

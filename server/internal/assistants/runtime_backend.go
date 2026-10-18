@@ -8,10 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	runtimeBackendFlyIO = "flyio"
-)
-
 // runTurnRequest bundles everything a backend needs to deliver one turn to
 // the runner's /threads/{thread_id}/turn endpoint.
 type runTurnRequest struct {
@@ -70,16 +66,14 @@ type RuntimeBackend interface {
 	InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error)
 	Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error)
 	// Stop halts the active runtime so it can be re-admitted later. Backends
-	// may keep persisted state (e.g. Fly app + IP) intact for warm reuse.
+	// may keep persisted state (e.g. local volumes) intact for warm reuse.
 	Stop(ctx context.Context, runtime assistantRuntimeRecord) error
 	// Reap permanently tears down all backend resources tied to the runtime
-	// (e.g. deletes the Fly app). Idempotent: must succeed when the resource
+	// (e.g. deletes a sandbox claim). Idempotent: must succeed when the resource
 	// is already gone. Distinct from Stop, which may preserve state for reuse.
 	Reap(ctx context.Context, runtime assistantRuntimeRecord) error
-	// ReapStoppedMachine tears down only this thread's machine slot, leaving
-	// the surrounding app (and any sibling threads' machines) untouched. Used
-	// by the per-thread janitor so the next admit for this thread can cold-
-	// launch into the same app and keep its IP and secrets. Idempotent.
+	// ReapStoppedMachine tears down a stopped runtime resource. Used by the
+	// per-thread janitor; must succeed when the resource is already gone.
 	ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error
 }
 
