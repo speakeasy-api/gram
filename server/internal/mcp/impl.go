@@ -111,6 +111,7 @@ type IdentityResolver interface {
 }
 
 type Service struct {
+	assistantWorkloadTokens   AssistantWorkloadTokenIssuer
 	federatedLoginConsumer    FederatedLoginConsumer
 	identityChainer           identityChainer
 	logger                    *slog.Logger

@@ -464,6 +464,9 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		oauthwire.GrantTypeAuthorizationCode,
 		oauthwire.GrantTypeRefreshToken,
 	}
+	if s.assistantWorkloadTokens != nil && !endpoint.IsOrganizationGateway() {
+		grantTypes = append(grantTypes, "client_credentials")
+	}
 	var grantProfiles []string
 	if endpoint.idJAGConfigured {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
