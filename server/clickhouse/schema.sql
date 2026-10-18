@@ -1629,7 +1629,8 @@ CREATE TABLE IF NOT EXISTS sigint_readings_v2 (
     selected_signal_id Nullable(UUID) COMMENT 'Selected signal identity for choice results.\n@access: confidential',
     selected_signal_slug String DEFAULT '' COMMENT 'Customer-defined slug of the selected signal.\n@access: opaque-confidential',
     expected_index Nullable(Float64) COMMENT 'Probability-weighted ordered-score index.\n@access: confidential',
-    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential'
+    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential',
+    INDEX event_occurred_at_minmax_idx event_occurred_at TYPE minmax GRANULARITY 1
 ) ENGINE = ReplacingMergeTree(evaluated_at)
 PARTITION BY toYYYYMM(evaluation_requested_at)
 PRIMARY KEY (organization_id, project_id, trigger_kind, run_id, sensor_id, event_occurred_at)
