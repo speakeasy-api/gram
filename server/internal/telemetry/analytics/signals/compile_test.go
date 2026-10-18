@@ -73,3 +73,13 @@ func TestSelectorsRespectByteBudgetWithExplicitGroups(t *testing.T) {
 	_, err := Compile(ctx, request)
 	require.ErrorContains(t, err, "64 KiB")
 }
+
+func TestAutomaticResolutionReportsAnImpossiblePointBudget(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	_, err := Compile(Context{OrganizationID: "example-org", ProjectID: uuid.NewString(), From: now.Add(-6 * time.Hour), To: now, Now: now, Step: "auto"}, Request{Selection: Selection{SensorID: uuid.NewString(), SignalID: uuid.NewString(), Threshold: .5}, GroupBy: []Dimension{{Attribute: "department"}}, Groups: 20, Points: 1})
+	var invalid *Error
+	require.ErrorAs(t, err, &invalid)
+	require.Equal(t, "points", invalid.Field)
+	require.Contains(t, invalid.Message, "fewer groups")
+}

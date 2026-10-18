@@ -232,6 +232,9 @@ func validateScope(ctx *Context, request *Request) error {
 				break
 			}
 		}
+		if ctx.Step == "" || ctx.Step == "auto" {
+			return invalid("points", "no supported interval fits the point budget; use fewer groups or a larger point budget")
+		}
 	}
 	if bucket(ctx.Step) == "" {
 		return invalid("grain", "choose auto, minute, hour, day, week or calendar month")
