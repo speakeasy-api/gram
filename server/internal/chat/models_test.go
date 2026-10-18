@@ -2,7 +2,6 @@ package chat_test
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -30,9 +29,10 @@ func TestHandleModels(t *testing.T) {
 	chat.Attach(mux, ti.service)
 
 	t.Run("authenticated sorted exact catalog", func(t *testing.T) {
+		t.Parallel()
 		req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/chat/models", nil)
 		req.Header.Set(constants.SessionHeader, *authCtx.SessionID)
-		req.Header.Set(constants.ProjectHeader, string(*authCtx.ProjectSlug))
+		req.Header.Set(constants.ProjectHeader, *authCtx.ProjectSlug)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
@@ -62,16 +62,18 @@ func TestHandleModels(t *testing.T) {
 
 	for _, token := range []string{"", "invalid-session"} {
 		t.Run("refuses session "+token, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/chat/models", nil)
 			req.Header.Set(constants.SessionHeader, token)
 			rec := httptest.NewRecorder()
-			oops.ErrHandle(slog.Default(), ti.service.HandleModels).ServeHTTP(rec, req)
+			oops.ErrHandle(testenv.NewLogger(t), ti.service.HandleModels).ServeHTTP(rec, req)
 			require.Equal(t, http.StatusUnauthorized, rec.Code)
 			require.NotContains(t, rec.Body.String(), `"data"`)
 		})
 	}
 
 	t.Run("refuses unknown project", func(t *testing.T) {
+		t.Parallel()
 		req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/chat/models", nil)
 		req.Header.Set(constants.SessionHeader, *authCtx.SessionID)
 		req.Header.Set(constants.ProjectHeader, "unknown-project")
