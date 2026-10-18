@@ -186,32 +186,61 @@ export function sharedUnit(
 
 /**
  * Axis tick for a bucket start. Daily and coarser grains are dates; finer
- * grains are times, except a local-midnight bucket, which reads as the date
+ * grains are UTC times, except a midnight bucket, which reads as the date
  * so the day boundaries stand out.
  */
-export function bucketTick(iso: string, grain: Grain): string {
+export function bucketTick(
+  iso: string,
+  grain: Grain,
+  timeZone?: "UTC",
+): string {
   const date = new Date(iso);
-  const atMidnight = date.getHours() === 0 && date.getMinutes() === 0;
+  if (grain === "month")
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      year: "2-digit",
+      timeZone,
+    });
+  if (grain === "hour" && timeZone === "UTC")
+    return date.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      hour12: false,
+      timeZone,
+    });
+  const atMidnight =
+    timeZone === "UTC"
+      ? date.getUTCHours() === 0 && date.getUTCMinutes() === 0
+      : date.getHours() === 0 && date.getMinutes() === 0;
   if (isDailyOrCoarser(grain) || atMidnight) {
     return date.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
+      timeZone,
     });
   }
   return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone,
   });
 }
 
 /** The full bucket start for a tooltip title, since ticks are sparse. */
-export function bucketTitle(iso: string, grain: Grain): string {
+export function bucketTitle(
+  iso: string,
+  grain: Grain,
+  timeZone?: "UTC",
+): string {
   const date = new Date(iso);
   if (isDailyOrCoarser(grain)) {
     return date.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
+      year: timeZone === "UTC" || grain === "month" ? "numeric" : undefined,
+      timeZone,
     });
   }
   return date.toLocaleString(undefined, {
@@ -220,6 +249,7 @@ export function bucketTitle(iso: string, grain: Grain): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone,
   });
 }
 

@@ -62,7 +62,7 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 	s := &seeder{spec: DefaultSpec(), q: nil, logger: nil, now: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)}
 	rows, err := s.sigintReadingRows()
 	require.NoError(t, err)
-	require.Len(t, rows, (sigintReadingDays+sigintManualRuns*sigintManualMessages)*3)
+	require.Len(t, rows, (signalMessageCount+sigintManualRuns*sigintManualMessages)*3)
 
 	ids := make(map[uuid.UUID]struct{}, len(rows))
 	manualRuns := make(map[uuid.UUID]int)
@@ -74,10 +74,9 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 			require.NotEqual(t, uuid.Nil, id)
 		}
 		require.NotEmpty(t, row.OrganizationID)
-		require.Equal(t, chrepo.StatusAnswered, row.Status)
-		require.Empty(t, row.FailureReason)
-		require.NotEmpty(t, row.ResultType)
-		require.NotEmpty(t, row.Probabilities)
+		require.Equal(t, "conversation.message", row.EventKind)
+		require.NotNil(t, row.ConversationID)
+		require.Equal(t, "original", row.ConversationCaptureKind)
 		require.LessOrEqual(t, len(row.Attributes), chrepo.MaxAttributes)
 		for _, key := range []string{"model_name", "model_family", "inference_provider", "department"} {
 			value, present := row.Attributes[key]
@@ -101,6 +100,11 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 			manualRuns[row.RunID]++
 		} else {
 			streaming++
+		}
+		if row.Status != chrepo.StatusAnswered {
+			require.Empty(t, row.Probabilities)
+			require.Empty(t, row.ResultType)
+			continue
 		}
 
 		signals := make(map[uuid.UUID]string, len(row.Probabilities))
@@ -134,7 +138,7 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		require.Contains(t, values, "", "%s must demonstrate unknown values", key)
 		require.GreaterOrEqual(t, len(values), 3, "%s must demonstrate breakdowns", key)
 	}
-	require.Equal(t, sigintReadingDays*3, streaming)
+	require.Equal(t, signalMessageCount*3, streaming)
 	require.Len(t, manualRuns, sigintManualRuns)
 	for _, count := range manualRuns {
 		require.Equal(t, sigintManualMessages*3, count)
