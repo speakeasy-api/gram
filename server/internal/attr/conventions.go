@@ -427,6 +427,14 @@ const (
 	// different pinned version when one hosted endpoint resolved a skill
 	// carried by several plugins.
 	McpSkillPinConflictCountKey = attribute.Key("gram.mcp.skill.pin_conflict_count")
+	// McpSkillIDKey is the managed skill a skill:// resources/read served.
+	McpSkillIDKey = attribute.Key("gram.mcp.skill.id")
+	// McpSkillVersionIDKey is the skill version whose content a skill://
+	// resources/read served.
+	McpSkillVersionIDKey = attribute.Key("gram.mcp.skill.version_id")
+	// McpSkillDigestKey is the SEP-2640 digest ("sha256:<hex>") of the
+	// content a skill:// resources/read served.
+	McpSkillDigestKey = attribute.Key("gram.mcp.skill.digest")
 	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
 	// MCP tools/call reached: "hosted" or "private_proxy".
 	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
