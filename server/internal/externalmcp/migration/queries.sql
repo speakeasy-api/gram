@@ -1,9 +1,11 @@
 -- name: ListCandidates :many
--- Live servers whose latest toolset version references a proxy tool from an
--- external MCP attachment on the project's active deployment, across every
--- organization, with what the migration needs to decide whether each one can
--- switch in place. A server is live when its toolset is MCP-enabled or fronted
--- by a live mcp_servers row. Pass toolset_ids to narrow the scan.
+-- Toolsets whose latest version references a proxy tool, or the per-tool
+-- (direct) tools, of an external MCP attachment on any deployment, across
+-- every organization, with what staff need to decide whether each one switches
+-- in place or is deleted. A toolset is live when it is MCP-enabled or fronted
+-- by a live mcp_servers row; on_active_deployment is set when its project's
+-- active deployment still serves the attachment. Pass toolset_ids to narrow
+-- the scan.
 WITH active_deployments AS (
   SELECT DISTINCT ON (d.project_id) d.project_id, d.id
   FROM deployments AS d
@@ -15,7 +17,9 @@ WITH active_deployments AS (
     )
   ORDER BY d.project_id, d.seq DESC
 ),
-live_toolsets AS (
+-- Every toolset, live or not, so the ones left with nothing to migrate are
+-- listed for deletion.
+scoped_toolsets AS (
   SELECT
     t.id,
     t.organization_id,
@@ -28,30 +32,33 @@ live_toolsets AS (
     t.user_session_issuer_id,
     t.external_oauth_server_id,
     t.oauth_proxy_server_id,
-    t.tool_variations_group_id
-  FROM toolsets AS t
-  JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
-  WHERE t.deleted IS FALSE
-    AND (sqlc.narg('toolset_ids')::uuid[] IS NULL OR t.id = ANY(sqlc.narg('toolset_ids')::uuid[]))
-    AND (
+    t.tool_variations_group_id,
+    (
       t.mcp_enabled
       OR EXISTS (
         SELECT 1
         FROM mcp_servers AS ms
         WHERE ms.toolset_id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE
       )
-    )
+    ) AS live
+  FROM toolsets AS t
+  JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
+  WHERE t.deleted IS FALSE
+    AND (sqlc.narg('toolset_ids')::uuid[] IS NULL OR t.id = ANY(sqlc.narg('toolset_ids')::uuid[]))
 ),
 latest_versions AS (
   SELECT DISTINCT ON (tv.toolset_id) tv.toolset_id, tv.tool_urns, tv.resource_urns
   FROM toolset_versions AS tv
-  JOIN live_toolsets AS lt ON lt.id = tv.toolset_id
+  JOIN scoped_toolsets AS lt ON lt.id = tv.toolset_id
   WHERE tv.deleted IS FALSE
   ORDER BY tv.toolset_id, tv.version DESC
 ),
+-- Definitions on any deployment; on_active marks the ones the project's active
+-- deployment serves, which are all the migration looks at.
 proxy_definitions AS (
   SELECT
     t.id AS toolset_id,
+    (ea.deployment_id = ad.id) IS TRUE AS on_active,
     ea.id AS attachment_id,
     etd.tool_urn,
     etd.remote_url,
@@ -61,25 +68,25 @@ proxy_definitions AS (
       WHEN jsonb_typeof(etd.header_definitions) = 'array' THEN jsonb_array_length(etd.header_definitions) > 0
       ELSE FALSE
     END AS declares_headers
-  FROM live_toolsets AS t
+  FROM scoped_toolsets AS t
   JOIN latest_versions AS lv ON lv.toolset_id = t.id
-  JOIN active_deployments AS ad ON ad.project_id = t.project_id
+  LEFT JOIN active_deployments AS ad ON ad.project_id = t.project_id
   CROSS JOIN LATERAL unnest(lv.tool_urns) AS tool_urn(value)
   JOIN external_mcp_tool_definitions AS etd ON etd.tool_urn = tool_urn.value
   JOIN external_mcp_attachments AS ea ON ea.id = etd.external_mcp_attachment_id
-  WHERE ea.deployment_id = ad.id
-    AND etd.type = 'proxy'
+  WHERE etd.type IN ('proxy', 'direct')
     AND etd.deleted IS FALSE
     AND ea.deleted IS FALSE
 ),
 grouped AS (
   SELECT
     pd.toolset_id,
-    count(DISTINCT pd.attachment_id)::bigint AS attachment_count,
-    array_agg(DISTINCT pd.remote_url ORDER BY pd.remote_url)::text[] AS remote_urls,
-    array_agg(DISTINCT pd.transport_type ORDER BY pd.transport_type)::text[] AS transport_types,
-    bool_or(pd.declares_headers) AS declares_headers,
-    bool_or(pd.requires_oauth) AS requires_oauth
+    bool_or(pd.on_active)::boolean AS on_active_deployment,
+    count(DISTINCT pd.attachment_id) FILTER (WHERE pd.on_active)::bigint AS attachment_count,
+    COALESCE(array_agg(DISTINCT pd.remote_url ORDER BY pd.remote_url) FILTER (WHERE pd.on_active), ARRAY[]::text[])::text[] AS remote_urls,
+    COALESCE(array_agg(DISTINCT pd.transport_type ORDER BY pd.transport_type) FILTER (WHERE pd.on_active), ARRAY[]::text[])::text[] AS transport_types,
+    COALESCE(bool_or(pd.declares_headers) FILTER (WHERE pd.on_active), FALSE)::boolean AS declares_headers,
+    COALESCE(bool_or(pd.requires_oauth) FILTER (WHERE pd.on_active), FALSE)::boolean AS requires_oauth
   FROM proxy_definitions AS pd
   GROUP BY pd.toolset_id
 )
@@ -101,6 +108,16 @@ SELECT
   t.oauth_proxy_server_id,
   (t.tool_variations_group_id IS NOT NULL)::boolean AS toolset_has_variations,
   usi.slug AS user_session_issuer_slug,
+  COALESCE(t.live, FALSE)::boolean AS live,
+  -- The server that kept the toolset's id now proxies a remote MCP server:
+  -- the toolset was migrated in place and only waits to be deleted.
+  EXISTS (
+    SELECT 1
+    FROM mcp_servers AS ms
+    WHERE ms.id = t.id AND ms.project_id = t.project_id AND ms.deleted IS FALSE
+      AND ms.toolset_id IS NULL AND ms.remote_mcp_server_id IS NOT NULL
+  )::boolean AS migrated_in_place,
+  g.on_active_deployment,
   g.attachment_count,
   g.remote_urls,
   g.transport_types,
@@ -113,7 +130,7 @@ SELECT
     OR EXISTS (
       SELECT 1
       FROM unnest(lv.tool_urns) AS tool_urn(value)
-      WHERE tool_urn.value NOT IN (SELECT pd.tool_urn FROM proxy_definitions AS pd WHERE pd.toolset_id = t.id)
+      WHERE tool_urn.value NOT IN (SELECT pd.tool_urn FROM proxy_definitions AS pd WHERE pd.toolset_id = t.id AND pd.on_active)
     )
   )::boolean AS serves_other_tools,
   (
@@ -151,37 +168,60 @@ SELECT
   EXISTS (SELECT 1 FROM plugin_servers AS ps WHERE ps.toolset_id = t.id AND ps.deleted IS FALSE)::boolean AS has_toolset_plugin_entries,
   EXISTS (
     SELECT 1
-    FROM organization_mcp_collection_server_attachments AS a
-    WHERE a.deleted IS FALSE AND (a.toolset_id = t.id OR a.mcp_server_id = wrapper.id)
-  )::boolean AS has_collection_attachments,
-  EXISTS (
-    SELECT 1
     FROM meta_mcp_server_members AS m
     WHERE m.deleted IS FALSE AND m.mcp_server_id = wrapper.id
   )::boolean AS in_gateway,
   COALESCE((
     SELECT array_agg(DISTINCT rsi.id)
     FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_clients AS rsc
+      ON rsc.id = link.remote_session_client_id
+     AND rsc.deleted IS FALSE
+     -- The serve-time credential resolver's tenancy: the project's own
+     -- clients and its organization's organization-level clients.
+     AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
+     AND (rsi.project_id = t.project_id OR (rsi.project_id IS NULL AND rsi.organization_id = t.organization_id))
     WHERE link.user_session_issuer_id = t.user_session_issuer_id
   ), ARRAY[]::uuid[])::uuid[] AS remote_session_issuer_ids,
   COALESCE((
     SELECT array_agg(DISTINCT COALESCE(rsi.name, rsi.issuer) ORDER BY COALESCE(rsi.name, rsi.issuer))
     FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_clients AS rsc
+      ON rsc.id = link.remote_session_client_id
+     AND rsc.deleted IS FALSE
+     -- The serve-time credential resolver's tenancy: the project's own
+     -- clients and its organization's organization-level clients.
+     AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     JOIN remote_session_issuers AS rsi ON rsi.id = rsc.remote_session_issuer_id AND rsi.deleted IS FALSE
+     AND (rsi.project_id = t.project_id OR (rsi.project_id IS NULL AND rsi.organization_id = t.organization_id))
     WHERE link.user_session_issuer_id = t.user_session_issuer_id
   ), ARRAY[]::text[])::text[] AS remote_issuer_names,
   EXISTS (
     SELECT 1
     FROM remote_session_client_user_session_issuers AS link
-    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id AND rsc.deleted IS FALSE
+    JOIN remote_session_clients AS rsc
+      ON rsc.id = link.remote_session_client_id
+     AND rsc.deleted IS FALSE
+     -- The serve-time credential resolver's tenancy: the project's own
+     -- clients and its organization's organization-level clients.
+     AND (rsc.project_id = t.project_id OR (rsc.project_id IS NULL AND rsc.organization_id = t.organization_id))
     WHERE link.user_session_issuer_id = t.user_session_issuer_id AND rsc.credential_owner = 'self'
   )::boolean AS has_self_owned_clients,
   EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b WHERE b.user_session_issuer_id = t.user_session_issuer_id
   )::boolean AS has_ema_bindings,
+  -- Another enabled toolset on the issuer still reads its sessions, so
+  -- stamping a resource on them could cut it off.
+  (
+    SELECT count(*)
+    FROM toolsets AS other
+    JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
+    WHERE other.user_session_issuer_id = t.user_session_issuer_id
+      AND other.id <> t.id
+      AND other.deleted IS FALSE
+      AND other.mcp_enabled
+  )::bigint AS other_toolsets_on_issuer,
   COALESCE((
     SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))
     FROM remote_sessions AS rs
@@ -212,7 +252,7 @@ SELECT
       AND other.id IS DISTINCT FROM wrapper.id
   ), ARRAY[]::text[])::text[] AS other_remote_urls_on_issuer
 FROM grouped AS g
-JOIN live_toolsets AS t ON t.id = g.toolset_id
+JOIN scoped_toolsets AS t ON t.id = g.toolset_id
 JOIN latest_versions AS lv ON lv.toolset_id = t.id
 JOIN projects AS p ON p.id = t.project_id
 LEFT JOIN organization_metadata AS o ON o.id = t.organization_id
@@ -227,7 +267,7 @@ LEFT JOIN LATERAL (
 ORDER BY organization_name, p.name, t.name, t.id;
 
 -- name: ListHeaderDefinitions :many
--- The proxy tool definitions behind a toolset on its project's active
+-- The proxy and per-tool definitions behind a toolset on its project's active
 -- deployment, with their attachment's slug, for copying headers.
 WITH active_deployment AS (
   SELECT d.id
@@ -250,7 +290,7 @@ CROSS JOIN LATERAL unnest(lv.tool_urns) AS tool_urn(value)
 JOIN external_mcp_tool_definitions AS etd ON etd.tool_urn = tool_urn.value
 JOIN external_mcp_attachments AS ea ON ea.id = etd.external_mcp_attachment_id
 JOIN active_deployment AS ad ON ad.id = ea.deployment_id
-WHERE etd.type = 'proxy' AND etd.deleted IS FALSE AND ea.deleted IS FALSE
+WHERE etd.type IN ('proxy', 'direct') AND etd.deleted IS FALSE AND ea.deleted IS FALSE
 ORDER BY ea.slug, etd.tool_urn;
 
 -- name: LockToolset :one
@@ -268,11 +308,11 @@ WHERE toolset_id = @toolset_id AND project_id = @project_id AND deleted IS FALSE
 
 -- name: SwitchServerToRemote :execrows
 -- Swaps the backend in one statement, as mcp_servers_backend_exclusivity_check
--- requires, keeping the row's id, slug, visibility and network access.
+-- requires, keeping the row's id, slug, visibility and network access. The
+-- upstream issuer is then derived by the shared resync, as for any server.
 UPDATE mcp_servers
 SET toolset_id = NULL,
   remote_mcp_server_id = @remote_mcp_server_id,
-  remote_session_issuer_id = @remote_session_issuer_id,
   user_session_issuer_id = COALESCE(user_session_issuer_id, @user_session_issuer_id),
   updated_at = clock_timestamp()
 WHERE id = @id
@@ -288,16 +328,15 @@ SET mcp_enabled = FALSE, updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: RekeyToolsetMetadata :execrows
--- The server keeps the toolset's id, so its metadata row moves from the
--- toolset key to the server key without changing which server it describes,
--- unless the server already has one.
+-- Moves the toolset's metadata row onto the server it now describes, unless
+-- the server already has one.
 UPDATE mcp_metadata AS md
-SET toolset_id = NULL, mcp_server_id = @id, updated_at = clock_timestamp()
+SET toolset_id = NULL, mcp_server_id = @mcp_server_id, updated_at = clock_timestamp()
 WHERE md.project_id = @project_id
-  AND md.toolset_id = @id
+  AND md.toolset_id = @toolset_id
   AND NOT EXISTS (
     SELECT 1 FROM mcp_metadata AS existing
-    WHERE existing.project_id = @project_id AND existing.mcp_server_id = @id
+    WHERE existing.project_id = @project_id AND existing.mcp_server_id = @mcp_server_id
   );
 
 -- name: CountServerPluginEntries :one
@@ -324,7 +363,9 @@ WHERE rs.user_session_issuer_id = @user_session_issuer_id
   AND rs.remote_session_client_id IN (
     SELECT link.remote_session_client_id
     FROM remote_session_client_user_session_issuers AS link
+    JOIN remote_session_clients AS rsc ON rsc.id = link.remote_session_client_id
     WHERE link.user_session_issuer_id = @user_session_issuer_id
+      AND (rsc.project_id = @project_id::uuid OR (rsc.project_id IS NULL AND rsc.organization_id = @organization_id::text))
   );
 
 -- TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
@@ -348,7 +389,7 @@ WITH attachment AS (
   RETURNING id
 )
 INSERT INTO external_mcp_tool_definitions (external_mcp_attachment_id, tool_urn, remote_url, transport_type, type, requires_oauth, header_definitions)
-SELECT id, @tool_urn, @remote_url, 'streamable-http', 'proxy', @requires_oauth, sqlc.narg('header_definitions')::jsonb
+SELECT id, @tool_urn, @remote_url, 'streamable-http', @type, @requires_oauth, sqlc.narg('header_definitions')::jsonb
 FROM attachment;
 
 -- name: SeedRemoteSessionClientFixture :one

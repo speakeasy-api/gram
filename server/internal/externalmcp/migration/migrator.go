@@ -26,6 +26,9 @@ const (
 	// StatusMigrated means the server was switched and its toolset disabled.
 	StatusMigrated Status = "migrated"
 
+	// StatusDeleted means the toolset and its server were deleted.
+	StatusDeleted Status = "deleted"
+
 	// StatusPreviewed means a dry run completed every step and rolled back.
 	StatusPreviewed Status = "previewed"
 
@@ -55,6 +58,10 @@ type Actor struct {
 type Outcome struct {
 	// ToolsetID is the candidate's toolset.
 	ToolsetID uuid.UUID
+
+	// Action is what the run did, or would do, with the candidate; empty
+	// when it was not attempted.
+	Action Action
 
 	// Status is the server's result.
 	Status Status
@@ -99,9 +106,8 @@ type Migrator struct {
 }
 
 // NewMigrator builds a migrator. enc decrypts environment values copied into
-// headers and encrypts them again; it may be nil when no application key is
-// configured, which fails any migration that needs it. toolCalls may be nil
-// when telemetry is unavailable.
+// headers and encrypts them again. toolCalls may be nil when telemetry is
+// unavailable.
 func NewMigrator(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, auditLogger *audit.Logger, policy *guardian.Policy, enc *encryption.Client, publication plugins.PublicationRequests, toolCalls ToolCallCounter) *Migrator {
 	return &Migrator{
 		logger:         logger.With(attr.SlogComponent("external_mcp_migration")),
@@ -138,7 +144,7 @@ func (m *Migrator) Run(ctx context.Context, actor Actor, requests []Request, dry
 	stopped := false
 	for _, request := range requests {
 		if stopped {
-			outcomes = append(outcomes, Outcome{ToolsetID: request.ToolsetID, Status: StatusNotAttempted, Reason: "an earlier server failed", McpSlug: "", McpServerID: uuid.Nil, RemoteMcpServerID: uuid.Nil, RemoteURL: "", Actions: nil, Warnings: nil})
+			outcomes = append(outcomes, Outcome{ToolsetID: request.ToolsetID, Action: "", Status: StatusNotAttempted, Reason: "an earlier server failed", McpSlug: "", McpServerID: uuid.Nil, RemoteMcpServerID: uuid.Nil, RemoteURL: "", Actions: nil, Warnings: nil})
 			continue
 		}
 		outcome := m.runOne(ctx, actor, request, dryRun)
@@ -159,6 +165,10 @@ func (m *Migrator) runOne(ctx context.Context, actor Actor, request Request, dry
 
 	outcome.ToolsetID = request.ToolsetID
 	outcome.Status = StatusFailed
+	// The transaction rolled back, so nothing it created exists.
+	outcome.RemoteMcpServerID = uuid.Nil
+	outcome.RemoteURL = ""
+	outcome.Actions = nil
 	var reason failure
 	switch {
 	case errors.As(err, &reason):
@@ -196,6 +206,9 @@ func (m *Migrator) migrate(ctx context.Context, actor Actor, request Request, dr
 		return outcome, fmt.Errorf("commit migration: %w", err)
 	}
 	outcome.Status = StatusMigrated
+	if outcome.Action == ActionDelete {
+		outcome.Status = StatusDeleted
+	}
 	return outcome, nil
 }
 

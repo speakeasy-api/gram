@@ -458,6 +458,11 @@ func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider,
 	if err != nil {
 		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "lock hosted MCP server for deletion")
 	}
+	// A server that kept the toolset's id but moved to a remote MCP backend no
+	// longer belongs to the toolset, so the toolset has nothing to tombstone.
+	if !locked.Server.ToolsetID.Valid && locked.Server.RemoteMcpServerID.Valid {
+		return DeleteResult{}, nil
+	}
 	if !locked.Server.ToolsetID.Valid || locked.Server.ToolsetID.UUID != toolset.ID {
 		return DeleteResult{}, oops.E(oops.CodeConflict, nil, "hosted MCP identity belongs to another server")
 	}

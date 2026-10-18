@@ -18,10 +18,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 )
 
-// Candidate is a live server backed by an external MCP attachment.
+// Action is what staff can do with a candidate.
+type Action string
+
+const (
+	// ActionMigrate switches the server in place to a remote MCP server.
+	ActionMigrate Action = "migrate"
+
+	// ActionDelete deletes the toolset and its server, for a toolset left with
+	// nothing to migrate.
+	ActionDelete Action = "delete"
+)
+
+// Candidate is a toolset backed by an external MCP attachment.
 type Candidate struct {
 	// Row is the candidate as stored.
 	Row repo.ListCandidatesRow
+
+	// Action is what running the candidate does.
+	Action Action
+
+	// DeleteReasons explain why the candidate is deleted rather than
+	// migrated; empty when it migrates.
+	DeleteReasons []string
 
 	// RemoteURL is the attachment's upstream URL, or empty when the server
 	// references several.
@@ -36,6 +55,10 @@ type Candidate struct {
 	// Blockers explain why the server cannot be migrated; empty when it can.
 	Blockers []string
 
+	// Warnings name what the migration drops or cannot carry over. They do
+	// not stop it.
+	Warnings []string
+
 	// ToolCalls counts the server's tool calls over the reporting window; nil
 	// when telemetry is unavailable.
 	ToolCalls *uint64
@@ -43,32 +66,30 @@ type Candidate struct {
 
 const (
 	blockerNoOrganization     = "its organization has no metadata record, so it is handled separately"
-	blockerNoIssuer           = "has no sign-in provider to reuse"
-	blockerExternalOAuth      = "uses an external OAuth server, which remote MCP servers do not support"
-	blockerOAuthProxy         = "uses an OAuth proxy, which remote MCP servers do not support"
-	blockerUserOAuthTokens    = "has stored OAuth proxy tokens, which remote MCP servers do not use" //nolint:gosec // a reason shown to staff, not a credential
-	blockerUserHeaders        = "users send their own credentials with each request; handle this server manually"
-	blockerManyAttachments    = "proxies more than one external MCP attachment"
-	blockerManyURLs           = "proxies more than one upstream URL"
-	blockerManyTransports     = "proxies upstreams over more than one transport"
-	blockerOtherTools         = "serves tools or resources beyond the external MCP attachment, which the switch would drop"
+	deleteNotLive             = "MCP is off and it has no server row, so nothing serves it"
+	deleteMigrated            = "already migrated; its server now proxies a remote MCP server and keeps working"
+	deleteNotOnDeployment     = "its external MCP attachment is no longer on the project's active deployment"
+	deleteManyUpstreams       = "proxies more than one external MCP attachment, URL or transport"
+	blockerTransport          = "uses a transport remote MCP servers do not support"
 	blockerVariations         = "uses tool variations, which the switch would drop"
 	blockerPrompts            = "has prompts, which the switch would drop"
 	blockerAssistants         = "is attached to an assistant through its toolset"
 	blockerSlackApps          = "is attached to a Slack app through its toolset"
 	blockerToolsetPlugin      = "is in a plugin through its toolset rather than its server"
-	blockerCollections        = "is in an organization collection"
 	blockerGateway            = "is a member of a gateway"
 	blockerNoServer           = "has no server row; only the legacy toolset address serves it"
 	blockerManyServers        = "has more than one server row"
 	blockerEndpoints          = "does not have exactly one address"
 	blockerServerIssuer       = "its server signs in through a different provider than its toolset"
-	blockerNoUpstreamIssuer   = "its sign-in provider has no upstream client"
 	blockerManyUpstreamIssuer = "its sign-in provider's clients use more than one upstream authorization server"
 	blockerSelfOwnedClient    = "its sign-in provider has a client that holds its own credentials"
 	blockerEMABindings        = "its sign-in provider has enterprise-managed authorization bindings"
+	warningExternalOAuth      = "uses an external OAuth server, which is not carried over; sign-in through it is dropped"
+	warningOAuthProxy         = "has an OAuth proxy or its stored tokens, which are dropped; sign-in through the proxy stops"
+	warningOtherTools         = "serves tools or resources beyond the external MCP attachment, which are dropped"
 	blockerManyResources      = "its signed-in sessions record more than one upstream resource"
 	blockerSharedNonRemote    = "another server signs in through the same provider and is not a remote MCP server"
+	blockerSharedToolset      = "another enabled toolset signs in through the same provider"
 	blockerSharedOtherURL     = "another remote MCP server on the same sign-in provider dials a different upstream"
 )
 
@@ -99,35 +120,40 @@ func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 
 // assess derives a candidate's upstream URLs and blockers from its row.
 func assess(row repo.ListCandidatesRow) Candidate {
-	candidate := Candidate{Row: row, RemoteURL: "", ReplacementURL: "", Blockers: nil, ToolCalls: nil}
+	candidate := Candidate{Row: row, Action: ActionMigrate, DeleteReasons: nil, RemoteURL: "", ReplacementURL: "", Blockers: nil, Warnings: nil, ToolCalls: nil}
 	block := func(reason string) { candidate.Blockers = append(candidate.Blockers, reason) }
+	warn := func(reason string) { candidate.Warnings = append(candidate.Warnings, reason) }
+
+	if reasons := deleteReasons(row); len(reasons) > 0 {
+		candidate.Action = ActionDelete
+		candidate.DeleteReasons = reasons
+		if len(row.RemoteUrls) == 1 {
+			candidate.RemoteURL = row.RemoteUrls[0]
+		}
+		// Deleting does not unlink a Slack app; that stays a dashboard job.
+		if row.HasSlackApps {
+			block(blockerSlackApps)
+		}
+		return candidate
+	}
 
 	if !row.HasOrganizationMetadata {
 		block(blockerNoOrganization)
 	}
-	if !row.UserSessionIssuerID.Valid || !row.UserSessionIssuerSlug.Valid {
-		block(blockerNoIssuer)
-	}
+	// Sign-in through an external OAuth server or an OAuth proxy does not carry
+	// over. The switched server keeps its user session issuer, if any, and
+	// reaches the upstream without upstream credentials.
 	if row.ExternalOauthServerID.Valid {
-		block(blockerExternalOAuth)
+		warn(warningExternalOAuth)
 	}
-	if row.OauthProxyServerID.Valid {
-		block(blockerOAuthProxy)
-	}
-	if row.HasUserOauthTokens {
-		block(blockerUserOAuthTokens)
-	}
-	if row.DeclaresHeaders && !row.RequiresOauth {
-		block(blockerUserHeaders)
-	}
-	if row.AttachmentCount != 1 {
-		block(blockerManyAttachments)
-	}
-	if len(row.TransportTypes) != 1 || !supportedTransport(row.TransportTypes[0]) {
-		block(blockerManyTransports)
+	if row.OauthProxyServerID.Valid || row.HasUserOauthTokens {
+		warn(warningOAuthProxy)
 	}
 	if row.ServesOtherTools {
-		block(blockerOtherTools)
+		warn(warningOtherTools)
+	}
+	if !supportedTransport(row.TransportTypes[0]) {
+		block(blockerTransport)
 	}
 	if row.ToolsetHasVariations || row.ServerHasVariations {
 		block(blockerVariations)
@@ -143,9 +169,6 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	}
 	if row.HasToolsetPluginEntries {
 		block(blockerToolsetPlugin)
-	}
-	if row.HasCollectionAttachments {
-		block(blockerCollections)
 	}
 	if row.InGateway {
 		block(blockerGateway)
@@ -163,12 +186,10 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if row.ServerUserSessionIssuerID.Valid && row.ServerUserSessionIssuerID != row.UserSessionIssuerID {
 		block(blockerServerIssuer)
 	}
+	// A server without a sign-in provider, or whose provider has no upstream
+	// client, holds no upstream credentials, so there is nothing to carry over.
 	if row.UserSessionIssuerID.Valid {
-		switch len(row.RemoteSessionIssuerIds) {
-		case 0:
-			block(blockerNoUpstreamIssuer)
-		case 1:
-		default:
+		if len(row.RemoteSessionIssuerIds) > 1 {
 			block(blockerManyUpstreamIssuer)
 		}
 		if row.HasSelfOwnedClients {
@@ -180,12 +201,11 @@ func assess(row repo.ListCandidatesRow) Candidate {
 		if row.OtherNonRemoteServersOnIssuer > 0 {
 			block(blockerSharedNonRemote)
 		}
+		if row.OtherToolsetsOnIssuer > 0 {
+			block(blockerSharedToolset)
+		}
 	}
 
-	if len(row.RemoteUrls) != 1 {
-		block(blockerManyURLs)
-		return candidate
-	}
 	candidate.RemoteURL = row.RemoteUrls[0]
 	replacement, err := replacementURL(candidate.RemoteURL, row.SessionResources)
 	if err != nil {
@@ -200,6 +220,25 @@ func assess(row repo.ListCandidatesRow) Candidate {
 		}
 	}
 	return candidate
+}
+
+// deleteReasons explain why a toolset is left with nothing to migrate. A
+// candidate with none proxies exactly one attachment, URL and transport on
+// its project's active deployment.
+func deleteReasons(row repo.ListCandidatesRow) []string {
+	var reasons []string
+	switch {
+	case row.MigratedInPlace:
+		return []string{deleteMigrated}
+	case !row.Live:
+		reasons = append(reasons, deleteNotLive)
+	}
+	if !row.OnActiveDeployment {
+		reasons = append(reasons, deleteNotOnDeployment)
+	} else if row.AttachmentCount != 1 || len(row.RemoteUrls) != 1 || len(row.TransportTypes) != 1 {
+		reasons = append(reasons, deleteManyUpstreams)
+	}
+	return reasons
 }
 
 // replacementURL is the URL the switched server dials. Existing upstream

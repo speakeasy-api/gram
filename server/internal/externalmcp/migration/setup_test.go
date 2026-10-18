@@ -111,7 +111,14 @@ type serverOptions struct {
 	headers       []byte
 	requiresOAuth bool
 	noIssuer      bool
+	noClient      bool
 	noWrapper     bool
+	// otherTool adds an HTTP tool beside the external MCP proxy tool.
+	otherTool bool
+	// perTool seeds a per-tool (direct) definition instead of the proxy tool.
+	perTool bool
+	// mcpOff seeds the toolset with MCP turned off.
+	mcpOff bool
 	// sharedIssuer signs the server in through another server's issuer
 	// instead of creating its own.
 	sharedIssuer *fixtureServer
@@ -120,20 +127,27 @@ type serverOptions struct {
 func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts serverOptions) fixtureServer {
 	t.Helper()
 
-	toolURN := urn.NewTool(urn.ToolKindExternalMCP, opts.slug, "proxy")
+	toolURN, toolType := urn.NewTool(urn.ToolKindExternalMCP, opts.slug, "proxy"), "proxy"
+	if opts.perTool {
+		toolURN, toolType = urn.NewTool(urn.ToolKindExternalMCP, opts.slug, "search"), "direct"
+	}
 	require.NoError(t, repo.New(ti.conn).SeedExternalMCPProxyFixture(ctx, repo.SeedExternalMCPProxyFixtureParams{
-		DeploymentID: ti.deploymentID, Slug: opts.slug, ToolUrn: toolURN.String(), RemoteUrl: opts.remoteURL, RequiresOauth: opts.requiresOAuth, HeaderDefinitions: opts.headers,
+		DeploymentID: ti.deploymentID, Slug: opts.slug, ToolUrn: toolURN.String(), RemoteUrl: opts.remoteURL, Type: toolType, RequiresOauth: opts.requiresOAuth, HeaderDefinitions: opts.headers,
 	}))
 
 	toolsets := toolsetsrepo.New(ti.conn)
 	toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: ti.organizationID, ProjectID: ti.projectID,
 		Name: opts.slug, Slug: opts.slug, Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug: conv.ToPGText(opts.slug + "-mcp"), McpEnabled: true,
+		McpSlug: conv.ToPGText(opts.slug + "-mcp"), McpEnabled: !opts.mcpOff,
 	})
 	require.NoError(t, err)
+	toolURNs := []urn.Tool{toolURN}
+	if opts.otherTool {
+		toolURNs = append(toolURNs, urn.NewTool(urn.ToolKindHTTP, opts.slug, "extra"))
+	}
 	_, err = toolsets.CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
-		ToolsetID: toolset.ID, Version: 1, ToolUrns: []urn.Tool{toolURN}, ResourceUrns: []urn.Resource{}, PredecessorID: uuid.NullUUID{},
+		ToolsetID: toolset.ID, Version: 1, ToolUrns: toolURNs, ResourceUrns: []urn.Resource{}, PredecessorID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
 
@@ -155,12 +169,16 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 			UserSessionIssuerID: conv.ToNullUUID(issuer.ID), Slug: toolset.Slug, ProjectID: ti.projectID,
 		})
 		require.NoError(t, err)
+		server.toolset, server.issuerID = toolset, issuer.ID
+		if opts.noClient {
+			break
+		}
 		clientID, err := repo.New(ti.conn).SeedRemoteSessionClientFixture(ctx, repo.SeedRemoteSessionClientFixtureParams{
 			ProjectID: conv.ToNullUUID(ti.projectID), OrganizationID: conv.ToPGText(ti.organizationID),
 			Slug: opts.slug + "-upstream", IssuerUrl: "https://auth.example.com/" + opts.slug, UserSessionIssuerID: issuer.ID,
 		})
 		require.NoError(t, err)
-		server.toolset, server.issuerID, server.clientID = toolset, issuer.ID, clientID
+		server.clientID = clientID
 	}
 
 	if !opts.noWrapper {

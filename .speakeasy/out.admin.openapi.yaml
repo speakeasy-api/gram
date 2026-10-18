@@ -542,7 +542,7 @@ paths:
       x-speakeasy-name-override: listExternalMcpMigrationCandidates
   /admin/externalMcpMigration.migrate:
     post:
-      description: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+      description: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
       operationId: adminMigrateExternalMcpServers
       requestBody:
         content:
@@ -623,7 +623,7 @@ paths:
       x-speakeasy-name-override: migrateExternalMcpServers
   /admin/externalMcpMigration.preview:
     post:
-      description: Runs the migration of each server inside a transaction that is rolled back, reporting what would happen without changing anything.
+      description: Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.
       operationId: adminPreviewExternalMcpMigration
       requestBody:
         content:
@@ -7660,11 +7660,22 @@ components:
     AdminExternalMcpMigrationCandidate:
       type: object
       properties:
+        action:
+          type: string
+          description: 'What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.'
+          enum:
+            - migrate
+            - delete
         blockers:
           type: array
           items:
             type: string
           description: Why the server cannot be migrated. Empty when it can.
+        delete_reasons:
+          type: array
+          items:
+            type: string
+          description: Why the candidate is deleted rather than migrated. Empty when it migrates.
         mcp_slug:
           type: string
           description: The slug in the server's /mcp/<slug> address. Absent when the server has none.
@@ -7707,7 +7718,12 @@ components:
           type: string
           description: The toolset behind the server.
           format: uuid
-      description: A live server backed by an external MCP attachment.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: What migrating the server drops or cannot carry over. Warnings do not stop it.
+      description: 'A toolset backed by an external MCP attachment, with what running it does: migrate its server in place, or delete it.'
       required:
         - toolset_id
         - organization_id
@@ -7717,10 +7733,19 @@ components:
         - project_name
         - project_slug
         - server_name
+        - action
+        - delete_reasons
         - blockers
+        - warnings
     AdminExternalMcpMigrationOutcome:
       type: object
       properties:
+        action:
+          type: string
+          description: What the run did, or would do, with the candidate. Absent when it was not attempted.
+          enum:
+            - migrate
+            - delete
         actions:
           type: array
           items:
@@ -7732,12 +7757,13 @@ components:
           format: uuid
         mcp_slug:
           type: string
-          description: The server's /mcp/<slug> address, which does not change.
+          description: The server's /mcp/<slug> address. Migrating keeps it; deleting a server the toolset still owns removes it.
         migration_status:
           type: string
-          description: migrated and previewed completed every step; failed left the server unchanged; not_attempted follows an earlier failure.
+          description: migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
           enum:
             - migrated
+            - deleted
             - previewed
             - failed
             - not_attempted
@@ -7746,11 +7772,11 @@ components:
           description: Why the server failed or was not attempted.
         remote_mcp_server_id:
           type: string
-          description: The remote MCP source the server now proxies.
+          description: The remote MCP source the server proxies once migrated. Absent when the server failed; a preview's source is rolled back.
           format: uuid
         remote_url:
           type: string
-          description: The upstream URL the server now dials.
+          description: The upstream URL the server dials once migrated. Absent when the server failed.
         toolset_id:
           type: string
           description: The candidate's toolset.
@@ -10194,7 +10220,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminExternalMcpMigrationRequest'
-          description: Servers to migrate, in order.
+          description: Servers to migrate or delete, in order.
           minItems: 1
           maxItems: 100
       required:
@@ -10237,7 +10263,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminExternalMcpMigrationRequest'
-          description: Servers to migrate, in order.
+          description: Servers to migrate or delete, in order.
           minItems: 1
           maxItems: 100
       required:
