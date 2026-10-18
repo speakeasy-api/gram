@@ -87,16 +87,17 @@ const AggregationCount = "count"
 type TimeGrain string
 
 const (
-	TimeGrainNone  TimeGrain = "none"
-	TimeGrainHour  TimeGrain = "hour"
-	TimeGrainDay   TimeGrain = "day"
-	TimeGrainWeek  TimeGrain = "week"
-	TimeGrainMonth TimeGrain = "month"
+	TimeGrainNone   TimeGrain = "none"
+	TimeGrainMinute TimeGrain = "minute"
+	TimeGrainHour   TimeGrain = "hour"
+	TimeGrainDay    TimeGrain = "day"
+	TimeGrainWeek   TimeGrain = "week"
+	TimeGrainMonth  TimeGrain = "month"
 )
 
 // timeGrains is every grain a grouped query may bucket by, narrowest first
 // after none.
-var timeGrains = []TimeGrain{TimeGrainNone, TimeGrainHour, TimeGrainDay, TimeGrainWeek, TimeGrainMonth}
+var timeGrains = []TimeGrain{TimeGrainNone, TimeGrainMinute, TimeGrainHour, TimeGrainDay, TimeGrainWeek, TimeGrainMonth}
 
 // TimeGrains lists the grains a grouped query may bucket by, as a copy the
 // caller may keep.
@@ -234,8 +235,9 @@ func (f *Field) AdmitsAggregation(agg string) bool {
 // builder is generated from, and the reason a new dataset needs no client
 // change.
 type Catalog struct {
-	datasets []*Dataset
-	lookups  []*Lookup
+	datasets      []*Dataset
+	lookups       []*Lookup
+	signalMetrics bool
 }
 
 // NewCatalog validates the lookups and datasets and returns a catalog over
@@ -265,7 +267,14 @@ func NewCatalog(lookups []*Lookup, datasets ...*Dataset) (*Catalog, error) {
 		}
 		seen[ds.Name] = struct{}{}
 	}
-	return &Catalog{datasets: datasets, lookups: lookups}, nil
+	return &Catalog{datasets: datasets, lookups: lookups, signalMetrics: false}, nil
+}
+
+// WithSignalMetrics adds the named signal-measurement contract to this catalog.
+func (c *Catalog) WithSignalMetrics() *Catalog {
+	cloned := *c
+	cloned.signalMetrics = true
+	return &cloned
 }
 
 // MustCatalog is NewCatalog for the package's own declarations.

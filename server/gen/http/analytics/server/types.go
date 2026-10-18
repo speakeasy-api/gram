@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	analytics "github.com/speakeasy-api/gram/server/gen/analytics"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -17,11 +19,15 @@ import (
 type QueryRequestBody struct {
 	// Dataset to query, per describe
 	Dataset *string `form:"dataset,omitempty" json:"dataset,omitempty" xml:"dataset,omitempty"`
+	// Required for dataset signals; uses semantic metrics and its own group/point
+	// budgets instead of composed measures
+	SignalQuery *AnalyticsSignalQueryRequestBody `form:"signal_query,omitempty" json:"signal_query,omitempty" xml:"signal_query,omitempty"`
 	// Start of the half-open window [from, to), ISO 8601
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End of the half-open window [from, to), ISO 8601
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
-	// Time bucket width for a grouped query. Absent means none.
+	// Time interval from the analytics catalog. Composed queries admit none,
+	// minute, hour, day, week or month. Signal measurements also admit auto.
 	Grain *string `form:"grain,omitempty" json:"grain,omitempty" xml:"grain,omitempty"`
 	// Group-by key when grouped; projected columns when ungrouped. At most 3.
 	Dimensions []string `form:"dimensions,omitempty" json:"dimensions,omitempty" xml:"dimensions,omitempty"`
@@ -46,12 +52,26 @@ type DimensionValuesRequestBody struct {
 	Dataset *string `form:"dataset,omitempty" json:"dataset,omitempty" xml:"dataset,omitempty"`
 	// Dimension to list values of
 	Dimension *string `form:"dimension,omitempty" json:"dimension,omitempty" xml:"dimension,omitempty"`
+	// Required for dataset signals
+	SignalScope *AnalyticsSignalScopeRequestBody `form:"signal_scope,omitempty" json:"signal_scope,omitempty" xml:"signal_scope,omitempty"`
+	// With dimension=attribute, the exact signal attribute key.
+	// dimension=attribute_keys discovers keys.
+	Attribute *string `form:"attribute,omitempty" json:"attribute,omitempty" xml:"attribute,omitempty"`
 	// Start of the half-open window [from, to), ISO 8601
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// End of the half-open window [from, to), ISO 8601
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Maximum values. Defaults to 50, at most 200.
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
+// SignalDefinitionResponseBody is the type of the "analytics" service
+// "signalDefinition" endpoint HTTP response body.
+type SignalDefinitionResponseBody struct {
+	SensorID       string         `form:"sensor_id" json:"sensor_id" xml:"sensor_id"`
+	DefinitionHash string         `form:"definition_hash" json:"definition_hash" xml:"definition_hash"`
+	Definition     map[string]any `form:"definition" json:"definition" xml:"definition"`
+	CapturedAt     string         `form:"captured_at" json:"captured_at" xml:"captured_at"`
 }
 
 // QueryResponseBody is the type of the "analytics" service "query" endpoint
@@ -64,6 +84,8 @@ type QueryResponseBody struct {
 	Plan string `form:"plan" json:"plan" xml:"plan"`
 	// Result rows
 	Rows []map[string]any `form:"rows" json:"rows" xml:"rows"`
+	// Measurement semantics and complete-series metadata for dataset signals
+	SignalResult *AnalyticsSignalResultResponseBody `form:"signal_result,omitempty" json:"signal_result,omitempty" xml:"signal_result,omitempty"`
 }
 
 // DescribeResponseBody is the type of the "analytics" service "describe"
@@ -75,6 +97,8 @@ type DescribeResponseBody struct {
 	// administrators can read, so a saved widget over one can say why it shows
 	// nothing rather than reading as broken
 	RestrictedDatasets []string `form:"restricted_datasets,omitempty" json:"restricted_datasets,omitempty" xml:"restricted_datasets,omitempty"`
+	// Signal measurement contract and current sensor/signal names, when entitled
+	SignalMetrics *AnalyticsSignalCatalogResponseBody `form:"signal_metrics,omitempty" json:"signal_metrics,omitempty" xml:"signal_metrics,omitempty"`
 }
 
 // DimensionValuesResponseBody is the type of the "analytics" service
@@ -83,6 +107,192 @@ type DimensionValuesResponseBody struct {
 	Dataset   string                                 `form:"dataset" json:"dataset" xml:"dataset"`
 	Dimension string                                 `form:"dimension" json:"dimension" xml:"dimension"`
 	Values    []*AnalyticsDimensionValueResponseBody `form:"values" json:"values" xml:"values"`
+}
+
+// SignalDefinitionUnauthorizedResponseBody is the type of the "analytics"
+// service "signalDefinition" endpoint HTTP response body for the
+// "unauthorized" error.
+type SignalDefinitionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalDefinitionForbiddenResponseBody is the type of the "analytics" service
+// "signalDefinition" endpoint HTTP response body for the "forbidden" error.
+type SignalDefinitionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalDefinitionBadRequestResponseBody is the type of the "analytics"
+// service "signalDefinition" endpoint HTTP response body for the "bad_request"
+// error.
+type SignalDefinitionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalDefinitionNotFoundResponseBody is the type of the "analytics" service
+// "signalDefinition" endpoint HTTP response body for the "not_found" error.
+type SignalDefinitionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalDefinitionConflictResponseBody is the type of the "analytics" service
+// "signalDefinition" endpoint HTTP response body for the "conflict" error.
+type SignalDefinitionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalDefinitionUnsupportedMediaResponseBody is the type of the "analytics"
+// service "signalDefinition" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SignalDefinitionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalDefinitionInvalidResponseBody is the type of the "analytics" service
+// "signalDefinition" endpoint HTTP response body for the "invalid" error.
+type SignalDefinitionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalDefinitionInvariantViolationResponseBody is the type of the
+// "analytics" service "signalDefinition" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SignalDefinitionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalDefinitionUnexpectedResponseBody is the type of the "analytics"
+// service "signalDefinition" endpoint HTTP response body for the "unexpected"
+// error.
+type SignalDefinitionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SignalDefinitionGatewayErrorResponseBody is the type of the "analytics"
+// service "signalDefinition" endpoint HTTP response body for the
+// "gateway_error" error.
+type SignalDefinitionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // QueryUnauthorizedResponseBody is the type of the "analytics" service "query"
@@ -630,6 +840,74 @@ type DimensionValuesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// AnalyticsSignalResultResponseBody is used to define fields on response body
+// types.
+type AnalyticsSignalResultResponseBody struct {
+	Metadata *AnalyticsSignalMetadataResponseBody `form:"metadata" json:"metadata" xml:"metadata"`
+	// Exact whole-window measures, including groups outside the selected top groups
+	Summary map[string]any `form:"summary" json:"summary" xml:"summary"`
+	// Whole-window totals for selected groups; group_values follows
+	// metadata.group_by
+	Groups []map[string]any `form:"groups" json:"groups" xml:"groups"`
+}
+
+// AnalyticsSignalMetadataResponseBody is used to define fields on response
+// body types.
+type AnalyticsSignalMetadataResponseBody struct {
+	Selection          *AnalyticsSignalSelectionResponseBody `form:"selection" json:"selection" xml:"selection"`
+	Trigger            string                                `form:"trigger" json:"trigger" xml:"trigger"`
+	RunID              *string                               `form:"run_id,omitempty" json:"run_id,omitempty" xml:"run_id,omitempty"`
+	Step               string                                `form:"step" json:"step" xml:"step"`
+	PhysicalResolution string                                `form:"physical_resolution" json:"physical_resolution" xml:"physical_resolution"`
+	TimeAxis           string                                `form:"time_axis" json:"time_axis" xml:"time_axis"`
+	Unit               string                                `form:"unit" json:"unit" xml:"unit"`
+	Population         string                                `form:"population" json:"population" xml:"population"`
+	Coverage           string                                `form:"coverage" json:"coverage" xml:"coverage"`
+	QueriedAt          string                                `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	From               string                                `form:"from" json:"from" xml:"from"`
+	To                 string                                `form:"to" json:"to" xml:"to"`
+	Filters            []*AnalyticsSignalFilterResponseBody  `form:"filters" json:"filters" xml:"filters"`
+	// Live, not a replayable historical snapshot
+	Snapshot        string                                  `form:"snapshot" json:"snapshot" xml:"snapshot"`
+	Exact           bool                                    `form:"exact" json:"exact" xml:"exact"`
+	SeriesComplete  bool                                    `form:"series_complete" json:"series_complete" xml:"series_complete"`
+	GroupsTruncated bool                                    `form:"groups_truncated" json:"groups_truncated" xml:"groups_truncated"`
+	GroupBy         []*AnalyticsSignalDimensionResponseBody `form:"group_by" json:"group_by" xml:"group_by"`
+	PointBudget     int                                     `form:"point_budget" json:"point_budget" xml:"point_budget"`
+}
+
+// AnalyticsSignalSelectionResponseBody is used to define fields on response
+// body types.
+type AnalyticsSignalSelectionResponseBody struct {
+	SensorID string `form:"sensor_id" json:"sensor_id" xml:"sensor_id"`
+	// For multi-label or exclusive results; omit when minimum_level is set
+	SignalID *string `form:"signal_id,omitempty" json:"signal_id,omitempty" xml:"signal_id,omitempty"`
+	// Zero-based ordered level; matches cumulative probability at or above this
+	// level
+	MinimumLevel *int `form:"minimum_level,omitempty" json:"minimum_level,omitempty" xml:"minimum_level,omitempty"`
+	// Explicit probability threshold greater than zero. Exclusive results use the
+	// selected signal instead.
+	Threshold float64 `form:"threshold" json:"threshold" xml:"threshold"`
+}
+
+// AnalyticsSignalFilterResponseBody is used to define fields on response body
+// types.
+type AnalyticsSignalFilterResponseBody struct {
+	Dimension *AnalyticsSignalDimensionResponseBody `form:"dimension" json:"dimension" xml:"dimension"`
+	// Comparison from the analytics catalog: equals, in, exists or missing
+	Operator string   `form:"operator" json:"operator" xml:"operator"`
+	Values   []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
+}
+
+// AnalyticsSignalDimensionResponseBody is used to define fields on response
+// body types.
+type AnalyticsSignalDimensionResponseBody struct {
+	// System dimension from the analytics catalog: source, role, actor, assistant
+	// or definition
+	Field     *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	Attribute *string `form:"attribute,omitempty" json:"attribute,omitempty" xml:"attribute,omitempty"`
+}
+
 // AnalyticsDatasetResponseBody is used to define fields on response body types.
 type AnalyticsDatasetResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
@@ -668,6 +946,40 @@ type AnalyticsLookupResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 }
 
+// AnalyticsSignalCatalogResponseBody is used to define fields on response body
+// types.
+type AnalyticsSignalCatalogResponseBody struct {
+	Dataset           string                               `form:"dataset" json:"dataset" xml:"dataset"`
+	Unit              string                               `form:"unit" json:"unit" xml:"unit"`
+	Population        string                               `form:"population" json:"population" xml:"population"`
+	Steps             []string                             `form:"steps" json:"steps" xml:"steps"`
+	Operators         []string                             `form:"operators" json:"operators" xml:"operators"`
+	SystemDimensions  []string                             `form:"system_dimensions" json:"system_dimensions" xml:"system_dimensions"`
+	InitialAttributes []string                             `form:"initial_attributes" json:"initial_attributes" xml:"initial_attributes"`
+	MaxSpanDays       int                                  `form:"max_span_days" json:"max_span_days" xml:"max_span_days"`
+	MaxGroups         int                                  `form:"max_groups" json:"max_groups" xml:"max_groups"`
+	MaxPoints         int                                  `form:"max_points" json:"max_points" xml:"max_points"`
+	Sensors           []*AnalyticsSignalSensorResponseBody `form:"sensors" json:"sensors" xml:"sensors"`
+	Signals           []*AnalyticsSignalNameResponseBody   `form:"signals" json:"signals" xml:"signals"`
+}
+
+// AnalyticsSignalSensorResponseBody is used to define fields on response body
+// types.
+type AnalyticsSignalSensorResponseBody struct {
+	ID        string   `form:"id" json:"id" xml:"id"`
+	Name      string   `form:"name" json:"name" xml:"name"`
+	Mode      string   `form:"mode" json:"mode" xml:"mode"`
+	Enabled   bool     `form:"enabled" json:"enabled" xml:"enabled"`
+	SignalIds []string `form:"signal_ids" json:"signal_ids" xml:"signal_ids"`
+}
+
+// AnalyticsSignalNameResponseBody is used to define fields on response body
+// types.
+type AnalyticsSignalNameResponseBody struct {
+	ID   string `form:"id" json:"id" xml:"id"`
+	Name string `form:"name" json:"name" xml:"name"`
+}
+
 // AnalyticsDimensionValueResponseBody is used to define fields on response
 // body types.
 type AnalyticsDimensionValueResponseBody struct {
@@ -675,6 +987,56 @@ type AnalyticsDimensionValueResponseBody struct {
 	Value string `form:"value" json:"value" xml:"value"`
 	// Rows at the dataset's grain carrying this value inside the window
 	Count int64 `form:"count" json:"count" xml:"count"`
+	// For signal attributes, false distinguishes absent labels from present empty
+	// strings
+	Present *bool `form:"present,omitempty" json:"present,omitempty" xml:"present,omitempty"`
+}
+
+// AnalyticsSignalQueryRequestBody is used to define fields on request body
+// types.
+type AnalyticsSignalQueryRequestBody struct {
+	Selection *AnalyticsSignalSelectionRequestBody `form:"selection,omitempty" json:"selection,omitempty" xml:"selection,omitempty"`
+	// Evaluation population: stream or manual
+	Trigger *string                                `form:"trigger,omitempty" json:"trigger,omitempty" xml:"trigger,omitempty"`
+	RunID   *string                                `form:"run_id,omitempty" json:"run_id,omitempty" xml:"run_id,omitempty"`
+	GroupBy []*AnalyticsSignalDimensionRequestBody `form:"group_by,omitempty" json:"group_by,omitempty" xml:"group_by,omitempty"`
+	Filters []*AnalyticsSignalFilterRequestBody    `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Top groups selected over the whole window
+	Groups *int `form:"groups,omitempty" json:"groups,omitempty" xml:"groups,omitempty"`
+	// Budget across complete selected series
+	Points *int `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
+}
+
+// AnalyticsSignalSelectionRequestBody is used to define fields on request body
+// types.
+type AnalyticsSignalSelectionRequestBody struct {
+	SensorID *string `form:"sensor_id,omitempty" json:"sensor_id,omitempty" xml:"sensor_id,omitempty"`
+	// For multi-label or exclusive results; omit when minimum_level is set
+	SignalID *string `form:"signal_id,omitempty" json:"signal_id,omitempty" xml:"signal_id,omitempty"`
+	// Zero-based ordered level; matches cumulative probability at or above this
+	// level
+	MinimumLevel *int `form:"minimum_level,omitempty" json:"minimum_level,omitempty" xml:"minimum_level,omitempty"`
+	// Explicit probability threshold greater than zero. Exclusive results use the
+	// selected signal instead.
+	Threshold *float64 `form:"threshold,omitempty" json:"threshold,omitempty" xml:"threshold,omitempty"`
+}
+
+// AnalyticsSignalDimensionRequestBody is used to define fields on request body
+// types.
+type AnalyticsSignalDimensionRequestBody struct {
+	// System dimension from the analytics catalog: source, role, actor, assistant
+	// or definition
+	Field     *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	Attribute *string `form:"attribute,omitempty" json:"attribute,omitempty" xml:"attribute,omitempty"`
+}
+
+// AnalyticsSignalFilterRequestBody is used to define fields on request body
+// types.
+type AnalyticsSignalFilterRequestBody struct {
+	Dimension *AnalyticsSignalDimensionRequestBody `form:"dimension,omitempty" json:"dimension,omitempty" xml:"dimension,omitempty"`
+	// Comparison from the analytics catalog: equals, in, exists or missing
+	Operator *string  `form:"operator,omitempty" json:"operator,omitempty" xml:"operator,omitempty"`
+	Values   []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
 }
 
 // AnalyticsMeasureRequestBody is used to define fields on request body types.
@@ -707,6 +1069,35 @@ type AnalyticsOrderByRequestBody struct {
 	Direction *string `form:"direction,omitempty" json:"direction,omitempty" xml:"direction,omitempty"`
 }
 
+// AnalyticsSignalScopeRequestBody is used to define fields on request body
+// types.
+type AnalyticsSignalScopeRequestBody struct {
+	SensorID *string `form:"sensor_id,omitempty" json:"sensor_id,omitempty" xml:"sensor_id,omitempty"`
+	// Evaluation population: stream or manual
+	Trigger *string `form:"trigger,omitempty" json:"trigger,omitempty" xml:"trigger,omitempty"`
+	// Required for manual; absent for stream
+	RunID *string `form:"run_id,omitempty" json:"run_id,omitempty" xml:"run_id,omitempty"`
+}
+
+// NewSignalDefinitionResponseBody builds the HTTP response body from the
+// result of the "signalDefinition" endpoint of the "analytics" service.
+func NewSignalDefinitionResponseBody(res *analytics.AnalyticsSignalDefinition) *SignalDefinitionResponseBody {
+	body := &SignalDefinitionResponseBody{
+		SensorID:       res.SensorID,
+		DefinitionHash: res.DefinitionHash,
+		CapturedAt:     res.CapturedAt,
+	}
+	if res.Definition != nil {
+		body.Definition = make(map[string]any, len(res.Definition))
+		for key, val := range res.Definition {
+			tk := key
+			tv := val
+			body.Definition[tk] = tv
+		}
+	}
+	return body
+}
+
 // NewQueryResponseBody builds the HTTP response body from the result of the
 // "query" endpoint of the "analytics" service.
 func NewQueryResponseBody(res *analytics.AnalyticsQueryResult) *QueryResponseBody {
@@ -726,6 +1117,9 @@ func NewQueryResponseBody(res *analytics.AnalyticsQueryResult) *QueryResponseBod
 		}
 	} else {
 		body.Rows = []map[string]any{}
+	}
+	if res.SignalResult != nil {
+		body.SignalResult = marshalAnalyticsAnalyticsSignalResultToAnalyticsSignalResultResponseBody(res.SignalResult)
 	}
 	return body
 }
@@ -752,6 +1146,9 @@ func NewDescribeResponseBody(res *analytics.AnalyticsDescribeResult) *DescribeRe
 			body.RestrictedDatasets[i] = val
 		}
 	}
+	if res.SignalMetrics != nil {
+		body.SignalMetrics = marshalAnalyticsAnalyticsSignalCatalogToAnalyticsSignalCatalogResponseBody(res.SignalMetrics)
+	}
 	return body
 }
 
@@ -773,6 +1170,150 @@ func NewDimensionValuesResponseBody(res *analytics.AnalyticsDimensionValuesResul
 		}
 	} else {
 		body.Values = []*AnalyticsDimensionValueResponseBody{}
+	}
+	return body
+}
+
+// NewSignalDefinitionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "signalDefinition" endpoint of the "analytics"
+// service.
+func NewSignalDefinitionUnauthorizedResponseBody(res *goa.ServiceError) *SignalDefinitionUnauthorizedResponseBody {
+	body := &SignalDefinitionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalDefinitionForbiddenResponseBody builds the HTTP response body from
+// the result of the "signalDefinition" endpoint of the "analytics" service.
+func NewSignalDefinitionForbiddenResponseBody(res *goa.ServiceError) *SignalDefinitionForbiddenResponseBody {
+	body := &SignalDefinitionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalDefinitionBadRequestResponseBody builds the HTTP response body from
+// the result of the "signalDefinition" endpoint of the "analytics" service.
+func NewSignalDefinitionBadRequestResponseBody(res *goa.ServiceError) *SignalDefinitionBadRequestResponseBody {
+	body := &SignalDefinitionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalDefinitionNotFoundResponseBody builds the HTTP response body from
+// the result of the "signalDefinition" endpoint of the "analytics" service.
+func NewSignalDefinitionNotFoundResponseBody(res *goa.ServiceError) *SignalDefinitionNotFoundResponseBody {
+	body := &SignalDefinitionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalDefinitionConflictResponseBody builds the HTTP response body from
+// the result of the "signalDefinition" endpoint of the "analytics" service.
+func NewSignalDefinitionConflictResponseBody(res *goa.ServiceError) *SignalDefinitionConflictResponseBody {
+	body := &SignalDefinitionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalDefinitionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "signalDefinition" endpoint of the "analytics"
+// service.
+func NewSignalDefinitionUnsupportedMediaResponseBody(res *goa.ServiceError) *SignalDefinitionUnsupportedMediaResponseBody {
+	body := &SignalDefinitionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalDefinitionInvalidResponseBody builds the HTTP response body from
+// the result of the "signalDefinition" endpoint of the "analytics" service.
+func NewSignalDefinitionInvalidResponseBody(res *goa.ServiceError) *SignalDefinitionInvalidResponseBody {
+	body := &SignalDefinitionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalDefinitionInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "signalDefinition" endpoint of the "analytics"
+// service.
+func NewSignalDefinitionInvariantViolationResponseBody(res *goa.ServiceError) *SignalDefinitionInvariantViolationResponseBody {
+	body := &SignalDefinitionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalDefinitionUnexpectedResponseBody builds the HTTP response body from
+// the result of the "signalDefinition" endpoint of the "analytics" service.
+func NewSignalDefinitionUnexpectedResponseBody(res *goa.ServiceError) *SignalDefinitionUnexpectedResponseBody {
+	body := &SignalDefinitionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSignalDefinitionGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "signalDefinition" endpoint of the "analytics"
+// service.
+func NewSignalDefinitionGatewayErrorResponseBody(res *goa.ServiceError) *SignalDefinitionGatewayErrorResponseBody {
+	body := &SignalDefinitionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -1198,6 +1739,18 @@ func NewDimensionValuesGatewayErrorResponseBody(res *goa.ServiceError) *Dimensio
 	return body
 }
 
+// NewSignalDefinitionPayload builds a analytics service signalDefinition
+// endpoint payload.
+func NewSignalDefinitionPayload(sensorID string, definitionHash string, sessionToken *string, projectSlugInput *string) *analytics.SignalDefinitionPayload {
+	v := &analytics.SignalDefinitionPayload{}
+	v.SensorID = sensorID
+	v.DefinitionHash = definitionHash
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewQueryPayload builds a analytics service query endpoint payload.
 func NewQueryPayload(body *QueryRequestBody, sessionToken *string, projectSlugInput *string) *analytics.QueryPayload {
 	v := &analytics.QueryPayload{
@@ -1211,6 +1764,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string, projectSlugIn
 	}
 	if body.Ungrouped != nil {
 		v.Ungrouped = *body.Ungrouped
+	}
+	if body.SignalQuery != nil {
+		v.SignalQuery = unmarshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery(body.SignalQuery)
 	}
 	if body.Dimensions != nil {
 		v.Dimensions = make([]string, len(body.Dimensions))
@@ -1275,11 +1831,15 @@ func NewDimensionValuesPayload(body *DimensionValuesRequestBody, sessionToken *s
 	v := &analytics.DimensionValuesPayload{
 		Dataset:   *body.Dataset,
 		Dimension: *body.Dimension,
+		Attribute: body.Attribute,
 		From:      *body.From,
 		To:        *body.To,
 	}
 	if body.Limit != nil {
 		v.Limit = *body.Limit
+	}
+	if body.SignalScope != nil {
+		v.SignalScope = unmarshalAnalyticsSignalScopeRequestBodyToAnalyticsAnalyticsSignalScope(body.SignalScope)
 	}
 	if body.Limit == nil {
 		v.Limit = 50
@@ -1301,16 +1861,16 @@ func ValidateQueryRequestBody(body *QueryRequestBody) (err error) {
 	if body.To == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
 	}
+	if body.SignalQuery != nil {
+		if err2 := ValidateAnalyticsSignalQueryRequestBody(body.SignalQuery); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.From != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
 	}
 	if body.To != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
-	}
-	if body.Grain != nil {
-		if !(*body.Grain == "none" || *body.Grain == "hour" || *body.Grain == "day" || *body.Grain == "week" || *body.Grain == "month") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.grain", *body.Grain, []any{"none", "hour", "day", "week", "month"}))
-		}
 	}
 	for _, e := range body.Measures {
 		if e != nil {
@@ -1361,6 +1921,21 @@ func ValidateDimensionValuesRequestBody(body *DimensionValuesRequestBody) (err e
 	if body.To == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
 	}
+	if body.SignalScope != nil {
+		if err2 := ValidateAnalyticsSignalScopeRequestBody(body.SignalScope); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Attribute != nil {
+		if utf8.RuneCountInString(*body.Attribute) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 1, true))
+		}
+	}
+	if body.Attribute != nil {
+		if utf8.RuneCountInString(*body.Attribute) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 256, false))
+		}
+	}
 	if body.From != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
 	}
@@ -1376,6 +1951,137 @@ func ValidateDimensionValuesRequestBody(body *DimensionValuesRequestBody) (err e
 		if *body.Limit > 200 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 200, false))
 		}
+	}
+	return
+}
+
+// ValidateAnalyticsSignalQueryRequestBody runs the validations defined on
+// AnalyticsSignalQueryRequestBody
+func ValidateAnalyticsSignalQueryRequestBody(body *AnalyticsSignalQueryRequestBody) (err error) {
+	if body.Selection == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selection", "body"))
+	}
+	if body.Selection != nil {
+		if err2 := ValidateAnalyticsSignalSelectionRequestBody(body.Selection); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.RunID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.run_id", *body.RunID, goa.FormatUUID))
+	}
+	if len(body.GroupBy) > 3 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.group_by", body.GroupBy, len(body.GroupBy), 3, false))
+	}
+	for _, e := range body.GroupBy {
+		if e != nil {
+			if err2 := ValidateAnalyticsSignalDimensionRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if len(body.Filters) > 20 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.filters", body.Filters, len(body.Filters), 20, false))
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateAnalyticsSignalFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Groups != nil {
+		if *body.Groups < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.groups", *body.Groups, 1, true))
+		}
+	}
+	if body.Groups != nil {
+		if *body.Groups > 20 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.groups", *body.Groups, 20, false))
+		}
+	}
+	if body.Points != nil {
+		if *body.Points < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.points", *body.Points, 1, true))
+		}
+	}
+	if body.Points != nil {
+		if *body.Points > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.points", *body.Points, 10000, false))
+		}
+	}
+	return
+}
+
+// ValidateAnalyticsSignalSelectionRequestBody runs the validations defined on
+// AnalyticsSignalSelectionRequestBody
+func ValidateAnalyticsSignalSelectionRequestBody(body *AnalyticsSignalSelectionRequestBody) (err error) {
+	if body.SensorID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sensor_id", "body"))
+	}
+	if body.Threshold == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("threshold", "body"))
+	}
+	if body.SensorID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.sensor_id", *body.SensorID, goa.FormatUUID))
+	}
+	if body.SignalID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.signal_id", *body.SignalID, goa.FormatUUID))
+	}
+	if body.MinimumLevel != nil {
+		if *body.MinimumLevel < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.minimum_level", *body.MinimumLevel, 0, true))
+		}
+	}
+	if body.MinimumLevel != nil {
+		if *body.MinimumLevel > 9 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.minimum_level", *body.MinimumLevel, 9, false))
+		}
+	}
+	if body.Threshold != nil {
+		if *body.Threshold < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.threshold", *body.Threshold, 0, true))
+		}
+	}
+	if body.Threshold != nil {
+		if *body.Threshold > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.threshold", *body.Threshold, 1, false))
+		}
+	}
+	return
+}
+
+// ValidateAnalyticsSignalDimensionRequestBody runs the validations defined on
+// AnalyticsSignalDimensionRequestBody
+func ValidateAnalyticsSignalDimensionRequestBody(body *AnalyticsSignalDimensionRequestBody) (err error) {
+	if body.Attribute != nil {
+		if utf8.RuneCountInString(*body.Attribute) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 1, true))
+		}
+	}
+	if body.Attribute != nil {
+		if utf8.RuneCountInString(*body.Attribute) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute", *body.Attribute, utf8.RuneCountInString(*body.Attribute), 256, false))
+		}
+	}
+	return
+}
+
+// ValidateAnalyticsSignalFilterRequestBody runs the validations defined on
+// AnalyticsSignalFilterRequestBody
+func ValidateAnalyticsSignalFilterRequestBody(body *AnalyticsSignalFilterRequestBody) (err error) {
+	if body.Dimension == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dimension", "body"))
+	}
+	if body.Operator == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("operator", "body"))
+	}
+	if body.Dimension != nil {
+		if err2 := ValidateAnalyticsSignalDimensionRequestBody(body.Dimension); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if len(body.Values) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 100, false))
 	}
 	return
 }
@@ -1427,6 +2133,21 @@ func ValidateAnalyticsOrderByRequestBody(body *AnalyticsOrderByRequestBody) (err
 		if !(*body.Direction == "asc" || *body.Direction == "desc") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.direction", *body.Direction, []any{"asc", "desc"}))
 		}
+	}
+	return
+}
+
+// ValidateAnalyticsSignalScopeRequestBody runs the validations defined on
+// AnalyticsSignalScopeRequestBody
+func ValidateAnalyticsSignalScopeRequestBody(body *AnalyticsSignalScopeRequestBody) (err error) {
+	if body.SensorID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sensor_id", "body"))
+	}
+	if body.SensorID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.sensor_id", *body.SensorID, goa.FormatUUID))
+	}
+	if body.RunID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.run_id", *body.RunID, goa.FormatUUID))
 	}
 	return
 }

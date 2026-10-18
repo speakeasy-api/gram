@@ -124,7 +124,7 @@ func UsageCommands() []string {
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
-		"analytics (query|describe|dimension-values)",
+		"analytics (signal-definition|query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
@@ -677,6 +677,12 @@ func ParseEndpoint(
 		aiIntegrationsRetryScheduleSessionTokenFlag = aiIntegrationsRetryScheduleFlags.String("session-token", "", "")
 
 		analyticsFlags = flag.NewFlagSet("analytics", flag.ContinueOnError)
+
+		analyticsSignalDefinitionFlags                = flag.NewFlagSet("signal-definition", flag.ExitOnError)
+		analyticsSignalDefinitionSensorIDFlag         = analyticsSignalDefinitionFlags.String("sensor-id", "REQUIRED", "")
+		analyticsSignalDefinitionDefinitionHashFlag   = analyticsSignalDefinitionFlags.String("definition-hash", "REQUIRED", "")
+		analyticsSignalDefinitionSessionTokenFlag     = analyticsSignalDefinitionFlags.String("session-token", "", "")
+		analyticsSignalDefinitionProjectSlugInputFlag = analyticsSignalDefinitionFlags.String("project-slug-input", "", "")
 
 		analyticsQueryFlags                = flag.NewFlagSet("query", flag.ExitOnError)
 		analyticsQueryBodyFlag             = analyticsQueryFlags.String("body", "REQUIRED", "")
@@ -5272,6 +5278,7 @@ func ParseEndpoint(
 	aiIntegrationsRetryScheduleFlags.Usage = aiIntegrationsRetryScheduleUsage
 
 	analyticsFlags.Usage = analyticsUsage
+	analyticsSignalDefinitionFlags.Usage = analyticsSignalDefinitionUsage
 	analyticsQueryFlags.Usage = analyticsQueryUsage
 	analyticsDescribeFlags.Usage = analyticsDescribeUsage
 	analyticsDimensionValuesFlags.Usage = analyticsDimensionValuesUsage
@@ -6779,6 +6786,9 @@ func ParseEndpoint(
 
 		case "analytics":
 			switch epn {
+			case "signal-definition":
+				epf = analyticsSignalDefinitionFlags
+
 			case "query":
 				epf = analyticsQueryFlags
 
@@ -9900,6 +9910,9 @@ func ParseEndpoint(
 		case "analytics":
 			c := analyticsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "signal-definition":
+				endpoint = c.SignalDefinition()
+				data, err = analyticsc.BuildSignalDefinitionPayload(*analyticsSignalDefinitionSensorIDFlag, *analyticsSignalDefinitionDefinitionHashFlag, *analyticsSignalDefinitionSessionTokenFlag, *analyticsSignalDefinitionProjectSlugInputFlag)
 			case "query":
 				endpoint = c.Query()
 				data, err = analyticsc.BuildQueryPayload(*analyticsQueryBodyFlag, *analyticsQuerySessionTokenFlag, *analyticsQueryProjectSlugInputFlag)
@@ -14810,6 +14823,7 @@ func analyticsUsage() {
 	fmt.Fprintln(os.Stderr, `Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] analytics COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    signal-definition: Inspect the immutable semantic definition used by a signal reading. Requires signals_intelligence and project:read.`)
 	fmt.Fprintln(os.Stderr, `    query: Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset's grain, newest first.`)
 	fmt.Fprintln(os.Stderr, `    describe: Describe every dataset and the fields it exposes, with the operators and aggregations each admits.`)
 	fmt.Fprintln(os.Stderr, `    dimension-values: List the values a dimension holds inside a window, most frequent first, for filter pickers. Values are resolved after the dataset collapses its observations, so every value returned is one a query would match.`)
@@ -14817,6 +14831,30 @@ func analyticsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s analytics COMMAND --help\n", os.Args[0])
 }
+func analyticsSignalDefinitionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] analytics signal-definition", os.Args[0])
+	fmt.Fprint(os.Stderr, " -sensor-id STRING")
+	fmt.Fprint(os.Stderr, " -definition-hash STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Inspect the immutable semantic definition used by a signal reading. Requires signals_intelligence and project:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -sensor-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -definition-hash STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics signal-definition --sensor-id \"550e8400-e29b-41d4-a716-446655440000\" --definition-hash \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func analyticsQueryUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] analytics query", os.Args[0])
@@ -14836,7 +14874,7 @@ func analyticsQueryUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics query --body '{\n      \"dataset\": \"tool_calls\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"hour\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"total_ms\",\n            \"field\": \"duration_ms\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"total_ms\"\n         }\n      ],\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics query --body '{\n      \"dataset\": \"tool_calls\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"abc123\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"total_ms\",\n            \"field\": \"duration_ms\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"total_ms\"\n         }\n      ],\n      \"signal_query\": {\n         \"filters\": [\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            },\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            },\n            {\n               \"dimension\": {\n                  \"attribute\": \"aa\",\n                  \"field\": \"abc123\"\n               },\n               \"operator\": \"abc123\",\n               \"values\": [\n                  \"abc123\",\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"group_by\": [\n            {\n               \"attribute\": \"aa\",\n               \"field\": \"abc123\"\n            },\n            {\n               \"attribute\": \"aa\",\n               \"field\": \"abc123\"\n            }\n         ],\n         \"groups\": 2,\n         \"points\": 2,\n         \"run_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"selection\": {\n            \"minimum_level\": 1,\n            \"sensor_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"signal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"threshold\": 1\n         },\n         \"trigger\": \"abc123\"\n      },\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func analyticsDescribeUsage() {
@@ -14878,7 +14916,7 @@ func analyticsDimensionValuesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics dimension-values --body '{\n      \"dataset\": \"tool_calls\",\n      \"dimension\": \"tool_name\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics dimension-values --body '{\n      \"attribute\": \"aa\",\n      \"dataset\": \"tool_calls\",\n      \"dimension\": \"tool_name\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"signal_scope\": {\n         \"run_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"sensor_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"trigger\": \"abc123\"\n      },\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.

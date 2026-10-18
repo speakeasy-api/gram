@@ -234,6 +234,8 @@ const HOUR_MS = 3_600_000;
 /** How long one bucket of a grain lasts; a month is taken as 31 days. */
 function bucketMs(grain: Grain): number {
   switch (grain) {
+    case "minute":
+      return 60_000;
     case "day":
       return 24 * HOUR_MS;
     case "week":

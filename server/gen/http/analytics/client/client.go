@@ -17,6 +17,10 @@ import (
 
 // Client lists the analytics service endpoint HTTP clients.
 type Client struct {
+	// SignalDefinition Doer is the HTTP client used to make requests to the
+	// signalDefinition endpoint.
+	SignalDefinitionDoer goahttp.Doer
+
 	// Query Doer is the HTTP client used to make requests to the query endpoint.
 	QueryDoer goahttp.Doer
 
@@ -48,14 +52,39 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		QueryDoer:           doer,
-		DescribeDoer:        doer,
-		DimensionValuesDoer: doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		SignalDefinitionDoer: doer,
+		QueryDoer:            doer,
+		DescribeDoer:         doer,
+		DimensionValuesDoer:  doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
+	}
+}
+
+// SignalDefinition returns an endpoint that makes HTTP requests to the
+// analytics service signalDefinition server.
+func (c *Client) SignalDefinition() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSignalDefinitionRequest(c.encoder)
+		decodeResponse = DecodeSignalDefinitionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSignalDefinitionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SignalDefinitionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("analytics", "signalDefinition", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

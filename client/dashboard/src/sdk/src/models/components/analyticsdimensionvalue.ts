@@ -13,6 +13,10 @@ export type AnalyticsDimensionValue = {
    */
   count: number;
   /**
+   * For signal attributes, false distinguishes absent labels from present empty strings
+   */
+  present?: boolean | undefined;
+  /**
    * A non-empty value of the dimension
    */
   value: string;
@@ -24,6 +28,7 @@ export const AnalyticsDimensionValue$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   count: z.int(),
+  present: z.optional(z.boolean()),
   value: z.string(),
 });
 

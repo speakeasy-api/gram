@@ -7,6 +7,11 @@
 
 package server
 
+// SignalDefinitionAnalyticsPath returns the URL path to the analytics service signalDefinition HTTP endpoint.
+func SignalDefinitionAnalyticsPath() string {
+	return "/rpc/analytics.signalDefinition"
+}
+
 // QueryAnalyticsPath returns the URL path to the analytics service query HTTP endpoint.
 func QueryAnalyticsPath() string {
 	return "/rpc/analytics.query"

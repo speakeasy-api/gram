@@ -144,6 +144,7 @@ trackedFiles:
   src/funcs/analyticsDescribe.ts: {}
   src/funcs/analyticsDimensionValues.ts: {}
   src/funcs/analyticsQuery.ts: {}
+  src/funcs/analyticsSignalDefinition.ts: {}
   src/funcs/assetsCreateSignedChatAttachmentURL.ts: {}
   src/funcs/assetsFetchImageFromURL.ts: {}
   src/funcs/assetsFetchOpenAPIv3FromURL.ts: {}
@@ -921,6 +922,17 @@ trackedFiles:
   src/models/components/analyticsorderby.ts: {}
   src/models/components/analyticsquerypayload.ts: {}
   src/models/components/analyticsqueryresult.ts: {}
+  src/models/components/analyticssignalcatalog.ts: {}
+  src/models/components/analyticssignaldefinition.ts: {}
+  src/models/components/analyticssignaldimension.ts: {}
+  src/models/components/analyticssignalfilter.ts: {}
+  src/models/components/analyticssignalmetadata.ts: {}
+  src/models/components/analyticssignalname.ts: {}
+  src/models/components/analyticssignalquery.ts: {}
+  src/models/components/analyticssignalresult.ts: {}
+  src/models/components/analyticssignalscope.ts: {}
+  src/models/components/analyticssignalselection.ts: {}
+  src/models/components/analyticssignalsensor.ts: {}
   src/models/components/anthropicinferenceconfig.ts: {}
   src/models/components/apikeypolicygrant.ts: {}
   src/models/components/apikeypolicyselector.ts: {}
@@ -2123,6 +2135,7 @@ trackedFiles:
   src/models/operations/analyticsdescribe.ts: {}
   src/models/operations/analyticsdimensionvalues.ts: {}
   src/models/operations/analyticsquery.ts: {}
+  src/models/operations/analyticssignaldefinition.ts: {}
   src/models/operations/applydirectoryrolesetup.ts: {}
   src/models/operations/approveallskillsuggestions.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
@@ -2966,6 +2979,8 @@ trackedFiles:
   src/react-query/analyticsDimensionValues.ts: {}
   src/react-query/analyticsQuery.core.ts: {}
   src/react-query/analyticsQuery.ts: {}
+  src/react-query/analyticsSignalDefinition.core.ts: {}
+  src/react-query/analyticsSignalDefinition.ts: {}
   src/react-query/anthropicInferenceConfig.core.ts: {}
   src/react-query/anthropicInferenceConfig.ts: {}
   src/react-query/applyDirectoryRoleSetup.ts: {}
@@ -4368,6 +4383,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  analyticsSignalDefinition:
+    speakeasy-default-analytics-signal-definition:
+      parameters:
+        query:
+          sensor_id: "37468269-d164-4db4-8e1b-367a3b1ced47"
+          definition_hash: "<value>"
+      responses:
+        "200":
+          application/json: {"captured_at": "2025-11-25T02:41:14.255Z", "definition": {"key": "<value>", "key1": "<value>"}, "definition_hash": "<value>", "sensor_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   applyDirectoryRoleSetup:
     speakeasy-default-apply-directory-role-setup:
       requestBody:

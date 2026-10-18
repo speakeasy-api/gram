@@ -13,11 +13,240 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	analytics "github.com/speakeasy-api/gram/server/gen/analytics"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// EncodeSignalDefinitionResponse returns an encoder for responses returned by
+// the analytics signalDefinition endpoint.
+func EncodeSignalDefinitionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*analytics.AnalyticsSignalDefinition)
+		enc := encoder(ctx, w)
+		body := NewSignalDefinitionResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSignalDefinitionRequest returns a decoder for requests sent to the
+// analytics signalDefinition endpoint.
+func DecodeSignalDefinitionRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*analytics.SignalDefinitionPayload, error) {
+	return func(r *http.Request) (*analytics.SignalDefinitionPayload, error) {
+		var payload *analytics.SignalDefinitionPayload
+		var (
+			sensorID         string
+			definitionHash   string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		qp := r.URL.Query()
+		sensorID = qp.Get("sensor_id")
+		if sensorID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("sensor_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("sensor_id", sensorID, goa.FormatUUID))
+		definitionHash = qp.Get("definition_hash")
+		if definitionHash == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("definition_hash", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("definition_hash", definitionHash, "^[a-f0-9]{64}$"))
+		if utf8.RuneCountInString(definitionHash) < 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("definition_hash", definitionHash, utf8.RuneCountInString(definitionHash), 64, true))
+		}
+		if utf8.RuneCountInString(definitionHash) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("definition_hash", definitionHash, utf8.RuneCountInString(definitionHash), 64, false))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewSignalDefinitionPayload(sensorID, definitionHash, sessionToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSignalDefinitionError returns an encoder for errors returned by the
+// signalDefinition analytics endpoint.
+func EncodeSignalDefinitionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSignalDefinitionGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
 
 // EncodeQueryResponse returns an encoder for responses returned by the
 // analytics query endpoint.
@@ -674,6 +903,109 @@ func EncodeDimensionValuesError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// unmarshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery
+// builds a value of type *analytics.AnalyticsSignalQuery from a value of type
+// *AnalyticsSignalQueryRequestBody.
+func unmarshalAnalyticsSignalQueryRequestBodyToAnalyticsAnalyticsSignalQuery(v *AnalyticsSignalQueryRequestBody) *analytics.AnalyticsSignalQuery {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsSignalQuery{
+		RunID: v.RunID,
+	}
+	if v.Trigger != nil {
+		res.Trigger = *v.Trigger
+	}
+	if v.Groups != nil {
+		res.Groups = *v.Groups
+	}
+	if v.Points != nil {
+		res.Points = *v.Points
+	}
+	res.Selection = unmarshalAnalyticsSignalSelectionRequestBodyToAnalyticsAnalyticsSignalSelection(v.Selection)
+	if v.Trigger == nil {
+		res.Trigger = "stream"
+	}
+	if v.GroupBy != nil {
+		res.GroupBy = make([]*analytics.AnalyticsSignalDimension, len(v.GroupBy))
+		for i, val := range v.GroupBy {
+			if val == nil {
+				res.GroupBy[i] = nil
+				continue
+			}
+			res.GroupBy[i] = unmarshalAnalyticsSignalDimensionRequestBodyToAnalyticsAnalyticsSignalDimension(val)
+		}
+	}
+	if v.Filters != nil {
+		res.Filters = make([]*analytics.AnalyticsSignalFilter, len(v.Filters))
+		for i, val := range v.Filters {
+			if val == nil {
+				res.Filters[i] = nil
+				continue
+			}
+			res.Filters[i] = unmarshalAnalyticsSignalFilterRequestBodyToAnalyticsAnalyticsSignalFilter(val)
+		}
+	}
+	if v.Groups == nil {
+		res.Groups = 5
+	}
+	if v.Points == nil {
+		res.Points = 2000
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsSignalSelectionRequestBodyToAnalyticsAnalyticsSignalSelection
+// builds a value of type *analytics.AnalyticsSignalSelection from a value of
+// type *AnalyticsSignalSelectionRequestBody.
+func unmarshalAnalyticsSignalSelectionRequestBodyToAnalyticsAnalyticsSignalSelection(v *AnalyticsSignalSelectionRequestBody) *analytics.AnalyticsSignalSelection {
+	res := &analytics.AnalyticsSignalSelection{
+		SensorID:     *v.SensorID,
+		SignalID:     v.SignalID,
+		MinimumLevel: v.MinimumLevel,
+		Threshold:    *v.Threshold,
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsSignalDimensionRequestBodyToAnalyticsAnalyticsSignalDimension
+// builds a value of type *analytics.AnalyticsSignalDimension from a value of
+// type *AnalyticsSignalDimensionRequestBody.
+func unmarshalAnalyticsSignalDimensionRequestBodyToAnalyticsAnalyticsSignalDimension(v *AnalyticsSignalDimensionRequestBody) *analytics.AnalyticsSignalDimension {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsSignalDimension{
+		Field:     v.Field,
+		Attribute: v.Attribute,
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsSignalFilterRequestBodyToAnalyticsAnalyticsSignalFilter
+// builds a value of type *analytics.AnalyticsSignalFilter from a value of type
+// *AnalyticsSignalFilterRequestBody.
+func unmarshalAnalyticsSignalFilterRequestBodyToAnalyticsAnalyticsSignalFilter(v *AnalyticsSignalFilterRequestBody) *analytics.AnalyticsSignalFilter {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsSignalFilter{
+		Operator: *v.Operator,
+	}
+	res.Dimension = unmarshalAnalyticsSignalDimensionRequestBodyToAnalyticsAnalyticsSignalDimension(v.Dimension)
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	}
+
+	return res
+}
+
 // unmarshalAnalyticsMeasureRequestBodyToAnalyticsAnalyticsMeasure builds a
 // value of type *analytics.AnalyticsMeasure from a value of type
 // *AnalyticsMeasureRequestBody.
@@ -724,6 +1056,141 @@ func unmarshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy(v *Analytic
 	}
 	if v.Direction == nil {
 		res.Direction = "desc"
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsSignalResultToAnalyticsSignalResultResponseBody
+// builds a value of type *AnalyticsSignalResultResponseBody from a value of
+// type *analytics.AnalyticsSignalResult.
+func marshalAnalyticsAnalyticsSignalResultToAnalyticsSignalResultResponseBody(v *analytics.AnalyticsSignalResult) *AnalyticsSignalResultResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AnalyticsSignalResultResponseBody{}
+	if v.Metadata != nil {
+		res.Metadata = marshalAnalyticsAnalyticsSignalMetadataToAnalyticsSignalMetadataResponseBody(v.Metadata)
+	}
+	if v.Summary != nil {
+		res.Summary = make(map[string]any, len(v.Summary))
+		for key, val := range v.Summary {
+			tk := key
+			tv := val
+			res.Summary[tk] = tv
+		}
+	}
+	if v.Groups != nil {
+		res.Groups = make([]map[string]any, len(v.Groups))
+		for i, val := range v.Groups {
+			res.Groups[i] = make(map[string]any, len(val))
+			for key, val := range val {
+				tk := key
+				tv := val
+				res.Groups[i][tk] = tv
+			}
+		}
+	} else {
+		res.Groups = []map[string]any{}
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsSignalMetadataToAnalyticsSignalMetadataResponseBody
+// builds a value of type *AnalyticsSignalMetadataResponseBody from a value of
+// type *analytics.AnalyticsSignalMetadata.
+func marshalAnalyticsAnalyticsSignalMetadataToAnalyticsSignalMetadataResponseBody(v *analytics.AnalyticsSignalMetadata) *AnalyticsSignalMetadataResponseBody {
+	res := &AnalyticsSignalMetadataResponseBody{
+		Trigger:            v.Trigger,
+		RunID:              v.RunID,
+		Step:               v.Step,
+		PhysicalResolution: v.PhysicalResolution,
+		TimeAxis:           v.TimeAxis,
+		Unit:               v.Unit,
+		Population:         v.Population,
+		Coverage:           v.Coverage,
+		QueriedAt:          v.QueriedAt,
+		From:               v.From,
+		To:                 v.To,
+		Snapshot:           v.Snapshot,
+		Exact:              v.Exact,
+		SeriesComplete:     v.SeriesComplete,
+		GroupsTruncated:    v.GroupsTruncated,
+		PointBudget:        v.PointBudget,
+	}
+	if v.Selection != nil {
+		res.Selection = marshalAnalyticsAnalyticsSignalSelectionToAnalyticsSignalSelectionResponseBody(v.Selection)
+	}
+	if v.Filters != nil {
+		res.Filters = make([]*AnalyticsSignalFilterResponseBody, len(v.Filters))
+		for i, val := range v.Filters {
+			if val == nil {
+				res.Filters[i] = nil
+				continue
+			}
+			res.Filters[i] = marshalAnalyticsAnalyticsSignalFilterToAnalyticsSignalFilterResponseBody(val)
+		}
+	} else {
+		res.Filters = []*AnalyticsSignalFilterResponseBody{}
+	}
+	if v.GroupBy != nil {
+		res.GroupBy = make([]*AnalyticsSignalDimensionResponseBody, len(v.GroupBy))
+		for i, val := range v.GroupBy {
+			if val == nil {
+				res.GroupBy[i] = nil
+				continue
+			}
+			res.GroupBy[i] = marshalAnalyticsAnalyticsSignalDimensionToAnalyticsSignalDimensionResponseBody(val)
+		}
+	} else {
+		res.GroupBy = []*AnalyticsSignalDimensionResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsSignalSelectionToAnalyticsSignalSelectionResponseBody
+// builds a value of type *AnalyticsSignalSelectionResponseBody from a value of
+// type *analytics.AnalyticsSignalSelection.
+func marshalAnalyticsAnalyticsSignalSelectionToAnalyticsSignalSelectionResponseBody(v *analytics.AnalyticsSignalSelection) *AnalyticsSignalSelectionResponseBody {
+	res := &AnalyticsSignalSelectionResponseBody{
+		SensorID:     v.SensorID,
+		SignalID:     v.SignalID,
+		MinimumLevel: v.MinimumLevel,
+		Threshold:    v.Threshold,
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsSignalFilterToAnalyticsSignalFilterResponseBody
+// builds a value of type *AnalyticsSignalFilterResponseBody from a value of
+// type *analytics.AnalyticsSignalFilter.
+func marshalAnalyticsAnalyticsSignalFilterToAnalyticsSignalFilterResponseBody(v *analytics.AnalyticsSignalFilter) *AnalyticsSignalFilterResponseBody {
+	res := &AnalyticsSignalFilterResponseBody{
+		Operator: v.Operator,
+	}
+	if v.Dimension != nil {
+		res.Dimension = marshalAnalyticsAnalyticsSignalDimensionToAnalyticsSignalDimensionResponseBody(v.Dimension)
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsSignalDimensionToAnalyticsSignalDimensionResponseBody
+// builds a value of type *AnalyticsSignalDimensionResponseBody from a value of
+// type *analytics.AnalyticsSignalDimension.
+func marshalAnalyticsAnalyticsSignalDimensionToAnalyticsSignalDimensionResponseBody(v *analytics.AnalyticsSignalDimension) *AnalyticsSignalDimensionResponseBody {
+	res := &AnalyticsSignalDimensionResponseBody{
+		Field:     v.Field,
+		Attribute: v.Attribute,
 	}
 
 	return res
@@ -801,13 +1268,144 @@ func marshalAnalyticsAnalyticsLookupToAnalyticsLookupResponseBody(v *analytics.A
 	return res
 }
 
+// marshalAnalyticsAnalyticsSignalCatalogToAnalyticsSignalCatalogResponseBody
+// builds a value of type *AnalyticsSignalCatalogResponseBody from a value of
+// type *analytics.AnalyticsSignalCatalog.
+func marshalAnalyticsAnalyticsSignalCatalogToAnalyticsSignalCatalogResponseBody(v *analytics.AnalyticsSignalCatalog) *AnalyticsSignalCatalogResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AnalyticsSignalCatalogResponseBody{
+		Dataset:     v.Dataset,
+		Unit:        v.Unit,
+		Population:  v.Population,
+		MaxSpanDays: v.MaxSpanDays,
+		MaxGroups:   v.MaxGroups,
+		MaxPoints:   v.MaxPoints,
+	}
+	if v.Steps != nil {
+		res.Steps = make([]string, len(v.Steps))
+		for i, val := range v.Steps {
+			res.Steps[i] = val
+		}
+	} else {
+		res.Steps = []string{}
+	}
+	if v.Operators != nil {
+		res.Operators = make([]string, len(v.Operators))
+		for i, val := range v.Operators {
+			res.Operators[i] = val
+		}
+	} else {
+		res.Operators = []string{}
+	}
+	if v.SystemDimensions != nil {
+		res.SystemDimensions = make([]string, len(v.SystemDimensions))
+		for i, val := range v.SystemDimensions {
+			res.SystemDimensions[i] = val
+		}
+	} else {
+		res.SystemDimensions = []string{}
+	}
+	if v.InitialAttributes != nil {
+		res.InitialAttributes = make([]string, len(v.InitialAttributes))
+		for i, val := range v.InitialAttributes {
+			res.InitialAttributes[i] = val
+		}
+	} else {
+		res.InitialAttributes = []string{}
+	}
+	if v.Sensors != nil {
+		res.Sensors = make([]*AnalyticsSignalSensorResponseBody, len(v.Sensors))
+		for i, val := range v.Sensors {
+			if val == nil {
+				res.Sensors[i] = nil
+				continue
+			}
+			res.Sensors[i] = marshalAnalyticsAnalyticsSignalSensorToAnalyticsSignalSensorResponseBody(val)
+		}
+	} else {
+		res.Sensors = []*AnalyticsSignalSensorResponseBody{}
+	}
+	if v.Signals != nil {
+		res.Signals = make([]*AnalyticsSignalNameResponseBody, len(v.Signals))
+		for i, val := range v.Signals {
+			if val == nil {
+				res.Signals[i] = nil
+				continue
+			}
+			res.Signals[i] = marshalAnalyticsAnalyticsSignalNameToAnalyticsSignalNameResponseBody(val)
+		}
+	} else {
+		res.Signals = []*AnalyticsSignalNameResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsSignalSensorToAnalyticsSignalSensorResponseBody
+// builds a value of type *AnalyticsSignalSensorResponseBody from a value of
+// type *analytics.AnalyticsSignalSensor.
+func marshalAnalyticsAnalyticsSignalSensorToAnalyticsSignalSensorResponseBody(v *analytics.AnalyticsSignalSensor) *AnalyticsSignalSensorResponseBody {
+	res := &AnalyticsSignalSensorResponseBody{
+		ID:      v.ID,
+		Name:    v.Name,
+		Mode:    v.Mode,
+		Enabled: v.Enabled,
+	}
+	if v.SignalIds != nil {
+		res.SignalIds = make([]string, len(v.SignalIds))
+		for i, val := range v.SignalIds {
+			res.SignalIds[i] = val
+		}
+	} else {
+		res.SignalIds = []string{}
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsSignalNameToAnalyticsSignalNameResponseBody builds
+// a value of type *AnalyticsSignalNameResponseBody from a value of type
+// *analytics.AnalyticsSignalName.
+func marshalAnalyticsAnalyticsSignalNameToAnalyticsSignalNameResponseBody(v *analytics.AnalyticsSignalName) *AnalyticsSignalNameResponseBody {
+	res := &AnalyticsSignalNameResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsSignalScopeRequestBodyToAnalyticsAnalyticsSignalScope
+// builds a value of type *analytics.AnalyticsSignalScope from a value of type
+// *AnalyticsSignalScopeRequestBody.
+func unmarshalAnalyticsSignalScopeRequestBodyToAnalyticsAnalyticsSignalScope(v *AnalyticsSignalScopeRequestBody) *analytics.AnalyticsSignalScope {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsSignalScope{
+		SensorID: *v.SensorID,
+		RunID:    v.RunID,
+	}
+	if v.Trigger != nil {
+		res.Trigger = *v.Trigger
+	}
+	if v.Trigger == nil {
+		res.Trigger = "stream"
+	}
+
+	return res
+}
+
 // marshalAnalyticsAnalyticsDimensionValueToAnalyticsDimensionValueResponseBody
 // builds a value of type *AnalyticsDimensionValueResponseBody from a value of
 // type *analytics.AnalyticsDimensionValue.
 func marshalAnalyticsAnalyticsDimensionValueToAnalyticsDimensionValueResponseBody(v *analytics.AnalyticsDimensionValue) *AnalyticsDimensionValueResponseBody {
 	res := &AnalyticsDimensionValueResponseBody{
-		Value: v.Value,
-		Count: v.Count,
+		Value:   v.Value,
+		Count:   v.Count,
+		Present: v.Present,
 	}
 
 	return res
