@@ -248,7 +248,6 @@ WITH runtimes AS (
     COALESCE(r.backend_metadata_json->>'container_name', '') AS container_name
   FROM assistant_runtimes r
   WHERE r.deleted IS FALSE
-    AND r.backend = 'local'
     AND r.state IN ('starting', 'active')
   ORDER BY r.created_at ASC
 )
@@ -300,7 +299,9 @@ FROM runtimes;
 }
 
 async function reconcileOnce() {
-  const runtimes = await loadRuntimes();
+  const runtimes = (await loadRuntimes()).filter(
+    (runtime) => runtime.backend === "local",
+  );
   desiredRuntimes.clear();
   for (const runtime of runtimes) {
     desiredRuntimes.set(runtime.runtime_id, runtime);

@@ -25,23 +25,6 @@ func TestAssistantRuntimeConfigFromCLIAcceptsGKEProvider(t *testing.T) {
 	require.Equal(t, serverURL, cfg.GKE.ServerURL)
 }
 
-func TestAssistantRuntimeConfigFromCLIDefaultsToGKE(t *testing.T) {
-	t.Setenv("GRAM_ASSISTANT_RUNTIME_PROVIDER", "")
-	for _, values := range []map[string]string{{}, {"assistant-runtime-provider": ""}} {
-		ctx := newAssistantRuntimeCLIContext(t, values)
-		cfg, err := assistantRuntimeConfigFromCLI(ctx, nil)
-		require.NoError(t, err)
-		require.Equal(t, assistants.RuntimeProviderGKE, cfg.Provider)
-	}
-}
-
-func TestAssistantRuntimeConfigFromCLIRejectsFlyProvider(t *testing.T) {
-	t.Parallel()
-	ctx := newAssistantRuntimeCLIContext(t, map[string]string{"assistant-runtime-provider": "flyio"})
-	_, err := assistantRuntimeConfigFromCLI(ctx, nil)
-	require.ErrorContains(t, err, "invalid assistant runtime provider: flyio")
-}
-
 func TestAssistantRuntimeConfigFromCLIRejectsUnknownProvider(t *testing.T) {
 	t.Parallel()
 

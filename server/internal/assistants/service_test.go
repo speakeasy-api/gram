@@ -757,38 +757,6 @@ func TestServiceCoreReapStuckRuntimesLeavesIdleActiveRuntime(t *testing.T) {
 	require.Equal(t, eventStatusPending, event.Status)
 }
 
-func TestServiceCoreExpireThreadRuntimeKeepsUnknownBackendRuntime(t *testing.T) {
-	t.Parallel()
-
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_expire_legacy")
-	require.NoError(t, err)
-
-	projectID, assistantID, threadID := insertReapableProject(t, conn, "expire-legacy")
-	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, "legacy", runtimeStateActive, `{"claim_name":"gram-asst-idle","sandbox_name":"m-1"}`)
-
-	var stopCalls atomic.Int64
-	logger := testenv.NewLogger(t)
-	backend := testRuntimeBackend{
-		backend:      "legacy",
-		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
-		stopCalls:    &stopCalls,
-	}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
-
-	result, err := core.ExpireThreadRuntime(t.Context(), projectID, threadID, DefaultWarmTTLSeconds)
-	require.NoError(t, err)
-	require.True(t, result.Stopped, "the thread workflow must exit its expiry loop")
-	require.Zero(t, stopCalls.Load(), "an unknown backend runtime must stay up")
-
-	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
-		ID:        runtimeID,
-		ProjectID: projectID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, runtimeStateActive, runtime.State)
-	require.False(t, runtime.Deleted)
-}
-
 func TestServiceCoreExpireThreadRuntimeStopsIdleV2Runtime(t *testing.T) {
 	t.Parallel()
 

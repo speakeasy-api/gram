@@ -79,25 +79,6 @@ async function run() {
   const restart = process.env["usage_restart"] === "true";
   const skipImage = process.env["usage_skip_image"] === "true";
 
-  // Validate before writing either setting. Older setups can retain a removed
-  // provider in the local file or environment; do not silently accept it or
-  // replace an intentional remote setup without an explicit --restart.
-  const configuredProvider = localConfigValue(PROVIDER_KEY);
-  const selectedProvider = restart
-    ? LOCAL_PROVIDER
-    : (configuredProvider ??
-      (isSet(process.env[PROVIDER_KEY])
-        ? process.env[PROVIDER_KEY]!
-        : LOCAL_PROVIDER));
-  if (selectedProvider !== LOCAL_PROVIDER && selectedProvider !== "gke") {
-    throw new Error(
-      `Unsupported assistant runtime provider ${JSON.stringify(selectedProvider)}. ` +
-        "Supported providers are local and gke. Run `mise run zero:assistants --restart` " +
-        "to reset the provider and image to local Docker defaults, or explicitly configure gke. " +
-        "No configuration was changed.",
-    );
-  }
-
   const provider = await ensureLocalConfig(
     PROVIDER_KEY,
     LOCAL_PROVIDER,
