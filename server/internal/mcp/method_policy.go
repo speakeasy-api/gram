@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"slices"
+
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -24,10 +26,22 @@ func initializeNegotiable(req *rawRequest, resolution mcpversions.Resolution) bo
 }
 
 // methodAvailable reports whether the request's method is defined by the
-// revision governing it. A negotiable initialize is governed by the revision
-// it will negotiate, so it is available only while supported still holds a
-// revision that defines initialize.
-func methodAvailable(req *rawRequest, resolution mcpversions.Resolution, supported []string) bool {
+// revision governing it or by an extension the surface declares. A negotiable
+// initialize is governed by the revision it will negotiate, so it is available
+// only while supported still holds a revision that defines initialize.
+//
+// extensions holds the capability labels the surface declares to this caller.
+// An extension's methods are negotiated by that declaration rather than by the
+// revision, so they are available on every revision while the label is
+// declared and on none while it is not. Declaring a label admits every method
+// the extension defines; dispatch still answers the ones the surface does not
+// implement as unknown methods, which is what the extension specifies for a
+// method gated behind an undeclared setting.
+func methodAvailable(req *rawRequest, resolution mcpversions.Resolution, supported []string, extensions []string) bool {
+	if label := mcpversions.MethodExtension(req.Method); label != "" {
+		return slices.Contains(extensions, label)
+	}
+
 	revision := resolution.InEffect
 	if req.Method == mcpversions.MethodInitialize {
 		if !initializeNegotiable(req, resolution) {
