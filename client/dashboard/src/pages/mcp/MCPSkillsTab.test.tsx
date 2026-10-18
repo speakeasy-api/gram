@@ -142,7 +142,11 @@ vi.mock("react-router", async (importOriginal) => ({
   Navigate: ({ to }: { to: string }) => <div data-testid="navigate">{to}</div>,
 }));
 
-import { MCPSkillsTab, MCPSkillsTabRoute } from "./MCPSkillsTab";
+import {
+  MCPSkillsTab,
+  MCPSkillsTabRoute,
+  ServedSkillsSection,
+} from "./MCPSkillsTab";
 
 const toolset = { id: "toolset-a", slug: "toolset-a", name: "Billing" };
 
@@ -487,5 +491,73 @@ describe("MCPSkillsTabRoute", () => {
     renderTab(<MCPSkillsTabRoute toolset={toolset} />);
     expect(screen.getByText("Access restricted")).toBeDefined();
     expect(screen.queryByText("Finance tools")).toBeNull();
+  });
+});
+
+describe("ServedSkillsSection for a remote server", () => {
+  const remotePlugin = {
+    id: "plugin-r",
+    name: "Ticketing tools",
+    assignmentCount: 1,
+    servers: [
+      { id: "ps-r", displayName: "Ticketing", mcpServerId: "remote-a" },
+    ],
+  };
+  const remote = (
+    <ServedSkillsSection
+      server={{ kind: "remote", mcpServerId: "remote-a", name: "Ticketing" }}
+    />
+  );
+
+  beforeEach(() => {
+    state.plugins = {
+      data: { plugins: [remotePlugin, hostedPlugin] },
+      error: null,
+      isLoading: false,
+    };
+    state.distributions.mockReturnValue(
+      distributionsResult([
+        distribution("r", "plugin-r"),
+        distribution("1", "plugin-a"),
+      ]),
+    );
+  });
+
+  it("lists skills of the plugins that include the server by its row id", () => {
+    renderTab(remote);
+    expect(screen.getByText("Ticketing tools")).toBeDefined();
+    expect(screen.getByText("Skill r")).toBeDefined();
+    expect(screen.queryByText("Finance tools")).toBeNull();
+    expect(screen.queryByText("Skill 1")).toBeNull();
+  });
+
+  it("says agents on the server do not load the skills over MCP", () => {
+    renderTab(remote);
+    expect(
+      screen.getByText(/don.t load these skills over MCP yet/),
+    ).toBeDefined();
+  });
+
+  it("does not wait on or fail with the hosted server list", () => {
+    state.servers = {
+      ...state.servers,
+      data: undefined,
+      error: new Error("boom"),
+    };
+    renderTab(remote);
+    expect(screen.queryByText("Couldn't load MCP servers")).toBeNull();
+    expect(screen.getByText("Skill r")).toBeDefined();
+  });
+
+  it("names no unresolved plugin when none includes the server", () => {
+    state.plugins = {
+      data: { plugins: [secondWrapperPlugin] },
+      error: null,
+      isLoading: false,
+    };
+    renderTab(remote);
+    expect(
+      screen.getByText("No plugin includes this server yet"),
+    ).toBeDefined();
   });
 });

@@ -5,6 +5,7 @@ import {
   hostedPluginServerToolsetId,
   hostedServerIndex,
   pluginServerServesToolset,
+  pluginServesMcpServer,
   pluginServesToolset,
   pluginsHaveUnresolvedServers,
   servedSkillDigest,
@@ -241,5 +242,28 @@ describe("groupServedSkillsByPlugin", () => {
       ["plugin-a", ["d1", "d3"]],
       ["plugin-c", []],
     ]);
+  });
+});
+
+describe("pluginServesMcpServer", () => {
+  const plugin = {
+    servers: [
+      { id: "ps-1", displayName: "Remote", mcpServerId: "remote-1" },
+      { id: "ps-2", displayName: "Hosted", toolsetId },
+    ],
+  };
+
+  it("matches a server the plugin includes by its row id", () => {
+    expect(pluginServesMcpServer(plugin, "remote-1")).toBe(true);
+  });
+
+  it("does not match a toolset id or another row", () => {
+    expect(pluginServesMcpServer(plugin, toolsetId)).toBe(false);
+    expect(pluginServesMcpServer(plugin, "remote-2")).toBe(false);
+  });
+
+  it("never matches an empty id or a plugin without servers", () => {
+    expect(pluginServesMcpServer(plugin, "")).toBe(false);
+    expect(pluginServesMcpServer({}, "remote-1")).toBe(false);
   });
 });

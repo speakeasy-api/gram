@@ -103,6 +103,20 @@ export function pluginServesToolset(
 }
 
 /**
+ * Whether a plugin includes the mcp_servers row with this id. A remote server
+ * has no toolset, so a plugin includes it only under its own row id.
+ */
+export function pluginServesMcpServer(
+  plugin: Pick<ServingPlugin, "servers">,
+  mcpServerId: string,
+): boolean {
+  if (!mcpServerId) return false;
+  return (plugin.servers ?? []).some(
+    (server) => server.mcpServerId === mcpServerId,
+  );
+}
+
+/**
  * The plugin servers that serve skills over MCP, split by what the index can
  * prove. A server carrying a toolset id is hosted. One carrying only an
  * mcp_servers id is hosted when the index resolves that id to a toolset; an

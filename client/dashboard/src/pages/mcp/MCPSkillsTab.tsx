@@ -1,4 +1,5 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Alert } from "@/components/ui/Alert";
 import { Page } from "@/components/page-layout";
 import { RequirePluginWrite } from "@/components/require-plugin-write";
 import { RequireScope } from "@/components/require-scope";
@@ -25,6 +26,7 @@ import { usePluginServerQueries } from "@/pages/plugins/usePluginServerQueries";
 import {
   groupServedSkillsByPlugin,
   hostedServerIndex,
+  pluginServesMcpServer,
   pluginServesToolset,
   pluginsHaveUnresolvedServers,
   type ServedSkillGroup,
@@ -51,6 +53,15 @@ import { toast } from "sonner";
 import { mcpDetailTabHref } from "./MCPDetailsRouting";
 
 type SkillsTabToolset = { id: string; slug: string; name: string };
+
+/**
+ * The server a Skills tab lists skills for. A hosted server is a toolset,
+ * which plugins may include under any mcp_servers row fronting it. A remote
+ * server is one mcp_servers row, which plugins include by that row's id.
+ */
+export type SkillsTabServer =
+  | { kind: "hosted"; toolsetId: string; name: string }
+  | { kind: "remote"; mcpServerId: string; name: string };
 
 /**
  * The route behind the Skills tab. The tab only exists while skills over MCP
@@ -106,6 +117,24 @@ export function MCPSkillsTab({
 }: {
   toolset: SkillsTabToolset;
 }): JSX.Element {
+  return (
+    <ServedSkillsSection
+      server={{ kind: "hosted", toolsetId: toolset.id, name: toolset.name }}
+    />
+  );
+}
+
+/**
+ * The skills distributed to the plugins that include a server, grouped by
+ * plugin, with the controls to add and remove them. Shared by the hosted and
+ * remote server Skills tabs; only how a plugin includes the server and the
+ * copy differ.
+ */
+export function ServedSkillsSection({
+  server,
+}: {
+  server: SkillsTabServer;
+}): JSX.Element {
   const routes = useRoutes();
   const { grants } = useRBAC();
   const project = useProject();
@@ -127,25 +156,34 @@ export function MCPSkillsTab({
   // toolset, not only the canonical one, and the backend serves skills
   // through every such row; the server list resolves those rows.
   const { serversQuery, canReadServers } = usePluginServerQueries();
+  // A remote server is matched by its own row id, so it needs no index.
+  const needsServerIndex = server.kind === "hosted" && canReadServers;
   const isServerIndexLoading =
-    canReadServers && !serversQuery.data && serversQuery.isLoading;
+    needsServerIndex && !serversQuery.data && serversQuery.isLoading;
+  const toolsetId = server.kind === "hosted" ? server.toolsetId : "";
   const hostedIndex = useMemo(
-    () => hostedServerIndex(serversQuery.data?.mcpServers, [toolset.id]),
-    [serversQuery.data?.mcpServers, toolset.id],
+    () => hostedServerIndex(serversQuery.data?.mcpServers, [toolsetId]),
+    [serversQuery.data?.mcpServers, toolsetId],
   );
+  const mcpServerId = server.kind === "remote" ? server.mcpServerId : "";
   const servingPlugins = useMemo(
     () =>
       (pluginsQuery.plugins ?? []).filter((plugin) =>
-        pluginServesToolset(plugin, toolset.id, hostedIndex),
+        mcpServerId
+          ? pluginServesMcpServer(plugin, mcpServerId)
+          : pluginServesToolset(plugin, toolsetId, hostedIndex),
       ),
-    [pluginsQuery.plugins, toolset.id, hostedIndex],
+    [pluginsQuery.plugins, mcpServerId, toolsetId, hostedIndex],
   );
   // A plugin server keyed by an mcp_servers id the list does not resolve may
   // be a wrapper of this toolset the reader cannot view, so an empty
-  // membership is not proof that no plugin includes the server.
+  // membership is not proof that no plugin includes the server. A remote
+  // server's membership is an exact id match and is always settled.
   const hasUnresolvedServers = useMemo(
-    () => pluginsHaveUnresolvedServers(pluginsQuery.plugins ?? [], hostedIndex),
-    [pluginsQuery.plugins, hostedIndex],
+    () =>
+      server.kind === "hosted" &&
+      pluginsHaveUnresolvedServers(pluginsQuery.plugins ?? [], hostedIndex),
+    [pluginsQuery.plugins, hostedIndex, server.kind],
   );
 
   // Every distribution in the project, then grouped under the plugins that
@@ -275,7 +313,7 @@ export function MCPSkillsTab({
         }
       />
     );
-  } else if (canReadServers && serversQuery.error && !serversQuery.data) {
+  } else if (needsServerIndex && serversQuery.error && !serversQuery.data) {
     // Without the server list, plugins that include this server through a
     // non-canonical wrapper would silently vanish from the membership.
     body = (
@@ -348,7 +386,11 @@ export function MCPSkillsTab({
       <InlineEmptyState
         icon="sparkles"
         heading="No skills served yet"
-        description={`Distribute a skill to ${listNames(servingPlugins)} to serve it to agents connected to ${toolset.name}.`}
+        description={
+          server.kind === "hosted"
+            ? `Distribute a skill to ${listNames(servingPlugins)} to serve it to agents connected to ${server.name}.`
+            : `Distribute a skill to ${listNames(servingPlugins)} to carry it to the people and agents the plugin is assigned to.`
+        }
         action={addControl ?? undefined}
       />
     );
@@ -372,9 +414,9 @@ export function MCPSkillsTab({
     <Page.Section>
       <Page.Section.Title>Skills</Page.Section.Title>
       <Page.Section.Description>
-        Skills agents load when they connect to this server. A plugin that
-        includes the server serves its skills to the people and agents it is
-        assigned to.
+        {server.kind === "hosted"
+          ? "Skills agents load when they connect to this server. A plugin that includes the server serves its skills to the people and agents it is assigned to."
+          : "Skills distributed to the plugins that include this server. A plugin carries its skills to the people and agents it is assigned to."}
       </Page.Section.Description>
       {addControl && servedCount > 0 ? (
         <Page.Section.CTA>{addControl}</Page.Section.CTA>
@@ -382,6 +424,16 @@ export function MCPSkillsTab({
       {/* The section renders only its named slots, so the picker lives in
           the body next to the list it changes. */}
       <Page.Section.Body>
+        {server.kind === "remote" && (
+          // The remote backend proxies every MCP request to the upstream, so
+          // the Skills extension is not answered on this server's URL.
+          <Alert variant="info" alignTop className="mb-4 text-sm">
+            Agents connected to this server don&apos;t load these skills over
+            MCP yet: Speakeasy passes every request on its URL straight to the
+            remote server. People get them by installing a plugin that includes
+            the server.
+          </Alert>
+        )}
         {body}
         {pickerPlugin && canReadAllSkills && canWritePlugin && (
           <SkillPickerDialog
@@ -396,7 +448,11 @@ export function MCPSkillsTab({
               .map((distribution) => distribution.skillId)}
             target={{ pluginId: pickerPlugin.id }}
             title="Add skills"
-            description={`Serve project skills to agents connected to ${toolset.name} through ${pickerPlugin.name}.`}
+            description={
+              server.kind === "hosted"
+                ? `Serve project skills to agents connected to ${server.name} through ${pickerPlugin.name}.`
+                : `Distribute project skills to ${pickerPlugin.name}, which includes ${server.name}.`
+            }
             actionLabel="Add"
             emptyMessage="No skills available to add. Record a skill in this project first."
             onBatchComplete={handleAddComplete}
