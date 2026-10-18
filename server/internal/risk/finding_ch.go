@@ -104,6 +104,7 @@ func (w *FindingCHWriter) HandleBatchWithResult(ctx context.Context, batch []gcp
 func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.Finding) ([]error, error) {
 	logger := w.logger
 	failed := make([]error, len(messages))
+	missingPolicies := make(map[findingPolicyFilterKey]struct{})
 
 	// Cache per-tenant derived keys for the lifetime of this batch so repeated
 	// findings from the same org don't each re-run HKDF.
@@ -179,7 +180,7 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 
 		// Suppression state events must land even when the original finding is now filtered.
 		if !deadLetter && eventKind == chrepo.EventKindFinding {
-			filters, err := w.policyFilters.filtersFor(ctx, message)
+			filters, err := w.policyFilters.filtersFor(ctx, message, missingPolicies)
 			if err != nil {
 				return nil, fmt.Errorf("resolve finding policy filters: %w", err)
 			}

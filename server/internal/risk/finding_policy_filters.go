@@ -48,7 +48,9 @@ func newFindingPolicyFilterResolver(db repo.DBTX) *findingPolicyFilterResolver {
 	}
 }
 
-func (r *findingPolicyFilterResolver) filtersFor(ctx context.Context, message *riskv1.Finding) (findingPolicyFilters, error) {
+// missing records policies not found during one batch, so a batch of findings for
+// a deleted policy queries once rather than once per finding.
+func (r *findingPolicyFilterResolver) filtersFor(ctx context.Context, message *riskv1.Finding, missing map[findingPolicyFilterKey]struct{}) (findingPolicyFilters, error) {
 	if message == nil || r.db == nil {
 		return emptyFindingPolicyFilters(), nil
 	}
@@ -66,13 +68,17 @@ func (r *findingPolicyFilterResolver) filtersFor(ctx context.Context, message *r
 	if filters, ok := r.cache.Get(key); ok {
 		return filters, nil
 	}
+	if _, ok := missing[key]; ok {
+		return emptyFindingPolicyFilters(), nil
+	}
 
 	policy, err := repo.New(r.db).GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        policyID,
 		ProjectID: projectID,
 	})
-	// Not cached: on a read replica a missing row may be replication lag.
+	// Not cached across batches: on a read replica a missing row may be replication lag.
 	if errors.Is(err, pgx.ErrNoRows) {
+		missing[key] = struct{}{}
 		return emptyFindingPolicyFilters(), nil
 	}
 	if err != nil {
