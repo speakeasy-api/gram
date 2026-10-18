@@ -79,6 +79,7 @@ const assistant: Assistant = {
   skills: [],
   warmTtlSeconds: 300,
   maxConcurrency: 1,
+  runtimeVersion: 2,
   status: "active",
   createdAt: new Date(),
   updatedAt: new Date(),
