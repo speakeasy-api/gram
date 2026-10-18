@@ -3120,6 +3120,7 @@ type chatMessageRow struct {
 	totalTokens      int64
 
 	generation int32
+	lineage    *MessageLineage
 
 	metadata httpMetadata
 }
@@ -3337,6 +3338,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 			UserEmail:         row.userEmail,
 			Provider:          "",
 			InferenceProvider: "",
+			Lineage:           row.lineage,
 			HookHostname:      "",
 			AccountType:       "",
 			BillingMode:       "",
