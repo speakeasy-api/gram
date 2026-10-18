@@ -1942,7 +1942,7 @@ func (stubProvenanceLookup) LookupMCPProvenanceByToolCallID(_ context.Context, _
 
 func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string, findingsPub gcp.Publisher[*riskv1.Finding]) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
-	return executeAnalyzeBatchForIDs(t, conn, nil, td, messageIDs, nil, sources, findingsPub)
+	return executeAnalyzeBatchForIDs(t, conn, nil, td, messageIDs, nil, sources, findingsPub, nil)
 }
 
 func TestAnalyzeBatch_ContentPartHydratesFullAssetContent(t *testing.T) {
@@ -1982,10 +1982,10 @@ func TestAnalyzeBatch_ContentPartHydratesFullAssetContent(t *testing.T) {
 
 func executeAnalyzeBatchWithContentParts(t *testing.T, conn *pgxpool.Pool, assetStorage assets.BlobStore, td testData, contentPartIDs []uuid.UUID, sources []string) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
-	return executeAnalyzeBatchForIDs(t, conn, assetStorage, td, nil, contentPartIDs, sources, newFindingsPub())
+	return executeAnalyzeBatchForIDs(t, conn, assetStorage, td, nil, contentPartIDs, sources, newFindingsPub(), nil)
 }
 
-func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage assets.BlobStore, td testData, messageIDs []uuid.UUID, contentPartIDs []uuid.UUID, sources []string, findingsPub gcp.Publisher[*riskv1.Finding]) risk_analysis.AnalyzeBatchResult {
+func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage assets.BlobStore, td testData, messageIDs []uuid.UUID, contentPartIDs []uuid.UUID, sources []string, findingsPub gcp.Publisher[*riskv1.Finding], flags feature.Provider) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
 	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, nil)
 	ab, err := risk_analysis.NewAnalyzeBatch(
@@ -1999,7 +1999,7 @@ func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage as
 		shadowMCPClient,
 		stubProvenanceLookup{},
 		nil,
-		nil,
+		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
 		newPromptInjectionPub(),
@@ -2397,6 +2397,28 @@ func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
 		return row.Topic != string(proto.MessageName(&webhooksv1.Event{}))
 	})
 	require.Len(t, allOutbox, len(firstOutbox), "a redrive must not re-emit webhook events for already-announced findings")
+}
+
+func TestAnalyzeBatch_ClickHouseCutoverDisablesBatchEmitter(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd",
+	})
+	require.NoError(t, err)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, td.orgID, true)
+	result := executeAnalyzeBatchForIDs(t, conn, nil, td, []uuid.UUID{msgID}, nil, []string{"gitleaks"}, newFindingsPub(), flags)
+	require.Positive(t, result.Findings)
+
+	count, err := testrepo.New(conn).CountOutboxEntriesByEventType(t.Context(), string(events.RiskFindingCreatedV1.EventType()))
+	require.NoError(t, err)
+	require.Zero(t, count, "the batch emitter stays off after the ClickHouse emitter is enabled")
 }
 
 func riskResultIDs(rows []testrepo.RiskResult) []uuid.UUID {
