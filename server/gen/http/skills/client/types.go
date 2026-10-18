@@ -401,6 +401,9 @@ type DistributeResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the distribution configuration last changed.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Loads are counted per skill, not per distribution.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // ShareResponseBody is the type of the "skills" service "share" endpoint HTTP
@@ -4954,6 +4957,9 @@ type PluginSkillDistributionResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the distribution configuration last changed.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// When an agent last loaded the skill over MCP from a Speakeasy-hosted server,
+	// absent when it never has. Loads are counted per skill, not per distribution.
+	LastLoadedOverMcpAt *string `form:"last_loaded_over_mcp_at,omitempty" json:"last_loaded_over_mcp_at,omitempty" xml:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // NewCreateRequestBody builds the HTTP request body from the payload of the
@@ -7923,21 +7929,22 @@ func NewArchiveGatewayError(body *ArchiveGatewayErrorResponseBody) *goa.ServiceE
 // endpoint result from a HTTP "OK" response.
 func NewDistributeSkillDistributionOK(body *DistributeResponseBody) *types.SkillDistribution {
 	v := &types.SkillDistribution{
-		ID:                *body.ID,
-		ProjectID:         *body.ProjectID,
-		SkillID:           *body.SkillID,
-		SkillName:         *body.SkillName,
-		SkillDisplayName:  *body.SkillDisplayName,
-		PluginID:          body.PluginID,
-		PluginName:        body.PluginName,
-		AssistantID:       body.AssistantID,
-		AssistantName:     body.AssistantName,
-		PinnedVersionID:   body.PinnedVersionID,
-		ResolvedVersionID: *body.ResolvedVersionID,
-		Channel:           *body.Channel,
-		CreatedByUserID:   *body.CreatedByUserID,
-		CreatedAt:         *body.CreatedAt,
-		UpdatedAt:         *body.UpdatedAt,
+		ID:                  *body.ID,
+		ProjectID:           *body.ProjectID,
+		SkillID:             *body.SkillID,
+		SkillName:           *body.SkillName,
+		SkillDisplayName:    *body.SkillDisplayName,
+		PluginID:            body.PluginID,
+		PluginName:          body.PluginName,
+		AssistantID:         body.AssistantID,
+		AssistantName:       body.AssistantName,
+		PinnedVersionID:     body.PinnedVersionID,
+		ResolvedVersionID:   *body.ResolvedVersionID,
+		Channel:             *body.Channel,
+		CreatedByUserID:     *body.CreatedByUserID,
+		CreatedAt:           *body.CreatedAt,
+		UpdatedAt:           *body.UpdatedAt,
+		LastLoadedOverMcpAt: body.LastLoadedOverMcpAt,
 	}
 
 	return v
@@ -9404,6 +9411,9 @@ func ValidateDistributeResponseBody(body *DistributeResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastLoadedOverMcpAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_loaded_over_mcp_at", *body.LastLoadedOverMcpAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -15598,6 +15608,9 @@ func ValidatePluginSkillDistributionResponseBody(body *PluginSkillDistributionRe
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.LastLoadedOverMcpAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_loaded_over_mcp_at", *body.LastLoadedOverMcpAt, goa.FormatDateTime))
 	}
 	return
 }

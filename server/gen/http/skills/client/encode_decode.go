@@ -5870,19 +5870,20 @@ func unmarshalUnknownSkillActivationResponseBodyToSkillsUnknownSkillActivation(v
 // *PluginSkillDistributionResponseBody.
 func unmarshalPluginSkillDistributionResponseBodyToTypesPluginSkillDistribution(v *PluginSkillDistributionResponseBody) *types.PluginSkillDistribution {
 	res := &types.PluginSkillDistribution{
-		ID:                *v.ID,
-		ProjectID:         *v.ProjectID,
-		SkillID:           *v.SkillID,
-		SkillName:         *v.SkillName,
-		SkillDisplayName:  *v.SkillDisplayName,
-		PluginID:          *v.PluginID,
-		PluginName:        *v.PluginName,
-		PinnedVersionID:   v.PinnedVersionID,
-		ResolvedVersionID: *v.ResolvedVersionID,
-		Channel:           *v.Channel,
-		CreatedByUserID:   *v.CreatedByUserID,
-		CreatedAt:         *v.CreatedAt,
-		UpdatedAt:         *v.UpdatedAt,
+		ID:                  *v.ID,
+		ProjectID:           *v.ProjectID,
+		SkillID:             *v.SkillID,
+		SkillName:           *v.SkillName,
+		SkillDisplayName:    *v.SkillDisplayName,
+		PluginID:            *v.PluginID,
+		PluginName:          *v.PluginName,
+		PinnedVersionID:     v.PinnedVersionID,
+		ResolvedVersionID:   *v.ResolvedVersionID,
+		Channel:             *v.Channel,
+		CreatedByUserID:     *v.CreatedByUserID,
+		CreatedAt:           *v.CreatedAt,
+		UpdatedAt:           *v.UpdatedAt,
+		LastLoadedOverMcpAt: v.LastLoadedOverMcpAt,
 	}
 
 	return res

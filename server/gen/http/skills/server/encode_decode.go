@@ -5857,19 +5857,20 @@ func marshalSkillsUnknownSkillActivationToUnknownSkillActivationResponseBody(v *
 // type *types.PluginSkillDistribution.
 func marshalTypesPluginSkillDistributionToPluginSkillDistributionResponseBody(v *types.PluginSkillDistribution) *PluginSkillDistributionResponseBody {
 	res := &PluginSkillDistributionResponseBody{
-		ID:                v.ID,
-		ProjectID:         v.ProjectID,
-		SkillID:           v.SkillID,
-		SkillName:         v.SkillName,
-		SkillDisplayName:  v.SkillDisplayName,
-		PluginID:          v.PluginID,
-		PluginName:        v.PluginName,
-		PinnedVersionID:   v.PinnedVersionID,
-		ResolvedVersionID: v.ResolvedVersionID,
-		Channel:           v.Channel,
-		CreatedByUserID:   v.CreatedByUserID,
-		CreatedAt:         v.CreatedAt,
-		UpdatedAt:         v.UpdatedAt,
+		ID:                  v.ID,
+		ProjectID:           v.ProjectID,
+		SkillID:             v.SkillID,
+		SkillName:           v.SkillName,
+		SkillDisplayName:    v.SkillDisplayName,
+		PluginID:            v.PluginID,
+		PluginName:          v.PluginName,
+		PinnedVersionID:     v.PinnedVersionID,
+		ResolvedVersionID:   v.ResolvedVersionID,
+		Channel:             v.Channel,
+		CreatedByUserID:     v.CreatedByUserID,
+		CreatedAt:           v.CreatedAt,
+		UpdatedAt:           v.UpdatedAt,
+		LastLoadedOverMcpAt: v.LastLoadedOverMcpAt,
 	}
 
 	return res

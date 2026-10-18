@@ -143,23 +143,28 @@ func BuildSkillVersionListView(rows []repo.ListSkillVersionsRow, frontmatter fun
 	return result, nil
 }
 
-func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName, skillDisplayName string, pluginName, assistantName *string, resolvedVersionID uuid.UUID) *types.SkillDistribution {
+// BuildSkillDistributionView renders one distribution. lastLoadedOverMCPAt is
+// the newest MCP activation of the skill (invalid when agents never loaded it
+// over MCP); it describes the skill, so every distribution of it carries the
+// same value.
+func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName, skillDisplayName string, pluginName, assistantName *string, resolvedVersionID uuid.UUID, lastLoadedOverMCPAt pgtype.Timestamptz) *types.SkillDistribution {
 	return &types.SkillDistribution{
-		ID:                distribution.ID.String(),
-		ProjectID:         distribution.ProjectID.String(),
-		SkillID:           distribution.SkillID.String(),
-		SkillName:         skillName,
-		SkillDisplayName:  skillDisplayName,
-		PluginID:          conv.FromNullableUUID(distribution.PluginID),
-		PluginName:        pluginName,
-		AssistantID:       conv.FromNullableUUID(distribution.AssistantID),
-		AssistantName:     assistantName,
-		PinnedVersionID:   conv.FromNullableUUID(distribution.PinnedVersionID),
-		ResolvedVersionID: resolvedVersionID.String(),
-		Channel:           distribution.Channel,
-		CreatedByUserID:   distribution.CreatedByUserID,
-		CreatedAt:         conv.FromPGTimestamptz(distribution.CreatedAt),
-		UpdatedAt:         conv.FromPGTimestamptz(distribution.UpdatedAt),
+		ID:                  distribution.ID.String(),
+		ProjectID:           distribution.ProjectID.String(),
+		SkillID:             distribution.SkillID.String(),
+		SkillName:           skillName,
+		SkillDisplayName:    skillDisplayName,
+		PluginID:            conv.FromNullableUUID(distribution.PluginID),
+		PluginName:          pluginName,
+		AssistantID:         conv.FromNullableUUID(distribution.AssistantID),
+		AssistantName:       assistantName,
+		PinnedVersionID:     conv.FromNullableUUID(distribution.PinnedVersionID),
+		ResolvedVersionID:   resolvedVersionID.String(),
+		Channel:             distribution.Channel,
+		CreatedByUserID:     distribution.CreatedByUserID,
+		CreatedAt:           conv.FromPGTimestamptz(distribution.CreatedAt),
+		UpdatedAt:           conv.FromPGTimestamptz(distribution.UpdatedAt),
+		LastLoadedOverMcpAt: conv.PtrEmpty(conv.FromPGTimestamptz(lastLoadedOverMCPAt)),
 	}
 }
 
@@ -173,6 +178,7 @@ func BuildSkillDistributionListView(rows []repo.ListActiveSkillDistributionsRow)
 			PinnedVersionID: conv.FromNullableUUID(row.SkillDistribution.PinnedVersionID), ResolvedVersionID: row.ResolvedVersionID.String(),
 			Channel: row.SkillDistribution.Channel, CreatedByUserID: row.SkillDistribution.CreatedByUserID,
 			CreatedAt: conv.FromPGTimestamptz(row.SkillDistribution.CreatedAt), UpdatedAt: conv.FromPGTimestamptz(row.SkillDistribution.UpdatedAt),
+			LastLoadedOverMcpAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.LastLoadedOverMcpAt)),
 		}
 	}
 
