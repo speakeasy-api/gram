@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"slices"
@@ -167,7 +168,7 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		confidence = new(0.6 + 0.3*math.Cos(day*2*math.Pi/17))
 	}
 
-	definition := sha256.Sum256([]byte(s.name("sigint-definition-" + sensor.key)))
+	_, definitionHash := s.sigintDemoDefinition(sensor)
 	departments := [2]string{"engineering", "marketing"}
 	regions := [2]string{"us-east", "eu-west"}
 	attributes := map[string]string{"region": regions[n%2], "environment": "production"}
@@ -212,7 +213,7 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		InsertedAt:                    s.now.UTC(),
 		Status:                        chrepo.StatusAnswered,
 		FailureReason:                 "",
-		DefinitionHash:                hex.EncodeToString(definition[:]),
+		DefinitionHash:                definitionHash,
 		ConfiguredModel:               "demo-classifier",
 		Models:                        nil,
 		CompilerVersion:               "demo-compiler-v1",
@@ -249,4 +250,19 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		ExpectedIndex:                 expectedIndex,
 		Confidence:                    confidence,
 	}
+}
+
+// sigintDemoDefinition explicitly labels simulated readings and keeps their
+// inspectable definition stable across the PostgreSQL and ClickHouse seeds.
+func (s *seeder) sigintDemoDefinition(sensor demoSigintSensor) ([]byte, string) {
+	data, _ := json.Marshal(struct {
+		Synthetic     bool   `json:"synthetic"`
+		Sensor        string `json:"sensor_id"`
+		Mode          string `json:"mode"`
+		Instructions  string `json:"instructions"`
+		InputStrategy string `json:"input_strategy"`
+		WindowSize    int32  `json:"window_size"`
+	}{Synthetic: true, Sensor: s.det("sigint-sensor-" + sensor.key).String(), Mode: sensor.mode, Instructions: sensor.instructions, InputStrategy: sensor.inputStrategy, WindowSize: sensor.windowSize})
+	hash := sha256.Sum256(data)
+	return data, hex.EncodeToString(hash[:])
 }

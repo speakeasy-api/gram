@@ -24,6 +24,7 @@ type compiledSensor struct {
 	questions   []classifier.Question
 	strategy    string
 	windowSize  int
+	definition  json.RawMessage
 }
 
 // windowFramingVersion identifies the target-focused conversation input contract.
@@ -97,7 +98,26 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	}
 	data, _ := json.Marshal(map[string]any{"version": "sigint-definition-v3", "mode": sensor.Mode, "instructions": instructions, "signals": signals, "match_expression": sensor.MatchExpression, "matching_contract": matching.Version, "input_strategy": strategy, "window_size": size, "window_contract": windowFramingVersion})
 	compiled.hash = digest(data)
+	compiled.definition = data
 	return compiled, true
+}
+
+// DefinitionSnapshot is the exact semantic definition hashed by an evaluation.
+type DefinitionSnapshot struct {
+	// SensorID identifies the contributing sensor within the project.
+	SensorID string `json:"sensor_id"`
+
+	// Hash is the digest carried by readings using this definition.
+	Hash string `json:"definition_hash"`
+
+	// Definition retains the canonical hashed JSON independently of later edits.
+	Definition json.RawMessage `json:"definition"`
+}
+
+// Snapshot returns a complete definition, or false for an incomplete sensor.
+func Snapshot(sensor Sensor) (DefinitionSnapshot, bool) {
+	compiled, ready := compileSensor(sensor)
+	return DefinitionSnapshot{SensorID: sensor.ID, Hash: compiled.hash, Definition: compiled.definition}, ready
 }
 
 // readingInput records the classifier input actually supplied for one sensor.

@@ -260,6 +260,9 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// Sigint ownership/reference FKs use ON DELETE SET NULL with non-null
 		// columns, so every row in the org's projects, including tombstones,
 		// must be physically removed child-first before the projects delete.
+		{"delete sigint definition snapshots", func() error {
+			return s.q.OrgDeleteSigintDefinitionSnapshots(ctx, org)
+		}},
 		{"delete sigint sensor signals", func() error {
 			return s.q.OrgDeleteSigintSensorSignals(ctx, org)
 		}},
@@ -351,6 +354,24 @@ func (s *seeder) orgProject(ctx context.Context) error {
 		}); err != nil {
 			return fmt.Errorf("insert demo sigint membership %s: %w", m.key, err)
 		}
+	}
+	for _, sensor := range demoSigintSensors {
+		if !sensor.enabled {
+			continue
+		}
+		definition, hash := s.sigintDemoDefinition(sensor)
+		if err := s.q.OrgInsertSigintDefinitionSnapshot(ctx, repo.OrgInsertSigintDefinitionSnapshotParams{
+			ProjectID: proj, SensorID: s.det("sigint-sensor-" + sensor.key), DefinitionHash: hash, Definition: definition,
+		}); err != nil {
+			return fmt.Errorf("seed sensor definition: %w", err)
+		}
+	}
+	count, err := s.q.OrgCountSigintDefinitionSnapshots(ctx, proj)
+	if err != nil {
+		return fmt.Errorf("count seeded sensor definitions: %w", err)
+	}
+	if count != 3 {
+		return fmt.Errorf("seed sensor definitions: expected three snapshots, got %d", count)
 	}
 	return nil
 }

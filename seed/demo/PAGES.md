@@ -234,6 +234,8 @@ present in a developer's org and deliberately absent from the shared demo org.
    `model_family`, `inference_provider`, `model_name` and `department`, with both known
    values and omitted attributes for unknowns. Model family and serving provider
    vary independently of the synthetic classifier metadata.
+   PostgreSQL `sigint_definition_snapshots` carries three matching, explicitly
+   synthetic definitions so reading provenance can be inspected after reseeding.
 4. Every new CH insert target (or new MV) gets a matching scoped DELETE in
    `ch_01_purge_telemetry.go`, or re-runs double the numbers.
 5. Cost/session MVs are provenance-first: usage rows must be Claude OTEL

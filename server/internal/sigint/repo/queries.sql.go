@@ -299,6 +299,38 @@ func (q *Queries) DeleteSignalMemberships(ctx context.Context, arg DeleteSignalM
 	return items, nil
 }
 
+const getDefinitionSnapshot = `-- name: GetDefinitionSnapshot :one
+SELECT snapshot.definition, snapshot.created_at
+FROM sigint_definition_snapshots snapshot
+JOIN projects p ON p.id = snapshot.project_id AND p.organization_id = $1
+WHERE snapshot.project_id = $2::uuid
+  AND snapshot.sensor_id = $3::uuid AND snapshot.definition_hash = $4
+`
+
+type GetDefinitionSnapshotParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SensorID       uuid.UUID
+	DefinitionHash string
+}
+
+type GetDefinitionSnapshotRow struct {
+	Definition []byte
+	CreatedAt  pgtype.Timestamptz
+}
+
+func (q *Queries) GetDefinitionSnapshot(ctx context.Context, arg GetDefinitionSnapshotParams) (GetDefinitionSnapshotRow, error) {
+	row := q.db.QueryRow(ctx, getDefinitionSnapshot,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SensorID,
+		arg.DefinitionHash,
+	)
+	var i GetDefinitionSnapshotRow
+	err := row.Scan(&i.Definition, &i.CreatedAt)
+	return i, err
+}
+
 const getSensor = `-- name: GetSensor :one
 SELECT
     sensor.id,
@@ -488,6 +520,46 @@ func (q *Queries) GetSignal(ctx context.Context, arg GetSignalParams) (SigintCus
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const listDefinitionSnapshots = `-- name: ListDefinitionSnapshots :many
+SELECT definition_hash, definition, created_at
+FROM sigint_definition_snapshots
+WHERE project_id = $1::uuid AND sensor_id = $2::uuid
+ORDER BY created_at, definition_hash
+LIMIT $3
+`
+
+type ListDefinitionSnapshotsParams struct {
+	ProjectID  uuid.UUID
+	SensorID   uuid.UUID
+	LimitValue int32
+}
+
+type ListDefinitionSnapshotsRow struct {
+	DefinitionHash string
+	Definition     []byte
+	CreatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListDefinitionSnapshots(ctx context.Context, arg ListDefinitionSnapshotsParams) ([]ListDefinitionSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, listDefinitionSnapshots, arg.ProjectID, arg.SensorID, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDefinitionSnapshotsRow
+	for rows.Next() {
+		var i ListDefinitionSnapshotsRow
+		if err := rows.Scan(&i.DefinitionHash, &i.Definition, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLiveSignalIDs = `-- name: ListLiveSignalIDs :many
@@ -1108,6 +1180,25 @@ type ReplaceSensorSignalsParams struct {
 
 func (q *Queries) ReplaceSensorSignals(ctx context.Context, arg ReplaceSensorSignalsParams) error {
 	_, err := q.db.Exec(ctx, replaceSensorSignals, arg.ProjectID, arg.SensorID, arg.SignalIds)
+	return err
+}
+
+const saveDefinitionSnapshots = `-- name: SaveDefinitionSnapshots :exec
+INSERT INTO sigint_definition_snapshots (project_id, sensor_id, definition_hash, definition)
+SELECT $1::uuid, snapshot.sensor_id, snapshot.definition_hash, snapshot.definition
+FROM jsonb_to_recordset($2::jsonb) AS snapshot(sensor_id uuid, definition_hash text, definition jsonb)
+JOIN projects p ON p.id = $1::uuid AND p.organization_id = $3
+ON CONFLICT (project_id, sensor_id, definition_hash) DO NOTHING
+`
+
+type SaveDefinitionSnapshotsParams struct {
+	ProjectID      uuid.UUID
+	Snapshots      []byte
+	OrganizationID string
+}
+
+func (q *Queries) SaveDefinitionSnapshots(ctx context.Context, arg SaveDefinitionSnapshotsParams) error {
+	_, err := q.db.Exec(ctx, saveDefinitionSnapshots, arg.ProjectID, arg.Snapshots, arg.OrganizationID)
 	return err
 }
 
