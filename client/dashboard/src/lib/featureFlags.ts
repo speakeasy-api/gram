@@ -25,6 +25,10 @@ export const FEATURE_FLAGS = {
   // to the policy editor mode.
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
   riskWatchdog: "gram-risk-watchdog",
+  // Org-targeted, read server-side under the same key: whether hosted MCP
+  // servers serve distributed skills to connected agents. Gates the MCP
+  // server Skills tab and the served-over-MCP hints on skill and plugin pages.
+  skillsOverMcp: "skills-over-mcp",
   tunneledMcp: "gram-tunneled-mcp",
   // UI-only rollout gate for the organization's Speakeasy authorization
   // servers page; the APIs behind it are not gated.

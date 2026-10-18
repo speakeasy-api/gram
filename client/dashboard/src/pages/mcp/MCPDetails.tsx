@@ -108,6 +108,7 @@ import {
 } from "./MCPDetailsRouting";
 import { MCPOverviewTab } from "./overview/MCPOverviewTab";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
+import { MCPSkillsTabRoute } from "./MCPSkillsTab";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
@@ -229,6 +230,10 @@ function renderMcpDetailTabContent(
       return <MCPResourcesTab toolset={toolset} />;
     case "prompts":
       return <MCPPromptsTab toolset={toolset} />;
+    case "skills":
+      // The route decides the flag before the scope, so a disabled tab always
+      // redirects; it gates skill read on this project itself.
+      return <MCPSkillsTabRoute toolset={toolset} />;
     case "authentication":
       return (
         <RequireScope scope="mcp:write" level="page">
