@@ -1366,6 +1366,19 @@ func parseOptionalMCPServerID(raw *string) (string, error) {
 	return id.String(), nil
 }
 
+func (s *Service) riskFindingsClickHouseEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+	projectSlug := ""
+	if authCtx.ProjectSlug != nil {
+		projectSlug = *authCtx.ProjectSlug
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, projectSlug))
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate risk findings ClickHouse cutover", attr.SlogError(err))
+		return false
+	}
+	return evaluation == feature.EvaluationEnabled
+}
+
 // listRiskResultsRaw is the shared, always-unredacted fetch behind both
 // ListRiskResults (which may redact its output) and ListRiskResultsForAgent
 // (which always redacts). Keeping this as the single source of raw data
@@ -1412,8 +1425,8 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.E(oops.CodeInvalid, nil, "invalid execution ID")
 	}
 
-	// The Postgres chat listing cannot narrow by finding or execution.
-	if chatID != "" && mcpServerID == "" && !resultID.Valid && executionID == "" {
+	clickHouseCutover := s.riskFindingsClickHouseEnabled(ctx, authCtx)
+	if chatID != "" && mcpServerID == "" && !resultID.Valid && executionID == "" && !clickHouseCutover {
 		totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
 		if err != nil {
 			totalCount = 0
@@ -1475,7 +1488,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if toTime.Valid {
 		to = &toTime.Time
 	}
-	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
+	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to, chatID != "" && clickHouseCutover)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
