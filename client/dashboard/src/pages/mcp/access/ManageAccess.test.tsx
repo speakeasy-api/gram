@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
 // whole point, so the tests assert the payload rather than the rendering alone.
-const { mutate, mutationOptions, invalidate } = vi.hoisted(() => ({
+const { mutate, mutationOptions, invalidate, permission } = vi.hoisted(() => ({
   mutate: vi.fn(),
   mutationOptions: vi.fn(),
   invalidate: vi.fn(),
+  permission: { admin: true },
 }));
 
 vi.mock("@gram/client/react-query/setResourceAudience.js", () => ({
@@ -85,13 +86,17 @@ vi.mock("react-router", () => ({
 }));
 
 vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    plugins: { detail: { href: (id: string) => `/org/plugins/${id}` } },
+  }),
   useOrgRoutes: () => ({
+    plugins: { detail: { href: (id: string) => `/org/plugins/${id}` } },
     access: { roles: { href: () => "/org/access/roles" } },
   }),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
+  useRBAC: () => ({ hasAnyScope: () => permission.admin }),
 }));
 
 vi.mock("@/components/require-scope", () => ({
@@ -110,7 +115,10 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { ManageAccess } from "./ManageAccess";
 
 afterEach(cleanup);
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  permission.admin = true;
+});
 
 function entry(
   overrides: Partial<ResourceAudienceEntry>,
@@ -458,4 +466,89 @@ it("confirms removing an agent that remains covered by a broader role allow", ()
     ["agent:a1", "blocked_manage"],
     ["agent:a1", "blocked_view"],
   ]);
+});
+
+describe("role plugin distribution", () => {
+  const role = entry({
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineering",
+  });
+  const plugin = {
+    principalUrn: role.principalUrn,
+    pluginId: "plugin-1",
+    name: "Tools",
+    slug: "tools",
+  };
+  const ui = (rolePlugins: (typeof plugin)[], entries = [role]) => (
+    <TooltipProvider>
+      <ManageAccess
+        resourceId="server-1"
+        entries={entries}
+        version="v1"
+        isLoading={false}
+        rolePlugins={rolePlugins}
+      />
+    </TooltipProvider>
+  );
+
+  it("shows an empty distribution without inventing links", () => {
+    render(ui([]));
+    expect(screen.getByText("Distributed via")).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+  });
+
+  it("links one exact role match to its plugin detail", () => {
+    render(
+      ui([
+        plugin,
+        {
+          ...plugin,
+          principalUrn: "role:other:1",
+          pluginId: "wrong",
+          name: "Unrelated",
+        },
+      ]),
+    );
+    expect(
+      screen.getByRole("link", { name: "Tools" }).getAttribute("href"),
+    ).toBe("/org/plugins/plugin-1");
+    expect(screen.queryByText("Unrelated")).toBeNull();
+  });
+
+  it("sorts multiple plugins and disambiguates duplicate names with slugs", () => {
+    render(
+      ui([
+        { ...plugin, pluginId: "z", slug: "z" },
+        { ...plugin, pluginId: "a", slug: "a" },
+        { ...plugin, pluginId: "first", name: "Alpha" },
+      ]),
+    );
+    const links = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("href")?.includes("/plugins/"));
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Alpha",
+      "Tools (a)",
+      "Tools (z)",
+    ]);
+    expect(links[0]?.parentElement?.textContent).toBe(
+      "Alpha, Tools (a), Tools (z)",
+    );
+  });
+
+  it("does not show plugins on non-role rows", () => {
+    render(ui([{ ...plugin, principalUrn: "user:1" }], [entry({})]));
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+  });
+
+  it("hides cached plugin data immediately after permission downgrade", () => {
+    const { rerender } = render(ui([plugin]));
+    expect(screen.getByRole("link", { name: "Tools" })).toBeDefined();
+    permission.admin = false;
+    rerender(ui([plugin]));
+    expect(screen.queryByRole("link", { name: "Tools" })).toBeNull();
+    expect(screen.queryByText("Distributed via")).toBeNull();
+    expect(screen.getByRole("link", { name: "Engineering" })).toBeDefined();
+  });
 });

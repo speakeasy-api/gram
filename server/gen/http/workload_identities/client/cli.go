@@ -74,6 +74,35 @@ func BuildListPlatformsPayload(workloadIdentitiesListPlatformsSessionToken strin
 	return v, nil
 }
 
+// BuildGetCustomFlowsPayload builds the payload for the workloadIdentities
+// getCustomFlows endpoint from CLI flags.
+func BuildGetCustomFlowsPayload(workloadIdentitiesGetCustomFlowsSessionToken string, workloadIdentitiesGetCustomFlowsApikeyToken string, workloadIdentitiesGetCustomFlowsProjectSlugInput string) (*workloadidentities.GetCustomFlowsPayload, error) {
+	var sessionToken *string
+	{
+		if workloadIdentitiesGetCustomFlowsSessionToken != "" {
+			sessionToken = &workloadIdentitiesGetCustomFlowsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesGetCustomFlowsApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesGetCustomFlowsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesGetCustomFlowsProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesGetCustomFlowsProjectSlugInput
+		}
+	}
+	v := &workloadidentities.GetCustomFlowsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListTokenEndpointsPayload builds the payload for the workloadIdentities
 // listTokenEndpoints endpoint from CLI flags.
 func BuildListTokenEndpointsPayload(workloadIdentitiesListTokenEndpointsSessionToken string, workloadIdentitiesListTokenEndpointsApikeyToken string, workloadIdentitiesListTokenEndpointsProjectSlugInput string) (*workloadidentities.ListTokenEndpointsPayload, error) {

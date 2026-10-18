@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -117,6 +118,15 @@ func (s *MCPToolExposureService) CreateMCPFromFunctions(ctx context.Context, pri
 	return output, nil
 }
 
+// hostedServerKeyWrites reports whether the organization's hosted writes use the canonical server key; errors keep the toolset key.
+func (s *MCPToolExposureService) hostedServerKeyWrites(ctx context.Context, organizationID, organizationSlug string) bool {
+	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.features, organizationID, organizationSlug)
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+	}
+	return enabled
+}
+
 // sanitizeMCPFromFunctionsError is the boundary every error crosses on its way
 // to the MCP caller. Nothing downstream of the tool rewrites an error it does
 // not recognise — the SDK returns it to the client as text — so a database or
@@ -167,6 +177,8 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	if organizationSlug == "" {
 		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(errors.New("organization slug unavailable"))
 	}
+	// Resolved before the transaction so flag latency never holds its locks.
+	serverKey := s.hostedServerKeyWrites(ctx, principal.OrganizationID, organizationSlug)
 
 	payload, err := json.Marshal(mcpFromFunctionsRequest{ProjectID: project.ID.String(), Name: name, ToolURNs: toolURNStrings(requested)})
 	if err != nil {
@@ -175,29 +187,17 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	digest := sha256.Sum256(append([]byte("platform-mcp-create-from-functions-v1\x00"), payload...))
 	inputHash := hex.EncodeToString(digest[:])
 
-	// A retry of a creation that already committed returns its stored result
-	// without spending the allowance. Both the lookup and the charge run here,
-	// outside any transaction: the limiter is a network round-trip, and taking
-	// it inside the receipt transaction would hold a database connection and
-	// the receipt lock for as long as the limiter takes to answer. The
-	// executor's locked re-check still replays a duplicate that commits
-	// between this lookup and its own.
-	if replay, ok, err := s.completedMCPFromFunctionsReceipt(ctx, principal, project.ID, input.IdempotencyKey, inputHash); err != nil {
-		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(err)
-	} else if ok {
-		var stored mcpFromFunctionsReceipt
-		if err := json.Unmarshal(replay.ResultPayload, &stored); err != nil {
-			return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(err)
+	// A retry of a creation that already committed replays its stored result
+	// without spending the allowance; see executeChargedMutationReceipt. The
+	// allowance is the one the other writes that change what a server exposes
+	// share, so a creation loop cannot outrun them.
+	charge := func(ctx context.Context) error {
+		if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			return mcpFromFunctionsBudgetError(err)
 		}
-		return s.finishMCPFromFunctions(ctx, principal, project, stored, replay), nil
+		return nil
 	}
-	// The same allowance as the other writes that change what a server
-	// exposes, so a creation loop cannot outrun them.
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsBudgetError(err)
-	}
-
-	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[mcpFromFunctionsReceipt]{
+	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[mcpFromFunctionsReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationCreateMCPFromFunctions,
 		IdempotencyKey: input.IdempotencyKey, InputHash: inputHash, Label: "MCP server from functions",
 		Invalid: func(error) error { return mcpFromFunctionsInvalid("The MCP server request is invalid.") },
@@ -217,7 +217,7 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 			return encoded, nil
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (mcpFromFunctionsReceipt, error) {
-			return s.createMCPFromFunctionsInTransaction(ctx, tx, principal, project, organizationSlug, name, requested)
+			return s.createMCPFromFunctionsInTransaction(ctx, tx, principal, project, organizationSlug, name, requested, serverKey)
 		},
 	})
 	if err != nil {
@@ -227,10 +227,10 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	if err := json.Unmarshal(receipt.ResultPayload, &stored); err != nil {
 		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(err)
 	}
-	return s.finishMCPFromFunctions(ctx, principal, project, stored, receipt), nil
+	return s.finishMCPFromFunctions(ctx, principal, project, stored, receipt, charge), nil
 }
 
-func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, organizationSlug, name string, requested []urn.Tool) (mcpFromFunctionsReceipt, error) {
+func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, organizationSlug, name string, requested []urn.Tool, serverKey bool) (mcpFromFunctionsReceipt, error) {
 	txQueries := s.queries.WithTx(tx)
 	// Held to commit, so the project cannot be deleted between the tool check
 	// and the two creates.
@@ -257,6 +257,7 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 		ActorUserID: principal.UserID, ActorEmail: email, Name: name, Description: nil,
 		DefaultEnvironmentSlug: nil, OriginRegistrySpecifier: nil,
 		ToolURNs: values, ResourceURNs: nil,
+		HostedServerKey: serverKey,
 	})
 	if err != nil {
 		return mcpFromFunctionsReceipt{}, classifyMCPFromFunctionsError(err)
@@ -297,7 +298,7 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 	return result, nil
 }
 
-func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, principal Principal, project ResolvedProject, stored mcpFromFunctionsReceipt, receipt OperationReceipt) CreateMCPFromFunctionsOutput {
+func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, principal Principal, project ResolvedProject, stored mcpFromFunctionsReceipt, receipt OperationReceipt, charge func(context.Context) error) CreateMCPFromFunctionsOutput {
 	output := CreateMCPFromFunctionsOutput{
 		Outcome: "created", MCPID: stored.MCPID, MCPName: stored.MCPName, MCPSlug: stored.MCPSlug, Visibility: stored.Visibility,
 		AddedToDefaultPlugin: stored.AddedToDefaultPlugin,
@@ -309,8 +310,11 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	// particular still needs it: with emission enabled it means the project
 	// has no marketplace connection yet, and the publish can create that first
 	// repository, exactly as the dashboard's first-server path does.
+	rerunErr := chargeRerun(ctx, receipt, charge)
 	if stored.AddedToDefaultPlugin && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		if s.publisher == nil {
+		if rerunErr != nil {
+			output.PublishSignal = skippedRerun(ctx, s.logger, rerunErr)
+		} else if s.publisher == nil {
 			output.PublishSignal = "unavailable"
 		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
 			output.PublishSignal = "request_failed"
@@ -324,7 +328,11 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	// a dynamic-mode server refuses tools/list outright until one exists. The
 	// target is the toolset recorded in the receipt, so a replay schedules the
 	// toolset the original wrote.
-	output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
+	if rerunErr != nil {
+		output.IndexSignal = skippedRerun(ctx, s.logger, rerunErr)
+	} else {
+		output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
+	}
 
 	mcpID, err := uuid.Parse(stored.MCPID)
 	if err != nil {
@@ -339,28 +347,6 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	output.Exposure = &exposure
 	output.SnapshotScope = "fresh_read_after_commit"
 	return output
-}
-
-// completedMCPFromFunctionsReceipt is a read-only lookup, on the pool rather
-// than in a transaction, for a creation with this exact key and input that
-// already committed and has not expired. Anything else — no receipt, a pending
-// one, different input under the same key — is left to the executor, which
-// decides it under the receipt lock.
-func (s *MCPToolExposureService) completedMCPFromFunctionsReceipt(ctx context.Context, principal Principal, projectID uuid.UUID, idempotencyKey, inputHash string) (OperationReceipt, bool, error) {
-	row, err := s.queries.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID, ProjectID: projectID, Operation: operationCreateMCPFromFunctions,
-		IdempotencyKey: idempotencyKey, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OperationReceipt{}, false, nil
-	}
-	if err != nil {
-		return OperationReceipt{}, false, fmt.Errorf("look up MCP server from functions receipt: %w", err)
-	}
-	if row.Status != receiptStatusSucceeded || len(row.ResultPayload) == 0 || row.InputHash != inputHash || !row.ExpiresAt.Valid || !row.ExpiresAt.Time.After(s.now()) {
-		return OperationReceipt{}, false, nil
-	}
-	return operationReceiptFromRow(row, true), true, nil
 }
 
 // MCPFromFunctionsPreview is what an unconfirmed create_mcp_from_functions

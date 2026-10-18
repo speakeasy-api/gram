@@ -6,6 +6,7 @@ import { dashboardsAddWidget } from "../funcs/dashboardsAddWidget.js";
 import { dashboardsCreate } from "../funcs/dashboardsCreate.js";
 import { dashboardsDelete } from "../funcs/dashboardsDelete.js";
 import { dashboardsDuplicate } from "../funcs/dashboardsDuplicate.js";
+import { dashboardsDuplicateBuiltIn } from "../funcs/dashboardsDuplicateBuiltIn.js";
 import { dashboardsGet } from "../funcs/dashboardsGet.js";
 import { dashboardsList } from "../funcs/dashboardsList.js";
 import { dashboardsRemoveWidget } from "../funcs/dashboardsRemoveWidget.js";
@@ -27,6 +28,10 @@ import {
   DeleteDashboardRequest,
   DeleteDashboardSecurity,
 } from "../models/operations/deletedashboard.js";
+import {
+  DuplicateBuiltInDashboardRequest,
+  DuplicateBuiltInDashboardSecurity,
+} from "../models/operations/duplicatebuiltindashboard.js";
 import {
   DuplicateDashboardRequest,
   DuplicateDashboardSecurity,
@@ -127,6 +132,25 @@ export class Dashboards extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Dashboard> {
     return unwrapAsync(dashboardsDuplicate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * duplicateBuiltInDashboard dashboards
+   *
+   * @remarks
+   * Copy a Speakeasy-built dashboard into a new one the caller owns, named "<name> (copy)", with a new saved widget per card, named the same way. The copy is a project dashboard like any other and can be changed; the built-in stays as it is.
+   */
+  async duplicateBuiltIn(
+    request: DuplicateBuiltInDashboardRequest,
+    security?: DuplicateBuiltInDashboardSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Dashboard> {
+    return unwrapAsync(dashboardsDuplicateBuiltIn(
       this,
       request,
       security,

@@ -282,10 +282,14 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 // agent steps. Callers have already committed and the checklist is advisory,
 // so a failed read leaves those steps unchecked instead of failing the call.
 func (s *Service) view(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, rows connectionRows) *gen.OktaIdentityProviderConnection {
+	return buildConnectionView(rows, observeAgent(ctx, logger, dbtx, rows))
+}
+
+func observeAgent(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX, rows connectionRows) AgentObservation {
 	agent := AgentObservation{App: nil, ConnectionRecorded: false}
 	// Revoke deletes the snapshot and the recorded resource connections.
 	if rows.Connection.Status == StatusRevoked {
-		return buildConnectionView(rows, agent)
+		return agent
 	}
 	orgID, id := rows.Connection.OrganizationID, rows.Connection.ID
 
@@ -297,7 +301,7 @@ func (s *Service) view(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX,
 
 	appID := rows.Okta.AgentAppID.String
 	if appID == "" || !rows.Okta.ApplicationsSyncedAt.Valid {
-		return buildConnectionView(rows, agent)
+		return agent
 	}
 	state, err := oktaapplications.GetAppState(ctx, dbtx, orgID, id, appID)
 	switch {
@@ -308,7 +312,7 @@ func (s *Service) view(ctx context.Context, logger *slog.Logger, dbtx repo.DBTX,
 	default:
 		agent.App = &AgentAppSignal{Found: true, Active: state.Active, Assigned: state.Assigned}
 	}
-	return buildConnectionView(rows, agent)
+	return agent
 }
 
 // withManagedClient reads on dbtx so a caller holding a transaction never waits on a second pool connection.
@@ -1296,6 +1300,9 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 	before, err := s.lock(ctx, logger, dbtx, authCtx.ActiveOrganizationID, id)
 	if err != nil {
 		return nil, err
+	}
+	if agentID != "" && before.Managed != nil && before.Managed.ClientID == agentID {
+		return nil, oops.E(oops.CodeBadRequest, nil, "agent_id is the connection's service app client ID; enter the AI agent's wlp... ID")
 	}
 	if before.Okta.AgentID.String == agentID && before.Okta.AgentAppID.String == agentAppID {
 		return s.view(ctx, logger, dbtx, *before), nil

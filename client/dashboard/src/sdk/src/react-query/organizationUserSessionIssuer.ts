@@ -59,7 +59,7 @@ export type OrganizationUserSessionIssuerQueryError =
  * getIssuer organizationUserSessionIssuers
  *
  * @remarks
- * Get an organization-owned user_session_issuer by id. Requires org:read.
+ * Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.
  */
 export function useOrganizationUserSessionIssuer(
   request: GetOrganizationUserSessionIssuerRequest,
@@ -88,7 +88,7 @@ export function useOrganizationUserSessionIssuer(
  * getIssuer organizationUserSessionIssuers
  *
  * @remarks
- * Get an organization-owned user_session_issuer by id. Requires org:read.
+ * Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.
  */
 export function useOrganizationUserSessionIssuerSuspense(
   request: GetOrganizationUserSessionIssuerRequest,

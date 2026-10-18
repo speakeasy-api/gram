@@ -384,7 +384,7 @@ func newDashboardDefinition() Definition {
 	return Definition{
 		Slug:                 DefinitionSlugDashboard,
 		Title:                "Dashboard",
-		Description:          "Direct messages from the Gram dashboard assistant sidebar.",
+		Description:          "Direct messages from the Speakeasy dashboard assistant sidebar.",
 		Kind:                 KindDirect,
 		ConfigSchema:         schema,
 		CompiledConfigSchema: compiled,

@@ -12,6 +12,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countIssuerKeysGrantedByCredential = `-- name: CountIssuerKeysGrantedByCredential :one
+SELECT count(*)
+FROM external_credentials AS ec
+JOIN external_keys AS ek
+  ON ek.external_credential_id = ec.id
+JOIN json_web_keys AS k
+  ON k.external_key_id = ek.id
+ AND k.organization_id = ek.organization_id
+JOIN internal_session_issuers AS isi
+  ON isi.organization_id = k.organization_id
+ AND isi.json_web_key_set_id = k.json_web_key_set_id
+WHERE ec.id = $1::uuid
+  AND ec.organization_id IS NULL
+  AND ec.project_id IS NULL
+  AND (k.state <> 'revoked' OR ($2::boolean AND k.kms_disabled_at IS NULL))
+`
+
+type CountIssuerKeysGrantedByCredentialParams struct {
+	ExternalCredentialID  uuid.UUID
+	IncludePendingCleanup bool
+}
+
+// Issuer keys still holding a signer grant made with this platform
+// credential's service account: live keys and, with include_pending_cleanup,
+// revoked keys whose KMS cleanup is pending. Platform credentials sign for
+// every organization, so the count spans them.
+func (q *Queries) CountIssuerKeysGrantedByCredential(ctx context.Context, arg CountIssuerKeysGrantedByCredentialParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countIssuerKeysGrantedByCredential, arg.ExternalCredentialID, arg.IncludePendingCleanup)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countLiveManagedExternalKeysByCredential = `-- name: CountLiveManagedExternalKeysByCredential :one
 SELECT count(*)
 FROM external_keys
@@ -190,7 +223,7 @@ type GetAwsIamCredentialRow struct {
 
 // Tenancy for the reads and writes below is a single nullable parameter:
 // @organization_id is a customer organization for organization-scoped rows, or
-// NULL for platform-scoped rows (Gram's own credentials, managed by the
+// NULL for platform-scoped rows (Speakeasy's own credentials, managed by the
 // platform-admin surface). IS NOT DISTINCT FROM makes NULL match NULL, so both
 // tiers share one query set; the platform-admin handlers pass a NULL
 // organization_id, exactly as they already do for CreateExternalCredential.

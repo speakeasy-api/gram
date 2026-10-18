@@ -1,3 +1,4 @@
+import type { ChatContentPart } from "@gram/client/models/components/chatcontentpart.js";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -24,9 +25,23 @@ const messages: ChatMessage[] = [
   },
 ];
 
+const ATTACHED_SECRET = "AKIAQRSTUVWXYZ012345";
+
+const attachment = (parentChatMessageId?: string): ChatContentPart => ({
+  id: "a1",
+  kind: "prompt_attachment",
+  content: `region,key\nus-west,${ATTACHED_SECRET}   \n`,
+  metadata: { display_path: "keys.csv", kind: "file" },
+  isRisk: true,
+  parentChatMessageId,
+  createdAt: new Date("2026-09-16T00:00:00Z"),
+});
+
+let contentParts: ChatContentPart[] = [];
+
 vi.mock("@gram/client/react-query/loadChat.js", () => ({
   useLoadChat: () => ({
-    data: { messages, numMessages: 1 },
+    data: { messages, contentParts, numMessages: 1 },
     isLoading: false,
     isError: false,
     error: null,
@@ -81,7 +96,10 @@ function renderContext(
   );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  contentParts = [];
+});
 
 describe("FindingContext masking", () => {
   it("keeps a sibling secret masked when a whole-message judge finding is revealed", () => {
@@ -106,5 +124,53 @@ describe("FindingContext masking", () => {
     renderContext(behavior, [behavior, secret]);
     expect(shows(BEHAVIOR)).toBe(false);
     expect(shows(SECRET)).toBe(false);
+  });
+});
+
+describe("FindingContext attachment findings", () => {
+  // Attachment findings carry the content part id instead of a message id.
+  const attached = finding({
+    id: "attached",
+    source: "gitleaks",
+    match: ATTACHED_SECRET,
+    chatMessageId: undefined,
+    chatContentPartId: "a1",
+  });
+
+  it("shows the flagged attachment under the prompt it hangs off", () => {
+    contentParts = [attachment("m1")];
+    renderContext(attached, [attached]);
+    expect(screen.getByText("Attachment · keys.csv")).toBeTruthy();
+    expect(screen.getByText("User prompt")).toBeTruthy();
+    expect(shows("region,key")).toBe(true);
+    expect(shows(ATTACHED_SECRET)).toBe(false);
+    expect(shows("outside the loaded transcript")).toBe(false);
+  });
+
+  it("reveals the attachment's match", () => {
+    contentParts = [attachment("m1")];
+    renderContext(attached, [attached], { revealed: true });
+    expect(shows(ATTACHED_SECRET)).toBe(true);
+  });
+
+  it("renders the attachment's cleaned text", () => {
+    contentParts = [attachment("m1")];
+    renderContext(attached, [attached], { revealed: true });
+    expect(shows(`us-west,${ATTACHED_SECRET}   `)).toBe(false);
+    expect(shows(`us-west,${ATTACHED_SECRET}`)).toBe(true);
+  });
+
+  it("keeps the placeholder when the parent prompt is outside the window", () => {
+    contentParts = [attachment("m-elsewhere")];
+    renderContext(attached, [attached]);
+    expect(screen.queryByText("Attachment · keys.csv")).toBeNull();
+    expect(shows("outside the loaded transcript")).toBe(true);
+  });
+
+  it("shows an unparented attachment on its own", () => {
+    contentParts = [attachment()];
+    renderContext(attached, [attached]);
+    expect(screen.getByText("Attachment · keys.csv")).toBeTruthy();
+    expect(screen.queryByText("User prompt")).toBeNull();
   });
 });

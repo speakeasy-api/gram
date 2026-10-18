@@ -511,7 +511,7 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 		"gen_ai.conversation.id":         uuid.New().String(),
 		"gen_ai.response.finish_reasons": []string{"tool_calls"},
 	}
-	// Left off entirely when unset, so a fixture can model a caller Gram never
+	// Left off entirely when unset, so a fixture can model a caller Speakeasy never
 	// saw an initialize handshake for.
 	if p.clientName != "" {
 		attrs["gram.mcp.client.name"] = p.clientName
@@ -909,7 +909,7 @@ func TestGetToolUsageClients_FoldsCaseAndUnattributed(t *testing.T) {
 		toolsetSlug: "payments", toolName: "charge", userEmail: "bob@example.com",
 		statusCode: 200, clientName: "Cursor", clientVersion: "1.7.42",
 	})
-	// Reported no client at all: handshaked before Gram recorded identities,
+	// Reported no client at all: handshaked before Speakeasy recorded identities,
 	// or never handshaked.
 	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
 		projectID: projectID, timestamp: now.Add(-17 * time.Minute),

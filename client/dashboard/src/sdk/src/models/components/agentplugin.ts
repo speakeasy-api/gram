@@ -5,29 +5,63 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+/**
+ * How the agent installs the plugin. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.
+ */
+export const InstallMode = {
+  Required: "required",
+  Default: "default",
+  Available: "available",
+} as const;
+/**
+ * How the agent installs the plugin. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.
+ */
+export type InstallMode = ClosedEnum<typeof InstallMode>;
+
 export type AgentPlugin = {
+  /**
+   * Short description of the plugin, when one is set.
+   */
+  description?: string | undefined;
+  /**
+   * How the agent installs the plugin. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.
+   */
+  installMode: InstallMode;
   /**
    * Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.
    */
   marketplaceName: string;
   /**
-   * Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.
+   * Display name of the plugin. Absent for the synthesized observability plugin.
+   */
+  name?: string | undefined;
+  /**
+   * Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
    */
   slug: string;
 };
 
 /** @internal */
+export const InstallMode$inboundSchema: z.ZodMiniEnum<typeof InstallMode> = z
+  .enum(InstallMode);
+
+/** @internal */
 export const AgentPlugin$inboundSchema: z.ZodMiniType<AgentPlugin, unknown> = z
   .pipe(
     z.object({
+      description: z.optional(z.string()),
+      install_mode: InstallMode$inboundSchema,
       marketplace_name: z.string(),
+      name: z.optional(z.string()),
       slug: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
+        "install_mode": "installMode",
         "marketplace_name": "marketplaceName",
       });
     }),

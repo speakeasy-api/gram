@@ -114,7 +114,7 @@ func TestTurnUserIDAgentBackedRequiresMembershipAndProjectAccess(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "turn-identity-active")
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Turn identity", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Turn identity", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
 	thread := assistantThreadRecord{SourceKind: sourceKindWake}
 	wake := func(requester string) assistantThreadEventRecord {
@@ -140,7 +140,7 @@ func TestProcessThreadEventsFailsRejectedIdentityTerminally(t *testing.T) {
 	seedIdentityMembers(t, conn)
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 	logger := testenv.NewLogger(t)
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	upgraded, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: projectID, AssistantID: assistantID, ActorUserID: "user-1", AgentID: uuid.Nil, AgentName: ""})
 	require.NoError(t, err)
 	_, err = agentrepo.New(conn).SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: "org-test", ID: uuid.MustParse(*upgraded.AgentID)})
@@ -184,7 +184,7 @@ func TestIngressPayloadCannotPoseAsWakeRequester(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "turn-identity-spoof")
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Spoof target", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Spoof target", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
 	seedProjectRead(t, db, "user-1", project)
 	seedProjectRead(t, db, "user-2", project)

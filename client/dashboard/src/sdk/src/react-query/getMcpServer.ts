@@ -59,7 +59,7 @@ export type GetMcpServerQueryError =
  * getMcpServer mcpServers
  *
  * @remarks
- * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
+ * Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.
  */
 export function useGetMcpServer(
   request?: GetMcpServerRequest | undefined,
@@ -82,7 +82,7 @@ export function useGetMcpServer(
  * getMcpServer mcpServers
  *
  * @remarks
- * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
+ * Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.
  */
 export function useGetMcpServerSuspense(
   request?: GetMcpServerRequest | undefined,
@@ -110,6 +110,7 @@ export function setGetMcpServerData(
     parameters: {
       id?: string | undefined;
       slug?: string | undefined;
+      toolsetId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -128,6 +129,7 @@ export function invalidateGetMcpServer(
     [parameters: {
       id?: string | undefined;
       slug?: string | undefined;
+      toolsetId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

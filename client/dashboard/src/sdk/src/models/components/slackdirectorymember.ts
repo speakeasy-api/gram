@@ -67,7 +67,7 @@ export type SlackDirectoryMember = {
    */
   displayName?: string | undefined;
   /**
-   * Observed email; never evidence of a confirmed Gram identity.
+   * Observed email; never evidence of a confirmed Speakeasy identity.
    */
   email?: string | undefined;
   /**

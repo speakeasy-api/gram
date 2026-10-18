@@ -14,8 +14,8 @@ type UserSessionClient struct {
 	ID string
 	// The owning user_session_issuer id.
 	UserSessionIssuerID string
-	// The client_id. Minted by Gram for a DCR registration; for a CIMD client it
-	// is the metadata document URL and equals client_id_metadata_uri.
+	// The client_id. Minted by Speakeasy for a DCR registration; for a CIMD client
+	// it is the metadata document URL and equals client_id_metadata_uri.
 	ClientID string
 	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
 	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR

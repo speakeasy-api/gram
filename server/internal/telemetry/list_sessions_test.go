@@ -402,7 +402,7 @@ func TestListSessions_CoLocatesAttributionFilters(t *testing.T) {
 }
 
 // TestListSessions_ExcludesAssistantChatCompletions guards the provenance
-// rule: the session list covers the three agent surfaces only, so Gram-hosted
+// rule: the session list covers the three agent surfaces only, so Speakeasy-hosted
 // assistant chat completions never appear even when they carry cost.
 func TestListSessions_ExcludesAssistantChatCompletions(t *testing.T) {
 	t.Parallel()

@@ -10,8 +10,12 @@ import (
 )
 
 type OktaServerSuggestionDismissal struct {
-	OrganizationID  string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
 	RegistryEntryID uuid.UUID
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

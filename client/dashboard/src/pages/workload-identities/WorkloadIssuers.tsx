@@ -20,10 +20,9 @@ import { useOrgRoutes } from "@/routes";
 import { toast } from "sonner";
 import { issuerMatches } from "./search";
 import { CatalogPlatforms } from "./setup/CatalogPlatforms";
-import {
-  RegisterIssuerSheet,
-  type RegisterIssuerValues,
-} from "./RegisterIssuerSheet";
+import { useCustomFlows } from "./custom/flows";
+import { PlatformFormSheet } from "./custom/PlatformFormSheet";
+import type { RegisterIssuerValues } from "./formValues";
 
 /**
  * The platforms this organization has trusted, one card each, and a way to trust
@@ -56,6 +55,8 @@ function WorkloadIssuersCatalogue(): JSX.Element {
   const [search, setSearch] = useState("");
   const { data, isPending, isError, refetch } = useWorkloadIdentities({});
   const issuers = useMemo(() => data?.issuers ?? [], [data]);
+  // Fetched with the page so the registration sheet opens on its form.
+  useCustomFlows();
 
   const visibleIssuers = useMemo(
     () => issuers.filter((issuer) => issuerMatches(issuer, search)),
@@ -112,11 +113,11 @@ function WorkloadIssuersCatalogue(): JSX.Element {
         description={
           <>
             Let agents on other platforms (CI jobs, cloud services, AI agents)
-            sign in to Gram without a stored secret.
+            sign in to Speakeasy without a stored secret.
             <br />
             {view === "custom"
               ? "Added by hand, with values from the platform's own console."
-              : "Platforms Gram knows how to federate with, ready to trust without looking anything up."}
+              : "Platforms Speakeasy knows how to federate with, ready to trust without looking anything up."}
           </>
         }
         // Registering by hand is the Custom tab's job; catalog platforms are
@@ -191,7 +192,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
         )}
       </ResourceListPage>
 
-      <RegisterIssuerSheet
+      <PlatformFormSheet
         open={registerOpen}
         onOpenChange={setRegisterOpen}
         onSubmit={handleRegister}

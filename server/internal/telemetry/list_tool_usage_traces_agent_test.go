@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,15 +41,15 @@ func TestListToolUsageTraces_SparseAgentAttributionMatchesSummary(t *testing.T) 
 			"http.response.status_code":     200,
 		})
 		require.NoError(t, err)
-		err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+		// One committed insert per row, so sparse attribution is also exercised
+		// across separate MV insert blocks.
+		err = ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 			ID: uuid.NewString(), GramProjectID: ti.projectID,
 			TimeUnixNano: now.UnixNano(), ObservedTimeUnixNano: now.UnixNano(),
 			TraceID: &row.traceID, GramURN: "tools:http:gram:charge",
 			Body: "hosted tool event", Attributes: string(attrs), ResourceAttributes: "{}",
-		})
+		}})
 		require.NoError(t, err)
-		// Exercise sparse attribution across separate MV insert blocks, too.
-		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 	}
 	payload := &gen.ListToolUsageTracesPayload{
 		From: now.Add(-time.Hour).Format(time.RFC3339),

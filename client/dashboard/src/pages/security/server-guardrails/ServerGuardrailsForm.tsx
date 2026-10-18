@@ -5,7 +5,7 @@ import { Text } from "@/components/ui/Text";
 import { Loader2 } from "lucide-react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { DetectorCard } from "../DetectorCard";
-import { ActionStep } from "../PolicyDetail";
+import { ActionStep } from "../policy-editor-shell";
 import type { PolicyAction, RuleCategory } from "../policy-data";
 import { FLAG_ONLY_CATEGORIES, type DetectorMode } from "../policy-form";
 import {

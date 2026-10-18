@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -129,16 +130,16 @@ func NewService(
 // one set of executor instances.
 func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformmemory.NewRememberTool(svc), RequiredFeature: ""},
-		{Executor: platformmemory.NewRecallTool(svc), RequiredFeature: ""},
-		{Executor: platformmemory.NewForgetTool(svc), RequiredFeature: ""},
+		{Executor: platformmemory.NewRememberTool(svc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformmemory.NewRecallTool(svc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformmemory.NewForgetTool(svc), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
 // AssistantSkillTools returns the always-on attached-skill tools.
 func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformskills.NewLoadTool(logger, db, opts...), RequiredFeature: ""},
+		{Executor: platformskills.NewLoadTool(logger, db, opts...), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -149,9 +150,9 @@ func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, opts ...platform
 // assistant in the same project.
 func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *audit.Logger) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformtriggers.NewAssistantListTriggersTool(db, app), RequiredFeature: ""},
-		{Executor: platformtriggers.NewAssistantConfigureTriggerTool(db, app, auditLogger), RequiredFeature: ""},
-		{Executor: platformtriggers.NewUnsubscribeThreadTool(app), RequiredFeature: ""},
+		{Executor: platformtriggers.NewAssistantListTriggersTool(db, app), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformtriggers.NewAssistantConfigureTriggerTool(db, app, auditLogger), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformtriggers.NewUnsubscribeThreadTool(app), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -160,15 +161,17 @@ func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *au
 // they have no dashboard surface to display the results.
 func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: ""},
-		{Executor: platformlogs.NewSearchToolCallsTool(telemetrySvc), RequiredFeature: ""},
-		{Executor: platformlogs.NewGetToolUsageSummaryTool(telemetrySvc), RequiredFeature: ""},
-		{Executor: platformlogs.NewSearchChatsTool(telemetrySvc), RequiredFeature: ""},
-		{Executor: platformlogs.NewSearchUsersTool(telemetrySvc), RequiredFeature: ""},
-		{Executor: platformlogs.NewGetProjectMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
-		{Executor: platformlogs.NewGetUserMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
-		{Executor: platformlogs.NewGetObservabilityOverviewTool(telemetrySvc), RequiredFeature: ""},
-		{Executor: platformlogs.NewListAttributeKeysTool(telemetrySvc), RequiredFeature: ""},
+		// Individual tool calls and raw log records need log:read on the
+		// project, which no system role and no agent runtime policy holds.
+		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: "", RequiredScope: string(authz.ScopeLogRead)},
+		{Executor: platformlogs.NewSearchToolCallsTool(telemetrySvc), RequiredFeature: "", RequiredScope: string(authz.ScopeLogRead)},
+		{Executor: platformlogs.NewGetToolUsageSummaryTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformlogs.NewSearchChatsTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformlogs.NewSearchUsersTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformlogs.NewGetProjectMetricsSummaryTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformlogs.NewGetUserMetricsSummaryTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformlogs.NewGetObservabilityOverviewTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformlogs.NewListAttributeKeysTool(telemetrySvc), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -176,8 +179,8 @@ func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []pl
 // managed assistant.
 func ManagedAssistantChatsTools(chatSvc platformchats.ChatService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformchats.NewListChatsTool(chatSvc), RequiredFeature: ""},
-		{Executor: platformchats.NewLoadChatTool(chatSvc), RequiredFeature: ""},
+		{Executor: platformchats.NewListChatsTool(chatSvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformchats.NewLoadChatTool(chatSvc), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -185,7 +188,7 @@ func ManagedAssistantChatsTools(chatSvc platformchats.ChatService) []platformtoo
 // managed assistant.
 func ManagedAssistantUsersTools(orgSvc platformusers.OrganizationsService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformusers.NewListOrganizationUsersTool(orgSvc), RequiredFeature: ""},
+		{Executor: platformusers.NewListOrganizationUsersTool(orgSvc), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -196,15 +199,14 @@ func ManagedAssistantUsersTools(orgSvc platformusers.OrganizationsService) []pla
 // audits the invoking user as the actor.
 func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService, redactionKey string) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewGetRiskPolicyStatusTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewGetRiskRuleBreakdownTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc, redactionKey), RequiredFeature: ""},
-		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc, redactionKey), RequiredFeature: ""},
-		{Executor: platformrisk.NewMarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewUnmarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformrisk.NewGetRiskRuleBreakdownTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc, redactionKey), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc, redactionKey), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformrisk.NewMarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformrisk.NewUnmarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -212,7 +214,7 @@ func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService, redactionKey st
 // the project's managed assistant.
 func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.DeploymentsService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformdeployments.NewGetDeploymentLogsTool(deploymentsSvc), RequiredFeature: ""},
+		{Executor: platformdeployments.NewGetDeploymentLogsTool(deploymentsSvc), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -222,7 +224,7 @@ func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.Deploym
 // fetch stays within the egress rules.
 func ManagedAssistantChangelogTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformchangelog.NewGetChangelogTool(httpClient), RequiredFeature: ""},
+		{Executor: platformchangelog.NewGetChangelogTool(httpClient), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -235,8 +237,8 @@ func ManagedAssistantChangelogTools(httpClient *guardian.HTTPClient) []platformt
 func ManagedAssistantDocsTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
 	client := platformdocs.NewClient(httpClient, platformdocs.DefaultSiteURL)
 	return []platformtools.ExternalTool{
-		{Executor: platformdocs.NewListDocsTool(client), RequiredFeature: ""},
-		{Executor: platformdocs.NewGetDocTool(client), RequiredFeature: ""},
+		{Executor: platformdocs.NewListDocsTool(client), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformdocs.NewGetDocTool(client), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -247,14 +249,14 @@ func ManagedAssistantDocsTools(httpClient *guardian.HTTPClient) []platformtools.
 // target, project:write for an assistant target).
 func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService, insights platformskills.SkillInsightsReader) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformskills.NewCreateTool(skillsSvc), RequiredFeature: "skills"},
-		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills"},
-		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills"},
-		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills"},
-		{Executor: platformskills.NewListDistributionsTool(skillsSvc), RequiredFeature: "skills"},
-		{Executor: platformskills.NewDistributeTool(skillsSvc), RequiredFeature: "skills"},
-		{Executor: platformskills.NewUndistributeTool(skillsSvc), RequiredFeature: "skills"},
-		{Executor: platformskills.NewInsightsTool(skillsSvc, insights), RequiredFeature: "skills"},
+		{Executor: platformskills.NewCreateTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
+		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
+		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
+		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
+		{Executor: platformskills.NewListDistributionsTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
+		{Executor: platformskills.NewDistributeTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
+		{Executor: platformskills.NewUndistributeTool(skillsSvc), RequiredFeature: "skills", RequiredScope: ""},
+		{Executor: platformskills.NewInsightsTool(skillsSvc, insights), RequiredFeature: "skills", RequiredScope: ""},
 	}
 }
 
@@ -264,10 +266,10 @@ func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService, insight
 // so both channels return identical data.
 func PlatformMCPReadTools(reader platformmcp.Reader) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformplatform.NewGetPlatformContextTool(), RequiredFeature: ""},
-		{Executor: platformplatform.NewListProjectsTool(reader), RequiredFeature: ""},
-		{Executor: platformplatform.NewFindMCPTool(reader), RequiredFeature: ""},
-		{Executor: platformplatform.NewGetMCPTool(reader), RequiredFeature: ""},
+		{Executor: platformplatform.NewGetPlatformContextTool(), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformplatform.NewListProjectsTool(reader), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformplatform.NewFindMCPTool(reader), RequiredFeature: "", RequiredScope: ""},
+		{Executor: platformplatform.NewGetMCPTool(reader), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 
@@ -277,7 +279,7 @@ func PlatformMCPReadTools(reader platformmcp.Reader) []platformtools.ExternalToo
 // plugin IDs in reach are those that already carry a distributed skill.
 func ManagedAssistantPluginsTools(pluginsSvc platformplugins.PluginsService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformplugins.NewListPluginsTool(pluginsSvc), RequiredFeature: ""},
+		{Executor: platformplugins.NewListPluginsTool(pluginsSvc), RequiredFeature: "", RequiredScope: ""},
 	}
 }
 

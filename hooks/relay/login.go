@@ -25,7 +25,7 @@ const (
 )
 
 // loginFlow runs the browser-based device sign-in: it serves a one-shot
-// localhost callback, opens the Gram dashboard pointed at it, and caches the
+// localhost callback, opens the Speakeasy dashboard pointed at it, and caches the
 // hooks key the dashboard returns. It replaces the legacy nc/mkfifo listener
 // with a net/http server so no external tools are required.
 type loginFlow struct {
@@ -37,8 +37,8 @@ type loginFlow struct {
 func newLoginFlow(cfg Config) *loginFlow {
 	return &loginFlow{
 		cfg:      cfg,
-		timeout:  envDuration("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", defaultLoginTimeout),
-		cooldown: envDuration("GRAM_HOOKS_LOGIN_COOLDOWN_SECONDS", defaultLoginCooldown),
+		timeout:  envDuration("HOOKS_LOGIN_TIMEOUT_SECONDS", defaultLoginTimeout),
+		cooldown: envDuration("HOOKS_LOGIN_COOLDOWN_SECONDS", defaultLoginCooldown),
 	}
 }
 
@@ -72,10 +72,10 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	// A key minted for a plaintext non-loopback server would be refused by
 	// every send; don't open a browser to it in the first place.
 	if insecureServerURL(l.cfg.ServerURL) {
-		return fmt.Errorf("refusing insecure Gram server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
+		return fmt.Errorf("refusing insecure Speakeasy server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
 	}
 	if !l.cfg.BrowserLogin {
-		return errors.New("browser sign-in is disabled for this organization; set GRAM_HOOKS_API_KEY to a hooks-scoped key")
+		return errors.New("browser sign-in is disabled for this organization; set SPEAKEASY_AI_HOOKS_API_KEY to a hooks-scoped key")
 	}
 	if ok, reason := loginViable(); !ok {
 		return fmt.Errorf("browser sign-in is unavailable: %s", reason)
@@ -169,7 +169,7 @@ func (l *loginFlow) run(ctx context.Context, force bool) error {
 	}
 }
 
-// dashboardURL builds the Gram sign-in URL pointed at the localhost callback.
+// dashboardURL builds the Speakeasy sign-in URL pointed at the localhost callback.
 func (l *loginFlow) dashboardURL(port int, state string) string {
 	callback := fmt.Sprintf("http://127.0.0.1:%d/callback?state=%s", port, url.QueryEscape(state))
 	q := url.Values{}
@@ -240,11 +240,11 @@ func loginViable() (bool, string) {
 }
 
 func disableLocalAuth() bool {
-	return os.Getenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH") == "1"
+	return Env("HOOKS_DISABLE_LOCAL_AUTH") == "1"
 }
 
 func loginForced() bool {
-	return os.Getenv("GRAM_HOOKS_LOGIN_FORCE") == "1"
+	return Env("HOOKS_LOGIN_FORCE") == "1"
 }
 
 // openLoginURL opens the sign-in URL through a 0600 redirect file so the
@@ -298,7 +298,7 @@ func randomToken() (string, error) {
 }
 
 func envDuration(name string, fallback time.Duration) time.Duration {
-	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+	if v := Env(name); v != "" {
 		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
 			return time.Duration(secs) * time.Second
 		}

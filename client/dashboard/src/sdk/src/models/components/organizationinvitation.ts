@@ -44,7 +44,7 @@ export type OrganizationInvitation = {
    */
   id: string;
   /**
-   * Gram user ID of the inviter, when known.
+   * Speakeasy user ID of the inviter, when known.
    */
   inviterUserId?: string | undefined;
   /**

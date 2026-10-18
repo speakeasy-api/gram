@@ -415,7 +415,7 @@ func listCacheKeyPrefix(registryURL string) string {
 }
 
 // listCacheKey keys the cached list by both URL and registry ID. The cached
-// servers embed the Gram registry ID (stamped during conversion), so a URL-only
+// servers embed the Speakeasy registry ID (stamped during conversion), so a URL-only
 // key could serve servers carrying a different registry's ID if a registry is
 // recreated under the same URL. Storage and ClearCache both derive from
 // listCacheKeyPrefix so the two cannot drift apart.

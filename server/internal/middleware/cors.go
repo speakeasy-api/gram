@@ -22,6 +22,23 @@ var mcpOpenAccessControlRoutes = []string{
 func CORSMiddleware(env string, serverURL string, platformOrigins []string, chatSessionValidator ChatSessionValidator) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if method, shared := sharedOAuthCORSMethod(r.URL.Path); shared {
+				// OAuth browser navigation and unknown shared routes receive no
+				// CORS policy. Public endpoints never inherit platform credentials.
+				if method != "" {
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+					w.Header().Set("Access-Control-Allow-Methods", method)
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+					w.Header().Set("Access-Control-Expose-Headers", "x-trace-id")
+				}
+				if r.Method == http.MethodOptions {
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			switch env {
 			case "local":
 				origin := r.Header.Get("Origin")
@@ -43,7 +60,7 @@ func CORSMiddleware(env string, serverURL string, platformOrigins []string, chat
 			// is invalid alongside Allow-Credentials. Browser support for it
 			// requires echoing Access-Control-Request-Headers instead of a
 			// static list.
-			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, User-Agent, Gram-Session, Gram-Project, Gram-Key, Gram-Token, idempotency-key, Gram-Admin-Override, Gram-Chat-ID, Gram-Assistant-ID, Gram-Chat-Session, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, X-Gram-Scope-Override, X-Gram-Source")
+			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, User-Agent, Gram-Session, Gram-Project, Gram-Key, Gram-Token, idempotency-key, Gram-Admin-Override, Gram-Chat-ID, Gram-Assistant-ID, Gram-Chat-Session, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, X-Gram-Scope-Override, X-Gram-Source, Speakeasy-AI-Key, Speakeasy-AI-Project, Speakeasy-AI-Session, Speakeasy-AI-Chat-Session, Speakeasy-AI-Environment, Speakeasy-AI-Mode, Speakeasy-AI-User-Email, Speakeasy-AI-Device-Serial, Speakeasy-AI-Device-Hostname, Speakeasy-AI-Device-Environment")
 			w.Header().Set("Access-Control-Expose-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, x-trace-id, Gram-Session, Gram-Chat-ID, Gram-Chat-Session, Mcp-Session-Id")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 

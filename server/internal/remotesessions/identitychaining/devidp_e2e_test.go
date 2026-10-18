@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	// devIDPClientID is shared by Gram's trusted client at the dev-idp and its
+	// devIDPClientID is shared by Speakeasy's trusted client at the dev-idp and its
 	// client at the resource authorization server: the dev-idp names the
 	// requesting app as the ID-JAG's client_id, which the resource
 	// authorization server then requires the redeeming client to present.
@@ -44,7 +44,7 @@ const (
 	devIDPResource     = "https://mcp.docs.example/"
 )
 
-// devIDPFixture is a Gram tenant whose trusted identity provider and resource
+// devIDPFixture is a Speakeasy tenant whose trusted identity provider and resource
 // authorization server are both one real dev-idp instance.
 type devIDPFixture struct {
 	observed    *recordingObserver
@@ -54,6 +54,15 @@ type devIDPFixture struct {
 	db          *pgxpool.Pool
 	enc         *encryption.Client
 	idpClientID uuid.UUID
+
+	// trustedIssuerID is the remote session issuer external chaining
+	// exchanges at; resourceIssuerID is the vendor's.
+	trustedIssuerID  uuid.UUID
+	resourceIssuerID uuid.UUID
+
+	// vendorIssuer is the downstream authorization server issuer the
+	// binding names, as a provider policy keys it.
+	vendorIssuer string
 }
 
 // recordingObserver keeps every observation the chainer reports.
@@ -77,11 +86,11 @@ func (r *recordingObserver) all() []Observation {
 
 // devIDPOptions varies the dev-idp tenant a fixture builds.
 type devIDPOptions struct {
-	// unassigned withholds the dev-idp assignment that lets Gram's app act for
+	// unassigned withholds the dev-idp assignment that lets Speakeasy's app act for
 	// the human at the resource.
 	unassigned bool
 
-	// remoteIssuer, when set, is the issuer Gram records for the downstream
+	// remoteIssuer, when set, is the issuer Speakeasy records for the downstream
 	// authorization server instead of the dev-idp resource server's own, as
 	// with Linear, whose MCP authorization server and Okta resource app differ.
 	remoteIssuer string
@@ -122,7 +131,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	require.NoError(t, fixtures.InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: human, Email: human + "@example.test", DisplayName: "Chaining user"}))
 	require.NoError(t, fixtures.CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: org, UserID: pgtype.Text{String: human, Valid: true}}))
 
-	// Gram's trusted registration at the dev-idp, as an administrator records it.
+	// Speakeasy's trusted registration at the dev-idp, as an administrator records it.
 	idpIssuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		OrganizationID: pgtype.Text{String: org, Valid: true}, Slug: "dev-idp", Issuer: idp.OAuth21URL,
 		AuthorizationEndpoint: pgtype.Text{String: idp.OAuth21URL + "/authorize", Valid: true},
@@ -208,13 +217,16 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	observed := &recordingObserver{}
 	chainer.SetObserver(observed)
 	return devIDPFixture{
-		observed:    observed,
-		idp:         idp,
-		chainer:     chainer,
-		req:         req,
-		db:          db,
-		enc:         enc,
-		idpClientID: idpClient.ID,
+		observed:         observed,
+		idp:              idp,
+		chainer:          chainer,
+		req:              req,
+		db:               db,
+		enc:              enc,
+		idpClientID:      idpClient.ID,
+		trustedIssuerID:  idpIssuer.ID,
+		resourceIssuerID: resourceIssuer,
+		vendorIssuer:     remoteIssuer,
 	}
 }
 
@@ -281,7 +293,7 @@ func TestDevIDP_UnassignedHumanIsDeniedAndCached(t *testing.T) {
 	f := newDevIDPFixture(t, devIDPOptions{unassigned: true})
 
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
-	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false}, outcome)
+	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome)
 	observed := f.observed.all()
 	require.Len(t, observed, 1)
 	require.Equal(t, outcome, observed[0].Outcome)
@@ -300,6 +312,7 @@ func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 	f := newDevIDPFixture(t, devIDPOptions{})
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
+	require.True(t, f.chainer.HasUsableCredential(t.Context(), f.req))
 
 	rotated, err := f.enc.Encrypt([]byte("rotated-secret"))
 	require.NoError(t, err)
@@ -307,10 +320,11 @@ func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 		ClientSecretEncrypted: pgtype.Text{String: rotated, Valid: true}, ID: f.idpClientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
 	})
 	require.NoError(t, err)
+	require.False(t, f.chainer.HasUsableCredential(t.Context(), f.req), "status reads agree with the runtime")
 
 	requests := f.idp.Requests()
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
-	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonConfigurationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome,
+	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonConfigurationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome,
 		"a token acquired under the previous trusted registration is never released")
 	require.Equal(t, requests, f.idp.Requests())
 }

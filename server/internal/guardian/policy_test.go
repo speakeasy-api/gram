@@ -316,10 +316,8 @@ func TestPolicy_DialerContext(t *testing.T) {
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	dialer := policy.Dialer()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Millisecond)
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 	defer cancel()
-
-	time.Sleep(2 * time.Millisecond)
 
 	err := dialer.ControlContext(ctx, "tcp", "8.8.8.8:80", nil)
 	require.NoError(t, err)

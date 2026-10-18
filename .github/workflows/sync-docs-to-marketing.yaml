@@ -1,13 +1,11 @@
-name: Sync Gram Docs → Marketing Site (PR)
+name: Sync Speakeasy Docs → Marketing Site (PR)
 on:
   push:
     branches: [main]
     paths:
       - "docs/src/content/docs/**"
       - "docs/public/**"
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 concurrency:
   group: gram-to-marketing-pr-sync-${{ github.ref }}
   cancel-in-progress: true
@@ -16,9 +14,12 @@ env:
   BRANCH: main
 jobs:
   sync:
+    name: sync
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
     steps:
-      - name: Checkout Gram repo (source)
+      - name: Checkout Speakeasy repo (source)
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
         with:
           fetch-depth: 0
@@ -116,7 +117,7 @@ jobs:
         run: |
           set -euo pipefail
           cd marketing-repo
-          echo "### Sync from Gram" > ../PR_BODY.md
+          echo "### Sync from Speakeasy" > ../PR_BODY.md
           echo "" >> ../PR_BODY.md
           echo "**Source commit:** \`${GITHUB_SHA}\`" >> ../PR_BODY.md
           echo "" >> ../PR_BODY.md
@@ -139,18 +140,38 @@ jobs:
             echo "_No file changes detected after sync._" >> ../PR_BODY.md
           fi
       - name: Create pull request in Marketing
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
-        with:
-          token: ${{ secrets.SERVICE_BOT_TOKEN }}
-          path: marketing-repo
-          commit-message: "Sync marketing docs from Gram 🐝 (source ${{ github.sha }})"
-          branch: chore/gram-to-marketing-sync-${{ github.sha }}
-          title: "chore: sync docs from Gram"
-          body-path: PR_BODY.md
-          committer: "Beezy the bot <beezy-bot@users.noreply.github.com>"
-          author: "Beezy the bot <beezy-bot@users.noreply.github.com>"
-          labels: |
-            automation
-            docs
-            sync
-          signoff: false
+        env:
+          GH_TOKEN: ${{ secrets.SERVICE_BOT_TOKEN }}
+          SYNC_BRANCH: chore/gram-to-marketing-sync-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd marketing-repo
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to sync."
+            exit 0
+          fi
+          git checkout -B "$SYNC_BRANCH"
+          git add -A
+          git -c user.name="Beezy the bot" -c user.email="beezy-bot@users.noreply.github.com" \
+            commit -m "Sync marketing docs from Speakeasy 🐝 (source ${GITHUB_SHA})"
+          # The checkout step does not persist credentials, so this one push
+          # gets the bot token through git's environment config, which keeps
+          # it out of the process arguments. --force makes a rerun for the
+          # same source commit replace its own earlier branch.
+          GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            git push --force origin "HEAD:refs/heads/${SYNC_BRANCH}"
+          existing=$(gh pr list --repo "$MARKETING_REPO" --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "$MARKETING_REPO" --body-file ../PR_BODY.md
+            echo "Sync pull request #$existing already open; branch and body updated."
+            exit 0
+          fi
+          gh pr create \
+            --repo "$MARKETING_REPO" \
+            --base "$BRANCH" \
+            --head "$SYNC_BRANCH" \
+            --title "chore: sync docs from Speakeasy" \
+            --body-file ../PR_BODY.md \
+            --label automation --label docs --label sync

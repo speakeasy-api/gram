@@ -24,6 +24,7 @@ import {
   CreateConnectionForm,
   SetupMethodChooser,
 } from "./OktaConnectionForms";
+import { OktaSignInSection } from "./OktaSignInSection";
 import { RevokeConnectionButton } from "./RevokeConnectionButton";
 import {
   CONNECTION_STATUS,
@@ -289,6 +290,7 @@ export function OktaConnectionTab({
         <SetupMethodChooser connection={connection} />
       )}
       <ChecklistSection connection={connection} />
+      <OktaSignInSection connection={connection} />
       <ConnectionCard connection={connection} />
     </div>
   );

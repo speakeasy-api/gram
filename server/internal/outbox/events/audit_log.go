@@ -45,6 +45,7 @@ var (
 	JsonWebKeyV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.json_web_key_event_v1", "Emitted when changes to published JSON Web Keys are made")
 	IdentityProviderConnectionV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.identity_provider_connection_event_v1", "Emitted when an organization creates, verifies, annotates, or revokes an identity provider connection")
 	JsonWebKeySetV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.json_web_key_set_event_v1", "Emitted when changes to JSON Web Key Sets are made")
+	InternalSessionIssuerV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.internal_session_issuer_event_v1", "Emitted when an organization enables or disables its internal session issuer")
 	KillswitchV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.killswitch_event_v1", "Emitted when killswitches are activated, changed, deactivated, or expire")
 	LiteLLMInstanceV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.litellm_instance_event_v1", "Emitted when changes to LiteLLM instances are made")
 	McpApprovalRequestV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_approval_request_event_v1", "Emitted when changes to MCP approval requests are made")
@@ -61,6 +62,7 @@ var (
 	OrganizationAccessV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_access_event_v1", "Emitted when staff enable or disable organization access, or change its demo-access whitelisting")
 	OrganizationBillingV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_billing_event_v1", "Emitted when the organization's billing state changes")
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
+	OrganizationAccountTypeV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_account_type_event_v1", "Emitted when staff apply organization account type policy, including same-tier repair")
 	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, started, extended, given a new end date, demoted, re-armed, or converted")
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
 	OrganizationOnboardingV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_onboarding_event_v1", "Emitted when an organization's onboarding selection is saved")
@@ -89,6 +91,8 @@ var (
 	AccessRequestV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_request_event_v1", "Emitted when changes to access requests are made")
 	ShadowMCPAccessRuleV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_access_rule_event_v1", "Deprecated: use audit_log.access_rule_event_v1.")
 	ShadowMCPApprovalV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_approval_event_v1", "Deprecated: use audit_log.access_request_event_v1.")
+	SigintSensorV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.sigint_sensor_event_v1", "Emitted when changes to signals intelligence sensors are made")
+	SigintSignalV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.sigint_signal_event_v1", "Emitted when changes to custom signals are made")
 	SkillEfficacySettingsV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_efficacy_settings_event_v1", "Emitted when skill efficacy sampling settings are changed")
 	SkillV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_event_v1", "Emitted when changes to skills are made")
 	SpendRuleV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.spend_rule_event_v1", "Emitted when changes to spend rules are made")
@@ -119,7 +123,7 @@ type AuditLogCreatedPayloadV1 struct {
 
 	// ActingSurface is how the change was made — a dashboard session, an API
 	// key, Platform MCP, a project assistant — drawn from a closed server-side
-	// set. Every record Gram writes carries one, and 'unknown' means no surface
+	// set. Every record Speakeasy writes carries one, and 'unknown' means no surface
 	// was identifiable rather than that the field was omitted.
 	//
 	// It is optional in the schema even so. This payload is published under 62

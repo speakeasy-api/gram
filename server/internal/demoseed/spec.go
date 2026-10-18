@@ -8,14 +8,10 @@ import (
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 )
 
-// Spec names the tenant a seed run provisions. The embedded SQL is written
-// against DefaultSpec's literals; every other tenant is produced by rewriting
-// those literals, so one script body serves the shared prod demo org, the
-// local development org, and the safety test's adversarial fixture tenant.
-//
-// This is the same mechanism TestDemoSeedSafety has always used to provision
-// its "other tenant" — lifted out of the test so production code and the test
-// cannot drift apart.
+// Spec names the tenant a seed run provisions. The seed builds every id, user,
+// and email it writes from the Spec (see seeder), so one body of Go serves the
+// shared prod demo org, the local development org, and the safety test's
+// adversarial fixture tenant.
 //
 // Every field must be a globally unique identifier family: two Specs that
 // share one field would collide on a unique index, or worse, silently share
@@ -44,19 +40,18 @@ type Spec struct {
 	// GroupPrefix prefixes workos_directory_group_id, which is globally
 	// unique.
 	GroupPrefix string
-	// WorkOSOrgID is the WorkOS organization this tenant's org is the Gram
+	// WorkOSOrgID is the WorkOS organization this tenant's org is the Speakeasy
 	// side of, and which OrgID is derived from. The shared demo org has no
-	// WorkOS counterpart, so its value is an inert placeholder that exists
-	// only to give the preflight assert something to rewrite.
+	// WorkOS counterpart, so its value is an inert placeholder that matches
+	// no real link.
 	WorkOSOrgID string
 	// Marker is the gram.deployment.id stamped on every telemetry row, which
 	// the ClickHouse postflight leak-checks.
 	Marker string
 }
 
-// DefaultSpec is the shared demo organization — the tenant the
-// embedded SQL is literally written against, and the one the daily production
-// run provisions. Rewriting a script with this Spec is a no-op.
+// DefaultSpec is the shared demo organization, the one the daily production
+// run provisions.
 //
 // OrgID must stay in sync with constants.DemoOrganizationID (asserted by
 // TestSpecMatchesConstants).
@@ -110,12 +105,6 @@ func (s Spec) ProjectID() string {
 	return s.FixedUUID("0000-4000-a000-000000000001")
 }
 
-// AssetID is the OpenAPI document asset the runner uploads the embedded spec
-// to, derived from UUIDPrefix.
-func (s Spec) AssetID() string {
-	return s.FixedUUID("0000-4000-a000-00000000a001")
-}
-
 // DeploymentID is the completed deployment the seeded tool stack hangs off.
 func (s Spec) DeploymentID() string {
 	return s.FixedUUID("0000-4000-a000-00000000d001")
@@ -127,13 +116,8 @@ func (s Spec) FixedUUID(rest string) string {
 	return s.UUIDPrefix + "-" + rest
 }
 
-// fields returns the Spec's identifier families in the order Rewrite must
-// apply them. Longer/more specific patterns come first: the backslash-escaped
-// LIKE pattern must be rewritten before the plain user id prefix, or the
-// postflight LIKE patterns stop matching the rewritten ids.
 func (s Spec) fields() []string {
 	return []string{
-		escapeLike(s.UserPrefix),
 		s.UserPrefix,
 		s.OrgID,
 		s.UUIDPrefix,
@@ -151,32 +135,16 @@ func (s Spec) fields() []string {
 // found in another tenant's row, proves this tenant leaked into it.
 func (s Spec) Identifiers() []string { return s.fields() }
 
-// escapeLike mirrors how the SQL writes an identifier prefix inside a LIKE
-// pattern, where '_' is a wildcard and must be escaped.
-func escapeLike(v string) string {
-	return strings.ReplaceAll(v, "_", `\_`)
-}
-
-// Rewrite retargets a seed script written against DefaultSpec at this Spec.
-// Rewriting with DefaultSpec returns the script unchanged.
-func (s Spec) Rewrite(script string) string {
-	def := DefaultSpec().fields()
-	for i, to := range s.fields() {
-		script = strings.ReplaceAll(script, def[i], to)
-	}
-	return script
-}
-
 // Validate reports whether the Spec can safely coexist with the default demo
 // tenant in one database. Every field must be non-empty; must differ from the
 // corresponding default field, so the two tenants never share an identifier
 // family; must differ from this Spec's own other fields, since two fields
-// holding one value would collapse together under Rewrite and collide on a
-// globally-unique index; and must not contain any default identifier, because
-// a target that embeds a source gets rewritten again by a later pass.
+// holding one value collide on a globally-unique index; and must not contain
+// any default identifier, or the leak checks could not tell the tenants
+// apart.
 //
-// The default Spec is exempt: it is the tenant the scripts are written
-// against, so rewriting it is a no-op and none of this applies.
+// The default Spec is exempt: it is the reference the others are checked
+// against.
 func (s Spec) Validate() error {
 	def := DefaultSpec()
 	defFields, fields := def.fields(), s.fields()
@@ -194,12 +162,12 @@ func (s Spec) Validate() error {
 			return fmt.Errorf("demo seed spec: field %q is shared with the default demo tenant; every identifier family must be distinct", v)
 		}
 		if _, dup := seen[v]; dup {
-			return fmt.Errorf("demo seed spec: field %q is used for two identifier families; Rewrite would collapse them into one value", v)
+			return fmt.Errorf("demo seed spec: field %q is used for two identifier families; the two would collide", v)
 		}
 		seen[v] = struct{}{}
 		for _, d := range defFields {
 			if strings.Contains(v, d) {
-				return fmt.Errorf("demo seed spec: field %q contains the default identifier %q, which a later rewrite pass would corrupt", v, d)
+				return fmt.Errorf("demo seed spec: field %q contains the default identifier %q, so the leak checks could not tell the tenants apart", v, d)
 			}
 		}
 	}

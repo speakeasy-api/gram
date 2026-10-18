@@ -28,7 +28,7 @@ export class McpMetadata extends ClientSDK {
    * exportMcpMetadata mcpMetadata
    *
    * @remarks
-   * Export MCP server details as JSON for documentation and integration purposes.
+   * Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.
    */
   async export(
     request: ExportMcpMetadataRequest,

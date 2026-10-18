@@ -23,6 +23,19 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 FOR UPDATE;
 
+-- name: LockProjectDashboards :exec
+-- Serializes a project's writes that reach both dashboards and widgets, so
+-- their row locks never cross: a layout change locks a dashboard and then
+-- share-locks the widgets it places, while deleting a widget locks the widget
+-- and then touches its dashboards. Every write that reaches both tables takes
+-- this first; one that locks only its dashboard row does not.
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('dashboard-widgets', (@project_id::uuid)::text)::text,
+        0
+    )
+);
+
 -- name: CreateDashboard :one
 INSERT INTO dashboards (
   project_id, organization_id, created_by_user_id, name, description, filters

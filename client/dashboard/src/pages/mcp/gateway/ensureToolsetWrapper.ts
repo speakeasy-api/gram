@@ -1,5 +1,13 @@
 import type { useSdkClient } from "@/contexts/Sdk";
 
+/** Gateway members never reuse the toolset's hosted MCP server, whose id is the toolset id. */
+export function memberWrappers<T extends { id: string }>(
+  servers: T[],
+  toolsetId: string,
+): T[] {
+  return servers.filter((server) => server.id !== toolsetId);
+}
+
 /** Reconcile uncertain writes against the exact retained toolset before retrying. */
 export async function ensureToolsetWrapper(
   client: ReturnType<typeof useSdkClient>,
@@ -7,9 +15,10 @@ export async function ensureToolsetWrapper(
   reconcile: boolean,
 ): Promise<string> {
   if (reconcile) {
-    const { mcpServers } = await client.mcpServers.list({
-      toolsetId: toolset.id,
-    });
+    const mcpServers = memberWrappers(
+      (await client.mcpServers.list({ toolsetId: toolset.id })).mcpServers,
+      toolset.id,
+    );
     if (mcpServers.length > 1) {
       throw new Error(
         "Multiple servers use this source. Select the intended existing server.",

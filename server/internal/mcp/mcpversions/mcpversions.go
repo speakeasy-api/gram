@@ -10,8 +10,8 @@ import (
 // Published MCP protocol revisions, oldest first. Sourced from the
 // specification's revision list (https://modelcontextprotocol.io/specification/versioning).
 //
-// These are NOT a statement of what Gram implements or accepts; the Supported*
-// functions below carry the revisions each Gram surface actually negotiates
+// These are NOT a statement of what Speakeasy implements or accepts; the Supported*
+// functions below carry the revisions each Speakeasy surface actually negotiates
 // and serves. They exist so telemetry can distinguish "a revision we know
 // about" from "something else entirely".
 const (
@@ -32,7 +32,7 @@ const (
 // UnsupportedProtocolVersionError that prevents the request from dispatching.
 const DefaultInEffect = Version20250326
 
-// The protocol revisions each Gram surface that terminates an MCP session
+// The protocol revisions each Speakeasy surface that terminates an MCP session
 // supports, oldest first. A revision in a surface's set governs per-request
 // behavior when declared, and is echoed at `initialize` when that revision
 // defines the handshake; anything outside the set is rejected with
@@ -58,9 +58,9 @@ const DefaultInEffect = Version20250326
 //
 // The remote MCP proxy has no entry here by design: it never answers a
 // version, it relays whatever the client and the upstream negotiate between
-// themselves. Gram's outbound remote-URL verification probe is also absent —
-// that is Gram acting as a client, so the versions it requests are chosen by
-// the MCP SDK client it connects with rather than served by Gram.
+// themselves. Speakeasy's outbound remote-URL verification probe is also absent —
+// that is Speakeasy acting as a client, so the versions it requests are chosen by
+// the MCP SDK client it connects with rather than served by Speakeasy.
 var (
 	supportedHostedToolset   = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
 	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
@@ -191,7 +191,7 @@ func Resolve(declared string, supported []string) Resolution {
 //
 // It is absent from the `initialize` request itself, since nothing is
 // negotiated yet at that point. It is a request header only: no revision
-// defines it on a response, so Gram's MCP servers never send it.
+// defines it on a response, so Speakeasy's MCP servers never send it.
 const HTTPHeader = "MCP-Protocol-Version"
 
 // Other and None are the two synthetic buckets [Clamp] emits, so that every

@@ -29,14 +29,14 @@ const (
 	// SurfaceSystem, so an unknown surface is a gap worth chasing rather than
 	// the expected shape of a scheduled job.
 	SurfaceUnknown Surface = "unknown"
-	// SurfaceSystem is Gram acting on its own, with no request behind it: a
+	// SurfaceSystem is Speakeasy acting on its own, with no request behind it: a
 	// Temporal activity, a scheduled job, a reconciler. These writes have no
 	// session, API key or human actor to attribute, and saying so is more
 	// useful than leaving them indistinguishable from a classification miss.
 	SurfaceSystem Surface = "system"
 	// SurfaceDashboard is an authenticated dashboard session.
 	SurfaceDashboard Surface = "dashboard"
-	// SurfaceAPIKey is a Gram API key, used by the CLI and by automation.
+	// SurfaceAPIKey is a Speakeasy API key, used by the CLI and by automation.
 	SurfaceAPIKey Surface = "api_key"
 	// SurfacePlatformMCP is the OAuth-authenticated Platform MCP endpoint,
 	// where a third-party agent acts on a user's behalf.

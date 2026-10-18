@@ -12,6 +12,11 @@ func GetOrganizationsPath() string {
 	return "/rpc/organizations.get"
 }
 
+// GetGatewayOrganizationsPath returns the URL path to the organizations service getGateway HTTP endpoint.
+func GetGatewayOrganizationsPath() string {
+	return "/rpc/organizations.getGateway"
+}
+
 // SendInviteOrganizationsPath returns the URL path to the organizations service sendInvite HTTP endpoint.
 func SendInviteOrganizationsPath() string {
 	return "/rpc/organizations.sendInvite"
@@ -40,6 +45,11 @@ func ListUsersOrganizationsPath() string {
 // RemoveUserOrganizationsPath returns the URL path to the organizations service removeUser HTTP endpoint.
 func RemoveUserOrganizationsPath() string {
 	return "/rpc/organizations.removeUser"
+}
+
+// RevokeMemberSignInsOrganizationsPath returns the URL path to the organizations service revokeMemberSignIns HTTP endpoint.
+func RevokeMemberSignInsOrganizationsPath() string {
+	return "/rpc/organizations.revokeMemberSignIns"
 }
 
 // EnableWebhooksOrganizationsPath returns the URL path to the organizations service enableWebhooks HTTP endpoint.

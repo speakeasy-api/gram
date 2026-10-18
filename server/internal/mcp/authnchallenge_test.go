@@ -1869,7 +1869,7 @@ func TestServeConsentMCP_LocalToolsetNegotiatesProtocolVersion(t *testing.T) {
 
 		serverInfo, ok := result["serverInfo"].(map[string]any)
 		require.True(t, ok, test.name)
-		require.Equal(t, "Gram", serverInfo["name"], test.name)
+		require.Equal(t, "Speakeasy", serverInfo["name"], test.name)
 		require.Equal(t, "0.0.0", serverInfo["version"], test.name)
 		meta, ok := result["_meta"].(map[string]any)
 		require.True(t, ok, test.name)
@@ -1918,7 +1918,7 @@ func TestServeConsentMCP_LocalToolsetEmitsResultFields(t *testing.T) {
 	require.True(t, ok)
 	serverInfo, ok := meta["io.modelcontextprotocol/serverInfo"].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "Gram", serverInfo["name"])
+	require.Equal(t, "Speakeasy", serverInfo["name"])
 	require.Equal(t, "0.0.0", serverInfo["version"])
 }
 
@@ -2184,6 +2184,7 @@ func seedUserSessionWithSelection(t *testing.T, ctx context.Context, ti *testIns
 		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: 0, Valid: true},
 		ToolSelection:       selection,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 	return refreshToken

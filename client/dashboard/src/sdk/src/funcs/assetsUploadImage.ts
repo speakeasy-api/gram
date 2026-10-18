@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * uploadImage assets
  *
  * @remarks
- * Upload an image to Gram.
+ * Upload an image to Speakeasy.
  */
 export function assetsUploadImage(
   client: GramCore,

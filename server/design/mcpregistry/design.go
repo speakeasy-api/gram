@@ -13,7 +13,7 @@ var discoveryPage = Type("RegistryDiscoveryPage", func() {
 })
 
 var _ = Service("registryDiscovery", func() {
-	Description("Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Gram credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Gram security.")
+	Description("Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Speakeasy credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Speakeasy security.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
 	shared.DeclareErrorResponses()

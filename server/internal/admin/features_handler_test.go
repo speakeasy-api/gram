@@ -42,7 +42,6 @@ var adminGenericWritableFeatures = []productfeatures.Feature{
 	productfeatures.FeatureAIPlatformPushIntegrations,
 	productfeatures.FeaturePlatformMCP,
 	productfeatures.FeatureCustomerManagedEncryptionKeys,
-	productfeatures.FeatureConsentToolFiltering,
 	productfeatures.FeatureSessionPortability,
 }
 
@@ -85,7 +84,7 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
+func TestGetOrganizationFeatures_ReturnsEveryField(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -115,7 +114,8 @@ func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
 		"skills_enabled": {}, "skill_capture_metadata_only": {}, "ai_platform_push_integrations_enabled": {},
 		"platform_mcp_enabled": {}, "customer_managed_encryption_keys_enabled": {},
 		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
-		"consent_tool_filtering_enabled": {}, "network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
+		"network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
+		"signals_intelligence_enabled": {}, "organization_gateway_disabled": {},
 	}
 	gotKeys := make(map[string]struct{}, len(result))
 	for key := range result {
@@ -230,7 +230,7 @@ func TestSetOrganizationFeature_EnableThenDisableEveryGenericWritableFeature(t *
 	Attach(mux, svc)
 	handler := SessionMiddleware(mux)
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
-	require.Len(t, adminGenericWritableFeatures, 15)
+	require.Len(t, adminGenericWritableFeatures, 14)
 	for _, feature := range adminGenericWritableFeatures {
 		setAdminOrganizationFeature(t, handler, sessionID, orgID, feature, true)
 	}

@@ -13,7 +13,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type AdminMcpServerHealthTrustedRemoteSession = {
   /**
-   * The remote session client ID Gram uses with the trusted issuer.
+   * The remote session client ID Speakeasy uses with the trusted issuer.
    */
   clientId: string;
   /**

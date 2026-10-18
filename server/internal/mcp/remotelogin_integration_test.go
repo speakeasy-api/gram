@@ -232,7 +232,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 
 	upstreamResp := httpGetNoFollow(t, authURL)
 	defer func() { _ = upstreamResp.Body.Close() }()
-	require.Equal(t, http.StatusFound, upstreamResp.StatusCode, "registered Gram callback should be accepted by dev-idp")
+	require.Equal(t, http.StatusFound, upstreamResp.StatusCode, "registered Speakeasy callback should be accepted by dev-idp")
 
 	badURL := *parsed
 	badQuery := badURL.Query()

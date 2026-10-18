@@ -33,6 +33,36 @@ func TestSeedOrganizationDefaultsTx_EnablesLoggingBundle(t *testing.T) {
 	}
 }
 
+func TestSeedOrganizationDefaultsTx_LeavesADisabledDefaultDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	_, err := q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+	})
+	require.NoError(t, err)
+
+	tx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "replaying default entitlements must not undo an administrator disable")
+}
+
 func TestOrganizationDefaultFailOpenCanBeDisabled(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProductFeaturesService(t)
@@ -54,6 +84,36 @@ func TestOrganizationDefaultFailOpenCanBeDisabled(t *testing.T) {
 	enabled, err = q.IsFeatureEnabled(ctx, params)
 	require.NoError(t, err)
 	require.False(t, enabled, "trial provisioning must preserve an explicit fail-closed choice")
+}
+
+func TestSeedEnterpriseTrialBundleTx_LeavesADisabledBundleFeatureDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	_, err := q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureLogs),
+	})
+	require.NoError(t, err)
+
+	tx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureLogs),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "a later trial must not undo an administrator disable")
 }
 
 func TestSeedEnterpriseTrialBundleTx_Idempotent(t *testing.T) {

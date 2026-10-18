@@ -102,6 +102,10 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok, "auth context should be set")
 
+	// log:read is held by no system role, so the admin fixture is granted it on
+	// its project explicitly, as an administrator would through a custom role.
+	ctx = authztest.WithAdminGrants(ctx, authz.NewGrant(authz.ScopeLogRead, authCtx.ProjectID.String()))
+
 	disabledLogsOrgID := uuid.New().String()
 	logsEnabled := func(_ context.Context, orgID string) (bool, error) {
 		if orgID == disabledLogsOrgID {

@@ -4,6 +4,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +22,7 @@ func TestPreparationInheritedGrantPublicationPreservesForbidden(t *testing.T) {
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	issuer, err := repo.New(ti.conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), Slug: "inherited-publication", Issuer: "https://issuer.example.com", TokenEndpoint: conv.ToPGText("https://issuer.example.com/token"), ScopesSupported: []string{"openid"}, GrantTypesSupported: []string{oauthwire.GrantTypeJWTBearer}, AuthorizationGrantProfilesSupported: []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, ResponseTypesSupported: []string{"code"}, TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+		MetadataFetchedAt: conv.ToPGTimestamptz(time.Now()),
 	})
 	require.NoError(t, err)
 	in.RemoteSessionIssuerID = issuer.ID
@@ -38,6 +40,48 @@ func TestPreparationInheritedGrantPublicationPreservesForbidden(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "manual_setup_required", result.State)
 	require.Equal(t, in.ConfirmGrants, result.GrantTypes)
+}
+
+func TestPreparationInheritedClientGrantChangeRequiresOrgAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	q := repo.New(ti.conn)
+	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), Slug: "inherited-unchanged", Issuer: "https://issuer.example.com", TokenEndpoint: conv.ToPGText("https://issuer.example.com/token"), MetadataFetchedAt: conv.ToPGTimestamptz(time.Now()), ScopesSupported: []string{"openid"}, GrantTypesSupported: []string{oauthwire.GrantTypeJWTBearer}, AuthorizationGrantProfilesSupported: []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, ResponseTypesSupported: []string{"code"}, TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	in.RemoteSessionIssuerID = issuer.ID
+	in.ClientID = seedOrgLevelRemoteClient(t, ctx, ti.conn, auth.ActiveOrganizationID, in.RemoteSessionIssuerID, "inherited-unchanged-client")
+	existing := []string{"authorization_code"}
+	_, err = q.SetEMAClientGrants(ctx, repo.SetEMAClientGrantsParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), GrantTypes: existing})
+	require.NoError(t, err)
+	projectWrite := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, auth.ProjectID.String())})
+	clientGrants := func() []string {
+		row, err := q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{ID: in.ClientID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+		require.NoError(t, err)
+		return row.RemoteSessionClient.GrantTypes
+	}
+
+	in.ConfirmGrants = []string{"authorization_code", "refresh_token"}
+	_, err = ti.service.PrepareIdentityChaining(projectWrite, in)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Equal(t, existing, clientGrants(), "refused grant change must not rewrite the org-owned client")
+
+	in.ConfirmGrants = existing
+	result, err := ti.service.PrepareIdentityChaining(projectWrite, in)
+	require.NoError(t, err, "confirming unchanged grants does not need org:admin")
+	require.Equal(t, "manual_setup_required", result.State)
+	require.Equal(t, existing, clientGrants())
+
+	orgAdmin := withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, auth.ProjectID.String())},
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, auth.ActiveOrganizationID)})
+	in.ConfirmGrants = []string{"authorization_code", "refresh_token"}
+	in.ExpectedGeneration = result.Generation
+	_, err = ti.service.PrepareIdentityChaining(orgAdmin, in)
+	require.NoError(t, err)
+	require.ElementsMatch(t, in.ConfirmGrants, clientGrants())
 }
 
 func TestPreparationFixtureRegistrationScopesJoinedClient(t *testing.T) {

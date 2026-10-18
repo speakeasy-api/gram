@@ -48,7 +48,7 @@ export function WithdrawIssuerDialog({
         <Dialog.Header>
           <Dialog.Title>Stop trusting this platform?</Dialog.Title>
           <Dialog.Description>
-            Gram stops accepting this platform&apos;s identity tokens.
+            Speakeasy stops accepting this platform&apos;s identity tokens.
           </Dialog.Description>
         </Dialog.Header>
         {issuer && (

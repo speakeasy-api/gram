@@ -45,7 +45,30 @@ export function AgentIdentityRow({
           },
         ]}
       />
+      <StaticCredentialFields
+        draft={draft}
+        disabled={disabled}
+        upstreamName={upstreamName}
+      />
+    </div>
+  );
+}
 
+/**
+ * The fields one static credential format needs, and a preview of the exact
+ * header the upstream receives. The format itself is chosen by the caller.
+ */
+export function StaticCredentialFields({
+  draft,
+  disabled,
+  upstreamName,
+}: {
+  draft: AgentCredentialFields;
+  disabled: boolean;
+  upstreamName: string;
+}): JSX.Element {
+  return (
+    <div className="space-y-3">
       {draft.format === "bearer" ? (
         <div className="grid gap-3 sm:grid-cols-[minmax(0,140px)_1fr]">
           <div className="space-y-1">

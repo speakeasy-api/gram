@@ -26,7 +26,7 @@ export type ChatParticipant = {
    */
   providerUserId: string;
   /**
-   * Explicitly mapped Gram person at capture time; this attribution grants no permissions.
+   * Explicitly mapped Speakeasy person at capture time; this attribution grants no permissions.
    */
   userId?: string | undefined;
 };

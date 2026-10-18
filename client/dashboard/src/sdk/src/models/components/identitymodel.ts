@@ -60,7 +60,7 @@ export type IdentityModel = {
    */
   photoUrl?: string | undefined;
   /**
-   * The Gram user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.
+   * The Speakeasy user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.
    */
   userIds: Array<string>;
   /**
