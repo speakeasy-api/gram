@@ -447,6 +447,7 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			event, err := riskFindingCreatedWebhook(row)
 			if err != nil {
 				logger.ErrorContext(ctx, "finding has invalid webhook identity, skipping its webhook", attr.SlogError(err))
+				w.metrics.RecordFindingCHWebhookDropped(ctx, "invalid_webhook_identity")
 			}
 			if event != nil {
 				if _, duplicate := webhookFindingIDs[row.ID]; !duplicate {

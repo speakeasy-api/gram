@@ -308,11 +308,12 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg conf
 
 		if len(ids) > 0 {
 			changed, err := falsepositivesweep.Apply(ctx, pool, ch, cfg.orgID, cfg.projectID, ids, reasons, cfg.dryRun)
+			if !cfg.dryRun {
+				// Earlier chunks may have committed before an error.
+				rep.updated += changed
+			}
 			if err != nil {
 				return rep, fmt.Errorf("apply batch ending at %s: %w", cursor, err)
-			}
-			if !cfg.dryRun {
-				rep.updated += changed
 			}
 		}
 

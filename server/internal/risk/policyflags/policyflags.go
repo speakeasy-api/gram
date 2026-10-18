@@ -2,11 +2,13 @@ package policyflags
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -61,16 +63,16 @@ func ProjectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Qu
 // ProjectFlagChecked is ProjectFlagEnabled for callers that must not read a
 // failed lookup as off. A nil provider reads as off without error.
 func ProjectFlagChecked(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (bool, error) {
-	state, resolved := projectFlagState(ctx, logger, queries, flags, orgID, projectID, flag)
-	if !resolved {
-		return false, fmt.Errorf("resolve %s for project %s", flag, projectID)
+	state, err := projectFlagState(ctx, logger, queries, flags, orgID, projectID, flag)
+	if err != nil {
+		return false, fmt.Errorf("resolve %s for project %s: %w", flag, projectID, err)
 	}
 	return state.enabled, nil
 }
 
-func projectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (flagState, bool) {
+func projectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (flagState, error) {
 	if flags == nil {
-		return flagState{enabled: false, orgSlug: ""}, true
+		return flagState{enabled: false, orgSlug: ""}, nil
 	}
 	memo, _ := ctx.Value(memoKey{}).(*requestMemo)
 	if memo == nil {
@@ -82,15 +84,15 @@ func projectFlagState(ctx context.Context, logger *slog.Logger, queries *repo.Qu
 	defer memo.mu.Unlock()
 	key := projectID.String() + ":" + string(flag)
 	if state, ok := memo.states[key]; ok {
-		return state, true
+		return state, nil
 	}
 	// A failed lookup is not memoized; the next scan retries it rather than
 	// inheriting the failure.
-	state, resolved := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
-	if resolved {
+	state, err := resolveProjectFlag(ctx, logger, queries, flags, orgID, projectID, flag)
+	if err == nil {
 		memo.states[key] = state
 	}
-	return state, resolved
+	return state, err
 }
 
 // ProjectFlagMode resolves the risk engine mode the multivariate flag selects
@@ -131,18 +133,22 @@ func ProjectFlagMode(ctx context.Context, logger *slog.Logger, queries *repo.Que
 
 // resolveProjectFlag reports false as its second result when the lookup
 // failed and the returned state is the fail-safe default.
-func resolveProjectFlag(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (flagState, bool) {
+// A deleted or missing project resolves as off rather than failing.
+func resolveProjectFlag(ctx context.Context, logger *slog.Logger, queries *repo.Queries, flags feature.Provider, orgID string, projectID uuid.UUID, flag feature.Flag) (flagState, error) {
 	groups, err := queries.GetProjectFlagGroups(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return flagState{enabled: false, orgSlug: ""}, nil
+	}
 	if err != nil {
 		logger.WarnContext(ctx, "resolve project flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
-		return flagState{enabled: false, orgSlug: ""}, false
+		return flagState{enabled: false, orgSlug: ""}, fmt.Errorf("get project flag groups: %w", err)
 	}
 	on, err := flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
 	if err != nil {
 		logger.WarnContext(ctx, "project flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
-		return flagState{enabled: false, orgSlug: ""}, false
+		return flagState{enabled: false, orgSlug: ""}, fmt.Errorf("check flag: %w", err)
 	}
-	return flagState{enabled: on, orgSlug: groups.OrganizationSlug}, true
+	return flagState{enabled: on, orgSlug: groups.OrganizationSlug}, nil
 }
 
 // resolveProjectFlagMode reports false as its second result when the lookup
