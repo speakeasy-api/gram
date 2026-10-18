@@ -83184,7 +83184,7 @@ components:
           description: For signal attributes, false distinguishes absent labels from present empty strings
         value:
           type: string
-          description: A non-empty value of the dimension
+          description: A recorded dimension value. Signal attributes may be empty; present distinguishes an absent label.
       required:
         - value
         - count

@@ -79,7 +79,8 @@ type AnalyticsDescribeResult struct {
 }
 
 type AnalyticsDimensionValue struct {
-	// A non-empty value of the dimension
+	// A recorded dimension value. Signal attributes may be empty; present
+	// distinguishes an absent label.
 	Value string
 	// Rows at the dataset's grain carrying this value inside the window
 	Count int64

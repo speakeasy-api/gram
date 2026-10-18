@@ -1070,7 +1070,8 @@ type AnalyticsSignalScopeRequestBody struct {
 // AnalyticsDimensionValueResponseBody is used to define fields on response
 // body types.
 type AnalyticsDimensionValueResponseBody struct {
-	// A non-empty value of the dimension
+	// A recorded dimension value. Signal attributes may be empty; present
+	// distinguishes an absent label.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 	// Rows at the dataset's grain carrying this value inside the window
 	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`

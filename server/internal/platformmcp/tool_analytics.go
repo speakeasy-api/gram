@@ -60,7 +60,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Name:  listAnalyticsDimensionValuesToolName,
 		Title: "List a Dimension's Values",
 		Description: "List the values one dimension of a dataset actually holds inside a time window, most frequent first with how many rows at the dataset's grain carry each, for choosing filter values before run_analytics_query. " +
-			"Every value returned is one a filter will match: a dimension that reads through a lookup shows the mapped names, and the empty value is never offered. " +
+			"Every value returned is one a filter will match: a dimension that reads through a lookup shows the mapped names. Composed datasets omit empty values. " +
 			"At most 200 values, 50 by default. For dataset signals, supply signal_scope; dimension=attribute_keys discovers available labels, and dimension=attribute with an exact attribute key lists values. present=false means the label is absent, independently of a present empty string. Composed datasets require Explore; signals requires Signals Intelligence.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{

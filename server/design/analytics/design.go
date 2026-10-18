@@ -130,7 +130,7 @@ var DimensionValuesResult = Type("AnalyticsDimensionValuesResult", func() {
 })
 
 var DimensionValue = Type("AnalyticsDimensionValue", func() {
-	Attribute("value", String, "A non-empty value of the dimension")
+	Attribute("value", String, "A recorded dimension value. Signal attributes may be empty; present distinguishes an absent label.")
 	Attribute("count", Int64, "Rows at the dataset's grain carrying this value inside the window")
 	Attribute("present", Boolean, "For signal attributes, false distinguishes absent labels from present empty strings")
 	Required("value", "count")

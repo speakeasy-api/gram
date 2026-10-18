@@ -17,7 +17,7 @@ export type AnalyticsDimensionValue = {
    */
   present?: boolean | undefined;
   /**
-   * A non-empty value of the dimension
+   * A recorded dimension value. Signal attributes may be empty; present distinguishes an absent label.
    */
   value: string;
 };
