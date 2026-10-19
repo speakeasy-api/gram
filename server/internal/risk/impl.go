@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -139,6 +140,9 @@ type Service struct {
 	riskRecorder    *metering.RiskRecorder
 	// stokenCodec counts prepared rule-playground input.
 	stokenCodec *stokens.Codec
+
+	// approvals holds, lists and decides tool approval requests.
+	approvals *approval.Service
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng         *celenv.Engine
@@ -193,6 +197,7 @@ func NewObserver(
 		cache:                        nil,
 		jwtSecret:                    "",
 		approvalIntake:               nil,
+		approvals:                    nil,
 		piiScanner:                   nil,
 		piScanner:                    nil,
 		gitleaksScanner:              nil,
@@ -236,6 +241,7 @@ func NewService(
 	assetStorage blobio.Reader,
 	riskRecorder *metering.RiskRecorder,
 	platformToolsets map[string]platformtools.Toolset,
+	approvals *approval.Service,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -289,6 +295,7 @@ func NewService(
 		riskRecorder:                 riskRecorder,
 		platformToolsets:             platformToolsets,
 		stokenCodec:                  stokens.NewCodec(),
+		approvals:                    approvals,
 	}
 }
 
@@ -511,6 +518,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	}
 	if err := policycore.ValidateMCPScope(mcpScope, sources, action); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	if action == policycore.ActionRequireApproval && !s.toolApprovalsEnabled(ctx, authCtx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "tool approvals are not enabled for this organization")
 	}
 	approvalConfig := approvalConfigFromPayload(payload.ApprovalConfig)
 	if err := policycore.ValidateApprovalPolicy(action, policyType, sources, payload.CustomRuleIds, approvalConfig); err != nil {
@@ -974,6 +984,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 	if err := validateSourceAction(sources, action); err != nil {
 		return nil, err
+	}
+	if action == policycore.ActionRequireApproval && current.Action != policycore.ActionRequireApproval && !s.toolApprovalsEnabled(ctx, authCtx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "tool approvals are not enabled for this organization")
 	}
 	approvalConfig := policycore.Project(current, nil).ApprovalConfig
 	if payload.ApprovalConfig != nil {
@@ -4106,6 +4119,23 @@ func promptPolicyNameFromBase(base string, existing []string) string {
 // for the org. The flag is targeted by PostHog group (org/project slug) the
 // same way the dashboard evaluates it, so we forward the groups built from the
 // auth context. A nil provider or a failed lookup degrades to disabled.
+// toolApprovalsEnabled reports whether the organization may create
+// require_approval policies. Errors fail closed.
+func (s *Service) toolApprovalsEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+	if s.flags == nil {
+		return false
+	}
+	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagToolApprovals, authCtx.ActiveOrganizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "tool approvals flag check failed; treating as disabled",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		)
+	}
+	return evaluation == feature.EvaluationEnabled
+}
+
 func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
 	if s.flags == nil {
 		return false

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -73,7 +74,7 @@ func newFixture(t *testing.T) fixture {
 	serverURL, err := url.Parse("https://speakeasy.test")
 	require.NoError(t, err)
 	f := fixture{
-		service:        NewService(logger, conn, serverURL),
+		service:        NewService(logger, conn, serverURL, audit.NewLogger()),
 		db:             conn,
 		organizationID: authCtx.ActiveOrganizationID,
 		projectID:      *authCtx.ProjectID,

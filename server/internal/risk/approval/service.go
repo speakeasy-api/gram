@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
@@ -138,16 +139,18 @@ type Service struct {
 	logger    *slog.Logger
 	db        *pgxpool.Pool
 	serverURL *url.URL
+	audit     *audit.Logger
 	now       func() time.Time
 }
 
 // NewService creates an approval service. serverURL is the public base URL
 // that request instructions point agents at.
-func NewService(logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, auditLogger *audit.Logger) *Service {
 	return &Service{
 		logger:    logger.With(attr.SlogComponent("risk_approval")),
 		db:        db,
 		serverURL: serverURL,
+		audit:     auditLogger,
 		now:       time.Now,
 	}
 }
@@ -387,7 +390,7 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (repo.RiskPol
 		return repo.RiskPolicyApproval{}, "", ErrNotFound
 	}
 	if Status(row.Status) != StatusBlocked {
-		return row, s.effectiveStatus(row), nil
+		return row, s.EffectiveStatus(row), nil
 	}
 
 	reason := strings.TrimSpace(input.Reason)
@@ -416,7 +419,13 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (repo.RiskPol
 		return repo.RiskPolicyApproval{}, "", fmt.Errorf("encode requested scope: %w", err)
 	}
 
-	updated, err := queries.MarkApprovalRequested(ctx, repo.MarkApprovalRequestedParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("begin approval request: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	updated, err := repo.New(dbtx).MarkApprovalRequested(ctx, repo.MarkApprovalRequestedParams{
 		OrganizationID: row.OrganizationID,
 		Reason:         conv.ToPGText(reason),
 		RequestedScope: requestedScope,
@@ -430,10 +439,34 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (repo.RiskPol
 		if getErr != nil {
 			return repo.RiskPolicyApproval{}, "", fmt.Errorf("reload approval: %w", getErr)
 		}
-		return current, s.effectiveStatus(current), nil
+		return current, s.EffectiveStatus(current), nil
 	}
 	if err != nil {
 		return repo.RiskPolicyApproval{}, "", fmt.Errorf("mark approval requested: %w", err)
+	}
+	policyName, err := s.policyName(ctx, dbtx, updated)
+	if err != nil {
+		return repo.RiskPolicyApproval{}, "", err
+	}
+	actor, err := urn.ParsePrincipal(updated.RequesterUrn)
+	if err != nil {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("parse requester: %w", err)
+	}
+	if err := s.audit.LogRiskPolicyApprovalRequest(ctx, dbtx, audit.LogRiskPolicyApprovalEvent{
+		OrganizationID:         updated.OrganizationID,
+		ProjectID:              updated.ProjectID,
+		Actor:                  actor,
+		ActorDisplayName:       nil,
+		ActorSlug:              nil,
+		RiskPolicyID:           updated.RiskPolicyID,
+		RiskPolicyName:         policyName,
+		ApprovalSnapshotBefore: auditSnapshot(row),
+		ApprovalSnapshotAfter:  auditSnapshot(updated),
+	}); err != nil {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("audit approval request: %w", err)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return repo.RiskPolicyApproval{}, "", fmt.Errorf("commit approval request: %w", err)
 	}
 	s.logger.InfoContext(ctx, "approval requested", attr.SlogRiskPolicyApprovalID(updated.ID.String()))
 	return updated, StatusPending, nil
@@ -453,7 +486,7 @@ func (s *Service) WatchStatus(ctx context.Context, token string) (Status, error)
 	if err != nil {
 		return "", fmt.Errorf("get approval by token: %w", err)
 	}
-	status := s.effectiveStatus(row)
+	status := s.EffectiveStatus(row)
 	if status == StatusConsumed {
 		return StatusApproved, nil
 	}
@@ -476,6 +509,9 @@ type DecideInput struct {
 
 	// DeciderUserID is the person deciding.
 	DeciderUserID string
+
+	// DeciderDisplayName names the person deciding in the audit log, when known.
+	DeciderDisplayName *string
 
 	// Via is where the decision came from.
 	Via DecidedVia
@@ -517,7 +553,14 @@ func (s *Service) Decide(ctx context.Context, input DecideInput) (repo.RiskPolic
 		status = StatusApproved
 		grantedScope = row.RequestedScope
 	}
-	decided, err := queries.DecideApproval(ctx, repo.DecideApprovalParams{
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return repo.RiskPolicyApproval{}, fmt.Errorf("begin approval decision: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	decided, err := repo.New(dbtx).DecideApproval(ctx, repo.DecideApprovalParams{
 		OrganizationID: input.OrganizationID,
 		Status:         string(status),
 		DecidedByUrn:   conv.ToPGText(urn.NewPrincipal(urn.PrincipalTypeUser, input.DeciderUserID).String()),
@@ -533,32 +576,80 @@ func (s *Service) Decide(ctx context.Context, input DecideInput) (repo.RiskPolic
 	if err != nil {
 		return repo.RiskPolicyApproval{}, fmt.Errorf("decide approval: %w", err)
 	}
+
+	logDecision := s.audit.LogRiskPolicyApprovalDeny
+	if input.Approve {
+		logDecision = s.audit.LogRiskPolicyApprovalApprove
+	}
+	if err := logDecision(ctx, dbtx, audit.LogRiskPolicyApprovalEvent{
+		OrganizationID:         decided.OrganizationID,
+		ProjectID:              decided.ProjectID,
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, input.DeciderUserID),
+		ActorDisplayName:       input.DeciderDisplayName,
+		ActorSlug:              nil,
+		RiskPolicyID:           decided.RiskPolicyID,
+		RiskPolicyName:         policyRow.Name,
+		ApprovalSnapshotBefore: auditSnapshot(row),
+		ApprovalSnapshotAfter:  auditSnapshot(decided),
+	}); err != nil {
+		return repo.RiskPolicyApproval{}, fmt.Errorf("audit approval decision: %w", err)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return repo.RiskPolicyApproval{}, fmt.Errorf("commit approval decision: %w", err)
+	}
 	s.logger.InfoContext(ctx, "approval decided", attr.SlogRiskPolicyApprovalID(decided.ID.String()), attr.SlogRiskPolicyApprovalStatus(string(status)))
 	return decided, nil
 }
 
 func (s *Service) requireApprover(ctx context.Context, organizationID, userID string, config *policycore.ApprovalConfig) error {
-	if config == nil || len(config.Approvers) == 0 || userID == "" {
+	principals, err := s.ApproverPrincipals(ctx, organizationID, userID)
+	if err != nil {
+		return err
+	}
+	if !CanApprove(principals, config) {
 		return ErrNotApprover
+	}
+	return nil
+}
+
+// ApproverPrincipals lists the principals a person can approve as: their user
+// and every role they hold in the organization. "All users" is left out, since
+// an approver list never names it.
+func (s *Service) ApproverPrincipals(ctx context.Context, organizationID, userID string) ([]string, error) {
+	if userID == "" {
+		return []string{}, nil
 	}
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, organizationID, userID)
 	if err != nil {
-		return fmt.Errorf("resolve decider principals: %w", err)
+		return nil, fmt.Errorf("resolve approver principals: %w", err)
 	}
+	out := make([]string, 0, len(principals))
 	for _, principal := range principals {
 		if principal.ID == urn.AllUsersPrincipalID {
 			continue
 		}
-		if slices.Contains(config.Approvers, principal.String()) {
-			return nil
-		}
+		out = append(out, principal.String())
 	}
-	return ErrNotApprover
+	return out, nil
 }
 
-// effectiveStatus reports an open request or an unused approval whose window
+// CanApprove reports whether any of principals is on the policy's approver
+// list.
+func CanApprove(principals []string, config *policycore.ApprovalConfig) bool {
+	if config == nil {
+		return false
+	}
+	for _, principal := range principals {
+		if slices.Contains(config.Approvers, principal) {
+			return true
+		}
+	}
+	return false
+}
+
+// EffectiveStatus reports an open request or an unused approval whose window
 // has passed as expired, without waiting for a sweep to rewrite the row.
-func (s *Service) effectiveStatus(row repo.RiskPolicyApproval) Status {
+func (s *Service) EffectiveStatus(row repo.RiskPolicyApproval) Status {
 	status := Status(row.Status)
 	// An approval no retry used before the window closed is as dead as an
 	// undecided request: the gateway no longer accepts it.
@@ -570,7 +661,7 @@ func (s *Service) effectiveStatus(row repo.RiskPolicyApproval) Status {
 }
 
 func (s *Service) holdMessage(policyName, toolName string, row repo.RiskPolicyApproval) string {
-	if s.effectiveStatus(row) == StatusPending {
+	if s.EffectiveStatus(row) == StatusPending {
 		return fmt.Sprintf(`Waiting: calling %s needs approval under risk policy %q, and approval was already requested.
 Request token: %s
 Run the watcher from your request_approval result if it is not running. When it prints APPROVED, retry this exact call with the same arguments.`,

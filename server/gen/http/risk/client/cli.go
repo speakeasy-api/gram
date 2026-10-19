@@ -2083,6 +2083,173 @@ func BuildRevokeRiskPolicyBypassRequestPayload(riskRevokeRiskPolicyBypassRequest
 	return v, nil
 }
 
+// BuildListRiskPolicyApprovalsPayload builds the payload for the risk
+// listRiskPolicyApprovals endpoint from CLI flags.
+func BuildListRiskPolicyApprovalsPayload(riskListRiskPolicyApprovalsStatus string, riskListRiskPolicyApprovalsCursor string, riskListRiskPolicyApprovalsLimit string, riskListRiskPolicyApprovalsApikeyToken string, riskListRiskPolicyApprovalsSessionToken string, riskListRiskPolicyApprovalsProjectSlugInput string) (*risk.ListRiskPolicyApprovalsPayload, error) {
+	var err error
+	var status *string
+	{
+		if riskListRiskPolicyApprovalsStatus != "" {
+			status = &riskListRiskPolicyApprovalsStatus
+			if !(*status == "blocked" || *status == "pending" || *status == "approved" || *status == "denied" || *status == "consumed" || *status == "expired") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"blocked", "pending", "approved", "denied", "consumed", "expired"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if riskListRiskPolicyApprovalsCursor != "" {
+			cursor = &riskListRiskPolicyApprovalsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int32
+	{
+		if riskListRiskPolicyApprovalsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListRiskPolicyApprovalsLimit, 10, 32)
+			limit = int32(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT32")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListRiskPolicyApprovalsApikeyToken != "" {
+			apikeyToken = &riskListRiskPolicyApprovalsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskPolicyApprovalsSessionToken != "" {
+			sessionToken = &riskListRiskPolicyApprovalsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskPolicyApprovalsProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskPolicyApprovalsProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskPolicyApprovalsPayload{}
+	v.Status = status
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetRiskPolicyApprovalPayload builds the payload for the risk
+// getRiskPolicyApproval endpoint from CLI flags.
+func BuildGetRiskPolicyApprovalPayload(riskGetRiskPolicyApprovalID string, riskGetRiskPolicyApprovalApikeyToken string, riskGetRiskPolicyApprovalSessionToken string, riskGetRiskPolicyApprovalProjectSlugInput string) (*risk.GetRiskPolicyApprovalPayload, error) {
+	var err error
+	var id string
+	{
+		id = riskGetRiskPolicyApprovalID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetRiskPolicyApprovalApikeyToken != "" {
+			apikeyToken = &riskGetRiskPolicyApprovalApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskPolicyApprovalSessionToken != "" {
+			sessionToken = &riskGetRiskPolicyApprovalSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskPolicyApprovalProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskPolicyApprovalProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskPolicyApprovalPayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDecideRiskPolicyApprovalPayload builds the payload for the risk
+// decideRiskPolicyApproval endpoint from CLI flags.
+func BuildDecideRiskPolicyApprovalPayload(riskDecideRiskPolicyApprovalBody string, riskDecideRiskPolicyApprovalApikeyToken string, riskDecideRiskPolicyApprovalSessionToken string, riskDecideRiskPolicyApprovalProjectSlugInput string) (*risk.DecideRiskPolicyApprovalPayload, error) {
+	var err error
+	var body DecideRiskPolicyApprovalRequestBody
+	{
+		err = json.Unmarshal([]byte(riskDecideRiskPolicyApprovalBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"deny\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"note\": \"aaa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if !(body.Decision == "approve" || body.Decision == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", body.Decision, []any{"approve", "deny"}))
+		}
+		if body.Note != nil {
+			if utf8.RuneCountInString(*body.Note) > 500 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 500, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskDecideRiskPolicyApprovalApikeyToken != "" {
+			apikeyToken = &riskDecideRiskPolicyApprovalApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskDecideRiskPolicyApprovalSessionToken != "" {
+			sessionToken = &riskDecideRiskPolicyApprovalSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskDecideRiskPolicyApprovalProjectSlugInput != "" {
+			projectSlugInput = &riskDecideRiskPolicyApprovalProjectSlugInput
+		}
+	}
+	v := &risk.DecideRiskPolicyApprovalPayload{
+		ID:       body.ID,
+		Decision: body.Decision,
+		Note:     body.Note,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildTriggerRiskAnalysisPayload builds the payload for the risk
 // triggerRiskAnalysis endpoint from CLI flags.
 func BuildTriggerRiskAnalysisPayload(riskTriggerRiskAnalysisBody string, riskTriggerRiskAnalysisApikeyToken string, riskTriggerRiskAnalysisSessionToken string, riskTriggerRiskAnalysisProjectSlugInput string) (*risk.TriggerRiskAnalysisPayload, error) {
