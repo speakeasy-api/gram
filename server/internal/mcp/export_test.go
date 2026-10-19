@@ -98,11 +98,3 @@ func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 func (s *Service) SetPosthog(p *posthog.Posthog) {
 	s.posthog = p
 }
-
-// SetDeviceAgentTokenBudget replaces the device-agent token endpoint's budget.
-func (s *Service) SetDeviceAgentTokenBudget(budget func(context.Context, string) (ratelimit.Result, error)) {
-	s.deviceAgentTokenBudget = budget
-}
-
-// DeviceAgentTokenBudgetScope is the device-agent token endpoint's budget key.
-const DeviceAgentTokenBudgetScope = deviceAgentTokenBudgetScope

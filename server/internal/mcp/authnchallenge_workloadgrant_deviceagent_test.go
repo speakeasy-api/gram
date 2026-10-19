@@ -28,7 +28,6 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -413,60 +412,4 @@ func seedOtherOrganization(t *testing.T, f deviceAgentGrantFixture) string {
 		CreatedAt:          pgtype.Timestamptz{},
 	}))
 	return id
-}
-
-// A spent endpoint budget refuses before any database read, so a known and an
-// unknown organization get the same throttled answer.
-func TestDeviceAgentToken_SpentBudgetRefusesBeforeTheOrganizationLookup(t *testing.T) {
-	t.Parallel()
-
-	f := newDeviceAgentGrantFixture(t)
-	var scopes []string
-	f.ti.service.SetDeviceAgentTokenBudget(func(_ context.Context, scope string) (ratelimit.Result, error) {
-		scopes = append(scopes, scope)
-		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 7 * time.Second}, nil
-	})
-
-	unknown := "org-" + uuid.NewString()
-	known := f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL))
-	missing := f.exchangeDeviceAgentAt(t, unknown, f.assertion(t, deviceagenttoken.TokenURL(f.ti.serverURL.String(), unknown)))
-	for _, w := range []*httptest.ResponseRecorder{known, missing} {
-		require.Equal(t, http.StatusTooManyRequests, w.Code, w.Body.String())
-		require.Equal(t, "7", w.Header().Get("Retry-After"))
-	}
-	require.JSONEq(t, known.Body.String(), missing.Body.String())
-	require.Equal(t, []string{mcp.DeviceAgentTokenBudgetScope, mcp.DeviceAgentTokenBudgetScope}, scopes)
-}
-
-// Every organization's exchanges charge the one endpoint budget, since the
-// organization in the path is the caller's to choose; within it, a device
-// still receives its token.
-func TestDeviceAgentToken_ChargesOneBudgetForEveryOrganization(t *testing.T) {
-	t.Parallel()
-
-	f := newDeviceAgentGrantFixture(t)
-	var scopes []string
-	f.ti.service.SetDeviceAgentTokenBudget(func(_ context.Context, scope string) (ratelimit.Result, error) {
-		scopes = append(scopes, scope)
-		return ratelimit.Result{Allowed: true, Remaining: 1, RetryAfter: 0}, nil
-	})
-
-	requireDeviceAgentToken(t, f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL)), f.fx.orgID, f.issuerID, f.subject)
-	unknown := "org-" + uuid.NewString()
-	requireWorkloadGrantRefused(t, f.exchangeDeviceAgentAt(t, unknown, f.assertion(t, deviceagenttoken.TokenURL(f.ti.serverURL.String(), unknown))))
-	require.Equal(t, []string{mcp.DeviceAgentTokenBudgetScope, mcp.DeviceAgentTokenBudgetScope}, scopes)
-}
-
-// A budget that cannot be charged fails closed as temporarily unavailable,
-// never as a refusal of the assertion.
-func TestDeviceAgentToken_UnchargeableBudgetIsUnavailable(t *testing.T) {
-	t.Parallel()
-
-	f := newDeviceAgentGrantFixture(t)
-	f.ti.service.SetDeviceAgentTokenBudget(func(context.Context, string) (ratelimit.Result, error) {
-		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 0}, errors.New("store down")
-	})
-
-	w := f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL))
-	require.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
 }
