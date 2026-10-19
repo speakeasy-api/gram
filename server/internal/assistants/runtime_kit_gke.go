@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"maps"
 	"net"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -25,7 +24,6 @@ import (
 )
 
 var kitTemplateGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxtemplates"}
-var kitPinnedImage = regexp.MustCompile(`^[^@\s]+@sha256:[a-f0-9]{64}$`)
 
 var kitSecretGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"}
 
@@ -97,8 +95,8 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	if len(validation.IsDNS1123Subdomain(in.Name)) != 0 || strings.HasPrefix(in.Name, "gram-asst") {
 		return out, fmt.Errorf("invalid dedicated Kit object name")
 	}
-	if !kitPinnedImage.MatchString(in.Image) {
-		return out, fmt.Errorf("kit image must be pinned to a lowercase SHA-256 digest")
+	if !kitGKEExplicitImage(in.Image) {
+		return out, fmt.Errorf("kit image requires an explicit non-latest version tag or digest")
 	}
 	if err := validateKitResources(in.Resources); err != nil {
 		return out, err

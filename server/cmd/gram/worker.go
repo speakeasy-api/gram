@@ -145,6 +145,11 @@ func newWorkerCommand() *cli.Command {
 		&cli.StringFlag{Name: "authz-private-key", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}, Usage: "Speakeasy platform signing key for principal credentials"},
 		&cli.StringFlag{Name: "authz-public-keys", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}, Usage: "Speakeasy platform verification keys for principal credentials"},
 		&cli.StringFlag{
+			Name:    "authentication-host-url",
+			Usage:   "Alternate MCP OAuth authentication host used by Kit workload issuer validation.",
+			EnvVars: []string{"GRAM_AUTHENTICATION_HOST_URL"},
+		},
+		&cli.StringFlag{
 			Name:     "server-url",
 			Usage:    "The public URL of the server",
 			EnvVars:  []string{"GRAM_SERVER_URL"},

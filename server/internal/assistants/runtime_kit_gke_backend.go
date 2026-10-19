@@ -1,0 +1,484 @@
+package assistants
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/url"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/distribution/reference"
+	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+)
+
+// KitGKERuntimeConfig composes dedicated Kit sandboxes, never legacy warm pools.
+// All lifecycle calls require the caller's shared runtime admission lock.
+// Bootstrap retires old inference authority before minting startup credentials.
+type KitGKERuntimeConfig struct {
+	GKE       GKERuntimeConfig
+	Provision KitGKEProvisionInput
+	Bootstrap func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error)
+	Protocol  func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error)
+	Fence     func(context.Context, assistantRuntimeRecord) error
+	Snapshots KitGKECheckpointDriver
+}
+
+type KitGKERuntimeBackend struct {
+	config      KitGKERuntimeConfig
+	fingerprint string
+	mu          sync.Mutex
+}
+
+var _ RuntimeBackend = (*KitGKERuntimeBackend)(nil)
+
+// No deployed snapshot status/expiry or persisted checkpoint authority contract
+// is verified here. Trigger creation and Pod Running never prove a checkpoint.
+const kitGKECheckpointUnavailable = "Kit GKE checkpoint/restore unavailable: deployed PodSnapshot trigger completion, source UID, AllSnapshotsAvailable and expiry contract and persisted checkpoint authority are not verified"
+
+func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend, error) {
+	if config.GKE.Dynamic == nil || config.GKE.Namespace == "" || config.GKE.ServerURL == nil || config.Bootstrap == nil || config.Protocol == nil || config.Fence == nil {
+		return nil, fmt.Errorf("Kit GKE requires dynamic client, namespace, server URL, bootstrap, fence and ACP protocol")
+	}
+	p := config.Provision
+	if p.GuestPort == 0 {
+		p.GuestPort = int32(config.GKE.GuestPort)
+		if p.GuestPort == 0 {
+			p.GuestPort = 8081
+		}
+	}
+	if len(p.Command) == 0 && p.Args == nil {
+		p.Command, p.Args = KitGatewayCommand(int(p.GuestPort))
+	}
+	if p.Identity.CompatibilityGeneration == "" {
+		p.Identity.CompatibilityGeneration = "kit-acp-v2-bootstrap-v1"
+	}
+	p.Command = slices.Clone(p.Command)
+	p.Args = slices.Clone(p.Args)
+	p.Resources = *p.Resources.DeepCopy()
+	serverURL := *config.GKE.ServerURL
+	config.GKE.ServerURL = &serverURL
+	config.Provision = p
+	if p.SnapshotsEnabled && config.Snapshots == nil {
+		return nil, fmt.Errorf("%s", kitGKECheckpointUnavailable)
+	}
+	if p.Restore != nil || p.RestoreSource != nil || p.ColdReset || p.PreviousIdentity != nil {
+		return nil, fmt.Errorf("restore/reset input must come from persisted runtime authority")
+	}
+	if p.Identity.CompatibilityGeneration == "" || !kitGKEExplicitImage(p.Image) {
+		return nil, fmt.Errorf("Kit GKE requires explicit compatibility generation and tagged or digest-pinned image")
+	}
+	if p.GuestPort < 1 || p.GuestPort > 65535 {
+		return nil, fmt.Errorf("invalid Kit GKE port")
+	}
+	if err := validateKitGatewayCommand(p.Command, p.Args, int(p.GuestPort)); err != nil {
+		return nil, err
+	}
+	if err := validateKitResources(p.Resources); err != nil {
+		return nil, err
+	}
+	if _, _, err := net.ParseCIDR(p.IngressCIDR); err != nil {
+		return nil, fmt.Errorf("invalid Kit GKE ingress CIDR")
+	}
+	p.Identity = KitGKEIdentity{Namespace: config.GKE.Namespace, CompatibilityGeneration: p.Identity.CompatibilityGeneration}
+	p.Name = ""
+	p.Model = ""
+	p.AgentsMD = nil
+	p.InferenceJSON = nil
+	p.MCPJSON = nil
+	p.GatewayToken = nil
+	p.MCPFiles = nil
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return nil, err
+	}
+	return &KitGKERuntimeBackend{config: config, fingerprint: fmt.Sprintf("%x", sha256.Sum256(raw))}, nil
+}
+func (k *KitGKERuntimeBackend) Backend() string               { return runtimeBackendGKE }
+func (k *KitGKERuntimeBackend) SupportsBackend(b string) bool { return b == runtimeBackendGKE }
+func (k *KitGKERuntimeBackend) ServerURL() *url.URL           { return k.config.GKE.ServerURL }
+func (k *KitGKERuntimeBackend) ImageRef() string              { return k.config.Provision.Image }
+func (k *KitGKERuntimeBackend) identity(r assistantRuntimeRecord) KitGKEIdentity {
+	return KitGKEIdentity{Namespace: k.config.GKE.Namespace, AssistantID: r.AssistantID.String(), Lineage: r.ID.String(), CompatibilityGeneration: k.config.Provision.Identity.CompatibilityGeneration}
+}
+func kitGKEName(r assistantRuntimeRecord) string { return "kit-" + r.ID.String() }
+func (k *KitGKERuntimeBackend) validate(r assistantRuntimeRecord) error {
+	if r.RuntimeVersion != 3 || r.ID == uuid.Nil || r.AssistantID == uuid.Nil || r.ProjectID == uuid.Nil || !k.SupportsBackend(r.Backend) {
+		return fmt.Errorf("invalid authoritative Kit GKE runtime binding")
+	}
+	return k.identity(r).validate()
+}
+
+type kitGKEBackendMetadata struct {
+	ImageDigest       string    `json:"image_digest"`
+	ContainerID       string    `json:"container_id"`
+	AuthorityUID      types.UID `json:"authority_uid,omitempty"`
+	AuthorityNotAfter time.Time `json:"authority_not_after"`
+	RuntimeID         uuid.UUID `json:"runtime_id"`
+	AssistantID       uuid.UUID `json:"assistant_id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	Version           int16     `json:"runtime_version"`
+	Namespace         string    `json:"namespace"`
+	Fingerprint       string    `json:"compatibility"`
+	ClaimUID          types.UID `json:"claim_uid"`
+	TemplateUID       types.UID `json:"template_uid"`
+	SecretUID         types.UID `json:"secret_uid"`
+	SecretName        string    `json:"secret_name"`
+	PodName           string    `json:"pod_name"`
+	PodUID            types.UID `json:"pod_uid"`
+}
+
+func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackendMetadata, error) {
+	var m kitGKEBackendMetadata
+	if err := k.validate(r); err != nil {
+		return m, err
+	}
+	if err := json.Unmarshal(r.BackendMetadataJSON, &m); err != nil {
+		return m, fmt.Errorf("decode Kit GKE authority: %w", err)
+	}
+	if m.AuthorityNotAfter.IsZero() || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || m.ImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "" {
+		return m, fmt.Errorf("Kit GKE authority or exact compatibility mismatch; explicit fenced reset required")
+	}
+	return m, nil
+}
+func (k *KitGKERuntimeBackend) checkObject(r assistantRuntimeRecord, o *unstructured.Unstructured, uid types.UID) error {
+	if err := kitCheckIdentity(o, k.identity(r)); err != nil {
+		return err
+	}
+	if o.GetUID() == "" || (uid != "" && uid != o.GetUID()) || o.GetAnnotations()["speakeasy.com/kit-spec"] != k.fingerprint || o.GetLabels()["gram.ai/project-id"] != r.ProjectID.String() {
+		return fmt.Errorf("Kit GKE resource authority mismatch")
+	}
+	if o.GetDeletionTimestamp() != nil {
+		return fmt.Errorf("Kit GKE resource is terminating")
+	}
+	return nil
+}
+func (k *KitGKERuntimeBackend) get(ctx context.Context, r assistantRuntimeRecord, gvr schema.GroupVersionResource, name string, uid types.UID) (*unstructured.Unstructured, error) {
+	o, err := k.config.GKE.Dynamic.Resource(gvr).Namespace(k.config.GKE.Namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if err = k.checkObject(r, o, uid); err != nil {
+		return nil, err
+	}
+	return o, nil
+}
+
+func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if err := k.validate(r); err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	if !kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
+		state, obj, e := k.loadAuthority(ctx, r)
+		if e != nil {
+			return RuntimeBackendEnsureResult{}, e
+		}
+		if state.Phase != "active" {
+			return k.restore(ctx, r, state, obj)
+		}
+		r.BackendMetadataJSON, _ = json.Marshal(state.Metadata)
+		if _, err := k.protocol(ctx, r); err != nil {
+			return RuntimeBackendEnsureResult{}, err
+		}
+		return RuntimeBackendEnsureResult{BackendMetadataJSON: r.BackendMetadataJSON}, nil
+	}
+	name := kitGKEName(r)
+	for _, step := range []struct {
+		gvr  schema.GroupVersionResource
+		name string
+	}{{gkeSandboxClaimGVR, name}, {kitTemplateGVR, name}} {
+		_, err := k.config.GKE.Dynamic.Resource(step.gvr).Namespace(k.config.GKE.Namespace).Get(ctx, step.name, metav1.GetOptions{})
+		if err == nil {
+			return RuntimeBackendEnsureResult{}, fmt.Errorf("unrecorded Kit GKE resources require fenced operator reconciliation")
+		}
+		if !apierrors.IsNotFound(err) {
+			return RuntimeBackendEnsureResult{}, err
+		}
+	}
+	b, err := k.config.Bootstrap(ctx, r)
+	if err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	in := k.config.Provision
+	in.Identity = k.identity(r)
+	in.Name = name
+	in.Model = b.Model
+	in.AgentsMD = b.AgentsMD
+	in.InferenceJSON = b.InferenceJSON
+	in.MCPJSON = b.MCPJSON
+	in.GatewayToken = b.GatewayToken
+	in.MCPFiles = b.MCPFiles
+	objects, err := RenderKitGKEProvision(in)
+	if err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	labels := in.Identity.labels()
+	if in.SnapshotsEnabled {
+		labels["gram.ai/snapshots"] = "enabled"
+	}
+	labels["gram.ai/project-id"] = r.ProjectID.String()
+	annotations := map[string]string{"speakeasy.com/kit-spec": k.fingerprint}
+	_ = unstructured.SetNestedStringMap(objects.Template.Object, labels, "spec", "podTemplate", "metadata", "labels")
+	podAnnotations, _, _ := unstructured.NestedStringMap(objects.Template.Object, "spec", "podTemplate", "metadata", "annotations")
+	if podAnnotations == nil {
+		podAnnotations = map[string]string{}
+	}
+	for key, value := range annotations {
+		podAnnotations[key] = value
+	}
+	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
+	m := kitGKEBackendMetadata{AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	for _, step := range []struct {
+		gvr schema.GroupVersionResource
+		obj *unstructured.Unstructured
+		uid *types.UID
+	}{{kitSecretGVR, objects.Secret, &m.SecretUID}, {kitTemplateGVR, objects.Template, &m.TemplateUID}, {gkeSandboxClaimGVR, objects.Claim, &m.ClaimUID}} {
+		step.obj.SetLabels(labels)
+		step.obj.SetAnnotations(annotations)
+		created, e := k.config.GKE.Dynamic.Resource(step.gvr).Namespace(in.Identity.Namespace).Create(ctx, step.obj, metav1.CreateOptions{})
+		if e != nil {
+			return RuntimeBackendEnsureResult{}, fmt.Errorf("create Kit GKE %s (partial resources require reconciliation): %w", step.obj.GetKind(), e)
+		}
+		*step.uid = created.GetUID()
+		if *step.uid == "" {
+			return RuntimeBackendEnsureResult{}, fmt.Errorf("Kit GKE create returned no authoritative UID")
+		}
+	}
+	readyCtx, cancel := context.WithTimeout(ctx, gkeRuntimeReadyTimeout)
+	defer cancel()
+	pod, err := k.waitPod(readyCtx, r, m)
+	if err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	m.ImageDigest, m.ContainerID, err = kitGKEProcessIdentity(pod)
+	if err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	m.PodName = pod.GetName()
+	m.PodUID = pod.GetUID()
+	m, err = k.createAuthority(readyCtx, r, m)
+	if err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	r.BackendMetadataJSON = raw
+	if _, err = k.protocol(readyCtx, r); err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	return RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: raw}, nil
+}
+
+func (k *KitGKERuntimeBackend) waitPod(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) (*unstructured.Unstructured, error) {
+	for {
+		if _, err := k.get(ctx, r, gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID); err != nil {
+			return nil, err
+		}
+		pods, err := k.config.GKE.Dynamic.Resource(gkePodGVR).Namespace(k.config.GKE.Namespace).List(ctx, metav1.ListOptions{LabelSelector: gkeClaimUIDLabel + "=" + string(m.ClaimUID)})
+		if err != nil {
+			return nil, err
+		}
+		if len(pods.Items) > 1 {
+			return nil, fmt.Errorf("ambiguous Kit GKE claim pod authority")
+		}
+		if len(pods.Items) == 1 {
+			p := &pods.Items[0]
+			if err := k.checkObject(r, p, m.PodUID); err != nil {
+				return nil, err
+			}
+			phase, _, _ := unstructured.NestedString(p.Object, "status", "phase")
+			ip, _, _ := unstructured.NestedString(p.Object, "status", "podIP")
+			if phase == "Running" && net.ParseIP(ip) != nil {
+				if _, _, e := kitGKEProcessIdentity(p); e == nil {
+					if e = k.checkPod(r, p, m); e != nil {
+						return nil, e
+					}
+					return p, nil
+				}
+			}
+			if phase == "Failed" || phase == "Succeeded" {
+				return nil, fmt.Errorf("Kit GKE process exited; cold replacement requires explicit fenced reset")
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("wait Kit GKE pod: %w", ctx.Err())
+		case <-time.After(gkeRuntimePollInterval):
+		}
+	}
+}
+func (k *KitGKERuntimeBackend) checkPod(r assistantRuntimeRecord, p *unstructured.Unstructured, m kitGKEBackendMetadata) error {
+	digest, containerID, err := kitGKEProcessIdentity(p)
+	if err != nil {
+		return err
+	}
+	if m.ImageDigest != "" && m.ImageDigest != digest {
+		return fmt.Errorf("Kit GKE observed image digest compatibility mismatch")
+	}
+	if m.ContainerID != "" && m.ContainerID != containerID {
+		return fmt.Errorf("Kit GKE process was replaced outside admission")
+	}
+
+	if err := k.checkObject(r, p, m.PodUID); err != nil {
+		return err
+	}
+	if (m.PodName != "" && p.GetName() != m.PodName) || p.GetLabels()[gkeClaimUIDLabel] != string(m.ClaimUID) {
+		return fmt.Errorf("Kit GKE source pod was replaced outside admission")
+	}
+	containers, _, _ := unstructured.NestedSlice(p.Object, "spec", "containers")
+	if len(containers) != 1 {
+		return fmt.Errorf("unexpected Kit GKE pod containers")
+	}
+	c, ok := containers[0].(map[string]any)
+	if !ok || c["name"] != "kit" || c["image"] != k.ImageRef() {
+		return fmt.Errorf("Kit GKE pod image compatibility mismatch")
+	}
+	return nil
+}
+func (k *KitGKERuntimeBackend) protocol(ctx context.Context, r assistantRuntimeRecord) (runtimeProtocol, error) {
+	state, _, err := k.loadAuthority(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	if state.Phase != "active" {
+		return nil, fmt.Errorf("Kit GKE authority is fenced in phase %s", state.Phase)
+	}
+	m := state.Metadata
+	if !time.Now().Before(m.AuthorityNotAfter) {
+		return nil, fmt.Errorf("Kit GKE startup authority expired; checkpoint and refresh required")
+	}
+	for _, s := range []struct {
+		gvr  schema.GroupVersionResource
+		name string
+		uid  types.UID
+	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}} {
+		if _, err = k.get(ctx, r, s.gvr, s.name, s.uid); err != nil {
+			return nil, err
+		}
+	}
+	pod, err := k.get(ctx, r, gkePodGVR, m.PodName, m.PodUID)
+	if err != nil {
+		return nil, err
+	}
+	if err = k.checkPod(r, pod, m); err != nil {
+		return nil, err
+	}
+	phase, _, _ := unstructured.NestedString(pod.Object, "status", "phase")
+	ip, _, _ := unstructured.NestedString(pod.Object, "status", "podIP")
+	if phase != "Running" || net.ParseIP(ip) == nil {
+		return nil, fmt.Errorf("%w: Kit GKE pod is not running", ErrRuntimeUnhealthy)
+	}
+	p, err := k.config.Protocol(ctx, r, &url.URL{Scheme: "http", Host: net.JoinHostPort(ip, strconv.Itoa(int(k.config.Provision.GuestPort))), Path: "/acp/v2"})
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, fmt.Errorf("Kit GKE ACP protocol unavailable")
+	}
+	// Status authenticates and initializes ACP; Pod Running is not readiness.
+	status, err := p.Status(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	if !status.Configured {
+		return nil, fmt.Errorf("Kit GKE ACP protocol is not configured")
+	}
+	return p, nil
+}
+func (k *KitGKERuntimeBackend) RunTurn(ctx context.Context, r assistantRuntimeRecord, t runTurnRequest) error {
+	p, e := k.protocol(ctx, r)
+	if e != nil {
+		return e
+	}
+	return p.RunTurn(ctx, r, t)
+}
+func (k *KitGKERuntimeBackend) InterruptTurn(ctx context.Context, r assistantRuntimeRecord, id uuid.UUID) (bool, error) {
+	p, e := k.protocol(ctx, r)
+	if e != nil {
+		return false, e
+	}
+	return p.InterruptTurn(ctx, r, id)
+}
+func (k *KitGKERuntimeBackend) Status(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	p, e := k.protocol(ctx, r)
+	if e != nil {
+		return RuntimeBackendStatus{}, e
+	}
+	return p.Status(ctx, r)
+}
+func (k *KitGKERuntimeBackend) RecycleImage(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
+	if _, e := k.metadata(r); e != nil {
+		return RuntimeBackendRecycleResult{}, e
+	}
+	if _, e := k.protocol(ctx, r); e != nil {
+		return RuntimeBackendRecycleResult{}, e
+	}
+	return RuntimeBackendRecycleResult{Recycled: false}, nil
+}
+
+// kitGKEExplicitImage accepts explicit deployment tags as well as digests.
+// Exact live spec and object UIDs remain required on every admission.
+func kitGKEExplicitImage(image string) bool {
+	named, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return false
+	}
+	tag, tagged := named.(reference.Tagged)
+	if tagged && strings.EqualFold(tag.Tag(), "latest") {
+		return false
+	}
+	_, digested := named.(reference.Digested)
+	return tagged || digested
+}
+
+// Container identity, not a mutable tag or Pod phase, proves process continuity.
+func kitGKEProcessIdentity(p *unstructured.Unstructured) (string, string, error) {
+	statuses, _, _ := unstructured.NestedSlice(p.Object, "status", "containerStatuses")
+	if len(statuses) != 1 {
+		return "", "", fmt.Errorf("Kit GKE container readiness is unknown")
+	}
+	status, ok := statuses[0].(map[string]any)
+	if !ok || status["name"] != "kit" || status["ready"] != true {
+		return "", "", fmt.Errorf("Kit GKE container is not ready")
+	}
+	restarts, ok := status["restartCount"].(int64)
+	if !ok || restarts != 0 {
+		return "", "", fmt.Errorf("Kit GKE process restarted outside admission")
+	}
+	image, ok := status["imageID"].(string)
+	if !ok {
+		return "", "", fmt.Errorf("Kit GKE observed image identity missing")
+	}
+	start := strings.LastIndex(image, "sha256:")
+	if start < 0 {
+		return "", "", fmt.Errorf("Kit GKE observed image has no digest")
+	}
+	digest := image[start:]
+	if len(digest) != 71 {
+		return "", "", fmt.Errorf("Kit GKE observed image digest invalid")
+	}
+	if _, err := hex.DecodeString(digest[7:]); err != nil {
+		return "", "", fmt.Errorf("Kit GKE observed image digest invalid")
+	}
+	container, ok := status["containerID"].(string)
+	if !ok || container == "" {
+		return "", "", fmt.Errorf("Kit GKE process identity missing")
+	}
+	return digest, container, nil
+}

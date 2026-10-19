@@ -47,14 +47,21 @@ type KitLocalCompositionConfig struct {
 }
 
 func validateKitLocalComposition(c KitLocalCompositionConfig) error {
-	if c.Environment != "local" || c.Image == "" || c.ProvisionMCP == nil || c.TurnStream == nil || c.MCPUserSessionIssuerID == uuid.Nil {
-		return errors.New("kit local composition requires explicit image, resource issuer, provisioning callback and turn stream")
-	}
-	if c.Origin == nil || c.Origin.String() != "https://ai.speakeasy.com" || c.AllowInsecureInference {
-		return errors.New("current Kit uses the HTTPS Speakeasy provider origin; local routing must preserve TLS and hostname")
+	if c.Environment != "local" {
+		return errors.New("kit local composition requires the local environment")
 	}
 	if c.Network == "" || c.ExtraCACertFile == "" {
 		return errors.New("local Kit requires an isolated network and trusted local TLS relay for ai.speakeasy.com")
+	}
+	return validateKitComposition(c)
+}
+
+func validateKitComposition(c KitLocalCompositionConfig) error {
+	if c.Image == "" || c.ProvisionMCP == nil || c.TurnStream == nil || c.MCPUserSessionIssuerID == uuid.Nil {
+		return errors.New("kit composition requires explicit image, resource issuer, provisioning callback and turn stream")
+	}
+	if c.Origin == nil || c.Origin.String() != "https://ai.speakeasy.com" || c.AllowInsecureInference {
+		return errors.New("Kit requires the HTTPS Speakeasy provider origin")
 	}
 	for _, u := range []*url.URL{c.MCPResource, c.MCPIssuer} {
 		if u == nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -76,30 +83,7 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil {
 		return errors.New("kit requires guarded HTTP, transcript, inference and encrypted gateway credential services")
 	}
-	projector := NewKitTranscriptProjector(s.db, s.chatWriter, c.TurnStream, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
-		bound, err := s.ValidateKitRuntimeSessionInTx(ctx, tx, kitRuntimeSessionKey{ProjectID: b.ProjectID, AssistantID: b.AssistantID, RuntimeID: b.RuntimeID, ThreadID: b.ThreadID}, b.SessionID)
-		if err != nil {
-			return err
-		}
-		if bound.ChatID != b.ChatID {
-			return ErrKitRuntimeBinding
-		}
-		return nil
-	})
-	// Match the legacy local backend: allow loopback only for this gateway
-	// client, not the global egress policy. Do not enable retries for ACP POSTs.
-	gatewayClient := s.guardianPolicy.PooledClient(guardian.WithAllowedCIDRBlocks(localRuntimeLoopbackCIDRs...))
-	factory := func(ctx context.Context, r assistantRuntimeRecord, endpoint *url.URL) (runtimeProtocol, error) {
-		token, err := s.loadKitGatewayTokenAlreadyLocked(ctx, r)
-		if err != nil {
-			return nil, err
-		}
-		protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: gatewayClient, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token})
-		if err != nil {
-			return nil, err
-		}
-		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: protocol}, nil
-	}
+	factory := s.kitProtocolFactory(c, localRuntimeLoopbackCIDRs)
 	env := map[string]string{"SPEAKEASY_ORIGIN": c.Origin.String()}
 	if c.AllowInsecureInference {
 		env["SPEAKEASY_ALLOW_INSECURE_HTTP"] = "1"
@@ -128,6 +112,35 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 		return err
 	}
 	return s.installKitRuntime(backend)
+}
+
+// kitProtocolFactory shares the canonical transcript projector and persisted
+// session authority across local and production transports.
+func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []string) func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) {
+	projector := NewKitTranscriptProjector(s.db, s.chatWriter, c.TurnStream, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
+		bound, err := s.ValidateKitRuntimeSessionInTx(ctx, tx, kitRuntimeSessionKey{ProjectID: b.ProjectID, AssistantID: b.AssistantID, RuntimeID: b.RuntimeID, ThreadID: b.ThreadID}, b.SessionID)
+		if err != nil {
+			return err
+		}
+		if bound.ChatID != b.ChatID {
+			return ErrKitRuntimeBinding
+		}
+		return nil
+	})
+	// Allow runtime network destinations only for this gateway client, not
+	// the global egress policy. Do not enable retries for ACP POSTs.
+	gatewayClient := s.guardianPolicy.PooledClient(guardian.WithAllowedCIDRBlocks(cidrs...))
+	return func(ctx context.Context, r assistantRuntimeRecord, endpoint *url.URL) (runtimeProtocol, error) {
+		token, err := s.loadKitGatewayTokenAlreadyLocked(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: gatewayClient, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token})
+		if err != nil {
+			return nil, err
+		}
+		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: protocol}, nil
+	}
 }
 
 // The verified filesystem config owns the machine-auth connections. Do not

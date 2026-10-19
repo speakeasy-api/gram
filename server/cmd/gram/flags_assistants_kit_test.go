@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"flag"
+	"strconv"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -66,4 +67,86 @@ func TestKitWorkloadAuthMethodConfiguration(t *testing.T) {
 	set.String("assistant-kit-image", "kit:test", "")
 	set.String("assistant-kit-mcp-auth-method", "invalid", "")
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(cli.NewContext(nil, set, nil), nil, nil, nil, nil, nil), "invalid assistant-kit-mcp-auth-method")
+}
+
+func kitCLIContext(t *testing.T, values map[string]string) *cli.Context {
+	t.Helper()
+	set := flag.NewFlagSet("kit", flag.ContinueOnError)
+	for _, f := range assistantRuntimeFlags() {
+		// Apply mutates flag.Value when an environment override is present.
+		var defaultValue string
+		switch value := f.(type) {
+		case *cli.StringFlag:
+			defaultValue = value.Value
+		case *cli.BoolFlag:
+			defaultValue = strconv.FormatBool(value.Value)
+		}
+		require.NoError(t, f.Apply(set))
+		switch f.(type) {
+		case *cli.StringFlag, *cli.BoolFlag:
+			require.NoError(t, set.Set(f.Names()[0], defaultValue))
+		}
+	}
+	set.String("environment", "production", "")
+	for name, value := range values {
+		require.NoError(t, set.Set(name, value))
+	}
+	return cli.NewContext(nil, set, nil)
+}
+
+func TestKitGKEProvisionCLI(t *testing.T) {
+	t.Parallel()
+	c := kitCLIContext(t, map[string]string{
+		"assistant-kit-gke-ingress-cidr":      "10.1.0.0/16",
+		"assistant-kit-gke-snapshots-enabled": "true",
+		"assistant-kit-gke-cpu-request":       "200m",
+		"assistant-kit-gke-work-size-limit":   "2Gi",
+	})
+	got, err := kitGKEProvisionFromCLI(c)
+	require.NoError(t, err)
+	require.Equal(t, "10.1.0.0/16", got.IngressCIDR)
+	require.True(t, got.SnapshotsEnabled)
+	require.Equal(t, "2Gi", got.WorkSizeLimit)
+	require.Equal(t, "128Mi", got.TmpSizeLimit)
+	require.Equal(t, "200m", got.Resources.Requests.Cpu().String())
+	require.Equal(t, "1", got.Resources.Limits.Cpu().String())
+	require.Equal(t, "128Mi", got.Resources.Requests.Memory().String())
+	require.Equal(t, "1Gi", got.Resources.Limits.Memory().String())
+	require.Empty(t, got.Image) // Composition owns image, identity and gateway settings.
+	require.Empty(t, got.Identity.AssistantID)
+	require.Zero(t, got.GuestPort)
+}
+
+func TestKitGKEProvisionCLIRejectsUnsafeConfiguration(t *testing.T) {
+	t.Parallel()
+	for name, value := range map[string]string{
+		"assistant-kit-network":                  "local-network",
+		"assistant-runtime-local-ca-file":        "/local/ca.pem",
+		"assistant-kit-allow-insecure-inference": "true",
+		"assistant-kit-gke-ingress-cidr":         "",
+		"assistant-kit-gke-cpu-request":          "2",
+		"assistant-kit-gke-cpu-limit":            "0",
+		"assistant-kit-gke-memory-request":       "2Gi",
+		"assistant-kit-gke-memory-limit":         "-1Gi",
+		"assistant-kit-gke-work-size-limit":      "invalid",
+		"assistant-kit-gke-tmp-size-limit":       "0",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			values := map[string]string{"assistant-kit-gke-ingress-cidr": "10.1.0.0/16"}
+			values[name] = value
+			_, err := kitGKEProvisionFromCLI(kitCLIContext(t, values))
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestKitCLIOptInAndProviderValidation(t *testing.T) {
+	t.Parallel()
+	// Unset image preserves legacy composition without needing service dependencies.
+	require.NoError(t, installKitLocalRuntimeFromCLI(kitCLIContext(t, nil), nil, nil, nil, nil, nil))
+	c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "local"})
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local environment")
+	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke"})
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "ingress-cidr")
 }

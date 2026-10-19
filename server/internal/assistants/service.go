@@ -441,6 +441,9 @@ type DashboardIngestor interface {
 }
 
 type ServiceCore struct {
+	// Set only by production Kit composition; existing assistants are untouched.
+	newAssistantRuntimeVersion int16
+
 	identities        *assistantidentity.Service
 	authz             *authz.Engine
 	logger            *slog.Logger
@@ -812,6 +815,9 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	// exited without expiring, died before their warm timer fired, or gave up
 	// mid-expire.
 	out.IdleRuntimesStopped = s.sweepIdleRuntimes(ctx, now, affected)
+	// Kit checkpoints preserve runtime/session authority and must not kick
+	// admission merely because the physical process was stopped.
+	out.IdleRuntimesStopped += s.sweepIdleKitRuntimes(ctx, now)
 
 	if len(affected) > 0 {
 		out.AffectedAssistantIDs = make([]uuid.UUID, 0, len(affected))
@@ -1627,6 +1633,19 @@ func (s *ServiceCore) CreateAssistant(
 	})
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("insert assistant: %w", err)
+	}
+	if s.newAssistantRuntimeVersion == 3 {
+		// This row is new and uncommitted: there is no conversation to migrate.
+		changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{
+			RuntimeVersion: 3, AssistantID: created.ID, ProjectID: projectID, ExpectedRuntimeVersion: created.RuntimeVersion,
+		})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("select new assistant Kit runtime: %w", err)
+		}
+		if changed != 1 {
+			return assistantRecord{}, fmt.Errorf("select new assistant Kit runtime: authority changed")
+		}
+		created.RuntimeVersion = 3
 	}
 	record := assistantRecordFromCreateRow(created)
 
@@ -2974,6 +2993,11 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 
 	ensureResult, err := s.runtime.Ensure(ctx, runtimeRecord)
 	if err != nil {
+		if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
+			// A failed restore must not retire the canonical Kit session owner
+			// or silently create a fresh conversation on the next admission.
+			return ProcessThreadEventsResult{}, fmt.Errorf("ensure Kit runtime without retiring session authority: %w", err)
+		}
 		// Ensure failed: mark the runtime row failed so the coordinator's
 		// admit query can re-admit this thread, and return RetryAdmission
 		// rather than propagating an error. Propagating would trigger activity
@@ -3026,6 +3050,14 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				attr.SlogError(runErr),
 			)
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
+
+			if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) &&
+				(errors.Is(runErr, ErrRuntimeUnhealthy) || errors.Is(runErr, ErrHistoryCorrupted)) {
+				// Legacy replacement/self-heal would discard the session owner and
+				// its transcript cursor. Kit recovery must use its fenced checkpoint,
+				// never silently start a new conversation after a transport failure.
+				return ProcessThreadEventsResult{}, fmt.Errorf("preserve Kit session authority after turn failure: %w", runErr)
+			}
 
 			teardownExhausted := errors.Is(runErr, ErrRuntimeUnhealthy) && event.Attempts >= maxRuntimeTeardowns
 			outcome := turnErrorBucket(runErr)
