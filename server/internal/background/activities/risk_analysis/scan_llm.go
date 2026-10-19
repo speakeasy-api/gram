@@ -56,26 +56,12 @@ func llmCoveredSources(sources sourceSet) []string {
 	return covered
 }
 
-// llmMessageSources keeps the covered sources whose detection scope admits
-// message i. It is the per-source prefilter the legacy engines apply through
-// CategoryScopeMasks.Subset, folded into the request: the consumer only
-// publishes findings for the sources the request names.
-func llmMessageSources(masks CategoryScopeMasks, i int, coveredSources []string) []string {
-	kept := make([]string, 0, len(coveredSources))
-	for _, source := range coveredSources {
-		if masks.AdmitsAny(i, sourceCategories[source]) {
-			kept = append(kept, source)
-		}
-	}
-	return kept
-}
-
 // publishLLMScanRequests hands the batch to the fine-tuned risk model's async
-// lane: one LLMAnalysis per message in scope for at least one covered
-// source, carrying the same provenance the legacy analysis requests carry so
-// findings and usage readings attribute identically. Messages every covered
-// source's detection scope excludes are not published, just as the legacy
-// engines never scan them. In the llm mode this lane is the only engine
+// lane: one LLMAnalysis per message, carrying the same provenance the legacy
+// analysis requests carry so findings and usage readings attribute
+// identically. Every message reaches the model; unlike the legacy engines it
+// is not prefiltered by detection scopes, which the consumer applies to its
+// findings instead. In the llm mode this lane is the only engine
 // evaluating the covered sources for the organization, so a dropped request
 // is a silently unscanned message and the publish must succeed for the
 // activity to succeed. In the shadow mode (shadow true, execution path
@@ -86,7 +72,7 @@ func llmMessageSources(masks CategoryScopeMasks, i int, coveredSources []string)
 // shadow_published so a partial publish is not undercounted. In the llm mode
 // published is only recorded once every message was acknowledged, since the
 // activity retry republishes the whole batch otherwise.
-func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks, shadow bool) (failed int, err error) {
+func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, shadow bool) (failed int, err error) {
 	executionPath := llmAnalyzerStreamExecutionPath
 	outcome := llmPolicyEvaluationPublished
 	if shadow {
@@ -96,11 +82,11 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	requestID := batchScanRequestID(args, "standard")
-	for i, msg := range messages {
-		sources := llmMessageSources(masks, i, coveredSources)
-		if len(sources) == 0 {
-			continue
-		}
+	if len(coveredSources) == 0 {
+		return 0, nil
+	}
+	for _, msg := range messages {
+		sources := coveredSources
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		provenance := batchRiskProvenance(args, msg, executionPath, requestID.String())
 		body, toolCalls := llmMessageInput(msg)

@@ -119,6 +119,19 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
   from the lane the comparison reads the awaited reply, otherwise the lane is
   dispatched detached exactly as under `shadow`.
 
+### Detection scopes
+
+The legacy engines are prefiltered by the policy's per-category detection
+scopes (realtime `CategoryScope.SourceInScope`, batch `CategoryScopeMasks`)
+before they run. The model is not: every message the policy applies to
+reaches it, with every covered source in the request's `sources`, and the
+streams consumer applies the scopes to the model's findings afterwards
+through `risk.FindingScopeResolver` (`llmanalyzer.FindingScopeFilter`, policy
+`analyzer_config` cached per policy version for a minute). A scope lookup
+failure publishes the findings unscoped. The realtime lane already filtered
+the lane's verdicts per source after the reply, so nothing changes there.
+Compared-source findings are published with `shadow = 1` in every mode.
+
 ### Cutover order
 
 The PostHog key is converted from boolean to multivariate **in place**, and a

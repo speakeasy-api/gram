@@ -184,10 +184,15 @@ func runLLMLaneBatchWithMeter(t *testing.T, conn *pgxpool.Pool, td testData, fla
 
 func insertUserMessage(t *testing.T, conn *pgxpool.Pool, td testData, content string) uuid.UUID {
 	t.Helper()
+	return insertRoleMessage(t, conn, td, "user", content)
+}
+
+func insertRoleMessage(t *testing.T, conn *pgxpool.Pool, td testData, role, content string) uuid.UUID {
+	t.Helper()
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
-		Role:      "user",
+		Role:      role,
 		Content:   content,
 	})
 	require.NoError(t, err)
@@ -584,4 +589,26 @@ func TestAnalyzeBatch_LLMAnalyzer_LLMModeKeepsPromptInjectionCascade(t *testing.
 	require.Len(t, *pubs.llm, 1)
 	assert.Equal(t, sources, (*pubs.llm)[0].GetSources(), "the model still scores prompt injection for comparison")
 	assert.False(t, (*pubs.llm)[0].GetShadow(), "the request enforces its enforced sources")
+}
+
+// Detection scopes no longer prefilter the model's lane: an assistant
+// message outside every recommended scope still reaches the model.
+func TestAnalyzeBatch_LLMAnalyzer_PublishesEveryMessageRegardlessOfScope(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	userMsg := insertUserMessage(t, conn, td, "please rotate the key")
+	assistantMsg := insertRoleMessage(t, conn, td, "assistant", "Sure, here is the key: ASIAZ2XY3WNBQR5TUVWX")
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMShadow)
+
+	_, pubs, err := runLLMLaneBatch(t, conn, td, flags, true, &countingPIIScanner{}, nil, []uuid.UUID{userMsg, assistantMsg}, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio})
+	require.NoError(t, err)
+	require.Len(t, *pubs.llm, 2, "both messages reach the model")
+	published := map[string][]string{}
+	for _, req := range *pubs.llm {
+		published[req.GetChatMessageId()] = req.GetSources()
+	}
+	assert.Equal(t, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio}, published[assistantMsg.String()], "every covered source rides along; scopes apply to the findings")
+	assert.Equal(t, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio}, published[userMsg.String()])
 }

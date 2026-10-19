@@ -72,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -621,7 +622,16 @@ func newStreamsCommand() *cli.Command {
 				logger.WarnContext(ctx, "LLM analyzer disabled: GRAM_RISK_LLM_URL empty")
 			}
 			llmAnalyzer := llmanalyzer.NewAnalyzer(logger, tracerProvider, riskLLMCompleter)
-			llmAnalyzerHandler := llmanalyzer.NewHandler(logger, meterProvider, llmAnalyzer, findingsPub, riskRecorder)
+			// Detection scopes prune the model's findings after the scan.
+			scopeCELEngine, err := celenv.New()
+			if err != nil {
+				return fmt.Errorf("create detection scope CEL engine: %w", err)
+			}
+			findingScopes, err := risk.NewFindingScopeResolver(replicaDB, scopeCELEngine)
+			if err != nil {
+				return fmt.Errorf("create llm analyzer finding scope resolver: %w", err)
+			}
+			llmAnalyzerHandler := llmanalyzer.NewHandler(logger, meterProvider, llmAnalyzer, findingsPub, riskRecorder, llmanalyzer.WithFindingScopeFilter(findingScopes))
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and

@@ -1,6 +1,7 @@
 package llmanalyzer_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -467,4 +468,95 @@ func TestHandle_ComparedOnlyRequestPublishesShadowAndAcks(t *testing.T) {
 	require.Len(t, *findings, 1)
 	require.Equal(t, llmanalyzer.RulePromptInjection, (*findings)[0].GetRuleId())
 	require.True(t, (*findings)[0].GetShadow())
+}
+
+// recordingScopeFilter drops the given rule ids and records its target.
+type recordingScopeFilter struct {
+	drop   map[string]bool
+	err    error
+	target llmanalyzer.ScopeTarget
+	calls  int
+}
+
+func (f *recordingScopeFilter) FilterFindings(_ context.Context, target llmanalyzer.ScopeTarget, findings []scanners.Finding) ([]scanners.Finding, error) {
+	f.calls++
+	f.target = target
+	if f.err != nil {
+		return nil, f.err
+	}
+	kept := make([]scanners.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if !f.drop[finding.RuleID] {
+			kept = append(kept, finding)
+		}
+	}
+	return kept, nil
+}
+
+// Detection scopes drop excluded verdicts before publishing.
+func TestHandle_DetectionScopesPruneFindingsAfterTheScan(t *testing.T) {
+	t.Parallel()
+
+	pub, findings := capturingFindingsPub(t)
+	meterPub, _ := capturingMeterPub(t)
+	stub := &llmanalyzer.StubCompleter{
+		Response: llmanalyzer.VerdictJSON(map[string]int{
+			llmanalyzer.KeySecretsLeak:      1,
+			llmanalyzer.KeyPersonalDataLeak: 1,
+		}, "A credential next to a home address."),
+		Err:              nil,
+		PromptTokens:     120,
+		CompletionTokens: 40,
+		Model:            "risk-judge-9b",
+		Calls:            nil,
+		ParseFailures:    0,
+	}
+	filter := &recordingScopeFilter{drop: map[string]bool{llmanalyzer.RulePII: true}, err: nil, target: llmanalyzer.ScopeTarget{}, calls: 0}
+	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), stub)
+	h := llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, pub, metering.NewRiskRecorder(meterPub), llmanalyzer.WithFindingScopeFilter(filter))
+
+	analysis := newAnalysis("AKIA0000000000000000 lives at 1 Main St")
+	analysis.SetToolName("mcp__files__write")
+	analysis.SetMessageType("tool_request")
+	analysis.SetToolCalls([]*riskv1.LLMAnalysis_ToolCall{riskv1.LLMAnalysis_ToolCall_builder{
+		Id:        new("toolu_1"),
+		Name:      new("mcp__files__write"),
+		Arguments: new(`{"path":"notes.txt"}`),
+	}.Build()})
+	require.NoError(t, h.Handle(t.Context(), analysis, gcp.MessageMetadata{}))
+
+	require.Equal(t, 1, filter.calls)
+	require.Equal(t, testProjectID, filter.target.ProjectID)
+	require.Equal(t, testPolicyID, filter.target.RiskPolicyID)
+	require.Equal(t, int64(3), filter.target.RiskPolicyVersion)
+	require.Equal(t, "tool_request", filter.target.MessageType)
+	require.Equal(t, "mcp__files__write", filter.target.ToolName)
+	require.Len(t, filter.target.ToolCalls, 1)
+	require.Equal(t, "mcp__files__write", filter.target.ToolCalls[0].Name)
+	require.Len(t, *findings, 1, "the scoped-out verdict is not published")
+	require.Equal(t, llmanalyzer.RuleSecret, (*findings)[0].GetRuleId())
+}
+
+// A scope lookup failure publishes the findings unscoped.
+func TestHandle_DetectionScopeLookupFailurePublishesUnscoped(t *testing.T) {
+	t.Parallel()
+
+	pub, findings := capturingFindingsPub(t)
+	meterPub, _ := capturingMeterPub(t)
+	stub := &llmanalyzer.StubCompleter{
+		Response:         llmanalyzer.VerdictJSON(map[string]int{llmanalyzer.KeySecretsLeak: 1}, "Credential in plaintext."),
+		Err:              nil,
+		PromptTokens:     120,
+		CompletionTokens: 40,
+		Model:            "risk-judge-9b",
+		Calls:            nil,
+		ParseFailures:    0,
+	}
+	filter := &recordingScopeFilter{drop: nil, err: errors.New("policy not found"), target: llmanalyzer.ScopeTarget{}, calls: 0}
+	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), stub)
+	h := llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, pub, metering.NewRiskRecorder(meterPub), llmanalyzer.WithFindingScopeFilter(filter))
+
+	require.NoError(t, h.Handle(t.Context(), newAnalysis("AKIA0000000000000000"), gcp.MessageMetadata{}))
+	require.Equal(t, 1, filter.calls)
+	require.Len(t, *findings, 1)
 }

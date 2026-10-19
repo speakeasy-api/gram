@@ -232,7 +232,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	if llmMode || llmShadow {
 		wg.Go(func() {
-			llmPublishFailed, llmPublishErr = a.publishLLMScanRequests(ctx, args, messages, llmOrgSlug, llmCoveredSources(sources), masks, llmShadow)
+			llmPublishFailed, llmPublishErr = a.publishLLMScanRequests(ctx, args, messages, llmOrgSlug, llmCoveredSources(sources), llmShadow)
 		})
 	}
 

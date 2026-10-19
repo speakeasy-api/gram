@@ -47,20 +47,57 @@ type Handler struct {
 	metrics      *scanners.AsyncScanHandlerMetrics
 	analyzer     *Analyzer
 	riskRecorder *metering.RiskRecorder
+	scopeFilter  FindingScopeFilter
 	disabledOnce sync.Once
+}
+
+// ScopeTarget is the policy and message a FindingScopeFilter evaluates,
+// mirroring the LLMAnalysis envelope.
+type ScopeTarget struct {
+	ProjectID         string
+	RiskPolicyID      string
+	RiskPolicyVersion int64
+	Content           string
+	MessageType       string
+	// ToolName and Body carry a single tool request without structured calls.
+	ToolName  string
+	Body      string
+	ToolCalls []ToolCall
+}
+
+// FindingScopeFilter applies a policy's detection scopes to the model's
+// findings after the scan; the legacy engines are prefiltered by the same
+// scopes. Implemented by the risk package.
+type FindingScopeFilter interface {
+	FilterFindings(ctx context.Context, target ScopeTarget, findings []scanners.Finding) ([]scanners.Finding, error)
+}
+
+// HandlerOption configures NewHandler.
+type HandlerOption func(*Handler)
+
+// WithFindingScopeFilter scopes findings before publishing.
+func WithFindingScopeFilter(filter FindingScopeFilter) HandlerOption {
+	return func(h *Handler) {
+		h.scopeFilter = filter
+	}
 }
 
 // NewHandler builds the async lane handler over analyzer. A disabled analyzer
 // (no model URL configured) makes the handler ack every message untouched.
-func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, analyzer *Analyzer, findingsPub gcp.Publisher[*riskv1.Finding], riskRecorder *metering.RiskRecorder) *Handler {
-	return &Handler{
+func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, analyzer *Analyzer, findingsPub gcp.Publisher[*riskv1.Finding], riskRecorder *metering.RiskRecorder, options ...HandlerOption) *Handler {
+	h := &Handler{
 		logger:       logger.With(attr.SlogComponent("llm-analyzer")),
 		findingsPub:  findingsPub,
 		metrics:      scanners.NewAsyncScanHandlerMetrics(meterProvider, logger),
 		analyzer:     analyzer,
 		riskRecorder: riskRecorder,
+		scopeFilter:  nil,
 		disabledOnce: sync.Once{},
 	}
+	for _, option := range options {
+		option(h)
+	}
+	return h
 }
 
 // Handle evaluates one message and publishes its findings. The return value
@@ -123,6 +160,21 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	if sources := m.GetSources(); len(sources) > 0 {
 		result.Findings = FindingsForSources(result.Findings, sources)
 	}
+	// Scopes prune the model's verdicts after the scan. A lookup failure
+	// publishes unscoped: an extra row beats a silently dropped verdict.
+	if h.scopeFilter != nil && len(result.Findings) > 0 {
+		scoped, scopeErr := h.scopeFilter.FilterFindings(ctx, scopeTarget(m), result.Findings)
+		if scopeErr != nil {
+			h.logger.WarnContext(ctx, "llm analyzer detection scopes unavailable; publishing unscoped findings",
+				attr.SlogError(scopeErr),
+				attr.SlogRiskScanRequestID(m.GetRequestId()),
+				attr.SlogRiskPolicyID(m.GetRiskPolicyId()),
+			)
+		} else {
+			result.Findings = scoped
+		}
+	}
+
 	// A shadow request publishes exactly like an enforcing one; the marker on
 	// each finding is what keeps the rows out of every user-facing read path
 	// while the comparison query can still join them with the legacy
@@ -190,6 +242,24 @@ func splitEnforcedFindings(findings []scanners.Finding) (enforced, compared []sc
 		compared = append(compared, f)
 	}
 	return enforced, compared
+}
+
+func scopeTarget(m *riskv1.LLMAnalysis) ScopeTarget {
+	calls := m.GetToolCalls()
+	toolCalls := make([]ToolCall, 0, len(calls))
+	for _, call := range calls {
+		toolCalls = append(toolCalls, ToolCall{ID: call.GetId(), Name: call.GetName(), Arguments: call.GetArguments()})
+	}
+	return ScopeTarget{
+		ProjectID:         m.GetProjectId(),
+		RiskPolicyID:      m.GetRiskPolicyId(),
+		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		Content:           m.GetContent(),
+		MessageType:       m.GetMessageType(),
+		ToolName:          m.GetToolName(),
+		Body:              m.GetBody(),
+		ToolCalls:         toolCalls,
+	}
 }
 
 // judgeMessage maps the request onto the judge message the analyzer renders,
