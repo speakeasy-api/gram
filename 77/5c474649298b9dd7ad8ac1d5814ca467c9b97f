@@ -1,0 +1,22 @@
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.test.tsx
+  h_9630b74bdac540 130
+client/dashboard/src/pages/org/identity-provider/DirectoryReviewPanel.tsx
+  h_9630b74bdac540 148-149
+.changeset/directory-review-ui.md
+  h_9630b74bdac540 1-5
+.changeset/directory-review-api.md
+  h_9630b74bdac540 1-5
+client/dashboard/src/pages/org/identity-provider/directoryReview.ts
+  h_9630b74bdac540 42-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "775c474649298b9dd7ad8ac1d5814ca467c9b97f",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
