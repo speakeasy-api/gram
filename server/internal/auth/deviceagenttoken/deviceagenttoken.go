@@ -13,6 +13,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/agents"
@@ -180,6 +181,9 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 	}
 
 	org, err := orgrepo.New(i.db).GetOrganizationMetadata(ctx, c.OrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ctx, fmt.Errorf("%w: organization not found", ErrInvalid)
+	}
 	if err != nil {
 		return ctx, fmt.Errorf("load device-agent token organization: %w", err)
 	}

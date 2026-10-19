@@ -304,6 +304,29 @@ func TestJWTAuth_WorkloadTokenRefusedOnOtherMethods(t *testing.T) {
 	requireShareableCode(t, err, oops.CodeForbidden)
 }
 
+// A workload refused at its project keeps that refusal when the request also
+// carries an API key: the key requirement Goa tries next does not authorize
+// on top of the workload's admission.
+func TestCodex_WorkloadRefusedAtItsProjectIsNotRescuedByAKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti)
+	other := otherReadableProject(t, ctx, ti, workload)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	grantAgentHooksFor(t, ctx, ti, workload, *authCtx.ProjectID)
+
+	refusedCtx, err := authenticateWorkload(t, ti, "codex", workload.token, other.Slug)
+	requireShareableCode(t, err, oops.CodeForbidden)
+
+	_, err = ti.service.APIKeyAuth(refusedCtx, "gram_key_not_a_real_key", &security.APIKeyScheme{
+		Name:           constants.KeySecurityScheme,
+		Scopes:         []string{},
+		RequiredScopes: []string{"hooks"},
+	})
+	requireShareableCode(t, err, oops.CodeForbidden)
+}
+
 // A workload whose agent lacks org:hooks_ingest is refused, as an agent key
 // without it is.
 func TestCursor_WorkloadTokenRefusedWithoutTheHooksGrant(t *testing.T) {
@@ -349,6 +372,19 @@ func TestJWTAuth_ExpiredWorkloadTokenIsRefused(t *testing.T) {
 		_, err := authenticateWorkload(t, ti, method, expired, workload.projectSlug)
 		requireShareableCode(t, err, oops.CodeUnauthorized)
 	}
+}
+
+// A token naming an organization that no longer exists is refused as
+// unauthorized rather than failing as a server error.
+func TestJWTAuth_TokenForMissingOrganizationIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti)
+
+	token, _, err := ti.service.deviceAgentTokens.Mint("org-"+uuid.NewString(), urn.NewWorkloadPrincipal(workload.issuerID, workload.subject), time.Now())
+	require.NoError(t, err)
+	_, err = authenticateWorkload(t, ti, "codex", token, workload.projectSlug)
+	requireShareableCode(t, err, oops.CodeUnauthorized)
 }
 
 // A token not signed by the platform key is refused on every ingest method.

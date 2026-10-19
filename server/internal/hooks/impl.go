@@ -335,6 +335,15 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 			return ctx, fmt.Errorf("device-agent token refused: %w", err)
 		}
 	}
+	// A workload admitted by its token and refused at its project reaches the
+	// key requirement with its admission still on the context. A key cannot
+	// authorize on top of that admission, so the workload's refusal stands.
+	if schema.Name == constants.KeySecurityScheme && deviceagenttoken.IsWorkloadActor(ctx) {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+		return ctx, oops.C(oops.CodeForbidden)
+	}
 	if schema.Name == constants.ProjectSlugSecuritySchema && deviceagenttoken.IsWorkloadActor(ctx) {
 		return s.authorizeWorkloadProject(ctx, key, schema)
 	}
