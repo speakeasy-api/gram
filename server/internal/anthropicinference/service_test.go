@@ -396,8 +396,7 @@ func TestServiceDoesNotWaitOnUnacceptedBacklog(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		frame := backlogFrame()
-		// Everything but the current turn is archived, and nothing is accepted,
-		// as after deliveries the upstream timeout cut off.
+		// Archived but never accepted, as after timed-out deliveries.
 		store := &deltaStore{memoryStore: memoryStore{}, newStart: 4}
 		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{delay: 100 * time.Millisecond, stall: "stall"}}
 		start := time.Now()
@@ -407,13 +406,30 @@ func TestServiceDoesNotWaitOnUnacceptedBacklog(t *testing.T) {
 		require.Equal(t, backlogBudget, time.Since(start))
 		require.Equal(t, transcriptHashes(frame.Messages[:2]), store.accepted)
 
-		// The next delivery resumes the backlog where the last one stopped.
 		retry := &recordingScanner{}
 		service.scanner = retry
 		verdict, err = service.Process(t.Context(), Config{}, frame)
 		require.NoError(t, err)
 		require.Equal(t, "allow", verdict.Action)
 		require.Equal(t, []string{"stall", "second reply", "new prompt"}, []string{retry.inputs[0].text, retry.inputs[1].text, retry.inputs[2].text})
+		require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
+	})
+}
+
+func TestServiceBacklogWindowStartsAfterLiveInputs(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		frame := exampleFrame()
+		frame.Messages = []Message{textMessage("user", "old prompt"), textMessage("assistant", "old reply")}
+		// A current turn with more inputs than scan slots.
+		for i := range scanConcurrency + 2 {
+			frame.Messages = append(frame.Messages, textMessage("user", fmt.Sprintf("new prompt %d", i)))
+		}
+		store := &deltaStore{memoryStore: memoryStore{}, newStart: 2}
+		service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &fakeScanner{delay: 600 * time.Millisecond}}
+		verdict, err := service.Process(t.Context(), Config{}, frame)
+		require.NoError(t, err)
+		require.Equal(t, "allow", verdict.Action)
 		require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
 	})
 }

@@ -31,13 +31,9 @@ import (
 )
 
 const (
-	// verdictBudget caps risk evaluation so the whole exchange fits Anthropic's
-	// default 5-second verdict timeout. Earlier request work can shorten it to
-	// preserve checkpoint and response headroom.
+	// verdictBudget fits the exchange within Anthropic's default 5-second timeout.
 	verdictBudget = 3750 * time.Millisecond
-	// backlogBudget bounds how long a verdict waits on stored content the
-	// checkpoint has not accepted yet. What it leaves unscanned is picked up by
-	// the next delivery.
+	// backlogBudget bounds how long a verdict waits on unaccepted stored content.
 	backlogBudget = time.Second
 	// scanConcurrency bounds how many inputs of one transcript are evaluated
 	// at once.
@@ -186,8 +182,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 			attr.SlogInferenceInputCount(len(inputs)-scope.start), attr.SlogInferenceAcceptedMessages(cleanThrough))
 		verdict = denyVerdict(unavailableDenyReason)
 	}
-	// Every acceptance takes a fresh token, so a fully accepted frame is
-	// accepted again even when the marker would not move.
+	// Re-accepting a complete frame refreshes the marker's token.
 	advances, fullyAccepted := cleanThrough > matched, cleanThrough == len(messages)
 	if advances || fullyAccepted {
 		if err := s.accept(ctx, session, hashes[:cleanThrough], verdict); err != nil {
@@ -197,8 +192,7 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 	return verdict, nil
 }
 
-// verdictContext caps evaluation at verdictBudget and keeps checkpoint and
-// response headroom before the caller's own deadline.
+// verdictContext keeps checkpoint and response headroom before ctx's deadline.
 func verdictContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	duration := verdictBudget
 	if deadline, ok := ctx.Deadline(); ok {
@@ -207,12 +201,8 @@ func verdictContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, duration)
 }
 
-// scanRange holds message positions: [start, live) is backlog and [live, end)
-// gates the verdict. The verdict waits on content the archive has not seen
-// and on the current turn. Stored content the checkpoint never accepted (a
-// delivery cut off by the upstream timeout, a policy change) is backlog: it is
-// scanned in the time left and accepted as it clears, so a long backlog cannot
-// make every later delivery time out.
+// scanRange holds message positions: [start, live) is stored content the
+// checkpoint never accepted (backlog), and [live, end) gates the verdict.
 type scanRange struct{ start, live int }
 
 func newScanRange(messages []Message, accepted, fresh int) scanRange {
@@ -220,8 +210,7 @@ func newScanRange(messages []Message, accepted, fresh int) scanRange {
 	return scanRange{start: min(accepted, live), live: live}
 }
 
-// inputs converts the range to indexes into the transcript's policy inputs.
-// Inputs are in message order, so backlog is a contiguous block.
+// inputs maps the range onto policy-input indexes, which follow message order.
 func (r scanRange) inputs(inputs []policyInput) scanRange {
 	return scanRange{start: firstInputAt(inputs, r.start), live: firstInputAt(inputs, r.live)}
 }
@@ -233,15 +222,11 @@ func firstInputAt(inputs []policyInput, message int) int {
 	return len(inputs)
 }
 
-// scanInputs evaluates inputs[scope.start:], live inputs first so they take
-// the scan slots before backlog. Backlog gets at most backlogBudget, and a
-// backlog scanner error only leaves that input unevaluated.
+// scanInputs scans live inputs before backlog; backlog errors only leave inputs unevaluated.
 func (s *Service) scanInputs(ctx context.Context, config Config, frame Frame, userID string, inputs []policyInput, scope scanRange) ([]inputScan, error) {
 	scans := make([]inputScan, len(inputs))
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(scanConcurrency)
-	backlogCtx, cancelBacklog := context.WithTimeout(groupCtx, backlogBudget)
-	defer cancelBacklog()
 	submit := func(scanCtx context.Context, from, to int, backlog bool) {
 		for index := from; index < to && scanCtx.Err() == nil; index++ {
 			group.Go(func() error {
@@ -256,7 +241,6 @@ func (s *Service) scanInputs(ctx context.Context, config Config, frame Frame, us
 				case scanCtx.Err() != nil:
 					return nil
 				case backlog:
-					// Left unevaluated, so the checkpoint stops short of it.
 					s.logger.WarnContext(ctx, "scan inference backlog input", attr.SlogError(err))
 					return nil
 				default:
@@ -275,6 +259,9 @@ func (s *Service) scanInputs(ctx context.Context, config Config, frame Frame, us
 		}
 	}
 	submit(groupCtx, scope.live, len(inputs), false)
+	// The backlog window opens once every live input holds a slot.
+	backlogCtx, cancelBacklog := context.WithTimeout(groupCtx, backlogBudget)
+	defer cancelBacklog()
 	submit(backlogCtx, scope.start, scope.live, true)
 	if err := group.Wait(); err != nil && !errors.Is(err, errPolicyDenied) {
 		return nil, fmt.Errorf("evaluate inference policy: %w", err)
@@ -282,7 +269,6 @@ func (s *Service) scanInputs(ctx context.Context, config Config, frame Frame, us
 	return scans, nil
 }
 
-// firstDenial is the first scan result that matched a denying policy.
 func firstDenial(scans []inputScan) *risk.ScanResult {
 	for _, scan := range scans {
 		if denies(scan.result) {
@@ -305,9 +291,7 @@ func cleanPrefix(inputs []policyInput, scans []inputScan, start, messages int) i
 	return messages
 }
 
-// accept records hashes as the accepted checkpoint. The scan budget may
-// already be spent, so the marker gets its own short window and a slow write
-// cannot push the verdict past the provider's timeout.
+// accept gets its own window because the scan budget may already be spent.
 func (s *Service) accept(ctx context.Context, session checkpointSession, hashes [][]byte, verdict Verdict) error {
 	acceptCtx, cancel := context.WithTimeout(ctx, checkpointBudget)
 	defer cancel()

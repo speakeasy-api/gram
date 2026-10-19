@@ -100,8 +100,7 @@ func parseMessageIdentity(externalID string, content []byte) messageIdentity {
 //
 // This archival heuristic deliberately treats a new message identical to an
 // anchor as already stored. Rewritten newest messages can fall back to the next
-// few stored anchors. Enforcement only uses it to choose what the verdict waits
-// on; acceptance always goes through acceptedPrefix.
+// few stored anchors. Acceptance never uses this heuristic.
 func alignTranscript(stored []messageIdentity, frame []Message) (start int, prev []byte, ok bool) {
 	// Cache hashes lazily so fallback anchors do not rehash the same messages.
 	hashes := make([][]byte, len(frame))
