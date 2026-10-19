@@ -4,14 +4,14 @@ info:
   title: Dashboard SDK policy
   version: 0.0.0
 actions:
-  # Keep the legacy HTTP route for already-open tabs, not for new SDK callers.
-  - target: $.paths["/rpc/access.setDirectoryRoleMapping"]
-    remove: true
   # A single-value enum is not auto-opened by the generator's global default.
   # This response reason can grow independently of the dashboard release.
   - target: $.components.schemas.OktaResourceConnectionServer.properties.not_applicable_reason
     update:
       x-speakeasy-unknown-values: allow
+  # Keep the legacy HTTP route for already-open tabs, not for new SDK callers.
+  - target: $.paths["/rpc/access.setDirectoryRoleMapping"]
+    remove: true
   # Keep established Dashboard model names while sourcing their contracts from Goa.
   - target: $.components.schemas.SetOrganizationFeatureRequestBody
     update:
