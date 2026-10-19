@@ -18,6 +18,7 @@ import {
   type ReactNode,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -37,6 +38,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Combobox, type DropdownItem } from "@/components/ui/Combobox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/Popover";
 import { SearchBar } from "@/components/ui/SearchBar";
 import {
   Select,
@@ -83,8 +89,17 @@ import {
 } from "./directoryMappingFlow";
 
 import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAccess";
+import { visibleChipCount } from "./chipOverflow";
 
 const CREATE_ROLE = "__create_role";
+
+// Roles take most of the row so more of a source's role set fits on its one
+// line. The attribute add row's grid-cols class repeats this split (1fr 2fr,
+// then the mark column) to line up with the table.
+const SOURCE_COLUMN = "1fr";
+const ROLES_COLUMN = "2fr";
+// Matches gap-2 between role chips.
+const CHIP_GAP = 8;
 
 /** One directory group or attribute value and the roles it grants. */
 type SourceRow = {
@@ -389,6 +404,7 @@ function MappingTable({
     {
       key: "source",
       header: sourceHeader,
+      width: SOURCE_COLUMN,
       render: (row) => (
         <div className="min-w-0">
           <Text className="truncate font-medium">{row.label}</Text>
@@ -407,7 +423,7 @@ function MappingTable({
     {
       key: "role",
       header: "Roles",
-      width: "280px",
+      width: ROLES_COLUMN,
       render: (row) => (
         <RolePicker row={row} roles={roles} refreshMappings={refreshMappings} />
       ),
@@ -509,48 +525,51 @@ function AttributeMappings({
         )}
 
         {/* The add row sits under the table and lines up with its columns:
-          attribute and value take the source column, then the role. */}
+          attribute and value take the source column, then the role, then
+          the mark column's width. */}
         <div
           className={cn(
-            "border-border flex items-center gap-3 border px-4 py-3",
+            "border-border grid grid-cols-[1fr_2fr_4rem] items-center gap-3 border px-4 py-3",
             rows.length > 0 && "border-t-0",
           )}
         >
-          <Select
-            value={attributeKey}
-            onValueChange={(key) => {
-              setAttributeKey(key);
-              setAttributeValue("");
-            }}
-          >
-            <SelectTrigger className="min-w-0 flex-1" aria-label="Attribute">
-              <SelectValue placeholder="Attribute" />
-            </SelectTrigger>
-            <SelectContent>
-              {keys.map((key) => (
-                <SelectItem key={key} value={key}>
-                  {key}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={attributeValue}
-            onValueChange={setAttributeValue}
-            disabled={attributeKey === ""}
-          >
-            <SelectTrigger className="min-w-0 flex-1" aria-label="Value">
-              <SelectValue placeholder="Value" />
-            </SelectTrigger>
-            <SelectContent>
-              {values.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.value} ({option.memberCount})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="w-[280px] shrink-0">
+          <div className="flex min-w-0 items-center gap-3">
+            <Select
+              value={attributeKey}
+              onValueChange={(key) => {
+                setAttributeKey(key);
+                setAttributeValue("");
+              }}
+            >
+              <SelectTrigger className="min-w-0 flex-1" aria-label="Attribute">
+                <SelectValue placeholder="Attribute" />
+              </SelectTrigger>
+              <SelectContent>
+                {keys.map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {key}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={attributeValue}
+              onValueChange={setAttributeValue}
+              disabled={attributeKey === ""}
+            >
+              <SelectTrigger className="min-w-0 flex-1" aria-label="Value">
+                <SelectValue placeholder="Value" />
+              </SelectTrigger>
+              <SelectContent>
+                {values.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.value} ({option.memberCount})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0">
             <RolePicker
               row={draft}
               roles={roles}
@@ -566,8 +585,6 @@ function AttributeMappings({
               }}
             />
           </div>
-          {/* Keeps the role picker in line with the table's mark column. */}
-          <div className="w-16 shrink-0" />
         </div>
       </div>
     </>
@@ -677,28 +694,19 @@ function RolePicker({
     }
     void changeRole(value);
   };
+  const chips = row.mappings.map((mapping) => ({
+    id: mapping.id,
+    name:
+      roles.find((role) => role.principalUrn === mapping.roleUrn)?.name ??
+      "Deleted role",
+  }));
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {row.mappings.map((mapping) => {
-        const name =
-          roles.find((role) => role.principalUrn === mapping.roleUrn)?.name ??
-          "Deleted role";
-        return (
-          <span
-            key={mapping.id}
-            className="bg-muted/40 border-border inline-flex max-w-full items-center gap-1 rounded-md border pl-2 text-sm"
-          >
-            <span className="truncate" title={name}>
-              {name}
-            </span>
-            <RemoveMappingButton
-              label={`${name} from ${row.label}`}
-              disabled={saving || !!disabledMessage}
-              onRemove={() => remove.mutate({ request: { id: mapping.id } })}
-            />
-          </span>
-        );
-      })}
+    <RoleChips
+      chips={chips}
+      sourceLabel={row.label}
+      disabled={saving || !!disabledMessage}
+      onRemove={(id) => remove.mutate({ request: { id } })}
+    >
       <Combobox
         items={items}
         selected={undefined}
@@ -715,7 +723,198 @@ function RolePicker({
           {saving ? "Saving…" : "Add role"}
         </span>
       </Combobox>
+    </RoleChips>
+  );
+}
+
+type RoleChipItem = { id: string; name: string };
+
+/**
+ * A source's roles on one line, so a row keeps the same height however many
+ * roles the source grants. The chips that fit are shown in order; the rest
+ * collapse into a "+N more" chip that opens the whole set, each role still
+ * removable there. `children` (the add control) always stays visible after
+ * the chips. Until the line can be measured (no layout yet, or in tests)
+ * every chip is shown.
+ */
+function RoleChips({
+  chips,
+  sourceLabel,
+  disabled,
+  onRemove,
+  children,
+}: {
+  chips: RoleChipItem[];
+  sourceLabel: string;
+  disabled: boolean;
+  onRemove: (id: string) => void;
+  children: ReactNode;
+}): JSX.Element {
+  const lineRef = useRef<HTMLDivElement>(null);
+  const addRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [canMeasure, setCanMeasure] = useState(false);
+  const [visible, setVisible] = useState<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const chipKey = chips.map((chip) => `${chip.id}:${chip.name}`).join("|");
+
+  useLayoutEffect(() => {
+    const line = lineRef.current;
+    if (!line) return;
+    const measure = () => {
+      if (line.clientWidth === 0) {
+        setCanMeasure(false);
+        setVisible(null);
+        return;
+      }
+      setCanMeasure(true);
+      const layer = measureRef.current;
+      if (!layer) return;
+      const sizes = [...layer.children].map(
+        (child) => (child as HTMLElement).offsetWidth,
+      );
+      // The layer holds every chip, then a sample overflow chip.
+      const overflowWidth = sizes.pop() ?? 0;
+      const addWidth = addRef.current?.offsetWidth ?? 0;
+      const available = line.clientWidth - addWidth - CHIP_GAP;
+      const next = visibleChipCount(sizes, available, CHIP_GAP, overflowWidth);
+      setVisible((previous) => (previous === next ? previous : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(line);
+    // The add control changes width while it saves.
+    if (addRef.current) observer.observe(addRef.current);
+    // Chips can change width when the web font lands, so measure again then.
+    let live = true;
+    void document.fonts?.ready.then(() => live && measure());
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
+  }, [chipKey, canMeasure]);
+
+  const shown = visible === null ? chips : chips.slice(0, visible);
+  const hidden = chips.length - shown.length;
+  // Once every role fits again the overflow chip goes, and so does its
+  // popover; reset it so it doesn't reopen when roles overflow later.
+  if (hidden === 0 && open) setOpen(false);
+
+  return (
+    <div ref={lineRef} className="relative flex h-8 min-w-0 items-center gap-2">
+      {shown.map((chip) => (
+        <RoleChip
+          key={chip.id}
+          chip={chip}
+          sourceLabel={sourceLabel}
+          disabled={disabled}
+          onRemove={onRemove}
+        />
+      ))}
+      {hidden > 0 && (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-8 shrink-0 px-2"
+              aria-label={`Show all ${chips.length} roles from ${sourceLabel}`}
+            >
+              {overflowLabel(hidden, shown.length)}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            ref={popoverRef}
+            tabIndex={-1}
+            align="start"
+            className="w-[min(24rem,90vw)] p-3"
+            // Focus the panel, not its first remove button, so opening it
+            // doesn't pop that button's tooltip over the heading; Tab still
+            // moves straight into the roles.
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              popoverRef.current?.focus();
+            }}
+          >
+            <Text small muted className="mb-2">
+              {pluralize(chips.length, "role")} from {sourceLabel}
+            </Text>
+            <div className="flex max-h-64 flex-wrap gap-2 overflow-y-auto">
+              {chips.map((chip) => (
+                <RoleChip
+                  key={chip.id}
+                  chip={chip}
+                  sourceLabel={sourceLabel}
+                  disabled={disabled}
+                  onRemove={onRemove}
+                />
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+      <div ref={addRef} className="shrink-0">
+        {children}
+      </div>
+      {/* An invisible copy of every chip, plus the widest overflow chip, so
+        the line can work out how many fit without showing them first. */}
+      {canMeasure && (
+        // Clipped to the line so the copy never widens a scrolling table.
+        <div
+          aria-hidden
+          className="pointer-events-none invisible absolute inset-0 overflow-hidden"
+        >
+          <div ref={measureRef} className="flex w-max gap-2 whitespace-nowrap">
+            {chips.map((chip) => (
+              <RoleChip key={chip.id} chip={chip} sourceLabel="" placeholder />
+            ))}
+            <span className="inline-flex h-8 items-center px-2 text-sm">
+              {overflowLabel(chips.length, 1)}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function overflowLabel(hidden: number, shown: number): string {
+  return shown === 0 ? pluralize(hidden, "role") : `+${hidden} more`;
+}
+
+/**
+ * One role a source grants, with its remove control. A placeholder chip has
+ * the same size but no control, for measuring.
+ */
+function RoleChip({
+  chip,
+  sourceLabel,
+  disabled = false,
+  onRemove,
+  placeholder = false,
+}: {
+  chip: RoleChipItem;
+  sourceLabel: string;
+  disabled?: boolean;
+  onRemove?: (id: string) => void;
+  placeholder?: boolean;
+}): JSX.Element {
+  return (
+    <span className="bg-muted/40 border-border inline-flex h-8 max-w-48 shrink-0 items-center gap-1 rounded-md border pl-2 text-sm">
+      <span className="truncate" title={chip.name}>
+        {chip.name}
+      </span>
+      {placeholder ? (
+        <span className="size-8 shrink-0" />
+      ) : (
+        <RemoveMappingButton
+          label={`${chip.name} from ${sourceLabel}`}
+          disabled={disabled}
+          onRemove={() => onRemove?.(chip.id)}
+        />
+      )}
+    </span>
   );
 }
 

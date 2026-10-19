@@ -8,8 +8,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import {
-  pendingMappingFromParams,
   completeCreateRoleFlow,
+  pendingMappingFromParams,
   startCreateRoleFlow,
 } from "./directoryMappingFlow";
 
@@ -17,8 +17,8 @@ import type { DirectoryRoleMapping } from "@gram/client/models/components/direct
 import { DirectoryRoleMappings } from "./DirectoryRoleMappings";
 import { MemoryRouter } from "react-router";
 import type { Role } from "@gram/client/models/components/role.js";
-import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAccess";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAccess";
 
 const mocks = vi.hoisted(() => ({
   save: vi.fn(),
@@ -141,7 +141,10 @@ beforeEach(() => {
   mocks.mappings = [mapping("Base"), mapping("Tools")];
   window.sessionStorage.clear();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("directory source role sets", () => {
   it("shows both roles and only offers unmapped roles to add", async () => {
@@ -317,6 +320,44 @@ describe("directory source role sets", () => {
       expectedRoleUrns: ["role:organization:Tools"],
       roleUrns: ["role:organization:Tools", "role:organization:Support"],
     });
+  });
+
+  it("collapses roles that don't fit on the row behind a +N more chip", () => {
+    mocks.mappings = [mapping("Base"), mapping("Tools"), mapping("Support")];
+    // A 300px line: each role chip is 100px, the add control 80px and the
+    // overflow chip 60px, so one chip fits beside the overflow chip.
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.textContent?.startsWith("+")) return 60;
+        if (this.className.includes("max-w-48")) return 100;
+        return 80;
+      },
+    );
+    renderMappings();
+
+    const removeButtons = () =>
+      screen
+        .getAllByRole("button", { name: /^Remove / })
+        .map((button) => button.getAttribute("aria-label"));
+    expect(removeButtons()).toEqual(["Remove Base from Engineering"]);
+    const more = screen.getByRole("button", {
+      name: "Show all 3 roles from Engineering",
+    });
+    expect(more.textContent).toBe("+2 more");
+
+    fireEvent.click(more);
+    expect(screen.getByText("3 roles from Engineering")).toBeDefined();
+    expect(removeButtons()).toEqual([
+      "Remove Base from Engineering",
+      "Remove Base from Engineering",
+      "Remove Tools from Engineering",
+      "Remove Support from Engineering",
+    ]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove Support from Engineering" }),
+    );
+    expect(mocks.remove).toHaveBeenCalledWith({ request: { id: "Support" } });
   });
 
   it("does not save when the mapping refresh fails", async () => {
