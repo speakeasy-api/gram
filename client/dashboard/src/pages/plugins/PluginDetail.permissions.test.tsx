@@ -292,10 +292,26 @@ describe("plugin detail permission boundary", () => {
           mcpEnabled: true,
           tools: [],
         },
+        {
+          id: "toolset-e",
+          name: "Ledger",
+          slug: "ledger",
+          mcpEnabled: true,
+          mcpSlug: "ledger",
+          tools: [],
+        },
       ],
     };
     serverData.mcpServers = {
       mcpServers: [
+        // Billing's canonical MCP server; Ledger has none.
+        {
+          id: "toolset-b",
+          name: "Billing",
+          slug: "billing",
+          toolsetId: "toolset-b",
+          visibility: "private",
+        },
         {
           id: "remote-a",
           name: "Linear",
@@ -341,6 +357,12 @@ describe("plugin detail permission boundary", () => {
         "Set an MCP address for this server before adding it to a plugin.",
       ),
     ).toBeTruthy();
+    // A hosted toolset without a canonical MCP server is rejected by the API too.
+    expect(
+      (screen.getByRole("checkbox", { name: "Ledger" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByText("No MCP server")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     await act(async () => {
       fireEvent.click(

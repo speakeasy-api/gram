@@ -2901,17 +2901,18 @@ func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, 
 }
 
 const insertToolsetKeyedMcpMetadataFixture = `-- name: InsertToolsetKeyedMcpMetadataFixture :one
-INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id, external_documentation_url)
+VALUES ($1, $2, $3, COALESCE($4::jsonb, '{}'::jsonb), $5, $6)
 RETURNING id
 `
 
 type InsertToolsetKeyedMcpMetadataFixtureParams struct {
-	ToolsetID            uuid.NullUUID
-	ProjectID            uuid.UUID
-	Instructions         pgtype.Text
-	HeaderDisplayNames   []byte
-	DefaultEnvironmentID uuid.NullUUID
+	ToolsetID                uuid.NullUUID
+	ProjectID                uuid.UUID
+	Instructions             pgtype.Text
+	HeaderDisplayNames       []byte
+	DefaultEnvironmentID     uuid.NullUUID
+	ExternalDocumentationUrl pgtype.Text
 }
 
 // Plants a row under the toolset key, as pods from before the server-key writers wrote.
@@ -2922,6 +2923,7 @@ func (q *Queries) InsertToolsetKeyedMcpMetadataFixture(ctx context.Context, arg 
 		arg.Instructions,
 		arg.HeaderDisplayNames,
 		arg.DefaultEnvironmentID,
+		arg.ExternalDocumentationUrl,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

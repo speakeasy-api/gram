@@ -2041,8 +2041,8 @@ VALUES (@project_id, @chat_id, @message_id, @provider, @provider_user_id, sqlc.n
 
 -- name: InsertToolsetKeyedMcpMetadataFixture :one
 -- Plants a row under the toolset key, as pods from before the server-key writers wrote.
-INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id)
-VALUES (@toolset_id, @project_id, @instructions, @header_display_names, @default_environment_id)
+INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id, external_documentation_url)
+VALUES (@toolset_id, @project_id, @instructions, COALESCE(sqlc.narg('header_display_names')::jsonb, '{}'::jsonb), @default_environment_id, sqlc.narg('external_documentation_url'))
 RETURNING id;
 
 -- name: InsertToolsetKeyedPluginServerFixture :one
