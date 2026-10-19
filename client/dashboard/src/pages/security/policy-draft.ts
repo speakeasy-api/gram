@@ -62,20 +62,51 @@ function toAction(value: string): PolicyAction {
   return ACTIONS.has(value) ? (value as PolicyAction) : "flag";
 }
 
+// Sources the editors can round-trip through policyToCategories and
+// categoriesToPayload. Unknown sources must not disappear during an edit.
+const SUPPORTED_SOURCES: ReadonlySet<string> = new Set([
+  "gitleaks",
+  "presidio",
+  "shadow_mcp",
+  "destructive_tool",
+  "cli_destructive",
+  "prompt_injection",
+  "account_identity",
+]);
+
+function supportsSources(sources: readonly string[]): boolean {
+  return sources.every((source) => SUPPORTED_SOURCES.has(source));
+}
+
+function draftSources(sources: readonly string[]): string[] {
+  if (!supportsSources(sources)) {
+    throw new Error(
+      "This policy's detectors are not supported by this version of Speakeasy. Refresh the page before editing.",
+    );
+  }
+  return [...sources];
+}
+
 export function supportsPolicyDraft(source: {
   policyType: string;
   action: string;
+  sources: readonly string[];
 }): boolean {
   return (
     isKnownEnumValue(RiskPolicyPolicyType, source.policyType) &&
-    isKnownEnumValue(RiskPolicyAction, source.action)
+    isKnownEnumValue(RiskPolicyAction, source.action) &&
+    supportsSources(source.sources)
   );
 }
 
 export function supportsPolicyEditing(
   policy: Pick<
     RiskPolicy,
-    "policyType" | "action" | "audienceType" | "shadowMcpDisposition"
+    | "policyType"
+    | "action"
+    | "audienceType"
+    | "shadowMcpDisposition"
+    | "sources"
   >,
 ): boolean {
   return (
@@ -96,7 +127,7 @@ export function draftFromPreset(preset: RiskPreset): PolicyDraft {
     name: preset.label,
     action: requireKnownEnumValue(RiskPolicyAction, preset.action),
     score: preset.score,
-    sources: [...preset.sources],
+    sources: draftSources(preset.sources),
     presidioEntities: [...preset.presidioEntities],
     prompt: preset.prompt,
     userMessage: preset.userMessage,
@@ -117,7 +148,7 @@ export function draftFromSuggestion(
     name: suggestion.name,
     action: requireKnownEnumValue(RiskPolicyAction, suggestion.action),
     score: suggestion.score,
-    sources: [...suggestion.sources],
+    sources: draftSources(suggestion.sources),
     presidioEntities: [...suggestion.presidioEntities],
     prompt: suggestion.prompt,
     userMessage: suggestion.userMessage,
@@ -189,7 +220,9 @@ export function readPolicyDraft(state: unknown): PolicyDraft | null {
   const draft = candidate as Partial<PolicyDraft>;
   if (
     (draft.policyType !== "standard" && draft.policyType !== "prompt_based") ||
-    typeof draft.name !== "string"
+    typeof draft.name !== "string" ||
+    (draft.sources !== undefined &&
+      (!Array.isArray(draft.sources) || !supportsSources(draft.sources)))
   ) {
     return null;
   }

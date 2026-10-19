@@ -260,6 +260,59 @@ describe("policy start session", () => {
 });
 
 describe("policy forward compatibility", () => {
+  it.each([["future_detector"], ["gitleaks", "future_detector"]])(
+    "rejects unsupported detector sources %j before editing or drafting",
+    (...sources) => {
+      const preset = { ...secretsPreset, sources };
+      const suggestion = { ...refundSuggestion, sources };
+      expect(
+        supportsPolicyEditing({ ...preset, audienceType: "everyone" }),
+      ).toBe(false);
+      expect(supportsPolicyDraft(preset)).toBe(false);
+      expect(supportsPolicyDraft(suggestion)).toBe(false);
+      expect(() => draftFromPreset(preset)).toThrow("not supported");
+      expect(() => draftFromSuggestion(suggestion)).toThrow("not supported");
+      expect(
+        readPolicyDraft({ draft: { ...preset, name: "Example policy" } }),
+      ).toBeNull();
+    },
+  );
+
+  it.each([
+    "gitleaks",
+    "presidio",
+    "shadow_mcp",
+    "destructive_tool",
+    "cli_destructive",
+    "prompt_injection",
+    "account_identity",
+  ])("preserves supported detector source %s", (source) => {
+    const preset = { ...secretsPreset, sources: [source] };
+    const suggestion = { ...refundSuggestion, sources: [source] };
+    expect(supportsPolicyEditing({ ...preset, audienceType: "everyone" })).toBe(
+      true,
+    );
+    expect(supportsPolicyDraft(preset)).toBe(true);
+    expect(supportsPolicyDraft(suggestion)).toBe(true);
+    expect(draftFromPreset(preset).sources).toEqual([source]);
+    expect(draftFromSuggestion(suggestion).sources).toEqual([source]);
+  });
+
+  it.each(["standard", "prompt_based"] as const)(
+    "allows empty sources for %s policies and drafts",
+    (policyType) => {
+      const preset = { ...secretsPreset, policyType, sources: [] };
+      const suggestion = { ...refundSuggestion, policyType, sources: [] };
+      expect(
+        supportsPolicyEditing({ ...preset, audienceType: "everyone" }),
+      ).toBe(true);
+      expect(supportsPolicyDraft(preset)).toBe(true);
+      expect(supportsPolicyDraft(suggestion)).toBe(true);
+      expect(draftFromPreset(preset).sources).toEqual([]);
+      expect(draftFromSuggestion(suggestion).sources).toEqual([]);
+    },
+  );
+
   it.each(["policyType", "action"] as const)(
     "refuses to convert an unknown %s to a supported draft",
     (field) => {

@@ -1,6 +1,10 @@
-import { enumPresentation } from "@/lib/enum";
+import { enumPresentation, isKnownEnumValue } from "@/lib/enum";
 import type { ExplainedAccessLevel } from "@gram/client/models/components/explainedaccesslevel.js";
-import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
+import {
+  AppliesTo,
+  Effect,
+  type ExplainedAccessRule,
+} from "@gram/client/models/components/explainedaccessrule.js";
 import type { ExplainResourceAccessResult } from "@gram/client/models/components/explainresourceaccessresult.js";
 import type { Badge } from "@/components/ui/Badge";
 import type { ComponentProps } from "react";
@@ -336,8 +340,14 @@ export function groupRules(
   });
 }
 
-/** A rule's own access type, without inferring semantics for future levels. */
+/** A rule's own access type, only when its reach and effect are understood. */
 export function ruleAccessTone(rule: ExplainedAccessRule): AccessTone {
+  if (
+    !isKnownEnumValue(AppliesTo, rule.appliesTo) ||
+    !isKnownEnumValue(Effect, rule.effect)
+  ) {
+    return "none";
+  }
   switch (rule.level) {
     case "use":
     case "view":
@@ -403,8 +413,15 @@ export function effectNote(
 ): string {
   switch (rule.effect) {
     case "allows":
-      if (rule.appliesTo === "resource") return "Defined on this server.";
-      return "Inherited from a rule covering more servers.";
+      switch (rule.appliesTo) {
+        case "resource":
+          return "Defined on this server.";
+        case "project":
+        case "all_resources":
+          return "Inherited from a rule covering more servers.";
+        default:
+          return "Rule reach unavailable.";
+      }
     case "overrides":
       return `Direct grants that name ${serverName} override blocks from roles and everyone.`;
     case "blocks":

@@ -13,20 +13,27 @@ vi.mock("@/components/page-layout", () => ({
   },
 }));
 afterEach(cleanup);
-it("keeps an unsupported policy readable without exposing an editor", () => {
-  const policy = {
-    name: "Example guardrail",
-    action: unrecognized("future_action"),
-    policyType: "standard",
-    audienceType: "everyone",
-    enabled: true,
-    prompt: "Keep confidential content private.",
-  } as RiskPolicy;
-  render(<PolicyEditorFor policy={policy} />);
-  expect(screen.getByRole("heading", { name: policy.name })).toBeTruthy();
-  expect(screen.getByText(policy.prompt!)).toBeTruthy();
-  expect(screen.getByText("Unknown")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Refresh page" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
-  expect(screen.queryByRole("textbox")).toBeNull();
-});
+it.each([
+  { action: unrecognized("future_action"), sources: ["gitleaks"] },
+  { action: "block", sources: ["future_detector"] },
+  { action: "block", sources: ["gitleaks", "future_detector"] },
+])(
+  "keeps an unsupported policy readable without exposing an editor: %j",
+  (settings) => {
+    const policy = {
+      name: "Example guardrail",
+      ...settings,
+      policyType: "standard",
+      audienceType: "everyone",
+      enabled: true,
+      prompt: "Keep confidential content private.",
+    } as RiskPolicy;
+    render(<PolicyEditorFor policy={policy} />);
+    expect(screen.getByRole("heading", { name: policy.name })).toBeTruthy();
+    expect(screen.getByText(policy.prompt!)).toBeTruthy();
+    expect(screen.getByText(/cannot safely edit/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refresh page" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  },
+);

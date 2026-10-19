@@ -7,6 +7,7 @@ import {
   accessDecision,
   directorySourceLabel,
   effectNote,
+  effectBadge,
   groupRules,
   levelStatus,
   ruleAccessLabel,
@@ -534,3 +535,67 @@ describe("rule access types", () => {
     },
   );
 });
+
+describe.each(["appliesTo", "effect"] as const)("unknown rule %s", (field) => {
+  it.each(["future_value", "constructor", "__proto__"])(
+    "keeps grant and block levels neutral for %s",
+    (value) => {
+      for (const accessLevel of ["manage", "blocked"] as const) {
+        const unknown = rule({
+          displayName: "Analyst",
+          level: accessLevel,
+          effect: "allows",
+          [field]: unrecognized(value),
+        });
+        expect(ruleAccessTone(unknown)).toBe("none");
+        expect(ruleAccessLabel(unknown, "use")).toBe("Unknown access");
+        expect(
+          effectNote(unknown, level({ level: "use" }), "Person", "Server"),
+        ).toBe(
+          field === "appliesTo"
+            ? "Rule reach unavailable."
+            : "Access effect unavailable.",
+        );
+        expect(effectBadge(unknown)).toEqual(
+          field === "appliesTo"
+            ? { label: "Allows", variant: "success" }
+            : { label: "Unknown", variant: "neutral" },
+        );
+      }
+    },
+  );
+});
+
+it.each(["resource", "project", "all_resources"] as const)(
+  "preserves known %s rule reach and lost-rule descriptions",
+  (appliesTo) => {
+    const grant = rule({
+      displayName: "Analyst",
+      level: "manage",
+      effect: "blocked",
+      appliesTo,
+    });
+    const block = rule({
+      displayName: "Analyst",
+      level: "blocked",
+      effect: "overridden",
+      appliesTo,
+    });
+    expect(ruleAccessTone(grant)).toBe("allowed");
+    expect(ruleAccessLabel(grant, "use")).toBe("Manage · includes Connect");
+    expect(ruleAccessTone(block)).toBe("blocked");
+    expect(ruleAccessLabel(block, "use")).toBe("Connect · All tools");
+    expect(
+      effectNote(
+        { ...grant, effect: "allows" },
+        level({ level: "use" }),
+        "Person",
+        "Server",
+      ),
+    ).toBe(
+      appliesTo === "resource"
+        ? "Defined on this server."
+        : "Inherited from a rule covering more servers.",
+    );
+  },
+);

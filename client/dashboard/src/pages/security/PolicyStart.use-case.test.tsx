@@ -84,7 +84,7 @@ const presets: RiskPreset[] = [
     label: "Secrets and credentials",
     description: "Block API keys, tokens, private keys and passwords.",
     policyType: "standard",
-    sources: ["secrets"],
+    sources: ["gitleaks"],
     presidioEntities: [],
     action: "block",
     score: 8,
@@ -215,29 +215,43 @@ describe("PolicyStartChooser Shadow AI use case", () => {
 });
 
 describe("unsupported policy drafts", () => {
-  afterEach(cleanup);
-
-  it("keeps unsupported presets visible without offering an unsafe conversion", () => {
-    presets.push({
-      ...presets[0]!,
-      id: "future_preset",
-      label: "Newer settings",
-      action: unrecognized("constructor"),
-    });
-    try {
-      renderChooser();
-      const row = screen.getByRole("button", { name: /Newer settings/ });
-      expect(row.hasAttribute("disabled")).toBe(true);
-      expect(row.textContent).toContain("Unknown");
-      expect(row.textContent).toContain("Refresh the page");
-    } finally {
-      presets.pop();
-    }
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
   });
 
-  it.each(["policyType", "action"] as const)(
-    "shows a recoverable state for an unknown suggested %s",
-    (field) => {
+  it.each([
+    { action: unrecognized("constructor") },
+    { sources: ["gitleaks", "future_detector"] },
+  ])(
+    "keeps unsupported presets visible without offering an unsafe conversion: %j",
+    (settings) => {
+      presets.push({
+        ...presets[0]!,
+        id: "future_preset",
+        label: "Newer settings",
+        ...settings,
+      });
+      try {
+        renderChooser();
+        const row = screen.getByRole("button", { name: /Newer settings/ });
+        expect(row.hasAttribute("disabled")).toBe(true);
+        fireEvent.click(row);
+        expect(mocks.navigate).not.toHaveBeenCalled();
+        expect(row.textContent).toContain("Refresh the page");
+      } finally {
+        presets.pop();
+      }
+    },
+  );
+
+  it.each([
+    { policyType: unrecognized("future_type") },
+    { action: unrecognized("future_action") },
+    { sources: ["gitleaks", "future_detector"] },
+  ])(
+    "shows a recoverable state for unsupported suggestion settings: %j",
+    (settings) => {
       const suggestion: SuggestRiskPolicyResult = {
         presetId: "",
         name: "A newer policy",
@@ -251,7 +265,7 @@ describe("unsupported policy drafts", () => {
         rationale: "",
         confidence: 1,
         alternatives: [],
-        [field]: unrecognized("future_value"),
+        ...settings,
       };
       const onBack = vi.fn<() => void>();
       const onContinue = vi.fn<() => void>();
