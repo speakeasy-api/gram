@@ -455,26 +455,34 @@ func (s *Scanner) Shutdown(ctx context.Context) error {
 	s.realtimeDraining = true
 	s.realtimeRecordsMu.Unlock()
 
+	if s.waitRealtimeRecords(ctx) {
+		return nil
+	}
+	// Cancel the bounded, cancellation-detached publish contexts before
+	// returning so publisher teardown cannot race a recording after the
+	// graceful-shutdown deadline.
+	s.realtimeRecordsMu.Lock()
+	for _, cancel := range s.realtimeRecordCancels {
+		cancel()
+	}
+	s.realtimeRecordsMu.Unlock()
+	s.realtimeRecords.Wait()
+	return fmt.Errorf("drain realtime meter recordings: %w", context.Cause(ctx))
+}
+
+// waitRealtimeRecords blocks until every admitted recording finished or ctx
+// ends, reporting whether they all finished.
+func (s *Scanner) waitRealtimeRecords(ctx context.Context) bool {
 	done := make(chan struct{})
 	go func() {
 		s.realtimeRecords.Wait()
 		close(done)
 	}()
-
 	select {
 	case <-done:
-		return nil
+		return true
 	case <-ctx.Done():
-		// Cancel the bounded, cancellation-detached publish contexts before
-		// returning so publisher teardown cannot race a recording after the
-		// graceful-shutdown deadline.
-		s.realtimeRecordsMu.Lock()
-		for _, cancel := range s.realtimeRecordCancels {
-			cancel()
-		}
-		s.realtimeRecordsMu.Unlock()
-		<-done
-		return fmt.Errorf("drain realtime meter recordings: %w", context.Cause(ctx))
+		return false
 	}
 }
 
@@ -629,8 +637,10 @@ func (s *Scanner) scanForEnforcement(
 			comparedLane = s.startComparedLLMLane(ctx, request, orgSlug, applicablePolicies)
 		}
 	case feature.VariantRiskLLMShadow:
-		// Legacy lanes travel as in the off mode and enforce alone; the LLM
-		// lane is dispatched detached and compared when it lands.
+		// The LLM lane goes out detached first so both engines judge the
+		// content concurrently; the legacy lanes then travel as in the off
+		// mode and enforce alone, and the lane is compared when it lands.
+		comparedLane = s.startComparedLLMLane(ctx, request, orgSlug, applicablePolicies)
 		if legacyLanesOn() {
 			legacyFindings, _, _ = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 				legacy:           true,
@@ -639,7 +649,6 @@ func (s *Scanner) scanForEnforcement(
 				llmFailMode:      "",
 			})
 		}
-		comparedLane = s.startComparedLLMLane(ctx, request, orgSlug, applicablePolicies)
 	default:
 		if legacyLanesOn() {
 			legacyFindings, _, _ = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
@@ -732,6 +741,7 @@ func (s *Scanner) scanForEnforcement(
 		})
 	}
 	if err := g.Wait(); err != nil && !errors.Is(err, matchErr) {
+		comparedLane.abandon()
 		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 		return nil, fmt.Errorf("risk policy fan-out: %w", err)
 	}
@@ -1944,12 +1954,13 @@ func (s *Scanner) recordRealtimeResult(ctx context.Context, definition metering.
 }
 
 // goRealtimeRecord runs fn on a cancellation-detached context bounded by
-// timeout, tracked for Shutdown. Reports false once draining.
-func (s *Scanner) goRealtimeRecord(ctx context.Context, timeout time.Duration, fn func(context.Context)) bool {
+// timeout, tracked for Shutdown, and returns that context's cancel; nil once
+// draining, when fn is not run.
+func (s *Scanner) goRealtimeRecord(ctx context.Context, timeout time.Duration, fn func(context.Context)) context.CancelFunc {
 	s.realtimeRecordsMu.Lock()
 	defer s.realtimeRecordsMu.Unlock()
 	if s.realtimeDraining {
-		return false
+		return nil
 	}
 	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	recordID := s.nextRealtimeRecordID
@@ -1964,32 +1975,24 @@ func (s *Scanner) goRealtimeRecord(ctx context.Context, timeout time.Duration, f
 		}()
 		fn(recordCtx)
 	})
-	return true
-}
-
-// AwaitRealtimeRecords waits for background recordings of returned scans
-// without draining. Tests use it before reading comparison metrics.
-func (s *Scanner) AwaitRealtimeRecords(ctx context.Context) error {
-	done := make(chan struct{})
-	go func() {
-		s.realtimeRecords.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("await realtime records: %w", context.Cause(ctx))
-	}
+	return cancel
 }
 
 // pendingLLMLane is the detached LLM lane; done closes once the fields are
-// set.
+// set, and cancel stops the lane early when nothing will read them.
 type pendingLLMLane struct {
 	done      chan struct{}
+	cancel    context.CancelFunc
 	findings  []scanners.Finding
 	truncated bool
 	duration  time.Duration
+}
+
+// abandon stops a lane whose verdict nothing will compare.
+func (l *pendingLLMLane) abandon() {
+	if l != nil && l.cancel != nil {
+		l.cancel()
+	}
 }
 
 // pendingComparison is one policy's comparison input awaiting the lane.
@@ -2004,13 +2007,17 @@ const comparedLaneTimeout = enforcereply.DefaultLLMAnalyzerWaitTimeout + 5*time.
 
 // startComparedLLMLane dispatches the LLM lane alone, detached from the
 // request, so enforcement never waits for it. A degraded lane yields the
-// sentinel (llm_unavailable, shadow fail mode); while draining the lane is
-// not dispatched and counts as unavailable.
+// sentinel (llm_unavailable, shadow fail mode). While draining the lane is
+// not dispatched; recordComparisons then drops the comparisons too.
 func (s *Scanner) startComparedLLMLane(ctx context.Context, request RealtimeScanRequest, orgSlug string, policies []repo.RiskPolicy) *pendingLLMLane {
-	lane := &pendingLLMLane{done: make(chan struct{}), findings: nil, truncated: false, duration: 0}
+	lane := &pendingLLMLane{done: make(chan struct{}), cancel: nil, findings: nil, truncated: false, duration: 0}
 	started := time.Now()
-	dispatched := s.goRealtimeRecord(ctx, comparedLaneTimeout, func(laneCtx context.Context) {
+	lane.cancel = s.goRealtimeRecord(ctx, comparedLaneTimeout, func(laneCtx context.Context) {
 		defer close(lane.done)
+		// The scan's span has ended by the time the lane answers; give the
+		// lane its own so the dispatcher's attributes land somewhere live.
+		laneCtx, span := s.tracer.Start(laneCtx, "risk.comparedLLMLane")
+		defer span.End()
 		var discarded atomic.Bool
 		_, lane.findings, lane.truncated = s.dispatchEnforcementLanes(laneCtx, request, orgSlug, policies, &discarded, laneDispatch{
 			legacy:           false,
@@ -2020,8 +2027,7 @@ func (s *Scanner) startComparedLLMLane(ctx context.Context, request RealtimeScan
 		})
 		lane.duration = time.Since(started)
 	})
-	if !dispatched {
-		lane.findings = llmanalyzer.DeadLetterResult("unavailable").Findings
+	if lane.cancel == nil {
 		close(lane.done)
 	}
 	return lane
@@ -2032,6 +2038,7 @@ func (s *Scanner) startComparedLLMLane(ctx context.Context, request RealtimeScan
 // in the background with the detached lane's duration once it answers.
 func (s *Scanner) recordComparisons(ctx context.Context, lane *pendingLLMLane, llmFindings []scanners.Finding, truncated bool, awaitedLane time.Duration, comparisons []pendingComparison) {
 	if len(comparisons) == 0 {
+		lane.abandon()
 		return
 	}
 	if lane == nil {
@@ -2042,7 +2049,7 @@ func (s *Scanner) recordComparisons(ctx context.Context, lane *pendingLLMLane, l
 		}
 		return
 	}
-	if !s.goRealtimeRecord(ctx, comparedLaneTimeout+time.Second, func(recordCtx context.Context) {
+	if s.goRealtimeRecord(ctx, comparedLaneTimeout+time.Second, func(recordCtx context.Context) {
 		select {
 		case <-lane.done:
 		case <-recordCtx.Done():
@@ -2053,7 +2060,8 @@ func (s *Scanner) recordComparisons(ctx context.Context, lane *pendingLLMLane, l
 			c.input.truncated = lane.truncated
 			s.recordShadowComparison(recordCtx, c.policy, c.input, lane.duration)
 		}
-	}) {
+	}) == nil {
+		lane.abandon()
 		s.logger.DebugContext(ctx, "scanner draining; dropping LLM lane comparisons", attr.SlogRiskPolicyID(comparisons[0].policy.ID.String()))
 	}
 }

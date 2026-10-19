@@ -421,6 +421,7 @@ func TestScanner_ShadowModeWithoutPubsubKeepsInProcessEngines(t *testing.T) {
 	require.NotNil(t, result, "the local classifier still enforces under shadow")
 	require.Equal(t, risk_analysis.SourcePromptInjection, result.Source)
 	require.Equal(t, int32(1), engine.calls.Load(), "the local classifier runs under shadow")
+	require.NoError(t, scanner.AwaitRealtimeRecords(ctx))
 }
 
 // TestScanner_OffVariantBeatsBooleanFlag pins the transition rule's edge: an
@@ -551,6 +552,9 @@ func TestScanner_ShadowModeNeverWaitsForLLMLane(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseLane := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseLane)
 	llmStarted := make(chan struct{}, 1)
 	gitleaksHit := gitleaksReplyFinding("aws-access-token", 0, len("AKIAIOSFODNN7EXAMPLE"))
 	dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
@@ -593,7 +597,7 @@ func TestScanner_ShadowModeNeverWaitsForLLMLane(t *testing.T) {
 	}
 	require.Empty(t, outcomeCounts(t, reader, "risk.llm.shadow_comparison", secretsID.String()), "nothing is compared before the model answers")
 
-	close(release)
+	releaseLane()
 	require.NoError(t, scanner.AwaitRealtimeRecords(ctx))
 	require.Equal(t, map[string]int64{"agree_match": 1}, outcomeCounts(t, reader, "risk.llm.shadow_comparison", secretsID.String()))
 	require.Equal(t, map[string]int64{"matched": 1}, outcomeCounts(t, reader, "risk.llm.policy_evaluations", secretsID.String()))
