@@ -462,3 +462,35 @@ func TestRunCountsGrantsMintedThroughAnotherIssuer(t *testing.T) {
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
 	require.Empty(t, f.associations(derivedMember), "the sibling grant routes the member to another client, so capture writes nothing")
 }
+
+// A platform client is shared by every organization, so its grants minted in
+// another organization say nothing about which client serves this one.
+func TestRunIgnoresGrantsMintedInAnotherOrganization(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	other := newFixtureIn(t, f.pool)
+	ctx := t.Context()
+	gatewayIssuer := f.userIssuer()
+	member := f.server(f.userIssuer(), "https://member.example.com/mcp")
+	remoteIssuerID, clientID := uuid.New(), uuid.New()
+	require.NoError(t, f.q.SeedRemoteSessionIssuerFixture(ctx, SeedRemoteSessionIssuerFixtureParams{
+		ID:        remoteIssuerID,
+		ProjectID: uuid.NullUUID{},
+		Slug:      "rsi-" + remoteIssuerID.String()[:8],
+		Issuer:    "https://" + remoteIssuerID.String()[:8] + ".example.com",
+	}))
+	require.NoError(t, f.q.SeedRemoteSessionClientFixture(ctx, SeedRemoteSessionClientFixtureParams{
+		ID:                    clientID,
+		ProjectID:             uuid.NullUUID{},
+		OrganizationID:        pgtype.Text{},
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              "cid-" + clientID.String()[:8],
+	}))
+	require.NoError(t, f.q.SeedClientBindingFixture(ctx, SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: gatewayIssuer}))
+	other.grant(other.userIssuer(), clientID, "https://member.example.com/mcp")
+	f.gateway(gatewayIssuer, member)
+
+	report := f.run(true)
+	require.Equal(t, GatewayOutcomeUnserved, gatewayResultFor(t, report, member).Outcome)
+	require.Empty(t, f.associations(member))
+}
