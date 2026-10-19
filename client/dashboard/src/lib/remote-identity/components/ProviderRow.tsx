@@ -347,6 +347,32 @@ export function UserIdentityRow({
 
       {selected && !draft.connected ? (
         <div className="space-y-4 pl-[52px]">
+          {selected.isNew && draft.discoveryStatus === "loading" ? (
+            <div role="status" className="flex items-center gap-2">
+              <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+              <Text muted small>
+                Checking OAuth metadata
+              </Text>
+            </div>
+          ) : null}
+          {selected.isNew && draft.discoveryStatus === "error" ? (
+            <Alert variant="error" dismissible={false}>
+              <div className="space-y-2 break-words">
+                <Text small className="block font-medium">
+                  Could not discover OAuth metadata
+                </Text>
+                <p>{draft.discoveryError}</p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={disabled || draft.saving}
+                  onClick={draft.retryDiscovery}
+                >
+                  <Button.Text>Retry</Button.Text>
+                </Button>
+              </div>
+            </Alert>
+          ) : null}
           <RegistrationChoices draft={draft} disabled={disabled} />
           <ChoiceDetails
             draft={draft}
@@ -533,6 +559,14 @@ function RegistrationChoices({
 }): JSX.Element {
   const name = draft.selected?.name ?? "the authorization server";
   const loading = draft.clientsLoading || draft.capabilitiesLoading;
+  const automaticReason =
+    draft.selected?.isNew && draft.discoveryStatus !== "ready"
+      ? draft.discoveryStatus === "loading"
+        ? "Checking automatic registration."
+        : draft.discoveryStatus === "error"
+          ? "Could not check automatic registration. Retry OAuth metadata discovery."
+          : "Automatic registration has not yet been checked."
+      : `${name} has no usable automatic registration method. Automatic registration requires compatible OAuth endpoints and client authentication, using a Client ID Metadata Document or dynamic client registration.`;
   return (
     <RadioCardGroup
       orientation="horizontal"
@@ -562,9 +596,7 @@ function RegistrationChoices({
         {draft.automaticAvailable ? (
           `Speakeasy registers a new client with ${name} when you save.`
         ) : (
-          <UnavailableReason
-            reason={`${name} supports neither a Client ID Metadata Document nor dynamic client registration, so Speakeasy can't register a client automatically.`}
-          />
+          <UnavailableReason reason={automaticReason} />
         )}
       </RadioCard>
       <RadioCard value="manual" title="Manual">
@@ -601,6 +633,8 @@ function ChoiceDetails({
           providerName={providerName}
         />
       );
+    case null:
+      return null;
   }
 }
 

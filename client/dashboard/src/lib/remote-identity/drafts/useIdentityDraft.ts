@@ -7,6 +7,7 @@ import {
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
@@ -23,7 +24,7 @@ import {
   useRemoteSessionsCount,
 } from "@gram/client/react-query/remoteSessionsCount.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   advertisedScopes,
@@ -283,6 +284,9 @@ export type UserIdentityDraft = {
   clientsLoading: boolean;
   /** A discovered provider's capabilities are still being read. */
   capabilitiesLoading: boolean;
+  discoveryStatus: "idle" | "loading" | "error" | "ready";
+  discoveryError: string | null;
+  retryDiscovery: () => void;
 
   /** The server has a client and the operator has not cleared it. */
   connected: boolean;
@@ -298,7 +302,7 @@ export type UserIdentityDraft = {
   /** Back out of clearing and keep the connected client. */
   cancelClear: () => void;
 
-  choice: RegistrationChoice;
+  choice: RegistrationChoice | null;
   selectChoice: (choice: RegistrationChoice) => void;
   existingAvailable: boolean;
   automaticAvailable: boolean;
@@ -431,7 +435,8 @@ export function useUserIdentityDraft({
       !matchedIssuer &&
       !linkedIssuerId,
   );
-  const discoveredIssuerUrl = prm.metadata?.authorizationServers?.[0] ?? null;
+  const discoveredIssuerUrl =
+    prm.metadata?.authorizationServers?.[0]?.trim() || null;
   // An advertised provider is new only when no issuer the project can see
   // shares its host. Held (not offered) until that lookup answers.
   const discoveredHost = hostOf(discoveredIssuerUrl);
@@ -630,21 +635,38 @@ export function useUserIdentityDraft({
     queryKey: ["remote-session-issuer-metadata", discoveredIssuerUrl],
     queryFn: async () => {
       if (!discoveredIssuerUrl) throw new Error("no discovered issuer");
-      return await client.remoteSessionIssuers.fetchMetadata({
+      const metadata = await client.remoteSessionIssuers.fetchMetadata({
         fetchIssuerMetadataRequestBody: { issuer: discoveredIssuerUrl },
       });
+      if (!metadata || metadata.issuer !== discoveredIssuerUrl) {
+        throw new Error("OAuth metadata did not match the requested issuer.");
+      }
+      return metadata;
     },
     enabled: enabled && !!selectedDiscovered && !!discoveredIssuerUrl,
     throwOnError: false,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
-  const discoveredMetadata = selectedDiscovered
-    ? (discoveredMetadataQuery.data ?? null)
-    : null;
-  // Nothing is claimed while the answer is outstanding.
-  const capabilitiesLoading =
-    !!selectedDiscovered && discoveredMetadataQuery.isLoading;
+  const discoveryStatus = !selectedDiscovered
+    ? "idle"
+    : discoveredMetadataQuery.isFetching
+      ? "loading"
+      : discoveredMetadataQuery.isError
+        ? "error"
+        : discoveredMetadataQuery.data?.issuer === discoveredIssuerUrl
+          ? "ready"
+          : "idle";
+  const discoveredMetadata =
+    discoveryStatus === "ready" ? discoveredMetadataQuery.data! : null;
+  const discoveryError =
+    discoveryStatus === "error"
+      ? discoveredMetadataQuery.error instanceof ServiceError &&
+        discoveredMetadataQuery.error.data$.message.trim()
+        ? discoveredMetadataQuery.error.data$.message
+        : "Could not discover OAuth metadata. Try again."
+      : null;
+  const capabilitiesLoading = discoveryStatus === "loading";
 
   let support: AutomaticSupport = { cimd: false, dcr: false };
   if (selectedDiscovered && discoveredMetadata) {
@@ -658,12 +680,18 @@ export function useUserIdentityDraft({
 
   // Reusing a client beats registering another, and registering beats asking
   // for credentials by hand. A pick the provider no longer allows falls back.
-  let defaultChoice: RegistrationChoice = "manual";
+  let defaultChoice: RegistrationChoice | null =
+    selectedDiscovered && discoveryStatus !== "ready" ? null : "manual";
   if (existingAvailable) defaultChoice = "existing";
   else if (automaticAvailable) defaultChoice = "auto";
-  let choice: RegistrationChoice = choicePick ?? defaultChoice;
+  let choice = choicePick ?? defaultChoice;
   if (choice === "existing" && !existingAvailable) choice = defaultChoice;
-  if (choice === "auto" && !automaticAvailable) choice = defaultChoice;
+  if (
+    choice === "auto" &&
+    !automaticAvailable &&
+    (!selectedDiscovered || discoveryStatus === "ready")
+  )
+    choice = defaultChoice;
 
   const existingClient =
     choice === "existing"
@@ -721,21 +749,58 @@ export function useUserIdentityDraft({
     resetChoice();
   };
 
+  const latestSelection = useRef({
+    selectedProviderId: selected?.id ?? null,
+    discoveredIssuerUrl,
+    enabled,
+    mcpServerId,
+    remoteMcpServerId,
+  });
+  latestSelection.current = {
+    selectedProviderId: selected?.id ?? null,
+    discoveredIssuerUrl,
+    enabled,
+    mcpServerId,
+    remoteMcpServerId,
+  };
+
   const commit = useMutation({
     mutationFn: async () => {
       if (!selected) throw new Error("choose an identity provider");
+      if (!choice) throw new Error("Choose a registration method.");
 
-      // A discovered provider is created from what the upstream publishes, so
-      // read its metadata now and send the whole record with the commit.
+      // Recheck the live cache as well as the rendered selection: query updates
+      // can arrive before React renders, including during scope discovery.
+      const assertCurrentDiscovery = () => {
+        const latest = latestSelection.current;
+        const query = queryClient.getQueryState<RemoteSessionIssuerDraft>([
+          "remote-session-issuer-metadata",
+          discoveredIssuerUrl,
+        ]);
+        if (
+          !latest.enabled ||
+          latest.selectedProviderId !== selectedProviderId ||
+          latest.discoveredIssuerUrl !== discoveredIssuerUrl ||
+          latest.mcpServerId !== mcpServerId ||
+          latest.remoteMcpServerId !== remoteMcpServerId ||
+          discoveryStatus !== "ready" ||
+          !discoveredMetadata ||
+          query?.status !== "success" ||
+          query.fetchStatus !== "idle" ||
+          query.data !== discoveredMetadata ||
+          query.data.issuer !== discoveredIssuerUrl
+        ) {
+          throw new Error(
+            "Discover OAuth metadata before saving this provider.",
+          );
+        }
+      };
       let createProvider = undefined;
       let providerId: string | undefined = selectedIssuer?.id;
       let draft: RemoteSessionIssuerDraft | null = null;
       if (selectedDiscovered && discoveredIssuerUrl) {
-        draft =
-          discoveredMetadata ??
-          (await client.remoteSessionIssuers.fetchMetadata({
-            fetchIssuerMetadataRequestBody: { issuer: discoveredIssuerUrl },
-          }));
+        assertCurrentDiscovery();
+        draft = discoveredMetadata!;
         providerId = undefined;
         createProvider = {
           issuer: discoveredIssuerUrl,
@@ -800,6 +865,7 @@ export function useUserIdentityDraft({
         };
       }
 
+      if (selectedDiscovered) assertCurrentDiscovery();
       return await client.remoteSessions.commitServerIdentityConfiguration({
         commitServerIdentityConfigurationForm: {
           mcpServerId,
@@ -872,7 +938,7 @@ export function useUserIdentityDraft({
     status = { kind: "done" };
   }
 
-  let choiceComplete = true;
+  let choiceComplete = choice !== null;
   if (choice === "existing")
     choiceComplete = !!existingClient && !sameAsConnected;
   if (choice === "manual") choiceComplete = clientId.trim() !== "";
@@ -886,6 +952,7 @@ export function useUserIdentityDraft({
     !!selected &&
     !connected &&
     !providerLoadFailed &&
+    (!selectedDiscovered || discoveryStatus === "ready") &&
     !capabilitiesLoading &&
     // Saving before the client list lands would miss an existing client and
     // register a duplicate in its place.
@@ -910,6 +977,13 @@ export function useUserIdentityDraft({
 
     clientsLoading,
     capabilitiesLoading,
+    discoveryStatus,
+    discoveryError,
+    retryDiscovery: () => {
+      if (selectedDiscovered && !discoveredMetadataQuery.isFetching) {
+        void discoveredMetadataQuery.refetch();
+      }
+    },
 
     connected,
     connectedClient,

@@ -1,9 +1,13 @@
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
+import { useUserIdentityDraft } from "@/lib/remote-identity/drafts/useIdentityDraft";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
+  act,
   fireEvent,
   render,
+  renderHook,
   screen,
   waitFor,
   within,
@@ -278,6 +282,7 @@ vi.mock("@gram/client/react-query/deleteRemoteMcpServerHeader.js", () => ({
 
 function renderIdentity(): ReturnType<typeof render> & {
   rerenderIdentity: () => void;
+  queryClient: QueryClient;
 } {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -293,7 +298,54 @@ function renderIdentity(): ReturnType<typeof render> & {
     </MemoryRouter>
   );
   const result = render(tree());
-  return { ...result, rerenderIdentity: () => result.rerender(tree()) };
+  return {
+    ...result,
+    queryClient,
+    rerenderIdentity: () => result.rerender(tree()),
+  };
+}
+
+const discoveryIssuer = "https://auth.example.test/";
+const discoveryKey = ["remote-session-issuer-metadata", discoveryIssuer];
+const discoveryMetadata = {
+  issuer: discoveryIssuer,
+  authorizationEndpoint: "https://auth.example.test/authorize",
+  tokenEndpoint: "https://auth.example.test/token",
+  registrationEndpoint: "https://auth.example.test/register",
+  scopesSupported: ["read"],
+};
+
+function discoverUnsavedProvider(): void {
+  mocks.protectedResourceMetadata.mockReturnValue({
+    status: "available",
+    metadata: { authorizationServers: [discoveryIssuer] },
+  });
+  mocks.fetchMetadata.mockResolvedValue(discoveryMetadata);
+}
+
+function renderIdentityDraft() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const result = renderHook(
+    () =>
+      useUserIdentityDraft({
+        mcpServerId: "mcp-server-1",
+        remoteMcpServerId: "remote-source-1",
+        upstreamUrl: "https://resource.example.test/mcp",
+        linkedClients: [],
+        configured: false,
+        enabled: true,
+      }),
+    {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    },
+  );
+  return { ...result, queryClient };
 }
 
 function addCustomHeader(name: string, value: string): void {
@@ -578,6 +630,7 @@ beforeEach(() => {
     manualSetupRequired: false,
   });
   mocks.discoverProtectedResource.mockResolvedValue({ available: false });
+  mocks.fetchMetadata.mockReset();
   mocks.invalidateHeaders.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue({});
   mocks.authenticationProbe.mockReturnValue("available");
@@ -984,6 +1037,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     // GitHub publishes no registration endpoint and no CIMD document — it can
     // only be set up by hand, and says so through service_documentation.
     mocks.fetchMetadata.mockResolvedValue({
+      issuer: "https://github.com/login/oauth",
       clientIdMetadataDocumentSupported: false,
       registrationEndpoint: undefined,
       serviceDocumentation: "https://docs.github.com/apps",
@@ -1016,6 +1070,379 @@ describe("RemoteMcpIdentitySectionBody", () => {
       name: /Open registration guide/i,
     });
     expect(guide.getAttribute("href")).toBe("https://docs.github.com/apps");
+  });
+
+  describe("unsaved provider discovery recovery", () => {
+    it.each(["manual", "existing"] as const)(
+      "preserves saved-provider %s submission without discovery",
+      async (mode) => {
+        autoConfigurableProvider();
+        if (mode === "existing") {
+          mocks.clients.mockReturnValue({
+            items: [
+              {
+                id: "example-existing-client",
+                clientId: "EXAMPLE-CLIENT",
+                remoteSessionIssuerId: "provider-1",
+                createdAt: new Date(0),
+              },
+            ],
+            isLoading: false,
+          });
+        }
+        const { result } = renderIdentityDraft();
+        act(() => result.current.selectProvider("provider-1"));
+        act(() => {
+          result.current.selectChoice(mode);
+          if (mode === "manual")
+            result.current.setClientId("EXAMPLE-MANUAL-CLIENT");
+        });
+        expect(result.current.canSave).toBe(true);
+        await act(async () => expect(await result.current.save()).toBe(true));
+        expect(mocks.commit).toHaveBeenCalledWith({
+          commitServerIdentityConfigurationForm: expect.objectContaining({
+            providerId: "provider-1",
+            createProvider: undefined,
+            clientMode: mode,
+            existingClientId:
+              mode === "existing" ? "example-existing-client" : undefined,
+          }),
+        });
+        expect(mocks.fetchMetadata).not.toHaveBeenCalled();
+      },
+    );
+
+    it("requests and trusts the whitespace-trimmed issuer without URL serialization", async () => {
+      discoverUnsavedProvider();
+      mocks.protectedResourceMetadata.mockReturnValue({
+        status: "available",
+        metadata: { authorizationServers: [`  ${discoveryIssuer}  `] },
+      });
+      const { result, queryClient } = renderIdentityDraft();
+      await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
+      expect(mocks.fetchMetadata).toHaveBeenCalledWith({
+        fetchIssuerMetadataRequestBody: { issuer: discoveryIssuer },
+      });
+      expect(queryClient.getQueryData(discoveryKey)).toEqual(discoveryMetadata);
+    });
+
+    it("waits for metadata without defaulting to Manual or claiming no support", async () => {
+      discoverUnsavedProvider();
+      let resolveMetadata!: (value: typeof discoveryMetadata) => void;
+      mocks.fetchMetadata.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveMetadata = resolve;
+          }),
+      );
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+      expect(screen.getByRole("status").textContent).toContain(
+        "Checking OAuth metadata",
+      );
+      expect(
+        screen.getByLabelText("Checking automatic registration."),
+      ).toBeDefined();
+      expect(screen.queryByLabelText("Client ID")).toBeNull();
+      expect(
+        screen
+          .getByRole("radio", {
+            name: "Manual",
+            description: /client ID and secret/,
+          })
+          .getAttribute("aria-checked"),
+      ).toBe("false");
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      expect(screen.queryByText(/supports neither/)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(mocks.commit).not.toHaveBeenCalled();
+      await act(async () => resolveMetadata(discoveryMetadata));
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole("radio", { name: /Auto-Configure/ })
+            .getAttribute("aria-checked"),
+        ).toBe("true"),
+      );
+    });
+
+    it("shows the public SDK mismatch error and retries into inline auto registration", async () => {
+      discoverUnsavedProvider();
+      const message =
+        "Metadata issuer does not exactly match the requested issuer.";
+      mocks.fetchMetadata.mockRejectedValueOnce(
+        new ServiceError(
+          {
+            message,
+            name: "invalid",
+            id: "example-error",
+            fault: false,
+            temporary: false,
+            timeout: false,
+          },
+          {
+            response: new Response(null, { status: 422 }),
+            request: new Request("https://app.example.test/rpc/discovery"),
+            body: "PRIVATE RESPONSE BODY",
+          },
+        ),
+      );
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+      expect((await screen.findByRole("alert")).textContent).toContain(message);
+      expect(screen.queryByText(/PRIVATE RESPONSE BODY/)).toBeNull();
+      expect(
+        screen.getByLabelText(
+          "Could not check automatic registration. Retry OAuth metadata discovery.",
+        ),
+      ).toBeDefined();
+      expect(screen.queryByLabelText("Client ID")).toBeNull();
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole("radio", { name: /Auto-Configure/ })
+            .getAttribute("aria-checked"),
+        ).toBe("true"),
+      );
+      expect(mocks.fetchMetadata).toHaveBeenCalledTimes(2);
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+      expect(mocks.commit).toHaveBeenCalledWith({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          clientMode: "auto",
+          createProvider: expect.objectContaining(discoveryMetadata),
+        }),
+      });
+      expect(mocks.fetchMetadata).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      new Error("dial tcp PRIVATE TRANSPORT DIAGNOSTIC"),
+      { message: "PRIVATE RESPONSE BODY" },
+    ])(
+      "uses a generic error for transport or unknown failures",
+      async (error) => {
+        discoverUnsavedProvider();
+        mocks.fetchMetadata.mockRejectedValue(error);
+        renderIdentity();
+        fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+        const alert = await screen.findByRole("alert");
+        expect(alert.textContent).toContain(
+          "Could not discover OAuth metadata. Try again.",
+        );
+        expect(alert.textContent).not.toContain("PRIVATE");
+        expect(screen.queryByLabelText("Client ID")).toBeNull();
+        expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
+      },
+    );
+
+    it.each([
+      null,
+      {},
+      { ...discoveryMetadata, issuer: "https://auth.example.test" },
+    ])(
+      "rejects malformed or mismatched returned metadata without a hidden Save fetch",
+      async (metadata) => {
+        discoverUnsavedProvider();
+        mocks.fetchMetadata.mockResolvedValue(metadata);
+        const { result } = renderIdentityDraft();
+        await waitFor(() =>
+          expect(result.current.discoveryStatus).toBe("error"),
+        );
+        expect(result.current.choice).toBeNull();
+        act(() => {
+          result.current.selectChoice("manual");
+          result.current.setClientId("EXAMPLE-MANUAL-CLIENT");
+        });
+        expect(result.current.canSave).toBe(false);
+        await act(async () => expect(await result.current.save()).toBe(false));
+        expect(mocks.commit).not.toHaveBeenCalled();
+        expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
+      },
+    );
+
+    it("defaults to Manual only after validated metadata establishes no usable method", async () => {
+      discoverUnsavedProvider();
+      mocks.fetchMetadata.mockResolvedValue({
+        ...discoveryMetadata,
+        registrationEndpoint: "http://auth.example.test/register",
+        clientIdMetadataDocumentSupported: true,
+        tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+      });
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      await screen.findByLabelText("Client ID");
+      expect(
+        screen
+          .getByRole("radio", {
+            name: "Manual",
+            description: /client ID and secret/,
+          })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(
+        screen.getByLabelText(/has no usable automatic registration method/),
+      ).toBeDefined();
+      expect(screen.queryByRole("alert")).toBeNull();
+      fireEvent.change(screen.getByLabelText("Client ID"), {
+        target: { value: "EXAMPLE-CLIENT" },
+      });
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+    });
+
+    it("blocks cached metadata during refetch and failure, retaining explicit Manual input on Retry", async () => {
+      discoverUnsavedProvider();
+      const { queryClient } = renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole("radio", { name: /Auto-Configure/ })
+            .getAttribute("aria-checked"),
+        ).toBe("true"),
+      );
+      fireEvent.click(
+        screen.getByRole("radio", {
+          name: "Manual",
+          description: /client ID and secret/,
+        }),
+      );
+      fireEvent.change(screen.getByLabelText("Client ID"), {
+        target: { value: "EXAMPLE-CLIENT" },
+      });
+      let rejectMetadata!: (error: Error) => void;
+      mocks.fetchMetadata.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectMetadata = reject;
+          }),
+      );
+      act(() => {
+        void queryClient.refetchQueries({
+          queryKey: discoveryKey,
+          exact: true,
+        });
+      });
+      await screen.findByText("Checking OAuth metadata");
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      await act(async () => rejectMetadata(new Error("transport failure")));
+      await screen.findByRole("alert");
+      expect(queryClient.getQueryData(discoveryKey)).toEqual(discoveryMetadata);
+      expect(
+        (
+          screen.getByRole("radio", {
+            name: /Auto-Configure/,
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      expect(
+        (screen.getByLabelText("Client ID") as HTMLInputElement).value,
+      ).toBe("EXAMPLE-CLIENT");
+      expect(
+        screen
+          .getByRole("radio", {
+            name: "Manual",
+            description: /client ID and secret/,
+          })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(mocks.fetchMetadata).toHaveBeenCalledTimes(3);
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+      expect(
+        mocks.commit.mock.calls[0]?.[0].commitServerIdentityConfigurationForm
+          .clientMode,
+      ).toBe("manual");
+    });
+
+    it("refuses direct Save while initial metadata is pending", async () => {
+      discoverUnsavedProvider();
+      mocks.fetchMetadata.mockImplementation(() => new Promise(() => {}));
+      const { result } = renderIdentityDraft();
+      expect(result.current.discoveryStatus).toBe("loading");
+      await act(async () => expect(await result.current.save()).toBe(false));
+      expect(mocks.commit).not.toHaveBeenCalled();
+      expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
+    });
+
+    it.each(["selection", "refetch", "failure"])(
+      "rechecks %s after awaiting protected-resource scopes before commit",
+      async (change) => {
+        discoverUnsavedProvider();
+        let resolveScopes!: (value: { available: boolean }) => void;
+        mocks.discoverProtectedResource.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveScopes = resolve;
+            }),
+        );
+        const { result, queryClient, rerender } = renderIdentityDraft();
+        await waitFor(() => expect(result.current.canSave).toBe(true));
+        let saving!: Promise<boolean>;
+        act(() => {
+          saving = result.current.save();
+        });
+        await waitFor(() =>
+          expect(mocks.discoverProtectedResource).toHaveBeenCalledOnce(),
+        );
+        if (change === "selection") {
+          mocks.protectedResourceMetadata.mockReturnValue({
+            status: "idle",
+            metadata: null,
+          });
+          rerender();
+        } else {
+          mocks.fetchMetadata.mockImplementationOnce(() =>
+            change === "failure"
+              ? Promise.reject(new Error("refetch failed"))
+              : new Promise(() => {}),
+          );
+          act(() => {
+            void queryClient.refetchQueries({
+              queryKey: discoveryKey,
+              exact: true,
+            });
+          });
+          if (change === "failure") {
+            await waitFor(() =>
+              expect(result.current.discoveryStatus).toBe("error"),
+            );
+          }
+        }
+        await act(async () => {
+          resolveScopes({ available: false });
+          expect(await saving).toBe(false);
+        });
+        expect(mocks.commit).not.toHaveBeenCalled();
+      },
+    );
   });
 
   it("marks the No Identity card when the probe says auth is required", () => {
