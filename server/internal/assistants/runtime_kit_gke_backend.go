@@ -65,7 +65,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 		p.Command, p.Args = KitGatewayCommand(int(p.GuestPort))
 	}
 	if p.Identity.CompatibilityGeneration == "" {
-		p.Identity.CompatibilityGeneration = "kit-acp-v2-bootstrap-v1"
+		p.Identity.CompatibilityGeneration = "kit-acp-v2-rootfs-v2"
 	}
 	p.Command = slices.Clone(p.Command)
 	p.Args = slices.Clone(p.Args)
@@ -133,6 +133,7 @@ func (k *KitGKERuntimeBackend) validate(r assistantRuntimeRecord) error {
 }
 
 type kitGKEBackendMetadata struct {
+	CheckpointMarker  string    `json:"checkpoint_marker"`
 	ImageDigest       string    `json:"image_digest"`
 	ContainerID       string    `json:"container_id"`
 	AuthorityUID      types.UID `json:"authority_uid,omitempty"`
@@ -159,7 +160,7 @@ func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackend
 	if err := json.Unmarshal(r.BackendMetadataJSON, &m); err != nil {
 		return m, fmt.Errorf("decode Kit GKE authority: %w", err)
 	}
-	if m.AuthorityNotAfter.IsZero() || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || m.ImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "" {
+	if m.CheckpointMarker == "" || m.AuthorityNotAfter.IsZero() || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || m.ImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "" {
 		return m, fmt.Errorf("kit GKE authority or exact compatibility mismatch; explicit fenced reset required")
 	}
 	return m, nil
@@ -233,6 +234,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	in.MCPJSON = b.MCPJSON
 	in.GatewayToken = b.GatewayToken
 	in.MCPFiles = b.MCPFiles
+	in.CheckpointMarker = []byte(uuid.NewString())
 	objects, err := RenderKitGKEProvision(in)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
@@ -252,7 +254,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 		podAnnotations[key] = value
 	}
 	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
-	m := kitGKEBackendMetadata{ImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	m := kitGKEBackendMetadata{CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
 	for _, step := range []struct {
 		gvr schema.GroupVersionResource
 		obj *unstructured.Unstructured

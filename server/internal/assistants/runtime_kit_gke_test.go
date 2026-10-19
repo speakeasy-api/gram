@@ -22,8 +22,9 @@ import (
 //nolint:exhaustive // Container resource budgets intentionally specify only CPU and memory.
 func kitGKEInput() KitGKEProvisionInput {
 	return KitGKEProvisionInput{
-		Identity: KitGKEIdentity{Namespace: "kit-test", AssistantID: "assistant-test", Lineage: "lineage-one", CompatibilityGeneration: "generation-one"},
-		Name:     "kit-test-runtime", Image: "example.invalid/kit@sha256:" + strings.Repeat("a", 64), IngressCIDR: "10.1.0.0/16", GuestPort: 8080,
+		CheckpointMarker: []byte("11111111-1111-4111-8111-111111111111"),
+		Identity:         KitGKEIdentity{Namespace: "kit-test", AssistantID: "assistant-test", Lineage: "lineage-one", CompatibilityGeneration: "generation-one"},
+		Name:             "kit-test-runtime", Image: "example.invalid/kit@sha256:" + strings.Repeat("a", 64), IngressCIDR: "10.1.0.0/16", GuestPort: 8080,
 		Command: []string{"/usr/local/bin/kit"}, Args: func() []string { _, args := KitGatewayCommand(8080); return args }(),
 		AgentsMD: []byte("caller instructions"), InferenceJSON: []byte(`{"api_key":"gram_local_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","project":"test-project","email":null,"organization_id":null}`), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("test-token"),
 		WorkSizeLimit: "1Gi", TmpSizeLimit: "128Mi",
@@ -48,7 +49,7 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	var secret corev1.Secret
 	require.NoError(t, runtime.DefaultUnstructuredConverter.FromUnstructured(objects.Secret.Object, &secret))
 	require.True(t, *secret.Immutable)
-	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}, secret.Data)
+	require.Equal(t, map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken, "checkpoint-marker": in.CheckpointMarker}, secret.Data)
 	require.Equal(t, in.Identity.labels(), secret.Labels)
 	pod := kitPodTemplate(t, objects)
 	for _, volume := range pod.Spec.Volumes {
@@ -69,27 +70,25 @@ func TestKitGKERenderIsolationAndBootstrap(t *testing.T) {
 	require.Equal(t, []string{"8.8.8.8", "1.1.1.1"}, pod.Spec.DNSConfig.Nameservers)
 	require.Equal(t, map[string]string{"sandbox.gke.io/runtime": "gvisor", "workload-type": "sandbox"}, pod.Spec.NodeSelector)
 	require.Len(t, pod.Spec.Tolerations, 2)
-	require.Len(t, pod.Spec.InitContainers, 1)
+	require.Empty(t, pod.Spec.InitContainers)
 	require.Len(t, pod.Spec.Containers, 1)
-	init, main := pod.Spec.InitContainers[0], pod.Spec.Containers[0]
-	require.Equal(t, in.Command, main.Command)
-	require.Equal(t, in.Args, main.Args)
+	main := pod.Spec.Containers[0]
+	require.Equal(t, []string{"/bin/sh", "-ec"}, main.Command)
+	require.Equal(t, append(append([]string{}, in.Command...), in.Args...), main.Args[2:])
+	require.Equal(t, kitBootstrapScript+"exec \"$@\"\n", main.Args[0])
 	require.Equal(t, []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}, {Name: "SPEAKEASY_ORIGIN", Value: "https://ai.speakeasy.com"}}, main.Env)
 	require.Equal(t, "/home/kit", main.WorkingDir)
-	require.Equal(t, []corev1.VolumeMount{{Name: "work", MountPath: "/home/kit"}, {Name: "tmp", MountPath: "/tmp"}}, main.VolumeMounts)
-	require.Equal(t, corev1.VolumeMount{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, init.VolumeMounts[1])
-	require.Equal(t, init.VolumeMounts[0], main.VolumeMounts[0])
-	require.Contains(t, init.Args[0], "umask 077")
-	require.Contains(t, init.Args[0], "chmod 600 /home/kit/.kit/AGENTS.md /home/kit/.kit/config.toml /home/kit/.kit/credentials/*")
-	for _, container := range []corev1.Container{init, main} {
+	require.Equal(t, []corev1.VolumeMount{{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, {Name: "tmp", MountPath: "/tmp"}}, main.VolumeMounts)
+	for _, container := range []corev1.Container{main} {
 		require.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
 		require.Equal(t, []corev1.Capability{"ALL"}, container.SecurityContext.Capabilities.Drop)
 	}
 	require.Equal(t, corev1.StorageMediumMemory, pod.Spec.Volumes[0].EmptyDir.Medium)
-	require.Equal(t, corev1.StorageMediumMemory, pod.Spec.Volumes[1].EmptyDir.Medium)
-	require.Equal(t, secret.Name, pod.Spec.Volumes[2].Secret.SecretName)
-	require.Equal(t, int32(0440), *pod.Spec.Volumes[2].Secret.DefaultMode)
-	require.Len(t, pod.Spec.Volumes[2].Secret.Items, 5)
+	require.Equal(t, secret.Name, pod.Spec.Volumes[1].Secret.SecretName)
+	require.Len(t, pod.Spec.Volumes, 2)
+	require.Equal(t, resource.MustParse(in.WorkSizeLimit), main.Resources.Limits[corev1.ResourceEphemeralStorage])
+	require.Equal(t, int32(0440), *pod.Spec.Volumes[1].Secret.DefaultMode)
+	require.Len(t, pod.Spec.Volumes[1].Secret.Items, 6)
 	policy, found, err := unstructured.NestedMap(objects.Template.Object, "spec", "networkPolicy")
 	require.NoError(t, err)
 	require.True(t, found)
@@ -146,6 +145,9 @@ func TestKitGKEProvisionValidation(t *testing.T) {
 		"unspecified args":             func(in *KitGKEProvisionInput) { in.Args = nil },
 		"invalid JSON":                 func(in *KitGKEProvisionInput) { in.MCPJSON = []byte("not JSON") },
 		"invalid label":                func(in *KitGKEProvisionInput) { in.Identity.Lineage = "bad/value" },
+		"missing marker":               func(in *KitGKEProvisionInput) { in.CheckpointMarker = nil },
+		"invalid marker":               func(in *KitGKEProvisionInput) { in.CheckpointMarker = []byte("invalid") },
+		"unexpected restore marker":    func(in *KitGKEProvisionInput) { in.ExpectedCheckpointMarker = in.CheckpointMarker },
 		"missing token":                func(in *KitGKEProvisionInput) { in.GatewayToken = nil },
 		"invalid CIDR":                 func(in *KitGKEProvisionInput) { in.IngressCIDR = "bad" },
 		"missing volume limit":         func(in *KitGKEProvisionInput) { in.WorkSizeLimit = "" },
@@ -197,6 +199,8 @@ func TestKitGKESnapshotContracts(t *testing.T) {
 	_, err = RenderKitGKEManualTrigger(true, "trigger", binding, pod)
 	require.Error(t, err)
 	selected := kitObject("PodSnapshot", "podsnapshot.gke.io/v1", "selected-snapshot", in.Identity)
+	selected.SetUID("snapshot-uid")
+	selected.SetUID("snapshot-uid")
 	_, err = VerifyKitGKESnapshot(t.Context(), selected, binding, nil)
 	require.Error(t, err)
 	unavailable := kitSnapshotVerifier(func(context.Context, *unstructured.Unstructured, KitGKESnapshotBinding) error {
@@ -212,6 +216,7 @@ func TestKitGKESnapshotContracts(t *testing.T) {
 	verified, err := VerifyKitGKESnapshot(t.Context(), selected, binding, verifier)
 	require.NoError(t, err)
 	require.Equal(t, selected.GetName(), verified.Name())
+	in.ExpectedCheckpointMarker = []byte("22222222-2222-4222-8222-222222222222")
 	in.Restore = verified
 	in.RestoreSource = &binding
 	_, err = RenderKitGKEProvision(in)
@@ -245,22 +250,15 @@ func TestKitGKESnapshotContracts(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
-	for _, label := range []string{"gram.ai/assistant-id", "gram.ai/runtime-version", "gram.ai/runtime-lineage", "gram.ai/compatibility-generation"} {
-		snapshot := selected.DeepCopy()
-		t.Run(label, func(t *testing.T) {
-			t.Parallel()
-			bad := snapshot
-			labels := bad.GetLabels()
-			labels[label] = "other"
-			bad.SetLabels(labels)
-			_, err := VerifyKitGKESnapshot(t.Context(), bad, binding, verifier)
-			require.Error(t, err)
-		})
-	}
+	// Controller snapshots need not inherit custom source labels.
+	selected.SetLabels(nil)
+	_, err = VerifyKitGKESnapshot(t.Context(), selected, binding, verifier)
+	require.NoError(t, err)
 	selected.SetNamespace("other")
 	_, err = VerifyKitGKESnapshot(t.Context(), selected, binding, verifier)
 	require.Error(t, err)
 	// No restore annotation deliberately retains GKE auto-selection semantics.
+	in.ExpectedCheckpointMarker = nil
 	in.Restore = nil
 	in.RestoreSource = nil
 	objects, err = RenderKitGKEProvision(in)
@@ -354,7 +352,7 @@ func TestKitGKEBootstrapReplacesCredentialDirectory(t *testing.T) {
 	require.NoError(t, os.MkdirAll(credentials, 0700))
 	require.NoError(t, os.MkdirAll(filepath.Join(bootstrap, "credentials"), 0700))
 	require.NoError(t, os.WriteFile(filepath.Join(credentials, "retired-key.pem"), []byte("retired"), 0600))
-	for _, file := range []string{"AGENTS.md", "config.toml", "credentials/gateway-token"} {
+	for _, file := range []string{"AGENTS.md", "config.toml", "credentials/gateway-token", "checkpoint-marker"} {
 		require.NoError(t, os.WriteFile(filepath.Join(bootstrap, file), []byte("fresh"), 0600))
 	}
 	script := strings.NewReplacer("/home/kit", home, "/bootstrap", bootstrap).Replace(kitBootstrapScript)
@@ -368,4 +366,53 @@ func TestKitGKEBootstrapReplacesCredentialDirectory(t *testing.T) {
 	info, err := os.Stat(filepath.Join(credentials, "gateway-token"))
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
+}
+
+// Run the actual guest shell program, not a replica of its marker semantics.
+func TestKitGKEBootstrapRestoreMarkerGate(t *testing.T) {
+	t.Parallel()
+	for _, saved := range []string{"", "wrong", "expected"} {
+		t.Run(saved, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			home, bootstrap := filepath.Join(root, "home"), filepath.Join(root, "bootstrap")
+			state := filepath.Join(home, ".kit")
+			require.NoError(t, os.MkdirAll(filepath.Join(state, "credentials"), 0700))
+			require.NoError(t, os.MkdirAll(filepath.Join(bootstrap, "credentials"), 0700))
+			for name, content := range map[string]string{"AGENTS.md": "fresh", "config.toml": "fresh", "credentials/gateway-token": "fresh", "expected-checkpoint-marker": "expected", "checkpoint-marker": "next"} {
+				require.NoError(t, os.WriteFile(filepath.Join(bootstrap, name), []byte(content), 0600))
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(state, "credentials", "gateway-token"), []byte("stale"), 0600))
+			require.NoError(t, os.WriteFile(filepath.Join(state, "session.json"), []byte("durable session"), 0600))
+			if saved != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(state, "checkpoint-marker"), []byte(saved), 0600))
+			}
+			script := strings.NewReplacer("/home/kit", home, "/bootstrap", bootstrap).Replace(kitBootstrapScript)
+			output, err := exec.CommandContext(t.Context(), "/bin/sh", "-ec", script).CombinedOutput()
+			if saved != "expected" {
+				require.Error(t, err, string(output))
+				credential, readErr := os.ReadFile(filepath.Join(state, "credentials", "gateway-token"))
+				require.NoError(t, readErr)
+				require.Equal(t, "stale", string(credential), "failed restore must not install fresh authority")
+			} else {
+				require.NoError(t, err, string(output))
+				marker, err := os.ReadFile(filepath.Join(state, "checkpoint-marker"))
+				require.NoError(t, err)
+				require.Equal(t, "next", string(marker))
+				credential, err := os.ReadFile(filepath.Join(state, "credentials", "gateway-token"))
+				require.NoError(t, err)
+				require.Equal(t, "fresh", string(credential))
+				// Restarting the already-validated rootfs still refreshes credentials.
+				require.NoError(t, os.WriteFile(filepath.Join(state, "credentials", "gateway-token"), []byte("stale again"), 0600))
+				output, err = exec.CommandContext(t.Context(), "/bin/sh", "-ec", script).CombinedOutput()
+				require.NoError(t, err, string(output))
+				credential, err = os.ReadFile(filepath.Join(state, "credentials", "gateway-token"))
+				require.NoError(t, err)
+				require.Equal(t, "fresh", string(credential))
+			}
+			session, err := os.ReadFile(filepath.Join(state, "session.json"))
+			require.NoError(t, err)
+			require.Equal(t, "durable session", string(session))
+		})
+	}
 }

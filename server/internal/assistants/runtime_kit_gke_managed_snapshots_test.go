@@ -14,7 +14,9 @@ import (
 
 func kitManagedPolicy(identity KitGKEIdentity, scope string) *unstructured.Unstructured {
 	p := kitObject("PodSnapshotPolicy", "podsnapshot.gke.io/v1", "kit-manual", identity)
-	p.Object["spec"] = map[string]any{"selector": map[string]any{"matchLabels": map[string]any{"gram.ai/runtime-version": "3"}}}
+	p.SetUID("policy-uid")
+	p.SetGeneration(1)
+	p.Object["spec"] = map[string]any{"triggerConfig": map[string]any{"type": "manual"}, "selector": map[string]any{"matchLabels": map[string]any{"gram.ai/runtime-version": "3"}}}
 	if scope != "" {
 		_ = unstructured.SetNestedField(p.Object, scope, "spec", "snapshotScope")
 	}
@@ -29,7 +31,7 @@ func TestKitGKEManagedPolicyScopesFailBeforeCheckpoint(t *testing.T) {
 	}{
 		{"", "restores application memory", false},
 		{"whole-pod", "restores application memory", false},
-		{"rootfs-only", "excludes Kit HOME/work", false},
+
 		{"future-scope", "unknown snapshotScope", true},
 	} {
 		t.Run(tc.scope, func(t *testing.T) {
@@ -58,7 +60,7 @@ func TestKitGKEManagedPolicyScopesFailBeforeCheckpoint(t *testing.T) {
 //nolint:paralleltest // Subtests deliberately mutate the same fake API resource sequentially.
 func TestKitGKEManagedSelectUsesDocumentedTriggerResult(t *testing.T) {
 	identity := kitGKEInput().Identity
-	binding := KitGKESnapshotBinding{Identity: identity, SourcePodName: "source", SourcePodUID: "source-uid"}
+	binding := KitGKESnapshotBinding{PolicyName: "kit-manual", PolicyUID: "policy-uid", PolicyGeneration: 1, Identity: identity, SourcePodName: "source", SourcePodUID: "source-uid"}
 	pod := kitObject("Pod", "v1", "source", identity)
 	pod.SetUID(binding.SourcePodUID)
 	labels := pod.GetLabels()
@@ -148,8 +150,40 @@ func TestKitGKEManagedRestoreNeverTreatsRunningAsEvidence(t *testing.T) {
 	t.Parallel()
 	driver, err := NewKitGKEManagedCheckpointDriver(dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()))
 	require.NoError(t, err)
-	require.ErrorIs(t, driver.VerifyRestored(t.Context(), nil, nil, KitGKESnapshotBinding{}), ErrKitGKEManagedSnapshotIncompatible)
-	require.ErrorIs(t, driver.RefreshRestored(t.Context(), assistantRuntimeRecord{}, nil, KitLocalBootstrap{}), ErrKitGKEManagedSnapshotIncompatible)
+	require.Error(t, driver.VerifyRestored(t.Context(), nil, nil, KitGKESnapshotBinding{}))
+	require.Error(t, driver.RefreshRestored(t.Context(), assistantRuntimeRecord{}, nil, KitLocalBootstrap{}))
 	_, err = NewKitGKEManagedCheckpointDriver(nil)
 	require.Error(t, err)
+}
+
+func TestKitGKEManagedRootfsReady(t *testing.T) {
+	t.Parallel()
+	identity := kitGKEInput().Identity
+	binding := KitGKESnapshotBinding{PolicyName: "kit-manual", PolicyUID: "policy-uid", PolicyGeneration: 1, Identity: identity, SourcePodName: "source", SourcePodUID: "source-uid"}
+	policy := kitManagedPolicy(identity, "rootfs-only")
+	snapshot := kitObject("PodSnapshot", "podsnapshot.gke.io/v1", "snapshot", identity)
+	snapshot.SetLabels(nil) // No undocumented controller label propagation.
+	snapshot.SetUID("snapshot-uid")
+	snapshot.SetGeneration(1)
+	snapshot.Object["spec"] = map[string]any{"policyName": policy.GetName()}
+	snapshot.Object["status"] = map[string]any{"observedGeneration": int64(1), "conditions": []any{map[string]any{"type": "Ready", "status": "True"}}}
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{kitGKEPolicyGVR: "PodSnapshotPolicyList"}, policy, snapshot)
+	driver, err := NewKitGKEManagedCheckpointDriver(client)
+	require.NoError(t, err)
+	pod := kitObject("Pod", "v1", "source", identity)
+	pod.SetUID(binding.SourcePodUID)
+	require.NoError(t, driver.VerifySettled(t.Context(), assistantRuntimeRecord{}, pod))
+	_, err = VerifyKitGKESnapshot(t.Context(), snapshot, binding, driver)
+	require.NoError(t, err)
+	require.Error(t, driver.VerifyRestored(t.Context(), pod, snapshot, binding))
+	pod.SetUID("restored-pod")
+	require.ErrorContains(t, driver.VerifyRestored(t.Context(), pod, snapshot, binding), "selection mismatch")
+	pod.SetAnnotations(map[string]string{"podsnapshot.gke.io/ps-name": snapshot.GetName()})
+	require.NoError(t, driver.VerifyRestored(t.Context(), pod, snapshot, binding))
+	snapshot.Object["status"] = map[string]any{"observedGeneration": int64(1), "conditions": []any{map[string]any{"type": "Ready", "status": "False"}}}
+	_, err = client.Resource(kitGKESnapshotGVR).Namespace(identity.Namespace).Update(t.Context(), snapshot, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	require.ErrorContains(t, driver.VerifyAvailable(t.Context(), snapshot, binding), "not Ready")
+	snapshot.SetUID("replacement")
+	require.ErrorContains(t, driver.VerifyAvailable(t.Context(), snapshot, binding), "UID changed")
 }

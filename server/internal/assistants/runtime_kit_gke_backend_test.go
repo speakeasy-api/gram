@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,12 @@ func (p *kitGKEBackendProtocol) InterruptTurn(context.Context, assistantRuntimeR
 func (p *kitGKEBackendProtocol) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	return RuntimeBackendStatus{Configured: true}, nil
 }
+func (p *kitGKEBackendProtocol) VerifyCheckpointSettled(context.Context, assistantRuntimeRecord) error {
+	if !p.settled {
+		return errRuntimeSwitchBusy
+	}
+	return nil
+}
 func (p *kitGKEBackendProtocol) PrepareRuntimeSwitch(context.Context, assistantRecord, []assistantRuntimeRecord, int16) (runtimeSwitchReadiness, error) {
 	return runtimeSwitchReadiness{Settled: p.settled, Release: func() {}}, nil
 }
@@ -42,7 +49,7 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 	fences := new(int)
 	k, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{GKE: GKERuntimeConfig{Dynamic: client, Namespace: input.Identity.Namespace, ServerURL: &url.URL{Scheme: "https", Host: "example.invalid"}}, Provision: input,
 		Bootstrap: func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
-			return KitLocalBootstrap{AgentsMD: input.AgentsMD, InferenceJSON: input.InferenceJSON, MCPJSON: input.MCPJSON, GatewayToken: input.GatewayToken}, nil
+			return KitLocalBootstrap{AgentsMD: input.AgentsMD, InferenceJSON: input.InferenceJSON, MCPJSON: input.MCPJSON, GatewayToken: []byte(uuid.NewString())}, nil
 		},
 		Fence: func(context.Context, assistantRuntimeRecord) error { *fences++; return nil },
 		Protocol: func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) {
@@ -316,4 +323,131 @@ func TestKitGKEBackendDerivesProductionDefaultsAndAcceptsTags(t *testing.T) {
 
 func (d *kitGKEFakeCheckpointDriver) VerifySettled(context.Context, assistantRuntimeRecord, *unstructured.Unstructured) error {
 	return nil
+}
+
+// A protocol factory is not network evidence; failed initialization keeps the
+// authoritative phase restoring even when Kubernetes reports a Running Pod.
+type kitGKEFailedStatusProtocol struct{ kitGKEBackendProtocol }
+
+func (*kitGKEFailedStatusProtocol) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	return RuntimeBackendStatus{}, fmt.Errorf("fresh gateway authentication failed")
+}
+func TestKitGKEBackendRestoreAuthenticationBeforeActive(t *testing.T) {
+	t.Parallel()
+	k, client, r, _ := kitGKEBackendFixture(t)
+	k.config.Provision.SnapshotsEnabled = true
+	k.config.Snapshots = &kitGKEFakeCheckpointDriver{client: client, restored: true}
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	require.NoError(t, k.Stop(t.Context(), r))
+	before, _, err := k.loadAuthority(t.Context(), r)
+	require.NoError(t, err)
+	k.config.Protocol = func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) {
+		return &kitGKEFailedStatusProtocol{}, nil
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	_, err = k.Ensure(ctx, r)
+	require.ErrorContains(t, err, "fresh gateway authentication failed")
+	state, _, err := k.loadAuthority(t.Context(), r)
+	require.NoError(t, err)
+	require.Equal(t, "restoring", state.Phase)
+	require.NotEqual(t, before.Metadata.SecretName, state.Metadata.SecretName)
+	require.NotEqual(t, before.Metadata.CheckpointMarker, state.Metadata.CheckpointMarker)
+	require.Equal(t, before.Metadata.CheckpointMarker, state.Source.CheckpointMarker)
+}
+
+// Embed only the declared interfaces, not the underlying concrete settlement API.
+type kitGKEMissingSettlementProtocol struct {
+	runtimeProtocol
+	runtimeSwitchCoordinator
+}
+type kitGKEBusySettlementProtocol struct{ kitGKEBackendProtocol }
+
+func (*kitGKEBusySettlementProtocol) VerifyCheckpointSettled(context.Context, assistantRuntimeRecord) error {
+	return errRuntimeSwitchBusy
+}
+func TestKitGKEBackendCheckpointRequiresGatewaySettlement(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []bool{true, false} {
+		name := "busy"
+		if missing {
+			name = "missing"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			k, client, r, fences := kitGKEBackendFixture(t)
+			k.config.Provision.SnapshotsEnabled = true
+			k.config.Snapshots = &kitGKEFakeCheckpointDriver{client: client, restored: true}
+			result, err := k.Ensure(t.Context(), r)
+			require.NoError(t, err)
+			r.BackendMetadataJSON = result.BackendMetadataJSON
+			k.config.Protocol = func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) {
+				base := &kitGKEBackendProtocol{settled: true}
+				if missing {
+					return &kitGKEMissingSettlementProtocol{runtimeProtocol: base, runtimeSwitchCoordinator: base}, nil
+				}
+				return &kitGKEBusySettlementProtocol{kitGKEBackendProtocol: *base}, nil
+			}
+			client.ClearActions()
+			err = k.Stop(t.Context(), r)
+			if missing {
+				require.ErrorIs(t, err, errRuntimeSwitchUnavailable)
+			} else {
+				require.ErrorIs(t, err, errRuntimeSwitchBusy)
+			}
+			require.Zero(t, *fences)
+			for _, action := range client.Actions() {
+				require.Equal(t, "get", action.GetVerb())
+			}
+			state, _, err := k.loadAuthority(t.Context(), r)
+			require.NoError(t, err)
+			require.Equal(t, "active", state.Phase)
+		})
+	}
+}
+
+func TestKitGKEBackendRestoreRetriesBootstrapFailure(t *testing.T) {
+	t.Parallel()
+	k, client, r, fences := kitGKEBackendFixture(t)
+	k.config.Provision.SnapshotsEnabled = true
+	k.config.Snapshots = &kitGKEFakeCheckpointDriver{client: client, restored: true}
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	require.NoError(t, k.Stop(t.Context(), r))
+	before, _, err := k.loadAuthority(t.Context(), r)
+	require.NoError(t, err)
+	bootstrap := k.config.Bootstrap
+	attempts := 0
+	k.config.Bootstrap = func(ctx context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
+		attempts++
+		if attempts == 1 {
+			return KitLocalBootstrap{}, fmt.Errorf("temporary bootstrap outage")
+		}
+		return bootstrap(ctx, r)
+	}
+	client.ClearActions()
+	_, err = k.Ensure(t.Context(), r)
+	require.ErrorContains(t, err, "temporary bootstrap outage")
+	require.Equal(t, 2, *fences, "failed bootstrap authority must be revoked")
+	for _, action := range client.Actions() {
+		require.Equal(t, "get", action.GetVerb(), "preparation must not mutate Kubernetes resources")
+	}
+	state, _, err := k.loadAuthority(t.Context(), r)
+	require.NoError(t, err)
+	require.Equal(t, "stopped", state.Phase)
+	require.Equal(t, before.Metadata, state.Metadata)
+	require.Equal(t, before.Source, state.Source)
+	require.Equal(t, before.SnapshotUID, state.SnapshotUID)
+	result, err = k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	require.False(t, result.ColdStart)
+	require.Equal(t, 2, attempts)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	state, _, err = k.loadAuthority(t.Context(), r)
+	require.NoError(t, err)
+	require.Equal(t, "active", state.Phase)
+	require.NotEqual(t, before.Metadata.CheckpointMarker, state.Metadata.CheckpointMarker)
 }

@@ -2,8 +2,13 @@ package assistants
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,23 +25,11 @@ var kitGKETriggerGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io", 
 var kitGKESnapshotGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io", Version: "v1", Resource: "podsnapshots"}
 
 // KitGKECheckpointDriver enforces the filesystem/fresh-process lifecycle contract.
-// The default managed driver reads the public CRD API and reports the concrete
-// incompatibility of whole-pod memory restore and rootfs-only mounted-file loss.
-// Public trigger result fields are documented at:
-// https://docs.cloud.google.com/kubernetes-engine/docs/reference/crds/podsnapshot
-// Select must wait for this exact trigger's completion and correlate source UID.
-// VerifyAvailable must recheck expiry/backing data, not merely cached status.
-// PrepareColdRestore must arrange filesystem restoration WITHOUT restoring
-// process memory, while keeping the restored guest externally fenced. GKE
-// whole-pod restore alone is not sufficient. All persisted session files and
-// tmpfs HOME data must survive; rootfs-only that loses HOME is not sufficient.
-// VerifyRestored must prove the exact filesystem snapshot was restored without
-// process memory and reject GKE's documented silent cold-start fallback.
-// RefreshRestored must cold-start a NEW process after replacing ALL fenced
-// inference/MCP/gateway credentials, proving no old process, background job,
-// cached token, MCP transport or gateway authentication survives. It must not
-// delete session files. File overwrite or an init container alone is NOT success.
-// No guessed status paths or unauthenticated exec implementation is provided.
+// Managed rootfs-only snapshots preserve writable filesystem state, not process
+// memory. A fresh projected bootstrap checks the previous boot's marker before
+// launching Kit. The backend authenticates the fresh gateway before publication.
+// Provider Ready conditions are documented at:
+// https://docs.cloud.google.com/kubernetes-engine/docs/how-to/pod-snapshots
 type KitGKECheckpointDriver interface {
 	KitGKESnapshotAvailabilityVerifier
 	// VerifySettled reconciles gateway session/list with canonical bindings and
@@ -65,13 +58,17 @@ type kitGKECheckpointIdentity struct {
 	CompatibilityGeneration string `json:"CompatibilityGeneration"`
 }
 type kitGKECheckpointSource struct {
-	Identity      kitGKECheckpointIdentity `json:"Identity"`
-	SourcePodName string                   `json:"SourcePodName"`
-	SourcePodUID  types.UID                `json:"SourcePodUID"`
+	PolicyName       string                   `json:"policy_name"`
+	PolicyUID        types.UID                `json:"policy_uid"`
+	PolicyGeneration int64                    `json:"policy_generation"`
+	CheckpointMarker string                   `json:"CheckpointMarker"`
+	Identity         kitGKECheckpointIdentity `json:"Identity"`
+	SourcePodName    string                   `json:"SourcePodName"`
+	SourcePodUID     types.UID                `json:"SourcePodUID"`
 }
 
 func (s kitGKECheckpointSource) binding() KitGKESnapshotBinding {
-	return KitGKESnapshotBinding{Identity: KitGKEIdentity(s.Identity), SourcePodName: s.SourcePodName, SourcePodUID: s.SourcePodUID}
+	return KitGKESnapshotBinding{PolicyName: s.PolicyName, PolicyUID: s.PolicyUID, PolicyGeneration: s.PolicyGeneration, Identity: KitGKEIdentity(s.Identity), SourcePodName: s.SourcePodName, SourcePodUID: s.SourcePodUID}
 }
 
 type kitGKEAuthority struct {
@@ -208,6 +205,15 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		if e = k.config.Snapshots.VerifySettled(ctx, r, pod); e != nil {
 			return fmt.Errorf("kit GKE Stop: %w", e)
 		}
+		settlement, ok := p.(interface {
+			VerifyCheckpointSettled(context.Context, assistantRuntimeRecord) error
+		})
+		if !ok {
+			return errRuntimeSwitchUnavailable
+		}
+		if err := settlement.VerifyCheckpointSettled(ctx, r); err != nil {
+			return fmt.Errorf("verify Kit checkpoint settlement: %w", err)
+		}
 		// Persist the admission fence before revoking credentials or triggering a
 		// snapshot. Retried operations cannot re-admit a checkpointing process.
 		if state.SnapshotName != "" {
@@ -218,7 +224,14 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		state.SnapshotUID = ""
 		state.Phase = "checkpointing"
 		state.TriggerName = "kit-checkpoint-" + uuid.NewString()
-		state.Source = &kitGKECheckpointSource{Identity: kitGKECheckpointIdentity(k.identity(r)), SourcePodName: state.Metadata.PodName, SourcePodUID: state.Metadata.PodUID}
+		state.Source = &kitGKECheckpointSource{PolicyName: "", PolicyUID: "", PolicyGeneration: 0, CheckpointMarker: state.Metadata.CheckpointMarker, Identity: kitGKECheckpointIdentity(k.identity(r)), SourcePodName: state.Metadata.PodName, SourcePodUID: state.Metadata.PodUID}
+		if driver, ok := k.config.Snapshots.(*KitGKEManagedCheckpointDriver); ok {
+			policy, err := driver.checkpointPolicy(ctx, pod)
+			if err != nil {
+				return err
+			}
+			state.Source.PolicyName, state.Source.PolicyUID, state.Source.PolicyGeneration = policy.GetName(), policy.GetUID(), policy.GetGeneration()
+		}
 		obj, err = k.saveAuthority(ctx, obj, state)
 		if err != nil {
 			return err
@@ -313,7 +326,7 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 	return err
 }
 
-func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRecord, state kitGKEAuthority, obj *unstructured.Unstructured) (RuntimeBackendEnsureResult, error) {
+func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRecord, state kitGKEAuthority, obj *unstructured.Unstructured) (_ RuntimeBackendEnsureResult, returnErr error) {
 	var empty RuntimeBackendEnsureResult
 	if k.config.Snapshots == nil {
 		return empty, fmt.Errorf("%s", kitGKECheckpointUnavailable)
@@ -352,24 +365,112 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if template == nil || template.GetUID() != state.Metadata.TemplateUID || template.GetName() != kitGKEName(r) {
 		return empty, fmt.Errorf("cold restore driver changed template authority")
 	}
+	if state.Source.CheckpointMarker == "" {
+		return empty, fmt.Errorf("checkpoint has no rootfs marker; legacy restore is unsupported")
+	}
+	// Stopped already fences admission and the source claim is gone. Keep that
+	// retryable phase through preparation: no Kubernetes resource has changed.
+	// Bootstrap may mint authority even when its result is an error. Revoke that
+	// authority on any preparation failure, including caller cancellation.
+	preparing := true
+	defer func() {
+		if preparing && returnErr != nil {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			if fenceErr := k.config.Fence(cleanupCtx, r); fenceErr != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("revoke failed restore bootstrap: %w", fenceErr))
+			}
+		}
+	}()
+	b, err := k.config.Bootstrap(ctx, r)
+	if err != nil {
+		return empty, err
+	}
+	if err = validateKitBootstrap(b); err != nil {
+		return empty, err
+	}
+	previousBootstrap, err := k.get(ctx, r, kitSecretGVR, state.Metadata.SecretName, state.Metadata.SecretUID)
+	if err != nil {
+		return empty, err
+	}
+	oldGateway, found, err := unstructured.NestedString(previousBootstrap.Object, "data", "gateway-token")
+	if err != nil || !found || oldGateway == base64.StdEncoding.EncodeToString(b.GatewayToken) {
+		return empty, fmt.Errorf("restore requires a fresh gateway authentication token")
+	}
+	in := k.config.Provision
+	in.Identity, in.Name, in.Model = k.identity(r), kitGKEName(r), b.Model
+	in.AgentsMD, in.InferenceJSON, in.MCPJSON, in.GatewayToken, in.MCPFiles = b.AgentsMD, b.InferenceJSON, b.MCPJSON, b.GatewayToken, b.MCPFiles
+	in.CheckpointMarker = []byte(uuid.NewString())
+	in.ExpectedCheckpointMarker = []byte(state.Source.CheckpointMarker)
+	in.Restore, in.RestoreSource = verified, &verified.binding
+	objects, err := RenderKitGKEProvision(in)
+	if err != nil {
+		return empty, err
+	}
+	labels := k.identity(r).labels()
+	labels["gram.ai/project-id"] = r.ProjectID.String()
+	if in.SnapshotsEnabled {
+		labels["gram.ai/snapshots"] = "enabled"
+	}
+	annotations := map[string]string{"speakeasy.com/kit-spec": k.fingerprint}
+	objects.Secret.SetLabels(labels)
+	objects.Secret.SetAnnotations(annotations)
+	// Cross the irreversible-resource boundary only after preparation succeeds.
+	// A failed preparation leaves the exact source snapshot/UIDs unchanged and
+	// the next Ensure can safely mint a different fresh bootstrap and retry.
 	state.Phase = "restoring"
 	obj, err = k.saveAuthority(ctx, obj, state)
 	if err != nil {
 		return empty, err
 	}
-	// Pin the selection prepared by the cold-filesystem driver; never accept
-	// automatic snapshot selection or resume process memory with cached tokens.
-	if err = unstructured.SetNestedField(template.Object, verified.Name(), "spec", "podTemplate", "metadata", "annotations", "podsnapshot.gke.io/ps-name"); err != nil {
-		return empty, fmt.Errorf("kit GKE restore: %w", err)
-	}
-	_, err = k.config.GKE.Dynamic.Resource(kitTemplateGVR).Namespace(k.config.GKE.Namespace).Update(ctx, template, metav1.UpdateOptions{})
+	preparing = false
+	secret, err := k.config.GKE.Dynamic.Resource(kitSecretGVR).Namespace(k.config.GKE.Namespace).Create(ctx, objects.Secret, metav1.CreateOptions{})
 	if err != nil {
-		return empty, fmt.Errorf("kit GKE restore: %w", err)
+		return empty, fmt.Errorf("create fresh restore bootstrap: %w", err)
+	}
+	if secret.GetUID() == "" {
+		return empty, fmt.Errorf("fresh restore bootstrap lacks UID")
+	}
+	oldSecretName, oldSecretUID := state.Metadata.SecretName, state.Metadata.SecretUID
+	state.Metadata.SecretName, state.Metadata.SecretUID = secret.GetName(), secret.GetUID()
+	state.Metadata.CheckpointMarker = string(in.CheckpointMarker)
+	obj, err = k.saveAuthority(ctx, obj, state)
+	if err != nil {
+		return empty, err
+	}
+	if err = k.deleteOwned(ctx, kitSecretGVR, oldSecretName, oldSecretUID); err != nil {
+		return empty, err
+	}
+	// SandboxTemplate's spec is immutable. Replace it only after its exact UID
+	// has been deleted; the restoring fence prevents concurrent admission.
+	if err = k.deleteOwned(ctx, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID); err != nil {
+		return empty, err
+	}
+	template = objects.Template
+	template.SetLabels(labels)
+	template.SetAnnotations(annotations)
+	if err = unstructured.SetNestedStringMap(template.Object, labels, "spec", "podTemplate", "metadata", "labels"); err != nil {
+		return empty, fmt.Errorf("set restored pod labels: %w", err)
+	}
+	if err = unstructured.SetNestedField(template.Object, k.fingerprint, "spec", "podTemplate", "metadata", "annotations", "speakeasy.com/kit-spec"); err != nil {
+		return empty, fmt.Errorf("set restored pod fingerprint: %w", err)
+	}
+	template, err = k.config.GKE.Dynamic.Resource(kitTemplateGVR).Namespace(k.config.GKE.Namespace).Create(ctx, template, metav1.CreateOptions{})
+	if err != nil {
+		return empty, fmt.Errorf("create fresh restore template: %w", err)
+	}
+	if template.GetUID() == "" {
+		return empty, fmt.Errorf("fresh restore template lacks UID")
+	}
+	state.Metadata.TemplateUID = template.GetUID()
+	obj, err = k.saveAuthority(ctx, obj, state)
+	if err != nil {
+		return empty, err
 	}
 	claim := kitObject("SandboxClaim", "extensions.agents.x-k8s.io/v1alpha1", kitGKEName(r), k.identity(r))
-	labels := claim.GetLabels()
-	labels["gram.ai/project-id"] = r.ProjectID.String()
-	claim.SetLabels(labels)
+	claimLabels := claim.GetLabels()
+	claimLabels["gram.ai/project-id"] = r.ProjectID.String()
+	claim.SetLabels(claimLabels)
 	claim.SetAnnotations(map[string]string{"speakeasy.com/kit-spec": k.fingerprint})
 	claim.Object["spec"] = map[string]any{"sandboxTemplateRef": map[string]any{"name": kitGKEName(r)}, "lifecycle": map[string]any{"shutdownPolicy": "Delete"}}
 	claim, err = k.config.GKE.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Create(ctx, claim, metav1.CreateOptions{})
@@ -410,13 +511,6 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if _, err = VerifyKitGKESnapshot(ctx, snapshot, state.Source.binding(), k.config.Snapshots); err != nil {
 		return empty, err
 	}
-	b, err := k.config.Bootstrap(ctx, r)
-	if err != nil {
-		return empty, err
-	}
-	if err = validateKitBootstrap(b); err != nil {
-		return empty, err
-	}
 	if err = k.config.Snapshots.RefreshRestored(ctx, r, pod, b); err != nil {
 		return empty, fmt.Errorf("kit GKE restore: %w", err)
 	}
@@ -438,17 +532,42 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	}
 	state.Metadata.PodName = pod.GetName()
 	state.Metadata.PodUID = pod.GetUID()
-	state.Phase = "active"
-	_, err = k.saveAuthority(ctx, obj, state)
+	raw, err := json.Marshal(state.Metadata)
+	if err != nil {
+		return empty, fmt.Errorf("kit GKE restore metadata: %w", err)
+	}
+	r.BackendMetadataJSON = raw
+	ip, _, _ := unstructured.NestedString(pod.Object, "status", "podIP")
+	if net.ParseIP(ip) == nil {
+		return empty, fmt.Errorf("restored Pod has no valid IP")
+	}
+	protocol, err := k.config.Protocol(readyCtx, r, &url.URL{Scheme: "http", Host: net.JoinHostPort(ip, strconv.Itoa(int(k.config.Provision.GuestPort))), Path: "/acp/v2"})
 	if err != nil {
 		return empty, err
 	}
-	raw, err := json.Marshal(state.Metadata)
-	if err != nil {
-		return empty, fmt.Errorf("kit GKE restore: %w", err)
+	if protocol == nil {
+		return empty, fmt.Errorf("fresh restore protocol unavailable")
 	}
-	r.BackendMetadataJSON = raw
-	if _, err = k.protocol(readyCtx, r); err != nil {
+	// Running precedes the entrypoint's marker check and gateway listener.
+	// Retry initialization under the restore fence, never publish on factory success.
+	for {
+		status, statusErr := protocol.Status(readyCtx, r)
+		if statusErr == nil && status.Configured {
+			break
+		}
+		select {
+		case <-readyCtx.Done():
+			if statusErr != nil {
+				return empty, fmt.Errorf("authenticate fresh restored gateway: %w", statusErr)
+			}
+			return empty, fmt.Errorf("fresh restored gateway is not configured: %w", readyCtx.Err())
+		case <-time.After(gkeRuntimePollInterval):
+		}
+	}
+	// Only authenticated startup proves the marker gate ran. Until this point
+	// all turn admission remains fenced, including silent cold-start fallback.
+	state.Phase = "active"
+	if _, err = k.saveAuthority(ctx, obj, state); err != nil {
 		return empty, err
 	}
 	return RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw}, nil

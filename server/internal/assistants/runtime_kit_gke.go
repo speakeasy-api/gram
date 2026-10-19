@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"maps"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -73,6 +75,9 @@ type KitGKEProvisionInput struct {
 	Restore          *KitGKEVerifiedSnapshot
 	// RestoreSource must be freshly read from authoritative runtime state.
 	RestoreSource *KitGKESnapshotBinding
+	// CheckpointMarker is a fresh UUID for this bootstrap generation. A restore
+	// must also supply the previous generation's authoritative rootfs marker.
+	CheckpointMarker, ExpectedCheckpointMarker []byte
 }
 
 type KitGKEObjects struct{ Secret, Template, Claim *unstructured.Unstructured }
@@ -135,6 +140,16 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 			return out, fmt.Errorf("kit cold/reset requires a new lineage for the same assistant and namespace, without restore")
 		}
 	}
+	if marker, err := uuid.Parse(string(in.CheckpointMarker)); err != nil || marker.String() != string(in.CheckpointMarker) {
+		return out, fmt.Errorf("kit bootstrap requires a canonical checkpoint marker UUID")
+	}
+	if in.Restore != nil {
+		if marker, err := uuid.Parse(string(in.ExpectedCheckpointMarker)); err != nil || marker.String() != string(in.ExpectedCheckpointMarker) || string(in.ExpectedCheckpointMarker) == string(in.CheckpointMarker) {
+			return out, fmt.Errorf("kit restore requires a distinct authoritative checkpoint marker")
+		}
+	} else if len(in.ExpectedCheckpointMarker) != 0 {
+		return out, fmt.Errorf("kit cold bootstrap cannot expect a checkpoint marker")
+	}
 	annotations := map[string]string{"cluster-autoscaler.kubernetes.io/safe-to-evict": "false"}
 	if in.Restore != nil {
 		if !in.SnapshotsEnabled || in.RestoreSource == nil || *in.RestoreSource != in.Restore.binding || in.Restore.binding.Identity != in.Identity || in.Restore.name == "" {
@@ -144,13 +159,17 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	}
 	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitBootstrapConfig(KitLocalBootstrap{Model: in.Model})), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
 	maps.Copy(data, in.MCPFiles)
+	data["checkpoint-marker"] = in.CheckpointMarker
+	if in.Restore != nil {
+		data["expected-checkpoint-marker"] = in.ExpectedCheckpointMarker
+	}
 	items := make([]corev1.KeyToPath, 0, len(data))
 	for _, name := range slices.Sorted(maps.Keys(data)) {
 		path := "credentials/" + name
 		if name == "speakeasy.json" {
 			path = "credentials/" + KitInferenceCredentialFilename
 		}
-		if name == "AGENTS.md" || name == "config.toml" {
+		if name == "AGENTS.md" || name == "config.toml" || name == "checkpoint-marker" || name == "expected-checkpoint-marker" {
 			path = name
 		}
 		items = append(items, corev1.KeyToPath{Key: name, Path: path})
@@ -171,25 +190,33 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		return out, fmt.Errorf("convert Kit bootstrap Secret: %w", err)
 	}
 	out.Secret = &unstructured.Unstructured{Object: secretMap}
-	work, err := kitMemoryVolume("work", in.WorkSizeLimit)
-	if err != nil {
-		return out, err
+	workLimit, err := resource.ParseQuantity(in.WorkSizeLimit)
+	if err != nil || workLimit.Sign() <= 0 {
+		return out, fmt.Errorf("kit writable rootfs requires a positive ephemeral storage limit")
 	}
+	resources := *in.Resources.DeepCopy()
+	if resources.Limits == nil {
+		resources.Limits = corev1.ResourceList{}
+	}
+	resources.Limits[corev1.ResourceEphemeralStorage] = workLimit
 	tmp, err := kitMemoryVolume("tmp", in.TmpSizeLimit)
 	if err != nil {
 		return out, err
 	}
 	security := &corev1.SecurityContext{AllowPrivilegeEscalation: &no, Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}}
-	home := corev1.VolumeMount{Name: "work", MountPath: "/home/kit"}
+	// The native Kit image owns /home/kit as UID 1000. Durable Kit state must
+	// remain on the container rootfs, not on a mount excluded from snapshots.
+	// Main-process bootstrap runs on each fresh process, in the same rootfs.
+	args := append([]string{kitBootstrapScript + "exec \"$@\"\n", "kit-bootstrap"}, in.Command...)
+	args = append(args, in.Args...)
 	pod := corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: in.Identity.labels(), Annotations: annotations}, Spec: corev1.PodSpec{
 		RuntimeClassName: new("gvisor"), AutomountServiceAccountToken: &no,
 		DNSPolicy: corev1.DNSNone, DNSConfig: &corev1.PodDNSConfig{Nameservers: []string{"8.8.8.8", "1.1.1.1"}},
 		NodeSelector:    map[string]string{"sandbox.gke.io/runtime": "gvisor", "workload-type": "sandbox"},
 		Tolerations:     []corev1.Toleration{{Key: "sandbox.gke.io/runtime", Operator: corev1.TolerationOpEqual, Value: "gvisor", Effect: corev1.TaintEffectNoSchedule}, {Key: "workload-type", Operator: corev1.TolerationOpEqual, Value: "sandbox", Effect: corev1.TaintEffectNoSchedule}},
 		SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: &yes, RunAsUser: &uid, RunAsGroup: &uid, FSGroup: &uid},
-		InitContainers:  []corev1.Container{{Name: "provision-kit", Image: in.Image, Command: []string{"/bin/sh", "-ec"}, Args: []string{kitBootstrapScript}, SecurityContext: security, Resources: in.Resources, VolumeMounts: []corev1.VolumeMount{home, {Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}}}},
-		Containers:      []corev1.Container{{Name: "kit", Image: in.Image, Command: in.Command, Args: in.Args, WorkingDir: "/home/kit", Ports: []corev1.ContainerPort{{ContainerPort: in.GuestPort}}, Env: environment, SecurityContext: security, Resources: in.Resources, VolumeMounts: []corev1.VolumeMount{home, {Name: "tmp", MountPath: "/tmp"}}}},
-		Volumes:         []corev1.Volume{work, tmp, {Name: "bootstrap", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretName, DefaultMode: &mode, Items: items}}}},
+		Containers:      []corev1.Container{{Name: "kit", Image: in.Image, Command: []string{"/bin/sh", "-ec"}, Args: args, WorkingDir: "/home/kit", Ports: []corev1.ContainerPort{{ContainerPort: in.GuestPort}}, Env: environment, SecurityContext: security, Resources: resources, VolumeMounts: []corev1.VolumeMount{{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, {Name: "tmp", MountPath: "/tmp"}}}},
+		Volumes:         []corev1.Volume{tmp, {Name: "bootstrap", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretName, DefaultMode: &mode, Items: items}}}},
 	}}
 	if in.SnapshotsEnabled {
 		pod.Labels["gram.ai/snapshots"] = "enabled"
@@ -209,13 +236,26 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 }
 
 const kitBootstrapScript = `umask 077
+# Never follow a restored symlink when installing fresh authority or checking state.
+test ! -L /home/kit/.kit
+test ! -L /home/kit/.kit/checkpoint-marker
+if [ -f /bootstrap/expected-checkpoint-marker ]; then
+  test -f /home/kit/.kit/checkpoint-marker
+  # A container restart may retain the rootfs after this generation already
+  # passed the restore gate. Only its fresh nonce may stand in for the source.
+  cmp -s /bootstrap/expected-checkpoint-marker /home/kit/.kit/checkpoint-marker ||
+    cmp -s /bootstrap/checkpoint-marker /home/kit/.kit/checkpoint-marker
+fi
 rm -rf /home/kit/.kit/credentials
 mkdir -p /home/kit/.kit/credentials /home/kit/workspace
 chmod 700 /home/kit/.kit /home/kit/.kit/credentials /home/kit/workspace
+rm -f /home/kit/.kit/AGENTS.md /home/kit/.kit/config.toml
 cp /bootstrap/AGENTS.md /home/kit/.kit/AGENTS.md
 cp /bootstrap/config.toml /home/kit/.kit/config.toml
 cp -R /bootstrap/credentials/. /home/kit/.kit/credentials/
 chmod 600 /home/kit/.kit/AGENTS.md /home/kit/.kit/config.toml /home/kit/.kit/credentials/*
+cp /bootstrap/checkpoint-marker /home/kit/.kit/checkpoint-marker
+chmod 600 /home/kit/.kit/checkpoint-marker
 `
 
 // ProvisionKitGKE is create-only: no adoption, mutation, cleanup, or readiness

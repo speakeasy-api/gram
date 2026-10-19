@@ -12,9 +12,12 @@ import (
 // KitGKESnapshotBinding is read from authoritative control-plane state. Labels
 // are checked in addition to, never in place of, this source-pod UID binding.
 type KitGKESnapshotBinding struct {
-	Identity      KitGKEIdentity
-	SourcePodName string
-	SourcePodUID  types.UID
+	PolicyName       string
+	PolicyUID        types.UID
+	PolicyGeneration int64
+	Identity         KitGKEIdentity
+	SourcePodName    string
+	SourcePodUID     types.UID
 }
 
 func (b KitGKESnapshotBinding) validate() error {
@@ -62,11 +65,10 @@ func RenderKitGKEManualTrigger(enabled bool, name string, binding KitGKESnapshot
 	return trigger, nil
 }
 
-// KitGKESnapshotAvailabilityVerifier must use the deployed CRD's actual status
-// contract to verify trigger success, selected snapshot AllSnapshotsAvailable,
-// unexpired backing data, and source pod name/UID correlation. The managed
-// implementation rejects incompatible storage/process scopes. A successful
-// trigger create or Pod Running alone MUST NOT satisfy this interface.
+// KitGKESnapshotAvailabilityVerifier rechecks the named snapshot UID, current
+// provider Ready status, and captured rootfs-only policy identity. Availability
+// is not restore proof: the fresh guest must pass the persisted marker gate and
+// authenticate before admission. Trigger creation or Pod Running is insufficient.
 type KitGKESnapshotAvailabilityVerifier interface {
 	VerifyAvailable(context.Context, *unstructured.Unstructured, KitGKESnapshotBinding) error
 }
@@ -84,8 +86,10 @@ func VerifyKitGKESnapshot(ctx context.Context, selected *unstructured.Unstructur
 	if err := binding.validate(); err != nil {
 		return nil, err
 	}
-	if err := kitCheckIdentity(selected, binding.Identity); err != nil {
-		return nil, err
+	// Managed snapshots do not promise propagation of source labels. Exact trigger
+	// result and persisted snapshot UID establish authority, not guessed labels.
+	if selected == nil || selected.GetNamespace() != binding.Identity.Namespace || selected.GetUID() == "" {
+		return nil, fmt.Errorf("invalid selected Kit snapshot identity")
 	}
 	if selected.GetAPIVersion() != "podsnapshot.gke.io/v1" || selected.GetKind() != "PodSnapshot" || len(validation.IsDNS1123Subdomain(selected.GetName())) != 0 {
 		return nil, fmt.Errorf("invalid selected Kit snapshot")

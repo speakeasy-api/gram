@@ -26,11 +26,9 @@ var ErrKitGKEManagedSnapshotSchema = errors.New("unsupported managed GKE snapsho
 // https://docs.cloud.google.com/kubernetes-engine/docs/reference/crds/podsnapshot
 // https://docs.cloud.google.com/kubernetes-engine/docs/concepts/pod-snapshots#snapshot-matching
 //
-// The existing Kit runtime stores HOME/work and /tmp on memory emptyDir volumes.
-// whole-pod restores memory (including old authority); rootfs-only excludes those
-// volumes. Neither scope implements this runtime's durable-files/fresh-process
-// contract. Reject before fencing or deleting a live runtime. A future guest
-// export/import protocol can change that contract, but is not simulated here.
+// Rootfs-only starts a new process. The guest's startup marker gate rejects
+// silent cold fallback before loading fresh projected credentials or listening.
+// Provider readiness is availability evidence, not proof of guest restoration.
 type KitGKEManagedCheckpointDriver struct{ client dynamic.Interface }
 
 var _ KitGKECheckpointDriver = (*KitGKEManagedCheckpointDriver)(nil)
@@ -65,50 +63,61 @@ func kitGKEManagedScope(policy *unstructured.Unstructured) error {
 	case "whole-pod":
 		return fmt.Errorf("%w: policy %s uses whole-pod, which restores application memory and cannot prove a fresh process with renewed credentials", ErrKitGKEManagedSnapshotIncompatible, policy.GetName())
 	case "rootfs-only":
-		return fmt.Errorf("%w: policy %s uses rootfs-only, which excludes Kit HOME/work and tmp memory emptyDir volumes; GKE 1.35.3-gke.1031000+ supports fresh processes but not preservation of these mounted files", ErrKitGKEManagedSnapshotIncompatible, policy.GetName())
+		trigger, _, err := unstructured.NestedString(policy.Object, "spec", "triggerConfig", "type")
+		if err != nil || trigger != "manual" || policy.GetUID() == "" || policy.GetGeneration() <= 0 {
+			return fmt.Errorf("%w: rootfs-only requires an authoritative manual policy", ErrKitGKEManagedSnapshotSchema)
+		}
+		return nil
 	default:
 		return fmt.Errorf("%w: unknown snapshotScope %q", ErrKitGKEManagedSnapshotSchema, scope)
 	}
 }
 
-func (d *KitGKEManagedCheckpointDriver) VerifySettled(ctx context.Context, _ assistantRuntimeRecord, pod *unstructured.Unstructured) error {
+func (d *KitGKEManagedCheckpointDriver) checkpointPolicy(ctx context.Context, pod *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	if pod == nil || pod.GetUID() == "" || pod.GetNamespace() == "" {
-		return ErrKitGKEManagedSnapshotSchema
+		return nil, ErrKitGKEManagedSnapshotSchema
 	}
 	// Inspect the actual matching policy, not a hard-coded deployment name.
 	policies, err := d.client.Resource(kitGKEPolicyGVR).Namespace(pod.GetNamespace()).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return fmt.Errorf("read managed snapshot policies: %w", err)
+		return nil, fmt.Errorf("read managed snapshot policies: %w", err)
 	}
 	var matched *unstructured.Unstructured
 	for i := range policies.Items {
 		p := &policies.Items[i]
 		raw, found, err := unstructured.NestedMap(p.Object, "spec", "selector")
 		if err != nil || !found {
-			return fmt.Errorf("%w: missing policy selector", ErrKitGKEManagedSnapshotSchema)
+			return nil, fmt.Errorf("%w: missing policy selector", ErrKitGKEManagedSnapshotSchema)
 		}
 		var selector metav1.LabelSelector
 		if err = runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selector); err != nil {
-			return fmt.Errorf("%w: malformed policy selector", ErrKitGKEManagedSnapshotSchema)
+			return nil, fmt.Errorf("%w: malformed policy selector", ErrKitGKEManagedSnapshotSchema)
 		}
 		s, err := metav1.LabelSelectorAsSelector(&selector)
 		if err != nil {
-			return fmt.Errorf("%w: invalid policy selector", ErrKitGKEManagedSnapshotSchema)
+			return nil, fmt.Errorf("%w: invalid policy selector", ErrKitGKEManagedSnapshotSchema)
 		}
 		if !s.Matches(labels.Set(pod.GetLabels())) {
 			continue
 		}
 		if matched != nil {
-			return fmt.Errorf("%w: multiple policies match the source Pod", ErrKitGKEManagedSnapshotSchema)
+			return nil, fmt.Errorf("%w: multiple policies match the source Pod", ErrKitGKEManagedSnapshotSchema)
 		}
 		matched = p
 	}
 	if matched == nil {
-		return fmt.Errorf("%w: no policy matches the source Pod", ErrKitGKEManagedSnapshotSchema)
+		return nil, fmt.Errorf("%w: no policy matches the source Pod", ErrKitGKEManagedSnapshotSchema)
 	}
-	// This never claims to have verified settlement. Unsupported restore must
-	// block checkpointing even when all foreground/background work is settled.
-	return kitGKEManagedScope(matched)
+	// The backend holds admission and has reconciled all gateway sessions and jobs.
+	if err := kitGKEManagedScope(matched); err != nil {
+		return nil, err
+	}
+	return matched, nil
+}
+
+func (d *KitGKEManagedCheckpointDriver) VerifySettled(ctx context.Context, _ assistantRuntimeRecord, pod *unstructured.Unstructured) error {
+	_, err := d.checkpointPolicy(ctx, pod)
+	return err
 }
 
 // Select follows the documented trigger result, never a newest-by-label guess.
@@ -197,21 +206,56 @@ func (d *KitGKEManagedCheckpointDriver) VerifyAvailable(ctx context.Context, sel
 	if err != nil {
 		return fmt.Errorf("verify managed snapshot: %w", err)
 	}
-	// Neither a conditions array, observedGCSPath nor Ready alone proves
-	// unexpired backing objects or a filesystem-only restoration. Do not turn
-	// the documented status summary into invented availability evidence.
-	return kitGKEManagedScope(policy)
+	if binding.PolicyName == "" || policy.GetName() != binding.PolicyName || policy.GetUID() != binding.PolicyUID || policy.GetGeneration() != binding.PolicyGeneration {
+		return fmt.Errorf("managed snapshot policy authority changed")
+	}
+	if err := kitGKEManagedScope(policy); err != nil {
+		return err
+	}
+	conditions, found, err := unstructured.NestedSlice(current.Object, "status", "conditions")
+	if err != nil || !found || current.GetDeletionTimestamp() != nil {
+		return ErrKitGKEManagedSnapshotSchema
+	}
+	for _, raw := range conditions {
+		condition, ok := raw.(map[string]any)
+		if ok && condition["type"] == "Ready" && condition["status"] == "True" {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: snapshot is not Ready", ErrKitGKEManagedSnapshotSchema)
 }
 
+// PrepareColdRestore validates provider scope; the backend renders a new immutable
+// bootstrap Secret and recreates the immutable template before the claim exists.
 func (d *KitGKEManagedCheckpointDriver) PrepareColdRestore(ctx context.Context, _ assistantRuntimeRecord, template, selected *unstructured.Unstructured, binding KitGKESnapshotBinding) (*unstructured.Unstructured, error) {
 	if err := d.VerifyAvailable(ctx, selected, binding); err != nil {
 		return nil, err
 	}
-	return nil, ErrKitGKEManagedSnapshotIncompatible
+	if err := kitCheckIdentity(template, binding.Identity); err != nil {
+		return nil, err
+	}
+	return template, nil
 }
-func (*KitGKEManagedCheckpointDriver) VerifyRestored(context.Context, *unstructured.Unstructured, *unstructured.Unstructured, KitGKESnapshotBinding) error {
-	return fmt.Errorf("%w: Pod Running and ps-name do not prove restore; GKE documents silent cold-start fallback", ErrKitGKEManagedSnapshotIncompatible)
+
+// VerifyRestored checks provider and Pod identity only. The backend must additionally
+// authenticate the new gateway before publication: its entrypoint checks the exact
+// checkpoint marker before listening, so Running/ps-name alone never opens admission.
+func (d *KitGKEManagedCheckpointDriver) VerifyRestored(ctx context.Context, pod, selected *unstructured.Unstructured, binding KitGKESnapshotBinding) error {
+	if err := kitCheckIdentity(pod, binding.Identity); err != nil {
+		return err
+	}
+	if pod.GetUID() == "" || pod.GetUID() == binding.SourcePodUID || pod.GetDeletionTimestamp() != nil {
+		return fmt.Errorf("managed restore requires a new Pod UID")
+	}
+	if selected == nil || pod.GetAnnotations()["podsnapshot.gke.io/ps-name"] != selected.GetName() {
+		return fmt.Errorf("managed restore snapshot selection mismatch")
+	}
+	return d.VerifyAvailable(ctx, selected, binding)
 }
-func (*KitGKEManagedCheckpointDriver) RefreshRestored(context.Context, assistantRuntimeRecord, *unstructured.Unstructured, KitLocalBootstrap) error {
-	return fmt.Errorf("%w: no authenticated guest export/import and credential-replacing fresh-process protocol exists for mounted session files", ErrKitGKEManagedSnapshotIncompatible)
+func (*KitGKEManagedCheckpointDriver) RefreshRestored(_ context.Context, _ assistantRuntimeRecord, pod *unstructured.Unstructured, b KitLocalBootstrap) error {
+	if pod == nil {
+		return ErrKitGKEManagedSnapshotSchema
+	}
+	// Credentials are projected before startup, never injected into a running guest.
+	return validateKitBootstrap(b)
 }
