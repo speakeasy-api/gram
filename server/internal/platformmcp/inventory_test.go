@@ -50,13 +50,13 @@ func TestMCPFromInventoryLabelsOwnershipAndNeverProbesLegacy(t *testing.T) {
 	require.Equal(t, "ready", platform.Readiness.State)
 	require.Len(t, platform.Distributions, 1)
 	require.True(t, platform.Registration.ComponentsComplete)
-	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "disable_mcp"}, platform.Operations)
+	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "disable_mcp", "delete_mcp"}, platform.Operations)
 
 	disabled := mcpFromInventory(mcpID, projectID, "Project", "project", "Reviewed", "reviewed", "disabled", "dashboard_managed", MCPBackendRemote, "https://mcp.example.test/platform", registrationID, "catalog", "registry", "reviewed/server", "registered", complete, complete, complete, complete, "ready", "checked", "expires", nil)
 	require.False(t, disabled.EffectiveEnabled)
 	require.Equal(t, "unknown", disabled.Readiness.State, "disabled Platform-managed MCPs do not expose stale readiness as effective")
 	require.Empty(t, disabled.Readiness.CheckedAt)
-	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "enable_mcp"}, disabled.Operations)
+	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "enable_mcp", "delete_mcp"}, disabled.Operations)
 
 	incomplete := mcpFromInventory(mcpID, projectID, "Project", "project", "Incomplete", "incomplete", "private", "dashboard_managed", MCPBackendRemote, "https://mcp.example.test/incomplete", registrationID, "catalog", "registry", "reviewed/incomplete", "pending", uuid.NullUUID{UUID: uuid.Nil, Valid: true}, complete, complete, complete, "", "", "", nil)
 	require.False(t, incomplete.Registration.ComponentsComplete, "zero UUID sentinels represent missing persisted components")
@@ -68,7 +68,7 @@ func TestMCPFromInventoryLabelsOwnershipAndNeverProbesLegacy(t *testing.T) {
 	require.Equal(t, MCPBackendTunneled, dashboard.BackendKind)
 	require.Equal(t, "dashboard_source", dashboard.Source.Kind, "the compatibility source kind remains unchanged")
 	require.Equal(t, "unsupported", dashboard.Readiness.State)
-	require.Equal(t, []string{"read", "dashboard_setup"}, dashboard.Operations)
+	require.Equal(t, []string{"read", "dashboard_setup", "delete_mcp"}, dashboard.Operations)
 
 	legacy := mcpFromInventory(mcpID, projectID, "Project", "project", "Legacy", "legacy", "disabled", "legacy", MCPBackendLegacy, "", uuid.Nil, "", "", "", "", uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, uuid.NullUUID{}, "ready", "checked", "expires", nil)
 	require.Equal(t, "legacy", legacy.Model)
@@ -196,7 +196,7 @@ func TestInventoryRowProjectsHostedBackendWithLegacyOwnership(t *testing.T) {
 	require.Equal(t, MCPBackendHosted, mcp.BackendKind)
 	require.Equal(t, "legacy", mcp.Model, "toolset-backed hosted servers retain their existing ownership model")
 	require.Equal(t, "legacy", mcp.Source.Kind)
-	require.Equal(t, []string{"read"}, mcp.Operations)
+	require.Equal(t, []string{"read", "delete_mcp"}, mcp.Operations)
 }
 
 func TestInventoryBackendKindRecognizesEveryConfiguredBackend(t *testing.T) {

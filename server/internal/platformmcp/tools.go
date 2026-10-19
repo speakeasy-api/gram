@@ -224,6 +224,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
 			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default. When no existing plugin fits, offer to create one: agree its name with the user, choose one idempotency key for this create and pass it on the unconfirmed preview and on the confirmed call: the preview returns the exact permanent install name it would use, show that to the user, and call it again confirmed once they agree, then distribute to the new plugin. A plugin created in the organization's default project is delivered to every member; elsewhere it reaches no one until people are assigned to it. rename_plugin changes only a plugin's display name, never its install name.",
+			"To delete an MCP server, which only an organization administrator can do, read it first with find_mcp or get_mcp in the exact project, name that server and project to the user, and wait for explicit confirmation. Then call delete_mcp with its project_id, mcp_id, the version from that read, and a fresh idempotency key. Delete one server per confirmation and never more than the user named. A server hosted from a toolset is turned off rather than removed, as the dashboard does. Report the returned outcome and current_state; on a conflict, read the server again and renew confirmation.",
 			"To remove existing plugin content, use remove_plugin_server with exact project, plugin and membership IDs after explicit confirmation. This changes distribution only, never server access. remove_mcp_from_plugin remains limited to undoing this connection's onboarding distribution. Re-read the plugin and distinguish a publication update from installed-client refresh.",
 			"When a member wants one connection for every MCP server they can reach across the organization, call get_my_organization_gateway and give them its url to add to their MCP client. It lists no servers itself; once connected, the gateway shows the servers their own access reaches. If it is unavailable, relay its next_action as written.",
 			"To change an existing MCP server or gateway address or network access, first read its exact connection settings in the selected project. Show the current and proposed address or mode, and wait for explicit confirmation before changing it. Re-read that same target afterwards. A publication request means the plugin update was requested, not that its packages or downstream users have converged; verify the publication evidence before reporting completion.",
@@ -402,6 +403,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableLifecycleVisibilityTools(reg)
 	} else {
 		registerLifecycleVisibilityTools(reg, registrations)
+	}
+	if registrations == nil {
+		registerLifecycleDeleteTool(reg, nil)
+	} else {
+		registerLifecycleDeleteTool(reg, registrations.lifecycleDelete)
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
 		registerUnavailableSetupHandoffTool(reg)
