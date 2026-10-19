@@ -625,7 +625,13 @@ func (q *Queries) PostflightIDProjectRemoteSessionIssuers(ctx context.Context, p
 const postflightIDProjectUserSessionIssuers = `-- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = $1::uuid AND deleted IS FALSE
+  AND id <> $2::uuid
 `
+
+type PostflightIDProjectUserSessionIssuersParams struct {
+	ProjectID             uuid.UUID
+	TunneledExampleIssuer uuid.UUID
+}
 
 // The registrations are the point of the Connections surfaces: one per
 // credential kind, plus the pre-column row. A rerun that dropped or
@@ -633,9 +639,10 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // than the one they were seeded to tell.
 // One issuer per Connections credential story (acme-partner-gateway), three
 // project MCP issuers, and the organization-wide workforce issuer used by
-// GitHub.
-func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
+// GitHub. The JAMF tool-permission example's issuer is checked by id in the
+// first postflight half.
+func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, arg PostflightIDProjectUserSessionIssuersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, arg.ProjectID, arg.TunneledExampleIssuer)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

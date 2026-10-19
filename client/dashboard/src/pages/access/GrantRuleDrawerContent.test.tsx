@@ -51,7 +51,7 @@ const serverGroups: ServerGroup[] = [
         slug: "server-one",
         tools: [{ id: "tool_one", name: "search", type: "http" }],
         dynamicTools: false,
-        remoteBacked: false,
+        storedToolInventory: false,
       },
     ],
   },

@@ -98,7 +98,7 @@ var rolesCustomRoles = []rolesCustomRole{
 	},
 	{
 		slug: "support-desk", name: "Support Desk",
-		description: "Connects to Acme Support Tools with every tool, and to Slack for read-only tools only.",
+		description: "Connects to Acme Support Tools with every tool, to Slack for read-only tools only, and to JAMF only to list devices.",
 		scopes:      []string{},
 		members:     []string{"hana"},
 		agents:      []string{},

@@ -131,10 +131,12 @@ WHERE project_id = @project_id::uuid
 -- than the one they were seeded to tell.
 -- One issuer per Connections credential story (acme-partner-gateway), three
 -- project MCP issuers, and the organization-wide workforce issuer used by
--- GitHub.
+-- GitHub. The JAMF tool-permission example's issuer is checked by id in the
+-- first postflight half.
 -- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
-WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+WHERE project_id = @project_id::uuid AND deleted IS FALSE
+  AND id <> @tunneled_example_issuer::uuid;
 
 -- name: PostflightIDOrgUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers

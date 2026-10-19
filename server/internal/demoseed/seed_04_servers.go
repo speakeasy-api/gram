@@ -164,6 +164,11 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("demo seed: expected 1 supplemental server membership, found %d", n)
 	}
 
+	// After role distribution above, so the tunneled server is in no plugin.
+	if err := s.seedServersTunneledJamf(ctx); err != nil {
+		return err
+	}
+
 	if err := s.q.ServersInsertLinearRemoteSessionIssuer(ctx, repo.ServersInsertLinearRemoteSessionIssuerParams{
 		ID:        s.det("remote-identity-provider-linear"),
 		ProjectID: proj,
@@ -547,6 +552,64 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 		RemoteSessionIssuerID: s.det("ema-idp"),
 	}); err != nil {
 		return fmt.Errorf("insert demo ema provider order: %w", err)
+	}
+	return nil
+}
+
+// seedServersTunneledJamf seeds a tunneled MCP server whose agent has never
+// connected: its recorded tools and a tool-level grant for Support Desk show
+// on the Inspect tab and in the role editor while the tunnel is offline.
+func (s *seeder) seedServersTunneledJamf(ctx context.Context) error {
+	org := s.orgID()
+	proj := s.projectID()
+	serverID := s.det("tunrbac-mcpserver")
+
+	if err := s.q.ServersInsertTunneledJamfSource(ctx, repo.ServersInsertTunneledJamfSourceParams{
+		ID:        s.det("tunrbac-source"),
+		ProjectID: proj,
+	}); err != nil {
+		return fmt.Errorf("insert demo tunneled jamf source: %w", err)
+	}
+	if err := s.q.ServersInsertTunneledJamfIssuer(ctx, repo.ServersInsertTunneledJamfIssuerParams{
+		ID:        s.det("tunrbac-issuer"),
+		ProjectID: proj,
+		OrgID:     org,
+	}); err != nil {
+		return fmt.Errorf("insert demo tunneled jamf issuer: %w", err)
+	}
+	if err := s.q.ServersInsertTunneledJamfServer(ctx, repo.ServersInsertTunneledJamfServerParams{
+		ID:        serverID,
+		ProjectID: proj,
+		SourceID:  s.det("tunrbac-source"),
+		IssuerID:  s.det("tunrbac-issuer"),
+	}); err != nil {
+		return fmt.Errorf("insert demo tunneled jamf server: %w", err)
+	}
+	if err := s.q.ServersInsertTunneledJamfEndpoint(ctx, repo.ServersInsertTunneledJamfEndpointParams{
+		ID:          s.det("tunrbac-endpoint"),
+		ProjectID:   proj,
+		McpServerID: serverID,
+		Slug:        s.spec.OrgSlug + "-jamf",
+	}); err != nil {
+		return fmt.Errorf("insert demo tunneled jamf endpoint: %w", err)
+	}
+	if err := s.q.ServersInsertTunneledJamfToolMetadata(ctx, repo.ServersInsertTunneledJamfToolMetadataParams{
+		ListDevicesID:  s.det("tunrbac-tool-list_devices"),
+		ProjectID:      proj,
+		McpServerID:    serverID,
+		GetDeviceID:    s.det("tunrbac-tool-get_device"),
+		LockDeviceID:   s.det("tunrbac-tool-lock_device"),
+		WipeDeviceID:   s.det("tunrbac-tool-wipe_device"),
+		DeviceStatusID: s.det("tunrbac-tool-device_status"),
+	}); err != nil {
+		return fmt.Errorf("insert demo tunneled jamf tool metadata: %w", err)
+	}
+	if err := s.q.ServersInsertSupportDeskJamfToolGrant(ctx, repo.ServersInsertSupportDeskJamfToolGrantParams{
+		ID:          s.det("tunrbac-grant-list-devices"),
+		OrgID:       org,
+		McpServerID: serverID,
+	}); err != nil {
+		return fmt.Errorf("insert demo support desk jamf tool grant: %w", err)
 	}
 	return nil
 }
