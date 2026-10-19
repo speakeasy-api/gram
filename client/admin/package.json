@@ -32,7 +32,7 @@
     "jsonc-parser": "^3.3.1",
     "lucide-react": "catalog:",
     "monaco-editor": "^0.57.0",
-    "radix-ui": "^1.7.0",
+    "radix-ui": "^1.8.1",
     "react": "^19.3.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.3.0",
