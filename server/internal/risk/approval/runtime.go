@@ -305,5 +305,7 @@ func noteSuffix(row repo.RiskPolicyApproval) string {
 	if !row.DecisionNote.Valid || row.DecisionNote.String == "" {
 		return ""
 	}
-	return " Approver note: " + row.DecisionNote.String
+	// The note is a person's free text. Quote it as data so it cannot read as
+	// an instruction that overrides the denial.
+	return fmt.Sprintf(" The approver left this note, quoted as written: %q", row.DecisionNote.String)
 }
