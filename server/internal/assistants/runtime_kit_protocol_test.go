@@ -108,84 +108,105 @@ func TestKitProtocolDrainsQueuedProjection(t *testing.T) {
 // connection. Reacquiring that lock in settlement would time out this test.
 func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
 	t.Parallel()
-	core, db, key, _ := kitSessionFixture(t)
-	_, err := core.StoreKitRuntimeSession(t.Context(), key, "session-one")
-	require.NoError(t, err)
-	var mu sync.Mutex
-	streams := map[string]chan string{}
-	observed := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer fixture-token" {
-			w.WriteHeader(401)
-			return
-		}
-		session := r.Header.Get("Acp-Session-Id")
-		switch r.Method {
-		case http.MethodPost:
-			var msg struct {
-				ID     json.RawMessage `json:"id"`
-				Method string          `json:"method"`
-			}
-			if json.NewDecoder(r.Body).Decode(&msg) != nil {
-				w.WriteHeader(400)
-				return
-			}
-			if msg.Method == "initialize" {
-				w.Header().Set("Acp-Connection-Id", "connection")
-				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
-				return
-			}
-			mu.Lock()
-			ch := streams[session]
-			mu.Unlock()
-			if ch == nil || msg.Method != "kit/session/status" {
-				w.WriteHeader(400)
-				return
-			}
-			mu.Lock()
-			observed++
-			mu.Unlock()
-			w.WriteHeader(202)
-			ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"session-one\",\"settled\":true,\"foregroundActive\":false,\"backgroundActive\":false,\"pendingBackgroundTerminals\":false,\"activeSubagents\":0}}\n\n", msg.ID)
-		case http.MethodGet:
-			ch := make(chan string, 8)
-			mu.Lock()
-			streams[session] = ch
-			mu.Unlock()
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.WriteHeader(200)
-			flushKitTestResponse(t, w)
-			for {
-				select {
-				case data := <-ch:
-					_, _ = fmt.Fprint(w, data)
-					flushKitTestResponse(t, w)
-				case <-r.Context().Done():
+	for _, busy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("background_busy_%t", busy), func(t *testing.T) {
+			core, db, key, chatID := kitSessionFixture(t)
+			_, err := core.StoreKitRuntimeSession(t.Context(), key, "session-one")
+			require.NoError(t, err)
+			_, err = assistantrepo.New(db).CancelPendingAssistantThreadEvents(t.Context(), assistantrepo.CancelPendingAssistantThreadEventsParams{ProjectID: key.ProjectID, ThreadID: key.ThreadID, PendingStatus: eventStatusPending, CancelledStatus: eventStatusCancelled})
+			require.NoError(t, err)
+			var mu sync.Mutex
+			streams := map[string]chan string{}
+			observed := 0
+			resumed := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") != "Bearer fixture-token" {
+					w.WriteHeader(401)
 					return
 				}
-			}
-		case http.MethodDelete:
-			w.WriteHeader(202)
-		}
-	}))
-	defer server.Close()
-	endpoint, err := url.Parse(server.URL + "/acp/v2")
-	require.NoError(t, err)
-	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: &KitTranscriptProjector{}, CWD: "/workspace", GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t)})
-	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	tx := testenv.BeginTx(t, ctx, db)
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	require.NoError(t, assistantrepo.New(tx).AcquireAssistantAdvisoryLock(ctx, key.AssistantID.String()))
-	r := assistantRuntimeRecord{ID: key.RuntimeID, AssistantID: key.AssistantID, ProjectID: key.ProjectID, RuntimeVersion: 3}
-	ready, err := p.PrepareRuntimeSwitch(ctx, assistantRecord{ID: key.AssistantID, ProjectID: key.ProjectID}, []assistantRuntimeRecord{r}, 2)
-	require.NoError(t, err)
-	require.True(t, ready.Settled)
-	require.NotNil(t, ready.Release)
-	mu.Lock()
-	require.Equal(t, 1, observed)
-	mu.Unlock()
+				session := r.Header.Get("Acp-Session-Id")
+				switch r.Method {
+				case http.MethodPost:
+					var msg struct {
+						ID     json.RawMessage            `json:"id"`
+						Method string                     `json:"method"`
+						Params map[string]json.RawMessage `json:"params"`
+					}
+					if json.NewDecoder(r.Body).Decode(&msg) != nil {
+						w.WriteHeader(400)
+						return
+					}
+					if msg.Method == "initialize" {
+						w.Header().Set("Acp-Connection-Id", "connection")
+						_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
+						return
+					}
+					mu.Lock()
+					ch := streams[session]
+					mu.Unlock()
+					if ch != nil && msg.Method == "session/resume" {
+						require.NotContains(t, msg.Params, "replayFrom")
+						require.NotContains(t, msg.Params, "mcpServers")
+						require.JSONEq(t, fmt.Sprintf(`{"ai.speakeasy/gram-chat-id":%q}`, chatID.String()), string(msg.Params["_meta"]))
+						resumed = true
+						w.WriteHeader(202)
+						ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
+						return
+					}
+					if ch == nil || msg.Method != "kit/session/status" || !resumed {
+						w.WriteHeader(400)
+						return
+					}
+					mu.Lock()
+					observed++
+					mu.Unlock()
+					w.WriteHeader(202)
+					ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"session-one\",\"settled\":%t,\"foregroundActive\":false,\"backgroundActive\":%t,\"pendingBackgroundTerminals\":false,\"activeSubagents\":0}}\n\n", msg.ID, !busy, busy)
+				case http.MethodGet:
+					ch := make(chan string, 8)
+					mu.Lock()
+					streams[session] = ch
+					mu.Unlock()
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(200)
+					flushKitTestResponse(t, w)
+					for {
+						select {
+						case data := <-ch:
+							_, _ = fmt.Fprint(w, data)
+							flushKitTestResponse(t, w)
+						case <-r.Context().Done():
+							return
+						}
+					}
+				case http.MethodDelete:
+					w.WriteHeader(202)
+				}
+			}))
+			defer server.Close()
+			endpoint, err := url.Parse(server.URL + "/acp/v2")
+			require.NoError(t, err)
+			p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: &KitTranscriptProjector{}, CWD: "/workspace", GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t)})
+			require.NoError(t, err)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			tx := testenv.BeginTx(t, ctx, db)
+			defer func() { _ = tx.Rollback(context.Background()) }()
+			require.NoError(t, assistantrepo.New(tx).AcquireAssistantAdvisoryLock(ctx, key.AssistantID.String()))
+			admitted, err := assistantrepo.New(tx).AssistantHasUnsettledEvents(ctx, assistantrepo.AssistantHasUnsettledEventsParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID})
+			require.NoError(t, err)
+			require.True(t, admitted.Valid)
+			require.False(t, admitted.Bool)
+			r := assistantRuntimeRecord{ID: key.RuntimeID, AssistantID: key.AssistantID, ProjectID: key.ProjectID, RuntimeVersion: 3}
+			ready, err := p.PrepareRuntimeSwitch(ctx, assistantRecord{ID: key.AssistantID, ProjectID: key.ProjectID}, []assistantRuntimeRecord{r}, 2)
+			require.NoError(t, err)
+			require.Equal(t, !busy, ready.Settled)
+			require.NotNil(t, ready.Release)
+			mu.Lock()
+			require.Equal(t, 1, observed)
+			mu.Unlock()
+		})
+	}
 }
 
 func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
@@ -284,6 +305,10 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 					result = catalog()
 				}
 				if msg.Method == "session/resume" && prompts > 0 {
+					// Resident gateway replay is the original ordered journal,
+					// including chunks with their original live message ID.
+					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":"projected "}}}}` + "\n\n"
+					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":"final"}}}}` + "\n\n"
 					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"user_message","messageId":"authoritative-user-message-1","content":[{"type":"text","text":"hello"}]}}}` + "\n\n"
 				}
 
@@ -320,9 +345,12 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				}
 				result = fmt.Sprintf(`{"messageId":"authoritative-user-message-%d"}`, prompts)
 			case "kit/session/status":
-				// Deliberately queue the final full replacement immediately ahead of the
-				// response. RunTurn may not return before its projector commits this row.
-				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message","messageId":"reply","content":[{"type":"text","text":"projected final"}]}}}` + "\n\n"
+				// Pinned Kit normal live completion emits chunks only, not a
+				// final full replacement. Settlement must await their writes.
+				if prompts == 1 {
+					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":"projected "}}}}` + "\n\n"
+					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":"final"}}}}` + "\n\n"
+				}
 				result = `{"sessionId":"session-one","settled":true,"foregroundActive":false,"backgroundActive":false,"pendingBackgroundTerminals":false,"activeSubagents":0}`
 			case "session/cancel":
 				w.WriteHeader(202)
@@ -373,7 +401,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 		if message.Role == "user" {
 			users++
 		}
-		if message.Role == "assistant" && strings.Contains(message.Content, "projected final") {
+		if message.Role == "assistant" && message.Content == "projected final" {
 			finals++
 		}
 	}

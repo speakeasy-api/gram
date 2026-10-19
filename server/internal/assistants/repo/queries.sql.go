@@ -2718,9 +2718,13 @@ func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg 
 }
 
 const listKitProtocolSessions = `-- name: ListKitProtocolSessions :many
-SELECT acp_session_id FROM assistant_kit_sessions
-WHERE project_id= $1 AND assistant_id= $2 AND runtime_id= $3
-ORDER BY acp_session_id
+SELECT s.acp_session_id, c.id AS chat_id
+FROM assistant_kit_sessions s
+LEFT JOIN assistant_threads t ON t.id = s.assistant_thread_id
+  AND t.project_id = s.project_id AND t.assistant_id = s.assistant_id AND t.deleted IS FALSE
+LEFT JOIN chats c ON c.id = t.chat_id AND c.project_id = s.project_id AND c.deleted IS FALSE
+WHERE s.project_id = $1 AND s.assistant_id = $2 AND s.runtime_id = $3
+ORDER BY s.acp_session_id
 `
 
 type ListKitProtocolSessionsParams struct {
@@ -2729,19 +2733,24 @@ type ListKitProtocolSessionsParams struct {
 	RuntimeID   uuid.NullUUID
 }
 
-func (q *Queries) ListKitProtocolSessions(ctx context.Context, arg ListKitProtocolSessionsParams) ([]string, error) {
+type ListKitProtocolSessionsRow struct {
+	AcpSessionID string
+	ChatID       uuid.NullUUID
+}
+
+func (q *Queries) ListKitProtocolSessions(ctx context.Context, arg ListKitProtocolSessionsParams) ([]ListKitProtocolSessionsRow, error) {
 	rows, err := q.db.Query(ctx, listKitProtocolSessions, arg.ProjectID, arg.AssistantID, arg.RuntimeID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListKitProtocolSessionsRow
 	for rows.Next() {
-		var acp_session_id string
-		if err := rows.Scan(&acp_session_id); err != nil {
+		var i ListKitProtocolSessionsRow
+		if err := rows.Scan(&i.AcpSessionID, &i.ChatID); err != nil {
 			return nil, err
 		}
-		items = append(items, acp_session_id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

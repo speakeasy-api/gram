@@ -1930,9 +1930,13 @@ WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @as
   AND a.runtime_version = 3 AND a.deleted IS FALSE;
 
 -- name: ListKitProtocolSessions :many
-SELECT acp_session_id FROM assistant_kit_sessions
-WHERE project_id= @project_id AND assistant_id= @assistant_id AND runtime_id= @runtime_id
-ORDER BY acp_session_id;
+SELECT s.acp_session_id, c.id AS chat_id
+FROM assistant_kit_sessions s
+LEFT JOIN assistant_threads t ON t.id = s.assistant_thread_id
+  AND t.project_id = s.project_id AND t.assistant_id = s.assistant_id AND t.deleted IS FALSE
+LEFT JOIN chats c ON c.id = t.chat_id AND c.project_id = s.project_id AND c.deleted IS FALSE
+WHERE s.project_id = @project_id AND s.assistant_id = @assistant_id AND s.runtime_id = @runtime_id
+ORDER BY s.acp_session_id;
 
 -- name: KitProtocolHasPriorMessages :one
 SELECT EXISTS(SELECT 1 FROM chat_messages

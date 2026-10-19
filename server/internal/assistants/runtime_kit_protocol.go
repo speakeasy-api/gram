@@ -184,6 +184,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	defer cancel()
 	projection := make(chan error, 1)
 	flush := make(chan chan error)
+	reducer := newKitTranscriptReducer()
 	go func() {
 		err := kitConsumeNotifications(work, c.Notifications(), flush, func(n kitacp.Notification) error {
 			if n.SessionID != session.SessionID {
@@ -210,7 +211,11 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			}
 			echoMu.RLock()
 			defer echoMu.RUnlock()
-			_, err := p.config.Projector.Handle(work, binding, n)
+			canonical, err := reducer.Apply(n)
+			if err != nil {
+				return err
+			}
+			_, err = p.config.Projector.Handle(work, binding, canonical)
 			return err
 		})
 		projection <- err
@@ -385,14 +390,28 @@ func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant
 		}
 	}()
 	for _, session := range sessions {
-		if err = c.AttachSession(ctx, session); err != nil {
-			return result, fmt.Errorf("kit protocol operation: %w", err)
+		if !session.ChatID.Valid || session.ChatID.UUID == uuid.Nil {
+			return result, ErrKitRuntimeBinding
 		}
-		raw, e := c.Call(ctx, "kit/session/status", map[string]string{"sessionId": session}, session)
+		if err = c.AttachSession(ctx, session.AcpSessionID); err != nil {
+			return result, fmt.Errorf("attach Kit switch session: %w", err)
+		}
+		// The admission fence excludes foreground controllers. Resume replaces
+		// transport control, not autonomous work. Omit replayFrom and mcpServers:
+		// this is observation, not transcript replay or overlay replacement.
+		_, err = c.Call(ctx, "session/resume", map[string]any{
+			"sessionId": session.AcpSessionID,
+			"cwd":       p.config.CWD,
+			"_meta":     map[string]string{"ai.speakeasy/gram-chat-id": session.ChatID.UUID.String()},
+		}, session.AcpSessionID)
+		if err != nil {
+			return result, fmt.Errorf("resume Kit switch session: %w", err)
+		}
+		raw, e := c.Call(ctx, "kit/session/status", map[string]string{"sessionId": session.AcpSessionID}, session.AcpSessionID)
 		if e != nil {
 			return result, fmt.Errorf("observe kit settlement: %w", e)
 		}
-		settled, e := kitSettled(raw, session)
+		settled, e := kitSettled(raw, session.AcpSessionID)
 		if e != nil {
 			return result, fmt.Errorf("observe kit settlement: %w", e)
 		}

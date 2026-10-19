@@ -113,12 +113,12 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 	if p.writer == nil {
 		return out, fmt.Errorf("kit transcript writer unavailable")
 	}
+	if u.SessionUpdate == "tool_call_update" {
+		return p.handleKitToolUpdate(ctx, b, u, envelope.Update)
+	}
 	switch u.SessionUpdate {
-	case "user_message", "agent_message", "tool_call_update":
+	case "user_message", "agent_message":
 		key := u.MessageID
-		if u.SessionUpdate == "tool_call_update" {
-			key = u.ToolCallID
-		}
 		if key == "" {
 			return out, fmt.Errorf("kit transcript update missing stable ID")
 		}
@@ -126,9 +126,6 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 		out.Role = "assistant"
 		if u.SessionUpdate == "user_message" {
 			out.Role = "user"
-		}
-		if u.SessionUpdate == "tool_call_update" {
-			out.Role = "tool"
 		}
 		if echo, ok := b.UserEchoes[key]; ok && u.SessionUpdate == "user_message" {
 			err := p.guarded(ctx, b, func(tx pgx.Tx) error {
