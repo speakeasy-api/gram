@@ -221,20 +221,21 @@ func TestRegisterDevice_RechecksTheDeviceAgentGrants(t *testing.T) {
 	agentID := newAgent(t, ctx, ti, "grants-removed")
 	token := createJoinToken(t, ctx, ti, agentID)
 
-	selectors, err := authz.NewSelector(authz.ScopeOrgHooksIngest, ti.orgID).MarshalJSON()
+	selectors, err := authz.NewSelector(authz.ScopeOrgDeviceAgentSync, ti.orgID).MarshalJSON()
 	require.NoError(t, err)
 	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
 		OrganizationID: ti.orgID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
-		Scope:          string(authz.ScopeOrgHooksIngest),
+		Scope:          string(authz.ScopeOrgDeviceAgentSync),
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)
 
 	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	require.ErrorContains(t, err, "org:device_agent_sync")
 
-	seedAgentGrant(t, ctx, ti, agentID, authz.ScopeOrgHooksIngest)
+	seedAgentGrant(t, ctx, ti, agentID, authz.ScopeOrgDeviceAgentSync)
 	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
 	require.NoError(t, err, "the refused attempt must not have spent the token")
 }
@@ -340,7 +341,7 @@ func TestCreateDeviceJoinToken_RequiresAuthorizingTheAgent(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestCreateDeviceJoinToken_RequiresTheDeviceAgentGrants(t *testing.T) {
+func TestCreateDeviceJoinToken_RequiresOnlyDeviceAgentSync(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
@@ -354,21 +355,22 @@ func TestCreateDeviceJoinToken_RequiresTheDeviceAgentGrants(t *testing.T) {
 		}
 	}
 
+	// A hooks grant alone does not let a device poll its policy.
 	bare := newAgentWithoutDeviceGrants(t, ctx, ti, "no-device-grants")
+	seedAgentGrant(t, ctx, ti, bare, authz.ScopeOrgHooksIngest)
 	_, err := ti.service.CreateDeviceJoinToken(ctx, payload(bare))
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
-	require.ErrorContains(t, err, "org:device_agent_sync and org:hooks_ingest")
+	require.ErrorContains(t, err, "the agent's policy must grant org:device_agent_sync on the organization")
 
-	// Policy polling alone is not enough: hooks would be refused on every send.
-	seedAgentGrant(t, ctx, ti, bare, authz.ScopeOrgDeviceAgentSync)
-	_, err = ti.service.CreateDeviceJoinToken(ctx, payload(bare))
-	requireOopsCode(t, err, oops.CodeFailedPrecondition)
-	require.ErrorContains(t, err, "org:hooks_ingest")
-	require.NotContains(t, err.Error(), "org:device_agent_sync")
-
-	seedAgentGrant(t, ctx, ti, bare, authz.ScopeOrgHooksIngest)
-	_, err = ti.service.CreateDeviceJoinToken(ctx, payload(bare))
+	// Device-agent sync with no hooks grant enrolls: hooks are checked per
+	// request, so the device can still use MCP.
+	mcpOnly := newAgentWithoutDeviceGrants(t, ctx, ti, "mcp-only")
+	seedAgentGrant(t, ctx, ti, mcpOnly, authz.ScopeOrgDeviceAgentSync)
+	join, err := ti.service.CreateDeviceJoinToken(ctx, payload(mcpOnly))
 	require.NoError(t, err)
+	reg, err := registerDevice(ctx, ti, join.Token, publicJWK(t, newDeviceKey(t).Public()))
+	require.NoError(t, err)
+	require.Equal(t, mcpOnly.String(), reg.AgentID)
 }
 
 // asUser returns ctx as another user of the same organization arrives.
