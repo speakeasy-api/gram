@@ -4597,8 +4597,8 @@ func (q *Queries) SeedCapturedAgentChatFixture(ctx context.Context, arg SeedCapt
 }
 
 const seedCapturedAgentChatMessageFixture = `-- name: SeedCapturedAgentChatMessageFixture :one
-INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, source, content_asset_url, risk_analyzed_at, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, content_raw, user_id, source, content_asset_url, risk_analyzed_at, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING id
 `
 
@@ -4609,6 +4609,8 @@ type SeedCapturedAgentChatMessageFixtureParams struct {
 	Content         string
 	Generation      int32
 	ToolCalls       []byte
+	ContentRaw      []byte
+	UserID          pgtype.Text
 	Source          pgtype.Text
 	ContentAssetUrl pgtype.Text
 	RiskAnalyzedAt  pgtype.Timestamptz
@@ -4616,8 +4618,8 @@ type SeedCapturedAgentChatMessageFixtureParams struct {
 }
 
 // Test-only fixture: inserts a captured transcript row with the full recall
-// shape — generation, tool_calls, capture source, asset offload marker, and
-// risk-analysis completion — at a deterministic created_at.
+// shape — generation, tool_calls, stored payload, sender, capture source, asset
+// offload marker, and risk-analysis completion — at a deterministic created_at.
 func (q *Queries) SeedCapturedAgentChatMessageFixture(ctx context.Context, arg SeedCapturedAgentChatMessageFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedCapturedAgentChatMessageFixture,
 		arg.ChatID,
@@ -4626,6 +4628,8 @@ func (q *Queries) SeedCapturedAgentChatMessageFixture(ctx context.Context, arg S
 		arg.Content,
 		arg.Generation,
 		arg.ToolCalls,
+		arg.ContentRaw,
+		arg.UserID,
 		arg.Source,
 		arg.ContentAssetUrl,
 		arg.RiskAnalyzedAt,
@@ -4634,6 +4638,33 @@ func (q *Queries) SeedCapturedAgentChatMessageFixture(ctx context.Context, arg S
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedChatMessageParticipantFixture = `-- name: SeedChatMessageParticipantFixture :exec
+INSERT INTO chat_message_participants (project_id, chat_id, message_id, provider, provider_user_id, user_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type SeedChatMessageParticipantFixtureParams struct {
+	ProjectID      uuid.UUID
+	ChatID         uuid.NullUUID
+	MessageID      uuid.NullUUID
+	Provider       string
+	ProviderUserID string
+	UserID         pgtype.Text
+}
+
+// Test-only fixture: records one participant snapshot on a captured message.
+func (q *Queries) SeedChatMessageParticipantFixture(ctx context.Context, arg SeedChatMessageParticipantFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedChatMessageParticipantFixture,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.MessageID,
+		arg.Provider,
+		arg.ProviderUserID,
+		arg.UserID,
+	)
+	return err
 }
 
 const seedDelegationLoaderClientFixture = `-- name: SeedDelegationLoaderClientFixture :exec

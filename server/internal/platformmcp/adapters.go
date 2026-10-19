@@ -613,7 +613,7 @@ func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *Postgre
 	return r
 }
 
-// WithChatSearch attaches explicitly authorized transcript search and evidence reads.
+// WithChatSearch attaches explicitly authorized transcript search and reads.
 func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.chatSearch = service

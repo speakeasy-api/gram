@@ -992,16 +992,6 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
-    queries: ../internal/platformmcp/fixtures/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "fixtures"
-        out: "../internal/platformmcp/fixtures"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
-  - schema: schema.sql
     queries: ../internal/killswitches/queries.sql
     engine: postgresql
     gen:

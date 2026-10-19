@@ -3963,161 +3963,61 @@ WHERE drm.organization_id = @organization_id
   AND drm.deleted IS FALSE
 ORDER BY drm.role_urn, drm.source_kind DESC, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
 
+-- name: SearchPlatformChatMessages :many
+-- Literal substring search over captured messages in one project and interval,
+-- newest or oldest first by (created_at, id). Fields over 128 KiB are neither
+-- matched nor returned. The caller requests one extra row to detect more pages.
+SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
+       COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       COALESCE(c.user_id, '')::text AS owner_user_id,
+       CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(m.content_raw::text) <= 131072 THEN m.content_raw END::jsonb AS content_raw,
+       (octet_length(m.content) > 131072 OR COALESCE(octet_length(m.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS oversized
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = c.project_id
+WHERE m.project_id = @project_id::uuid
+  AND c.organization_id = @organization_id AND p.organization_id = @organization_id
+  AND c.deleted IS FALSE AND p.deleted IS FALSE
+  AND m.created_at >= @from_time AND m.created_at < @to_time
+  AND (cardinality(@chat_ids::uuid[]) = 0 OR m.chat_id = ANY(@chat_ids::uuid[]))
+  AND (@owner_user_id::text = '' OR c.user_id = @owner_user_id)
+  AND (@source::text = '' OR m.source = @source)
+  AND (@pattern::text = ''
+       OR (octet_length(m.content) <= 131072 AND m.content ILIKE @pattern ESCAPE '\')
+       OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE @pattern ESCAPE '\')
+       OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE @pattern ESCAPE '\')
+       OR c.title ILIKE @pattern ESCAPE '\')
+  AND (@participant_id::text = ''
+       OR (@participant_provider::text = '' AND m.user_id = @participant_id)
+       OR EXISTS (
+         SELECT 1 FROM chat_message_participants cp
+         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id AND cp.message_id = m.id
+           AND (cp.user_id = @participant_id OR cp.provider_user_id = @participant_id)
+           AND (@participant_provider = '' OR cp.provider = @participant_provider)))
+  AND (NOT @has_cursor::boolean
+       OR (@oldest_first::boolean AND (m.created_at, m.id) > (@cursor_at::timestamptz, @cursor_id::uuid))
+       OR (NOT @oldest_first AND (m.created_at, m.id) < (@cursor_at, @cursor_id)))
+ORDER BY CASE WHEN @oldest_first THEN m.created_at END ASC,
+         CASE WHEN @oldest_first THEN m.id END ASC,
+         CASE WHEN NOT @oldest_first THEN m.created_at END DESC,
+         CASE WHEN NOT @oldest_first THEN m.id END DESC
+LIMIT @row_limit::integer;
 
--- name: SearchPlatformChatEvidence :many
--- Traverse indexed sessions, then their captured messages. Query text is never
--- used to choose a scan boundary: hidden credential matches cannot affect a
--- continuation. The caller matches canonical, redacted text after this read.
-WITH eligible AS NOT MATERIALIZED (
- SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at
- FROM chats c
- JOIN projects p ON p.id=c.project_id AND p.organization_id=c.organization_id AND p.deleted IS FALSE
- WHERE c.organization_id=sqlc.arg('organization_id') AND p.organization_id=sqlc.arg('organization_id') AND c.project_id=sqlc.arg('project_id')
-   AND c.deleted IS FALSE
-   AND (sqlc.arg('owner_user_id')::text='' OR c.user_id=sqlc.arg('owner_user_id'))
-   AND (COALESCE(cardinality(sqlc.arg('chat_ids')::uuid[]),0)=0 OR c.id=ANY(sqlc.arg('chat_ids')::uuid[]))
-   AND (
-     (sqlc.arg('source')::text='' AND c.updated_at>=sqlc.arg('from_time') AND c.updated_at<sqlc.arg('to_time'))
-     OR EXISTS (
-       SELECT 1 FROM chat_messages probe
-       WHERE probe.chat_id=c.id AND probe.project_id=sqlc.arg('project_id')
-         AND probe.created_at>=sqlc.arg('from_time') AND probe.created_at<sqlc.arg('to_time')
-         AND (sqlc.arg('source')::text='' OR probe.source=sqlc.arg('source'))
-     )
-   )
-), newest AS (
- SELECT * FROM eligible c
- WHERE NOT sqlc.arg('oldest_first')::boolean
-   AND (NOT sqlc.arg('has_cursor')::boolean OR (c.created_at,c.id)<=(sqlc.arg('cursor_session_at')::timestamptz,sqlc.arg('cursor_session_id')::uuid))
- ORDER BY c.created_at DESC,c.id DESC LIMIT sqlc.arg('session_row_limit')
-), oldest AS (
- SELECT * FROM eligible c
- WHERE sqlc.arg('oldest_first')::boolean
-   AND (NOT sqlc.arg('has_cursor')::boolean OR (c.created_at,c.id)>=(sqlc.arg('cursor_session_at')::timestamptz,sqlc.arg('cursor_session_id')::uuid))
- ORDER BY c.created_at ASC,c.id ASC LIMIT sqlc.arg('session_row_limit')
-), candidates AS MATERIALIZED (
- SELECT * FROM newest UNION ALL SELECT * FROM oldest
-), chosen AS MATERIALIZED (
- SELECT * FROM candidates
- ORDER BY CASE WHEN sqlc.arg('oldest_first')::boolean THEN created_at END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN id END ASC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN created_at END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN id END DESC
- LIMIT sqlc.arg('session_limit')
-), events AS (
- SELECT c.id AS chat_id,c.user_id,c.created_at AS session_at,c.id AS evidence_id,
-        0::integer AS event_kind,0::bigint AS seq,c.updated_at AS created_at
- FROM chosen c
- WHERE NOT sqlc.arg('has_cursor')::boolean OR c.id<>sqlc.arg('cursor_session_id')::uuid
- UNION ALL
- SELECT c.id,c.user_id,c.created_at,m.id,1::integer,m.seq,m.created_at
- FROM chosen c
- CROSS JOIN LATERAL (
-   (SELECT m.id,m.seq,m.created_at FROM chat_messages m
-     WHERE sqlc.arg('include_messages')::boolean AND m.chat_id=c.id AND m.project_id=sqlc.arg('project_id')
-       AND m.created_at>=sqlc.arg('from_time') AND m.created_at<sqlc.arg('to_time')
-       AND (sqlc.arg('source')::text='' OR m.source=sqlc.arg('source'))
-       AND sqlc.arg('oldest_first')::boolean
-       AND (NOT sqlc.arg('has_cursor')::boolean OR c.id<>sqlc.arg('cursor_session_id')::uuid OR sqlc.arg('cursor_kind')::integer=0
-            OR (m.created_at,m.seq,m.id)>(sqlc.arg('cursor_message_at')::timestamptz,sqlc.arg('cursor_seq')::bigint,sqlc.arg('cursor_id')::uuid))
-     ORDER BY m.created_at ASC,m.seq ASC,m.id ASC LIMIT sqlc.arg('row_limit')
-   ) UNION ALL (
-     SELECT m.id,m.seq,m.created_at FROM chat_messages m
-     WHERE sqlc.arg('include_messages')::boolean AND m.chat_id=c.id AND m.project_id=sqlc.arg('project_id')
-       AND m.created_at>=sqlc.arg('from_time') AND m.created_at<sqlc.arg('to_time')
-       AND (sqlc.arg('source')::text='' OR m.source=sqlc.arg('source'))
-       AND NOT sqlc.arg('oldest_first')::boolean
-       AND (NOT sqlc.arg('has_cursor')::boolean OR c.id<>sqlc.arg('cursor_session_id')::uuid OR sqlc.arg('cursor_kind')::integer=0
-            OR (m.created_at,m.seq,m.id)<(sqlc.arg('cursor_message_at')::timestamptz,sqlc.arg('cursor_seq')::bigint,sqlc.arg('cursor_id')::uuid))
-     ORDER BY m.created_at DESC,m.seq DESC,m.id DESC LIMIT sqlc.arg('row_limit')
-   )
- ) m
-), ids AS MATERIALIZED (
- SELECT * FROM events
- ORDER BY CASE WHEN sqlc.arg('oldest_first')::boolean THEN session_at END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN chat_id END ASC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN session_at END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN chat_id END DESC,
-          event_kind ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN created_at END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN seq END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN evidence_id END ASC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN created_at END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN seq END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN evidence_id END DESC
- LIMIT sqlc.arg('row_limit')
-), payloads AS MATERIALIZED (
- SELECT i.*,
-   CASE WHEN i.event_kind=0 THEN 'session' ELSE cm.role END::text AS role,
-   COALESCE(cm.generation,0)::integer AS generation,
-   CASE WHEN i.event_kind=0 THEN COALESCE(c.title,'') ELSE cm.content END::text AS raw_content,
-   cm.tool_calls,cm.content_raw,cm.tool_call_id,cm.source,
-   (cm.content_asset_url IS NOT NULL AND cm.content_raw IS NULL) AS offloaded
- FROM ids i JOIN chosen c ON c.id=i.chat_id
- LEFT JOIN chat_messages cm ON i.event_kind=1 AND cm.id=i.evidence_id AND cm.chat_id=i.chat_id AND cm.project_id=sqlc.arg('project_id')
-), capped AS MATERIALIZED (
- SELECT chat_id,user_id,session_at,evidence_id,event_kind,seq,created_at,role,generation,
-   CASE WHEN octet_length(raw_content)<=131072 THEN raw_content ELSE '' END::text AS content,
-   CASE WHEN octet_length(tool_calls::text)<=131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
-   CASE WHEN octet_length(content_raw::text)<=131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
-   CASE WHEN octet_length(tool_call_id)<=4096 THEN tool_call_id ELSE NULL END::text AS tool_call_id,
-   CASE WHEN octet_length(source)<=4096 THEN source ELSE NULL END::text AS source,
-   offloaded,
-   (octet_length(raw_content)>131072 OR COALESCE(octet_length(tool_calls::text),0)>131072 OR COALESCE(octet_length(content_raw::text),0)>131072 OR COALESCE(octet_length(tool_call_id),0)>4096 OR COALESCE(octet_length(source),0)>4096) AS oversized
- FROM payloads
-), sized AS (
- SELECT *, (octet_length(content)+COALESCE(octet_length(tool_calls::text),0)+COALESCE(octet_length(content_raw::text),0)+COALESCE(octet_length(tool_call_id),0)+COALESCE(octet_length(source),0))::bigint AS payload_bytes
- FROM capped
-), budgeted AS (
- SELECT *, SUM(payload_bytes) OVER (
- ORDER BY CASE WHEN sqlc.arg('oldest_first')::boolean THEN session_at END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN chat_id END ASC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN session_at END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN chat_id END DESC,
-          event_kind ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN created_at END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN seq END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN evidence_id END ASC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN created_at END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN seq END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN evidence_id END DESC
- ROWS UNBOUNDED PRECEDING) AS cumulative_bytes
- FROM sized
-)
-SELECT chat_id,user_id,session_at,evidence_id,event_kind,seq,created_at,role,generation,
-       CASE WHEN cumulative_bytes<=sqlc.arg('byte_budget')::bigint THEN content ELSE '' END::text AS content,
-       CASE WHEN cumulative_bytes<=sqlc.arg('byte_budget')::bigint THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
-       CASE WHEN cumulative_bytes<=sqlc.arg('byte_budget')::bigint THEN content_raw ELSE NULL END::jsonb AS content_raw,
-       CASE WHEN cumulative_bytes<=sqlc.arg('byte_budget')::bigint THEN COALESCE(tool_call_id,'') ELSE '' END::text AS tool_call_id,
-       CASE WHEN cumulative_bytes<=sqlc.arg('byte_budget')::bigint THEN COALESCE(source,'') ELSE '' END::text AS source,
-       offloaded,oversized,payload_bytes,
-       (cumulative_bytes<=sqlc.arg('byte_budget')::bigint)::boolean AS payload_available,
-       ((SELECT count(*) FROM candidates)>(SELECT count(*) FROM chosen))::boolean AS more_sessions
-FROM budgeted
--- Include one metadata-only overflow sentinel; the caller does not consume it.
-WHERE cumulative_bytes-payload_bytes<=sqlc.arg('byte_budget')::bigint
-ORDER BY CASE WHEN sqlc.arg('oldest_first')::boolean THEN session_at END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN chat_id END ASC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN session_at END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN chat_id END DESC,
-          event_kind ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN created_at END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN seq END ASC,
-          CASE WHEN sqlc.arg('oldest_first')::boolean THEN evidence_id END ASC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN created_at END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN seq END DESC,
-          CASE WHEN NOT sqlc.arg('oldest_first')::boolean THEN evidence_id END DESC;
-
--- name: GetPlatformChatEvidenceSession :one
-SELECT c.id, c.user_id
+-- name: GetPlatformChatSearchChat :one
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 WHERE c.id = @chat_id AND c.project_id = @project_id AND c.organization_id = @organization_id
   AND c.deleted IS FALSE;
 
--- name: ReadPlatformChatEvidence :many
--- The anchor must belong to this exact session and project. All generations
--- remain available as historical evidence, and are explicitly labelled.
+-- name: ReadPlatformChatMessages :many
+-- Capture-sequence window around one message of this chat, or its latest one,
+-- with up to five recorded participants per message.
 WITH anchor AS (
     SELECT cm.seq FROM chat_messages cm
     JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id AND c.deleted IS FALSE
@@ -4135,67 +4035,20 @@ WITH anchor AS (
      WHERE cm.chat_id = @chat_id AND cm.project_id = @project_id AND cm.seq >= a.seq
      ORDER BY cm.seq ASC LIMIT @following_limit::integer
 ), neighbors AS (SELECT * FROM preceding UNION ALL SELECT * FROM following)
-SELECT id, seq, created_at, role, generation,
-       CASE WHEN octet_length(content) <= 131072 THEN content ELSE '' END::text AS content,
-       CASE WHEN octet_length(tool_calls::text) <= 131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
-       CASE WHEN octet_length(content_raw::text) <= 131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
-       tool_call_id, source,
-       (content_asset_url IS NOT NULL AND content_raw IS NULL) AS offloaded,
-       (octet_length(content) > 131072 OR COALESCE(octet_length(tool_calls::text), 0) > 131072 OR COALESCE(octet_length(content_raw::text), 0) > 131072) AS oversized
-FROM neighbors ORDER BY seq;
-
--- name: ListPlatformChatEvidenceParticipants :many
--- Only messages already selected under transcript authorization are admitted.
--- The per-message sentinel makes truncated attribution explicit.
-SELECT cm.id AS message_id, cp.provider, cp.provider_user_id,
-       cp.provider_team_id, cp.user_id, cp.display_name, cp.created_at
-FROM chat_messages cm
-JOIN chats c ON c.id=cm.chat_id AND c.project_id=cm.project_id AND c.deleted IS FALSE
-JOIN projects pr ON pr.id=c.project_id AND pr.organization_id=c.organization_id AND pr.deleted IS FALSE
-CROSS JOIN LATERAL (
- SELECT
-   CASE WHEN octet_length(p.provider)<=128 THEN p.provider ELSE '[WITHHELD]' END::text AS provider,
-   CASE WHEN octet_length(p.provider_user_id)<=128 THEN p.provider_user_id ELSE '[WITHHELD]' END::text AS provider_user_id,
-   CASE WHEN coalesce(octet_length(p.provider_team_id),0)<=128 THEN coalesce(p.provider_team_id,'') ELSE '[WITHHELD]' END::text AS provider_team_id,
-   CASE WHEN coalesce(octet_length(p.user_id),0)<=128 THEN coalesce(p.user_id,'') ELSE '[WITHHELD]' END::text AS user_id,
-   CASE WHEN coalesce(octet_length(p.display_name),0)<=256 THEN coalesce(p.display_name,'') ELSE '[WITHHELD]' END::text AS display_name,
-   p.created_at, p.id, CASE WHEN
-   (sqlc.arg('participant_user_id')::text<>'' AND p.user_id=sqlc.arg('participant_user_id'))
-   OR (sqlc.arg('participant_provider')::text<>'' AND p.provider=sqlc.arg('participant_provider')
-       AND p.provider_user_id=sqlc.arg('participant_provider_user_id')
-       AND (sqlc.arg('participant_provider_team_id')::text='' OR p.provider_team_id=sqlc.arg('participant_provider_team_id')))
-   THEN 0 ELSE 1 END AS match_priority
- FROM chat_message_participants p
- WHERE p.project_id=cm.project_id AND p.chat_id=cm.chat_id AND p.message_id=cm.id
- ORDER BY match_priority,p.provider,p.provider_user_id,p.id
- LIMIT sqlc.arg('participant_row_limit')::integer
-) cp
-WHERE cm.project_id=sqlc.arg('project_id') AND c.organization_id=sqlc.arg('organization_id')
-  AND pr.organization_id=sqlc.arg('organization_id') AND cm.id=ANY(sqlc.arg('message_ids')::uuid[])
-ORDER BY cm.id,cp.match_priority,cp.provider,cp.provider_user_id,cp.id;
-
--- name: ResolvePlatformChatEvidenceSlackIdentities :many
--- Caller separately requires org:admin for current directory data. A missing
--- workspace is resolvable only when the organization has one exact match.
-WITH identities AS (
- SELECT unnest(sqlc.arg('provider_user_ids')::text[])::text AS provider_user_id,
-        unnest(sqlc.arg('provider_team_ids')::text[])::text AS provider_team_id
-), candidates AS (
- SELECT i.provider_user_id,i.provider_team_id,
-   CASE WHEN coalesce(octet_length(d.display_name),0)<=256 THEN coalesce(d.display_name,'') ELSE '[WITHHELD]' END::text AS display_name,
-   CASE WHEN coalesce(octet_length(m.user_id),0)<=128 THEN coalesce(m.user_id,'') ELSE '[WITHHELD]' END::text AS user_id,
-   m.created_at AS mapping_confirmed_at,d.last_seen_at AS directory_observed_at,
-   count(*) OVER (PARTITION BY i.provider_user_id,i.provider_team_id) AS matches
- FROM identities i
- JOIN projects pr ON pr.id=sqlc.arg('project_id') AND pr.organization_id=sqlc.arg('organization_id') AND pr.deleted IS FALSE
- JOIN slack_directory_memberships d ON d.organization_id=pr.organization_id AND d.slack_user_id=i.provider_user_id
-   AND (i.provider_team_id='' OR d.slack_team_id=i.provider_team_id)
- JOIN slack_directory_connections c ON c.organization_id=d.organization_id AND c.slack_team_id=d.slack_team_id AND c.disconnected_at IS NULL
- LEFT JOIN slack_identity_mappings m ON m.organization_id=d.organization_id
-   AND m.slack_team_id=d.slack_team_id AND m.slack_user_id=d.slack_user_id AND m.revoked_at IS NULL
-   AND d.mapping_conflict_reason IS NULL
-   AND EXISTS (SELECT 1 FROM users u JOIN organization_user_relationships r ON r.user_id=u.id AND r.organization_id=d.organization_id
-               WHERE u.id=m.user_id AND u.deleted_at IS NULL AND r.deleted_at IS NULL)
-)
-SELECT provider_user_id,provider_team_id,display_name,user_id,mapping_confirmed_at,directory_observed_at
-FROM candidates WHERE matches=1;
+SELECT n.id, n.seq, n.created_at, n.role, n.generation,
+       COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
+       CASE WHEN octet_length(n.content) <= 131072 THEN n.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(n.tool_calls::text) <= 131072 THEN n.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(n.content_raw::text) <= 131072 THEN n.content_raw END::jsonb AS content_raw,
+       (octet_length(n.content) > 131072 OR COALESCE(octet_length(n.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS oversized,
+       COALESCE((
+         SELECT jsonb_agg(jsonb_build_object(
+                  'provider', CASE WHEN octet_length(cp.provider) <= 512 THEN cp.provider END, 'provider_user_id', CASE WHEN octet_length(cp.provider_user_id) <= 512 THEN cp.provider_user_id END,
+                  'user_id', COALESCE(CASE WHEN octet_length(cp.user_id) <= 512 THEN cp.user_id END, ''), 'display_name', COALESCE(CASE WHEN octet_length(cp.display_name) <= 1024 THEN cp.display_name END, '')))
+         FROM (SELECT * FROM chat_message_participants cp
+               WHERE cp.project_id = @project_id AND cp.chat_id = n.chat_id AND cp.message_id = n.id
+               ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
+       ), '[]')::jsonb AS participants
+FROM neighbors n ORDER BY n.seq;

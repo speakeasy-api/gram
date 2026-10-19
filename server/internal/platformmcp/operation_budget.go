@@ -184,7 +184,7 @@ const (
 	DrilldownRowsPerConnectionPerWindow          = 1000
 	DrilldownMetricQueriesPerConnectionPerWindow = 20
 
-	// SessionRecallsPer* bound session recall and captured chat evidence reads.
+	// SessionRecallsPer* bound session recall and captured chat search and reads.
 	// These reads share a separate, lower allowance because they return
 	// transcript content; metadata and aggregate reads cannot fund them.
 	SessionRecallsPerConnectionPerMinute   = 10

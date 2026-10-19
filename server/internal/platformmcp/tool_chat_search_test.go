@@ -2,19 +2,19 @@ package platformmcp
 
 import (
 	"encoding/json"
-	"github.com/google/jsonschema-go/jsonschema"
 	"strings"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
-func TestChatEvidenceToolContractAndDiscovery(t *testing.T) {
+func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 	t.Parallel()
-	f := newChatEvidenceFixture(t)
+	f := newChatSearchFixture(t)
 	ctx := f.context(t.Context())
 	live := newRegistrar(newTestMCPServer())
 	registerChatSearchTools(live, f.service)
@@ -41,19 +41,7 @@ func TestChatEvidenceToolContractAndDiscovery(t *testing.T) {
 	admin := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)})
 	require.Empty(t, live.FilterExternalTools(admin, f.principal, tools))
 	require.Empty(t, live.For(AudienceAssistant))
-	for _, arguments := range []string{
-		`{}`,
-		`{"from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z"}`,
-		`{"project_slug":"fixture","project_id":"00000000-0000-0000-0000-000000000001","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z"}`,
-		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","limit":21}`,
-		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","unknown":true}`,
-		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","participant":{}}`,
-		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","participant":{"provider":"slack","provider_user_id":"UEXAMPLE01","unknown":true}}`,
-		`{"project_slug":"fixture","from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z","participant":{"user_id":"fixture","provider":"slack","provider_user_id":"UEXAMPLE01"}}`,
-	} {
-		_, err := descriptorByName(t, live, searchChatsToolName).Invoke(ctx, json.RawMessage(arguments))
-		require.ErrorContains(t, err, "arguments do not match the tool schema", arguments)
-	}
+
 	for _, name := range []string{searchChatsToolName, readChatToolName} {
 		arguments := `{"project_slug":"fixture","chat_id":"00000000-0000-0000-0000-000000000001"}`
 		if name == searchChatsToolName {
@@ -69,7 +57,6 @@ func TestChatEvidenceToolContractAndDiscovery(t *testing.T) {
 	var invalid *ToolRefusalError
 	require.ErrorAs(t, err, &invalid)
 	require.Contains(t, invalid.Payload, `"code":"invalid_request"`)
-	// Public tool invocation exercises typed schemas and the shared error mapping.
 	args, err := json.Marshal(f.search("no match"))
 	require.NoError(t, err)
 	result, err := descriptorByName(t, live, searchChatsToolName).Invoke(ctx, args)
@@ -83,28 +70,34 @@ func TestChatEvidenceToolContractAndDiscovery(t *testing.T) {
 	require.Contains(t, denied.Payload, `"required_scope":"chat:read"`)
 }
 
-func TestChatEvidenceInputSchemaCombinations(t *testing.T) {
+func TestChatSearchInputSchemas(t *testing.T) {
 	t.Parallel()
 	reg := newRegistrar(newTestMCPServer())
 	registerChatSearchTools(reg, nil)
+	chatIDs := make([]string, chatSearchMaxChatIDs+1)
+	for i := range chatIDs {
+		chatIDs[i] = `"00000000-0000-0000-0000-000000000001"`
+	}
+	window := `"from":"2026-01-05T11:00:00Z","to":"2026-01-05T13:00:00Z"`
 	cases := []struct {
 		name, tool, arguments string
 		valid                 bool
 	}{
-		{"mixed provider", searchChatsToolName, `{"participant":{"user_id":"fixture","provider":"slack"}}`, false},
-		{"mixed provider id", searchChatsToolName, `{"participant":{"user_id":"fixture","provider_user_id":"UEXAMPLE01"}}`, false},
-		{"mixed team", searchChatsToolName, `{"participant":{"user_id":"fixture","provider_team_id":"TEXAMPLE01"}}`, false},
-		{"user", searchChatsToolName, `{"participant":{"user_id":"fixture"}}`, true},
-		{"provider", searchChatsToolName, `{"participant":{"provider":"slack","provider_user_id":"UEXAMPLE01","provider_team_id":"TEXAMPLE01"}}`, true},
-		{"unicode", searchChatsToolName, `{}`, true},
-		{"offset missing version", readChatToolName, `{"text_offset":1,"context_size":0,"message_id":"00000000-0000-0000-0000-000000000001"}`, false},
-		{"offset missing message", readChatToolName, `{"text_offset":1,"context_size":0,"expected_text_version":"VERSION"}`, false},
-		{"offset missing context", readChatToolName, `{"text_offset":1,"message_id":"00000000-0000-0000-0000-000000000001","expected_text_version":"VERSION"}`, false},
-		{"offset with context", readChatToolName, `{"text_offset":1,"context_size":1,"message_id":"00000000-0000-0000-0000-000000000001","expected_text_version":"VERSION"}`, false},
-		{"version without message", readChatToolName, `{"context_size":0,"expected_text_version":"VERSION"}`, false},
-		{"continuation", readChatToolName, `{"text_offset":1,"context_size":0,"message_id":"00000000-0000-0000-0000-000000000001","expected_text_version":"VERSION"}`, true},
-		{"version at zero", readChatToolName, `{"context_size":0,"message_id":"00000000-0000-0000-0000-000000000001","expected_text_version":"VERSION"}`, true},
-		{"initial read", readChatToolName, `{}`, true},
+		{"search minimal", searchChatsToolName, `{"project_slug":"fixture",` + window + `}`, true},
+		{"search every filter", searchChatsToolName, `{"project_id":"00000000-0000-0000-0000-000000000001",` + window + `,"query":"x","sort_order":"oldest_first","owner_user_id":"user","participant_id":"UEXAMPLE01","participant_provider":"slack","chat_ids":["00000000-0000-0000-0000-000000000001"],"source":"codex","limit":20,"cursor":"c"}`, true},
+		{"search unicode query", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"query":"` + strings.Repeat("🙂", 256) + `"}`, true},
+		{"search long query", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"query":"` + strings.Repeat("a", 257) + `"}`, false},
+		{"search no project", searchChatsToolName, `{` + window + `}`, false},
+		{"search both projects", searchChatsToolName, `{"project_slug":"fixture","project_id":"00000000-0000-0000-0000-000000000001",` + window + `}`, false},
+		{"provider without participant", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"participant_provider":"slack"}`, false},
+		{"search no dates", searchChatsToolName, `{"project_slug":"fixture"}`, false},
+		{"search limit", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"limit":21}`, false},
+		{"search sort", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"sort_order":"relevance"}`, false},
+		{"search chat ids", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"chat_ids":[` + strings.Join(chatIDs, ",") + `]}`, false},
+		{"search unknown", searchChatsToolName, `{"project_slug":"fixture",` + window + `,"unknown":true}`, false},
+		{"read minimal", readChatToolName, `{"project_slug":"fixture","chat_id":"00000000-0000-0000-0000-000000000001"}`, true},
+		{"read context", readChatToolName, `{"project_slug":"fixture","chat_id":"00000000-0000-0000-0000-000000000001","context_size":6}`, false},
+		{"read no chat", readChatToolName, `{"project_slug":"fixture"}`, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -114,17 +107,7 @@ func TestChatEvidenceInputSchemaCombinations(t *testing.T) {
 			resolved, err := schema.Resolve(nil)
 			require.NoError(t, err)
 			var args map[string]any
-			require.NoError(t, json.Unmarshal([]byte(strings.ReplaceAll(tc.arguments, "VERSION", strings.Repeat("a", 64))), &args))
-			args["project_slug"] = "fixture"
-			if tc.tool == searchChatsToolName {
-				args["from"] = "2026-01-05T11:00:00Z"
-				args["to"] = "2026-01-05T13:00:00Z"
-				if tc.name == "unicode" {
-					args["query"] = strings.Repeat("🙂", 256)
-				}
-			} else {
-				args["chat_id"] = "00000000-0000-0000-0000-000000000001"
-			}
+			require.NoError(t, json.Unmarshal([]byte(tc.arguments), &args))
 			if tc.valid {
 				require.NoError(t, resolved.Validate(args))
 			} else {

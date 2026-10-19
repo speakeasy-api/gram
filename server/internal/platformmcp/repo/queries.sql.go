@@ -1939,29 +1939,30 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 	return i, err
 }
 
-const getPlatformChatEvidenceSession = `-- name: GetPlatformChatEvidenceSession :one
-SELECT c.id, c.user_id
+const getPlatformChatSearchChat = `-- name: GetPlatformChatSearchChat :one
+SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS title
 FROM chats c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = $1 AND p.deleted IS FALSE
 WHERE c.id = $2 AND c.project_id = $3 AND c.organization_id = $1
   AND c.deleted IS FALSE
 `
 
-type GetPlatformChatEvidenceSessionParams struct {
+type GetPlatformChatSearchChatParams struct {
 	OrganizationID string
 	ChatID         uuid.UUID
 	ProjectID      uuid.UUID
 }
 
-type GetPlatformChatEvidenceSessionRow struct {
-	ID     uuid.UUID
-	UserID pgtype.Text
+type GetPlatformChatSearchChatRow struct {
+	ID          uuid.UUID
+	OwnerUserID string
+	Title       string
 }
 
-func (q *Queries) GetPlatformChatEvidenceSession(ctx context.Context, arg GetPlatformChatEvidenceSessionParams) (GetPlatformChatEvidenceSessionRow, error) {
-	row := q.db.QueryRow(ctx, getPlatformChatEvidenceSession, arg.OrganizationID, arg.ChatID, arg.ProjectID)
-	var i GetPlatformChatEvidenceSessionRow
-	err := row.Scan(&i.ID, &i.UserID)
+func (q *Queries) GetPlatformChatSearchChat(ctx context.Context, arg GetPlatformChatSearchChatParams) (GetPlatformChatSearchChatRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformChatSearchChat, arg.OrganizationID, arg.ChatID, arg.ProjectID)
+	var i GetPlatformChatSearchChatRow
+	err := row.Scan(&i.ID, &i.OwnerUserID, &i.Title)
 	return i, err
 }
 
@@ -4981,95 +4982,6 @@ func (q *Queries) ListOwnedChatTranscriptMessagesForRecall(ctx context.Context, 
 	return items, nil
 }
 
-const listPlatformChatEvidenceParticipants = `-- name: ListPlatformChatEvidenceParticipants :many
-SELECT cm.id AS message_id, cp.provider, cp.provider_user_id,
-       cp.provider_team_id, cp.user_id, cp.display_name, cp.created_at
-FROM chat_messages cm
-JOIN chats c ON c.id=cm.chat_id AND c.project_id=cm.project_id AND c.deleted IS FALSE
-JOIN projects pr ON pr.id=c.project_id AND pr.organization_id=c.organization_id AND pr.deleted IS FALSE
-CROSS JOIN LATERAL (
- SELECT
-   CASE WHEN octet_length(p.provider)<=128 THEN p.provider ELSE '[WITHHELD]' END::text AS provider,
-   CASE WHEN octet_length(p.provider_user_id)<=128 THEN p.provider_user_id ELSE '[WITHHELD]' END::text AS provider_user_id,
-   CASE WHEN coalesce(octet_length(p.provider_team_id),0)<=128 THEN coalesce(p.provider_team_id,'') ELSE '[WITHHELD]' END::text AS provider_team_id,
-   CASE WHEN coalesce(octet_length(p.user_id),0)<=128 THEN coalesce(p.user_id,'') ELSE '[WITHHELD]' END::text AS user_id,
-   CASE WHEN coalesce(octet_length(p.display_name),0)<=256 THEN coalesce(p.display_name,'') ELSE '[WITHHELD]' END::text AS display_name,
-   p.created_at, p.id, CASE WHEN
-   ($1::text<>'' AND p.user_id=$1)
-   OR ($2::text<>'' AND p.provider=$2
-       AND p.provider_user_id=$3
-       AND ($4::text='' OR p.provider_team_id=$4))
-   THEN 0 ELSE 1 END AS match_priority
- FROM chat_message_participants p
- WHERE p.project_id=cm.project_id AND p.chat_id=cm.chat_id AND p.message_id=cm.id
- ORDER BY match_priority,p.provider,p.provider_user_id,p.id
- LIMIT $5::integer
-) cp
-WHERE cm.project_id=$6 AND c.organization_id=$7
-  AND pr.organization_id=$7 AND cm.id=ANY($8::uuid[])
-ORDER BY cm.id,cp.match_priority,cp.provider,cp.provider_user_id,cp.id
-`
-
-type ListPlatformChatEvidenceParticipantsParams struct {
-	ParticipantUserID         string
-	ParticipantProvider       string
-	ParticipantProviderUserID string
-	ParticipantProviderTeamID string
-	ParticipantRowLimit       int32
-	ProjectID                 uuid.NullUUID
-	OrganizationID            string
-	MessageIds                []uuid.UUID
-}
-
-type ListPlatformChatEvidenceParticipantsRow struct {
-	MessageID      uuid.UUID
-	Provider       string
-	ProviderUserID string
-	ProviderTeamID string
-	UserID         string
-	DisplayName    string
-	CreatedAt      pgtype.Timestamptz
-}
-
-// Only messages already selected under transcript authorization are admitted.
-// The per-message sentinel makes truncated attribution explicit.
-func (q *Queries) ListPlatformChatEvidenceParticipants(ctx context.Context, arg ListPlatformChatEvidenceParticipantsParams) ([]ListPlatformChatEvidenceParticipantsRow, error) {
-	rows, err := q.db.Query(ctx, listPlatformChatEvidenceParticipants,
-		arg.ParticipantUserID,
-		arg.ParticipantProvider,
-		arg.ParticipantProviderUserID,
-		arg.ParticipantProviderTeamID,
-		arg.ParticipantRowLimit,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.MessageIds,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPlatformChatEvidenceParticipantsRow
-	for rows.Next() {
-		var i ListPlatformChatEvidenceParticipantsRow
-		if err := rows.Scan(
-			&i.MessageID,
-			&i.Provider,
-			&i.ProviderUserID,
-			&i.ProviderTeamID,
-			&i.UserID,
-			&i.DisplayName,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPlatformMCPAssignedPluginInventory = `-- name: ListPlatformMCPAssignedPluginInventory :many
 SELECT
     p.id,
@@ -7526,66 +7438,75 @@ func (q *Queries) PlatformMCPOperationReceiptInputClaimed(ctx context.Context, a
 	return exists, err
 }
 
-const readPlatformChatEvidence = `-- name: ReadPlatformChatEvidence :many
+const readPlatformChatMessages = `-- name: ReadPlatformChatMessages :many
 WITH anchor AS (
     SELECT cm.seq FROM chat_messages cm
     JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id AND c.deleted IS FALSE
     JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id AND p.deleted IS FALSE
-    WHERE c.organization_id = $1 AND p.organization_id = $1
-      AND ($2::uuid IS NULL OR cm.id = $2)
-      AND cm.chat_id = $3 AND cm.project_id = $4
+    WHERE c.organization_id = $2 AND p.organization_id = $2
+      AND ($3::uuid IS NULL OR cm.id = $3)
+      AND cm.chat_id = $4 AND cm.project_id = $1
     ORDER BY cm.seq DESC LIMIT 1
 ), preceding AS (
     SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
-     WHERE cm.chat_id = $3 AND cm.project_id = $4 AND cm.seq < a.seq
+     WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq < a.seq
      ORDER BY cm.seq DESC LIMIT $5::integer
 ), following AS (
     SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
-     WHERE cm.chat_id = $3 AND cm.project_id = $4 AND cm.seq >= a.seq
+     WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq >= a.seq
      ORDER BY cm.seq ASC LIMIT $6::integer
 ), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM following)
-SELECT id, seq, created_at, role, generation,
-       CASE WHEN octet_length(content) <= 131072 THEN content ELSE '' END::text AS content,
-       CASE WHEN octet_length(tool_calls::text) <= 131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
-       CASE WHEN octet_length(content_raw::text) <= 131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
-       tool_call_id, source,
-       (content_asset_url IS NOT NULL AND content_raw IS NULL) AS offloaded,
-       (octet_length(content) > 131072 OR COALESCE(octet_length(tool_calls::text), 0) > 131072 OR COALESCE(octet_length(content_raw::text), 0) > 131072) AS oversized
-FROM neighbors ORDER BY seq
+SELECT n.id, n.seq, n.created_at, n.role, n.generation,
+       COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,
+       CASE WHEN octet_length(n.content) <= 131072 THEN n.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(n.tool_calls::text) <= 131072 THEN n.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(n.content_raw::text) <= 131072 THEN n.content_raw END::jsonb AS content_raw,
+       (octet_length(n.content) > 131072 OR COALESCE(octet_length(n.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS oversized,
+       COALESCE((
+         SELECT jsonb_agg(jsonb_build_object(
+                  'provider', CASE WHEN octet_length(cp.provider) <= 512 THEN cp.provider END, 'provider_user_id', CASE WHEN octet_length(cp.provider_user_id) <= 512 THEN cp.provider_user_id END,
+                  'user_id', COALESCE(CASE WHEN octet_length(cp.user_id) <= 512 THEN cp.user_id END, ''), 'display_name', COALESCE(CASE WHEN octet_length(cp.display_name) <= 1024 THEN cp.display_name END, '')))
+         FROM (SELECT id, project_id, chat_id, message_id, provider, provider_user_id, provider_team_id, user_id, display_name, created_at, updated_at FROM chat_message_participants cp
+               WHERE cp.project_id = $1 AND cp.chat_id = n.chat_id AND cp.message_id = n.id
+               ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
+       ), '[]')::jsonb AS participants
+FROM neighbors n ORDER BY n.seq
 `
 
-type ReadPlatformChatEvidenceParams struct {
+type ReadPlatformChatMessagesParams struct {
+	ProjectID      uuid.UUID
 	OrganizationID string
 	MessageID      uuid.NullUUID
 	ChatID         uuid.UUID
-	ProjectID      uuid.NullUUID
 	ContextSize    int32
 	FollowingLimit int32
 }
 
-type ReadPlatformChatEvidenceRow struct {
-	ID         uuid.UUID
-	Seq        int64
-	CreatedAt  pgtype.Timestamptz
-	Role       string
-	Generation int32
-	Content    string
-	ToolCalls  []byte
-	ContentRaw []byte
-	ToolCallID pgtype.Text
-	Source     pgtype.Text
-	Offloaded  pgtype.Bool
-	Oversized  pgtype.Bool
+type ReadPlatformChatMessagesRow struct {
+	ID           uuid.UUID
+	Seq          int64
+	CreatedAt    pgtype.Timestamptz
+	Role         string
+	Generation   int32
+	Source       string
+	UserID       string
+	Content      string
+	ToolCalls    []byte
+	ContentRaw   []byte
+	Oversized    bool
+	Participants []byte
 }
 
-// The anchor must belong to this exact session and project. All generations
-// remain available as historical evidence, and are explicitly labelled.
-func (q *Queries) ReadPlatformChatEvidence(ctx context.Context, arg ReadPlatformChatEvidenceParams) ([]ReadPlatformChatEvidenceRow, error) {
-	rows, err := q.db.Query(ctx, readPlatformChatEvidence,
+// Capture-sequence window around one message of this chat, or its latest one,
+// with up to five recorded participants per message.
+func (q *Queries) ReadPlatformChatMessages(ctx context.Context, arg ReadPlatformChatMessagesParams) ([]ReadPlatformChatMessagesRow, error) {
+	rows, err := q.db.Query(ctx, readPlatformChatMessages,
+		arg.ProjectID,
 		arg.OrganizationID,
 		arg.MessageID,
 		arg.ChatID,
-		arg.ProjectID,
 		arg.ContextSize,
 		arg.FollowingLimit,
 	)
@@ -7593,22 +7514,22 @@ func (q *Queries) ReadPlatformChatEvidence(ctx context.Context, arg ReadPlatform
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ReadPlatformChatEvidenceRow
+	var items []ReadPlatformChatMessagesRow
 	for rows.Next() {
-		var i ReadPlatformChatEvidenceRow
+		var i ReadPlatformChatMessagesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Seq,
 			&i.CreatedAt,
 			&i.Role,
 			&i.Generation,
+			&i.Source,
+			&i.UserID,
 			&i.Content,
 			&i.ToolCalls,
 			&i.ContentRaw,
-			&i.ToolCallID,
-			&i.Source,
-			&i.Offloaded,
 			&i.Oversized,
+			&i.Participants,
 		); err != nil {
 			return nil, err
 		}
@@ -8113,81 +8034,6 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 	return err
 }
 
-const resolvePlatformChatEvidenceSlackIdentities = `-- name: ResolvePlatformChatEvidenceSlackIdentities :many
-WITH identities AS (
- SELECT unnest($1::text[])::text AS provider_user_id,
-        unnest($2::text[])::text AS provider_team_id
-), candidates AS (
- SELECT i.provider_user_id,i.provider_team_id,
-   CASE WHEN coalesce(octet_length(d.display_name),0)<=256 THEN coalesce(d.display_name,'') ELSE '[WITHHELD]' END::text AS display_name,
-   CASE WHEN coalesce(octet_length(m.user_id),0)<=128 THEN coalesce(m.user_id,'') ELSE '[WITHHELD]' END::text AS user_id,
-   m.created_at AS mapping_confirmed_at,d.last_seen_at AS directory_observed_at,
-   count(*) OVER (PARTITION BY i.provider_user_id,i.provider_team_id) AS matches
- FROM identities i
- JOIN projects pr ON pr.id=$3 AND pr.organization_id=$4 AND pr.deleted IS FALSE
- JOIN slack_directory_memberships d ON d.organization_id=pr.organization_id AND d.slack_user_id=i.provider_user_id
-   AND (i.provider_team_id='' OR d.slack_team_id=i.provider_team_id)
- JOIN slack_directory_connections c ON c.organization_id=d.organization_id AND c.slack_team_id=d.slack_team_id AND c.disconnected_at IS NULL
- LEFT JOIN slack_identity_mappings m ON m.organization_id=d.organization_id
-   AND m.slack_team_id=d.slack_team_id AND m.slack_user_id=d.slack_user_id AND m.revoked_at IS NULL
-   AND d.mapping_conflict_reason IS NULL
-   AND EXISTS (SELECT 1 FROM users u JOIN organization_user_relationships r ON r.user_id=u.id AND r.organization_id=d.organization_id
-               WHERE u.id=m.user_id AND u.deleted_at IS NULL AND r.deleted_at IS NULL)
-)
-SELECT provider_user_id,provider_team_id,display_name,user_id,mapping_confirmed_at,directory_observed_at
-FROM candidates WHERE matches=1
-`
-
-type ResolvePlatformChatEvidenceSlackIdentitiesParams struct {
-	ProviderUserIds []string
-	ProviderTeamIds []string
-	ProjectID       uuid.UUID
-	OrganizationID  string
-}
-
-type ResolvePlatformChatEvidenceSlackIdentitiesRow struct {
-	ProviderUserID      string
-	ProviderTeamID      string
-	DisplayName         string
-	UserID              string
-	MappingConfirmedAt  pgtype.Timestamptz
-	DirectoryObservedAt pgtype.Timestamptz
-}
-
-// Caller separately requires org:admin for current directory data. A missing
-// workspace is resolvable only when the organization has one exact match.
-func (q *Queries) ResolvePlatformChatEvidenceSlackIdentities(ctx context.Context, arg ResolvePlatformChatEvidenceSlackIdentitiesParams) ([]ResolvePlatformChatEvidenceSlackIdentitiesRow, error) {
-	rows, err := q.db.Query(ctx, resolvePlatformChatEvidenceSlackIdentities,
-		arg.ProviderUserIds,
-		arg.ProviderTeamIds,
-		arg.ProjectID,
-		arg.OrganizationID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ResolvePlatformChatEvidenceSlackIdentitiesRow
-	for rows.Next() {
-		var i ResolvePlatformChatEvidenceSlackIdentitiesRow
-		if err := rows.Scan(
-			&i.ProviderUserID,
-			&i.ProviderTeamID,
-			&i.DisplayName,
-			&i.UserID,
-			&i.MappingConfirmedAt,
-			&i.DirectoryObservedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const resolvePlatformMCPAssignedPluginTarget = `-- name: ResolvePlatformMCPAssignedPluginTarget :many
 SELECT
     p.id,
@@ -8679,216 +8525,102 @@ func (q *Queries) RotatePlatformMCPSession(ctx context.Context, arg RotatePlatfo
 	return i, err
 }
 
-const searchPlatformChatEvidence = `-- name: SearchPlatformChatEvidence :many
-WITH eligible AS NOT MATERIALIZED (
- SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at
- FROM chats c
- JOIN projects p ON p.id=c.project_id AND p.organization_id=c.organization_id AND p.deleted IS FALSE
- WHERE c.organization_id=$3 AND p.organization_id=$3 AND c.project_id=$4
-   AND c.deleted IS FALSE
-   AND ($5::text='' OR c.user_id=$5)
-   AND (COALESCE(cardinality($6::uuid[]),0)=0 OR c.id=ANY($6::uuid[]))
-   AND (
-     ($7::text='' AND c.updated_at>=$8 AND c.updated_at<$9)
-     OR EXISTS (
-       SELECT 1 FROM chat_messages probe
-       WHERE probe.chat_id=c.id AND probe.project_id=$4
-         AND probe.created_at>=$8 AND probe.created_at<$9
-         AND ($7::text='' OR probe.source=$7)
-     )
-   )
-), newest AS (
- SELECT id, user_id, title, created_at, updated_at FROM eligible c
- WHERE NOT $2::boolean
-   AND (NOT $10::boolean OR (c.created_at,c.id)<=($11::timestamptz,$12::uuid))
- ORDER BY c.created_at DESC,c.id DESC LIMIT $13
-), oldest AS (
- SELECT id, user_id, title, created_at, updated_at FROM eligible c
- WHERE $2::boolean
-   AND (NOT $10::boolean OR (c.created_at,c.id)>=($11::timestamptz,$12::uuid))
- ORDER BY c.created_at ASC,c.id ASC LIMIT $13
-), candidates AS MATERIALIZED (
- SELECT id, user_id, title, created_at, updated_at FROM newest UNION ALL SELECT id, user_id, title, created_at, updated_at FROM oldest
-), chosen AS MATERIALIZED (
- SELECT id, user_id, title, created_at, updated_at FROM candidates
- ORDER BY CASE WHEN $2::boolean THEN created_at END ASC,
-          CASE WHEN $2::boolean THEN id END ASC,
-          CASE WHEN NOT $2::boolean THEN created_at END DESC,
-          CASE WHEN NOT $2::boolean THEN id END DESC
- LIMIT $14
-), events AS (
- SELECT c.id AS chat_id,c.user_id,c.created_at AS session_at,c.id AS evidence_id,
-        0::integer AS event_kind,0::bigint AS seq,c.updated_at AS created_at
- FROM chosen c
- WHERE NOT $10::boolean OR c.id<>$12::uuid
- UNION ALL
- SELECT c.id,c.user_id,c.created_at,m.id,1::integer,m.seq,m.created_at
- FROM chosen c
- CROSS JOIN LATERAL (
-   (SELECT m.id,m.seq,m.created_at FROM chat_messages m
-     WHERE $15::boolean AND m.chat_id=c.id AND m.project_id=$4
-       AND m.created_at>=$8 AND m.created_at<$9
-       AND ($7::text='' OR m.source=$7)
-       AND $2::boolean
-       AND (NOT $10::boolean OR c.id<>$12::uuid OR $16::integer=0
-            OR (m.created_at,m.seq,m.id)>($17::timestamptz,$18::bigint,$19::uuid))
-     ORDER BY m.created_at ASC,m.seq ASC,m.id ASC LIMIT $20
-   ) UNION ALL (
-     SELECT m.id,m.seq,m.created_at FROM chat_messages m
-     WHERE $15::boolean AND m.chat_id=c.id AND m.project_id=$4
-       AND m.created_at>=$8 AND m.created_at<$9
-       AND ($7::text='' OR m.source=$7)
-       AND NOT $2::boolean
-       AND (NOT $10::boolean OR c.id<>$12::uuid OR $16::integer=0
-            OR (m.created_at,m.seq,m.id)<($17::timestamptz,$18::bigint,$19::uuid))
-     ORDER BY m.created_at DESC,m.seq DESC,m.id DESC LIMIT $20
-   )
- ) m
-), ids AS MATERIALIZED (
- SELECT chat_id, user_id, session_at, evidence_id, event_kind, seq, created_at FROM events
- ORDER BY CASE WHEN $2::boolean THEN session_at END ASC,
-          CASE WHEN $2::boolean THEN chat_id END ASC,
-          CASE WHEN NOT $2::boolean THEN session_at END DESC,
-          CASE WHEN NOT $2::boolean THEN chat_id END DESC,
-          event_kind ASC,
-          CASE WHEN $2::boolean THEN created_at END ASC,
-          CASE WHEN $2::boolean THEN seq END ASC,
-          CASE WHEN $2::boolean THEN evidence_id END ASC,
-          CASE WHEN NOT $2::boolean THEN created_at END DESC,
-          CASE WHEN NOT $2::boolean THEN seq END DESC,
-          CASE WHEN NOT $2::boolean THEN evidence_id END DESC
- LIMIT $20
-), payloads AS MATERIALIZED (
- SELECT i.chat_id, i.user_id, i.session_at, i.evidence_id, i.event_kind, i.seq, i.created_at,
-   CASE WHEN i.event_kind=0 THEN 'session' ELSE cm.role END::text AS role,
-   COALESCE(cm.generation,0)::integer AS generation,
-   CASE WHEN i.event_kind=0 THEN COALESCE(c.title,'') ELSE cm.content END::text AS raw_content,
-   cm.tool_calls,cm.content_raw,cm.tool_call_id,cm.source,
-   (cm.content_asset_url IS NOT NULL AND cm.content_raw IS NULL) AS offloaded
- FROM ids i JOIN chosen c ON c.id=i.chat_id
- LEFT JOIN chat_messages cm ON i.event_kind=1 AND cm.id=i.evidence_id AND cm.chat_id=i.chat_id AND cm.project_id=$4
-), capped AS MATERIALIZED (
- SELECT chat_id,user_id,session_at,evidence_id,event_kind,seq,created_at,role,generation,
-   CASE WHEN octet_length(raw_content)<=131072 THEN raw_content ELSE '' END::text AS content,
-   CASE WHEN octet_length(tool_calls::text)<=131072 THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
-   CASE WHEN octet_length(content_raw::text)<=131072 THEN content_raw ELSE NULL END::jsonb AS content_raw,
-   CASE WHEN octet_length(tool_call_id)<=4096 THEN tool_call_id ELSE NULL END::text AS tool_call_id,
-   CASE WHEN octet_length(source)<=4096 THEN source ELSE NULL END::text AS source,
-   offloaded,
-   (octet_length(raw_content)>131072 OR COALESCE(octet_length(tool_calls::text),0)>131072 OR COALESCE(octet_length(content_raw::text),0)>131072 OR COALESCE(octet_length(tool_call_id),0)>4096 OR COALESCE(octet_length(source),0)>4096) AS oversized
- FROM payloads
-), sized AS (
- SELECT chat_id, user_id, session_at, evidence_id, event_kind, seq, created_at, role, generation, content, tool_calls, content_raw, tool_call_id, source, offloaded, oversized, (octet_length(content)+COALESCE(octet_length(tool_calls::text),0)+COALESCE(octet_length(content_raw::text),0)+COALESCE(octet_length(tool_call_id),0)+COALESCE(octet_length(source),0))::bigint AS payload_bytes
- FROM capped
-), budgeted AS (
- SELECT chat_id, user_id, session_at, evidence_id, event_kind, seq, created_at, role, generation, content, tool_calls, content_raw, tool_call_id, source, offloaded, oversized, payload_bytes, SUM(payload_bytes) OVER (
- ORDER BY CASE WHEN $2::boolean THEN session_at END ASC,
-          CASE WHEN $2::boolean THEN chat_id END ASC,
-          CASE WHEN NOT $2::boolean THEN session_at END DESC,
-          CASE WHEN NOT $2::boolean THEN chat_id END DESC,
-          event_kind ASC,
-          CASE WHEN $2::boolean THEN created_at END ASC,
-          CASE WHEN $2::boolean THEN seq END ASC,
-          CASE WHEN $2::boolean THEN evidence_id END ASC,
-          CASE WHEN NOT $2::boolean THEN created_at END DESC,
-          CASE WHEN NOT $2::boolean THEN seq END DESC,
-          CASE WHEN NOT $2::boolean THEN evidence_id END DESC
- ROWS UNBOUNDED PRECEDING) AS cumulative_bytes
- FROM sized
-)
-SELECT chat_id,user_id,session_at,evidence_id,event_kind,seq,created_at,role,generation,
-       CASE WHEN cumulative_bytes<=$1::bigint THEN content ELSE '' END::text AS content,
-       CASE WHEN cumulative_bytes<=$1::bigint THEN tool_calls ELSE NULL END::jsonb AS tool_calls,
-       CASE WHEN cumulative_bytes<=$1::bigint THEN content_raw ELSE NULL END::jsonb AS content_raw,
-       CASE WHEN cumulative_bytes<=$1::bigint THEN COALESCE(tool_call_id,'') ELSE '' END::text AS tool_call_id,
-       CASE WHEN cumulative_bytes<=$1::bigint THEN COALESCE(source,'') ELSE '' END::text AS source,
-       offloaded,oversized,payload_bytes,
-       (cumulative_bytes<=$1::bigint)::boolean AS payload_available,
-       ((SELECT count(*) FROM candidates)>(SELECT count(*) FROM chosen))::boolean AS more_sessions
-FROM budgeted
-WHERE cumulative_bytes-payload_bytes<=$1::bigint
-ORDER BY CASE WHEN $2::boolean THEN session_at END ASC,
-          CASE WHEN $2::boolean THEN chat_id END ASC,
-          CASE WHEN NOT $2::boolean THEN session_at END DESC,
-          CASE WHEN NOT $2::boolean THEN chat_id END DESC,
-          event_kind ASC,
-          CASE WHEN $2::boolean THEN created_at END ASC,
-          CASE WHEN $2::boolean THEN seq END ASC,
-          CASE WHEN $2::boolean THEN evidence_id END ASC,
-          CASE WHEN NOT $2::boolean THEN created_at END DESC,
-          CASE WHEN NOT $2::boolean THEN seq END DESC,
-          CASE WHEN NOT $2::boolean THEN evidence_id END DESC
+const searchPlatformChatMessages = `-- name: SearchPlatformChatMessages :many
+SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
+       COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       COALESCE(c.user_id, '')::text AS owner_user_id,
+       CASE WHEN octet_length(m.content) <= 131072 THEN m.content ELSE '' END::text AS content,
+       CASE WHEN octet_length(m.tool_calls::text) <= 131072 THEN m.tool_calls END::jsonb AS tool_calls,
+       CASE WHEN octet_length(m.content_raw::text) <= 131072 THEN m.content_raw END::jsonb AS content_raw,
+       (octet_length(m.content) > 131072 OR COALESCE(octet_length(m.tool_calls::text), 0) > 131072
+        OR COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS oversized
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = c.project_id
+WHERE m.project_id = $1::uuid
+  AND c.organization_id = $2 AND p.organization_id = $2
+  AND c.deleted IS FALSE AND p.deleted IS FALSE
+  AND m.created_at >= $3 AND m.created_at < $4
+  AND (cardinality($5::uuid[]) = 0 OR m.chat_id = ANY($5::uuid[]))
+  AND ($6::text = '' OR c.user_id = $6)
+  AND ($7::text = '' OR m.source = $7)
+  AND ($8::text = ''
+       OR (octet_length(m.content) <= 131072 AND m.content ILIKE $8 ESCAPE '\')
+       OR (octet_length(m.tool_calls::text) <= 131072 AND m.tool_calls::text ILIKE $8 ESCAPE '\')
+       OR (octet_length(m.content_raw::text) <= 131072 AND m.content_raw::text ILIKE $8 ESCAPE '\')
+       OR c.title ILIKE $8 ESCAPE '\')
+  AND ($9::text = ''
+       OR ($10::text = '' AND m.user_id = $9)
+       OR EXISTS (
+         SELECT 1 FROM chat_message_participants cp
+         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id AND cp.message_id = m.id
+           AND (cp.user_id = $9 OR cp.provider_user_id = $9)
+           AND ($10 = '' OR cp.provider = $10)))
+  AND (NOT $11::boolean
+       OR ($12::boolean AND (m.created_at, m.id) > ($13::timestamptz, $14::uuid))
+       OR (NOT $12 AND (m.created_at, m.id) < ($13, $14)))
+ORDER BY CASE WHEN $12 THEN m.created_at END ASC,
+         CASE WHEN $12 THEN m.id END ASC,
+         CASE WHEN NOT $12 THEN m.created_at END DESC,
+         CASE WHEN NOT $12 THEN m.id END DESC
+LIMIT $15::integer
 `
 
-type SearchPlatformChatEvidenceParams struct {
-	ByteBudget      int64
-	OldestFirst     bool
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	OwnerUserID     string
-	ChatIds         []uuid.UUID
-	Source          string
-	FromTime        pgtype.Timestamptz
-	ToTime          pgtype.Timestamptz
-	HasCursor       bool
-	CursorSessionAt pgtype.Timestamptz
-	CursorSessionID uuid.UUID
-	SessionRowLimit int32
-	SessionLimit    int32
-	IncludeMessages bool
-	CursorKind      int32
-	CursorMessageAt pgtype.Timestamptz
-	CursorSeq       int64
-	CursorID        uuid.UUID
-	RowLimit        int32
+type SearchPlatformChatMessagesParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	FromTime            pgtype.Timestamptz
+	ToTime              pgtype.Timestamptz
+	ChatIds             []uuid.UUID
+	OwnerUserID         string
+	Source              string
+	Pattern             string
+	ParticipantID       string
+	ParticipantProvider string
+	HasCursor           bool
+	OldestFirst         bool
+	CursorAt            pgtype.Timestamptz
+	CursorID            uuid.UUID
+	RowLimit            int32
 }
 
-type SearchPlatformChatEvidenceRow struct {
-	ChatID           uuid.UUID
-	UserID           pgtype.Text
-	SessionAt        pgtype.Timestamptz
-	EvidenceID       uuid.UUID
-	EventKind        int32
-	Seq              int64
-	CreatedAt        pgtype.Timestamptz
-	Role             string
-	Generation       int32
-	Content          string
-	ToolCalls        []byte
-	ContentRaw       []byte
-	ToolCallID       string
-	Source           string
-	Offloaded        pgtype.Bool
-	Oversized        pgtype.Bool
-	PayloadBytes     int64
-	PayloadAvailable bool
-	MoreSessions     bool
+type SearchPlatformChatMessagesRow struct {
+	ID          uuid.UUID
+	ChatID      uuid.UUID
+	Seq         int64
+	CreatedAt   pgtype.Timestamptz
+	Role        string
+	Generation  int32
+	Source      string
+	UserID      string
+	ChatTitle   string
+	OwnerUserID string
+	Content     string
+	ToolCalls   []byte
+	ContentRaw  []byte
+	Oversized   bool
 }
 
-// Traverse indexed sessions, then their captured messages. Query text is never
-// used to choose a scan boundary: hidden credential matches cannot affect a
-// continuation. The caller matches canonical, redacted text after this read.
-// Include one metadata-only overflow sentinel; the caller does not consume it.
-func (q *Queries) SearchPlatformChatEvidence(ctx context.Context, arg SearchPlatformChatEvidenceParams) ([]SearchPlatformChatEvidenceRow, error) {
-	rows, err := q.db.Query(ctx, searchPlatformChatEvidence,
-		arg.ByteBudget,
-		arg.OldestFirst,
-		arg.OrganizationID,
+// Literal substring search over captured messages in one project and interval,
+// newest or oldest first by (created_at, id). Fields over 128 KiB are neither
+// matched nor returned. The caller requests one extra row to detect more pages.
+func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlatformChatMessagesParams) ([]SearchPlatformChatMessagesRow, error) {
+	rows, err := q.db.Query(ctx, searchPlatformChatMessages,
 		arg.ProjectID,
-		arg.OwnerUserID,
-		arg.ChatIds,
-		arg.Source,
+		arg.OrganizationID,
 		arg.FromTime,
 		arg.ToTime,
+		arg.ChatIds,
+		arg.OwnerUserID,
+		arg.Source,
+		arg.Pattern,
+		arg.ParticipantID,
+		arg.ParticipantProvider,
 		arg.HasCursor,
-		arg.CursorSessionAt,
-		arg.CursorSessionID,
-		arg.SessionRowLimit,
-		arg.SessionLimit,
-		arg.IncludeMessages,
-		arg.CursorKind,
-		arg.CursorMessageAt,
-		arg.CursorSeq,
+		arg.OldestFirst,
+		arg.CursorAt,
 		arg.CursorID,
 		arg.RowLimit,
 	)
@@ -8896,29 +8628,24 @@ func (q *Queries) SearchPlatformChatEvidence(ctx context.Context, arg SearchPlat
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SearchPlatformChatEvidenceRow
+	var items []SearchPlatformChatMessagesRow
 	for rows.Next() {
-		var i SearchPlatformChatEvidenceRow
+		var i SearchPlatformChatMessagesRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.ChatID,
-			&i.UserID,
-			&i.SessionAt,
-			&i.EvidenceID,
-			&i.EventKind,
 			&i.Seq,
 			&i.CreatedAt,
 			&i.Role,
 			&i.Generation,
+			&i.Source,
+			&i.UserID,
+			&i.ChatTitle,
+			&i.OwnerUserID,
 			&i.Content,
 			&i.ToolCalls,
 			&i.ContentRaw,
-			&i.ToolCallID,
-			&i.Source,
-			&i.Offloaded,
 			&i.Oversized,
-			&i.PayloadBytes,
-			&i.PayloadAvailable,
-			&i.MoreSessions,
 		); err != nil {
 			return nil, err
 		}
