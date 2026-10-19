@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 )
 
@@ -30,8 +31,8 @@ func (k *KitLocalRuntimeBackend) RuntimeReadyForAdmission(ctx context.Context) e
 func (k *KitLocalRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
 	releases := make([]func(), 0, len(rows))
 	result := runtimeSwitchReadiness{DestinationReady: false, Settled: false, Release: sync.OnceFunc(func() {
-		for i := len(releases) - 1; i >= 0; i-- {
-			releases[i]()
+		for _, release := range slices.Backward(releases) {
+			release()
 		}
 	})}
 	if destination != 2 && destination != 3 {

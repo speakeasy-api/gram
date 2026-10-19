@@ -205,9 +205,6 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	return out, nil
 }
 
-//go:fix inline
-func ptrKitString(s string) *string { return new(s) }
-
 const kitBootstrapScript = `umask 077
 rm -rf /home/kit/.kit/credentials
 mkdir -p /home/kit/.kit/credentials /home/kit/workspace
