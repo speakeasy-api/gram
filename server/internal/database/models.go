@@ -7534,8 +7534,6 @@ type WorkloadDeviceJoinToken struct {
 	// @access: confidential
 	AgentID uuid.UUID
 	// @access: confidential
-	HooksProjectID uuid.UUID
-	// @access: confidential
 	CreatedByUserID string
 	// @access: confidential
 	ExpiresAt pgtype.Timestamptz
@@ -7597,10 +7595,6 @@ type WorkloadIdentityAdmission struct {
 	Name pgtype.Text
 	// @access: opaque-confidential
 	Tags []string
-	// @access: confidential
-	HooksProjectID uuid.NullUUID
-	// @access: confidential
-	HooksProjectOrganizationID pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

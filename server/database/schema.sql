@@ -4836,30 +4836,12 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   -- the same convention and limits as workload_issuers.tags.
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
 
-  -- The project this workload may send hooks to, which bounds the hooks grant
-  -- its device-agent tokens carry. Unrelated to project_id, which is the
-  -- admission's tier. NULL sends no hooks.
-  hooks_project_id uuid,
-  -- The tenant half of the hooks project reference. It exists so deleting the
-  -- project can SET NULL the pair without touching the NOT NULL
-  -- organization_id; the check pins it to organization_id while set.
-  hooks_project_organization_id TEXT,
-
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT workload_identity_admissions_pkey PRIMARY KEY (id),
-  CONSTRAINT workload_identity_admissions_hooks_project_check CHECK (
-    (hooks_project_organization_id IS NULL AND hooks_project_id IS NULL) OR
-    (hooks_project_organization_id IS NOT NULL AND hooks_project_id IS NOT NULL AND
-     hooks_project_organization_id = organization_id)
-  ),
-  -- Composite so a project in another organization is a schema error. Deleting
-  -- the project clears the hooks project and keeps the admission: losing the
-  -- project must not silently revoke the workload.
-  CONSTRAINT workload_identity_admissions_hooks_project_fkey FOREIGN KEY (hooks_project_organization_id, hooks_project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
   CONSTRAINT workload_identity_admissions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   -- Composite for the same reason as the issuer reference below: a project in
   -- another organization is a schema error rather than a row a handler has to
@@ -4881,8 +4863,6 @@ COMMENT ON COLUMN workload_identity_admissions.subject IS '@access: restricted';
 COMMENT ON COLUMN workload_identity_admissions.match_kind IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.name IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.tags IS '@access: opaque-confidential';
-COMMENT ON COLUMN workload_identity_admissions.hooks_project_id IS '@access: confidential';
-COMMENT ON COLUMN workload_identity_admissions.hooks_project_organization_id IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.created_at IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.updated_at IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.deleted_at IS '@access: confidential';
@@ -4923,10 +4903,6 @@ WHERE deleted IS FALSE AND project_id IS NULL;
 CREATE INDEX IF NOT EXISTS workload_identity_admissions_workload_issuer_id_idx
 ON workload_identity_admissions (workload_issuer_id)
 WHERE deleted IS FALSE;
-
--- Supports the hooks project foreign key's SET NULL on project delete.
-CREATE INDEX IF NOT EXISTS workload_identity_admissions_hooks_project_idx
-ON workload_identity_admissions (hooks_project_organization_id, hooks_project_id);
 
 CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
   remote_session_client_id uuid NOT NULL,
@@ -7713,10 +7689,6 @@ CREATE TABLE IF NOT EXISTS workload_device_join_tokens (
   -- The agent the enrolled device inherits its policy from.
   agent_id uuid NOT NULL,
 
-  -- The project the device may send hooks to, copied to its admission. A
-  -- device has no permission of its own to inherit one from.
-  hooks_project_id uuid NOT NULL,
-
   -- Recorded as the actor of the enrollment this token authorizes.
   created_by_user_id TEXT NOT NULL,
 
@@ -7735,15 +7707,13 @@ CREATE TABLE IF NOT EXISTS workload_device_join_tokens (
 
   CONSTRAINT workload_device_join_tokens_pkey PRIMARY KEY (id),
   CONSTRAINT workload_device_join_tokens_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT workload_device_join_tokens_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT workload_device_join_tokens_hooks_project_fkey FOREIGN KEY (organization_id, hooks_project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+  CONSTRAINT workload_device_join_tokens_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN workload_device_join_tokens.id IS '@access: confidential';
 COMMENT ON COLUMN workload_device_join_tokens.organization_id IS '@access: confidential';
 COMMENT ON COLUMN workload_device_join_tokens.token_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN workload_device_join_tokens.agent_id IS '@access: confidential';
-COMMENT ON COLUMN workload_device_join_tokens.hooks_project_id IS '@access: confidential';
 COMMENT ON COLUMN workload_device_join_tokens.created_by_user_id IS '@access: confidential';
 COMMENT ON COLUMN workload_device_join_tokens.expires_at IS '@access: confidential';
 COMMENT ON COLUMN workload_device_join_tokens.consumed_at IS '@access: confidential';
@@ -7760,10 +7730,6 @@ ON workload_device_join_tokens (token_hash);
 -- Supports the agent foreign-key cascade.
 CREATE INDEX IF NOT EXISTS workload_device_join_tokens_agent_idx
 ON workload_device_join_tokens (organization_id, agent_id);
-
--- Supports the hooks project foreign-key cascade.
-CREATE INDEX IF NOT EXISTS workload_device_join_tokens_hooks_project_idx
-ON workload_device_join_tokens (organization_id, hooks_project_id);
 
 -- The public key an enrolled device signs its workload assertions with. An
 -- assertion from a 'device_keys' issuer is verified against the key registered
@@ -7783,8 +7749,8 @@ CREATE TABLE IF NOT EXISTS workload_device_keys (
 
   -- What the device reported about itself at enrollment, for an administrator
   -- telling enrolled boxes apart. Self-reported, never used for authorization.
-  hostname TEXT CHECK (hostname IS NULL OR CHAR_LENGTH(hostname) <= 255),
-  serial TEXT CHECK (serial IS NULL OR CHAR_LENGTH(serial) <= 255),
+  hostname TEXT,
+  serial TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

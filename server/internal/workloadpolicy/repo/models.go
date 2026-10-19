@@ -50,10 +50,6 @@ type WorkloadIdentityAdmission struct {
 	// @access: opaque-confidential
 	Tags []string
 	// @access: confidential
-	HooksProjectID uuid.NullUUID
-	// @access: confidential
-	HooksProjectOrganizationID pgtype.Text
-	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
