@@ -403,6 +403,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 	container, err := testcontainers.Run(t.Context(), manifest.Image,
 		testcontainers.WithLogger(testenv.NewTestcontainersLogger()),
 		testcontainers.WithExposedPorts("4000/tcp"),
+		testenv.WithLoopbackPorts(),
 		testcontainers.WithHostPortAccess(hostPorts...),
 		testcontainers.WithFiles(testcontainers.ContainerFile{
 			Reader: bytes.NewReader(configBytes), ContainerFilePath: "/app/e2e-config.yaml", FileMode: 0o644,
