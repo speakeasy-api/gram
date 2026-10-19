@@ -198,3 +198,13 @@ func (b *ValidatorBoundary) StampConsentDiscovery(ctx context.Context, userID st
 func WithoutIdentity(ctx context.Context) context.Context {
 	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
 }
+
+// StampValidatedWorkloadSession binds a validated machine session to the agent
+// resolved by live admission. The workload actor and session lifetime remain
+// unchanged; agent provenance supplies the kill-switch principal candidate.
+func (b *ValidatorBoundary) StampValidatedWorkloadSession(ctx context.Context, session sessiontokens.ValidatedSession, agentID uuid.UUID) context.Context {
+	if b == nil || !b.initialized || !session.Valid() || session.Subject().Kind != urn.SessionSubjectKindWorkload || agentID == uuid.Nil {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID.String(), expiresAt: session.ExpiresAt(), sessionJTI: session.JTI()})
+}
