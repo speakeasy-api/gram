@@ -19,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/directoryreview"
+	directoryreviewrepo "github.com/speakeasy-api/gram/server/internal/directoryreview/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -52,7 +54,9 @@ type workosDirectoryGroupMembershipEventPayload struct {
 	Group workosDirectoryGroupEventPayload `json:"group"`
 }
 
-// handleDirectoryUserEvent applies a dsync.user.* event.
+// handleDirectoryUserEvent applies a dsync.user.* event, then raises and
+// settles the directory review decisions the change causes, in the same
+// transaction.
 func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) (postCommitEffects, error) {
 	var none postCommitEffects
 
@@ -63,6 +67,65 @@ func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx
 	if payload.ID == "" {
 		return none, oops.Permanent(oops.E(oops.CodeBadRequest, nil, "invalid directory user event payload missing ID"))
 	}
+
+	beforeOrg, before, err := directoryUserReviewSnapshot(ctx, dbtx, payload.ID)
+	if err != nil {
+		return none, err
+	}
+	effects, err := applyDirectoryUserEvent(ctx, logger, dbtx, event, payload)
+	if err != nil {
+		return none, err
+	}
+	afterOrg, after, err := directoryUserReviewSnapshot(ctx, dbtx, payload.ID)
+	if err != nil {
+		return none, err
+	}
+	if organizationID := conv.Default(afterOrg, beforeOrg); organizationID != "" {
+		if _, err := directoryreview.ReconcileUserChange(ctx, dbtx, organizationID, payload.ID, before, after); err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "review directory user change")
+		}
+	}
+	return effects, nil
+}
+
+// directoryUserReviewSnapshot reads a directory user's organization and
+// attributes, with nil attributes when the user is not live.
+func directoryUserReviewSnapshot(ctx context.Context, dbtx database.DBTX, workosDirectoryUserID string) (string, directoryreview.UserAttributes, error) {
+	user, err := directoryrepo.New(dbtx).GetDirectoryUserByWorkOSID(ctx, workosDirectoryUserID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil, nil
+	case err != nil:
+		return "", nil, oops.E(oops.CodeUnexpected, err, "get directory user for review")
+	}
+	if user.Deleted || user.WorkosDeleted {
+		return user.OrganizationID, nil, nil
+	}
+	attributes, err := directoryreview.ParseUserAttributes(user.Attributes)
+	if err != nil {
+		return "", nil, oops.E(oops.CodeUnexpected, err, "parse directory user attributes for review")
+	}
+	return user.OrganizationID, attributes, nil
+}
+
+// reviewDirectoryGroup raises and settles the directory review decisions for
+// a group an event created, changed or deleted.
+func reviewDirectoryGroup(ctx context.Context, dbtx database.DBTX, workosDirectoryGroupID string) error {
+	group, err := directoryreviewrepo.New(dbtx).GetDirectoryGroupByWorkOSIDForReview(ctx, workosDirectoryGroupID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "get directory group for review")
+	}
+	if _, err := directoryreview.ReconcileGroup(ctx, dbtx, group.OrganizationID, group.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "review directory group change")
+	}
+	return nil
+}
+
+func applyDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event, payload workosDirectoryUserEventPayload) (postCommitEffects, error) {
+	var none postCommitEffects
 
 	switch workos.EventKind(event.Event) {
 	case workos.EventKindDirectorySyncUserCreated, workos.EventKindDirectorySyncUserUpdated:
@@ -113,12 +176,17 @@ func handleDirectoryGroupEvent(ctx context.Context, logger *slog.Logger, dbtx da
 
 	switch workos.EventKind(event.Event) {
 	case workos.EventKindDirectorySyncGroupCreated, workos.EventKindDirectorySyncGroupUpdated:
-		return upsertDirectoryGroup(ctx, dbtx, event, payload)
+		if err := upsertDirectoryGroup(ctx, dbtx, event, payload); err != nil {
+			return err
+		}
 	case workos.EventKindDirectorySyncGroupDeleted:
-		return deleteDirectoryGroup(ctx, logger, dbtx, event, payload)
+		if err := deleteDirectoryGroup(ctx, logger, dbtx, event, payload); err != nil {
+			return err
+		}
 	default:
 		return nil
 	}
+	return reviewDirectoryGroup(ctx, dbtx, payload.ID)
 }
 
 func handleDirectoryGroupMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
@@ -454,6 +522,9 @@ func createDirectoryGroupFromMembership(ctx context.Context, dbtx database.DBTX,
 	}
 
 	if err := upsertDirectoryGroup(ctx, dbtx, event, group); err != nil {
+		return uuid.Nil, err
+	}
+	if err := reviewDirectoryGroup(ctx, dbtx, group.ID); err != nil {
 		return uuid.Nil, err
 	}
 
