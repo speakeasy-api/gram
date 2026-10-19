@@ -286,6 +286,7 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 			}
 			cursor = r.ID
 			n++
+			s.scanned++
 			s.bySource[r.Source]++
 
 			select {
@@ -301,7 +302,6 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 		}
 		rows.Close()
 
-		s.scanned += int64(n)
 		// This is the read position, not a safe resume point: rows up to here may
 		// still be in flight downstream. The resume cursor is the sink's committed
 		// id (see Sink.LastCommitted), printed in the final report.

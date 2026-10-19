@@ -91,32 +91,24 @@ func (s *Sink) flushGapFill(ctx context.Context, rows []FindingRow) error {
 			batchStats[row.Source] = stats
 		}
 
-		markedAt, missing := missingSuppression(current, row)
+		state, missing := missingState(current, row)
 		if !missing {
-			continue
-		}
-		if clickHouseStateWins(current, markedAt) {
-			stats := batchStats[row.Source]
-			stats.SkippedCHNewer++
-			batchStats[row.Source] = stats
 			continue
 		}
 		if _, planned := statePlans[current.id]; planned {
 			continue
 		}
-		falsePositiveAt := row.FalsePositiveAt
-		if falsePositiveAt == nil {
-			falsePositiveAt = current.falsePositiveAt
+		if state == nil {
+			stats := batchStats[row.Source]
+			stats.SkippedCHNewer++
+			batchStats[row.Source] = stats
+			continue
 		}
 		statePlans[current.id] = stateCopyPlan{
 			organizationID: row.OrganizationID,
 			projectID:      row.ProjectID,
 			targetID:       current.id,
-			state: chrepo.BackfillSuppressionState{
-				ExcludedAt:      row.ExcludedAt,
-				ExclusionID:     row.ExclusionID,
-				FalsePositiveAt: falsePositiveAt,
-			},
+			state:          *state,
 		}
 		stats := batchStats[row.Source]
 		stats.StateCopies++
@@ -145,15 +137,46 @@ func (s *Sink) flushGapFill(ctx context.Context, rows []FindingRow) error {
 	return nil
 }
 
-func missingSuppression(current *latestFinding, desired FindingRow) (time.Time, bool) {
-	if desired.ExcludedAt != nil && desired.ExclusionID != nil &&
-		(current.excludedAt == nil || current.exclusionID == nil) {
-		return *desired.ExcludedAt, true
+// missingState reports whether Postgres holds suppression state that the
+// latest ClickHouse copy lacks. A nil state with missing=true means
+// ClickHouse state wins and nothing is appended.
+func missingState(current *latestFinding, desired FindingRow) (*chrepo.BackfillSuppressionState, bool) {
+	falsePositiveAt := desired.FalsePositiveAt
+	if falsePositiveAt == nil {
+		falsePositiveAt = current.falsePositiveAt
 	}
-	if desired.FalsePositiveAt != nil && current.falsePositiveAt == nil && current.excludedAt == nil {
-		return *desired.FalsePositiveAt, true
+
+	var markedAt time.Time
+	switch {
+	case desired.ExcludedAt != nil && desired.ExclusionID != nil &&
+		(current.excludedAt == nil || current.exclusionID == nil):
+		markedAt = *desired.ExcludedAt
+	case desired.FalsePositiveAt != nil && current.falsePositiveAt == nil && current.excludedAt == nil:
+		markedAt = *desired.FalsePositiveAt
+	case desired.FalsePositiveAt != nil && current.falsePositiveAt == nil &&
+		current.excludedAt != nil && current.exclusionID != nil:
+		// A rule exclusion carries false_positive_at through apply and
+		// reversal, and no live path clears it while the rule holds, so the
+		// missing dismissal is copied under the current exclusion.
+		return &chrepo.BackfillSuppressionState{
+			ExcludedAt:      current.excludedAt,
+			ExclusionID:     current.exclusionID,
+			FalsePositiveAt: falsePositiveAt,
+			MarkedAt:        &current.insertedAt,
+		}, true
+	default:
+		return nil, false
 	}
-	return time.Time{}, false
+
+	if clickHouseStateWins(current, markedAt) {
+		return nil, true
+	}
+	return &chrepo.BackfillSuppressionState{
+		ExcludedAt:      desired.ExcludedAt,
+		ExclusionID:     desired.ExclusionID,
+		FalsePositiveAt: falsePositiveAt,
+		MarkedAt:        nil,
+	}, true
 }
 
 func clickHouseStateWins(current *latestFinding, postgresMarkedAt time.Time) bool {
@@ -275,7 +298,7 @@ FROM (
                ORDER BY (event_kind IN ('suppression', 'unsuppression')) DESC, inserted_at DESC
            ) AS rn
     FROM risk_findings
-    WHERE organization_id = ? AND project_id = ?
+    WHERE organization_id = ? AND project_id = ? AND shadow = 0
       AND created_at >= toDateTime64(?, 9) AND created_at < toDateTime64(?, 9)
       AND source IN (` + placeholders + `)
 )

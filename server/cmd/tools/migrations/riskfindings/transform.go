@@ -24,7 +24,9 @@ import (
 // The struct is intentionally flat — AppendStruct does not recurse into embedded
 // structs. inserted_at is omitted so ClickHouse stamps its DEFAULT now64(9).
 type FindingRow struct {
-	ID                       uuid.UUID `ch:"id"`
+	ID uuid.UUID `ch:"id"`
+	// sourceID is the Postgres risk_results id behind the resume cursor and
+	// batch boundaries. Span rows share it; it is not a ClickHouse column.
 	sourceID                 uuid.UUID
 	CreatedAt                time.Time  `ch:"created_at"`
 	OrganizationID           string     `ch:"organization_id"`

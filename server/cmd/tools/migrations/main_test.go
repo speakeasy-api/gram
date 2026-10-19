@@ -65,3 +65,15 @@ func TestPrintReportIncludesPerSourceGapFillCounts(t *testing.T) {
 	require.Contains(t, out.String(), "presidio: postgres=3 present_by_id=0 matched_by_key=2 state_copies=1 skipped_ch_newer=1 inserts=1")
 	require.Contains(t, out.String(), "last cursor: (dry run, no durable checkpoint)")
 }
+
+func TestParseFlagsGapFillResumeRequiresExplicitFrom(t *testing.T) {
+	t.Setenv("GRAM_DATABASE_URL", "postgres://local")
+	t.Setenv("GRAM_RISK_FINGERPRINT_PEPPER_KEYRING", `{"current":"v1","keys":{"v1":"dGVzdA=="}}`)
+
+	cursor := "00000000-0000-0000-0000-000000000001"
+	_, err := parseFlags([]string{"-gap-fill", "-org", "org_test", "-cursor", cursor}, time.Now().UTC())
+	require.ErrorContains(t, err, "-from is required")
+
+	_, err = parseFlags([]string{"-gap-fill", "-org", "org_test", "-cursor", cursor, "-from", "2026-07-01T00:00:00Z"}, time.Now().UTC())
+	require.NoError(t, err)
+}

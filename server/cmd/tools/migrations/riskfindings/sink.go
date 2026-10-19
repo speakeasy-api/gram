@@ -37,7 +37,8 @@ type SinkOptions struct {
 	// BufferSize sizes the sink input channel.
 	BufferSize int
 
-	// BatchSize bounds each ClickHouse insert and lookup.
+	// BatchSize is the target rows per ClickHouse insert and lookup. A flush
+	// can exceed it to keep all spans of one finding together.
 	BatchSize int
 
 	// DryRun disables writes while retaining lookups and counts.

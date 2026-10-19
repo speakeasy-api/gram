@@ -232,7 +232,9 @@ id by anchor, policy id and version, source, rule id, and span offsets.
    explicit reversal or a newer state event, and `inserts` is the number of
    missing ClickHouse rows.
 3. Repeat the same command with `-dry-run=false`. Preserve `-org`, `-project`,
-   `-sources`, `-from`, and `-to` when resuming with `-cursor`.
+   `-policy`, `-sources`, `-from`, and `-to` when resuming with `-cursor`.
+   Pass `-from` explicitly on resume (the failure log prints the effective
+   value), since the gap-fill default is relative to run time.
 4. Run the dry run again. Every source should report zero `state_copies` and
    zero `inserts`.
 5. Validate per-source counts over the same half-open time window. Expand

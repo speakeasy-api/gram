@@ -181,6 +181,9 @@ func runRiskFindings(args []string) int {
 		resumeHint := ""
 		if committed := sink.LastCommitted(); committed != uuid.Nil {
 			resumeHint = fmt.Sprintf("; resume with -cursor %s and repeat the same mode, -from, -to, -org, -project, -policy, and -sources", committed)
+			if cfg.from != nil {
+				resumeHint += fmt.Sprintf(" (effective -from %s)", cfg.from.Format(time.RFC3339Nano))
+			}
 		}
 		if errors.Is(runErr, context.Canceled) {
 			log.Printf("migration interrupted before completion%s", resumeHint)
@@ -289,7 +292,7 @@ func parseFlags(args []string, now time.Time) (config, error) {
 		batchSize         = fs.Int("batch-size", riskfindings.DefaultBatchSize, "rows per source page and sink batch")
 		bufferSize        = fs.Int("buffer", riskfindings.DefaultBatchSize, "channel buffer between pipeline stages")
 		dryRun            = fs.Bool("dry-run", true, "read and report without writing")
-		liftPartGuard     = fs.Bool("lift-partition-guard", true, "set max_partitions_per_insert_block=0 on inserts")
+		liftPartGuard     = fs.Bool("lift-partition-guard", true, "set max_partitions_per_insert_block=0 on inserts; pass -lift-partition-guard=false when the ClickHouse settings profile constrains that setting (code 452)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return config{}, fmt.Errorf("parse flags: %w", err)
@@ -361,6 +364,9 @@ func parseFlags(args []string, now time.Time) (config, error) {
 	effectiveFrom := *fromStr
 	if !fromSet {
 		if cfg.gapFill {
+			if *cursorStr != "" {
+				return cfg, errors.New("-from is required with -cursor and -gap-fill because the default window moves with the clock")
+			}
 			from := now.Add(-clickhouseRetention)
 			cfg.from = &from
 		} else {

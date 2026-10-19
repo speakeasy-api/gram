@@ -85,6 +85,10 @@ type BackfillSuppressionState struct {
 
 	// FalsePositiveAt is the manual dismissal time.
 	FalsePositiveAt *time.Time
+
+	// MarkedAt overrides the mark time that newer ClickHouse state events must
+	// not exceed. When nil, the exclusion or dismissal time is used.
+	MarkedAt *time.Time
 }
 
 // BackfillSuppressionCopy targets one existing ClickHouse finding.
@@ -137,6 +141,9 @@ func (q *Queries) AppendBackfillSuppressions(
 		default:
 			return fmt.Errorf("backfill suppression state for %s is empty", copy.ID)
 		}
+		if state.MarkedAt != nil {
+			markedAt = FormatCHTime(*state.MarkedAt)
+		}
 		ids = append(ids, copy.ID)
 		valueRows = append(valueRows, "(?, ?, ?, ?, ?, ?)")
 		valueArgs = append(valueArgs, copy.ID, excludedAt, exclusionID, falsePositiveAt, reason, markedAt)
@@ -161,7 +168,8 @@ func (q *Queries) AppendBackfillSuppressions(
 		" AND latest.event_kind != '" + EventKindUnsuppression + "'" +
 		" AND NOT (" + stateRankSQL + " AND latest.inserted_at > state.marked_at)" +
 		" AND (" +
-		"(state.excluded_reason = '" + ExcludedReasonRule + "' AND (latest.excluded_at IS NULL OR latest.exclusion_id IS NULL)) OR " +
+		"(state.excluded_reason = '" + ExcludedReasonRule + "' AND (latest.excluded_at IS NULL OR latest.exclusion_id IS NULL OR " +
+		"(state.false_positive_at IS NOT NULL AND latest.false_positive_at IS NULL))) OR " +
 		"(state.excluded_reason = '" + ExcludedReasonManual + "' AND latest.excluded_at IS NULL AND latest.false_positive_at IS NULL))"
 	args := []any{insertedAt, organizationID, projectID}
 	args = append(args, idArgs...)

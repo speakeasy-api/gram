@@ -664,3 +664,130 @@ func TestGapFillPreservesReversedExclusion(t *testing.T) {
 	require.Equal(t, chrepo.EventKindUnsuppression, eventKind)
 	require.False(t, excluded)
 }
+
+func TestGapFillIgnoresShadowRows(t *testing.T) {
+	t.Parallel()
+
+	tn := seedTenant(t)
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	shadowID := uuid.New()
+	row := FindingRow{
+		ID:                shadowID,
+		sourceID:          shadowID,
+		CreatedAt:         createdAt,
+		OrganizationID:    tn.orgID,
+		ProjectID:         tn.projectID.String(),
+		ChatMessageID:     uuid.NewString(),
+		RiskPolicyID:      tn.policyID.String(),
+		RiskPolicyVersion: 1,
+		RuleID:            "prompt_injection",
+		Source:            "llm_judge",
+		Tags:              []string{},
+		StartPos:          0,
+		EndPos:            8,
+		MessageCreatedAt:  createdAt,
+	}
+	scratch := row
+	scratch.OrganizationID = "org_" + uuid.NewString()
+	seedSink := NewSink(conn, SinkOptions{BatchSize: 10, LiftPartitionGuard: true})
+	require.NoError(t, seedSink.insertRows(t.Context(), []FindingRow{scratch}))
+	// REPLACE aliases shadow the source columns in WHERE, so filter by id only.
+	require.NoError(t, conn.Exec(t.Context(), `
+		INSERT INTO risk_findings
+		SELECT * REPLACE (toUInt8(1) AS shadow, ? AS organization_id)
+		FROM risk_findings WHERE id = ?
+	`, tn.orgID, shadowID))
+	var shadowRows uint64
+	require.NoError(t, conn.QueryRow(t.Context(),
+		`SELECT count() FROM risk_findings WHERE organization_id = ? AND shadow = 1`, tn.orgID,
+	).Scan(&shadowRows))
+	require.Equal(t, uint64(1), shadowRows)
+
+	desired := row
+	desired.ID = uuid.New()
+	desired.sourceID = desired.ID
+	sink := NewSink(conn, SinkOptions{BatchSize: 10, DryRun: true, GapFill: true})
+	require.NoError(t, sink.flushGapFill(t.Context(), []FindingRow{desired}))
+	require.Equal(t, SourceStats{Inserted: 1}, sink.StatsBySource()["llm_judge"])
+}
+
+func TestGapFillCopiesFalsePositiveUnderRuleExclusion(t *testing.T) {
+	t.Parallel()
+
+	tn := seedTenant(t)
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	createdAt := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	liveID := uuid.New()
+	row := FindingRow{
+		ID:                liveID,
+		sourceID:          liveID,
+		CreatedAt:         createdAt,
+		OrganizationID:    tn.orgID,
+		ProjectID:         tn.projectID.String(),
+		ChatMessageID:     uuid.NewString(),
+		RiskPolicyID:      tn.policyID.String(),
+		RiskPolicyVersion: 1,
+		RuleID:            "pii.email_address",
+		Source:            "presidio",
+		Tags:              []string{},
+		StartPos:          1,
+		EndPos:            8,
+		MessageCreatedAt:  createdAt,
+	}
+	seedSink := NewSink(conn, SinkOptions{BatchSize: 10, LiftPartitionGuard: true})
+	require.NoError(t, seedSink.insertRows(t.Context(), []FindingRow{row}))
+
+	falsePositiveAt := createdAt.Add(5 * time.Minute)
+	excludedAt := createdAt.Add(10 * time.Minute)
+	exclusionID := uuid.New()
+	queries := chrepo.New(conn)
+	require.NoError(t, queries.AppendBackfillSuppressions(
+		t.Context(),
+		tn.orgID,
+		tn.projectID.String(),
+		chrepo.FormatCHTime(excludedAt),
+		[]chrepo.BackfillSuppressionCopy{{
+			ID: liveID,
+			State: chrepo.BackfillSuppressionState{
+				ExcludedAt:      &excludedAt,
+				ExclusionID:     &exclusionID,
+				FalsePositiveAt: nil,
+				MarkedAt:        nil,
+			},
+		}},
+	))
+
+	desired := row
+	desired.ID = uuid.New()
+	desired.sourceID = desired.ID
+	desired.ExcludedAt = &excludedAt
+	desired.ExclusionID = &exclusionID
+	desired.FalsePositiveAt = &falsePositiveAt
+
+	sink := NewSink(conn, SinkOptions{BatchSize: 10, GapFill: true})
+	require.NoError(t, sink.flushGapFill(t.Context(), []FindingRow{desired}))
+	require.Equal(t, SourceStats{MatchedByKey: 1, StateCopies: 1}, sink.StatsBySource()["presidio"])
+
+	rerun := NewSink(conn, SinkOptions{BatchSize: 10, DryRun: true, GapFill: true})
+	require.NoError(t, rerun.flushGapFill(t.Context(), []FindingRow{desired}))
+	require.Equal(t, SourceStats{MatchedByKey: 1}, rerun.StatsBySource()["presidio"])
+
+	var (
+		gotExclusionID string
+		falsePositive  bool
+	)
+	require.NoError(t, conn.QueryRow(t.Context(), `
+		SELECT coalesce(toString(exclusion_id), ''), false_positive_at IS NOT NULL
+		FROM risk_findings
+		WHERE organization_id = ? AND project_id = ? AND id = ?
+		ORDER BY (event_kind IN ('suppression', 'unsuppression')) DESC, inserted_at DESC
+		LIMIT 1
+	`, tn.orgID, tn.projectID.String(), liveID).Scan(&gotExclusionID, &falsePositive))
+	require.Equal(t, exclusionID.String(), gotExclusionID)
+	require.True(t, falsePositive)
+}
