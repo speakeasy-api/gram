@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -13,7 +12,7 @@ import (
 func TestOptionalOrganizationGatewayURLFailsOpen(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	called := false
 	got := optionalOrganizationGatewayURL(context.Background(), logger, func() (*string, error) {
 		called = true
