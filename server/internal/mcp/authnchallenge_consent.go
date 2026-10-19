@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -236,6 +237,11 @@ type sessionDurationOption struct {
 // means never connected. Only Connected enables consent — the other two are
 // no better than none until the user reconnects.
 type remoteSessionCard struct {
+	// consentPermissionsHash fingerprints the effective upstream request.
+	consentPermissionsHash string
+	// consentReuseReady requires a routable connection with all requested scopes.
+	consentReuseReady bool
+
 	ClientID   string
 	IssuerSlug string
 
@@ -651,6 +657,23 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
+	if r.URL.Query().Get("consent") != "required" && len(agentOptions) == 0 &&
+		consentReuseEligible(endpoint, challengeState) && consentBrowserMatches(r, challengeState, time.Now()) &&
+		consentRemoteFingerprint(endpoint, cards) != "" {
+		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
+		lockedDown, lockdownErr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
+		if eligibilityErr != nil {
+			logger.WarnContext(ctx, "saved consent eligibility unavailable", attr.SlogError(eligibilityErr))
+		}
+		if eligible && eligibilityErr == nil && lockdownErr == nil && !lockedDown {
+			if _, lookupErr := usersessions_repo.New(s.db).GetUserSessionConsentResource(ctx, consentResourceParams(endpoint, challengeState, clientRowID)); lookupErr == nil {
+				return renderConsentReuse(w, endpoint, challengeState)
+			} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
+				logger.WarnContext(ctx, "saved consent lookup unavailable", attr.SlogError(lookupErr))
+			}
+		}
+	}
+
 	// Skip the interstitial when it has nothing to ask. A server fronting a
 	// single upstream that the subject has not linked yet leaves the page with
 	// exactly one useful control, and the user already expressed intent by
@@ -826,8 +849,21 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// attacker-controllable bucket the guards above describe rather than
 	// counting against a config's health signal.
 	action := r.PostForm.Get("action")
-	if action != "approve" && action != "approve_agent" && action != "deny" {
-		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", or "deny"`).LogError(ctx, logger)
+	if action != "approve" && action != "approve_agent" && action != "deny" && action != "reuse" {
+		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
+	}
+
+	reuse := action == "reuse"
+	if reuse {
+		if !consentReuseEligible(endpoint, challengeState) || !consentBrowserMatches(r, challengeState, time.Now()) {
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
+		agents, err := s.eligibleConsentAgents(ctx, challengeState, endpoint)
+		if err != nil || len(agents) != 0 {
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
 	}
 
 	// The RFC 9207 `iss` both branches below emit, resolved once so the deny
@@ -924,7 +960,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// unrestricted grant the pre-picker flow always minted, so stripping the
 	// field can only widen a submission to the status quo, never past it.
 	var boundInventory *consentToolInventory
-	if selectedAgentID == "" && r.PostForm.Get("tool_filtering") == "on" {
+	if reuse {
+		boundInventory, err = s.consentReuseInventory(ctx, endpoint, challengeState, r.PostForm.Get("tool_inventory_id"))
+		if err != nil || boundInventory == nil {
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
+	}
+	if selectedAgentID == "" && !reuse && r.PostForm.Get("tool_filtering") == "on" {
 		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
 		if eerr != nil {
 			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
@@ -947,8 +990,16 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		boundInventory = &inventory
 	}
 
+	if selectedAgentID == "" && !reuse && boundInventory == nil && r.PostForm.Get("tool_inventory_id") != "" {
+		if attempt, aerr := consentAttemptID(r.PostForm.Get("tool_inventory_id")); aerr == nil {
+			if inventory, found, gerr := s.getCompletedConsentInventory(ctx, stateID, attempt); gerr == nil && found {
+				boundInventory = &inventory
+			}
+		}
+	}
+
 	var toolSelection *toolfilter.SessionSelection
-	if selectedAgentID == "" {
+	if selectedAgentID == "" && !reuse {
 		toolSelection, err = chosenToolSelection(r.PostForm, boundInventory)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "invalid tool selection").LogError(ctx, logger)
@@ -987,6 +1038,28 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, nil)
 
+	duration := desiredSessionDurationHours(r.PostForm.Get("session_duration_hours"))
+	var approval *consentApprovalTransaction
+	// Both authorization routes share client and resource identities. Every
+	// explicit human approval must supersede older evidence, including when
+	// the per-endpoint route cannot save a reusable replacement.
+	if selectedAgentID == "" && !challengeState.FirstParty && challengeState.Subject.Kind == urn.SessionSubjectKindUser {
+		evidence := boundInventory
+		if !consentReuseEligible(endpoint, challengeState) {
+			evidence = nil
+		}
+		approval, err = s.beginConsentApproval(ctx, endpoint, challengeState, clientRow.ID, evidence, toolSelection, duration, reuse)
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "prepare consent approval").LogError(ctx, logger)
+		}
+		if approval == nil {
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
+		defer o11y.NoLogDefer(func() error { return approval.tx.Rollback(ctx) })
+		toolSelection, duration = approval.selection, approval.duration
+	}
+
 	// Atomic GETDEL: a consent approval consumes the authn-challenge state
 	// single-use. Parallel POSTs (e.g. user double-submits) lose the race
 	// and get "not found or expired", so only one grant is ever minted per
@@ -998,6 +1071,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)
+	}
+	if reuse && !consentBrowserMatches(r, challengeState, time.Now()) {
+		return oops.E(oops.CodeUnauthorized, nil, "invalid consent browser binding").LogWarn(ctx, logger)
 	}
 	subject := *challengeState.Subject
 
@@ -1019,7 +1095,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// (principal_urn, user_session_client_id, remote_set_hash) makes this
 	// idempotent on re-consent for the same set; we treat the duplicate-key
 	// error as a no-op (consent already on file).
-	if agentAuthorization == nil {
+	if agentAuthorization == nil && approval == nil {
 		if _, err := usersessions_repo.New(s.db).CreateUserSessionConsent(ctx, usersessions_repo.CreateUserSessionConsentParams{
 			SubjectUrn:          subject,
 			UserSessionClientID: clientRow.ID,
@@ -1059,7 +1135,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		Subject:                     subject,
 		Endpoint:                    &grantEndpoint,
 		AgentAuthorization:          agentAuthorization,
-		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
+		DesiredSessionDurationHours: duration,
 		ToolSelection:               toolSelection,
 		SignInID:                    nil,
 		GatewayPolicy:               toolPolicy,
@@ -1072,6 +1148,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "store user session grant").LogError(ctx, logger)
+	}
+
+	if approval != nil {
+		if err := approval.tx.Commit(ctx); err != nil {
+			_, _ = s.userSessionGrantCache.GetAndDelete(ctx, grant.CacheKey())
+			return oops.E(oops.CodeUnexpected, err, "commit consent approval").LogError(ctx, logger)
+		}
 	}
 
 	s.evictConsentToolInventory(ctx, stateID)
@@ -1623,7 +1706,22 @@ func (s *Service) buildRemoteSessionCards(
 			chainCheck = s.consentChainCheckAtRender(ctx, chainRequests[c.ID])
 		}
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
+		requested = slices.Clone(requested)
+		slices.Sort(requested)
+		permissionHash := consentEvidenceHash(struct {
+			ClientID uuid.UUID
+			IssuerID uuid.UUID
+			Issuer   string
+			Resource string
+			Scopes   []string
+		}{ClientID: c.ID, IssuerID: c.RemoteSessionIssuerID, Issuer: c.IssuerIdentifier, Resource: c.ResourceIdentifier, Scopes: requested})
+		reuseReady := connected && state.ValidationStatus != remotesessions.ValidationOutcomeInactive && state.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember
+		for _, scope := range requested {
+			reuseReady = reuseReady && slices.Contains(state.Scopes, scope)
+		}
 		cards = append(cards, remoteSessionCard{
+			consentPermissionsHash: permissionHash,
+			consentReuseReady:      reuseReady,
 			ClientID:               c.ID.String(),
 			IssuerSlug:             c.IssuerSlug,
 			IssuerDisplay:          issuerDisplay,

@@ -263,9 +263,9 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
   ($1::uuid, $2::uuid, 'Acme Tracker', 'acme-tracker',
-   NULL, $3::uuid, $4::uuid, 'private'),
+   NULL, $3::uuid, $4::uuid, 'disabled'),
   ($5::uuid, $2::uuid, 'Acme Wiki', 'acme-wiki',
-   NULL, $6::uuid, $4::uuid, 'private')
+   NULL, $6::uuid, $4::uuid, 'disabled')
 `
 
 type ServersInsertEMAMCPServersParams struct {

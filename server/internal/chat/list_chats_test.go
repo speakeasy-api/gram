@@ -923,7 +923,6 @@ func TestListChats_ClickHouseCutover(t *testing.T) {
 	dismissal.EventKind = riskchrepo.EventKindSuppression
 	rows = append(rows, excluded, shadow, deadLetter, dismissed, dismissal)
 	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, rows))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListChats(ctx, defaultPayload())
 	require.NoError(t, err)
