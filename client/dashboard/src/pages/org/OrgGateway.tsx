@@ -2,8 +2,8 @@ import { SettingsPage } from "@/components/page-templates";
 import {
   GatewayNotServed,
   OrganizationGatewaySwitch,
-  useOrganizationGatewaySetting,
 } from "@/components/mcp/organization-gateway-setting";
+import { useOrganizationGatewaySetting } from "@/components/mcp/useOrganizationGatewaySetting";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";

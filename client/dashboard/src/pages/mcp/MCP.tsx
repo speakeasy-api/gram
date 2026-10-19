@@ -1,9 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
-import {
-  TeamGatewayCard,
-  useTeamGatewayEntry,
-} from "@/components/mcp/TeamGatewayCard";
+import { TeamGatewayCard } from "@/components/mcp/TeamGatewayCard";
+import { useTeamGatewayEntry } from "@/components/mcp/useTeamGatewayEntry";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import {

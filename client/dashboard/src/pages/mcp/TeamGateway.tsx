@@ -3,8 +3,11 @@ import { SpeakeasyMark } from "@/components/mcp/TeamGatewayCard";
 import {
   GatewayNotServed,
   OrganizationGatewaySwitch,
-  useOrganizationGatewaySetting,
 } from "@/components/mcp/organization-gateway-setting";
+import {
+  type OrganizationGatewaySetting,
+  useOrganizationGatewaySetting,
+} from "@/components/mcp/useOrganizationGatewaySetting";
 import { SettingsPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
@@ -108,7 +111,7 @@ function GatewayBody({
   isOn,
   serverName,
 }: {
-  gateway: ReturnType<typeof useOrganizationGatewaySetting>["gateway"];
+  gateway: OrganizationGatewaySetting["gateway"];
   isOn: boolean | undefined;
   serverName: string;
 }): JSX.Element {

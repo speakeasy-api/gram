@@ -1,0 +1,85 @@
+import { handleAPIError } from "@/lib/errors";
+import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
+import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
+import {
+  invalidateAllOrganizationGateway,
+  useOrganizationGateway,
+} from "@gram/client/react-query/organizationGateway.js";
+import {
+  invalidateAllProductFeatures,
+  useProductFeatures,
+} from "@gram/client/react-query/productFeatures.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+export type OrganizationGatewaySetting = {
+  features: ReturnType<typeof useProductFeatures>;
+  gateway: ReturnType<typeof useOrganizationGateway>;
+  /** Whether the gateway is switched on; undefined until the setting loads. */
+  on: boolean | undefined;
+  setOn: (on: boolean, options?: { onSuccess?: () => void }) => void;
+  isPending: boolean;
+};
+
+/**
+ * The Team Gateway's on/off state and the switch that changes it. The stored
+ * product feature turns the gateway off, so "on" is its inverse. Shared by the
+ * Team Gateway page and the organization's Gateway settings page so both read
+ * and write the same thing the same way.
+ */
+export function useOrganizationGatewaySetting({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}): OrganizationGatewaySetting {
+  const queryClient = useQueryClient();
+  const features = useProductFeatures({ organizationId }, undefined, {
+    throwOnError: false,
+  });
+  const gateway = useOrganizationGateway(undefined, undefined, {
+    throwOnError: false,
+  });
+  const mutation = useFeaturesSetMutation({
+    onSuccess: async (_, variables) => {
+      if (!isCurrentOrganization()) return;
+      await Promise.all([
+        invalidateAllProductFeatures(queryClient),
+        invalidateAllOrganizationGateway(queryClient),
+      ]);
+      if (!isCurrentOrganization()) return;
+      toast.success(
+        variables.request.setProductFeatureRequestBody.enabled
+          ? "Team Gateway turned off"
+          : "Team Gateway turned on",
+      );
+    },
+    onError: (error) => {
+      if (!isCurrentOrganization()) return;
+      handleAPIError(error, "Failed to update the Team Gateway");
+    },
+  });
+
+  const setOn = (on: boolean, options?: { onSuccess?: () => void }) =>
+    mutation.mutate(
+      {
+        request: {
+          setProductFeatureRequestBody: {
+            organizationId,
+            featureName: FeatureName.OrganizationGatewayDisabled,
+            enabled: !on,
+          },
+        },
+      },
+      options,
+    );
+
+  return {
+    features,
+    gateway,
+    on: features.data ? !features.data.organizationGatewayDisabled : undefined,
+    setOn,
+    isPending: mutation.isPending,
+  };
+}

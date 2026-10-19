@@ -2,37 +2,11 @@ import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { SPEAKEASY_RAINBOW } from "@/components/icon-dither";
 import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
-import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
-import { useOrganizationGateway } from "@gram/client/react-query/organizationGateway.js";
 import { ArrowRight } from "lucide-react";
 import { McpEntityCard } from "./McpEntityCard";
 
-export const TEAM_GATEWAY_SUBTITLE =
-  "Every server your team can reach, at one URL";
-
-/**
- * Whether the MCP Servers list offers the Team Gateway. Everyone sees it while
- * it is served. Organization admins also see it while it is turned off, so the
- * page they turned it off from stays the way back to turning it on.
- */
-export function useTeamGatewayEntry(): {
-  show: boolean;
-  isOff: boolean;
-  url: string | undefined;
-} {
-  const organization = useOrganization();
-  const { hasScope } = useRBAC();
-  // Discoverability only: a failed read hides the entry rather than the page.
-  const { data } = useOrganizationGateway(undefined, undefined, {
-    throwOnError: false,
-  });
-  const isOff = data?.unavailableReason === "turned_off";
-  const show =
-    !!data?.available || (isOff && hasScope("org:admin", organization.id));
-  return { show, isOff, url: data?.available ? data.url : undefined };
-}
+const TEAM_GATEWAY_SUBTITLE = "Every server your team can reach, at one URL";
 
 export function SpeakeasyMark({
   className,

@@ -2,86 +2,11 @@ import { RequireScope } from "@/components/require-scope";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
-import { handleAPIError } from "@/lib/errors";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationGateway } from "@gram/client/models/components/organizationgateway.js";
-import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
-import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
-import {
-  invalidateAllOrganizationGateway,
-  useOrganizationGateway,
-} from "@gram/client/react-query/organizationGateway.js";
-import {
-  invalidateAllProductFeatures,
-  useProductFeatures,
-} from "@gram/client/react-query/productFeatures.js";
-import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import type { OrganizationGatewaySetting } from "./useOrganizationGatewaySetting";
 import { Link } from "react-router";
-import { toast } from "sonner";
-
-/**
- * The Team Gateway's on/off state and the switch that changes it. The stored
- * product feature turns the gateway off, so "on" is its inverse. Shared by the
- * Team Gateway page and the organization's Gateway settings page so both read
- * and write the same thing the same way.
- */
-export function useOrganizationGatewaySetting({
-  organizationId,
-  isCurrentOrganization,
-}: {
-  organizationId: string;
-  isCurrentOrganization: () => boolean;
-}) {
-  const queryClient = useQueryClient();
-  const features = useProductFeatures({ organizationId }, undefined, {
-    throwOnError: false,
-  });
-  const gateway = useOrganizationGateway(undefined, undefined, {
-    throwOnError: false,
-  });
-  const mutation = useFeaturesSetMutation({
-    onSuccess: async (_, variables) => {
-      if (!isCurrentOrganization()) return;
-      await Promise.all([
-        invalidateAllProductFeatures(queryClient),
-        invalidateAllOrganizationGateway(queryClient),
-      ]);
-      if (!isCurrentOrganization()) return;
-      toast.success(
-        variables.request.setProductFeatureRequestBody.enabled
-          ? "Team Gateway turned off"
-          : "Team Gateway turned on",
-      );
-    },
-    onError: (error) => {
-      if (!isCurrentOrganization()) return;
-      handleAPIError(error, "Failed to update the Team Gateway");
-    },
-  });
-
-  const setOn = (on: boolean, options?: { onSuccess?: () => void }) =>
-    mutation.mutate(
-      {
-        request: {
-          setProductFeatureRequestBody: {
-            organizationId,
-            featureName: FeatureName.OrganizationGatewayDisabled,
-            enabled: !on,
-          },
-        },
-      },
-      options,
-    );
-
-  return {
-    features,
-    gateway,
-    on: features.data ? !features.data.organizationGatewayDisabled : undefined,
-    setOn,
-    isPending: mutation.isPending,
-  };
-}
 
 /**
  * The on/off switch. Turning on is immediate; turning off asks first, because
@@ -92,10 +17,9 @@ export function OrganizationGatewaySwitch({
   on,
   setOn,
   isPending,
-}: Pick<
-  ReturnType<typeof useOrganizationGatewaySetting>,
-  "setOn" | "isPending"
-> & { on: boolean }): JSX.Element {
+}: Pick<OrganizationGatewaySetting, "setOn" | "isPending"> & {
+  on: boolean;
+}): JSX.Element {
   const [confirming, setConfirming] = useState(false);
   return (
     <>
