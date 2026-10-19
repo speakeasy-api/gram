@@ -68,57 +68,80 @@ func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx
 		return none, oops.Permanent(oops.E(oops.CodeBadRequest, nil, "invalid directory user event payload missing ID"))
 	}
 
-	beforeOrg, before, err := directoryUserReviewSnapshot(ctx, dbtx, payload.ID)
+	// Review is scoped to the organization the event names. An event without
+	// one, or for an organization we don't know, is left to the hourly sweep.
+	organizationID, err := directoryReviewOrganizationID(ctx, dbtx, payload.OrganizationID)
 	if err != nil {
 		return none, err
+	}
+	var before directoryreview.UserAttributes
+	if organizationID != "" {
+		if before, err = directoryUserReviewSnapshot(ctx, dbtx, organizationID, payload.ID); err != nil {
+			return none, err
+		}
 	}
 	effects, err := applyDirectoryUserEvent(ctx, logger, dbtx, event, payload)
 	if err != nil {
 		return none, err
 	}
-	afterOrg, after, err := directoryUserReviewSnapshot(ctx, dbtx, payload.ID)
+	if organizationID == "" {
+		return effects, nil
+	}
+	after, err := directoryUserReviewSnapshot(ctx, dbtx, organizationID, payload.ID)
 	if err != nil {
 		return none, err
 	}
-	if organizationID := conv.Default(afterOrg, beforeOrg); organizationID != "" {
-		if _, err := directoryreview.ReconcileUserChange(ctx, dbtx, organizationID, payload.ID, before, after); err != nil {
-			return none, oops.E(oops.CodeUnexpected, err, "review directory user change")
-		}
+	if _, err := directoryreview.ReconcileUserChange(ctx, dbtx, organizationID, payload.ID, before, after); err != nil {
+		return none, oops.E(oops.CodeUnexpected, err, "review directory user change")
 	}
 	return effects, nil
 }
 
-// directoryUserReviewSnapshot reads a directory user's organization and
-// attributes, with nil attributes when the user is not live.
-func directoryUserReviewSnapshot(ctx context.Context, dbtx database.DBTX, workosDirectoryUserID string) (string, directoryreview.UserAttributes, error) {
-	user, err := directoryrepo.New(dbtx).GetDirectoryUserByWorkOSID(ctx, workosDirectoryUserID)
+// directoryReviewOrganizationID resolves the organization a directory event
+// names, or "" when the event names none or an unknown one.
+func directoryReviewOrganizationID(ctx context.Context, dbtx database.DBTX, workosOrganizationID string) (string, error) {
+	if workosOrganizationID == "" {
+		return "", nil
+	}
+	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrganizationID))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return "", nil, nil
+		return "", nil
 	case err != nil:
-		return "", nil, oops.E(oops.CodeUnexpected, err, "get directory user for review")
+		return "", oops.E(oops.CodeUnexpected, err, "get organization for directory review")
 	}
-	if user.Deleted || user.WorkosDeleted {
-		return user.OrganizationID, nil, nil
-	}
-	attributes, err := directoryreview.ParseUserAttributes(user.Attributes)
+	return org.ID, nil
+}
+
+// directoryUserReviewSnapshot reads an organization's directory user's
+// attributes, nil when the user is missing or not live.
+func directoryUserReviewSnapshot(ctx context.Context, dbtx database.DBTX, organizationID, workosDirectoryUserID string) (directoryreview.UserAttributes, error) {
+	attributes, err := directoryreview.LoadUserAttributes(ctx, dbtx, organizationID, workosDirectoryUserID)
 	if err != nil {
-		return "", nil, oops.E(oops.CodeUnexpected, err, "parse directory user attributes for review")
+		return nil, oops.E(oops.CodeUnexpected, err, "read directory user attributes for review")
 	}
-	return user.OrganizationID, attributes, nil
+	return attributes, nil
 }
 
 // reviewDirectoryGroup raises and settles the directory review decisions for
-// a group an event created, changed or deleted.
-func reviewDirectoryGroup(ctx context.Context, dbtx database.DBTX, workosDirectoryGroupID string) error {
-	group, err := directoryreviewrepo.New(dbtx).GetDirectoryGroupByWorkOSIDForReview(ctx, workosDirectoryGroupID)
+// a group an event created, changed or deleted, within the organization the
+// event names.
+func reviewDirectoryGroup(ctx context.Context, dbtx database.DBTX, workosOrganizationID, workosDirectoryGroupID string) error {
+	organizationID, err := directoryReviewOrganizationID(ctx, dbtx, workosOrganizationID)
+	if err != nil || organizationID == "" {
+		return err
+	}
+	groupID, err := directoryreviewrepo.New(dbtx).GetDirectoryGroupIDForReview(ctx, directoryreviewrepo.GetDirectoryGroupIDForReviewParams{
+		OrganizationID:         organizationID,
+		WorkosDirectoryGroupID: workosDirectoryGroupID,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "get directory group for review")
 	}
-	if _, err := directoryreview.ReconcileGroup(ctx, dbtx, group.OrganizationID, group.ID); err != nil {
+	if _, err := directoryreview.ReconcileGroup(ctx, dbtx, organizationID, groupID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "review directory group change")
 	}
 	return nil
@@ -186,7 +209,7 @@ func handleDirectoryGroupEvent(ctx context.Context, logger *slog.Logger, dbtx da
 	default:
 		return nil
 	}
-	return reviewDirectoryGroup(ctx, dbtx, payload.ID)
+	return reviewDirectoryGroup(ctx, dbtx, payload.OrganizationID, payload.ID)
 }
 
 func handleDirectoryGroupMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
@@ -524,7 +547,7 @@ func createDirectoryGroupFromMembership(ctx context.Context, dbtx database.DBTX,
 	if err := upsertDirectoryGroup(ctx, dbtx, event, group); err != nil {
 		return uuid.Nil, err
 	}
-	if err := reviewDirectoryGroup(ctx, dbtx, group.ID); err != nil {
+	if err := reviewDirectoryGroup(ctx, dbtx, group.OrganizationID, group.ID); err != nil {
 		return uuid.Nil, err
 	}
 

@@ -38,7 +38,7 @@ export function reviewItemDetail(
       ? names.join(", ")
       : pluralize(item.item.existingRoleUrns.length, "role");
   const again =
-    item.occurrence > 1 ? " It came back once before and has gone again." : "";
+    item.occurrence > 1 ? " It has come back and gone again before." : "";
   const grant = item.item.existingRoleUrns.length === 1 ? "grants" : "grant";
   return `Still mapped to ${roles}, which ${grant} nothing while it is gone.${again} Remove the roles, or keep them for when it returns.`;
 }

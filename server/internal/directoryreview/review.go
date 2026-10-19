@@ -7,13 +7,12 @@
 package directoryreview
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -160,38 +159,37 @@ func SupersedeAttributeKey(ctx context.Context, dbtx database.DBTX, organization
 // reads them, before or after an event. Nil means the user is not live.
 type UserAttributes map[string]string
 
-// ParseUserAttributes reads a directory user's stored attributes. Each scalar
-// value becomes the text Postgres's ->> operator returns for it, so it
-// compares the way mappings match. Nulls, objects and arrays are left out: a
-// mapping value is a scalar, and Postgres formats nested JSON differently.
-func ParseUserAttributes(raw []byte) (UserAttributes, error) {
-	out := UserAttributes{}
-	if len(raw) == 0 {
-		return out, nil
+// LoadUserAttributes reads an organization's directory user's attributes for
+// ReconcileUserChange. Postgres renders each value, so it is exactly the text
+// ->> returns and mappings match on, nested values included. It returns nil
+// when the user is missing or not live.
+func LoadUserAttributes(ctx context.Context, dbtx database.DBTX, organizationID, workosDirectoryUserID string) (UserAttributes, error) {
+	q := repo.New(dbtx)
+	user, err := q.GetDirectoryUserForReview(ctx, repo.GetDirectoryUserForReviewParams{
+		OrganizationID:        organizationID,
+		WorkosDirectoryUserID: workosDirectoryUserID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("get directory user for review: %w", err)
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return nil, fmt.Errorf("parse directory user attributes: %w", err)
+	if user.Deleted || user.WorkosDeleted {
+		return nil, nil
 	}
-	for key, value := range fields {
-		if text, ok := attributeText(value); ok {
-			out[key] = text
-		}
+	rows, err := q.ListDirectoryUserAttributesForReview(ctx, repo.ListDirectoryUserAttributesForReviewParams{
+		OrganizationID:        organizationID,
+		WorkosDirectoryUserID: workosDirectoryUserID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list directory user attributes for review: %w", err)
+	}
+	out := make(UserAttributes, len(rows))
+	for _, row := range rows {
+		out[row.AttributeKey] = row.AttributeValue
 	}
 	return out, nil
-}
-
-func attributeText(raw json.RawMessage) (string, bool) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || string(trimmed) == "null" || trimmed[0] == '{' || trimmed[0] == '[' {
-		return "", false
-	}
-	var s string
-	if err := json.Unmarshal(trimmed, &s); err == nil {
-		return s, true
-	}
-	// Numbers and booleans: ->> returns their JSON text.
-	return string(trimmed), true
 }
 
 // ReconcileUserChange raises and settles items after a directory event

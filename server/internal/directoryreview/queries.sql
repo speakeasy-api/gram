@@ -215,11 +215,30 @@ WHERE du.organization_id = @organization_id
   AND du.workos_directory_user_id <> @workos_directory_user_id
   AND du.attributes ->> sqlc.arg(attribute_key)::text = sqlc.arg(attribute_value)::text;
 
--- name: GetDirectoryGroupByWorkOSIDForReview :one
--- The group a directory event touched, deleted or not.
-SELECT id, organization_id
+-- name: GetDirectoryGroupIDForReview :one
+-- The organization's group a directory event touched, deleted or not.
+SELECT id
 FROM directory_groups
-WHERE workos_directory_group_id = @workos_directory_group_id;
+WHERE organization_id = @organization_id
+  AND workos_directory_group_id = @workos_directory_group_id;
+
+-- name: GetDirectoryUserForReview :one
+-- The organization's directory user a directory event touched, deleted or not.
+SELECT deleted, workos_deleted
+FROM directory_users
+WHERE organization_id = @organization_id
+  AND workos_directory_user_id = @workos_directory_user_id;
+
+-- name: ListDirectoryUserAttributesForReview :many
+-- A directory user's attribute values as the text ->> returns, which is what
+-- mappings match on. JSON nulls are left out because ->> makes them NULL.
+SELECT a.key::text AS attribute_key, a.value::text AS attribute_value
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(du.attributes) AS a
+WHERE du.organization_id = @organization_id
+  AND du.workos_directory_user_id = @workos_directory_user_id
+  AND jsonb_typeof(du.attributes) = 'object'
+  AND a.value IS NOT NULL;
 
 -- name: ListMappedAttributeKeys :many
 -- Attribute keys with at least one live mapping, the only keys whose value

@@ -627,6 +627,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
+	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)

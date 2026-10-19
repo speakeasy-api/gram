@@ -10,11 +10,26 @@ import { DirectoryReviewPanel } from "./DirectoryReviewPanel";
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
+  refetch: vi.fn(),
   items: [] as DirectoryReviewItem[],
+  failed: false,
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@gram/client/react-query/directoryReviewItems.js", () => ({
-  useDirectoryReviewItems: () => ({ data: { items: mocks.items } }),
+  useDirectoryReviewItems: () =>
+    mocks.failed
+      ? {
+          data: undefined,
+          isError: true,
+          isFetching: false,
+          refetch: mocks.refetch,
+        }
+      : {
+          data: { items: mocks.items },
+          isError: false,
+          isFetching: false,
+          refetch: mocks.refetch,
+        },
 }));
 vi.mock("@gram/client/react-query/resolveDirectoryReviewItem.js", () => ({
   useResolveDirectoryReviewItemMutation: () => ({
@@ -88,14 +103,20 @@ const missingGroup: DirectoryReviewItem = {
   },
 };
 
-function renderPanel() {
-  return render(<DirectoryReviewPanel roles={roles} />, {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={new QueryClient()}>
-        <TooltipProvider>{children}</TooltipProvider>
-      </QueryClientProvider>
-    ),
-  });
+function renderPanel(rolesLoaded = true) {
+  return render(
+    <DirectoryReviewPanel
+      roles={rolesLoaded ? roles : []}
+      rolesLoaded={rolesLoaded}
+    />,
+    {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          <TooltipProvider>{children}</TooltipProvider>
+        </QueryClientProvider>
+      ),
+    },
+  );
 }
 
 function requestOf(call: number) {
@@ -105,6 +126,7 @@ function requestOf(call: number) {
 
 beforeEach(() => {
   mocks.items = [newGroup, newValue, missingGroup];
+  mocks.failed = false;
 });
 
 afterEach(() => {
@@ -127,9 +149,34 @@ describe("DirectoryReviewPanel", () => {
     expect(screen.getByText("Group deleted: Contractors")).toBeTruthy();
     expect(
       screen.getByText(
-        /Still mapped to Support, which grants nothing while it is gone. It came back once before/,
+        /Still mapped to Support, which grants nothing while it is gone. It has come back and gone again before/,
       ),
     ).toBeTruthy();
+  });
+
+  it("says a proposed new role starts with no access", () => {
+    renderPanel();
+    expect(
+      screen.getAllByText(
+        "A new role grants no access until you add permissions to it.",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("counts mapped roles until the role list loads", () => {
+    renderPanel(false);
+    expect(screen.getByText(/Still mapped to 1 role,/)).toBeTruthy();
+    expect(screen.queryByText(/a deleted role/)).toBeNull();
+  });
+
+  it("shows a load failure with a retry", () => {
+    mocks.failed = true;
+    renderPanel();
+    expect(
+      screen.getByText("Couldn't load directory changes to review."),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.refetch).toHaveBeenCalled();
   });
 
   it("maps a new group to the proposed role", () => {

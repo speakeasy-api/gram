@@ -2074,11 +2074,11 @@ WHERE organization_id = @organization_id
 ORDER BY created_at, id;
 
 -- name: SetDirectoryGroupWorkOSDeletedFixture :exec
--- Tombstones a directory group as a directory deletion does, or with deleted
--- false brings it back.
+-- Deletes a directory group as a WorkOS deletion does, setting both markers,
+-- or with deleted false brings it back by clearing them.
 UPDATE directory_groups
 SET workos_deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() END,
-    deleted_at = NULL
+    deleted_at = CASE WHEN @deleted::boolean THEN clock_timestamp() END
 WHERE id = @id;
 
 -- name: SetDirectoryUserAttributesFixture :exec
@@ -2087,8 +2087,10 @@ SET attributes = @attributes::jsonb
 WHERE workos_directory_user_id = @workos_directory_user_id;
 
 -- name: SetDirectoryUserWorkOSDeletedFixture :exec
+-- Deletes a directory user as a WorkOS deletion does, setting both markers.
 UPDATE directory_users
-SET workos_deleted_at = clock_timestamp()
+SET workos_deleted_at = clock_timestamp(),
+    deleted_at = clock_timestamp()
 WHERE workos_directory_user_id = @workos_directory_user_id;
 
 -- name: SoftDeleteDirectoryGroupRoleMappingsFixture :exec

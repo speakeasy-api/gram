@@ -380,7 +380,10 @@ export function DirectoryRoleMappings({
           onClose={() => setSettingUp(false)}
         />
       )}
-      <DirectoryReviewPanel roles={roles} />
+      <DirectoryReviewPanel
+        roles={roles}
+        rolesLoaded={rolesData !== undefined}
+      />
 
       <Collapsible>
         {isPending && <SkeletonTable />}

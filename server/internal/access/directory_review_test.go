@@ -106,8 +106,11 @@ func TestService_ResolveDirectoryReviewItem_ApproveCreatesRoleAndMapping(t *test
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
 
-	// Resolving it again is a conflict.
+	// Resolving it again is a conflict, even when the stale request would
+	// also fail validation.
 	_, err = ti.service.ResolveDirectoryReviewItem(ctx, &gen.ResolveDirectoryReviewItemPayload{ID: item.ID, Decision: directoryReviewDecisionDismiss})
+	requireOopsCode(t, err, oops.CodeConflict)
+	_, err = ti.service.ResolveDirectoryReviewItem(ctx, &gen.ResolveDirectoryReviewItemPayload{ID: item.ID, Decision: directoryReviewDecisionApprove})
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 

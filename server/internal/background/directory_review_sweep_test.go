@@ -65,6 +65,7 @@ func TestDirectoryReviewSweepSchedule(t *testing.T) {
 		action, ok := options.Action.(*client.ScheduleWorkflowAction)
 		require.True(t, ok)
 		require.Equal(t, "sweep-test", action.TaskQueue)
+		require.Equal(t, directoryReviewSweepRunTimeout, action.WorkflowRunTimeout)
 		return true
 	})).Return(nil, nil).Once()
 

@@ -152,12 +152,7 @@ func deactivateUser(t *testing.T, conn *pgxpool.Pool, externalID string) directo
 
 func userSnapshot(t *testing.T, conn *pgxpool.Pool, externalID string) directoryreview.UserAttributes {
 	t.Helper()
-	user, err := directoryrepo.New(conn).GetDirectoryUserByWorkOSID(t.Context(), externalID)
-	require.NoError(t, err)
-	if user.Deleted || user.WorkosDeleted {
-		return nil
-	}
-	attributes, err := directoryreview.ParseUserAttributes(user.Attributes)
+	attributes, err := directoryreview.LoadUserAttributes(t.Context(), conn, testOrg, externalID)
 	require.NoError(t, err)
 	return attributes
 }
@@ -426,14 +421,36 @@ func TestSweepCoversOrganizationsWithDirectoryData(t *testing.T) {
 	require.Equal(t, []string{testOrg, "org_scim"}, baselined)
 }
 
-func TestParseUserAttributesMatchesPostgresText(t *testing.T) {
+func TestLoadUserAttributesMatchesMappingText(t *testing.T) {
 	t.Parallel()
+	conn := newTestDB(t)
 
-	got, err := directoryreview.ParseUserAttributes([]byte(`{"s":"x","n":12,"b":true,"z":null,"o":{"a":1},"l":["x"]}`))
+	seedUser(t, conn, "user_types", `{"s":"x","n":12,"b":true,"z":null,"o":{"a":1},"l":["x"]}`)
+	got, err := directoryreview.LoadUserAttributes(t.Context(), conn, testOrg, "user_types")
 	require.NoError(t, err)
-	require.Equal(t, directoryreview.UserAttributes{"s": "x", "n": "12", "b": "true"}, got)
+	require.Equal(t, directoryreview.UserAttributes{
+		"s": "x", "n": "12", "b": "true", "o": `{"a": 1}`, "l": `["x"]`,
+	}, got, "every value is the text ->> returns, nested values included, and nulls are left out")
 
-	empty, err := directoryreview.ParseUserAttributes(nil)
+	seedUser(t, conn, "user_empty", `{}`)
+	empty, err := directoryreview.LoadUserAttributes(t.Context(), conn, testOrg, "user_empty")
 	require.NoError(t, err)
+	require.NotNil(t, empty, "a live user with no attributes is not the same as a missing one")
 	require.Empty(t, empty)
+
+	missing, err := directoryreview.LoadUserAttributes(t.Context(), conn, "org_other", "user_types")
+	require.NoError(t, err)
+	require.Nil(t, missing, "another organization's user is not found")
+}
+
+func TestNestedAttributeValueGoingMissingIsRaised(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+
+	seedUser(t, conn, "user_nested", `{"team":{"name":"core"}}`)
+	mapAttribute(t, conn, "team", `{"name": "core"}`)
+	sweep(t, conn)
+
+	changes := setUserAttributes(t, conn, "user_nested", `{}`)
+	require.Len(t, changes.Opened, 1, "the mapped nested value lost its last holder")
 }

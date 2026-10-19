@@ -122,11 +122,6 @@ func (s *Service) ResolveDirectoryReviewItem(ctx context.Context, payload *gen.R
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid directory review item ID").LogWarn(ctx, s.logger)
 	}
-	for _, role := range payload.Roles {
-		if role == nil || (role.RoleUrn == nil) == (role.CreateName == nil) {
-			return nil, oops.E(oops.CodeBadRequest, nil, "each role needs exactly one of role_urn or create_name").LogWarn(ctx, s.logger)
-		}
-	}
 
 	// Read the item's source first: its lock is taken before the item's row
 	// lock, the order mapping writes take them in.
@@ -136,6 +131,17 @@ func (s *Service) ResolveDirectoryReviewItem(ctx context.Context, payload *gen.R
 		return nil, oops.E(oops.CodeNotFound, err, "directory review item not found").LogWarn(ctx, s.logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "get directory review item").LogError(ctx, s.logger)
+	}
+	// An item someone already resolved is a conflict whatever the request
+	// says, so a stale client hears that before any validation error. The
+	// locked read below rechecks it.
+	if item.State != directoryreview.StatePending {
+		return nil, errDirectoryReviewItemResolved(ctx, s, nil)
+	}
+	for _, role := range payload.Roles {
+		if role == nil || (role.RoleUrn == nil) == (role.CreateName == nil) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "each role needs exactly one of role_urn or create_name").LogWarn(ctx, s.logger)
+		}
 	}
 	if err := validateDirectoryReviewDecision(item.Kind, payload); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s", err.Error()).LogWarn(ctx, s.logger)
@@ -158,7 +164,7 @@ func (s *Service) ResolveDirectoryReviewItem(ctx context.Context, payload *gen.R
 	reviews := reviewrepo.New(dbtx)
 	if _, err := reviews.GetPendingDirectoryReviewItemForUpdate(ctx, reviewrepo.GetPendingDirectoryReviewItemForUpdateParams{OrganizationID: orgID, ID: itemID}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeConflict, err, "this directory change has already been resolved; refresh the review list").LogWarn(ctx, s.logger)
+			return nil, errDirectoryReviewItemResolved(ctx, s, err)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock directory review item").LogError(ctx, s.logger)
 	}
@@ -239,6 +245,10 @@ func (s *Service) ResolveDirectoryReviewItem(ctx context.Context, payload *gen.R
 		Mappings:     applied.mappings,
 		SideEffects:  s.reconcileDirectorySetupRoles(ctx, applied),
 	}, nil
+}
+
+func errDirectoryReviewItemResolved(ctx context.Context, s *Service, cause error) error {
+	return oops.E(oops.CodeConflict, cause, "this directory change has already been resolved; refresh the review list").LogWarn(ctx, s.logger)
 }
 
 // validateDirectoryReviewDecision checks a decision fits the item's kind.

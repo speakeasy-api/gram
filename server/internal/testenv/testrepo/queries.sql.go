@@ -5530,7 +5530,7 @@ func (q *Queries) SetDeviceIntegrationSyncPushDigestFixture(ctx context.Context,
 const setDirectoryGroupWorkOSDeletedFixture = `-- name: SetDirectoryGroupWorkOSDeletedFixture :exec
 UPDATE directory_groups
 SET workos_deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() END,
-    deleted_at = NULL
+    deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() END
 WHERE id = $2
 `
 
@@ -5539,8 +5539,8 @@ type SetDirectoryGroupWorkOSDeletedFixtureParams struct {
 	ID      uuid.UUID
 }
 
-// Tombstones a directory group as a directory deletion does, or with deleted
-// false brings it back.
+// Deletes a directory group as a WorkOS deletion does, setting both markers,
+// or with deleted false brings it back by clearing them.
 func (q *Queries) SetDirectoryGroupWorkOSDeletedFixture(ctx context.Context, arg SetDirectoryGroupWorkOSDeletedFixtureParams) error {
 	_, err := q.db.Exec(ctx, setDirectoryGroupWorkOSDeletedFixture, arg.Deleted, arg.ID)
 	return err
@@ -5564,10 +5564,12 @@ func (q *Queries) SetDirectoryUserAttributesFixture(ctx context.Context, arg Set
 
 const setDirectoryUserWorkOSDeletedFixture = `-- name: SetDirectoryUserWorkOSDeletedFixture :exec
 UPDATE directory_users
-SET workos_deleted_at = clock_timestamp()
+SET workos_deleted_at = clock_timestamp(),
+    deleted_at = clock_timestamp()
 WHERE workos_directory_user_id = $1
 `
 
+// Deletes a directory user as a WorkOS deletion does, setting both markers.
 func (q *Queries) SetDirectoryUserWorkOSDeletedFixture(ctx context.Context, workosDirectoryUserID string) error {
 	_, err := q.db.Exec(ctx, setDirectoryUserWorkOSDeletedFixture, workosDirectoryUserID)
 	return err

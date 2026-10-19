@@ -40,14 +40,24 @@ import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAc
  */
 export function DirectoryReviewPanel({
   roles,
+  rolesLoaded,
 }: {
   /** Roles sorted for display. */
   roles: Role[];
+  /**
+   * Whether `roles` has loaded. Until it has, a mapped role that isn't in the
+   * list is counted rather than called deleted.
+   */
+  rolesLoaded: boolean;
 }): JSX.Element | null {
-  const { data } = useDirectoryReviewItems(undefined, undefined, {
-    refetchOnMount: "always",
-    throwOnError: false,
-  });
+  const { data, isError, isFetching, refetch } = useDirectoryReviewItems(
+    undefined,
+    undefined,
+    {
+      refetchOnMount: "always",
+      throwOnError: false,
+    },
+  );
   const queryClient = useQueryClient();
   const resolve = useResolveDirectoryReviewItemMutation({
     retry: false,
@@ -67,8 +77,36 @@ export function DirectoryReviewPanel({
     [roles],
   );
 
+  if (isError && !data) {
+    return (
+      <section
+        aria-label="Directory changes to review"
+        className="border-border flex items-center justify-between gap-3 border px-3 py-2"
+      >
+        <Text muted small>
+          Couldn't load directory changes to review.
+        </Text>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isFetching}
+          onClick={() => void refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </section>
+    );
+  }
+
   const items = data?.items ?? [];
   if (items.length === 0) return null;
+
+  // Without the role list, names are unknown, so the detail line counts the
+  // roles instead of naming any as deleted.
+  const roleNames = (urns: string[]): string[] =>
+    rolesLoaded
+      ? urns.map((urn) => roleByUrn.get(urn)?.name ?? "a deleted role")
+      : [];
 
   const decide = (
     item: DirectoryReviewItem,
@@ -113,9 +151,7 @@ export function DirectoryReviewPanel({
             key={item.id}
             item={item}
             roles={roles}
-            roleNames={(urns) =>
-              urns.map((urn) => roleByUrn.get(urn)?.name ?? "a deleted role")
-            }
+            roleNames={roleNames}
             disabled={resolve.isPending}
             onDecide={(decision, choice) => decide(item, decision, choice)}
           />
@@ -151,6 +187,11 @@ function ReviewRow({
         <Text muted small>
           {reviewItemDetail(item, roleNames)}
         </Text>
+        {!missing && choice?.kind === "create" && (
+          <Text muted small>
+            A new role grants no access until you add permissions to it.
+          </Text>
+        )}
       </div>
       {missing ? (
         <div className="flex items-center gap-2">

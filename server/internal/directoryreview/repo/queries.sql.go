@@ -44,23 +44,24 @@ func (q *Queries) CountOtherLiveAttributeHolders(ctx context.Context, arg CountO
 	return column_1, err
 }
 
-const getDirectoryGroupByWorkOSIDForReview = `-- name: GetDirectoryGroupByWorkOSIDForReview :one
-SELECT id, organization_id
+const getDirectoryGroupIDForReview = `-- name: GetDirectoryGroupIDForReview :one
+SELECT id
 FROM directory_groups
-WHERE workos_directory_group_id = $1
+WHERE organization_id = $1
+  AND workos_directory_group_id = $2
 `
 
-type GetDirectoryGroupByWorkOSIDForReviewRow struct {
-	ID             uuid.UUID
-	OrganizationID string
+type GetDirectoryGroupIDForReviewParams struct {
+	OrganizationID         string
+	WorkosDirectoryGroupID string
 }
 
-// The group a directory event touched, deleted or not.
-func (q *Queries) GetDirectoryGroupByWorkOSIDForReview(ctx context.Context, workosDirectoryGroupID string) (GetDirectoryGroupByWorkOSIDForReviewRow, error) {
-	row := q.db.QueryRow(ctx, getDirectoryGroupByWorkOSIDForReview, workosDirectoryGroupID)
-	var i GetDirectoryGroupByWorkOSIDForReviewRow
-	err := row.Scan(&i.ID, &i.OrganizationID)
-	return i, err
+// The organization's group a directory event touched, deleted or not.
+func (q *Queries) GetDirectoryGroupIDForReview(ctx context.Context, arg GetDirectoryGroupIDForReviewParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getDirectoryGroupIDForReview, arg.OrganizationID, arg.WorkosDirectoryGroupID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getDirectoryReviewItem = `-- name: GetDirectoryReviewItem :one
@@ -127,6 +128,31 @@ func (q *Queries) GetDirectoryReviewOrgState(ctx context.Context, organizationID
 		&i.LastEmailedAt,
 		&i.RemindersSent,
 	)
+	return i, err
+}
+
+const getDirectoryUserForReview = `-- name: GetDirectoryUserForReview :one
+SELECT deleted, workos_deleted
+FROM directory_users
+WHERE organization_id = $1
+  AND workos_directory_user_id = $2
+`
+
+type GetDirectoryUserForReviewParams struct {
+	OrganizationID        string
+	WorkosDirectoryUserID string
+}
+
+type GetDirectoryUserForReviewRow struct {
+	Deleted       bool
+	WorkosDeleted bool
+}
+
+// The organization's directory user a directory event touched, deleted or not.
+func (q *Queries) GetDirectoryUserForReview(ctx context.Context, arg GetDirectoryUserForReviewParams) (GetDirectoryUserForReviewRow, error) {
+	row := q.db.QueryRow(ctx, getDirectoryUserForReview, arg.OrganizationID, arg.WorkosDirectoryUserID)
+	var i GetDirectoryUserForReviewRow
+	err := row.Scan(&i.Deleted, &i.WorkosDeleted)
 	return i, err
 }
 
@@ -207,6 +233,48 @@ ON CONFLICT (organization_id) DO NOTHING
 func (q *Queries) InsertDirectoryReviewOrgStateIfMissing(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, insertDirectoryReviewOrgStateIfMissing, organizationID)
 	return err
+}
+
+const listDirectoryUserAttributesForReview = `-- name: ListDirectoryUserAttributesForReview :many
+SELECT a.key::text AS attribute_key, a.value::text AS attribute_value
+FROM directory_users AS du
+CROSS JOIN LATERAL jsonb_each_text(du.attributes) AS a
+WHERE du.organization_id = $1
+  AND du.workos_directory_user_id = $2
+  AND jsonb_typeof(du.attributes) = 'object'
+  AND a.value IS NOT NULL
+`
+
+type ListDirectoryUserAttributesForReviewParams struct {
+	OrganizationID        string
+	WorkosDirectoryUserID string
+}
+
+type ListDirectoryUserAttributesForReviewRow struct {
+	AttributeKey   string
+	AttributeValue string
+}
+
+// A directory user's attribute values as the text ->> returns, which is what
+// mappings match on. JSON nulls are left out because ->> makes them NULL.
+func (q *Queries) ListDirectoryUserAttributesForReview(ctx context.Context, arg ListDirectoryUserAttributesForReviewParams) ([]ListDirectoryUserAttributesForReviewRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryUserAttributesForReview, arg.OrganizationID, arg.WorkosDirectoryUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryUserAttributesForReviewRow
+	for rows.Next() {
+		var i ListDirectoryUserAttributesForReviewRow
+		if err := rows.Scan(&i.AttributeKey, &i.AttributeValue); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMappedAttributeKeys = `-- name: ListMappedAttributeKeys :many
