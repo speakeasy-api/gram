@@ -284,6 +284,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerToolExposureTools(reg, postgresReader.toolExposure, reader)
 		registerCreateMCPFromFunctionsTool(reg, postgresReader.toolExposure)
+		registerGatewayTools(reg, postgresReader.gateways)
 		registerProjectLifecycleTools(reg, postgresReader.projectLifecycle)
 		if postgresReader.reviewRequests == nil {
 			registerUnavailableReviewRequestTools(reg)
@@ -332,6 +333,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableNetworkIngressTool(reg)
 		registerToolExposureTools(reg, nil, reader)
 		registerCreateMCPFromFunctionsTool(reg, nil)
+		registerGatewayTools(reg, nil)
 		registerProjectLifecycleTools(reg, nil)
 		registerUnavailableReviewRequestTools(reg)
 		registerRiskAnalysisStatusTool(reg, nil)
