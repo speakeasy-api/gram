@@ -337,9 +337,12 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 		authz: engine, roleMgr: nil, audit: auditLogger, email: nil, orgHosts: nil, foldGate: nil,
 	}
 	for _, group := range groups {
+		// No expected set: each desired set was read under the source lock this
+		// transaction still holds, so nothing can have changed it since.
 		if _, err := writer.setDirectoryRoleMappingsTx(ctx, tx, ac, &gen.SetDirectoryRoleMappingsPayload{
 			SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: new(group.ID.String()), RoleUrns: desiredSets[group.ID],
-			ApikeyToken: nil, SessionToken: nil, AttributeKey: nil, AttributeValue: nil,
+			ExpectedRoleUrns: nil,
+			ApikeyToken:      nil, SessionToken: nil, AttributeKey: nil, AttributeValue: nil,
 		}, false); err != nil {
 			return report, err
 		}
