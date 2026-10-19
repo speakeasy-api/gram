@@ -633,13 +633,13 @@ export function RemoteMcpIdentitySectionBody({
               <Alert variant="warning" dismissible={false}>
                 This identity is shared by {linkedServers.length} MCP servers.
                 Editing is disabled here so one server cannot change the
-                credential used by the others. Manage linked providers and
-                clients in{" "}
+                credential used by the others. Manage linked authorization
+                servers and clients in{" "}
                 <Link
                   className="font-medium underline underline-offset-2"
                   to={routes.remoteIdentityProviders.href()}
                 >
-                  Remote Identity Providers
+                  Authorization Servers
                 </Link>
                 .
               </Alert>
@@ -1034,7 +1034,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 const UNLINK_PROVIDER_CONSEQUENCE =
-  "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers.";
+  "Saving unlinks the authorization server from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The authorization server and its client stay available to other servers.";
 const REPLACE_CLIENT_CONSEQUENCE =
   "Saving replaces the client this server uses. Everyone signed in through the current one will have to sign in again. The old client stays available to other servers.";
 const REMOVE_SELF_CLIENT_CONSEQUENCE =

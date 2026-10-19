@@ -463,6 +463,249 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/externalMcpMigration.listCandidates:
+        get:
+            description: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
+            operationId: adminListExternalMcpMigrationCandidates
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListExternalMcpMigrationCandidatesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listExternalMcpMigrationCandidates admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listExternalMcpMigrationCandidates
+    /admin/externalMcpMigration.migrate:
+        post:
+            description: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+            operationId: adminMigrateExternalMcpServers
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MigrateExternalMcpServersRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminExternalMcpMigrationResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: migrateExternalMcpServers admin
+            tags:
+                - admin
+            x-speakeasy-name-override: migrateExternalMcpServers
+    /admin/externalMcpMigration.preview:
+        post:
+            description: Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.
+            operationId: adminPreviewExternalMcpMigration
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PreviewExternalMcpMigrationRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminExternalMcpMigrationResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: previewExternalMcpMigration admin
+            tags:
+                - admin
+            x-speakeasy-name-override: previewExternalMcpMigration
     /admin/onboarding.playbooks:
         get:
             description: Read every playbook, or, when an organization is named, the shared ones and its own.
@@ -10287,7 +10530,8 @@ paths:
                 type: mutation
     /rpc/access.setDirectoryRoleMapping:
         post:
-            description: Map a directory group or attribute value to a role, replacing any role it was mapped to before.
+            deprecated: true
+            description: Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.
             operationId: setDirectoryRoleMapping
             parameters:
                 - allowEmptyValue: true
@@ -10380,6 +10624,104 @@ paths:
             x-speakeasy-name-override: setDirectoryRoleMapping
             x-speakeasy-react-hook:
                 name: SetDirectoryRoleMapping
+                type: mutation
+    /rpc/access.setDirectoryRoleMappings:
+        post:
+            description: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.
+            operationId: setDirectoryRoleMappings
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetDirectoryRoleMappingsForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/DirectoryRoleMapping'
+                                type: array
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: setDirectoryRoleMappings access
+            tags:
+                - access
+            x-speakeasy-name-override: setDirectoryRoleMappings
+            x-speakeasy-react-hook:
+                name: SetDirectoryRoleMappings
                 type: mutation
     /rpc/access.setResourceAudience:
         post:
@@ -87732,6 +88074,160 @@ components:
             required:
                 - location
                 - cache_control
+        AdminExternalMcpMigrationCandidate:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: 'What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.'
+                    enum:
+                        - migrate
+                        - delete
+                blockers:
+                    type: array
+                    items:
+                        type: string
+                    description: Why the server cannot be migrated. Empty when it can.
+                delete_reasons:
+                    type: array
+                    items:
+                        type: string
+                    description: Why the candidate is deleted rather than migrated. Empty when it migrates.
+                mcp_slug:
+                    type: string
+                    description: The slug in the server's /mcp/<slug> address. Absent when the server has none.
+                organization_id:
+                    type: string
+                    description: Organization ID.
+                organization_name:
+                    type: string
+                    description: Organization name.
+                organization_slug:
+                    type: string
+                    description: Organization slug.
+                project_id:
+                    type: string
+                    description: Project ID.
+                    format: uuid
+                project_name:
+                    type: string
+                    description: Project name.
+                project_slug:
+                    type: string
+                    description: Project slug.
+                remote_url:
+                    type: string
+                    description: The attachment's upstream URL. Absent when the server proxies several.
+                replacement_url:
+                    type: string
+                    description: 'The upstream URL the server will dial as a remote MCP server: the one resource its signed-in sessions recorded, otherwise the attachment''s URL without unfilled template query parameters.'
+                server_name:
+                    type: string
+                    description: The server's display name.
+                sign_in_provider:
+                    type: string
+                    description: The server's user session issuer and the upstream authorization servers behind it. Absent when the server has none.
+                tool_calls:
+                    type: integer
+                    description: Tool calls over the last tool_call_window_days. Absent when telemetry is unavailable.
+                    format: int64
+                toolset_id:
+                    type: string
+                    description: The toolset behind the server.
+                    format: uuid
+                warnings:
+                    type: array
+                    items:
+                        type: string
+                    description: What migrating the server drops or cannot carry over. Warnings do not stop it.
+            description: 'A toolset backed by an external MCP attachment, with what running it does: migrate its server in place, or delete it.'
+            required:
+                - toolset_id
+                - organization_id
+                - organization_name
+                - organization_slug
+                - project_id
+                - project_name
+                - project_slug
+                - server_name
+                - action
+                - delete_reasons
+                - blockers
+                - warnings
+        AdminExternalMcpMigrationOutcome:
+            type: object
+            properties:
+                action:
+                    type: string
+                    description: What the run did, or would do, with the candidate. Absent when it was not attempted.
+                    enum:
+                        - migrate
+                        - delete
+                actions:
+                    type: array
+                    items:
+                        type: string
+                    description: Each change, in order.
+                mcp_server_id:
+                    type: string
+                    description: The server, which keeps its ID.
+                    format: uuid
+                mcp_slug:
+                    type: string
+                    description: The server's /mcp/<slug> address. Migrating keeps it; deleting a server the toolset still owns removes it.
+                migration_status:
+                    type: string
+                    description: migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
+                    enum:
+                        - migrated
+                        - deleted
+                        - previewed
+                        - failed
+                        - not_attempted
+                reason:
+                    type: string
+                    description: Why the server failed or was not attempted.
+                remote_mcp_server_id:
+                    type: string
+                    description: The remote MCP source the server proxies once migrated. Absent when the server failed; a preview's source is rolled back.
+                    format: uuid
+                remote_url:
+                    type: string
+                    description: The upstream URL the server dials once migrated. Absent when the server failed.
+                toolset_id:
+                    type: string
+                    description: The candidate's toolset.
+                    format: uuid
+                warnings:
+                    type: array
+                    items:
+                        type: string
+                    description: What the migration could not carry over.
+            description: What happened, or in a preview what would happen, to one server.
+            required:
+                - toolset_id
+                - migration_status
+                - actions
+                - warnings
+        AdminExternalMcpMigrationRequest:
+            type: object
+            properties:
+                toolset_id:
+                    type: string
+                    description: The candidate's toolset.
+                    format: uuid
+            required:
+                - toolset_id
+        AdminExternalMcpMigrationResult:
+            type: object
+            properties:
+                outcomes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminExternalMcpMigrationOutcome'
+                    description: One outcome per requested server, in request order.
+            required:
+                - outcomes
         AdminInferenceKey:
             type: object
             properties:
@@ -87846,6 +88342,21 @@ components:
                 - period_start
                 - period_end
                 - spend_usd
+        AdminListExternalMcpMigrationCandidatesResult:
+            type: object
+            properties:
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminExternalMcpMigrationCandidate'
+                    description: Every candidate across all organizations.
+                tool_call_window_days:
+                    type: integer
+                    description: Days of tool calls each candidate's tool_calls covers.
+                    format: int64
+            required:
+                - candidates
+                - tool_call_window_days
         AdminListOrganizationActivityResult:
             type: object
             properties:
@@ -98808,12 +99319,16 @@ components:
                     $ref: '#/components/schemas/DeviceAgentConfiguration'
                 etag:
                     type: string
-                    description: Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.
+                    description: Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
                 marketplaces:
                     type: array
                     items:
                         $ref: '#/components/schemas/AgentMarketplace'
                     description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+                organization_gateway_url:
+                    type: string
+                    description: URL of the active organization's gateway. Absent when the organization gateway is unavailable.
+                    format: uri
                 plugins:
                     type: array
                     items:
@@ -104838,6 +105353,12 @@ components:
                     type: string
                     description: When the meta MCP server was created
                     format: date-time
+                discovery_mode:
+                    type: string
+                    description: The effective default discovery mode. Unconfigured connections follow this value.
+                    enum:
+                        - progressive
+                        - direct
                 id:
                     type: string
                     description: The ID of the meta MCP server
@@ -104888,6 +105409,7 @@ components:
                 - name
                 - visibility
                 - network_access_mode
+                - discovery_mode
                 - created_at
                 - updated_at
         MeterUsageBreakdown:
@@ -105034,6 +105556,18 @@ components:
             required:
                 - from
                 - to
+        MigrateExternalMcpServersRequestBody:
+            type: object
+            properties:
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminExternalMcpMigrationRequest'
+                    description: Servers to migrate or delete, in order.
+                    minItems: 1
+                    maxItems: 100
+            required:
+                - servers
         MigrateIssuerRequestBody:
             type: object
             properties:
@@ -105153,6 +105687,12 @@ components:
         MintUserSessionRequestBody:
             type: object
             properties:
+                discovery_mode:
+                    type: string
+                    description: An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.
+                    enum:
+                        - progressive
+                        - direct
                 mcp_server_id:
                     type: string
                     description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -107745,6 +108285,18 @@ components:
                 - user_session_issuer_id
                 - remote_session_issuer_id
                 - resource
+        PreviewExternalMcpMigrationRequestBody:
+            type: object
+            properties:
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminExternalMcpMigrationRequest'
+                    description: Servers to migrate or delete, in order.
+                    minItems: 1
+                    maxItems: 100
+            required:
+                - servers
         PreviewSpendRuleRequestBody:
             type: object
             properties:
@@ -113633,7 +114185,7 @@ components:
                     format: uuid
                 role_urn:
                     type: string
-                    description: Principal URN of the role to grant, from Role.principal_urn.
+                    description: Role principal URN to grant.
                 source_kind:
                     type: string
                     description: What the mapping matches.
@@ -113643,6 +114195,40 @@ components:
             required:
                 - source_kind
                 - role_urn
+        SetDirectoryRoleMappingsForm:
+            type: object
+            properties:
+                attribute_key:
+                    type: string
+                    description: Attribute key to match. Required when source_kind is attribute.
+                    minLength: 1
+                attribute_value:
+                    type: string
+                    description: Attribute value to match. Required when source_kind is attribute.
+                    minLength: 1
+                directory_group_id:
+                    type: string
+                    description: Directory group to map. Required when source_kind is group.
+                    format: uuid
+                expected_role_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional compare-and-set precondition. The normalized current role set must match or the request returns conflict without changes. Omit for unconditional replacement; an empty array requires an unmapped source.
+                role_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.
+                source_kind:
+                    type: string
+                    description: What the mapping matches.
+                    enum:
+                        - group
+                        - attribute
+            required:
+                - source_kind
+                - role_urns
         SetEMAProvidersRequestBody:
             type: object
             properties:
@@ -120488,6 +121074,12 @@ components:
         UpdateMetaMcpServerForm:
             type: object
             properties:
+                discovery_mode:
+                    type: string
+                    description: The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+                    enum:
+                        - progressive
+                        - direct
                 id:
                     type: string
                     description: The ID of the meta MCP server to update

@@ -37,10 +37,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -331,6 +333,7 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, clickHouseReadFlags()...)
 	flags = append(flags, platformHostsCLIFlag())
 	flags = append(flags, orgDefaultHostFlags()...)
+	flags = append(flags, pluginPublicationEmitFlag())
 
 	return &cli.Command{
 		Name:  "admin",
@@ -546,6 +549,17 @@ func newAdminCommand() *cli.Command {
 				defer o11y.LogDefer(ctx, logger, "shut down admin asset storage", func() error { return assetShutdown(ctx) })
 				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
 				adminService.SetAssetService(platformAssets)
+			}
+			// The migration copies encrypted environment values into headers,
+			// so it needs the application key.
+			if applicationEncryption != nil {
+				adminService.SetExternalMCPMigrator(migration.NewMigrator(
+					logger, tracerProvider, db, audit.NewLogger(), guardianPolicy, applicationEncryption,
+					plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)},
+					migration.NewClickHouseToolCalls(chDB),
+				))
+			} else {
+				logger.WarnContext(ctx, "External MCP migration unavailable; no application encryption key configured")
 			}
 			admin.Attach(mux, adminService)
 			if c.Bool("admin-mcp-enabled") {

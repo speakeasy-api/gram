@@ -14561,6 +14561,754 @@ func DecodeGetMcpServerToolCallsResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildListExternalMcpMigrationCandidatesRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "listExternalMcpMigrationCandidates" endpoint
+func (c *Client) BuildListExternalMcpMigrationCandidatesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListExternalMcpMigrationCandidatesAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listExternalMcpMigrationCandidates", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListExternalMcpMigrationCandidatesRequest returns an encoder for
+// requests sent to the admin listExternalMcpMigrationCandidates server.
+func EncodeListExternalMcpMigrationCandidatesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListExternalMcpMigrationCandidatesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listExternalMcpMigrationCandidates", "*admin.ListExternalMcpMigrationCandidatesPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListExternalMcpMigrationCandidatesResponse returns a decoder for
+// responses returned by the admin listExternalMcpMigrationCandidates endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeListExternalMcpMigrationCandidatesResponse may return the following
+// errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListExternalMcpMigrationCandidatesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListExternalMcpMigrationCandidatesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			res := NewListExternalMcpMigrationCandidatesAdminListExternalMcpMigrationCandidatesResultOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListExternalMcpMigrationCandidatesUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			return nil, NewListExternalMcpMigrationCandidatesUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body ListExternalMcpMigrationCandidatesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			return nil, NewListExternalMcpMigrationCandidatesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListExternalMcpMigrationCandidatesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			return nil, NewListExternalMcpMigrationCandidatesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListExternalMcpMigrationCandidatesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			return nil, NewListExternalMcpMigrationCandidatesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListExternalMcpMigrationCandidatesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			return nil, NewListExternalMcpMigrationCandidatesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListExternalMcpMigrationCandidatesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			return nil, NewListExternalMcpMigrationCandidatesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			return nil, NewListExternalMcpMigrationCandidatesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListExternalMcpMigrationCandidatesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			return nil, NewListExternalMcpMigrationCandidatesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListExternalMcpMigrationCandidatesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+				}
+				err = ValidateListExternalMcpMigrationCandidatesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+				}
+				return nil, NewListExternalMcpMigrationCandidatesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListExternalMcpMigrationCandidatesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+				}
+				err = ValidateListExternalMcpMigrationCandidatesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+				}
+				return nil, NewListExternalMcpMigrationCandidatesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listExternalMcpMigrationCandidates", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListExternalMcpMigrationCandidatesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			err = ValidateListExternalMcpMigrationCandidatesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listExternalMcpMigrationCandidates", err)
+			}
+			return nil, NewListExternalMcpMigrationCandidatesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listExternalMcpMigrationCandidates", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildPreviewExternalMcpMigrationRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "previewExternalMcpMigration" endpoint
+func (c *Client) BuildPreviewExternalMcpMigrationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PreviewExternalMcpMigrationAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "previewExternalMcpMigration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodePreviewExternalMcpMigrationRequest returns an encoder for requests
+// sent to the admin previewExternalMcpMigration server.
+func EncodePreviewExternalMcpMigrationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.PreviewExternalMcpMigrationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "previewExternalMcpMigration", "*admin.PreviewExternalMcpMigrationPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewPreviewExternalMcpMigrationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "previewExternalMcpMigration", err)
+		}
+		return nil
+	}
+}
+
+// DecodePreviewExternalMcpMigrationResponse returns a decoder for responses
+// returned by the admin previewExternalMcpMigration endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodePreviewExternalMcpMigrationResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodePreviewExternalMcpMigrationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body PreviewExternalMcpMigrationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			res := NewPreviewExternalMcpMigrationAdminExternalMcpMigrationResultOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body PreviewExternalMcpMigrationUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			return nil, NewPreviewExternalMcpMigrationUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body PreviewExternalMcpMigrationUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			return nil, NewPreviewExternalMcpMigrationUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body PreviewExternalMcpMigrationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			return nil, NewPreviewExternalMcpMigrationForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body PreviewExternalMcpMigrationBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			return nil, NewPreviewExternalMcpMigrationBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body PreviewExternalMcpMigrationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			return nil, NewPreviewExternalMcpMigrationNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body PreviewExternalMcpMigrationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			return nil, NewPreviewExternalMcpMigrationConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body PreviewExternalMcpMigrationUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			return nil, NewPreviewExternalMcpMigrationUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body PreviewExternalMcpMigrationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			return nil, NewPreviewExternalMcpMigrationInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body PreviewExternalMcpMigrationInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+				}
+				err = ValidatePreviewExternalMcpMigrationInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+				}
+				return nil, NewPreviewExternalMcpMigrationInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body PreviewExternalMcpMigrationUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+				}
+				err = ValidatePreviewExternalMcpMigrationUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+				}
+				return nil, NewPreviewExternalMcpMigrationUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "previewExternalMcpMigration", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body PreviewExternalMcpMigrationGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "previewExternalMcpMigration", err)
+			}
+			err = ValidatePreviewExternalMcpMigrationGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "previewExternalMcpMigration", err)
+			}
+			return nil, NewPreviewExternalMcpMigrationGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "previewExternalMcpMigration", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildMigrateExternalMcpServersRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "migrateExternalMcpServers" endpoint
+func (c *Client) BuildMigrateExternalMcpServersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MigrateExternalMcpServersAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "migrateExternalMcpServers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMigrateExternalMcpServersRequest returns an encoder for requests sent
+// to the admin migrateExternalMcpServers server.
+func EncodeMigrateExternalMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.MigrateExternalMcpServersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "migrateExternalMcpServers", "*admin.MigrateExternalMcpServersPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewMigrateExternalMcpServersRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "migrateExternalMcpServers", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMigrateExternalMcpServersResponse returns a decoder for responses
+// returned by the admin migrateExternalMcpServers endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeMigrateExternalMcpServersResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMigrateExternalMcpServersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MigrateExternalMcpServersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			res := NewMigrateExternalMcpServersAdminExternalMcpMigrationResultOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body MigrateExternalMcpServersUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			return nil, NewMigrateExternalMcpServersUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body MigrateExternalMcpServersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			return nil, NewMigrateExternalMcpServersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MigrateExternalMcpServersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			return nil, NewMigrateExternalMcpServersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MigrateExternalMcpServersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			return nil, NewMigrateExternalMcpServersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MigrateExternalMcpServersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			return nil, NewMigrateExternalMcpServersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MigrateExternalMcpServersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			return nil, NewMigrateExternalMcpServersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MigrateExternalMcpServersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			return nil, NewMigrateExternalMcpServersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MigrateExternalMcpServersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			return nil, NewMigrateExternalMcpServersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MigrateExternalMcpServersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+				}
+				err = ValidateMigrateExternalMcpServersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+				}
+				return nil, NewMigrateExternalMcpServersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MigrateExternalMcpServersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+				}
+				err = ValidateMigrateExternalMcpServersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+				}
+				return nil, NewMigrateExternalMcpServersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "migrateExternalMcpServers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MigrateExternalMcpServersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateExternalMcpServers", err)
+			}
+			err = ValidateMigrateExternalMcpServersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateExternalMcpServers", err)
+			}
+			return nil, NewMigrateExternalMcpServersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "migrateExternalMcpServers", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRegistryOktaCandidatesRequest instantiates a HTTP request object
 // with method and path set to call the "admin" service
 // "getRegistryOktaCandidates" endpoint
@@ -22221,6 +22969,90 @@ func unmarshalAdminMcpServerToolCallBucketResponseBodyToAdminAdminMcpServerToolC
 		BucketStart: *v.BucketStart,
 		Total:       *v.Total,
 		Failed:      *v.Failed,
+	}
+
+	return res
+}
+
+// unmarshalAdminExternalMcpMigrationCandidateResponseBodyToAdminAdminExternalMcpMigrationCandidate
+// builds a value of type *admin.AdminExternalMcpMigrationCandidate from a
+// value of type *AdminExternalMcpMigrationCandidateResponseBody.
+func unmarshalAdminExternalMcpMigrationCandidateResponseBodyToAdminAdminExternalMcpMigrationCandidate(v *AdminExternalMcpMigrationCandidateResponseBody) *admin.AdminExternalMcpMigrationCandidate {
+	res := &admin.AdminExternalMcpMigrationCandidate{
+		ToolsetID:        *v.ToolsetID,
+		OrganizationID:   *v.OrganizationID,
+		OrganizationName: *v.OrganizationName,
+		OrganizationSlug: *v.OrganizationSlug,
+		ProjectID:        *v.ProjectID,
+		ProjectName:      *v.ProjectName,
+		ProjectSlug:      *v.ProjectSlug,
+		ServerName:       *v.ServerName,
+		McpSlug:          v.McpSlug,
+		RemoteURL:        v.RemoteURL,
+		ReplacementURL:   v.ReplacementURL,
+		SignInProvider:   v.SignInProvider,
+		ToolCalls:        v.ToolCalls,
+		Action:           *v.Action,
+	}
+	res.DeleteReasons = make([]string, len(v.DeleteReasons))
+	for i, val := range v.DeleteReasons {
+		res.DeleteReasons[i] = val
+	}
+	res.Blockers = make([]string, len(v.Blockers))
+	for i, val := range v.Blockers {
+		res.Blockers[i] = val
+	}
+	res.Warnings = make([]string, len(v.Warnings))
+	for i, val := range v.Warnings {
+		res.Warnings[i] = val
+	}
+
+	return res
+}
+
+// marshalAdminAdminExternalMcpMigrationRequestToAdminExternalMcpMigrationRequestRequestBody
+// builds a value of type *AdminExternalMcpMigrationRequestRequestBody from a
+// value of type *admin.AdminExternalMcpMigrationRequest.
+func marshalAdminAdminExternalMcpMigrationRequestToAdminExternalMcpMigrationRequestRequestBody(v *admin.AdminExternalMcpMigrationRequest) *AdminExternalMcpMigrationRequestRequestBody {
+	res := &AdminExternalMcpMigrationRequestRequestBody{
+		ToolsetID: v.ToolsetID,
+	}
+
+	return res
+}
+
+// marshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest
+// builds a value of type *admin.AdminExternalMcpMigrationRequest from a value
+// of type *AdminExternalMcpMigrationRequestRequestBody.
+func marshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(v *AdminExternalMcpMigrationRequestRequestBody) *admin.AdminExternalMcpMigrationRequest {
+	res := &admin.AdminExternalMcpMigrationRequest{
+		ToolsetID: v.ToolsetID,
+	}
+
+	return res
+}
+
+// unmarshalAdminExternalMcpMigrationOutcomeResponseBodyToAdminAdminExternalMcpMigrationOutcome
+// builds a value of type *admin.AdminExternalMcpMigrationOutcome from a value
+// of type *AdminExternalMcpMigrationOutcomeResponseBody.
+func unmarshalAdminExternalMcpMigrationOutcomeResponseBodyToAdminAdminExternalMcpMigrationOutcome(v *AdminExternalMcpMigrationOutcomeResponseBody) *admin.AdminExternalMcpMigrationOutcome {
+	res := &admin.AdminExternalMcpMigrationOutcome{
+		ToolsetID:         *v.ToolsetID,
+		Action:            v.Action,
+		MigrationStatus:   *v.MigrationStatus,
+		Reason:            v.Reason,
+		McpSlug:           v.McpSlug,
+		McpServerID:       v.McpServerID,
+		RemoteMcpServerID: v.RemoteMcpServerID,
+		RemoteURL:         v.RemoteURL,
+	}
+	res.Actions = make([]string, len(v.Actions))
+	for i, val := range v.Actions {
+		res.Actions[i] = val
+	}
+	res.Warnings = make([]string, len(v.Warnings))
+	for i, val := range v.Warnings {
+		res.Warnings[i] = val
 	}
 
 	return res

@@ -112,9 +112,9 @@ type CreateSessionHandoffRequestBody struct {
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
-	// Opaque revision identifier covering the marketplace, plugin, and
-	// remote-configuration set. The agent stores this to detect changes between
-	// polls.
+	// Opaque revision identifier covering the marketplace, plugin,
+	// remote-configuration, and organization-gateway set. The agent stores this to
+	// detect changes between polls.
 	Etag *string `form:"etag,omitempty" json:"etag,omitempty" xml:"etag,omitempty"`
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -129,6 +129,9 @@ type GetPluginsResponseBody struct {
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfigurationResponseBody `form:"configuration,omitempty" json:"configuration,omitempty" xml:"configuration,omitempty"`
+	// URL of the active organization's gateway. Absent when the organization
+	// gateway is unavailable.
+	OrganizationGatewayURL *string `form:"organization_gateway_url,omitempty" json:"organization_gateway_url,omitempty" xml:"organization_gateway_url,omitempty"`
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipalResponseBody `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
@@ -2560,7 +2563,8 @@ func NewCreateSessionHandoffRequestBody(p *agent.CreateSessionHandoffPayload) *C
 // from a HTTP "OK" response.
 func NewGetPluginsResultOK(body *GetPluginsResponseBody) *agent.GetPluginsResult {
 	v := &agent.GetPluginsResult{
-		Etag: *body.Etag,
+		Etag:                   *body.Etag,
+		OrganizationGatewayURL: body.OrganizationGatewayURL,
 	}
 	v.Marketplaces = make([]*agent.AgentMarketplace, len(body.Marketplaces))
 	for i, val := range body.Marketplaces {
@@ -4389,6 +4393,9 @@ func ValidateGetPluginsResponseBody(body *GetPluginsResponseBody) (err error) {
 		if err2 := ValidateDeviceAgentConfigurationResponseBody(body.Configuration); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	if body.OrganizationGatewayURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_gateway_url", *body.OrganizationGatewayURL, goa.FormatURI))
 	}
 	if body.Principal != nil {
 		if err2 := ValidateAgentPollingPrincipalResponseBody(body.Principal); err2 != nil {

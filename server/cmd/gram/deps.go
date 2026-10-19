@@ -514,6 +514,14 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	}, nil
 }
 
+// newFeatureFlags returns PostHog, or the CSV-backed in-memory provider in local dev.
+func newFeatureFlags(ctx context.Context, c *cli.Context, logger *slog.Logger, posthogClient feature.Provider) feature.Provider {
+	if c.String("environment") == "local" {
+		return newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+	}
+	return posthogClient
+}
+
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
 	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
@@ -1442,6 +1450,18 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "llmAnalysis", pub: llmAnalysis})
 
+	toolCallAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.ToolCallAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for tool call analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "toolCallAnalysis", pub: toolCallAnalysis})
+
+	accountIdentityAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.AccountIdentityAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for account identity analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "accountIdentityAnalysis", pub: accountIdentityAnalysis})
+
 	riskFindings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
@@ -1546,6 +1566,8 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
 		LLMAnalysis:             llmAnalysis,
+		ToolCallAnalysis:        toolCallAnalysis,
+		AccountIdentityAnalysis: accountIdentityAnalysis,
 		RiskFindings:            riskFindings,
 		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,

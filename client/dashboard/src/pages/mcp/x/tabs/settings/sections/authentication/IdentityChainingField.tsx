@@ -1053,7 +1053,7 @@ export function IdentityChainingField({
             <Text muted small className="block">
               Client {selected.clientId} is a public client. Enterprise Managed
               Authorization needs a confidential client that authenticates to
-              the provider’s token endpoint.
+              the authorization server’s token endpoint.
             </Text>
           )}
           {!publicClient && grantsBlocked && (
@@ -1085,7 +1085,7 @@ export function IdentityChainingField({
                   <Text small>
                     {cimd
                       ? "Publish these grants in the client's metadata document: "
-                      : `Declare that client ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
+                      : `Declare that client ${selected.clientId} is registered with the authorization server for these grants, and record them on it: `}
                     {grantDeclaration.grants.join(", ")}
                   </Text>
                 </label>

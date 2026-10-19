@@ -11,12 +11,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
-
-	"github.com/speakeasy-api/gram/server/internal/risk"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -70,6 +67,19 @@ func TestHandlerFailsClosedOnProcessingError(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Contains(t, response.Body.String(), `"action":"deny"`)
 	require.NotContains(t, response.Body.String(), "database")
+}
+
+func TestHandlerDoesNotAnswerAfterCallerHangsUp(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t, &testProcessor{err: fmt.Errorf("inference policy deadline: %w", context.Canceled)})
+	body := `{"type":"prompt","request_id":"request-example"}`
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/", strings.NewReader(body))
+	request.Header = signedHeaders([]byte(body), h.keys[0], time.Now())
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, request)
+	require.Empty(t, response.Body.String())
 }
 
 func TestHandlerRejectsCrossTenantDelivery(t *testing.T) {
@@ -264,18 +274,6 @@ func TestAttachDeadlineIncludesUnresponsiveResolver(t *testing.T) {
 	})
 }
 
-type slowScanner struct{ calls atomic.Int32 }
-
-func (s *slowScanner) ScanForInferenceEnforcement(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error) {
-	s.calls.Add(1)
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("scan deadline: %w", ctx.Err())
-	case <-time.After(time.Second):
-		return &risk.InferenceScanOutcome{Result: nil, Complete: true}, nil
-	}
-}
-
 func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
@@ -285,7 +283,7 @@ func TestAttachBoundsLongTranscriptScanning(t *testing.T) {
 		}
 		body, err := json.Marshal(frame)
 		require.NoError(t, err)
-		scanner := &slowScanner{}
+		scanner := &fakeScanner{delay: time.Second}
 		service := &Service{logger: testenv.NewLogger(t), store: &memoryStore{saved: nil, userID: "", err: nil}, scanner: scanner}
 		key := []byte("EXAMPLE-signing-secret")
 		var config Config

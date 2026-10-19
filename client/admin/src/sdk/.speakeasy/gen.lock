@@ -77,6 +77,7 @@ trackedFiles:
   src/funcs/adminGetSupportCoverage.ts: {}
   src/funcs/adminGetSupportMatrix.ts: {}
   src/funcs/adminListCustomerUsage.ts: {}
+  src/funcs/adminListExternalMcpMigrationCandidates.ts: {}
   src/funcs/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/funcs/adminListGlobalIssuers.ts: {}
   src/funcs/adminListOnboardingPlaybooks.ts: {}
@@ -94,7 +95,9 @@ trackedFiles:
   src/funcs/adminListUsers.ts: {}
   src/funcs/adminLogout.ts: {}
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
+  src/funcs/adminMigrateExternalMcpServers.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
+  src/funcs/adminPreviewExternalMcpMigration.ts: {}
   src/funcs/adminRearmTrial.ts: {}
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRepairInferenceKey.ts: {}
@@ -140,12 +143,17 @@ trackedFiles:
   src/models/components/admincustomerusage.ts: {}
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
+  src/models/components/adminexternalmcpmigrationcandidate.ts: {}
+  src/models/components/adminexternalmcpmigrationoutcome.ts: {}
+  src/models/components/adminexternalmcpmigrationrequest.ts: {}
+  src/models/components/adminexternalmcpmigrationresult.ts: {}
   src/models/components/admininferencekey.ts: {}
   src/models/components/admininferencekeycause.ts: {}
   src/models/components/admininferencekeylimit.ts: {}
   src/models/components/admininferencekeyrepairresult.ts: {}
   src/models/components/admininferencekeyrepairstate.ts: {}
   src/models/components/admininferencespendmonth.ts: {}
+  src/models/components/adminlistexternalmcpmigrationcandidatesresult.ts: {}
   src/models/components/adminlistorganizationactivityresult.ts: {}
   src/models/components/adminlistorganizationmembersresult.ts: {}
   src/models/components/adminlistorganizationprojectsresult.ts: {}
@@ -238,8 +246,10 @@ trackedFiles:
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
   src/models/components/meterusagewindow.ts: {}
+  src/models/components/migrateexternalmcpserversrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
+  src/models/components/previewexternalmcpmigrationrequestbody.ts: {}
   src/models/components/productfeatures.ts: {}
   src/models/components/rearmtrialrequestbody.ts: {}
   src/models/components/remotesessionissuer.ts: {}
@@ -381,6 +391,8 @@ trackedFiles:
   src/react-query/adminGetSupportMatrix.ts: {}
   src/react-query/adminListCustomerUsage.core.ts: {}
   src/react-query/adminListCustomerUsage.ts: {}
+  src/react-query/adminListExternalMcpMigrationCandidates.core.ts: {}
+  src/react-query/adminListExternalMcpMigrationCandidates.ts: {}
   src/react-query/adminListGlobalIssuerConvergenceCandidates.core.ts: {}
   src/react-query/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/react-query/adminListGlobalIssuers.core.ts: {}
@@ -407,6 +419,7 @@ trackedFiles:
   src/react-query/adminListUsers.ts: {}
   src/react-query/adminLogout.ts: {}
   src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
+  src/react-query/adminMigrateExternalMcpServers.ts: {}
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
   src/react-query/adminOnboardingPlaybooks.core.ts: {}
   src/react-query/adminOnboardingPlaybooks.ts: {}
@@ -422,6 +435,7 @@ trackedFiles:
   src/react-query/adminOrganizationOnboardingPlaybook.ts: {}
   src/react-query/adminOrganizationOnboardingStack.core.ts: {}
   src/react-query/adminOrganizationOnboardingStack.ts: {}
+  src/react-query/adminPreviewExternalMcpMigration.ts: {}
   src/react-query/adminRearmTrial.ts: {}
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminRepairInferenceKey.ts: {}
@@ -1079,6 +1093,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminListExternalMcpMigrationCandidates:
+    speakeasy-default-admin-list-external-mcp-migration-candidates:
+      responses:
+        "200":
+          application/json: {"candidates": [], "tool_call_window_days": 796214}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminListGlobalIssuerConvergenceCandidates:
     speakeasy-default-admin-list-global-issuer-convergence-candidates:
       parameters:
@@ -1272,6 +1295,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminMigrateExternalMcpServers:
+    speakeasy-default-admin-migrate-external-mcp-servers:
+      requestBody:
+        application/json: {"servers": [{"toolset_id": "d0567f52-612d-4f52-b3a6-0bb2278127c4"}]}
+      responses:
+        "200":
+          application/json: {"outcomes": [{"actions": ["<value 1>", "<value 2>", "<value 3>"], "migration_status": "not_attempted", "toolset_id": "8fe25300-17ed-4fb9-8d55-f69cb830dda4", "warnings": []}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminMigrateToGlobalIssuer:
     speakeasy-default-admin-migrate-to-global-issuer:
       requestBody:
@@ -1294,6 +1328,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminPreviewExternalMcpMigration:
+    speakeasy-default-admin-preview-external-mcp-migration:
+      requestBody:
+        application/json: {"servers": [{"toolset_id": "8df6671e-5b16-4d0e-96ac-f1556c21d33b"}]}
+      responses:
+        "200":
+          application/json: {"outcomes": [{"actions": ["<value 1>"], "migration_status": "failed", "toolset_id": "469e0370-3974-478d-bcfe-43d0fb8dd83f", "warnings": ["<value 1>", "<value 2>"]}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminRearmTrial:
     speakeasy-default-admin-rearm-trial:
       requestBody:

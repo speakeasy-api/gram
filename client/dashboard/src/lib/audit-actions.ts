@@ -284,6 +284,7 @@ export const AUDIT_ACTIONS = [
   "toolset:delete",
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
+  "toolset:migrate_to_remote_mcp",
   "toolset:update",
   "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
@@ -951,6 +952,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated the OAuth proxy on";
     case "toolset:detach_oauth_proxy":
       return "detached an OAuth proxy from";
+    case "toolset:migrate_to_remote_mcp":
+      return "migrated the external MCP server";
 
     case "trigger-instance:create":
       return "created trigger";

@@ -2944,10 +2944,10 @@ paths:
       x-speakeasy-react-hook:
         name: SetAIToolDecision
         type: mutation
-  /rpc/access.setDirectoryRoleMapping:
+  /rpc/access.setDirectoryRoleMappings:
     post:
-      description: Map a directory group or attribute value to a role, replacing any role it was mapped to before.
-      operationId: setDirectoryRoleMapping
+      description: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.
+      operationId: setDirectoryRoleMappings
       parameters:
         - allowEmptyValue: true
           description: API Key header
@@ -2967,14 +2967,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetDirectoryRoleMappingForm'
+              $ref: '#/components/schemas/SetDirectoryRoleMappingsForm'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DirectoryRoleMapping'
+                items:
+                  $ref: '#/components/schemas/DirectoryRoleMapping'
+                type: array
           description: OK response.
         "400":
           content:
@@ -3034,12 +3036,12 @@ paths:
         - apikey_header_Gram-Key: []
         - session_header_Gram-Session: []
         - {}
-      summary: setDirectoryRoleMapping access
+      summary: setDirectoryRoleMappings access
       tags:
         - access
-      x-speakeasy-name-override: setDirectoryRoleMapping
+      x-speakeasy-name-override: setDirectoryRoleMappings
       x-speakeasy-react-hook:
-        name: SetDirectoryRoleMapping
+        name: SetDirectoryRoleMappings
         type: mutation
   /rpc/access.setResourceAudience:
     post:
@@ -89805,12 +89807,16 @@ components:
           $ref: '#/components/schemas/DeviceAgentConfiguration'
         etag:
           type: string
-          description: Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.
+          description: Opaque revision identifier covering the marketplace, plugin, remote-configuration, and organization-gateway set. The agent stores this to detect changes between polls.
         marketplaces:
           type: array
           items:
             $ref: '#/components/schemas/AgentMarketplace'
           description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+        organization_gateway_url:
+          type: string
+          description: URL of the active organization's gateway. Absent when the organization gateway is unavailable.
+          format: uri
         plugins:
           type: array
           items:
@@ -95567,6 +95573,12 @@ components:
           type: string
           description: When the meta MCP server was created
           format: date-time
+        discovery_mode:
+          type: string
+          description: The effective default discovery mode. Unconfigured connections follow this value.
+          enum:
+            - progressive
+            - direct
         id:
           type: string
           description: The ID of the meta MCP server
@@ -95617,6 +95629,7 @@ components:
         - name
         - visibility
         - network_access_mode
+        - discovery_mode
         - created_at
         - updated_at
     MeterUsageBreakdown:
@@ -95882,6 +95895,12 @@ components:
     MintUserSessionRequestBody:
       type: object
       properties:
+        discovery_mode:
+          type: string
+          description: An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.
+          enum:
+            - progressive
+            - direct
         mcp_server_id:
           type: string
           description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -104060,7 +104079,7 @@ components:
           minimum: 0
       required:
         - billing_cycle_anchor_day
-    SetDirectoryRoleMappingForm:
+    SetDirectoryRoleMappingsForm:
       type: object
       properties:
         attribute_key:
@@ -104075,9 +104094,16 @@ components:
           type: string
           description: Directory group to map. Required when source_kind is group.
           format: uuid
-        role_urn:
-          type: string
-          description: Principal URN of the role to grant, from Role.principal_urn.
+        expected_role_urns:
+          type: array
+          items:
+            type: string
+          description: Optional compare-and-set precondition. The normalized current role set must match or the request returns conflict without changes. Omit for unconditional replacement; an empty array requires an unmapped source.
+        role_urns:
+          type: array
+          items:
+            type: string
+          description: The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.
         source_kind:
           type: string
           description: What the mapping matches.
@@ -104086,7 +104112,7 @@ components:
             - attribute
       required:
         - source_kind
-        - role_urn
+        - role_urns
     SetEMAProvidersRequestBody:
       type: object
       properties:
@@ -110281,6 +110307,12 @@ components:
     UpdateMetaMcpServerForm:
       type: object
       properties:
+        discovery_mode:
+          type: string
+          description: The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+          enum:
+            - progressive
+            - direct
         id:
           type: string
           description: The ID of the meta MCP server to update

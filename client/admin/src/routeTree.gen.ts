@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
+import { Route as ExternalMcpMigrationRouteImport } from './routes/external-mcp-migration'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as OnboardingPlaybooksRouteImport } from './routes/onboarding-playbooks'
@@ -52,6 +53,11 @@ const IndexRoute = IndexRouteImport.update({
 const CustomerUsageRoute = CustomerUsageRouteImport.update({
   id: '/customer-usage',
   path: '/customer-usage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExternalMcpMigrationRoute = ExternalMcpMigrationRouteImport.update({
+  id: '/external-mcp-migration',
+  path: '/external-mcp-migration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationCoverageRoute = IntegrationCoverageRouteImport.update({
@@ -234,6 +240,7 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -270,6 +277,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -300,6 +308,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -338,6 +347,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/customer-usage'
+    | '/external-mcp-migration'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -374,6 +384,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/customer-usage'
+    | '/external-mcp-migration'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -403,6 +414,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/customer-usage'
+    | '/external-mcp-migration'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -440,6 +452,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
+  ExternalMcpMigrationRoute: typeof ExternalMcpMigrationRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
   OnboardingPlaybooksRoute: typeof OnboardingPlaybooksRoute
@@ -467,6 +480,13 @@ declare module '@tanstack/react-router' {
       path: '/customer-usage'
       fullPath: '/customer-usage'
       preLoaderRoute: typeof CustomerUsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/external-mcp-migration': {
+      id: '/external-mcp-migration'
+      path: '/external-mcp-migration'
+      fullPath: '/external-mcp-migration'
+      preLoaderRoute: typeof ExternalMcpMigrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integration-coverage': {
@@ -822,6 +842,7 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CustomerUsageRoute: CustomerUsageRoute,
+  ExternalMcpMigrationRoute: ExternalMcpMigrationRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,
   OnboardingPlaybooksRoute: OnboardingPlaybooksRoute,

@@ -77,6 +77,9 @@ type Client struct {
 	GetSupportCoverageEndpoint                    goa.Endpoint
 	DescribeMcpServerHealthEndpoint               goa.Endpoint
 	GetMcpServerToolCallsEndpoint                 goa.Endpoint
+	ListExternalMcpMigrationCandidatesEndpoint    goa.Endpoint
+	PreviewExternalMcpMigrationEndpoint           goa.Endpoint
+	MigrateExternalMcpServersEndpoint             goa.Endpoint
 	GetRegistryOktaCandidatesEndpoint             goa.Endpoint
 	ListRegistryOktaUnmappedEndpoint              goa.Endpoint
 	ListRegistryEntriesEndpoint                   goa.Endpoint
@@ -108,7 +111,7 @@ type Client struct {
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, getMcpServerToolCalls, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, getMcpServerToolCalls, listExternalMcpMigrationCandidates, previewExternalMcpMigration, migrateExternalMcpServers, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                                 login,
 		CallbackEndpoint:                              callback,
@@ -170,6 +173,9 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		GetSupportCoverageEndpoint:                    getSupportCoverage,
 		DescribeMcpServerHealthEndpoint:               describeMcpServerHealth,
 		GetMcpServerToolCallsEndpoint:                 getMcpServerToolCalls,
+		ListExternalMcpMigrationCandidatesEndpoint:    listExternalMcpMigrationCandidates,
+		PreviewExternalMcpMigrationEndpoint:           previewExternalMcpMigration,
+		MigrateExternalMcpServersEndpoint:             migrateExternalMcpServers,
 		GetRegistryOktaCandidatesEndpoint:             getRegistryOktaCandidates,
 		ListRegistryOktaUnmappedEndpoint:              listRegistryOktaUnmapped,
 		ListRegistryEntriesEndpoint:                   listRegistryEntries,
@@ -1580,6 +1586,78 @@ func (c *Client) GetMcpServerToolCalls(ctx context.Context, p *GetMcpServerToolC
 		return
 	}
 	return ires.(*AdminMcpServerToolCalls), nil
+}
+
+// ListExternalMcpMigrationCandidates calls the
+// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
+// ListExternalMcpMigrationCandidates may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListExternalMcpMigrationCandidates(ctx context.Context, p *ListExternalMcpMigrationCandidatesPayload) (res *AdminListExternalMcpMigrationCandidatesResult, err error) {
+	var ires any
+	ires, err = c.ListExternalMcpMigrationCandidatesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminListExternalMcpMigrationCandidatesResult), nil
+}
+
+// PreviewExternalMcpMigration calls the "previewExternalMcpMigration" endpoint
+// of the "admin" service.
+// PreviewExternalMcpMigration may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) PreviewExternalMcpMigration(ctx context.Context, p *PreviewExternalMcpMigrationPayload) (res *AdminExternalMcpMigrationResult, err error) {
+	var ires any
+	ires, err = c.PreviewExternalMcpMigrationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminExternalMcpMigrationResult), nil
+}
+
+// MigrateExternalMcpServers calls the "migrateExternalMcpServers" endpoint of
+// the "admin" service.
+// MigrateExternalMcpServers may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MigrateExternalMcpServers(ctx context.Context, p *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error) {
+	var ires any
+	ires, err = c.MigrateExternalMcpServersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminExternalMcpMigrationResult), nil
 }
 
 // GetRegistryOktaCandidates calls the "getRegistryOktaCandidates" endpoint of
