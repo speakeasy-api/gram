@@ -13,8 +13,8 @@
 # The runner resolves a `$/` reference while it sets up the job, by downloading
 # a tarball of this whole repository (~133 MB), and that added 10-100s to every
 # job that used one. Each of these jobs checks out the run's commit as its
-# first step, and no workflow here runs on pull_request_target, so `./` loads
-# the same file without the download. Use `$/` only when the job has not
+# first step, and none of their workflows runs on pull_request_target, so `./`
+# loads the same file without the download. Use `$/` only when the job has not
 # checked out that commit, or when a step before it rewrites `.github/`.
 rules:
   unpinned-uses:
