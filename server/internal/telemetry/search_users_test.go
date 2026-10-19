@@ -1656,3 +1656,104 @@ func insertPollingLogWithUserAndEmail(t *testing.T, ctx context.Context, project
 		projectID, deploymentID, "cursor:usage:metrics", "gram-cursor")
 	require.NoError(t, err)
 }
+
+// searchEmployeesPage reads one page of the internal people directory, newest
+// activity first.
+func searchEmployeesPage(t *testing.T, ctx context.Context, ti *testInstance, now time.Time, cursor *string, limit int) *gen.SearchUsersResult {
+	t.Helper()
+
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: now.Add(-time.Hour).Format(time.RFC3339),
+			To:   now.Add(time.Hour).Format(time.RFC3339),
+		},
+		UserType: "internal",
+		Cursor:   cursor,
+		Limit:    limit,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	return res
+}
+
+// requireEmployees asserts the directory holds the test's rows. The fixtures
+// insert with async_insert=0, so they are queryable once Exec returns.
+func requireEmployees(t *testing.T, ctx context.Context, ti *testInstance, now time.Time, want int) {
+	t.Helper()
+
+	require.Len(t, searchEmployeesPage(t, ctx, ti, now, nil, 10).Users, want)
+}
+
+// TestSearchUsers_PaginatesPastAnExcludedLaterEvent pins that the people
+// directory advances past a person whose Speakeasy-hosted (excluded) activity runs
+// later than their last qualifying event.
+//
+// A cursor carrying only the person's group key makes the next page re-derive
+// their last_seen through a lookup that ignores the excluded hook sources. That
+// lookup sees the later excluded event, the person still sorts before the
+// inflated boundary, and they come back on page 2 and every page after it, so
+// the rest of the directory is never reached.
+func TestSearchUsers_PaginatesPastAnExcludedLaterEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+
+	now := time.Now().UTC()
+	personA := "person-a-" + uuid.NewString()[:8] + "@example.com"
+	personB := "person-b-" + uuid.NewString()[:8] + "@example.com"
+
+	// A qualifies at T and has an excluded Speakeasy-hosted event at T+1; B
+	// qualifies before T.
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), personA, 100, 50, 1.5)
+	insertGramHostedJudgeLog(t, ctx, projectID, now.Add(-9*time.Minute), personA, 10, 10, 0.1)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-20*time.Minute), personB, 100, 50, 1.5)
+	requireEmployees(t, ctx, ti, now, 2)
+
+	page1 := searchEmployeesPage(t, ctx, ti, now, nil, 1)
+	require.Len(t, page1.Users, 1)
+	require.Equal(t, personA, page1.Users[0].UserID)
+	require.NotNil(t, page1.NextCursor)
+
+	page2 := searchEmployeesPage(t, ctx, ti, now, page1.NextCursor, 1)
+	require.Len(t, page2.Users, 1)
+	require.Equal(t, personB, page2.Users[0].UserID, "page 2 must reach the next person rather than repeat the first")
+	require.Nil(t, page2.NextCursor, "the directory ends after the second person")
+}
+
+// TestSearchUsers_BareGroupKeyCursorStillPages pins that a cursor in the shape
+// the directory handed out before the boundary was sealed — the bare group key
+// of the last person on the page — is still accepted mid-traversal: it resumes
+// after that person, and the cursor it returns carries the traversal to the end.
+func TestSearchUsers_BareGroupKeyCursorStillPages(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+
+	now := time.Now().UTC()
+	people := []string{
+		"bare-1-" + uuid.NewString()[:8] + "@example.com",
+		"bare-2-" + uuid.NewString()[:8] + "@example.com",
+		"bare-3-" + uuid.NewString()[:8] + "@example.com",
+	}
+	for i, email := range people {
+		insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-time.Duration(10*(i+1))*time.Minute), email, 100, 50, 1.5)
+	}
+	requireEmployees(t, ctx, ti, now, len(people))
+
+	bareCursor := people[0]
+	page2 := searchEmployeesPage(t, ctx, ti, now, &bareCursor, 1)
+	require.Len(t, page2.Users, 1)
+	require.Equal(t, people[1], page2.Users[0].UserID)
+	require.NotNil(t, page2.NextCursor)
+
+	page3 := searchEmployeesPage(t, ctx, ti, now, page2.NextCursor, 1)
+	require.Len(t, page3.Users, 1)
+	require.Equal(t, people[2], page3.Users[0].UserID)
+	require.Nil(t, page3.NextCursor)
+}

@@ -18,7 +18,7 @@ import { useEffect, useMemo } from "react";
 import { useSyncToolMetadata } from "./useSyncToolMetadata";
 
 export interface RemoteMcpToolConnectionOptions {
-  /** The Gram-proxied MCP URL to connect to; undefined while it resolves. */
+  /** The Speakeasy-proxied MCP URL to connect to; undefined while it resolves. */
   mcpUrl: string | undefined;
   /** The mcp_server id, used to mint the user-session JWT. */
   mcpServerId: string | undefined;
@@ -26,7 +26,7 @@ export interface RemoteMcpToolConnectionOptions {
   userSessionIssuerId: string | undefined;
   /** Only remote-backed servers carry stored tool metadata. */
   remoteMcpServerId: string | undefined;
-  /** Gram-origin endpoint slug, for the first-party connect page. */
+  /** Speakeasy-origin endpoint slug, for the first-party connect page. */
   platformSlug: string | undefined;
   tunneledMcpServerId: string | undefined;
   visibility: string | undefined;
@@ -61,7 +61,7 @@ export interface RemoteMcpToolConnection {
 }
 
 /**
- * Connects to a remote MCP server through Gram to list its tools, and records
+ * Connects to a remote MCP server through Speakeasy to list its tools, and records
  * the tools it sees for the first time so they can be permissioned by name.
  *
  * Issuer-gated servers connect with a minted user-session JWT. With no

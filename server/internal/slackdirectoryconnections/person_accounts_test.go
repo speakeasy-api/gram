@@ -177,7 +177,7 @@ func TestPersonAccountsNeverAuthorizesByEmailOrForeignPerson(t *testing.T) {
 	_, err := f.service.SetMapping(ctx, mappingRequest(m, &f.auth.UserID))
 	require.NoError(t, err)
 	foreign := "user_synthetic_foreign"
-	// A real Gram user without membership. The forged caller below retains the session email.
+	// A real Speakeasy user without membership. The forged caller below retains the session email.
 	require.NoError(t, testrepo.New(f.db).InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: foreign, Email: "foreign@demo.getgram.ai", DisplayName: "Synthetic foreign person"}))
 	_, err = f.service.ListPersonAccounts(ctx, personAccountsRequest(foreign))
 	requireMappingCode(t, err, oops.CodeNotFound)

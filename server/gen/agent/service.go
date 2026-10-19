@@ -10,6 +10,7 @@ package agent
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -66,12 +67,13 @@ type Service interface {
 	// removed here; it leaves the list only by leaving Speakeasy's catalog.
 	// Requires a session with the org:admin scope.
 	DeleteAiScanTarget(context.Context, *DeleteAiScanTargetPayload) (res *DeleteAiScanTargetResult, err error)
-	// Resolve display metadata (Gram chat id, generated title, last activity) for
-	// captured agent sessions the calling user owns. Used by the device agent's
-	// session picker to overlay server-generated titles on locally discovered
-	// transcripts; unknown or non-owned session ids are silently omitted, so the
-	// picker degrades gracefully. Requires a per-user key: the fleet-shared org
-	// install key is refused because session metadata is per-user data.
+	// Resolve display metadata (Speakeasy chat id, generated title, last activity)
+	// for captured agent sessions the calling user owns. Used by the device
+	// agent's session picker to overlay server-generated titles on locally
+	// discovered transcripts; unknown or non-owned session ids are silently
+	// omitted, so the picker degrades gracefully. Requires a per-user key: the
+	// fleet-shared org install key is refused because session metadata is per-user
+	// data.
 	GetSessionMeta(context.Context, *GetSessionMetaPayload) (res *GetSessionMetaResult, err error)
 	// Record that a captured agent session was moved to another harness on a
 	// device (session portability). Carries no session content — only the session
@@ -154,12 +156,21 @@ type AgentMarketplace struct {
 }
 
 type AgentPlugin struct {
-	// Plugin slug. Combined with marketplace_name, this identifies the plugin the
-	// agent enables in the managed tool.
+	// Plugin slug. Combined with marketplace_name, this identifies the plugin in
+	// the managed tool.
 	Slug string
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName string
+	// How the agent installs the plugin. `required`: installed, and the user can't
+	// turn it off. `default`: installed, and the user can turn it off.
+	// `available`: not installed until the user turns it on. Agents that predate
+	// this field install every listed plugin.
+	InstallMode string
+	// Display name of the plugin. Absent for the synthesized observability plugin.
+	Name *string
+	// Short description of the plugin, when one is set.
+	Description *string
 }
 
 type AgentPollingPrincipal struct {
@@ -173,7 +184,7 @@ type AgentSessionMeta struct {
 	// The native harness session identifier this entry resolves, echoed from the
 	// request.
 	SessionID string
-	// Gram chat id for the captured session.
+	// Speakeasy chat id for the captured session.
 	ChatID string
 	// Generated (or manually set) chat title. Absent when no title has been
 	// generated yet.
@@ -205,6 +216,11 @@ type AiScanTarget struct {
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
 	Customized bool
+	// The organization's access decision for the target, computed with the same
+	// rules the AI detections carry: unreviewed when nothing is recorded, and
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
+	Access *types.AIToolAccessSummary
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string
 	// When the organization's row last changed; absent for an untouched default.
@@ -212,14 +228,15 @@ type AiScanTarget struct {
 }
 
 // How a target detected on a device is recognized again when the same tool
-// calls Gram's MCP gateway. A device signature and a registered OAuth client
-// share no natural join key, so the link is declared here. The three lists are
-// not interchangeable: the first two name credentials Gram verified and can be
-// enforced on, the third names what a client said about itself and is used
-// only to attribute traffic.
+// calls Speakeasy's MCP gateway. A device signature and a registered OAuth
+// client share no natural join key, so the link is declared here. The three
+// lists are not interchangeable: the first two name credentials Speakeasy
+// verified and can be enforced on, the third names what a client said about
+// itself and is used only to attribute traffic.
 type AiScanTargetGatewayClient struct {
-	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets
-	// may claim the same key, or a block on either would silently cover the other.
+	// Vendor keys from Speakeasy's CIMD client catalog. Vendor-grained: no two
+	// targets may claim the same key, or a block on either would silently cover
+	// the other.
 	CimdVendorKeys []string
 	// Client ids matched literally against the caller's verified client_id, or
 	// CIMD catalog URLs — including the wildcard patterns — matched against the
@@ -260,7 +277,7 @@ type AiScanTargetSignatures struct {
 // createSessionHandoff method.
 type CreateSessionHandoffPayload struct {
 	ApikeyToken *string
-	// Native harness session identifier the handoff was rendered from. Gram
+	// Native harness session identifier the handoff was rendered from. Speakeasy
 	// derives its chat id from this the same way hook ingest does; a
 	// not-yet-captured session can still mint a link.
 	SessionID string
@@ -366,8 +383,11 @@ type GetPluginsResult struct {
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
 	Marketplaces []*AgentMarketplace
-	// Plugins the agent should enable. Each entry references one of the
-	// marketplaces above by name.
+	// Plugins for the caller: the observability plugin of each listed marketplace,
+	// when enabled, and the plugins assigned to the caller. Each entry's
+	// install_mode says whether the agent installs it (`required`, `default`) or
+	// only offers it for the user to turn on (`available`). Each entry references
+	// one of the marketplaces above by name.
 	Plugins []*AgentPlugin
 	// Organization-wide remote configuration. Absent until an administrator saves
 	// a configuration, allowing an agent with no cached remote layer to keep using
@@ -383,8 +403,8 @@ type GetPluginsResult struct {
 type GetSessionMetaPayload struct {
 	ApikeyToken *string
 	// Native harness session identifiers (e.g. Claude Code session UUIDs, Codex
-	// rollout ids) to resolve. Gram derives its chat ids from these the same way
-	// hook ingest does.
+	// rollout ids) to resolve. Speakeasy derives its chat ids from these the same
+	// way hook ingest does.
 	SessionIds []string
 }
 
@@ -459,15 +479,15 @@ type ReportAIScanPayload struct {
 // reportSessionMoved method.
 type ReportSessionMovedPayload struct {
 	ApikeyToken *string
-	// Native harness session identifier of the moved session. Gram derives its
-	// chat id from this the same way hook ingest does; the move is recorded even
-	// if the session has not been captured yet.
+	// Native harness session identifier of the moved session. Speakeasy derives
+	// its chat id from this the same way hook ingest does; the move is recorded
+	// even if the session has not been captured yet.
 	SessionID string
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness string
 	// Native session id minted for the continuation, when the daemon knows it at
 	// launch time (claude-code targets today; Cursor mints ids server-side so
-	// moves there omit it). Lets Gram link the original session and its
+	// moves there omit it). Lets Speakeasy link the original session and its
 	// continuation.
 	TargetSessionID *string
 	// Harness the session originated in, as detected by the agent (e.g.
@@ -503,8 +523,8 @@ type UpdateConfigurationPayload struct {
 	// sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan.
 	// update_channel and blocked_versions can only be set by Speakeasy platform
 	// administrators; per-device identity and secret keys are forbidden, as is
-	// ai_scan, which Gram injects from the organization's scan target list when
-	// serving agents.
+	// ai_scan, which Speakeasy injects from the organization's scan target list
+	// when serving agents.
 	Config map[string]any
 }
 

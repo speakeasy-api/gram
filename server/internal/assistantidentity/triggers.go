@@ -151,7 +151,7 @@ func (s *Service) bindRoot(ctx context.Context, tx pgx.Tx, project, trigger uuid
 	return nil
 }
 
-// projectIssuer returns the project's trust registration for the Gram issuer,
+// projectIssuer returns the project's trust registration for the Speakeasy issuer,
 // registering one when none exists, and holds its workload policy write lock.
 func (s *Service) projectIssuer(ctx context.Context, tx pgx.Tx, org string, project uuid.UUID, actor auditActor) (workloadrepo.WorkloadIssuer, error) {
 	q := repo.New(tx)

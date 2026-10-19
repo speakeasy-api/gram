@@ -25,7 +25,7 @@ type CapCopy = {
 };
 
 /**
- * Everything the dashboard says about a Gram-managed inference key, keyed by
+ * Everything the dashboard says about a Speakeasy-managed inference key, keyed by
  * the API's own key type.
  *
  * One record rather than a mapping function per string: the label, the anchor

@@ -52,6 +52,11 @@ func DuplicateDashboardDashboardsPath() string {
 	return "/rpc/dashboards.duplicate"
 }
 
+// DuplicateBuiltInDashboardDashboardsPath returns the URL path to the dashboards service duplicateBuiltInDashboard HTTP endpoint.
+func DuplicateBuiltInDashboardDashboardsPath() string {
+	return "/rpc/dashboards.duplicateBuiltIn"
+}
+
 // DeleteDashboardDashboardsPath returns the URL path to the dashboards service deleteDashboard HTTP endpoint.
 func DeleteDashboardDashboardsPath() string {
 	return "/rpc/dashboards.delete"

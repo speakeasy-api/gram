@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
@@ -11,10 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -33,40 +31,27 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useOrgRoutes } from "@/routes";
-import {
-  ArrowLeft,
-  Bot,
-  Check,
-  ChevronRight,
-  Loader2,
-  Lock,
-} from "lucide-react";
+import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
 import {
   getSelectableMembers,
   isMemberLockedToRole,
   membersWithRole,
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
-import { MCP_CONNECT_SCOPE } from "./mcpAccessModel";
-import { McpAccessPanel } from "./McpAccessPanel";
-import { useMcpAccessCount } from "./useMcpAccessCount";
-import { PermissionScopeControl } from "./PermissionScopeControl";
-import { RolePermissionsSection } from "./RolePermissionsSection";
+import { RoleAccessMatrix } from "./RoleAccessMatrix";
+import { useOrgMcpServers } from "./useOrgMcpServers";
+import { RoleDirectorySources } from "./RoleDirectorySources";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
   isProjectFilteredResourceType,
   isProjectSelectableResourceType,
-  isUnrestrictedResourceType,
 } from "./types";
 import {
   isSaveDisabled,
   grantKeysString as grantKeysStringFn,
-  computeRuleLabel,
 } from "./roleDialogState";
 import {
   applyRemoveRule,
@@ -95,7 +80,9 @@ function getAllowLevel(
   rules: ScopeRule[],
 ): "all" | "project" | "server" | "tool" | "annotation" | null {
   const allows = rules.filter((r) => r.effect === "allow");
-  if (allows.length === 0) return null;
+  // A block with no grant beside it subtracts from what other roles grant,
+  // which can be everything, so it may name anything.
+  if (allows.length === 0) return rules.length > 0 ? "all" : null;
   if (allows.some((r) => r.selectors === null)) return "all";
   const allSels = allows.flatMap((r) => r.selectors ?? []);
   if (allSels.some((s) => s.projectId)) return "project";
@@ -196,35 +183,21 @@ export function CreateRoleDialog({
   // ─── Hooks ────────────────────────────────────────────────────
   const queryClient = useQueryClient();
   const organization = useOrganization();
-  const orgRoutes = useOrgRoutes();
-  // A directory owns assignment under SCIM, so the list shows only who it
-  // enrolled; with nobody enrolled there is nothing to show but the way there.
-  // Gated on initialization so a role still loading its members does not
-  // flash the empty state.
-  const scimWithNoMembers =
-    !!organization.scimEnabled &&
-    (!isEditing || initialized) &&
-    selectedMembers.size === 0;
   const { data: membersData } = useMembers();
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  const agentManagementEnabled =
-    useFeatureFlag(FEATURE_FLAGS.agentManagement).status === "enabled";
   const sdk = useSdkClient();
   // Every page of them: an agent missing from this picker cannot be given the
   // role, and nothing on screen would say why.
   //
-  // throwOnError is off because the agents service answers 404 (and 403 for
-  // callers without agent:read) when the rollout is off for the organization,
-  // and the global query policy only suppresses 401 and 403. The agent picker
-  // is optional here, so on any error it shows no agents instead of taking the
-  // role editor down.
+  // The picker is optional here, so on any error (including 403 for callers
+  // without agent:read) it shows no agents instead of taking the role editor
+  // down.
   const { data: agentsData } = useQuery({
     queryKey: [...queryKeyAgents({}), "all-pages"],
     queryFn: ({ signal }) =>
       collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
-    enabled: agentManagementEnabled,
     throwOnError: false,
   });
   // Suspended and revoked agents keep the roles they hold but cannot be given
@@ -245,73 +218,17 @@ export function CreateRoleDialog({
     [scopeDefinitions],
   );
 
-  const mcpAccessCount = useMcpAccessCount(grants, open);
+  const mcpInventory = useOrgMcpServers(open);
 
   const projectList = useMemo(
-    () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
+    () =>
+      organization.projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+      })),
     [organization.projects],
   );
-
-  const scopeGroups = useMemo(() => {
-    const groupOrder: {
-      label: string;
-      resourceType: ResourceType;
-      description: string;
-    }[] = [
-      {
-        label: "Organization",
-        resourceType: "org",
-        description: "Organization metadata, members, and access settings.",
-      },
-      {
-        label: "Build & Deploy",
-        resourceType: "project",
-        description: "Projects and their related resources.",
-      },
-      {
-        label: "Environments",
-        resourceType: "environment",
-        description: "Environments and their entries within projects.",
-      },
-      {
-        label: "Skills",
-        resourceType: "skill",
-        description: "Skills available within projects.",
-      },
-      {
-        label: "Assistants",
-        resourceType: "assistant",
-        description: "Assistants available within projects.",
-      },
-      {
-        label: "MCP Servers",
-        resourceType: "mcp",
-        description: "MCP server configuration and connections.",
-      },
-      {
-        label: "Agent Sessions",
-        resourceType: "chat",
-        description: "Access to members' agent session transcripts.",
-      },
-      {
-        label: "Agents",
-        resourceType: "agent",
-        description: "Agents available within the organization.",
-      },
-      {
-        label: "Workload Identities",
-        resourceType: "workload",
-        description:
-          "The trust policy deciding which machines the organization recognises.",
-      },
-    ];
-    return groupOrder.map((g) => ({
-      ...g,
-      scopes: userVisibleScopeDefinitions.filter(
-        (s) => s.resourceType === g.resourceType,
-      ),
-    }));
-  }, [userVisibleScopeDefinitions]);
 
   // ─── Initialize when editing ──────────────────────────────────
   if (editingRole && !initialized && scopesData && membersData) {
@@ -339,6 +256,7 @@ export function CreateRoleDialog({
     onSuccess: async (role) => {
       await Promise.all([
         invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
         invalidateAllMembers(queryClient),
       ]);
       onRoleCreated?.(role);
@@ -358,6 +276,7 @@ export function CreateRoleDialog({
     onSuccess: async () => {
       await Promise.all([
         invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
         invalidateAllMembers(queryClient),
       ]);
       // On its own page the editor stays open after a save: what was saved
@@ -409,32 +328,6 @@ export function CreateRoleDialog({
   ) => {
     setAssignmentConfirmed(false);
     setGrants(update);
-  };
-
-  const toggleScope = (scope: Scope) => {
-    updateGrants((prev) => {
-      const next = { ...prev };
-      if (next[scope]) {
-        delete next[scope];
-      } else {
-        next[scope] = {
-          scope,
-          rules: [
-            { id: crypto.randomUUID(), effect: "allow", selectors: null },
-          ],
-        };
-      }
-      return next;
-    });
-  };
-
-  const setConnectGrant = (grant: RoleGrant | undefined) => {
-    updateGrants((prev) => {
-      const next = { ...prev };
-      if (grant) next[MCP_CONNECT_SCOPE] = grant;
-      else delete next[MCP_CONNECT_SCOPE];
-      return next;
-    });
   };
 
   const openRuleEditor = (scopeSlug: Scope, ruleIndex: number) => {
@@ -527,24 +420,6 @@ export function CreateRoleDialog({
     }, 300);
   };
 
-  // "All servers" is the unrestricted rule, which the model stores as null
-  // selectors rather than as a list naming everything.
-  const resetRuleToAll = (scopeSlug: string) => {
-    updateGrants((prev) => {
-      const grant = prev[scopeSlug];
-      if (!grant) return prev;
-      return {
-        ...prev,
-        [scopeSlug]: {
-          ...grant,
-          rules: grant.rules.map((rule) =>
-            rule.effect === "allow" ? { ...rule, selectors: null } : rule,
-          ),
-        },
-      };
-    });
-  };
-
   const removeRule = (scopeSlug: string, ruleIndex: number) => {
     updateGrants((prev) => {
       const grant = prev[scopeSlug];
@@ -634,10 +509,8 @@ export function CreateRoleDialog({
                 ? Array.from(selectedMembers)
                 : undefined,
             // Agent membership is declarative: an agent has no other surface
-            // to be taken off a role on. Preserve it when the rollout is unavailable.
-            ...(agentManagementEnabled
-              ? { agentIds: Array.from(selectedAgents) }
-              : {}),
+            // to be taken off a role on.
+            agentIds: Array.from(selectedAgents),
           },
         },
       });
@@ -652,7 +525,7 @@ export function CreateRoleDialog({
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
                 : undefined,
-            ...(agentManagementEnabled && selectedAgents.size > 0
+            ...(selectedAgents.size > 0
               ? { agentIds: Array.from(selectedAgents) }
               : {}),
           },
@@ -688,9 +561,7 @@ export function CreateRoleDialog({
   // ─── Derived for slide panel ──────────────────────────────────
 
   const editingScopeDef = editingScopeSlug
-    ? scopeGroups
-        .flatMap((g) => g.scopes)
-        .find((s) => s.slug === editingScopeSlug)
+    ? userVisibleScopeDefinitions.find((s) => s.slug === editingScopeSlug)
     : null;
 
   // Exception constraints: an exception must be narrower than the broadest allow.
@@ -800,7 +671,7 @@ export function CreateRoleDialog({
               // Quieter than a banner: the fields it describes are right
               // above it, and already visibly disabled.
               <Text muted small>
-                Built-in role. Gram manages its name and description; its
+                Built-in role. Speakeasy manages its name and description; its
                 permissions are yours to change.
               </Text>
             )}
@@ -811,113 +682,30 @@ export function CreateRoleDialog({
                 Permissions
               </Text>
             </div>
-            <RolePermissionsSection
-              groups={scopeGroups}
-              selectedScopes={new Set(Object.keys(grants))}
-              disabled={false}
+            <RoleAccessMatrix
+              grants={grants}
+              onChange={updateGrants}
+              scopes={userVisibleScopeDefinitions}
+              projects={projectList}
+              inventory={mcpInventory}
+              // An existing role's grants replace the form once they load, so
+              // the grid waits for them rather than take edits that would be
+              // overwritten.
+              loading={isEditing && !initialized}
               markAgentIneligible={selectedAgents.size > 0}
-              onToggleScope={toggleScope}
-              // No number until an existing role's grants are in: an empty
-              // form would count as zero servers.
-              mcpAccessCount={isEditing && !initialized ? null : mcpAccessCount}
-              renderMcpAccess={({ showPlatformAccess }) =>
-                // An existing role's grants replace the form once they load,
-                // so the panel waits for them rather than take edits that
-                // would be overwritten.
-                isEditing && !initialized ? (
-                  <Skeleton className="m-4">
-                    <div className="h-24 w-full" />
-                    <div className="h-40 w-full" />
-                  </Skeleton>
-                ) : (
-                  <McpAccessPanel
-                    grants={grants}
-                    onChangeConnectGrant={setConnectGrant}
-                    onShowPlatformAccess={showPlatformAccess}
-                  />
-                )
-              }
-              renderScopeRule={(scopeDef) => {
-                const grant = grants[scopeDef.slug];
-                if (!grant) return null;
-                // Scopes with nothing to narrow — an organization is not a
-                // list you pick from — carry no control at all: an "All" chip
-                // that cannot be changed is noise.
-                if (isUnrestrictedResourceType(scopeDef.resourceType)) {
-                  return null;
-                }
-                // A permission can hold more than one allow rule — selectors
-                // at different levels do not merge — so each one gets its own
-                // sentence rather than the first one standing for all of them.
-                const allowRules = grant.rules
-                  .map((rule, index) => ({ rule, index }))
-                  .filter(({ rule }) => rule.effect === "allow");
-                const denyRules = grant.rules
-                  .map((rule, index) => ({ rule, index }))
-                  .filter(({ rule }) => rule.effect === "deny");
-                return allowRules.map(
-                  ({ rule: allowRule, index: allowIndex }, position) => (
-                    <PermissionScopeControl
-                      key={allowRule.id}
-                      allowRule={allowRule}
-                      // Exceptions belong to the permission, not to one of its
-                      // allow rules, so they are stated once.
-                      denyRules={position === 0 ? denyRules : []}
-                      resourceType={scopeDef.resourceType}
-                      allowLabel={computeRuleLabel(
-                        allowRule?.selectors ?? null,
-                        scopeDef.resourceType,
-                        projectList,
-                      )}
-                      denyLabel={(rule) =>
-                        computeRuleLabel(
-                          rule.selectors,
-                          scopeDef.resourceType,
-                          projectList,
-                        )
-                      }
-                      canAddException={
-                        position === 0 &&
-                        denyRules.length === 0 &&
-                        getDenyPanels(
-                          getAllowLevel(grant.rules),
-                          scopeDef.resourceType,
-                        ).length > 0
-                      }
-                      disabled={false}
-                      onChooseSpecific={() =>
-                        openRuleEditor(scopeDef.slug, allowIndex)
-                      }
-                      onResetToAll={() => resetRuleToAll(scopeDef.slug)}
-                      onAddException={() => openRuleEditor(scopeDef.slug, -1)}
-                      onEditException={(index) =>
-                        openRuleEditor(scopeDef.slug, index)
-                      }
-                      onRemoveException={(index) =>
-                        removeRule(scopeDef.slug, index)
-                      }
-                    />
-                  ),
-                );
-              }}
+              onEditRule={openRuleEditor}
+              onRemoveRule={removeRule}
             />
 
-            {/* ─── Assign Members (read-only when directory sync manages assignment) ─── */}
-            {!hideAssignments && scimWithNoMembers && (
-              <div className="border-border flex items-center gap-1 border-t pt-4 pb-4">
-                <Text variant="body" className="font-medium">
-                  Assign Members
-                </Text>
-                <Link
-                  to={orgRoutes.identity.href()}
-                  className="text-muted-foreground ml-1 underline underline-offset-2"
-                >
-                  Configure directory sync
-                </Link>
-              </div>
+            {/* ─── Who holds the role ───────────────────────────────
+                Under directory sync the directory decides, so the editor
+                shows the groups and attributes that give the role out in
+                place of a member picker. */}
+            {!hideAssignments && organization.scimEnabled && (
+              <RoleDirectorySources role={editingRole ?? undefined} />
             )}
-            {!hideAssignments && !scimWithNoMembers && (
-              <div className="border-border border-t pt-4 pb-4">
+            {!hideAssignments && !organization.scimEnabled && (
+              <div className="border-border border-t pt-4">
                 <button
                   type="button"
                   onClick={() => setShowMembers(!showMembers)}
@@ -933,139 +721,106 @@ export function CreateRoleDialog({
                     Assign Members
                   </Text>
                   <Text variant="body" className="text-muted-foreground ml-1">
-                    {organization.scimEnabled
-                      ? `(${selectedMembers.size} assigned by directory sync)`
-                      : `(optional, ${selectedMembers.size} selected)`}
+                    {`(optional, ${selectedMembers.size} selected)`}
                   </Text>
                 </button>
 
                 {showMembers && (
-                  <div className="relative mt-3">
-                    {/* The rows stay visible — who holds the role is still worth
-                        reading — but a directory owns the answer, so nothing here
-                        is clickable. */}
-                    {organization.scimEnabled && (
-                      <div className="bg-background/60 absolute inset-0 z-10 flex items-center justify-center">
-                        <div className="border-border bg-background flex items-center gap-2 border px-3 py-1.5 shadow-sm">
-                          <Lock className="text-muted-foreground h-3.5 w-3.5" />
-                          <Text variant="body" className="text-xs">
-                            Managed by directory sync
-                          </Text>
-                        </div>
-                      </div>
-                    )}
-                    <div
-                      className={cn(
-                        "border-border divide-border divide-y border",
-                        organization.scimEnabled &&
-                          "pointer-events-none opacity-50 select-none",
-                      )}
-                    >
-                      {/* Select-all header */}
-                      {!organization.scimEnabled &&
-                        (() => {
-                          const selectableMembers = getSelectableMembers(
-                            members,
-                            isEditing,
-                            editingRole?.id,
-                          );
-                          const allSelected =
-                            selectableMembers.length > 0 &&
-                            selectableMembers.every((m) =>
-                              selectedMembers.has(m.id),
-                            );
-                          const someSelected =
-                            !allSelected &&
-                            selectableMembers.some((m) =>
-                              selectedMembers.has(m.id),
-                            );
-                          return (
-                            <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
-                              <Checkbox
-                                checked={
-                                  allSelected
-                                    ? true
-                                    : someSelected
-                                      ? "indeterminate"
-                                      : false
-                                }
-                                onCheckedChange={() => toggleAllMembers()}
-                              />
-                              <Text
-                                variant="body"
-                                className="text-muted-foreground text-sm font-medium"
-                              >
-                                Select all
-                              </Text>
-                            </label>
-                          );
-                        })()}
-                      {(organization.scimEnabled
-                        ? members.filter((m) => selectedMembers.has(m.id))
-                        : members
-                      ).map((member) => {
-                        const alreadyHasRole = isMemberLockedToRole(
-                          isEditing,
-                          editingRole?.id,
-                          member.roleIds,
+                  <div className="border-border divide-border divide-y border mt-3">
+                    {/* Select-all header */}
+                    {(() => {
+                      const selectableMembers = getSelectableMembers(
+                        members,
+                        isEditing,
+                        editingRole?.id,
+                      );
+                      const allSelected =
+                        selectableMembers.length > 0 &&
+                        selectableMembers.every((m) =>
+                          selectedMembers.has(m.id),
                         );
-                        // Under directory sync the rows are read-only for
-                        // everyone, not only the mouse: a focusable checkbox
-                        // would let the keyboard edit an assignment the next
-                        // sync overwrites.
-                        const locked =
-                          organization.scimEnabled || alreadyHasRole;
-                        return (
-                          <label
-                            key={member.id}
-                            className={cn(
-                              "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
-                              alreadyHasRole && "cursor-default opacity-50",
-                            )}
+                      const someSelected =
+                        !allSelected &&
+                        selectableMembers.some((m) =>
+                          selectedMembers.has(m.id),
+                        );
+                      return (
+                        <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
+                          <Checkbox
+                            checked={
+                              allSelected
+                                ? true
+                                : someSelected
+                                  ? "indeterminate"
+                                  : false
+                            }
+                            onCheckedChange={() => toggleAllMembers()}
+                          />
+                          <Text
+                            variant="body"
+                            className="text-muted-foreground text-sm font-medium"
                           >
-                            <Checkbox
-                              checked={
-                                alreadyHasRole || selectedMembers.has(member.id)
-                              }
-                              disabled={locked}
-                              onCheckedChange={() => {
-                                void (!locked && toggleMember(member.id));
-                              }}
-                            />
-                            <Avatar className="h-7 w-7">
-                              {member.photoUrl && (
-                                <AvatarImage
-                                  src={member.photoUrl}
-                                  alt={member.name}
-                                />
-                              )}
-                              <AvatarFallback className="text-xs">
-                                {member.name
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")
-                                  .toUpperCase()
-                                  .slice(0, 2)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0 flex-1 space-y-0.5">
-                              <Text
-                                variant="body"
-                                className="text-sm font-medium"
-                              >
-                                {member.name}
-                              </Text>
-                              <Text
-                                variant="body"
-                                className="text-muted-foreground text-xs"
-                              >
-                                {member.email}
-                              </Text>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
+                            Select all
+                          </Text>
+                        </label>
+                      );
+                    })()}
+                    {members.map((member) => {
+                      const alreadyHasRole = isMemberLockedToRole(
+                        isEditing,
+                        editingRole?.id,
+                        member.roleIds,
+                      );
+                      return (
+                        <label
+                          key={member.id}
+                          className={cn(
+                            "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
+                            alreadyHasRole && "cursor-default opacity-50",
+                          )}
+                        >
+                          <Checkbox
+                            checked={
+                              alreadyHasRole || selectedMembers.has(member.id)
+                            }
+                            disabled={alreadyHasRole}
+                            onCheckedChange={() => {
+                              void (!alreadyHasRole && toggleMember(member.id));
+                            }}
+                          />
+                          <Avatar className="h-7 w-7">
+                            {member.photoUrl && (
+                              <AvatarImage
+                                src={member.photoUrl}
+                                alt={member.name}
+                              />
+                            )}
+                            <AvatarFallback className="text-xs">
+                              {member.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                                .slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <Text
+                              variant="body"
+                              className="text-sm font-medium"
+                            >
+                              {member.name}
+                            </Text>
+                            <Text
+                              variant="body"
+                              className="text-muted-foreground text-xs"
+                            >
+                              {member.email}
+                            </Text>
+                          </div>
+                        </label>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1074,8 +829,8 @@ export function CreateRoleDialog({
             {/* ─── Assign Agents ─────────────────────────────────────
                 Not gated on SCIM: a directory syncs people, never agents,
                 so this is the only place an agent's roles are decided. */}
-            {agentManagementEnabled && !hideAssignments && (
-              <div className="border-border border-t pt-4 pb-4">
+            {!hideAssignments && (
+              <div className="border-border border-t pt-4">
                 <button
                   type="button"
                   onClick={() => setShowAgents(!showAgents)}

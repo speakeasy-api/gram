@@ -52,7 +52,7 @@ export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
   };
 }
 
-// Gram's own hosts: getgram.ai, ai.speakeasy.com and their subdomains. Matched
+// Speakeasy's own hosts: getgram.ai, ai.speakeasy.com and their subdomains. Matched
 // on label boundaries so lookalikes such as mygetgram.ai do not qualify.
 export function isGramHost(serverURL: string): boolean {
   const host = new URL(serverURL).hostname;

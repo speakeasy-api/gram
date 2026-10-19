@@ -46,6 +46,7 @@ func TestEveryAdvertisedOutputSchemaAcceptsAPopulatedResult(t *testing.T) {
 		require.NotEmpty(t, tools)
 		checked := 0
 		for _, tool := range tools {
+			requireObjectPropertySchemas(t, tool)
 			output, ok := outputs[tool.Name]
 			require.True(t, ok, "%s is listed but has no descriptor", tool.Name)
 			if output == reflect.TypeFor[any]() {
@@ -188,9 +189,33 @@ func TestInferredOutputSchemaAcceptsFieldsAddedLater(t *testing.T) {
 	}), "labels")
 }
 
-// listAdvertisedTools lists every tool through a real MCP session, following
-// the server's pagination, so the assertion covers what a client actually sees.
-func listAdvertisedTools(t *testing.T, server *mcp.Server) []*mcp.Tool {
+// connectTestClient opens a client session to server over in-memory
+// transports, closed when the test ends.
+// requireObjectPropertySchemas asserts every value directly under the input and
+// output schemas' properties is a JSON object. JSON Schema allows the boolean
+// schemas true and false there, and jsonschema-go encodes an empty Schema as
+// true, but the MCP spec types each property schema as an object, and the MCP
+// TypeScript SDK drops the whole tools/list result when one tool fails.
+func requireObjectPropertySchemas(t *testing.T, tool *mcp.Tool) {
+	t.Helper()
+	for field, schema := range map[string]any{"inputSchema": tool.InputSchema, "outputSchema": tool.OutputSchema} {
+		encoded, err := json.Marshal(schema)
+		require.NoError(t, err)
+		if string(encoded) == "null" {
+			continue
+		}
+		var decoded struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		}
+		require.NoError(t, json.Unmarshal(encoded, &decoded), "%s: %s", tool.Name, field)
+		for property, value := range decoded.Properties {
+			require.Truef(t, strings.HasPrefix(strings.TrimSpace(string(value)), "{"),
+				"%s: %s.properties.%s is %s; MCP clients require an object, so use a typed schema or {}", tool.Name, field, property, value)
+		}
+	}
+}
+
+func connectTestClient(t *testing.T, server *mcp.Server) *mcp.ClientSession {
 	t.Helper()
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
@@ -198,11 +223,19 @@ func listAdvertisedTools(t *testing.T, server *mcp.Server) []*mcp.Tool {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = serverSession.Close() })
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "output-schema-test", Version: "0.0.1"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "platform-mcp-test-client", Version: "0.0.1"}, nil)
 	session, err := client.Connect(t.Context(), clientTransport, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Close() })
+	return session
+}
 
+// listAdvertisedTools lists every tool through a real MCP session, following
+// the server's pagination, so the assertion covers what a client actually sees.
+func listAdvertisedTools(t *testing.T, server *mcp.Server) []*mcp.Tool {
+	t.Helper()
+
+	session := connectTestClient(t, server)
 	var tools []*mcp.Tool
 	params := &mcp.ListToolsParams{}
 	for {

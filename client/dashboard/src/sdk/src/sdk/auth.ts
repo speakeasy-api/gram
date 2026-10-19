@@ -7,6 +7,7 @@ import { authEnterDemo } from "../funcs/authEnterDemo.js";
 import { authInfo } from "../funcs/authInfo.js";
 import { authLogin } from "../funcs/authLogin.js";
 import { authLogout } from "../funcs/authLogout.js";
+import { authLogoutEverywhere } from "../funcs/authLogoutEverywhere.js";
 import { authRegister } from "../funcs/authRegister.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { authTransferIn } from "../funcs/authTransferIn.js";
@@ -38,6 +39,11 @@ import {
   LogoutResponse,
   LogoutSecurity,
 } from "../models/operations/logout.js";
+import {
+  LogoutEverywhereRequest,
+  LogoutEverywhereResponse,
+  LogoutEverywhereSecurity,
+} from "../models/operations/logouteverywhere.js";
 import {
   RegisterRequest,
   RegisterSecurity,
@@ -139,6 +145,25 @@ export class Auth extends ClientSDK {
     options?: RequestOptions,
   ): Promise<LogoutResponse | undefined> {
     return unwrapAsync(authLogout(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * logoutEverywhere auth
+   *
+   * @remarks
+   * Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.
+   */
+  async logoutEverywhere(
+    request?: LogoutEverywhereRequest | undefined,
+    security?: LogoutEverywhereSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<LogoutEverywhereResponse> {
+    return unwrapAsync(authLogoutEverywhere(
       this,
       request,
       security,

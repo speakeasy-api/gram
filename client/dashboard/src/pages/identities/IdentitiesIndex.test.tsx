@@ -7,7 +7,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import IdentitiesIndex from "./IdentitiesIndex";
 
 const mocks = vi.hoisted(() => ({
-  flag: "enabled",
   orgRead: true,
   agents: vi.fn(),
   coverage: vi.fn(),
@@ -29,9 +28,6 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.orgRead }),
-}));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: mocks.flag }),
 }));
 vi.mock("@/components/dev-toolbar-utils", () => ({
   getRBACScopeOverrideHeader: () => null,
@@ -134,7 +130,6 @@ vi.mock("@/components/ui/Table", () => ({
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.flag = "enabled";
   mocks.orgRead = true;
   mocks.session = {
     user: { id: "user_example" },
@@ -188,29 +183,6 @@ function setup(search = "", kind: "person" | "agent" = "agent") {
   const result = render(tree());
   return { ...result, rerenderPage: () => result.rerender(tree()) };
 }
-it.each(["disabled", "loading", "missing", "error"])(
-  "does not fetch registered agents with rollout %s",
-  async (status) => {
-    mocks.flag = status;
-    setup("", "person");
-    await waitFor(() => expect(rowsText()).toContain("unknown_subject"));
-    expect(
-      screen
-        .getByRole("link", { name: "Configure IDP sync" })
-        .getAttribute("href"),
-    ).toBe("/org/identity");
-    expect(mocks.agents).not.toHaveBeenCalled();
-    expect(screen.queryByText("Registered agent")).toBeNull();
-  },
-);
-it("hides cached registered agents after rollout is disabled", async () => {
-  const page = setup();
-  await screen.findByText("Registered agent");
-  mocks.flag = "disabled";
-  page.rerenderPage();
-  expect(screen.queryByText("Registered agent")).toBeNull();
-  expect(screen.queryByText("New agent identity")).toBeNull();
-});
 it("skips organization-only device coverage for a project reader", async () => {
   mocks.orgRead = false;
   setup();

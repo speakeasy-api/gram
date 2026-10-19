@@ -97,7 +97,7 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpme
 	storeSessionClientInfo(ctx, logger, clientInfoStore, payload, params.ClientInfo.Name, params.ClientInfo.Version, params.ProtocolVersion)
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		if err := productMetrics.CaptureEvent(ctx, "mcp_initialized", payload.sessionID, map[string]any{
+		props := map[string]any{
 			"project_id":           payload.projectID.String(),
 			"authenticated":        payload.authenticated,
 			"mcp_domain":           requestContext.Host,
@@ -108,7 +108,9 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpme
 			"client_name":          conv.PtrEmpty(conv.TruncateString(params.ClientInfo.Name, 100)),
 			"client_version":       conv.PtrEmpty(conv.TruncateString(params.ClientInfo.Version, 100)),
 			"capabilities":         conv.Ternary(validParams, capabilities, nil),
-		}); err != nil {
+		}
+		payload.recordServingAnalytics(props)
+		if err := productMetrics.CaptureEvent(ctx, "mcp_initialized", payload.sessionID, props); err != nil {
 			logger.ErrorContext(ctx, "failed to capture mcp_initialized event", attr.SlogError(err))
 		}
 	}

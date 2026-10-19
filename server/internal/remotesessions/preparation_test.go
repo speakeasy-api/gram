@@ -8,12 +8,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -42,6 +45,17 @@ func TestPreparationEligibility(t *testing.T) {
 		})
 	}
 }
+func TestIssuerPreparationEligibilityRequiresDiscovery(t *testing.T) {
+	t.Parallel()
+	issuer := repo.RemoteSessionIssuer{AuthorizationGrantProfilesSupported: []string{oauthwire.GrantProfileIDJAG}, GrantTypesSupported: []string{oauthwire.GrantTypeJWTBearer}}
+	require.Equal(t, PreparationStateIncompleteMetadata, IssuerPreparationEligibility(issuer), "a declared advertisement is not discovery evidence")
+	require.Equal(t, PreparationStateIncompleteMetadata, IssuerPreparationEligibility(repo.RemoteSessionIssuer{}), "an undiscovered issuer needs discovery, not another provider")
+	issuer.MetadataFetchedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	require.Equal(t, preparationEligible, IssuerPreparationEligibility(issuer))
+	issuer.AuthorizationGrantProfilesSupported = nil
+	require.Equal(t, PreparationStateUnsupportedProfile, IssuerPreparationEligibility(issuer))
+}
+
 func TestPreparationCanonicalResourceAndScopes(t *testing.T) {
 	t.Parallel()
 	in := PreparationInput{UserSessionIssuerID: uuid.New(), RemoteSessionIssuerID: uuid.New(), Resource: "https://resource.example.com/mcp/", Scopes: []string{"write", "read", "read"}}
@@ -106,17 +120,30 @@ func TestPreparationDCRValidation(t *testing.T) {
 		})
 	}
 }
+
+const preparationDCRTestOrigin = "https://gram.example.test"
+
+var preparationDCRInteractiveGrants = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}
+
+func newPreparationDCRTestService(t *testing.T, policy *guardian.Policy) *Service {
+	t.Helper()
+	origin, err := url.Parse(preparationDCRTestOrigin)
+	require.NoError(t, err)
+	return &Service{policy: policy, logger: testenv.NewLogger(t), origins: DefaultCallbackOrigins(origin)}
+}
+
 func TestPreparationDCRWireAndUncertainty(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	s := &Service{policy: policy}
+	s := newPreparationDCRTestService(t, policy)
 	for _, tt := range []struct {
 		name                string
 		status              int
 		body, content, want string
 	}{
 		{"confirmed", 201, `{"client_id":"resource-client","client_secret":"test-secret","token_endpoint_auth_method":"client_secret_basic","grant_types":["urn:ietf:params:oauth:grant-type:jwt-bearer"]}`, "application/json", "ready"},
+		{"grants omitted", 201, `{"client_id":"resource-client","client_secret":"test-secret","client_secret_expires_at":0,"redirect_uris":["` + preparationDCRTestOrigin + `/mcp/remote_login_callback"]}`, "application/json", "unknown_grants"},
 		{"malformed grants", 201, `{"grant_types":"bad"}`, "application/json", "indeterminate"},
 		{"HTML", 201, `<html>ok</html>`, "text/html", "indeterminate"},
 		{"rejected", 400, `{"error":"invalid_client_metadata"}`, "application/json", "provider_rejection"},
@@ -128,15 +155,17 @@ func TestPreparationDCRWireAndUncertainty(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var request map[string]json.RawMessage
 				assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
-				assert.JSONEq(t, `["urn:ietf:params:oauth:grant-type:jwt-bearer"]`, string(request["grant_types"]))
+				assert.JSONEq(t, `["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:jwt-bearer"]`, string(request["grant_types"]))
+				assert.JSONEq(t, `["`+preparationDCRTestOrigin+`/mcp/remote_login_callback"]`, string(request["redirect_uris"]))
+				assert.JSONEq(t, `["code"]`, string(request["response_types"]))
 				assert.NotContains(t, request, "client_secret")
-				assert.NotContains(t, request, "redirect_uris")
+				assert.Equal(t, constants.UserAgent, r.Header.Get("User-Agent"))
 				w.Header().Set("Content-Type", tt.content)
 				w.WriteHeader(tt.status)
 				_, _ = w.Write([]byte(tt.body))
 			}))
 			t.Cleanup(server.Close)
-			_, state := s.submitPreparationDCR(t.Context(), PreparationInput{Scopes: []string{"read"}}, server.URL, "client_secret_basic")
+			_, state := s.submitPreparationDCR(t.Context(), PreparationInput{Scopes: []string{"read"}}, server.URL, "client_secret_basic", preparationDCRInteractiveGrants)
 			require.Equal(t, tt.want, state)
 		})
 	}
@@ -147,7 +176,7 @@ func TestPreparationDCRWireAndUncertainty(t *testing.T) {
 		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
 	}))
 	t.Cleanup(source.Close)
-	_, state := s.submitPreparationDCR(t.Context(), PreparationInput{}, source.URL, "client_secret_basic")
+	_, state := s.submitPreparationDCR(t.Context(), PreparationInput{}, source.URL, "client_secret_basic", preparationDCRInteractiveGrants)
 	require.Equal(t, "indeterminate", state)
 	require.Zero(t, redirected.Load())
 }
@@ -208,7 +237,7 @@ func TestPreparationLookupError(t *testing.T) {
 func TestPreparationDCRRejectsPlaintextBeforeSubmission(t *testing.T) {
 	t.Parallel()
 	// A nil policy would return indeterminate if transport validation were skipped.
-	_, state := (&Service{}).submitPreparationDCR(t.Context(), PreparationInput{}, "http://registration.example/register", "client_secret_basic")
+	_, state := (&Service{}).submitPreparationDCR(t.Context(), PreparationInput{}, "http://registration.example/register", "client_secret_basic", preparationDCRInteractiveGrants)
 	require.Equal(t, "manual_setup_required", state)
 }
 
@@ -222,7 +251,7 @@ func TestPreparationPublicClientOmittedAuthMethods(t *testing.T) {
 	}{
 		{"omitted", nil, false},
 		{"empty", []string{}, false},
-		{"explicit public support", []string{"none"}, true},
+		{"explicit public support", []string{"none"}, false},
 		{"confidential only", []string{"client_secret_basic"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -237,10 +266,74 @@ func TestPreparationDCRRejectsUnsupportedConfidentialMethods(t *testing.T) {
 	for _, method := range []string{"", "none", "private_key_jwt", "unknown"} {
 		t.Run(method, func(t *testing.T) {
 			t.Parallel()
-			_, state := (&Service{}).submitPreparationDCR(t.Context(), PreparationInput{}, "https://issuer.example/register", method)
+			_, state := (&Service{}).submitPreparationDCR(t.Context(), PreparationInput{}, "https://issuer.example/register", method, preparationDCRInteractiveGrants)
 			require.Equal(t, "manual_setup_required", state, "invalid authentication must fail before any HTTP submission")
 			response := preparationDCRResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: method, GrantTypes: []string{oauthwire.GrantTypeJWTBearer}}
 			require.Equal(t, "indeterminate", validatePreparationDCR(response, nil, method))
+		})
+	}
+}
+
+func TestPreparationDCRWithoutCallbackOriginSubmitsNothing(t *testing.T) {
+	t.Parallel()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	var submitted atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { submitted.Add(1) }))
+	t.Cleanup(server.Close)
+	_, state := (&Service{policy: policy}).submitPreparationDCR(t.Context(), PreparationInput{}, server.URL, "client_secret_basic", preparationDCRInteractiveGrants)
+	require.Equal(t, "indeterminate", state)
+	require.Zero(t, submitted.Load())
+}
+
+func TestPreparationDCRRejectionKeepsOnlyErrorMembers(t *testing.T) {
+	t.Parallel()
+	body := `{"error":"invalid_client_metadata","error_description":"redirect_uris: Invalid input:\n\u001b[31mexpected array\u0007","client_secret":"leaked-secret"}`
+	code, description := preparationDCRRejection(strings.NewReader(body))
+	require.Equal(t, "invalid_client_metadata", code)
+	require.Equal(t, "redirect_uris: Invalid input: [31mexpected array", description)
+	require.NotContains(t, description, "leaked-secret")
+
+	code, description = preparationDCRRejection(strings.NewReader(`{"error":"bad\ncode","error_description":"` + strings.Repeat("a", 400) + `"}`))
+	require.Empty(t, code, "codes outside NQSCHAR are dropped")
+	require.Len(t, []rune(description), maxProviderErrorDescriptionRunes+1)
+
+	code, description = preparationDCRRejection(strings.NewReader(`<html>nope</html>`))
+	require.Empty(t, code)
+	require.Empty(t, description)
+}
+
+func TestPreparationDCRRequestsOnlyAdvertisedGrants(t *testing.T) {
+	t.Parallel()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	callback := `["` + preparationDCRTestOrigin + `/mcp/remote_login_callback"]`
+	for _, tc := range []struct {
+		name                    string
+		grants, responseTypes   []string
+		wantGrants              string
+		wantRedirect, wantTypes string
+	}{
+		{"jwt bearer only", []string{oauthwire.GrantTypeJWTBearer}, []string{"code"}, `["urn:ietf:params:oauth:grant-type:jwt-bearer"]`, "", ""},
+		{"no refresh token", []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeJWTBearer}, nil, `["authorization_code","urn:ietf:params:oauth:grant-type:jwt-bearer"]`, callback, `["code"]`},
+		{"code response unsupported", preparationDCRInteractiveGrants, []string{"token"}, `["urn:ietf:params:oauth:grant-type:jwt-bearer"]`, "", ""},
+		{"interactive", preparationDCRInteractiveGrants, []string{"code"}, `["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:jwt-bearer"]`, callback, `["code"]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request map[string]json.RawMessage
+				assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+				assert.JSONEq(t, tc.wantGrants, string(request["grant_types"]))
+				assert.Equal(t, tc.wantRedirect, string(request["redirect_uris"]))
+				assert.Equal(t, tc.wantTypes, string(request["response_types"]))
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"client_id":"resource-client","client_secret":"test-secret","grant_types":["urn:ietf:params:oauth:grant-type:jwt-bearer"]}`))
+			}))
+			t.Cleanup(server.Close)
+			_, state := newPreparationDCRTestService(t, policy).submitPreparationDCRWithTunnel(t.Context(), PreparationInput{}, server.URL, "client_secret_basic", tc.grants, tc.responseTypes, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+			require.Equal(t, "ready", state)
 		})
 	}
 }

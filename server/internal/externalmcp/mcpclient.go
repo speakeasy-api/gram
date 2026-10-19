@@ -152,9 +152,9 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 
 	var httpClient *guardian.HTTPClient
 	if opts.DisableRetries {
-		httpClient = guardianPolicy.PooledClient()
+		httpClient = guardianPolicy.PooledClient(guardian.WithInternalCatalog())
 	} else {
-		httpClient = guardianPolicy.PooledClient(guardian.WithRetryConfig(discoverAwareRetryConfig(logger, remoteURL)))
+		httpClient = guardianPolicy.PooledClient(guardian.WithInternalCatalog(), guardian.WithRetryConfig(discoverAwareRetryConfig(logger, remoteURL)))
 	}
 	trasnport := httpClient.Transport
 	authRT := &authRoundTripper{

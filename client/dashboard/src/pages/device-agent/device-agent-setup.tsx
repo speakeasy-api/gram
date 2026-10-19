@@ -1032,7 +1032,7 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 // install from the signed .msi, which lays down the daemon, CLI, and UI under
 // C:\Program Files\Speakeasy\ and registers the machine-wide LocalSystem
 // service itself — no separate service-registration step. The primary snippet
-// uses this Gram server's stable /v1/install URL, which 302-redirects to the
+// uses this Speakeasy server's stable /v1/install URL, which 302-redirects to the
 // current version's signed msi, so the copy never goes stale. Like the macOS
 // pkg, the msi is deliberately not listed in releases.json (it's the
 // manual/MDM on-ramp), so the direct-download URL is built from the resolved

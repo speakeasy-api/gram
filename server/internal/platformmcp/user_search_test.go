@@ -278,7 +278,7 @@ func TestSearchUsers_MasksIdentitiesAndMintsProjectReferences(t *testing.T) {
 	require.Equal(t, "pat", params.IdentityContains)
 	require.Equal(t, defaultUserSearchLimit+1, params.Limit)
 	require.Equal(t, "organization-1", params.CanonicalIdentityOrg)
-	require.NotEmpty(t, params.ExcludedHookSources, "an organization's own people never count Gram-hosted inference as their usage")
+	require.NotEmpty(t, params.ExcludedHookSources, "an organization's own people never count Speakeasy-hosted inference as their usage")
 	require.Empty(t, params.UserIDs)
 	require.Equal(t, telemetryrepo.MetricsDetailFull, params.MetricsDetail)
 

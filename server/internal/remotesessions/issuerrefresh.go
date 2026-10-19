@@ -20,14 +20,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
-// untrustedDocumentError marks a discovery document that parsed but that Gram
+// untrustedDocumentError marks a discovery document that parsed but that Speakeasy
 // refuses to persist over an issuer's stored metadata. It is distinct from
 // *discoveryError, which means the document could not be fetched or read at
 // all: here the upstream answered, and what it said is the problem.
 //
 // Both map to a 4xx. The upstream is the customer's own identity provider, so
-// a document Gram will not act on is a fact about their configuration to
-// surface, not a Gram fault to page on.
+// a document Speakeasy will not act on is a fact about their configuration to
+// surface, not a Speakeasy fault to page on.
 type untrustedDocumentError struct {
 	reason string
 }
@@ -74,7 +74,7 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
 
-		// Gram behavior flags and operator knobs, not discovered metadata. A
+		// Speakeasy behavior flags and operator knobs, not discovered metadata. A
 		// draft never proposes them; the operator opts in on the create form.
 		Oidc:                       false,
 		Passthrough:                false,
@@ -87,16 +87,16 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 // mapDiscoveryError turns the errors discovery raises into the response a fetch
 // or refresh handler returns for them.
 //
-// A document that was read fine and is merely not one Gram will persist is
+// A document that was read fine and is merely not one Speakeasy will persist is
 // always a 422: nothing about retrying changes the answer, and the upstream is
 // the caller's own identity provider.
 //
 // Whether an unreachable or unparseable upstream is the caller's fault depends
 // on which method asked, so callers pass the code. On fetchMetadata the caller
 // supplied the URL, and a host that does not resolve is a typo: 400, and
-// customer IdP misconfiguration stays out of Gram's error budget. On
-// refreshMetadata the caller supplied only an issuer id and Gram chose the URL
-// from the stored row, so the same failure means an upstream Gram depends on is
+// customer IdP misconfiguration stays out of Speakeasy's error budget. On
+// refreshMetadata the caller supplied only an issuer id and Speakeasy chose the URL
+// from the stored row, so the same failure means an upstream Speakeasy depends on is
 // down or slow. That is a 502 — it is not caller error, and SDK retry policies
 // treat 4xx as terminal, which would make a thirty-second outage look permanent.
 func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unreachable oops.Code) error {
@@ -111,7 +111,7 @@ func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unre
 		return oops.E(unreachable, err, "%s", msg).LogError(ctx, logger)
 	default:
 		// Unreachable today: discoverIssuerMetadata only ever returns the two
-		// types above. An unexpected error is Gram's to explain rather than
+		// types above. An unexpected error is Speakeasy's to explain rather than
 		// the caller's to correct.
 		return oops.E(oops.CodeUnexpected, err, "%s", msg).LogError(ctx, logger)
 	}
@@ -152,7 +152,7 @@ func discoveryFailureMessage(err error) (msg string, transient bool) {
 // transaction would hold a pooled connection open for the duration.
 //
 // Only RFC 8414-derived columns are represented in the returned parameters.
-// Gram's own behavior and display fields cannot be expressed through them —
+// Speakeasy's own behavior and display fields cannot be expressed through them —
 // see UpdateRemoteSessionIssuerDiscoveredMetadata, which has no parameter for
 // slug, issuer, name, logo, client setup documentation, oidc, or passthrough.
 func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolver *jwks.Resolver, tunnels *tunnelrouting.HTTPClient, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
@@ -183,7 +183,7 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolve
 	}
 	doc := discovered.doc
 
-	if err := vetRefreshedDocument(doc, issuer); err != nil {
+	if err := vetDiscoveredDocument(doc, issuer.Issuer); err != nil {
 		return zero, nil, err
 	}
 
@@ -267,8 +267,8 @@ func (e *keySetRefreshError) Error() string {
 }
 func (e *keySetRefreshError) Unwrap() error { return e.cause }
 
-// vetRefreshedDocument is the distrust gate a fetched document must pass
-// before it may overwrite an issuer's stored metadata. Gram distrusts the
+// vetDiscoveredDocument is the distrust gate a fetched document must pass
+// before it may overwrite an issuer's stored metadata. Speakeasy distrusts the
 // whole document rather than salvaging parts of it: a refresh overwrites
 // metadata that currently works, so a document that deviates on anything
 // load-bearing is more likely to be a captive portal, an error page rendered
@@ -288,23 +288,23 @@ func (e *keySetRefreshError) Unwrap() error { return e.cause }
 // better one, which on create leaves the operator to fill the endpoints in by
 // hand. Persisting it over an issuer that currently has working endpoints
 // would break every session it mints.
-func vetRefreshedDocument(doc rfc8414Document, issuer repo.RemoteSessionIssuer) error {
+func vetDiscoveredDocument(doc rfc8414Document, issuerURL string) error {
 	switch {
 	case doc.Issuer == "":
 		return &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuer.Issuer),
+			reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuerURL),
 		}
-	case doc.Issuer != issuer.Issuer:
+	case doc.Issuer != issuerURL:
 		return &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuer.Issuer),
+			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuerURL),
 		}
 	case doc.AuthorizationEndpoint == "":
 		return &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no authorization_endpoint", issuer.Issuer),
+			reason: fmt.Sprintf("metadata document at %s advertises no authorization_endpoint", issuerURL),
 		}
 	case doc.TokenEndpoint == "":
 		return &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no token_endpoint", issuer.Issuer),
+			reason: fmt.Sprintf("metadata document at %s advertises no token_endpoint", issuerURL),
 		}
 	default:
 		return nil
@@ -323,7 +323,7 @@ func discoveredMetadataParams(doc rfc8414Document, unreadable string, unreadable
 		// history rather than on what the issuer advertises right now.
 		AuthorizationEndpoint: doc.AuthorizationEndpoint,
 		TokenEndpoint:         doc.TokenEndpoint,
-		// Deliberately absent from vetRefreshedDocument: an issuer that
+		// Deliberately absent from vetDiscoveredDocument: an issuer that
 		// advertises no revocation endpoint is the common case, not a signal
 		// that the document is untrustworthy. It clears to NULL like any other
 		// endpoint the issuer has stopped advertising, and revoking a session
@@ -371,7 +371,7 @@ func discoveredMetadataParams(doc rfc8414Document, unreadable string, unreadable
 		MetadataLastErrorUrl: unreadable,
 
 		// The identity the update re-asserts, so a concurrent move or issuer
-		// rename aborts the write instead of applying it to a row Gram no
+		// rename aborts the write instead of applying it to a row Speakeasy no
 		// longer holds the same authorization over.
 		ID:             issuer.ID,
 		Issuer:         issuer.Issuer,

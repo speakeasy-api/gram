@@ -10,10 +10,10 @@ logs. Use only synthetic values and placeholders such as `<ORG_ID>`.
 
 ## What the clocks control
 
-Stripe test clocks advance Stripe objects only. They do not advance Gram's
+Stripe test clocks advance Stripe objects only. They do not advance Speakeasy's
 Postgres clock, Temporal clock, worker schedules, or activity `Now` inputs.
 The sandbox portion below validates real Stripe subscription and invoice state.
-The deterministic Gram tests use explicit timestamps to validate billing-period
+The deterministic Speakeasy tests use explicit timestamps to validate billing-period
 and invoice-allocation transitions without waiting for wall-clock time.
 
 Stripe advances a clock asynchronously. After every advance, poll until its
@@ -115,7 +115,7 @@ References:
    ```
 
    **Listener readiness is not verified webhook delivery.** A connected CLI
-   and matching signing secret do not prove that Gram accepted and processed
+   and matching signing secret do not prove that Speakeasy accepted and processed
    an event. After the local mocked checks pass, separately validate a real
    sandbox checkout and its resulting webhook, checking the expected local
    billing transition and successful HTTP delivery. Do not interpret mere
@@ -132,6 +132,50 @@ advance clocks, or change trial state. Real sandbox setup, wake/pause/restart,
 credential rotation/expiry, checkout and webhook processing remain manual
 validation steps; run them only when authorized.
 
+## Manual partner conversion and daily inference settlement
+
+Only a manually applied promotion satisfying the enabled signup-offer and
+gateway-scope checks can terminate an ordinary Checkout trial early. No code,
+unmapped codes, disabled offers, and unrelated discounts retain existing trial
+behavior. Use only isolated synthetic customers and test-mode credentials when
+validating this route; do not consume finite-use shared promotion codes.
+
+Stripe sandbox validation established these API contracts for
+`2026-03-25.dahlia`:
+
+- `trial_end=now` with `proration_behavior=none` activates the subscription and
+  resets the anchor to the current instant; identical idempotency-key replay is
+  safe.
+- Adding `billing_cycle_anchor=unchanged` is rejected when ending a trial.
+- `billing_cycle_anchor_config` is not accepted by subscription update.
+- The non-midnight time persists across renewals; it is not just a first stub.
+
+For this route only, verify the redeemed partner subscription's original monthly
+anchor against each invoice, including February/leap-year day clamping. Preserve
+all Stripe invoice timestamps and existing identity checks. Never round persisted
+invoice periods or relax the nonpartner midnight requirement.
+
+Inference allocation uses completed UTC days with an initial waiver: exclude the
+UTC day containing conversion, then assign each later boundary day to the next
+invoice. For a conversion on December 31 at 13:17 UTC, the first invoice allocates
+January 1–30 and the next allocates January 31–February 28 in a leap year. Native
+Stripe meter periods remain December 31 13:17–January 31 13:17 and January 31
+13:17–February 29 13:17 respectively. The day waiver concerns daily inference,
+not timestamped native-meter events.
+
+Check recovery/readiness/freeze selection as well as final charges; retries must
+not duplicate days, and cancellation must retain the original anchor for pending
+settlement. An externally changed anchor or unsupported interval must fail closed,
+not silently move historical costs to a new period.
+
+Focused deterministic production-seam regressions:
+
+```sh
+mise run test:server ./internal/usage -run 'TestManualPartner|TestPartnerInvoice' -count=1
+mise run test:server ./internal/background/activities -run TestPartnerDailyAllocations -count=1
+mise run test:server ./internal/thirdparty/stripe -run 'TestPartnerCheckoutWire|TestEndPartnerCheckoutTrial' -count=1
+```
+
 ## Create a clocked Stripe customer
 
 Choose a UTC timestamp before the next midnight and export it as Unix seconds.
@@ -145,7 +189,7 @@ M3_CLOCK_ID="$({
   curl --fail --silent --show-error https://api.stripe.com/v1/test_helpers/test_clocks \
     -u "$STRIPE_API_KEY:" \
     -d frozen_time="$M3_CLOCK_START" \
-    -d name='Gram M3 validation'
+    -d name='Speakeasy M3 validation'
 } | jq -r .id)"
 export M3_CLOCK_ID
 
@@ -237,7 +281,7 @@ curl --fail --silent --show-error \
 wait_for_m3_clock
 ```
 
-## Validate Gram's explicit-time billing transitions
+## Validate Speakeasy's explicit-time billing transitions
 
 Run the deterministic acceptance suites. They seed synthetic Postgres state,
 invoke the real activities and webhook handler with explicit timestamps, and
@@ -302,7 +346,7 @@ meters; TUM has no separate streaming toggle.
 Cancel the current sandbox subscription. Wait for
 `customer.subscription.deleted`, then verify:
 
-- Gram is `free` and not admitted;
+- Speakeasy is `free` and not admitted;
 - the stored subscription ID and exact Stripe anchor are cleared, while the
   Stripe customer remains;
 - the Other inference key is disabled locally and upstream;
@@ -319,10 +363,10 @@ cause current-state reconciliation to re-enable the same Other inference key
 with a $100 monthly cap and restore the Security inference key to its most
 recent chosen cap, or $100 when no chosen cap exists.
 
-The voluntary cancellation proves Gram's terminal event behavior. Separately,
+The voluntary cancellation proves Speakeasy's terminal event behavior. Separately,
 confirm the sandbox Dashboard still has the required Smart Retries end action:
 8 attempts within 2 weeks, then cancel. Stripe owns the retry schedule and
-customer retry emails; Gram reacts only to the terminal deletion.
+customer retry emails; Speakeasy reacts only to the terminal deletion.
 
 ## Cleanup and mandatory repetition
 
@@ -334,10 +378,10 @@ curl --fail --silent --show-error -X DELETE \
   -u "$STRIPE_API_KEY:"
 ```
 
-Delete the synthetic Gram organization through the normal local administration
+Delete the synthetic Speakeasy organization through the normal local administration
 path. Do not reuse its billing rows for the second run.
 
-Repeat the complete runbook with a new clock, customer, and synthetic Gram
+Repeat the complete runbook with a new clock, customer, and synthetic Speakeasy
 organization. The second run must require no manual database repair and must
 produce the same invariants. File a discrepancy before expanding beyond the
 internal sandbox cohort.

@@ -18,7 +18,7 @@ import (
 // is the issuer identifier, and it serves real discovery and a key set. Launch
 // it with LaunchOpts.TLS, since jwks.NewRemoteSource requires an https jwks_uri.
 //
-// dev-idp's own id_tokens do not describe a workload addressed to Gram, so
+// dev-idp's own id_tokens do not describe a workload addressed to Speakeasy, so
 // assertions are signed here with the key the dev-idp publishes.
 
 // DiscoverWorkloadJWKSURI returns the jwks_uri the dev-idp's OpenID discovery

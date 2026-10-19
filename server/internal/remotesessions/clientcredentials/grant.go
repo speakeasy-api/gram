@@ -35,8 +35,8 @@ const (
 // grant runs the client credentials grant for client, sending resource unless
 // it is empty, and stores the result under keys. A credential that cannot be
 // stored is still returned.
-func (m *Minter) grant(ctx context.Context, logger *slog.Logger, client repo.GetClientCredentialsGrantClientRow, resource string, keys cacheKeys) (Credential, error) {
-	var none Credential
+func (m *Minter) grant(ctx context.Context, logger *slog.Logger, client repo.GetClientCredentialsGrantClientRow, resource string, keys cacheKeys) (remotesessions.ClientCredential, error) {
+	var none remotesessions.ClientCredential
 
 	endpoint, err := m.endpoints.BindTokenEndpoint(remotesessions.TokenEndpointRegistration{
 		ClientID:                        client.ClientID,
@@ -100,13 +100,21 @@ func (m *Minter) grant(ctx context.Context, logger *slog.Logger, client repo.Get
 		tok, err = endpoint.Post(postCtx, form)
 	}
 
+	if rejected, ok := errors.AsType[*remotesessions.TokenEndpointError](err); ok && rejected.Code == oautherr.CodeInvalidClient {
+		m.markUpstreamRejected(ctx, logger, client)
+	}
+
 	if err != nil {
 		return none, fmt.Errorf("client credentials grant: %w", err)
 	}
 
+	if client.UpstreamRejectedAt.Valid {
+		m.clearUpstreamRejected(ctx, logger, client)
+	}
+
 	// RFC 6749 §7.1: a client must not use a token whose type it does not
 	// understand. A missing token_type is presented as a bearer token.
-	if tokenType := tok.TokenType(); tokenType != "" && !strings.EqualFold(tokenType, string(SchemeBearer)) {
+	if tokenType := tok.TokenType(); tokenType != "" && !strings.EqualFold(tokenType, string(remotesessions.ClientCredentialSchemeBearer)) {
 		return none, configurationError("token endpoint issued a token type other than Bearer")
 	}
 
@@ -126,18 +134,12 @@ func (m *Minter) grant(ctx context.Context, logger *slog.Logger, client repo.Get
 	entry := credentialEntry{
 		Key:                  keys.credential,
 		AccessTokenEncrypted: encrypted,
-		Scheme:               SchemeBearer,
+		Scheme:               remotesessions.ClientCredentialSchemeBearer,
 		ExpiresAt:            expiresAt,
 		MintedAt:             now,
 		ttl:                  expiresAt.Sub(receivedAt),
 	}
-	cred := Credential{
-		value:     tok.AccessToken(),
-		scheme:    SchemeBearer,
-		expiresAt: expiresAt,
-		mintedAt:  now,
-		entry:     &entry,
-	}
+	stored := &entry
 
 	storeCtx, storeCancel := context.WithTimeout(context.WithoutCancel(ctx), detachedWriteTimeout)
 	defer storeCancel()
@@ -145,10 +147,41 @@ func (m *Minter) grant(ctx context.Context, logger *slog.Logger, client repo.Get
 	if err := m.credentials.Store(storeCtx, entry); err != nil {
 		logger.WarnContext(ctx, "store client credential", attr.SlogCacheKey(keys.credential), attr.SlogError(err))
 
-		cred.entry = nil
+		stored = nil
 	}
 
-	return cred, nil
+	return m.credential(tok.AccessToken(), remotesessions.ClientCredentialSchemeBearer, expiresAt, now, stored), nil
+}
+
+// markUpstreamRejected records that the token endpoint answered
+// invalid_client, so administrators see that the client's credentials no
+// longer authenticate. The client_id the rejection was observed for keys the
+// write, so a grant that raced a credential change cannot mark the
+// replacement. Best effort: the grant has already failed either way.
+func (m *Minter) markUpstreamRejected(ctx context.Context, logger *slog.Logger, client repo.GetClientCredentialsGrantClientRow) {
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedWriteTimeout)
+	defer cancel()
+
+	if _, err := repo.New(m.db).MarkRemoteSessionClientUpstreamRejected(writeCtx, repo.MarkRemoteSessionClientUpstreamRejectedParams{
+		ID:       client.ClientID,
+		ClientID: client.ExternalClientID,
+	}); err != nil {
+		logger.WarnContext(ctx, "mark client credentials client as rejected by its issuer", attr.SlogError(err))
+	}
+}
+
+// clearUpstreamRejected drops an earlier rejection marker once the token
+// endpoint authenticates the client again. Best effort: the grant stands.
+func (m *Minter) clearUpstreamRejected(ctx context.Context, logger *slog.Logger, client repo.GetClientCredentialsGrantClientRow) {
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedWriteTimeout)
+	defer cancel()
+
+	if _, err := repo.New(m.db).ClearRemoteSessionClientUpstreamRejected(writeCtx, repo.ClearRemoteSessionClientUpstreamRejectedParams{
+		ID:       client.ClientID,
+		ClientID: client.ExternalClientID,
+	}); err != nil {
+		logger.WarnContext(ctx, "clear client credentials client rejection marker", attr.SlogError(err))
+	}
 }
 
 // sentResource is the resource the grant sends for requested. Only an issuer

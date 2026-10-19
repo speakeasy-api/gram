@@ -41,6 +41,11 @@ const (
 // servers are served.
 const testServerURL = "https://gram.example.com"
 
+// testAuthenticationHostURL is the deployment's authentication host, where
+// shared authorization servers of issuers pinned to or opted in to it are
+// served.
+const testAuthenticationHostURL = "https://id.example.com"
+
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
@@ -87,7 +92,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil})
+	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil})
 
 	return ctx, &testInstance{
 		service:   service,

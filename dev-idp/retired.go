@@ -35,7 +35,7 @@ var retiredPrefixes = []retiredPrefix{
 	{old: "/mock-workos", current: devidpworkos.Prefix, envVar: "WORKOS_API_URL"},
 }
 
-// retiredEnvKeys are settings dev-idp or the Gram server used to read and no
+// retiredEnvKeys are settings dev-idp or the Speakeasy server used to read and no
 // longer do. Left in mise.local.toml they change nothing, but they make the
 // configuration look like it still has a knob it lost.
 var retiredEnvKeys = []struct{ key, replacedBy string }{
@@ -55,7 +55,7 @@ const staleConfigFix = "mise gws && mise run start"
 // reportStaleConfig inspects the environment dev-idp was started with for
 // values that predate a rename and logs each at error level with the fix, so
 // a stale checkout hears about it at `mise run start` rather than at the first
-// request that 410s. dev-idp and the Gram server start from the same mise
+// request that 410s. dev-idp and the Speakeasy server start from the same mise
 // environment, so what dev-idp sees here is what the server will call.
 // Startup continues either way: the retired prefix handlers still explain
 // each request, and a warning that blocks boot is easy to miss in a supervisor

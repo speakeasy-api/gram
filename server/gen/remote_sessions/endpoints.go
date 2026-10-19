@@ -20,6 +20,7 @@ type Endpoints struct {
 	AttachBinding                     goa.Endpoint
 	DetachBinding                     goa.Endpoint
 	CommitServerIdentityConfiguration goa.Endpoint
+	GetServerIdentityImpact           goa.Endpoint
 	ListRemoteSessions                goa.Endpoint
 	CountRemoteSessions               goa.Endpoint
 	RevokeRemoteSession               goa.Endpoint
@@ -35,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 		AttachBinding:                     NewAttachBindingEndpoint(s, a.APIKeyAuth),
 		DetachBinding:                     NewDetachBindingEndpoint(s, a.APIKeyAuth),
 		CommitServerIdentityConfiguration: NewCommitServerIdentityConfigurationEndpoint(s, a.APIKeyAuth),
+		GetServerIdentityImpact:           NewGetServerIdentityImpactEndpoint(s, a.APIKeyAuth),
 		ListRemoteSessions:                NewListRemoteSessionsEndpoint(s, a.APIKeyAuth),
 		CountRemoteSessions:               NewCountRemoteSessionsEndpoint(s, a.APIKeyAuth),
 		RevokeRemoteSession:               NewRevokeRemoteSessionEndpoint(s, a.APIKeyAuth),
@@ -48,6 +50,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AttachBinding = m(e.AttachBinding)
 	e.DetachBinding = m(e.DetachBinding)
 	e.CommitServerIdentityConfiguration = m(e.CommitServerIdentityConfiguration)
+	e.GetServerIdentityImpact = m(e.GetServerIdentityImpact)
 	e.ListRemoteSessions = m(e.ListRemoteSessions)
 	e.CountRemoteSessions = m(e.CountRemoteSessions)
 	e.RevokeRemoteSession = m(e.RevokeRemoteSession)
@@ -215,6 +218,65 @@ func NewCommitServerIdentityConfigurationEndpoint(s Service, authAPIKeyFn securi
 			return nil, err
 		}
 		return s.CommitServerIdentityConfiguration(ctx, p)
+	}
+}
+
+// NewGetServerIdentityImpactEndpoint returns an endpoint function that calls
+// the method "getServerIdentityImpact" of service "remoteSessions".
+func NewGetServerIdentityImpactEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetServerIdentityImpactPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetServerIdentityImpact(ctx, p)
 	}
 }
 

@@ -59,7 +59,7 @@ export type ServeOpenAPIv3QueryError =
  * serveOpenAPIv3 assets
  *
  * @remarks
- * Serve an OpenAPIv3 asset from Gram.
+ * Serve an OpenAPIv3 asset from Speakeasy.
  */
 export function useServeOpenAPIv3(
   request: ServeOpenAPIv3Request,
@@ -82,7 +82,7 @@ export function useServeOpenAPIv3(
  * serveOpenAPIv3 assets
  *
  * @remarks
- * Serve an OpenAPIv3 asset from Gram.
+ * Serve an OpenAPIv3 asset from Speakeasy.
  */
 export function useServeOpenAPIv3Suspense(
   request: ServeOpenAPIv3Request,

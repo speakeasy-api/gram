@@ -16,6 +16,10 @@ import {
   AiScanTargetSignatures,
   AiScanTargetSignatures$inboundSchema,
 } from "./aiscantargetsignatures.js";
+import {
+  AIToolAccessSummary,
+  AIToolAccessSummary$inboundSchema,
+} from "./aitoolaccesssummary.js";
 
 /**
  * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
@@ -47,6 +51,10 @@ export type Origin = ClosedEnum<typeof Origin>;
  */
 export type AiScanTarget = {
   /**
+   * The enforcement verdict for one AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
+   */
+  access?: AIToolAccessSummary | undefined;
+  /**
    * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
    */
   category: AiScanTargetCategory;
@@ -63,7 +71,7 @@ export type AiScanTarget = {
    */
   displayName: string;
   /**
-   * How a target detected on a device is recognized again when the same tool calls Gram's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
+   * How a target detected on a device is recognized again when the same tool calls Speakeasy's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Speakeasy verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
    */
   gatewayClient: AiScanTargetGatewayClient;
   /**
@@ -102,6 +110,7 @@ export const Origin$inboundSchema: z.ZodMiniEnum<typeof Origin> = z.enum(
 export const AiScanTarget$inboundSchema: z.ZodMiniType<AiScanTarget, unknown> =
   z.pipe(
     z.object({
+      access: z.optional(AIToolAccessSummary$inboundSchema),
       category: AiScanTargetCategory$inboundSchema,
       created_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),

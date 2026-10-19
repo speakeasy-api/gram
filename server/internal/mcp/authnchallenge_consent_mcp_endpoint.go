@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -107,12 +108,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return err
 	}
 
-	// The transport exists only while the organization's admin opt-in is
-	// enabled; an unavailable checker reads as off. 404 matches how the
-	// island's absence hides the surface entirely.
-	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
-		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
-	}
+	// 404 matches how the island's absence hides the surface entirely.
 	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
@@ -121,7 +117,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
 	// Mixed credentials are a confusion smell: the consent transport never
-	// authenticates with Gram bearer tokens.
+	// authenticates with Speakeasy bearer tokens.
 	if r.Header.Get("Authorization") != "" {
 		return oops.E(oops.CodeBadRequest, nil, "consent requests must not carry an Authorization header").LogWarn(ctx, logger)
 	}
@@ -202,7 +198,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 }
 
 // serveConsentToolsetMCP answers the consent method surface locally for
-// toolset-backed endpoints: Gram is the MCP server, so there is no upstream
+// toolset-backed endpoints: Speakeasy is the MCP server, so there is no upstream
 // handshake and the whole inventory is one page, snapshotted before the
 // response is written.
 func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, draft consentToolInventory) error {
@@ -345,15 +341,24 @@ func (s *Service) serveConsentProxiedMCP(
 		if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 			return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
 		}
+		if errors.Is(err, remotesessions.ErrClientCredentialMisconfigured) {
+			return clientCredentialMisconfiguredError(err).LogWarn(ctx, logger)
+		}
 		if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
 			return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
 		}
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
-			return oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
+			conflict := oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools")
+			if s.consentTransportDeferred(ctx, logger, endpoint, challengeState) {
+				// Expected before approval: chaining mints the token afterwards.
+				logger.InfoContext(ctx, "consent tool inventory waits for identity chaining", attr.SlogConsentInventoryDeferred(true))
+				return conflict
+			}
+			return conflict.LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
-	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, tunneledBackendIssuer(serverRow))
+	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, serverRow.RemoteSessionIssuerID)
 	var routeErr *upstreamRoutingError
 	switch {
 	case errors.As(err, &routeErr):
@@ -402,7 +407,7 @@ func (s *Service) serveConsentProxiedMCP(
 		if herr != nil {
 			return oops.E(oops.CodeUnexpected, herr, "load remote mcp server headers for consent transport").LogError(ctx, logger)
 		}
-		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken, "", nil)
+		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil)
 	} else {
 		// One state-derived affinity key pins the whole consent session
 		// (initialize, list pages, DELETE) to a single gateway.
@@ -413,7 +418,7 @@ func (s *Service) serveConsentProxiedMCP(
 			OrganizationID:     endpoint.OrganizationID,
 			MCPServer:          serverRow,
 			ResourceIdentifier: endpoint.UpstreamResource,
-			UpstreamAuth:       upstreamToken,
+			UpstreamAuth:       upstreamToken.Token,
 			WWWAuthenticate:    "",
 			Selection:          nil,
 		})
@@ -421,6 +426,8 @@ func (s *Service) serveConsentProxiedMCP(
 			return err
 		}
 	}
+	renewal := s.renewClientCredentialOnRejection(p, logger, upstreamToken)
+	rejectSurvivingClientCredentialRejection(w, p, logger, upstreamToken, renewal)
 
 	p.UserRequestInterceptors = append([]proxy.UserRequestInterceptor{consentMethodAllowlistInterceptor{}}, p.UserRequestInterceptors...)
 	p.ToolsListResponseInterceptors = append(p.ToolsListResponseInterceptors, &consentInventoryCaptureInterceptor{service: s, draft: &draft})
@@ -461,6 +468,40 @@ func (s *Service) serveConsentProxiedMCP(
 		}
 	}
 	return nil
+}
+
+// consentInventoryDeferred is the page's rule for loading tools only after
+// approval: every service is reachable only by identity chaining, which has
+// no upstream token before the grant exists, and no chain check has been
+// refused yet. A stored restrictive selection keeps blocking instead, since
+// deferring would replace it with all tools.
+func consentInventoryDeferred(cards []remoteSessionCard, hasPrefill bool) bool {
+	if len(cards) == 0 || hasPrefill {
+		return false
+	}
+	for _, c := range cards {
+		if !c.Chained || c.Connected || c.ChainCheck == chainCheckRejected {
+			return false
+		}
+	}
+	return true
+}
+
+// consentTransportDeferred re-evaluates consentInventoryDeferred for the
+// transport's "not connected" answer, so only the conflict the page treats
+// as deferred is logged as expected. Any lookup fault reads as not deferred.
+func (s *Service) consentTransportDeferred(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) bool {
+	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
+	if err != nil {
+		logger.WarnContext(ctx, "build consent cards for inventory deferral", attr.SlogError(err))
+		return false
+	}
+	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+	if err != nil {
+		return false
+	}
+	prefill := s.consentToolSelectionPrefill(ctx, endpoint, *challengeState.Subject, client.ID)
+	return consentInventoryDeferred(cards, prefill != nil)
 }
 
 // consentMethodAllowlistInterceptor rejects every JSON-RPC message outside

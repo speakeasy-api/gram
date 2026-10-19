@@ -4743,6 +4743,7 @@ func marshalPluginsPluginAssignmentToPluginAssignmentResponseBody(v *plugins.Plu
 	res := &PluginAssignmentResponseBody{
 		ID:           v.ID,
 		PrincipalUrn: v.PrincipalUrn,
+		InstallMode:  v.InstallMode,
 		CreatedAt:    v.CreatedAt,
 	}
 

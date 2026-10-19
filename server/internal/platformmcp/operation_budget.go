@@ -53,6 +53,8 @@ const (
 	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
 	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
 	ProjectMutationOrganizationLimitName          = "platform-mcp-project-mutation-organization"
+	GatewayMutationConnectionLimitName            = "platform-mcp-gateway-mutation-connection"
+	GatewayMutationOrganizationLimitName          = "platform-mcp-gateway-mutation-organization"
 )
 
 const (
@@ -144,6 +146,13 @@ const (
 	ToolExposureMutationsPerConnectionPerMinute   = 5
 	ToolExposureMutationsPerOrganizationPerMinute = 50
 
+	// GatewayMutationsPer* bound creating gateways and setting their members
+	// on one allowance, so alternating between the two cannot multiply the
+	// write rate. Each allowed call locks the gateway and may republish every
+	// plugin carrying it.
+	GatewayMutationsPerConnectionPerMinute   = 5
+	GatewayMutationsPerOrganizationPerMinute = 50
+
 	// DataExportTogglesPer* bound pausing and resuming data export routes on
 	// their own allowance. Both tools share it, so alternating between them
 	// cannot multiply the permitted write rate. A person handling an incident
@@ -191,7 +200,7 @@ var (
 	ErrOperationBudgetUnavailable = errors.New("platform mcp operation budget unavailable")
 )
 
-// Limiter is the narrow Platform MCP boundary around Gram's shared rate limiter.
+// Limiter is the narrow Platform MCP boundary around Speakeasy's shared rate limiter.
 // It lets unit tests deterministically model an allowance, a throttle, or a
 // backing-store failure without depending on Redis.
 type Limiter interface {
@@ -312,7 +321,7 @@ type OperationBudgets struct {
 	// AccessRoleMutations independently meters custom MCP access-role writes.
 	AccessRoleMutations OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
-	// queries over Gram-owned telemetry, so the cost being metered is the
+	// queries over Speakeasy-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
 	Diagnostics OperationBudget
 	// SensitiveDiagnostics meters the bounded drill-downs. It is separate from

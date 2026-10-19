@@ -36,7 +36,7 @@ func TestFeatureWriteRefreshEnablesDisablesAndReplays(t *testing.T) {
 	writer, tools, features := newFeatureWriterFixture(t, f)
 	ctx := writeContext(t, f)
 	q := featurerepo.New(f.db)
-	_, err := q.EnableFeature(t.Context(), featurerepo.EnableFeatureParams{OrganizationID: f.orgA, FeatureName: string(productfeatures.FeatureConsentToolFiltering)})
+	_, err := q.EnableFeature(t.Context(), featurerepo.EnableFeatureParams{OrganizationID: f.orgA, FeatureName: string(productfeatures.FeatureLogs)})
 	require.NoError(t, err)
 	for _, feature := range []productfeatures.Feature{productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureRemoteSessionAutoRefreshEnforced} {
 		cached, err := features.IsFeatureEnabled(ctx, f.orgA, feature)
@@ -78,7 +78,7 @@ func TestFeatureWriteRefreshEnablesDisablesAndReplays(t *testing.T) {
 		enforcedCache, err := features.IsFeatureEnabled(ctx, f.orgA, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
 		require.NoError(t, err)
 		require.False(t, enforcedCache)
-		untouched, err := q.IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: string(productfeatures.FeatureConsentToolFiltering)})
+		untouched, err := q.IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: string(productfeatures.FeatureLogs)})
 		require.NoError(t, err)
 		require.True(t, untouched)
 		action := audit.ActionOrganizationProductFeatureDisabled

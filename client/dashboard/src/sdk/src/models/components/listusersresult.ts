@@ -13,7 +13,7 @@ import {
 
 export type ListUsersResult = {
   /**
-   * Users linked to the organization in Gram.
+   * Users linked to the organization in Speakeasy.
    */
   users: Array<OrganizationUser>;
 };

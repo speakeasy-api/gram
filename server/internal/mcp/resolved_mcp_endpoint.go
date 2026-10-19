@@ -239,6 +239,7 @@ func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error
 // the host the request arrived on.
 func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool, baseURL string) (EndpointRef, error) {
 	isPublic := e.IsPublic
+	useAuthenticationHost := e.useAuthenticationHost
 	if e.sharedResource != nil {
 		origin := e.sharedResource.origin
 		return EndpointRef{
@@ -252,6 +253,7 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 			ToolsetID:                 e.ToolsetID,
 			IsPublic:                  &isPublic,
 			SharedAuthorizationServer: true,
+			UseAuthenticationHost:     &useAuthenticationHost,
 		}, nil
 	}
 	authority := networkingress.FromRequest(ctx, baseURL, e.OrganizationID, e.CustomDomainID)
@@ -277,6 +279,7 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 		ToolsetID:                 e.ToolsetID,
 		IsPublic:                  &isPublic,
 		SharedAuthorizationServer: false,
+		UseAuthenticationHost:     &useAuthenticationHost,
 	}, nil
 }
 
@@ -284,9 +287,15 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 // redirects back to after authenticating a user on the private-endpoint
 // path. Shape: `<baseURL>/<RouteBase>/idp_callback`. The endpoint slug
 // is intentionally absent — the callback dispatches on the `state`
-// query parameter to recover the originating challenge.
+// query parameter to recover the originating challenge. An organization
+// gateway is served on the /mcp surface and uses its callback, which is the
+// one the IDP already redirects to.
 func (e *ResolvedMcpEndpoint) IDPCallbackURL(baseURL string) (string, error) {
-	u, err := url.JoinPath(baseURL, e.RouteBase, "idp_callback")
+	routeBase := e.RouteBase
+	if e.IsOrganizationGateway() {
+		routeBase = "mcp"
+	}
+	u, err := url.JoinPath(baseURL, routeBase, "idp_callback")
 	if err != nil {
 		return "", fmt.Errorf("build IDP callback URL: %w", err)
 	}
@@ -454,6 +463,12 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if e.sharedResource != nil && ref.BaseURL != e.sharedResource.origin.BaseURL {
 		return errToolsetEndpointMismatch
 	}
+	// An issuer toggling use_authentication_host mid-flow moves its
+	// authorization server, so the flow would resume under an issuer the
+	// client never recorded.
+	if ref.UseAuthenticationHost != nil && e.useAuthenticationHost != *ref.UseAuthenticationHost {
+		return errToolsetEndpointMismatch
+	}
 	return nil
 }
 
@@ -596,12 +611,23 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 // HandleIDPCallback (mounted under both route surfaces) to resume an
 // in-flight challenge against the addressing path it was minted under.
 func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	if ref.SharedAuthorizationServer {
+		// The ref names the resource, which is never on the authentication
+		// host, so it resolves as sharedResourceContext resolves a resource
+		// indicator: whether or not the issuer opts in to
+		// use_authentication_host.
+		ctx = withoutAuthenticationHost(ctx)
+	}
 	endpoint, err := s.buildResolvedMcpEndpointByRef(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
-		return nil, err
+	// A builder that already ran the issuer check, as the organization
+	// gateway's does, leaves nothing for a second one to find.
+	if !endpoint.issuerStamped {
+		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
+			return nil, err
+		}
 	}
 	if ref.SharedAuthorizationServer {
 		// An issuer switched out of shared mode mid-flow closes the flows its
@@ -621,6 +647,19 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 }
 
 func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	if ref.RouteBase == organizationGatewayRouteBase {
+		gateway, err := s.loadOrganizationGateway(ctx, ref.McpSlug)
+		if err != nil {
+			return nil, err
+		}
+		// The slug now names a different organization, or the gateway's
+		// identity changed underneath the flow: the challenge belongs to the
+		// gateway it was minted for.
+		if !ref.MetaMcpServerID.Valid || ref.MetaMcpServerID.UUID != gateway.metaServer.ID {
+			return nil, errToolsetEndpointMismatch
+		}
+		return gateway.resolved, nil
+	}
 	if ref.MetaMcpServerID.Valid {
 		return s.buildResolvedMetaMcpEndpointByRef(ctx, ref)
 	}
@@ -696,14 +735,14 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		// resolver and must never become a private fallback.
 		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 	}
-	toolset, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
+	toolset, wrapperID, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackChallengeResume)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackChallengeResume, ref.McpSlug, toolset, wrapperID)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
@@ -727,19 +766,19 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 // of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint →
 // mcp_server row yet (issuer-gated toolset-backed servers predating the
 // toolsets → mcp_servers migration).
-func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string) (*ResolvedMcpEndpoint, error) {
+func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string, entryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackOAuth)
+	s.recordToolsetSlugFallback(ctx, s.logger, entryPoint, mcpSlug, toolset, wrapperID)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}

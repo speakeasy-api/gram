@@ -5,7 +5,7 @@
 //
 // The leading space belongs to it. Without one the two run together into a
 // single word when they are read out.
-export const LEAVES_THE_APP = " (opens in the Gram dashboard)";
+export const LEAVES_THE_APP = " (opens in the Speakeasy dashboard)";
 
 // The slug rides in the first path segment of `redirect`, which is all the
 // server reads back as the organization: organizationSlugFromDestinationURL,

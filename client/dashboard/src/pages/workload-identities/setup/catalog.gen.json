@@ -1,0 +1,390 @@
+{
+  "platforms": [
+    {
+      "key": "claude-tag",
+      "display_name": "Claude Tag",
+      "description": "Let Claude in Slack call your MCP servers from any channel in your Anthropic organization.",
+      "icon": "/access-hub/claude-tag.svg",
+      "enabled": true,
+      "issuer": {
+        "value": "https://identity.anthropic.com/agents",
+        "visibility": "hidden"
+      },
+      "jwks_uri": {
+        "value": "https://identity.anthropic.com/agents/jwks.json",
+        "visibility": "hidden"
+      },
+      "variables": [
+        {
+          "key": "org_id",
+          "tier": "rule",
+          "label": "Anthropic organization ID",
+          "help": "At the very bottom of Claude's organization settings, labeled Organization ID. The Claude Tag console shows the same value as Tenant ID for tokens.",
+          "placeholder": "Your organization ID",
+          "pattern": "[A-Za-z0-9-]+",
+          "pattern_message": "An organization ID is letters, numbers and hyphens."
+        }
+      ],
+      "subject": {
+        "template": "wimse://identity.anthropic.com/org/{org_id}/agent/",
+        "wildcard": true
+      },
+      "steps": [
+        {
+          "id": "before",
+          "title": "Before you start",
+          "phase": "collect",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "You need:\n\n- **Claude Tag federated access** in your Anthropic organization, and an Owner or an admin with full Claude Tag management permission there.\n- **A Speakeasy MCP server** reached on a Speakeasy host, not a custom domain.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "text",
+              "markdown": "Keep Claude Tag's federated access settings open in another tab. You'll switch to them after step 3.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "link",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "https://claude.ai/admin-settings/claude-tag/federated-cloud-access",
+              "label": "Open Claude Tag federated access settings",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "link",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "https://claude.com/docs/claude-tag/admins/federated-access/authorization-server",
+              "label": "Claude Tag docs: connect an authorization server",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "organization",
+          "title": "Your Anthropic organization",
+          "phase": "collect",
+          "blocks": [
+            {
+              "type": "link",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "https://claude.ai/admin-settings/organization",
+              "label": "Open Claude organization settings",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "field",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "org_id",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "subject_rule",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "agent",
+          "title": "Choose an agent and connect",
+          "phase": "create",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "Every Claude Tag channel in this organization acts under the agent you choose, and can do only what its policy allows. Connecting saves the access rule from the previous step with this agent. You can remove it from the Access Hub at any time.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "agent_picker",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "tags",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "console",
+          "title": "Connect an authorization server",
+          "phase": "connect",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "In Claude Tag's federated access settings, under **Authorization servers**, click **Connect an authorization server**. Fill in each field below and tick it off as you go.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "link",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "https://claude.ai/admin-settings/claude-tag/federated-cloud-access",
+              "label": "Open Claude Tag federated access settings",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "computed_status",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "Token endpoint",
+              "variable": "",
+              "value": "token_endpoint",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "Issuer URL (optional)",
+              "variable": "",
+              "value": "issuer_url",
+              "help": "Fill this in even though Claude marks it optional. Claude's token must be issued for this issuer, or Speakeasy refuses it."
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "Nothing to copy. Speakeasy already accepts Claude's issuer and your organization's subject prefix from the steps you completed here.",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "Set your authorization server to accept these values",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "Tick this checkbox. Speakeasy's access rule is that check.",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "This authorization server checks that each token's subject belongs to your organization",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "Click it. Claude then opens **Add authorization server to a bundle**.",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "Register server",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "bundle",
+          "title": "Add the server to a bundle",
+          "phase": "connect",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "In **Add authorization server to a bundle**, fill in each field below and tick it off as you go.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "Leave empty. Claude Tag's token then works at every MCP server of this authorization server that the agent assigned to Claude Tag may connect to.",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "Resource (optional)",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "Leave empty.",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "Scope (optional)",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "Allowed API hosts",
+              "variable": "",
+              "value": "mcp_host",
+              "help": "When the token endpoint above is on this same host, Claude asks for the API paths it may call too. List the paths of the MCP servers Claude Tag should use, such as /mcp/your-server."
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "Choose the bundle assigned to the channels Claude Tag should work in, or create one with **New bundle**.",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "Access bundle",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "Click it.",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "Connect server",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "check",
+          "title": "Check it worked",
+          "phase": "connect",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "In a Slack **channel** where the bundle applies, start a new thread and ask Claude to list the MCP server's tools. A direct message with Claude will not work: federated connections only run in channel threads.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "text",
+              "markdown": "Each channel that signs in appears in **Sessions**, under Claude Tag's issuer and the channel's own subject.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

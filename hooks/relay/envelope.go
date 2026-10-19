@@ -16,7 +16,7 @@ const (
 	agentTurnPrefix = "agent-turn:v1:"
 )
 
-// adapterSlug maps an agenthooks provider onto the stable Gram adapter slug the
+// adapterSlug maps an agenthooks provider onto the stable Speakeasy adapter slug the
 // backend expects (it keys its provider-style telemetry vocabulary on these).
 func adapterSlug(p agenthooks.Provider) string {
 	switch p {
@@ -27,7 +27,7 @@ func adapterSlug(p agenthooks.Provider) string {
 	}
 }
 
-// canonicalEventType resolves the Gram canonical event.type from the unified
+// canonicalEventType resolves the Speakeasy canonical event.type from the unified
 // event kind. Two cursor quirks the unified taxonomy cannot express yet are
 // split inline: its stop hook reports a usage summary rather than a final
 // message, and it is the only provider with a distinct thought stream on the
@@ -68,7 +68,7 @@ func canonicalEventType(e *agenthooks.Event) components.Type {
 	}
 }
 
-// buildEnvelope projects a normalized agenthooks event onto the canonical Gram
+// buildEnvelope projects a normalized agenthooks event onto the canonical Speakeasy
 // ingest payload. Feature blocks are populated only for the event's kind; the
 // verbatim provider payload rides under raw for debugging (the backend never
 // reads it for behavior).

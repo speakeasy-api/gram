@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -20,11 +22,13 @@ import (
 	authRepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -195,7 +199,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
 		require.Empty(t, result.SessionCookie)
-		require.Contains(t, result.Location, "support login intent does not match login nonce")
+		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 
 		for _, orgID := range []string{supportTarget.ID, staleTarget.ID} {
 			membership, err := orgRepo.New(instance.conn).HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
@@ -225,7 +229,7 @@ func TestService_Callback(t *testing.T) {
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
-		require.Contains(t, result.Location, "support login intent does not match login nonce")
+		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 	})
 
 	t.Run("empty expected support intent fails closed", func(t *testing.T) {
@@ -249,7 +253,7 @@ func TestService_Callback(t *testing.T) {
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
-		require.Contains(t, result.Location, "support login intent is missing an organization")
+		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 	})
 
 	t.Run("disabled support target is rejected at callback", func(t *testing.T) {
@@ -286,7 +290,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
 		require.Empty(t, result.SessionCookie)
-		require.Contains(t, result.Location, "organization support target is disabled")
+		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 	})
 
 	t.Run("state param takes priority over IDP org selection", func(t *testing.T) {
@@ -718,7 +722,7 @@ func TestService_CallbackSupportRequiresCurrentPlatformAdmin(t *testing.T) {
 	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
 	require.NoError(t, err)
 	require.Empty(t, result.SessionToken)
-	require.Contains(t, result.Location, "organization support access requires a platform admin")
+	require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 }
 
 func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {
@@ -755,6 +759,51 @@ func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, info.ImpersonatorEmail)
 	require.Equal(t, "support@example.com", *info.ImpersonatorEmail)
+}
+
+func TestCallback_ImpersonatedLoginDoesNotArmSelfServeTrial(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "impersonated-admin@example.com"
+		organizationID = "org-impersonated-admin"
+		workosOrgID    = "org_01IMPERSONATED_ADMIN"
+	)
+	userInfo := &MockUserInfo{
+		UserID:        "user_01IMPERSONATED_ADMIN",
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, adminMembershipFetcher(userInfo.UserID, workosOrgID, "Gated Org"))
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 organizationID,
+		Name:               "Gated Org",
+		Slug:               organizationID,
+		WorkosID:           new(workosOrgID),
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+
+	ctx, stateParam := instance.stateWithNonce(ctx, t, "")
+	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+		Code:  "impersonation_code",
+		State: &stateParam,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	storedSession, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
+	require.NoError(t, err)
+	require.Equal(t, "support@example.com", storedSession.ImpersonatorEmail)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.False(t, org.Whitelisted, "staff impersonation must not start the customer's trial")
+
+	_, err = trialsRepo.New(instance.conn).GetTrial(ctx, organizationID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.Empty(t, instance.trialNotifier.trialStarted)
 }
 
 func TestIdentityResolverCapturesWorkOSImpersonatorEmail(t *testing.T) {
@@ -1043,6 +1092,23 @@ func TestCallback_SignupAfterWorkOSDeleteWhitelistsActiveOrg(t *testing.T) {
 	require.True(t, org.Whitelisted)
 }
 
+func adminMembershipFetcher(userID, workosOrgID, orgName string) *mockWorkOSFetcher {
+	return &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			userID: {{
+				ID:             "om_" + workosOrgID,
+				UserID:         userID,
+				OrganizationID: workosOrgID,
+				Organization:   orgName,
+				RoleSlugs:      []string{"admin"},
+			}},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+}
+
 func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 	t.Parallel()
 
@@ -1051,6 +1117,7 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 		oldWorkosID = "user_01STALE_LOGIN_DELETED"
 		newWorkosID = "user_01STALE_LOGIN"
 		staleOrgID  = "org-stale-login-unwhitelisted"
+		workosOrgID = "org_01STALE_LOGIN"
 	)
 	gramUserID := uuid.New().String()
 
@@ -1059,7 +1126,7 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 		Email:         email,
 		Organizations: nil,
 	}
-	ctx, instance := newTestAuthService(t, userInfo)
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, adminMembershipFetcher(newWorkosID, workosOrgID, "Stale Org"))
 	usersQueries := usersRepo.New(instance.conn)
 
 	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
@@ -1078,9 +1145,18 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 		ID:                 staleOrgID,
 		Name:               "Stale Org",
 		Slug:               staleOrgID,
-		WorkosID:           nil,
+		WorkosID:           new(workosOrgID),
 		UserWorkspaceSlugs: nil,
 	}, gramUserID))
+	expiredAt := time.Now().UTC().Add(-time.Hour)
+	require.NoError(t, trialsRepo.New(instance.conn).InsertTrialFixture(ctx, trialsRepo.InsertTrialFixtureParams{
+		OrganizationID: staleOrgID,
+		Tier:           "enterprise",
+		CreatedAt:      pgtype.Timestamptz{Time: expiredAt.Add(-14 * 24 * time.Hour), Valid: true},
+		EndsAt:         pgtype.Timestamptz{Time: expiredAt, Valid: true},
+		ConvertedAt:    pgtype.Timestamptz{},
+		DemotedAt:      pgtype.Timestamptz{},
+	}))
 	_, err = usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
 		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
@@ -1097,48 +1173,194 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, staleOrgID, authCtx.ActiveOrganizationID)
-	require.False(t, authCtx.Whitelisted, "ordinary login must not whitelist a gated organization")
+	require.False(t, authCtx.Whitelisted, "an organization that already has a trial lifecycle stays behind the gate")
+
+	trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, staleOrgID)
+	require.NoError(t, err)
+	require.WithinDuration(t, expiredAt, trial.EndsAt.Time, time.Second)
 }
 
-func TestCallback_SignupIntentDoesNotWhitelistActiveUserOrg(t *testing.T) {
+func TestCallback_LoginArmsTrialForOrganizationThatNeverTrialled(t *testing.T) {
 	t.Parallel()
 
 	const (
 		email          = "active-signup@example.com"
 		organizationID = "org-active-signup"
+		workosOrgID    = "org_01ACTIVE_SIGNUP"
 	)
 	userInfo := &MockUserInfo{
 		UserID:        "user_01ACTIVE_SIGNUP",
 		Email:         email,
 		Organizations: nil,
 	}
-	ctx, instance := newTestAuthService(t, userInfo)
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			userInfo.UserID: {{
+				ID:             "om_active_signup",
+				UserID:         userInfo.UserID,
+				OrganizationID: workosOrgID,
+				Organization:   "Gated Org",
+				RoleSlugs:      []string{"admin"},
+			}},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Gated Org"},
+		},
+	})
 	require.NoError(t, instance.createTestUser(ctx, userInfo))
 	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
 		ID:                 organizationID,
 		Name:               "Gated Org",
 		Slug:               organizationID,
-		WorkosID:           nil,
+		WorkosID:           new(workosOrgID),
 		UserWorkspaceSlugs: nil,
 	}, userInfo.UserID))
 
-	ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Should Not Whitelist")
-	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "mock_code",
-		State: &stateParam,
-	})
+	result, err := instance.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
 
 	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 	require.NoError(t, err)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, organizationID, authCtx.ActiveOrganizationID)
-	require.False(t, authCtx.Whitelisted)
+	require.True(t, authCtx.Whitelisted)
+	require.Equal(t, "enterprise", authCtx.AccountType)
+	require.Equal(t, []string{organizationID}, instance.trialNotifier.trialStarted)
+}
+
+func TestCallback_LoginDoesNotArmTrialForProspect(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "prospect-login@example.com"
+		organizationID = "org-prospect-login"
+		workosOrgID    = "org_01PROSPECT_LOGIN"
+	)
+	userInfo := &MockUserInfo{
+		UserID:        "user_01PROSPECT_LOGIN",
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, adminMembershipFetcher(userInfo.UserID, workosOrgID, "Prospect Org"))
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 organizationID,
+		Name:               "Prospect Org",
+		Slug:               organizationID,
+		WorkosID:           new(workosOrgID),
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+	_, err := orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:             organizationID,
+		Name:           "Prospect Org",
+		Slug:           organizationID,
+		WorkosID:       conv.ToPGText(workosOrgID),
+		Whitelisted:    pgtype.Bool{Bool: false, Valid: true},
+		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
+	})
+	require.NoError(t, err)
+
+	result, err := instance.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
 
 	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
 	require.NoError(t, err)
-	require.False(t, org.Whitelisted, "signup intent alone must not bypass the book-a-demo gate")
+	require.False(t, org.Whitelisted, "a prospect stays behind the book-a-demo gate")
+
+	_, err = trialsRepo.New(instance.conn).GetTrial(ctx, organizationID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestCallback_LoginDoesNotArmTrialForPaidOrganization(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "paid-gated@example.com"
+		organizationID = "org-paid-gated"
+		workosOrgID    = "org_01PAID_GATED"
+	)
+	userInfo := &MockUserInfo{
+		UserID:        "user_01PAID_GATED",
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, adminMembershipFetcher(userInfo.UserID, workosOrgID, "Paid Org"))
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 organizationID,
+		Name:               "Paid Org",
+		Slug:               organizationID,
+		WorkosID:           new(workosOrgID),
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+	require.NoError(t, orgRepo.New(instance.conn).SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+		GramAccountType: "pro",
+		ID:              organizationID,
+	}))
+
+	result, err := instance.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.False(t, org.Whitelisted)
+	require.Equal(t, "pro", org.GramAccountType)
+}
+
+func TestCallback_LoginContinuesWhenSelfServeTrialArmingFails(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "trial-arm-fails@example.com"
+		organizationID = "org-trial-arm-fails"
+	)
+	userInfo := &MockUserInfo{
+		UserID:        "user_01TRIAL_ARM_FAILS",
+		Email:         email,
+		Organizations: nil,
+	}
+	const workosOrgID = "org_01TRIAL_ARM_FAILS"
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			userInfo.UserID: {{
+				ID:             "om_trial_arm_fails",
+				UserID:         userInfo.UserID,
+				OrganizationID: workosOrgID,
+				Organization:   "Gated Org",
+				RoleSlugs:      []string{"admin"},
+			}},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Gated Org"},
+		},
+	})
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 organizationID,
+		Name:               "Gated Org",
+		Slug:               organizationID,
+		WorkosID:           new(workosOrgID),
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+	instance.service.SetOrganizationFeatureSeederForTest(func(context.Context, pgx.Tx, string) error {
+		return errors.New("seed failed")
+	})
+
+	result, err := instance.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.False(t, org.Whitelisted)
+
+	_, err = trialsRepo.New(instance.conn).GetTrial(ctx, organizationID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestCallback_ReactivatedSignupPrefersExistingWhitelistedOrg(t *testing.T) {

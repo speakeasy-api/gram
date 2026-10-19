@@ -24,7 +24,6 @@ import {
   isPrivateKeyJwtAuthMethod,
   type ClientType,
 } from "./issuerFormUtils";
-import type { ReactNode } from "react";
 
 // RedirectURICallout shows the redirect_uri operators must register on the
 // upstream provider's OAuth app before typed-in client credentials will
@@ -283,12 +282,23 @@ export function TokenEndpointAuthMethodField({
   value,
   onChange,
   allowPrivateKeyJwt = false,
+  privateKeyJwtUnavailable,
+  hideNone = false,
+  disabled = false,
 }: {
   value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
   onChange: (
     value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => void;
   allowPrivateKeyJwt?: boolean;
+  /**
+   * Lists private_key_jwt even when it can't be picked, with this reason
+   * beside it, so the option is visible rather than missing.
+   */
+  privateKeyJwtUnavailable?: string;
+  /** A service account must prove who it is, so `none` is not offered. */
+  hideNone?: boolean;
+  disabled?: boolean;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -300,6 +310,7 @@ export function TokenEndpointAuthMethodField({
         onValueChange={(next) =>
           onChange(next as CreateRemoteSessionClientFormTokenEndpointAuthMethod)
         }
+        disabled={disabled}
       >
         <SelectTrigger>
           <SelectValue placeholder="client_secret_basic (default)" />
@@ -319,11 +330,26 @@ export function TokenEndpointAuthMethodField({
           >
             client_secret_post
           </SelectItem>
-          <SelectItem
-            value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
-          >
-            none
-          </SelectItem>
+          {!hideNone && (
+            <SelectItem
+              value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
+            >
+              none
+            </SelectItem>
+          )}
+          {privateKeyJwtUnavailable !== undefined &&
+            !allowPrivateKeyJwt &&
+            value !==
+              CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt && (
+              <SelectItem
+                value={
+                  CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+                }
+                disabled
+              >
+                private_key_jwt · {privateKeyJwtUnavailable}
+              </SelectItem>
+            )}
           {(allowPrivateKeyJwt ||
             value ===
               CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt) && (
@@ -344,9 +370,11 @@ export function TokenEndpointAuthMethodField({
 export function ClientAssertionAudienceField({
   value,
   onChange,
+  disabled = false,
 }: {
   value: AuthAudienceFormat;
   onChange: (value: AuthAudienceFormat) => void;
+  disabled?: boolean;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -356,6 +384,7 @@ export function ClientAssertionAudienceField({
       <Select
         value={value}
         onValueChange={(next) => onChange(next as AuthAudienceFormat)}
+        disabled={disabled}
       >
         <SelectTrigger>
           <SelectValue />
@@ -486,21 +515,18 @@ export function ClientCredentialsFields({
 
 // OverridesFields renders the per-client OAuth dance overrides. Both fields
 // are optional and apply in both DCR and manual modes — they control what
-// Gram sends at authorize/token time, independent of how the client was
-// registered. scopeWarning renders under the scope input once it has text, for
-// callers whose issuer pins the requested scopes and so makes this field inert.
+// Speakeasy sends at authorize/token time, independent of how the client was
+// registered.
 export function OverridesFields({
   scopeOverride,
   audienceOverride,
   onScopeOverrideChange,
   onAudienceOverrideChange,
-  scopeWarning,
 }: {
   scopeOverride: string;
   audienceOverride: string;
   onScopeOverrideChange: (value: string) => void;
   onAudienceOverrideChange: (value: string) => void;
-  scopeWarning?: ReactNode;
 }): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
@@ -514,12 +540,10 @@ export function OverridesFields({
           placeholder="read, write, openid"
         />
         <Text muted small>
-          Comma-separated. When provided, the platform requests these scopes
-          during the OAuth dance; otherwise it falls back to the issuer's
-          scopes_supported.
+          Comma-separated. When provided, every sign-in requests these scopes.
+          Otherwise sign-ins request what the MCP server asks for, falling back
+          to the issuer's scopes_supported.
         </Text>
-        {/* Only warn once there are client scopes to be overridden. */}
-        {scopeOverride.trim() && scopeWarning}
       </Stack>
 
       <Stack gap={2}>

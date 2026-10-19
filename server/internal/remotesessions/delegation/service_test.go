@@ -1283,3 +1283,140 @@ func TestDelegationServiceCheck(t *testing.T) {
 		require.ErrorIs(t, s.Check(t.Context(), b, deny), ErrConfiguration)
 	})
 }
+
+func TestDelegationServiceCheckResolvable(t *testing.T) {
+	t.Parallel()
+	retained := func(t *testing.T, refresh string, ttl time.Duration, edit func(*delegationCredential)) (*Service, Binding, Authorizer) {
+		t.Helper()
+		s, store, p, b, allow := newDelegationUnitFixture(t)
+		signedIn := s.now()
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, signedIn, "id", refresh, ttl), true))
+		s.now = func() time.Time { return signedIn.Add(10 * time.Minute) }
+		if edit != nil {
+			store.mu.Lock()
+			c := store.rows[b]
+			edit(&c)
+			store.rows[b] = c
+			store.mu.Unlock()
+		}
+		return s, b, allow
+	}
+	t.Run("live assertion", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, nil)
+		require.NoError(t, s.CheckResolvable(t.Context(), b, allow))
+	})
+	t.Run("expired assertion with a refresh grant", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, nil)
+		require.NoError(t, s.CheckResolvable(t.Context(), b, allow))
+	})
+	t.Run("expired assertion without a refresh grant", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Minute, nil)
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check alone still reads the registration as current")
+	})
+	t.Run("reauthentication recorded", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) {
+			c.status = "reauthentication_required"
+			c.refresh = ""
+		})
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check alone does not see a recorded reauthentication")
+	})
+	t.Run("reauthentication recorded with a live assertion", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.status = "reauthentication_required" })
+		require.NoError(t, s.CheckResolvable(t.Context(), b, allow), "Resolve still returns the live assertion")
+	})
+	t.Run("renewal backing off", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.retryAfter = time.Unix(1700000000, 0).Add(time.Hour) })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrTemporary)
+	})
+	t.Run("nothing retained", func(t *testing.T) {
+		t.Parallel()
+		s, _, _, b, allow := newDelegationUnitFixture(t)
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+	})
+	t.Run("retained under an earlier registration", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Hour, func(c *delegationCredential) { c.config = "earlier-registration" })
+		err := s.CheckResolvable(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrStaleRegistration)
+		require.ErrorIs(t, err, ErrConfiguration, "a stale registration is still a configuration failure to callers that do not ask")
+		require.EqualError(t, err, ErrConfiguration.Error())
+		require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrStaleRegistration)
+	})
+	t.Run("renewal in flight with a live assertion", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.claim = uuid.New() })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrTemporary)
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrTemporary)
+	})
+	t.Run("live assertion that does not decrypt", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.assertion = "not-a-ciphertext" })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrConfiguration)
+	})
+	t.Run("live assertion whose subject does not decrypt", func(t *testing.T) {
+		t.Parallel()
+		s, store, p, b, allow := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "", time.Hour), true))
+		store.mu.Lock()
+		c := store.rows[b]
+		c.subject = "not-a-ciphertext"
+		store.rows[b] = c
+		store.mu.Unlock()
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+		require.ErrorIs(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "", time.Hour), true), ErrConfiguration, "a fresh sign-in cannot repair it")
+	})
+	t.Run("refresh grant that does not decrypt", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.refresh = "not-a-ciphertext" })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrConfiguration)
+	})
+	t.Run("refresh grant whose nonce does not decrypt", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.nonce = "not-a-ciphertext" })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("assertion inside the safety window without a refresh grant", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", 10*time.Minute+30*time.Second, nil)
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication, "Resolve does not release an assertion with 30 seconds left")
+	})
+	t.Run("refresh grant without a subject", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.subject = "" })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("refresh grant whose subject seals an empty value", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, nil)
+		sealed, err := s.enc.Encrypt([]byte(""))
+		require.NoError(t, err)
+		store, ok := s.store.(*delegationMemoryStore)
+		require.True(t, ok)
+		store.mu.Lock()
+		c := store.rows[b]
+		c.subject = sealed
+		store.rows[b] = c
+		store.mu.Unlock()
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("configuration failure under the current registration", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Hour, func(c *delegationCredential) { c.status = "configuration_failure" })
+		err := s.CheckResolvable(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrConfiguration)
+		require.NotErrorIs(t, err, ErrStaleRegistration, "a sign-in under the same registration cannot repair it")
+	})
+}

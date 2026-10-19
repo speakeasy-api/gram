@@ -142,7 +142,7 @@ func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientID}}, tokenCredentials(tokens))
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: "upstream-access-token", Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}}, tokenCredentials(tokens))
 	require.Equal(t, session.ID, tokens[remoteIssuerID].RemoteSessionID)
 	require.Equal(t, session.UpdatedAt.Time, tokens[remoteIssuerID].RemoteSessionUpdatedAt)
 }
@@ -317,7 +317,7 @@ func TestResolveAccessTokens_TenantClientOnPlatformIssuer(t *testing.T) {
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{platformID: {Token: "platform-upstream-token", Resource: "", RemoteSessionClientID: uuid.MustParse(clientID)}}, tokenCredentials(tokens))
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{platformID: {Token: "platform-upstream-token", Resource: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: uuid.MustParse(clientID)}}, tokenCredentials(tokens))
 }
 
 // Two clients on distinct remote issuers bound to one user_session_issuer —
@@ -365,8 +365,8 @@ func TestResolveAccessTokens_MultipleUpstreamsCarryQualifiedResources(t *testing
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{
-		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: clientA},
-		remoteIssuerB: {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: clientB},
+		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientA},
+		remoteIssuerB: {Token: "token-b", Resource: "https://b.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientB},
 	}, tokenCredentials(tokens))
 }
 
@@ -405,7 +405,7 @@ func TestResolveAvailableAccessTokens_SkipsUnlinkedClients(t *testing.T) {
 	tokens, err := mgr.ResolveAvailableAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{
-		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: clientA},
+		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientA},
 	}, tokenCredentials(tokens))
 
 	// The strict variant still refuses the same shape, pinning that partial

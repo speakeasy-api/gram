@@ -125,6 +125,19 @@ type ListPlatformsResponseBody struct {
 	Platforms []*WorkloadPlatformResponseBody `form:"platforms" json:"platforms" xml:"platforms"`
 }
 
+// GetCustomFlowsResponseBody is the type of the "workloadIdentities" service
+// "getCustomFlows" endpoint HTTP response body.
+type GetCustomFlowsResponseBody struct {
+	// Trusts a new platform; submits registerIssuer.
+	RegisterPlatform *WorkloadFormResponseBody `form:"register_platform" json:"register_platform" xml:"register_platform"`
+	// Edits a trusted platform; submits updateIssuer.
+	EditPlatform *WorkloadFormResponseBody `form:"edit_platform" json:"edit_platform" xml:"edit_platform"`
+	// Allows a subject under a trusted platform; submits admitSubject.
+	AllowAccess *WorkloadFormResponseBody `form:"allow_access" json:"allow_access" xml:"allow_access"`
+	// Edits allowed access; submits updateSubject.
+	EditAccess *WorkloadFormResponseBody `form:"edit_access" json:"edit_access" xml:"edit_access"`
+}
+
 // ListTokenEndpointsResponseBody is the type of the "workloadIdentities"
 // service "listTokenEndpoints" endpoint HTTP response body.
 type ListTokenEndpointsResponseBody struct {
@@ -540,6 +553,195 @@ type ListPlatformsUnexpectedResponseBody struct {
 // "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
 // the "gateway_error" error.
 type ListPlatformsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetCustomFlowsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsForbiddenResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "forbidden"
+// error.
+type GetCustomFlowsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsBadRequestResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "bad_request"
+// error.
+type GetCustomFlowsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsNotFoundResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "not_found"
+// error.
+type GetCustomFlowsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsConflictResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "conflict"
+// error.
+type GetCustomFlowsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetCustomFlowsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsInvalidResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "invalid" error.
+type GetCustomFlowsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetCustomFlowsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "getCustomFlows" endpoint HTTP response body for the "unexpected"
+// error.
+type GetCustomFlowsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetCustomFlowsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "getCustomFlows" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetCustomFlowsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2041,6 +2243,60 @@ type WorkloadPlatformBlockResponseBody struct {
 	Help string `form:"help" json:"help" xml:"help"`
 }
 
+// WorkloadFormResponseBody is used to define fields on response body types.
+type WorkloadFormResponseBody struct {
+	// Heads the form.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Shown under the title.
+	Description string `form:"description" json:"description" xml:"description"`
+	// The submit button's label.
+	SubmitLabel string `form:"submit_label" json:"submit_label" xml:"submit_label"`
+	// The submit button's label while the form submits.
+	PendingLabel string `form:"pending_label" json:"pending_label" xml:"pending_label"`
+	// The form's steps, in order.
+	Steps []*WorkloadFormStepResponseBody `form:"steps" json:"steps" xml:"steps"`
+}
+
+// WorkloadFormStepResponseBody is used to define fields on response body types.
+type WorkloadFormStepResponseBody struct {
+	// Stable within the form.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Heads the step.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Rendered in order.
+	Blocks []*WorkloadFormBlockResponseBody `form:"blocks" json:"blocks" xml:"blocks"`
+}
+
+// WorkloadFormBlockResponseBody is used to define fields on response body
+// types.
+type WorkloadFormBlockResponseBody struct {
+	// The kind of content. wildcard_caution marks where the form warns that a
+	// wildcard rule admits more than one identity; the dashboard writes that
+	// warning, since it names the rule and the agent.
+	Type string `form:"type" json:"type" xml:"type"`
+	// A text block's Markdown. Raw HTML in it must not be rendered.
+	Markdown string `form:"markdown" json:"markdown" xml:"markdown"`
+	// A link's https target.
+	Href string `form:"href" json:"href" xml:"href"`
+	// A link's label, or a form control's.
+	Label string `form:"label" json:"label" xml:"label"`
+	// The form value an input collects. label is submitted as an admission's name.
+	Field string `form:"field" json:"field" xml:"field"`
+	// Shown in an empty form control.
+	Placeholder string `form:"placeholder" json:"placeholder" xml:"placeholder"`
+	// Markdown shown under a form control while it has no validation message. Raw
+	// HTML in it must not be rendered.
+	Help string `form:"help" json:"help" xml:"help"`
+	// Whether an input is a text area.
+	Multiline bool `form:"multiline" json:"multiline" xml:"multiline"`
+	// Whether an input shows its value without letting it change. A read-only
+	// value is not submitted.
+	ReadOnly bool `form:"read_only" json:"read_only" xml:"read_only"`
+	// The dashboard validator an input's value must pass. The server applies the
+	// same rules when the form is submitted.
+	Format string `form:"format" json:"format" xml:"format"`
+}
+
 // WorkloadTokenEndpointResponseBody is used to define fields on response body
 // types.
 type WorkloadTokenEndpointResponseBody struct {
@@ -2108,6 +2364,25 @@ func NewListPlatformsResponseBody(res *workloadidentities.WorkloadPlatformCatalo
 		}
 	} else {
 		body.Platforms = []*WorkloadPlatformResponseBody{}
+	}
+	return body
+}
+
+// NewGetCustomFlowsResponseBody builds the HTTP response body from the result
+// of the "getCustomFlows" endpoint of the "workloadIdentities" service.
+func NewGetCustomFlowsResponseBody(res *workloadidentities.WorkloadCustomFlows) *GetCustomFlowsResponseBody {
+	body := &GetCustomFlowsResponseBody{}
+	if res.RegisterPlatform != nil {
+		body.RegisterPlatform = marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody(res.RegisterPlatform)
+	}
+	if res.EditPlatform != nil {
+		body.EditPlatform = marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody(res.EditPlatform)
+	}
+	if res.AllowAccess != nil {
+		body.AllowAccess = marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody(res.AllowAccess)
+	}
+	if res.EditAccess != nil {
+		body.EditAccess = marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody(res.EditAccess)
 	}
 	return body
 }
@@ -2594,6 +2869,153 @@ func NewListPlatformsUnexpectedResponseBody(res *goa.ServiceError) *ListPlatform
 // service.
 func NewListPlatformsGatewayErrorResponseBody(res *goa.ServiceError) *ListPlatformsGatewayErrorResponseBody {
 	body := &ListPlatformsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsUnauthorizedResponseBody(res *goa.ServiceError) *GetCustomFlowsUnauthorizedResponseBody {
+	body := &GetCustomFlowsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsForbiddenResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsForbiddenResponseBody(res *goa.ServiceError) *GetCustomFlowsForbiddenResponseBody {
+	body := &GetCustomFlowsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsBadRequestResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsBadRequestResponseBody(res *goa.ServiceError) *GetCustomFlowsBadRequestResponseBody {
+	body := &GetCustomFlowsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsNotFoundResponseBody builds the HTTP response body from the
+// result of the "getCustomFlows" endpoint of the "workloadIdentities" service.
+func NewGetCustomFlowsNotFoundResponseBody(res *goa.ServiceError) *GetCustomFlowsNotFoundResponseBody {
+	body := &GetCustomFlowsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsConflictResponseBody builds the HTTP response body from the
+// result of the "getCustomFlows" endpoint of the "workloadIdentities" service.
+func NewGetCustomFlowsConflictResponseBody(res *goa.ServiceError) *GetCustomFlowsConflictResponseBody {
+	body := &GetCustomFlowsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetCustomFlowsUnsupportedMediaResponseBody {
+	body := &GetCustomFlowsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsInvalidResponseBody builds the HTTP response body from the
+// result of the "getCustomFlows" endpoint of the "workloadIdentities" service.
+func NewGetCustomFlowsInvalidResponseBody(res *goa.ServiceError) *GetCustomFlowsInvalidResponseBody {
+	body := &GetCustomFlowsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getCustomFlows" endpoint of the
+// "workloadIdentities" service.
+func NewGetCustomFlowsInvariantViolationResponseBody(res *goa.ServiceError) *GetCustomFlowsInvariantViolationResponseBody {
+	body := &GetCustomFlowsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsUnexpectedResponseBody(res *goa.ServiceError) *GetCustomFlowsUnexpectedResponseBody {
+	body := &GetCustomFlowsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetCustomFlowsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getCustomFlows" endpoint of the "workloadIdentities"
+// service.
+func NewGetCustomFlowsGatewayErrorResponseBody(res *goa.ServiceError) *GetCustomFlowsGatewayErrorResponseBody {
+	body := &GetCustomFlowsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3645,6 +4067,17 @@ func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput 
 // endpoint payload.
 func NewListPlatformsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListPlatformsPayload {
 	v := &workloadidentities.ListPlatformsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetCustomFlowsPayload builds a workloadIdentities service getCustomFlows
+// endpoint payload.
+func NewGetCustomFlowsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.GetCustomFlowsPayload {
+	v := &workloadidentities.GetCustomFlowsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -97,7 +100,7 @@ func TestNewSDKConfigRoutesSDKLogsThroughLogger(t *testing.T) {
 
 	logger, buf := newCapturingLogger(t, slog.LevelDebug)
 
-	config := newSDKConfig(logger.With(attr.SlogComponent("posthog")), "https://posthog.example.test", "")
+	config := newSDKConfig(logger.With(attr.SlogComponent("posthog")), "https://posthog.example.test", "", nil)
 	require.NotNil(t, config.Logger)
 	require.Empty(t, config.PersonalApiKey)
 	require.Zero(t, config.DefaultFeatureFlagsPollingInterval)
@@ -116,7 +119,7 @@ func TestNewSDKConfigEnablesLocalEvaluationWithPersonalAPIKey(t *testing.T) {
 
 	logger, _ := newCapturingLogger(t, slog.LevelDebug)
 
-	config := newSDKConfig(logger, "https://posthog.example.test", "personal-api-key")
+	config := newSDKConfig(logger, "https://posthog.example.test", "personal-api-key", &atomic.Int64{})
 	require.Equal(t, "personal-api-key", config.PersonalApiKey)
 	require.Equal(t, time.Minute, config.DefaultFeatureFlagsPollingInterval)
 	require.NotNil(t, config.Logger)
@@ -135,4 +138,88 @@ func TestNewTagsLoggerWithComponent(t *testing.T) {
 	logs := decodeCapturedLogs(t, buf)
 	require.Len(t, logs, 1)
 	require.Equal(t, "posthog", logs[0].Component)
+}
+
+// Only a successful definitions fetch confirms the cached definitions; a
+// failing poll leaves the last confirmation in place so its age grows.
+func TestDefinitionsTransportRecordsSuccessfulDefinitionFetches(t *testing.T) {
+	t.Parallel()
+
+	status := atomic.Int32{}
+	status.Store(http.StatusOK)
+	body := atomic.Pointer[string]{}
+	definitions, maintenance, incompatible := `{"flags":[]}`, `<html>maintenance</html>`, `{"flags":[{"key":"pause","active":"invalid"}]}`
+	body.Store(&definitions)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(int(status.Load()))
+		_, _ = w.Write([]byte(*body.Load()))
+	}))
+	t.Cleanup(server.Close)
+
+	confirmedAt := &atomic.Int64{}
+	provider := &Posthog{client: &evaluationClient{}, disabled: false, localEvaluation: true, logger: nil, definitionsConfirmedAt: confirmedAt}
+	transport := &definitionsTransport{base: http.DefaultTransport, confirmedAt: confirmedAt}
+	fetch := func(path string) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+path, nil)
+		require.NoError(t, err)
+		res, err := transport.RoundTrip(req)
+		require.NoError(t, err)
+		require.NoError(t, res.Body.Close())
+	}
+
+	_, ok := provider.FlagDefinitionsConfirmedAt()
+	require.False(t, ok, "definitions never fetched are not current")
+	fetch("/flags/")
+	_, ok = provider.FlagDefinitionsConfirmedAt()
+	require.False(t, ok, "other endpoints confirm nothing")
+
+	fetch("/api/feature_flag/local_evaluation")
+	first, ok := provider.FlagDefinitionsConfirmedAt()
+	require.True(t, ok)
+
+	status.Store(http.StatusServiceUnavailable)
+	fetch("/api/feature_flag/local_evaluation")
+	after, ok := provider.FlagDefinitionsConfirmedAt()
+	require.True(t, ok)
+	require.Equal(t, first, after, "a failed poll never refreshes the confirmation")
+
+	status.Store(http.StatusOK)
+	body.Store(&maintenance)
+	fetch("/api/feature_flag/local_evaluation")
+	after, ok = provider.FlagDefinitionsConfirmedAt()
+	require.True(t, ok)
+	require.Equal(t, first, after, "a body the SDK can't load never refreshes the confirmation")
+
+	body.Store(&incompatible)
+	for range 3 {
+		fetch("/api/feature_flag/local_evaluation")
+	}
+	after, ok = provider.FlagDefinitionsConfirmedAt()
+	require.True(t, ok)
+	require.Equal(t, first, after, "flags JSON the SDK's typed decode rejects never refreshes the confirmation, so it ages past the pause window")
+	body.Store(&definitions)
+
+	status.Store(http.StatusNotModified)
+	fetch("/api/feature_flag/local_evaluation")
+	refreshed, ok := provider.FlagDefinitionsConfirmedAt()
+	require.True(t, ok)
+	require.True(t, refreshed.After(first), "an unchanged response confirms the cached definitions")
+}
+
+func TestDefinitionsTransportRefusesOversizedDefinitions(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"flags":[],"pad":"`))
+		_, _ = w.Write(bytes.Repeat([]byte("a"), maxDefinitionsBytes))
+		_, _ = w.Write([]byte(`"}`))
+	}))
+	t.Cleanup(server.Close)
+	confirmedAt := &atomic.Int64{}
+	transport := &definitionsTransport{base: http.DefaultTransport, confirmedAt: confirmedAt}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/feature_flag/local_evaluation", nil)
+	require.NoError(t, err)
+	res, err := transport.RoundTrip(req) //nolint:bodyclose // Refused before a body is returned.
+	require.Error(t, err)
+	require.Nil(t, res)
+	require.Zero(t, confirmedAt.Load())
 }

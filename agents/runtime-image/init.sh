@@ -7,7 +7,7 @@ sandbox_src=/usr/share/gram/sandbox
 mkdir -p "$workdir"
 
 # The platform may mount an extra CA bundle (e.g. the mkcert root CA during
-# local development) so the runner and its sandbox children trust the Gram
+# local development) so the runner and its sandbox children trust the Speakeasy
 # server's TLS certificate. Build a combined bundle in /tmp rather than
 # mutating the system trust store, which must stay pristine (and may sit on a
 # read-only root filesystem).

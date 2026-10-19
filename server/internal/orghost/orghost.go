@@ -1,4 +1,4 @@
-// Package orghost resolves the base URL of the URLs Gram renders for an
+// Package orghost resolves the base URL of the URLs Speakeasy renders for an
 // organization without an inbound request to follow: emails, Slack messages,
 // and background jobs. Request-driven URLs follow the request's platform
 // origin instead.

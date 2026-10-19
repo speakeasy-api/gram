@@ -21,6 +21,7 @@ daemons = [
   "pystreams-multi",
   "dashboard",
   "assistant-runtime",
+  "assistant-relay",
   "tunnel-gateway",
 ]
 
@@ -37,6 +38,7 @@ daemons = [
   "pystreams-multi",
   "dashboard",
   "assistant-runtime",
+  "assistant-relay",
   "tunnel-gateway",
   "idle-pause",
 ]
@@ -89,10 +91,12 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 [daemons.server]
 run = "mise run start:server"
 ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["assistant-relay"]
 
 [daemons.worker]
 run = "mise run start:worker"
 ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["assistant-relay"]
 
 [daemons.streams]
 run = "mise run start:streams"
@@ -116,6 +120,10 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 [daemons.assistant-runtime]
 run = "mise run start:assistant-runtime"
 ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.assistant-relay]
+run = "mise run start:assistant-relay"
+ready_output = "Assistant relay ready:"
 
 [daemons.tunnel-gateway]
 run = "mise run start:tunnel-gateway"

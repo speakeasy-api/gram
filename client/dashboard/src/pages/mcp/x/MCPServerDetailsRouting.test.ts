@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   activeTabFromPath,
   initialTabFromHash,
+  isCanonicalHostedWrapper,
   isLegacyAuthenticationTabPath,
   isLegacyToolsTabPath,
+  toolsetTabForServerPath,
 } from "./MCPServerDetailsRouting";
 
 describe("activeTabFromPath", () => {
@@ -127,5 +129,61 @@ describe("initialTabFromHash", () => {
 
   it("supports team access", () => {
     expect(initialTabFromHash("#team-access")).toBe("team-access");
+  });
+});
+
+describe("isCanonicalHostedWrapper", () => {
+  const toolsetId = "7f1c2a9e-1111-4c4c-9a9a-000000000001";
+
+  it("treats a server whose id is its toolset id as the canonical wrapper", () => {
+    expect(isCanonicalHostedWrapper({ id: toolsetId, toolsetId })).toBe(true);
+  });
+
+  it("keeps a fresh-id toolset-backed server on the server page", () => {
+    expect(
+      isCanonicalHostedWrapper({
+        id: "7f1c2a9e-2222-4c4c-9a9a-000000000002",
+        toolsetId,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps a remote server on the server page", () => {
+    expect(
+      isCanonicalHostedWrapper({
+        id: "7f1c2a9e-3333-4c4c-9a9a-000000000003",
+        toolsetId: undefined,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("toolsetTabForServerPath", () => {
+  const base = "/acme/projects/default/mcp/x/my-server";
+
+  it.each([
+    ["", "", "overview"],
+    ["/overview", "", "overview"],
+    ["/inspect", "", "tools"],
+    ["/tools", "", "tools"],
+    ["/authentication", "", "authentication"],
+    ["/team-access", "", "team-access"],
+    ["/guardrails", "", undefined],
+    ["/sessions", "", "sessions"],
+    ["/settings", "", "settings"],
+    ["/settings", "#authentication", "authentication"],
+    ["/settings", "#agent-setup", undefined],
+    ["/settings", "#server-url", undefined],
+    ["/settings", "#public-access", undefined],
+    ["/settings", "#resource-identifier", undefined],
+    ["/settings", "#tunnel-key", undefined],
+    ["/settings", "#unknown-section", undefined],
+    ["", "#settings", "settings"],
+    ["", "#authentication", "authentication"],
+    ["", "#tools", "tools"],
+  ] as const)("maps %s%s to toolset tab %s", (suffix, hash, expected) => {
+    expect(toolsetTabForServerPath(`${base}${suffix}`, "my-server", hash)).toBe(
+      expected,
+    );
   });
 });

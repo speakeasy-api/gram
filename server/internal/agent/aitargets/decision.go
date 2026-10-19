@@ -3,7 +3,7 @@ package aitargets
 import "slices"
 
 // Decision is an organization's access decision for one AI tool: whether it
-// may reach Gram's MCP gateway. Org-level per tool; a per-server override
+// may reach Speakeasy's MCP gateway. Org-level per tool; a per-server override
 // would be a later table on the same pair.
 type Decision string
 
@@ -71,7 +71,7 @@ type AccessSummary struct {
 
 // SummarizeAccess builds the verdict for one target.
 //
-// A tool Gram cannot recognize at the gateway reads unreviewed whatever is
+// A tool Speakeasy cannot recognize at the gateway reads unreviewed whatever is
 // stored: blocking is CIMD-only, so claiming "blocked" would be untrue in the
 // one place an admin checks. The stored decision is left alone. A target the
 // catalog no longer serves arrives as the zero Target and lands here too.

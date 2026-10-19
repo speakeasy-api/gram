@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("identity", func() {
-	Description("Resolves the identifiers Gram records activity under into a single identity.")
+	Description("Resolves the identifiers Speakeasy records activity under into a single identity.")
 
 	Security(security.ByKey, func() {
 		Scope("producer")
@@ -42,7 +42,7 @@ var _ = Service("identity", func() {
 var ResolveIdentityForm = Type("ResolveIdentityForm", func() {
 	Required("urn")
 	Attribute("urn", String, func() {
-		Description("The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.")
+		Description("The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Speakeasy user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.")
 		Example("user:user_01abc")
 	})
 })
@@ -74,7 +74,7 @@ var IdentityModel = Type("IdentityModel", func() {
 	})
 
 	Attribute("user_ids", ArrayOf(String), func() {
-		Description("The Gram user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.")
+		Description("The Speakeasy user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.")
 	})
 	Attribute("emails", ArrayOf(String), func() {
 		Description("Every address the subject is known by — directory email first, then linked AI account emails. Telemetry and cost aggregate over this set.")

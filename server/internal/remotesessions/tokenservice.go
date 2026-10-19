@@ -1,7 +1,7 @@
 // tokenservice.go is the MCP-runtime side of the remote-session flow.
 // challenge.go drives the *login* leg (build authz URL, exchange code,
 // persist tokens). This file drives the *use* leg: given a subject the
-// MCP runtime has just authenticated via a Gram user-session JWT, find
+// MCP runtime has just authenticated via a Speakeasy user-session JWT, find
 // the upstream access token to forward on the request.
 //
 // Three entry points exposed:
@@ -46,6 +46,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -166,6 +167,11 @@ type ResolvedAuthorization struct {
 	RemoteSessionUpdatedAt time.Time
 	RemoteSessionClientID  uuid.UUID
 	RemoteSessionIssuerID  uuid.UUID
+
+	// CredentialOwner is who AccessToken belongs to. A CredentialOwnerSelf
+	// token is the client's own, so it has no grant row and RemoteSessionID
+	// and RemoteSessionUpdatedAt are zero.
+	CredentialOwner CredentialOwner
 }
 
 // remoteSessionLastUsedCutoff coalesces the last_used_at stamp so a busy
@@ -218,6 +224,14 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	resource string,
 ) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
+	// Workload credentials require a tenant-scoped owner lookup, just as
+	// agent attachments require scoped resolution rather than this primitive.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		return zero, nil
+	}
+	if subject.Kind == urn.SessionSubjectKindWorkload {
+		return zero, nil
+	}
 
 	if _, ok := principalcredential.FromContext(ctx); ok {
 		// Principal credentials resolve only through the tenant-scoped path.
@@ -290,10 +304,13 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 	return UpstreamToken{
 		Token:                              tok,
 		Resource:                           conv.FromPGTextOrEmpty[string](sess.Resource),
+		CredentialOwner:                    CredentialOwnerSubject,
 		RemoteSessionClientID:              clientID,
 		RemoteSessionID:                    sess.ID,
 		RemoteSessionUpdatedAt:             sess.UpdatedAt.Time,
 		RemoteSessionResolvedFromUpdatedAt: resolvedFromUpdatedAt,
+		ClientCredentialErr:                nil,
+		renewal:                            nil,
 	}, nil
 }
 
@@ -319,28 +336,40 @@ func (m *ChallengeManager) ResolveAuthorization(
 		return ResolvedAuthorization{}, ErrInvalidAuthorizationRequest
 	}
 
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return ResolvedAuthorization{}, fmt.Errorf("list remote_session_clients: %w", err)
 	}
 
-	var clientID uuid.UUID
-	for _, client := range clients {
+	var bound *remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow
+	for i, client := range clients {
 		if client.RemoteSessionIssuerID != remoteSessionIssuerID {
 			continue
 		}
 		if err := inv.Check("remotesessions.ResolveAuthorization",
-			"at most one remote_session_client per (user_session_issuer, remote_session_issuer)", clientID == uuid.Nil,
+			"at most one remote_session_client per (user_session_issuer, remote_session_issuer)", bound == nil,
 		); err != nil {
 			return ResolvedAuthorization{}, fmt.Errorf("invariant: %w", err)
 		}
-		clientID = client.ClientID
+		bound = &clients[i]
 	}
-	if clientID == uuid.Nil {
+	if bound == nil {
 		return ResolvedAuthorization{}, ErrNoRemoteSessionClientBinding
 	}
+	clientID := bound.ClientID
 
-	resolved, err := m.resolveCallerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, subject, resource)
+	var resolved UpstreamToken
+	if CredentialOwner(bound.CredentialOwner) == CredentialOwnerSelf {
+		// The caller names the upstream, so it stands in for the attachment
+		// derivation when the client records no resource identifier.
+		resolved, err = m.resolveClientCredential(ctx, ClientCredentialRequest{
+			OrganizationID: organizationID,
+			ClientID:       clientID,
+			Resource:       clientCredentialRequestResource(*bound, resource),
+		})
+	} else {
+		resolved, err = m.resolveCallerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, subject, resource)
+	}
 	if err != nil {
 		return ResolvedAuthorization{}, fmt.Errorf("resolve remote-session access token: %w", err)
 	}
@@ -354,6 +383,7 @@ func (m *ChallengeManager) ResolveAuthorization(
 		RemoteSessionUpdatedAt: resolved.RemoteSessionUpdatedAt,
 		RemoteSessionClientID:  clientID,
 		RemoteSessionIssuerID:  remoteSessionIssuerID,
+		CredentialOwner:        resolved.CredentialOwner,
 	}, nil
 }
 
@@ -370,6 +400,18 @@ type UpstreamToken struct {
 	// the connect flow carried no resource indicator.
 	Resource string
 
+	// CredentialOwner is who the credential belongs to.
+	//
+	// A CredentialOwnerSelf token is the client's own. Its Resource is the one
+	// its grant requested, empty when it requested none, and it routes by the
+	// remote_session_issuer it is keyed under as well. It has no grant row
+	// (the RemoteSession fields below are zero), and
+	// RenewClientCredential replaces it after an upstream rejection. With an
+	// empty Token it marks a self client whose credential could not be
+	// obtained, which only ResolveAvailableAccessTokens returns, and
+	// ClientCredentialErr says why.
+	CredentialOwner CredentialOwner
+
 	// RemoteSessionClientID is the remote_session_client the credential
 	// belongs to.
 	RemoteSessionClientID uuid.UUID
@@ -383,6 +425,24 @@ type UpstreamToken struct {
 	// RemoteSessionResolvedFromUpdatedAt identifies the grant snapshot loaded
 	// before token resolution refreshed it.
 	RemoteSessionResolvedFromUpdatedAt time.Time
+
+	// ClientCredentialErr is why the self client this entry stands for has
+	// no usable credential, classified as ErrClientCredentialMisconfigured or
+	// ErrClientCredentialUnavailable, so a caller routing to that client
+	// answers with the remedy instead of calling anonymously. Nil for a usable
+	// token.
+	ClientCredentialErr error
+
+	// renewal is how RenewClientCredential replaces the self credential Token
+	// came from; nil for any other token.
+	renewal *clientCredentialRenewal
+}
+
+// clientCredentialRenewal is what replacing a self credential needs: the
+// credential to discard and the request that obtained it.
+type clientCredentialRenewal struct {
+	credential ClientCredential
+	request    ClientCredentialRequest
 }
 
 // ResolveAccessTokens is the variant the MCP serving path calls. It
@@ -407,6 +467,11 @@ type UpstreamToken struct {
 //     themselves. Resolution stops at the first failed refresh and judges
 //     the remaining clients from stored state, so a request with several
 //     unreachable upstreams waits on one refresh rather than all of them.
+//
+// A self client contributes the credential it holds for itself, whoever the
+// subject is. One that cannot be obtained fails resolution with
+// ErrClientCredentialMisconfigured or ErrClientCredentialUnavailable; it never
+// asks for re-linking, which nobody can do for it.
 //
 // Current intent (all-or-nothing): resolution fails if ANY attached upstream
 // is missing or invalid, even when the request only needs a different one.
@@ -435,6 +500,12 @@ type availabilityCheckKey struct{}
 
 // CheckAccessTokens validates connection availability without recording use.
 // Refresh remains allowed, but consent is not a proxied upstream tool call.
+//
+// Self clients are skipped without obtaining their credential. Nothing the
+// subject connects or attaches supplies it, so it cannot decide whether the
+// subject may proceed, and obtaining it here would wait on an upstream token
+// endpoint while callers hold admission locks. A broken self credential is
+// reported when a request needs it.
 func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject) error {
 	_, err := m.ResolveAccessTokens(context.WithValue(ctx, availabilityCheckKey{}, true), projectID, organizationID, issuerID, subject)
 	return err
@@ -447,7 +518,10 @@ func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, projectID uuid
 // credential by its recorded resource, so a member whose provider is not
 // connected degrades member-scoped while every other member keeps serving.
 // Returns the resolvable subset — possibly empty — and errors only on
-// infrastructure failures, never on missing or expired grants.
+// infrastructure failures, never on missing or expired grants. A self client
+// whose credential cannot be obtained keeps an entry with an empty Token
+// and UpstreamToken.ClientCredentialErr set, so routing to it names the
+// remedy instead of calling anonymously.
 func (m *ChallengeManager) ResolveAvailableAccessTokens(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -466,7 +540,7 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 	subject urn.SessionSubject,
 	skipUnusable bool,
 ) (map[uuid.UUID]UpstreamToken, error) {
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return nil, fmt.Errorf("list remote_session_clients: %w", err)
 	}
@@ -489,18 +563,43 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 		seen[c.RemoteSessionIssuerID] = true
 	}
 
+	availabilityCheck := ctx.Value(availabilityCheckKey{}) == true
+	selfResources, err := m.selfClientResources(ctx, organizationID, clients, availabilityCheck)
+	if err != nil {
+		return nil, err
+	}
+
 	tokens := make(map[uuid.UUID]UpstreamToken, len(clients))
 	for i, c := range clients {
-		// The grant-time metadata (the recorded RFC 8707 resource) comes from
-		// the same row load that produced the token, so a disconnect+reconnect
-		// between two reads can never pair an old token with a new row's
-		// resource.
-		// No endpoint-level fallback: a refresh of a legacy NULL-resource row
-		// derives the client's own resource in RefreshNow.
-		resolved, err := m.resolveCallerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, "")
+		self := CredentialOwner(c.CredentialOwner) == CredentialOwnerSelf
+		if self && availabilityCheck {
+			continue
+		}
+
+		var resolved UpstreamToken
+		var selfResource string
+		if self {
+			selfResource = clientCredentialRequestResource(c, selfResources[c.ClientID])
+			resolved, err = m.resolveClientCredential(ctx, ClientCredentialRequest{
+				OrganizationID: organizationID,
+				ClientID:       c.ClientID,
+				Resource:       selfResource,
+			})
+		} else {
+			// The grant-time metadata (the recorded RFC 8707 resource) comes
+			// from the same row load that produced the token, so a
+			// disconnect+reconnect between two reads can never pair an old
+			// token with a new row's resource.
+			// No endpoint-level fallback: a refresh of a legacy NULL-resource
+			// row derives the client's own resource in RefreshNow.
+			resolved, err = m.resolveCallerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, "")
+		}
 		switch {
 		case errors.Is(err, ErrNoValidToken):
 			if skipUnusable {
+				if self {
+					tokens[c.RemoteSessionIssuerID] = unavailableClientCredential(c.ClientID, selfResource, err)
+				}
 				continue
 			}
 			// A refined failure can still be outranked by a later client that
@@ -528,6 +627,55 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 	return tokens, nil
 }
 
+// selfClientResources derives, for each self client among clients, the
+// upstream its attached MCP servers name, in one load. The derivation is only
+// the fallback for a client that records no resource identifier, and an
+// availability check obtains no self credential, so it loads nothing then.
+func (m *ChallengeManager) selfClientResources(ctx context.Context, organizationID string, clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow, availabilityCheck bool) (map[uuid.UUID]string, error) {
+	if availabilityCheck {
+		return nil, nil
+	}
+
+	var ids []uuid.UUID
+	for _, c := range clients {
+		if CredentialOwner(c.CredentialOwner) == CredentialOwnerSelf && (!c.ResourceIdentifier.Valid || c.ResourceIdentifier.String == "") {
+			ids = append(ids, c.ClientID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	attachments, err := attachmentsForClients(ctx, m.db, organizationID, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	resources := make(map[uuid.UUID]string, len(ids))
+	for _, id := range ids {
+		resources[id] = clientUpstreamResource(attachments[id])
+	}
+
+	return resources, nil
+}
+
+// unavailableClientCredential is the entry ResolveAvailableAccessTokens keeps
+// for a self client whose credential for resource could not be obtained, for
+// err. It carries the resource so it routes exactly as the credential would.
+func unavailableClientCredential(clientID uuid.UUID, resource string, err error) UpstreamToken {
+	return UpstreamToken{
+		Token:                              "",
+		Resource:                           resource,
+		CredentialOwner:                    CredentialOwnerSelf,
+		RemoteSessionClientID:              clientID,
+		RemoteSessionID:                    uuid.Nil,
+		RemoteSessionUpdatedAt:             time.Time{},
+		RemoteSessionResolvedFromUpdatedAt: time.Time{},
+		ClientCredentialErr:                err,
+		renewal:                            nil,
+	}
+}
+
 // RemoteSessionsNeedReconnect reports whether any remote session subject must
 // hold under the user-session issuer is missing or can no longer be renewed,
 // judged from stored state alone, including token expiry and readability. It never
@@ -545,7 +693,7 @@ func (m *ChallengeManager) RemoteSessionsNeedReconnect(
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (bool, error) {
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return false, fmt.Errorf("list remote_session_clients: %w", err)
 	}
@@ -555,7 +703,8 @@ func (m *ChallengeManager) RemoteSessionsNeedReconnect(
 // storedGrantsNeedReconnect reports whether the stored credential the caller
 // would resolve for any of clients needs re-linking. It selects the credential
 // source exactly as resolveCallerUpstreamToken does and applies
-// validateAndRefresh's reconnect conditions without refreshing.
+// validateAndRefresh's reconnect conditions without refreshing. Self clients
+// are never re-linked, because no subject connects them.
 func (m *ChallengeManager) storedGrantsNeedReconnect(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -568,11 +717,26 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 	if err != nil {
 		return false, err
 	}
+	var workloadOwner string
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
+		admission, err := m.workloadCredentialOwner(ctx, projectID, organizationID, subject)
+		if err != nil {
+			return false, err
+		}
+		workloadOwner = admission.OwnerUserID
+	} else if subject.Kind == urn.SessionSubjectKindWorkload {
+		return false, ErrInvalidAuthorizationRequest
+	}
 	q := remotesessions_repo.New(m.db)
 	now := time.Now()
 	for _, c := range clients {
+		if CredentialOwner(c.CredentialOwner) == CredentialOwnerSelf {
+			continue
+		}
 		var sess remotesessions_repo.RemoteSession
-		if attached {
+		if workloadOwner != "" {
+			sess, err = q.GetTenantUserRemoteSession(ctx, remotesessions_repo.GetTenantUserRemoteSessionParams{SubjectUrn: urn.NewUserSubject(workloadOwner), RemoteSessionClientID: c.ClientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID})
+		} else if attached {
 			sess, err = q.GetPrincipalRemoteSessionBinding(ctx, remotesessions_repo.GetPrincipalRemoteSessionBindingParams{
 				ProjectID:             projectID,
 				OrganizationID:        organizationID,

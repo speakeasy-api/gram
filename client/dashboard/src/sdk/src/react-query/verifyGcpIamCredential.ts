@@ -54,7 +54,7 @@ export type VerifyGcpIamCredentialMutationError =
  * verifyGcpIamCredential externalCredentials
  *
  * @remarks
- * Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
+ * Probe that Speakeasy can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.
  */
 export function useVerifyGcpIamCredentialMutation(
   options?: MutationHookOptions<

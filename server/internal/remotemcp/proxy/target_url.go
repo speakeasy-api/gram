@@ -32,7 +32,7 @@ func ValidateRemoteMCPURL(ctx context.Context, policy *guardian.Policy, rawURL s
 		return nil, err
 	}
 
-	validated, err := policy.ValidateHTTPURL(ctx, rawURL)
+	validated, err := policy.ValidateHTTPURL(ctx, rawURL, guardian.WithInternalCatalog())
 	if err != nil {
 		return nil, fmt.Errorf("validate remote MCP URL: %w", err)
 	}

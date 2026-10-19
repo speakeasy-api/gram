@@ -47,7 +47,7 @@ const (
 	ToolCallSourceMCP    ToolCallSource = "mcp"
 
 	// userEmailEnvVar is the environment variable injected into function
-	// payloads when authInput.gramEmail is enabled and Gram has authenticated
+	// payloads when authInput.gramEmail is enabled and Speakeasy has authenticated
 	// the identity accessing the MCP server.
 	userEmailEnvVar = "SPEAKEASY_AI_USER_EMAIL"
 
@@ -1013,7 +1013,7 @@ func (tp *ToolProxy) doExternalMCP(
 	return nil
 }
 
-// An upstream rejection is a tool error, not a rejection of the caller's Gram
+// An upstream rejection is a tool error, not a rejection of the caller's Speakeasy
 // bearer. Never relay its WWW-Authenticate challenge: it names a different
 // audience and may contain sensitive, upstream-controlled values.
 func writeExternalMCPAuthRejection(w http.ResponseWriter, requiresOAuth bool) error {

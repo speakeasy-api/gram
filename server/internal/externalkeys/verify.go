@@ -23,7 +23,7 @@ import (
 // verifyRatePerMin and verifyRateBurst bound how often one organization can run
 // the verify probe. Verify authenticates outbound as a caller-named identity and
 // then performs a real AsymmetricSign, so an unbounded endpoint would be both an
-// oracle for what Gram can reach and a way to run up signing charges on someone
+// oracle for what Speakeasy can reach and a way to run up signing charges on someone
 // else's key.
 //
 // The burst is wider than the credential bucket's because the unit being probed
@@ -49,7 +49,7 @@ const (
 // untruncated error is always in the log.
 const verifyDetailMaxLen = 300
 
-// VerifyGcpKmsKey probes end to end that Gram can reach a GCP KMS key through
+// VerifyGcpKmsKey probes end to end that Speakeasy can reach a GCP KMS key through
 // its backing credential and use it to sign. The probe is ephemeral — nothing is
 // persisted — and almost every negative outcome is a reportable state a human can
 // act on rather than a request error: a missing roles/cloudkms.signerVerifier
@@ -105,7 +105,7 @@ func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKms
 		return unverified(outcome, detail), nil
 	}
 
-	// The recorded algorithm is what Gram advertises and signs with, so it is the
+	// The recorded algorithm is what Speakeasy advertises and signs with, so it is the
 	// expectation the key is measured against. It comes back out of a text column,
 	// where a bare conversion to jose.SignatureAlgorithm would accept anything the
 	// column happens to hold.
@@ -115,7 +115,7 @@ func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKms
 		return unverified(outcomeUnsupportedAlg, "this key records an algorithm Speakeasy cannot sign with; delete it and create it again with RS256 or ES256"), nil
 	}
 
-	// TokenSource alone proves nothing: it is lazy by design, so a credential Gram
+	// TokenSource alone proves nothing: it is lazy by design, so a credential Speakeasy
 	// cannot actually impersonate would build a source successfully and then fail
 	// on the first KMS call, where the error arrives as Unauthenticated and reads
 	// as a missing roles/cloudkms.signerVerifier grant on the key. That names the
@@ -128,7 +128,7 @@ func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKms
 	}
 
 	// The identity resolved a moment ago, so a token source that cannot be built
-	// for it now is a fault on Gram's side rather than the customer's.
+	// for it now is a fault on Speakeasy's side rather than the customer's.
 	tokenSource, err := s.gcpIdentity.TokenSource(ctx, credential)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "cannot verify this key right now, try again shortly").LogError(ctx, logger)
@@ -162,7 +162,7 @@ func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKms
 // authenticates as a stored credential; this wrapper renders its problem codes
 // as probe outcomes. A screening the server cannot evaluate is an error rather
 // than an unverified result: reporting "not verified" would blame the
-// customer's configuration for a fault on Gram's side.
+// customer's configuration for a fault on Speakeasy's side.
 //
 // A non-empty outcome means the caller returns that outcome unverified; a
 // non-nil error means the probe could not be evaluated and the request fails.

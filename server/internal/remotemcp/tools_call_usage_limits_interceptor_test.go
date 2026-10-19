@@ -25,9 +25,11 @@ type fakeBillingRepo struct {
 	billing.Repository // embedded for the unused-methods-panic effect: calling any unoverridden method is a nil-pointer panic, which is equivalent to failing the test
 	storedUsage        *usage.PeriodUsage
 	storedErr          error
+	lastOrganizationID string
 }
 
-func (f *fakeBillingRepo) GetStoredPeriodUsage(_ context.Context, _ string) (*usage.PeriodUsage, error) {
+func (f *fakeBillingRepo) GetStoredPeriodUsage(_ context.Context, organizationID string) (*usage.PeriodUsage, error) {
+	f.lastOrganizationID = organizationID
 	return f.storedUsage, f.storedErr
 }
 

@@ -11,7 +11,7 @@ export type ReportSessionMovedRequestBody = {
    */
   email?: string | undefined;
   /**
-   * Native harness session identifier of the moved session. Gram derives its chat id from this the same way hook ingest does; the move is recorded even if the session has not been captured yet.
+   * Native harness session identifier of the moved session. Speakeasy derives its chat id from this the same way hook ingest does; the move is recorded even if the session has not been captured yet.
    */
   sessionId: string;
   /**
@@ -23,7 +23,7 @@ export type ReportSessionMovedRequestBody = {
    */
   targetHarness: string;
   /**
-   * Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Gram link the original session and its continuation.
+   * Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Speakeasy link the original session and its continuation.
    */
   targetSessionId?: string | undefined;
 };

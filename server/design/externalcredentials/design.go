@@ -9,21 +9,21 @@ import (
 )
 
 // The externalCredentials service exposes organization-scoped CRUD over
-// external_credentials (how Gram authenticates into a customer's AWS or GCP
+// external_credentials (how Speakeasy authenticates into a customer's AWS or GCP
 // account). Writes are per-provider and strongly typed; reads use a generic,
 // supertype-only list plus per-provider typed detail endpoints.
 //
 // GCP credentials are verifiable here. That was originally out of scope because
-// the ambient identity mode makes verification meaningless — resolving Gram's
+// the ambient identity mode makes verification meaningless — resolving Speakeasy's
 // own attached identity says nothing about a customer's configuration. Requiring
 // impersonation on this tier removes that objection: impersonating the
 // customer's service account is a real authorization check that only succeeds
-// when they have granted Gram roles/iam.serviceAccountTokenCreator on it.
+// when they have granted Speakeasy roles/iam.serviceAccountTokenCreator on it.
 //
-// AWS credentials are not verifiable yet — Gram has no AWS identity to assume a
+// AWS credentials are not verifiable yet — Speakeasy has no AWS identity to assume a
 // customer role from — so no verify method exists for that provider.
 var _ = Service("externalCredentials", func() {
-	Description("Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.")
+	Description("Manage organization-level external credentials — how Speakeasy authenticates into a customer's AWS or GCP account.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
@@ -234,7 +234,7 @@ var _ = Service("externalCredentials", func() {
 	})
 
 	Method("verifyGcpIamCredential", func() {
-		Description("Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.")
+		Description("Probe that Speakeasy can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.")
 
 		// Declared here rather than in shared.DeclareErrorResponses because only the
 		// rate-limited endpoints can return it, and putting it in the shared set
@@ -267,7 +267,7 @@ var _ = Service("externalCredentials", func() {
 	})
 
 	Method("getGcpSetupInfo", func() {
-		Description("Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.")
+		Description("Report what the customer must grant in their own GCP project before Speakeasy can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.")
 
 		Payload(func() {
 			security.SessionPayload()

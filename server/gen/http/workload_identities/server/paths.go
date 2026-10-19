@@ -17,6 +17,11 @@ func ListPlatformsWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.listPlatforms"
 }
 
+// GetCustomFlowsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service getCustomFlows HTTP endpoint.
+func GetCustomFlowsWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.getCustomFlows"
+}
+
 // ListTokenEndpointsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service listTokenEndpoints HTTP endpoint.
 func ListTokenEndpointsWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.listTokenEndpoints"

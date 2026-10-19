@@ -41,13 +41,13 @@ func newNetingressAttestorCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:     "upstream-url",
-				Usage:    "Gram private listener URL",
+				Usage:    "Speakeasy private listener URL",
 				EnvVars:  []string{"GRAM_NETINGRESS_UPSTREAM_URL"},
 				Required: true,
 			},
 			&cli.StringFlag{
 				Name:     "upstream-ca-file",
-				Usage:    "PEM CA bundle for the Gram private listener",
+				Usage:    "PEM CA bundle for the Speakeasy private listener",
 				EnvVars:  []string{"GRAM_NETINGRESS_UPSTREAM_CA_FILE"},
 				Required: true,
 			},

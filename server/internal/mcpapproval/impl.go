@@ -82,6 +82,13 @@ const (
 // statusRequested is the status a raised or reopened request carries.
 const statusRequested = "requested"
 
+// Exported names for the two intake values other packages file requests with,
+// so a caller never carries its own copy of the literal.
+const (
+	TargetKindServerURL = targetKindServerURL
+	StatusRequested     = statusRequested
+)
+
 // statusUnreviewed marks an evidence dossier nobody has asked about: opened
 // so a server can be inspected, it stays out of the decision queue and
 // upgrades in place to requested the moment someone actually asks.

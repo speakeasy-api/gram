@@ -388,7 +388,7 @@ type GetToolUsageSummaryRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -424,7 +424,7 @@ type GetToolUsageTotalsRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -460,7 +460,7 @@ type GetToolUsageTargetsRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -496,7 +496,7 @@ type GetToolUsageUsersRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -532,7 +532,7 @@ type GetToolUsageClientsRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -568,7 +568,7 @@ type GetToolUsageClientToolBreakdownRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -604,7 +604,7 @@ type GetToolUsageTargetTimeSeriesRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -640,7 +640,7 @@ type GetToolUsageUserTimeSeriesRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -676,7 +676,7 @@ type GetToolUsageUsersByTargetRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -712,7 +712,7 @@ type GetToolUsageTargetToolBreakdownRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -748,7 +748,7 @@ type ListToolUsageTracesRequestBody struct {
 	// and are excluded when this filter is set.
 	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string `form:"client_keys,omitempty" json:"client_keys,omitempty" xml:"client_keys,omitempty"`
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
@@ -757,7 +757,7 @@ type ListToolUsageTracesRequestBody struct {
 	// all.
 	Statuses []string `form:"statuses,omitempty" json:"statuses,omitempty" xml:"statuses,omitempty"`
 	// Free-text attribute search string from the q URL param. Matches useful
-	// identifier attributes such as Gram URN, conversation ID, and trigger
+	// identifier attributes such as Speakeasy URN, conversation ID, and trigger
 	// instance ID.
 	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
 	// Arbitrary attribute filter conditions from the af URL param
@@ -7945,7 +7945,7 @@ type SearchLogsFilterRequestBody struct {
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 	// Service name filter
 	ServiceName *string `form:"service_name,omitempty" json:"service_name,omitempty" xml:"service_name,omitempty"`
-	// Gram URN filter (one or more URNs)
+	// Speakeasy URN filter (one or more URNs)
 	GramUrns []string `form:"gram_urns,omitempty" json:"gram_urns,omitempty" xml:"gram_urns,omitempty"`
 	// Chat ID filter
 	GramChatID *string `form:"gram_chat_id,omitempty" json:"gram_chat_id,omitempty" xml:"gram_chat_id,omitempty"`
@@ -7963,7 +7963,7 @@ type SearchLogsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function ID filter
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
 
@@ -8014,7 +8014,7 @@ type SearchToolCallsFilterRequestBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// Function ID filter
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 }
 
@@ -8028,7 +8028,7 @@ type ToolCallSummaryResponseBody struct {
 	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
 	// HTTP status code (if applicable)
 	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
-	// Gram URN associated with this tool call
+	// Speakeasy URN associated with this tool call
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 	// Tool name (from attributes.gram.tool.name)
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
@@ -8046,7 +8046,7 @@ type SearchChatsFilterRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Deployment ID filter
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 	// User ID filter
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
@@ -8176,8 +8176,8 @@ type UserAccountResponseBody struct {
 	// Account record id (user_accounts.id); used to scope chat/session views to
 	// this account
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram user id of the directory owner of this account; the authoritative link
-	// between account-email-keyed usage and the org member
+	// Speakeasy user id of the directory owner of this account; the authoritative
+	// link between account-email-keyed usage and the org member
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// AI provider the account belongs to ('anthropic', 'openai', 'cursor')
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
@@ -9010,7 +9010,7 @@ type ToolUsageTraceSummaryResponseBody struct {
 	StartTimeUnixNano *string `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
 	// Number of logs in the trace
 	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
-	// Gram URN associated with the trace
+	// Speakeasy URN associated with the trace
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 	// Tool name shown in the row
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
@@ -9152,7 +9152,7 @@ type HookTraceSummaryResponseBody struct {
 	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
 	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
 	BlockReason *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
-	// Gram URN associated with this hook trace
+	// Speakeasy URN associated with this hook trace
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 	// Tool name (from materialized column)
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`

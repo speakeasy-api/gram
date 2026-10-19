@@ -16,7 +16,7 @@ func TestSpliceResultProtocolFields_ObjectGainsBothFields(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"resultType": "complete",
-		"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Gram", "version": "0.0.0"}}
+		"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Speakeasy", "version": "0.0.0"}}
 	}`, string(out))
 }
 
@@ -30,7 +30,7 @@ func TestSpliceResultProtocolFields_PreservesExistingResultType(t *testing.T) {
 	// the two fields are filled independently.
 	require.JSONEq(t, `{
 		"resultType": "input_required",
-		"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Gram", "version": "0.0.0"}}
+		"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Speakeasy", "version": "0.0.0"}}
 	}`, string(out))
 }
 
@@ -41,7 +41,7 @@ func TestSpliceResultProtocolFields_NullMetaTreatedAsAbsent(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"resultType": "complete",
-		"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Gram", "version": "0.0.0"}}
+		"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Speakeasy", "version": "0.0.0"}}
 	}`, string(out))
 }
 
@@ -68,7 +68,7 @@ func TestSpliceResultProtocolFields_MergesIntoExistingMeta(t *testing.T) {
 		"content": [],
 		"_meta": {
 			"com.example/key": "kept",
-			"io.modelcontextprotocol/serverInfo": {"name": "Gram", "version": "0.0.0"}
+			"io.modelcontextprotocol/serverInfo": {"name": "Speakeasy", "version": "0.0.0"}
 		}
 	}`, string(out))
 }
@@ -108,7 +108,7 @@ func TestSpliceCacheHints_ObjectGainsBothMembers(t *testing.T) {
 
 	out, err := spliceResultProtocolFields([]byte(`{"tools":[]}`), serverInfoHostedToolset, cacheHintsCallerVarying)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Gram","version":"0.0.0"}},"tools":[],"ttlMs":0,"cacheScope":"private"}`, string(out))
+	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Speakeasy","version":"0.0.0"}},"tools":[],"ttlMs":0,"cacheScope":"private"}`, string(out))
 }
 
 func TestSpliceCacheHints_OverwritesUpstreamValues(t *testing.T) {
@@ -120,7 +120,7 @@ func TestSpliceCacheHints_OverwritesUpstreamValues(t *testing.T) {
 	in := `{"contents":[],"ttlMs":60000,"cacheScope":"public"}`
 	out, err := spliceResultProtocolFields([]byte(in), serverInfoHostedToolset, cacheHintsCallerVarying)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Gram","version":"0.0.0"}},"contents":[],"ttlMs":0,"cacheScope":"private"}`, string(out))
+	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Speakeasy","version":"0.0.0"}},"contents":[],"ttlMs":0,"cacheScope":"private"}`, string(out))
 }
 
 func TestSpliceCacheHints_OverwritesOffSpecUpstreamValues(t *testing.T) {
@@ -131,7 +131,7 @@ func TestSpliceCacheHints_OverwritesOffSpecUpstreamValues(t *testing.T) {
 	in := `{"ttlMs":-5000,"cacheScope":"whatever"}`
 	out, err := spliceResultProtocolFields([]byte(in), serverInfoHostedToolset, cacheHintsCallerVarying)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Gram","version":"0.0.0"}},"ttlMs":0,"cacheScope":"private"}`, string(out))
+	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Speakeasy","version":"0.0.0"}},"ttlMs":0,"cacheScope":"private"}`, string(out))
 }
 
 func TestSpliceCacheHints_NonObjectResultUnchanged(t *testing.T) {
@@ -194,7 +194,7 @@ func TestResultMarshal_EmitsCacheHintsWhenSet(t *testing.T) {
 			"resultType": "complete",
 			"ttlMs": 0,
 			"cacheScope": "private",
-			"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Gram", "version": "0.0.0"}}
+			"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Speakeasy", "version": "0.0.0"}}
 		}
 	}`, string(bs))
 }
@@ -226,7 +226,7 @@ func TestResultMarshal_DefaultsToHostedIdentity(t *testing.T) {
 		"id": 7,
 		"result": {
 			"resultType": "complete",
-			"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Gram", "version": "0.0.0"}}
+			"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Speakeasy", "version": "0.0.0"}}
 		}
 	}`, string(bs))
 }
@@ -245,7 +245,7 @@ func TestResultMarshal_PlatformIdentity(t *testing.T) {
 		"id": 7,
 		"result": {
 			"resultType": "complete",
-			"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Gram Platform Toolset", "version": "0.0.0"}}
+			"_meta": {"io.modelcontextprotocol/serverInfo": {"name": "Speakeasy Platform Toolset", "version": "0.0.0"}}
 		}
 	}`, string(bs))
 }

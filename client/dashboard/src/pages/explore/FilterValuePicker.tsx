@@ -110,7 +110,7 @@ export function FilterValuePicker({
               setOpen(true);
             }
           }}
-          className="border-input bg-surface-primary-default focus-visible:border-focus flex min-h-9 min-w-64 max-w-3xl cursor-pointer flex-wrap items-center gap-1.5 border px-3 py-1.5 text-left text-sm focus-visible:outline-none"
+          className="border-input bg-surface-primary-default focus-visible:border-focus flex min-h-8 min-w-56 max-w-3xl cursor-pointer flex-wrap items-center gap-1.5 border px-2.5 py-1 text-left text-sm focus-visible:outline-none"
         >
           {values.length === 0 ? (
             <span className="text-muted-foreground">

@@ -15,9 +15,10 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Organization-administrator visibility into remote_sessions Gram is holding
-// on a principal's behalf, across every project in the caller's organization.
-// access_token_encrypted and refresh_token_encrypted are never returned.
+// Organization-administrator visibility into remote_sessions Speakeasy is
+// holding on a principal's behalf, across every project in the caller's
+// organization. access_token_encrypted and refresh_token_encrypted are never
+// returned.
 type Service interface {
 	// List the remote_sessions minted against a remote_session_client in the
 	// caller's organization. access_token_encrypted and refresh_token_encrypted

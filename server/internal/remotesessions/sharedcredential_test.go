@@ -386,7 +386,7 @@ func TestRefreshSweep_SiblingIssuerKeepsCredentialEligible(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Provenance issuer A mints the credential but its subject holds no live
-	// Gram session under A; sibling issuer B is bound to the same client and
+	// Speakeasy session under A; sibling issuer B is bound to the same client and
 	// does. The keepalive must consider the credential eligible through B.
 	issuerID := createRemoteIssuer(t, ctx, ti, "shared-sweep-issuer", "")
 	provenance := createUserSessionIssuer(t, ctx, ti.conn, "shared-sweep-usi-a")
@@ -441,7 +441,7 @@ func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
 	// The client is owned by the fixture project. A binding row attached
 	// directly (bypassing the attach handlers' tenancy validation, as a
 	// corrupted or maliciously inserted row would) links it to an issuer in a
-	// DIFFERENT project. That issuer holds the only live Gram session for the
+	// DIFFERENT project. That issuer holds the only live Speakeasy session for the
 	// subject, so without the client-tenancy predicate the sweep would claim
 	// the credential through the foreign project's binding.
 	issuerID := createRemoteIssuer(t, ctx, ti, "shared-sweep-xten-issuer", "")
@@ -522,7 +522,7 @@ func TestRefreshSweep_NoLiveBoundIssuerSessionNotEligible(t *testing.T) {
 	window := newSweepWindow()
 	rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
 	require.NoError(t, err)
-	require.Empty(t, rows, "with no bound issuer holding a live Gram session, the keepalive must not claim the credential")
+	require.Empty(t, rows, "with no bound issuer holding a live Speakeasy session, the keepalive must not claim the credential")
 
 	_, err = repo.New(ti.conn).GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(session.ID, authCtx.ActiveOrganizationID))
 	require.ErrorIs(t, err, pgx.ErrNoRows)

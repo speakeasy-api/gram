@@ -185,22 +185,21 @@ func actor(ctx context.Context, authCtx *contextvalues.AuthContext) urn.Principa
 	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 }
 
-// requireEnabled checks the rollout flag and returns the organization's
-// slug for later flag reads; a lookup failure reads as unavailable, never
-// forbidden.
-func (s *Service) requireEnabled(ctx context.Context, logger *slog.Logger, organizationID string) (string, error) {
+// requireEnabled checks the rollout flag; a lookup failure reads as
+// unavailable, never forbidden.
+func (s *Service) requireEnabled(ctx context.Context, logger *slog.Logger, organizationID string) error {
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
-		return "", oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
+		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
 	}
 	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagOktaConnections, organizationID, feature.OrgProjectGroups(org.Slug, ""))
 	if err != nil {
-		return "", oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
+		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
 	}
 	if !enabled {
-		return "", oops.E(oops.CodeForbidden, nil, "okta connections are not enabled for this organization")
+		return oops.E(oops.CodeForbidden, nil, "okta connections are not enabled for this organization")
 	}
-	return org.Slug, nil
+	return nil
 }
 
 // upstreamKey identifies the resource the administrator connects in Okta.
@@ -250,7 +249,7 @@ type snapshot struct {
 	// server, read once; the login probes, this surface never does.
 	resources map[resourceKey]repo.ListRemoteProtectedResourceScopesRow
 
-	// discoverScopes applies the resource's advertised scopes, per the rollout flag.
+	// discoverScopes applies the resource's challenge scopes, pin, and advertised scopes.
 	discoverScopes bool
 
 	// owners holds, per remote-backed server, which bound clients own its
@@ -304,6 +303,15 @@ func (snap *snapshot) resourceRow(sv repo.ListEligibleServersRow) *remotesession
 	return &out
 }
 
+// documentResource is the resource sv's cached protected resource document
+// names, or empty.
+func (snap *snapshot) documentResource(sv repo.ListEligibleServersRow) string {
+	if !sv.RemoteUrl.Valid {
+		return ""
+	}
+	return snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}].DocumentResource
+}
+
 func (snap *snapshot) agentRecorded() bool {
 	return snap.connection.AgentID.Valid && snap.connection.AgentID.String != ""
 }
@@ -312,7 +320,7 @@ func (snap *snapshot) agentRecorded() bool {
 func (snap *snapshot) derive(sv repo.ListEligibleServersRow) row {
 	r := row{server: sv, connection: nil, clientID: "", binding: "", scopes: nil, resource: resourceIndicator(sv), state: "", reason: "", broken: ""}
 	r.connection = snap.records[r.key()]
-	r.clientID, r.scopes, r.binding = resolveClient(sv, r.resource, snap.clients[sv.IssuerID], snap.bindings[sv.IssuerID], snap.resourceScopes(sv))
+	r.clientID, r.scopes, r.binding = resolveClient(sv, r.resource, snap.documentResource(sv), snap.clients[sv.IssuerID], snap.bindings[sv.IssuerID], snap.resourceScopes(sv))
 	in := inputsFor(sv, r.connection, snap.agentRecorded())
 	r.state = Derive(in)
 	r.reason = NotApplicableReason(in)
@@ -322,7 +330,7 @@ func (snap *snapshot) derive(sv repo.ListEligibleServersRow) row {
 
 // load reads the connection, the eligible servers, and the recorded resource
 // connections, and derives every state. It reads outside any transaction.
-func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID, organizationSlug string) (*snapshot, error) {
+func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID string) (*snapshot, error) {
 	q := repo.New(s.db)
 	connection, err := q.GetLiveConnection(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -351,7 +359,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID,
 		records:        map[upstreamKey]*record{},
 		deepLink:       deepLink(connection),
 		resources:      map[resourceKey]repo.ListRemoteProtectedResourceScopesRow{},
-		discoverScopes: remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, organizationID, organizationSlug),
+		discoverScopes: true,
 		owners:         map[uuid.UUID]map[uuid.UUID]bool{},
 		now:            time.Now(),
 	}
@@ -451,6 +459,9 @@ func inputsFor(sv repo.ListEligibleServersRow, rc *record, agentRecorded bool) I
 	return in
 }
 
+// ResourceIndicator is the resource readiness reports for an eligible server.
+func ResourceIndicator(sv repo.ListEligibleServersRow) string { return resourceIndicator(sv) }
+
 // resourceIndicator is the RFC 9728 identifier when the server declares one,
 // else the server URL.
 func resourceIndicator(sv repo.ListEligibleServersRow) string {
@@ -470,7 +481,7 @@ func resourceIndicator(sv repo.ListEligibleServersRow) string {
 // bindings for the resource that agree on one client win; else the single
 // attached client in the server's project or the organization, preferring
 // one registered for this resource; else ambiguous or missing.
-func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []repo.ListIssuerClientsRow, bindings []repo.ListEMABindingsRow, resourceScopes func(clientID uuid.UUID) remotesessions.ResourceScopes) (string, []string, string) {
+func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource string, clients []repo.ListIssuerClientsRow, bindings []repo.ListEMABindingsRow, resourceScopes func(clientID uuid.UUID) remotesessions.ResourceScopes) (string, []string, string) {
 	byID := make(map[uuid.UUID]repo.ListIssuerClientsRow, len(clients))
 	for _, c := range clients {
 		byID[c.ID] = c
@@ -490,7 +501,8 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		for _, scope := range scopesOr(b.RequestedScopes, requestedScopes(c, resourceScopes(c.ID))) {
+		// Identity chaining requests the scopes recorded at Turn on.
+		for _, scope := range remotesessions.GrantScopes(b.RequestedScopes) {
 			if !slices.Contains(boundScopes, scope) {
 				boundScopes = append(boundScopes, scope)
 			}
@@ -528,32 +540,38 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 	case 0:
 		return "", nil, ClientBindingMissing
 	case 1:
-		return candidates[0].ClientID, requestedScopes(candidates[0], resourceScopes(candidates[0].ID)), ClientBindingSingle
+		return candidates[0].ClientID, turnOnScopes(sv, documentResource, candidates[0], resourceScopes(candidates[0].ID)), ClientBindingSingle
 	default:
 		return "", nil, ClientBindingAmbiguous
 	}
 }
 
-// requestedScopes is what a login through c would request today, from the
-// cached resource row; this surface never probes.
-func requestedScopes(c repo.ListIssuerClientsRow, resourceScopes remotesessions.ResourceScopes) []string {
-	scopes := (remotesessions.Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
-		ClientScope:             c.Scope,
-		IssuerScopeOverride:     c.IssuerScopeOverride,
-		IssuerScopesSupported:   c.IssuerScopesSupported,
-		IssuerOmitScopeFallback: c.IssuerOmitScopeFallback.Valid && c.IssuerOmitScopeFallback.Bool,
-	}).RequestedScopes(resourceScopes).Scopes
-	return scopesOr(nil, scopes)
+// turnOnScopes is what identity chaining through c would request for sv after
+// Turn on now, from the cached resource row; this surface never probes. Turn
+// on keys a connection only when the server's URL, or the resource its cached
+// document names, is exactly the resource the binding would select; otherwise
+// its scopes would come from the request.
+func turnOnScopes(sv repo.ListEligibleServersRow, documentResource string, c repo.ListIssuerClientsRow, resource remotesessions.ResourceScopes) []string {
+	var connection *remotesessions.ScopeResolution
+	if sv.RemoteUrl.Valid && remotesessions.ServesBindingResource(sv.RemoteUrl.String, documentResource, bindingResource(sv)) {
+		resolution := remotesessions.ClientConnectionScopes(remotesessions.ConnectionScopeInput{
+			ClientID:                c.ID,
+			ClientScope:             c.Scope,
+			IssuerScopesSupported:   c.IssuerScopesSupported,
+			IssuerScopeOverride:     c.IssuerScopeOverride,
+			IssuerOmitScopeFallback: c.IssuerOmitScopeFallback.Valid && c.IssuerOmitScopeFallback.Bool,
+		}, resource, true)
+		connection = &resolution
+	}
+	return remotesessions.GrantScopes(remotesessions.BindingScopes(connection, nil).Scopes)
 }
 
-func scopesOr(preferred, fallback []string) []string {
-	if len(preferred) > 0 {
-		return preferred
+// bindingResource is the resource a binding for sv would select, untrimmed.
+func bindingResource(sv repo.ListEligibleServersRow) string {
+	if sv.TunneledResourceIdentifier.Valid && sv.TunneledResourceIdentifier.String != "" {
+		return sv.TunneledResourceIdentifier.String
 	}
-	if fallback == nil {
-		return []string{}
-	}
-	return fallback
+	return sv.RemoteUrl.String
 }
 
 func (s *Service) List(ctx context.Context, payload *srv.ListPayload) (*srv.ListOktaResourceConnectionsResult, error) {
@@ -561,15 +579,7 @@ func (s *Service) List(ctx context.Context, payload *srv.ListPayload) (*srv.List
 	if err != nil {
 		return nil, err
 	}
-	// The slug only targets the scope discovery flag, which reads as off for
-	// an unreadable organization rather than failing the page.
-	organizationSlug := ""
-	if org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID); err != nil {
-		logger.WarnContext(ctx, "read organization for scope discovery flag", attr.SlogError(err))
-	} else {
-		organizationSlug = org.Slug
-	}
-	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, organizationSlug)
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -666,15 +676,14 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 	if err != nil {
 		return nil, err
 	}
-	orgSlug, err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID)
-	if err != nil {
+	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	items, err := parseConfirmations(payload.Connections)
 	if err != nil {
 		return nil, err
 	}
-	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, orgSlug)
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -730,7 +739,7 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 		if resource == "" {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no resource indicator")
 		}
-		if _, _, binding := resolveClient(server, resource, snap.clients[server.IssuerID], snap.bindings[server.IssuerID], snap.resourceScopes(server)); binding == ClientBindingMissing || binding == ClientBindingAmbiguous {
+		if _, _, binding := resolveClient(server, resource, snap.documentResource(server), snap.clients[server.IssuerID], snap.bindings[server.IssuerID], snap.resourceScopes(server)); binding == ClientBindingMissing || binding == ClientBindingAmbiguous {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no single client registered at its authorization server")
 		}
 		key := upstreamKey{issuerID: server.IssuerID, resource: resource}
@@ -816,15 +825,14 @@ func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.Ok
 	if err != nil {
 		return nil, err
 	}
-	orgSlug, err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID)
-	if err != nil {
+	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.McpServerID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id")
 	}
-	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, orgSlug)
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -930,7 +938,7 @@ func buildRow(snap *snapshot, r row) *srv.OktaResourceConnectionServer {
 		AuthorizationServerIssuer: conv.PtrEmpty(r.server.Issuer),
 		ClientID:                  conv.PtrEmpty(r.clientID),
 		ClientBinding:             r.binding,
-		Scopes:                    scopesOr(nil, r.scopes),
+		Scopes:                    conv.DefaultSlice(r.scopes, []string{}),
 		DeepLink:                  conv.PtrEmpty(snap.deepLink),
 		Audience:                  nil,
 		OktaApplicationID:         nil,

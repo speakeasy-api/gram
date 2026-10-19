@@ -6,7 +6,6 @@
 SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
 ORDER BY principal_urn, scope;
 
@@ -16,7 +15,6 @@ ORDER BY principal_urn, scope;
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND principal_urn = ANY(@principal_urns::text[]);
 
 -- name: ListPrincipalGrantsByResource :many
@@ -24,7 +22,6 @@ WHERE organization_id = @organization_id
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text,
@@ -40,7 +37,6 @@ ORDER BY principal_urn;
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text
@@ -50,25 +46,20 @@ ORDER BY principal_urn;
 
 -- name: UpsertPrincipalGrant :one
 -- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
--- any legacy effect is normalized to the allow-only NULL representation.
+-- the existing row is kept and its updated_at is bumped.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
-  effect = NULL,
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
 
 -- name: InsertPrincipalGrantIfAbsent :execrows
--- Creates a single grant row, leaves existing allow rows untouched, and converts
--- a conflicting legacy effect row to the allow-only NULL representation.
+-- Creates a single grant row and leaves an existing identical row untouched.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
-DO UPDATE SET
-  effect = NULL,
-  updated_at = clock_timestamp()
-WHERE principal_grants.effect IS NOT NULL;
+DO NOTHING;
 
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
@@ -1107,7 +1098,6 @@ WITH user_grants AS (
     (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
-    AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY(@principal_urns::text[])
     AND pg.scope IN (
       'mcp:connect', 'mcp:read', 'mcp:write',
@@ -1186,7 +1176,6 @@ WITH user_grants AS (
     (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
-    AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY(@principal_urns::text[])
     AND pg.scope IN (
       'skill:read', 'skill:write',
@@ -1592,7 +1581,7 @@ WHERE drm.organization_id = @organization_id
   AND drm.deleted IS FALSE
 ORDER BY drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
 
--- name: UpsertDirectoryGroupRoleMapping :one
+-- name: InsertDirectoryGroupRoleMapping :one
 INSERT INTO directory_role_mappings (
   organization_id,
   source_kind,
@@ -1605,14 +1594,9 @@ VALUES (
   @directory_group_id,
   @role_urn
 )
-ON CONFLICT (organization_id, directory_group_id)
-  WHERE deleted IS FALSE AND directory_group_id IS NOT NULL
-DO UPDATE SET
-  role_urn = EXCLUDED.role_urn,
-  updated_at = clock_timestamp()
 RETURNING id, role_urn, created_at, updated_at;
 
--- name: UpsertDirectoryAttributeRoleMapping :one
+-- name: InsertDirectoryAttributeRoleMapping :one
 INSERT INTO directory_role_mappings (
   organization_id,
   source_kind,
@@ -1627,17 +1611,10 @@ VALUES (
   @attribute_value,
   @role_urn
 )
-ON CONFLICT (organization_id, attribute_key, attribute_value)
-  WHERE deleted IS FALSE AND attribute_key IS NOT NULL
-DO UPDATE SET
-  role_urn = EXCLUDED.role_urn,
-  updated_at = clock_timestamp()
 RETURNING id, role_urn, created_at, updated_at;
 
--- name: GetLiveDirectoryRoleMappingRoleForSource :one
--- The role a group or attribute value is mapped to now, locked so a
--- concurrent set cannot slip between this read and the upsert.
-SELECT role_urn
+-- name: ListLiveDirectoryRoleMappingsForSource :many
+SELECT id, role_urn, created_at, updated_at
 FROM directory_role_mappings
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
@@ -1649,7 +1626,38 @@ WHERE organization_id = @organization_id
       AND attribute_value = sqlc.narg('attribute_value')::text
     )
   )
+ORDER BY role_urn
 FOR UPDATE;
+
+-- name: ListLiveDirectoryMappingRoles :many
+WITH live_global_roles AS (
+  SELECT ('role:global:' || id::text)::text AS role_urn
+  FROM global_roles
+  WHERE ('role:global:' || id::text) = ANY(@role_urns::text[])
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  ORDER BY id
+  FOR SHARE
+), live_organization_roles AS (
+  SELECT ('role:organization:' || id::text)::text AS role_urn
+  FROM organization_roles
+  WHERE organization_id = @organization_id
+    AND ('role:organization:' || id::text) = ANY(@role_urns::text[])
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  ORDER BY id
+  FOR SHARE
+)
+SELECT role_urn FROM live_global_roles
+UNION ALL
+SELECT role_urn FROM live_organization_roles;
+
+-- name: GetDirectoryRoleMappingGroupSource :one
+SELECT name, deleted, workos_deleted
+FROM directory_groups
+WHERE id = @id
+  AND organization_id = @organization_id
+FOR SHARE;
 
 -- name: GetActiveDirectoryGroupName :one
 SELECT name

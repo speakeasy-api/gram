@@ -117,7 +117,7 @@ type Client struct {
 	endpoint   string
 }
 
-// NewClient validates cfg, applies the default timeout and max tokens, and
+// NewClient validates cfg, applies the default timeout, and
 // builds the guardian-backed HTTP client with the retry policy the analyzer
 // relies on: up to three retries on 5xx, 429 and connection errors with
 // 100ms to 1s backoff, never on a context deadline.
@@ -129,7 +129,6 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, meterPr
 		return nil, err
 	}
 	cfg.Timeout = conv.Default(cfg.Timeout, DefaultTimeout)
-	cfg.MaxTokens = conv.Default(cfg.MaxTokens, DefaultMaxTokens)
 
 	logger = logger.With(attr.SlogComponent("risk-llm-analyzer"))
 
@@ -224,7 +223,7 @@ type chatRequest struct {
 	Model              string             `json:"model"`
 	Messages           []Message          `json:"messages"`
 	Temperature        float64            `json:"temperature"`
-	MaxTokens          int                `json:"max_tokens"`
+	MaxTokens          int                `json:"max_tokens,omitempty"` // absent = no cap
 	ChatTemplateKwargs chatTemplateKwargs `json:"chat_template_kwargs"`
 }
 

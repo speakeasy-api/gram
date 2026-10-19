@@ -38,7 +38,7 @@ type MessageWrite struct {
 	// Params contains the SQLc parameters persisted for the message.
 	Params repo.CreateChatMessageParams
 
-	// BillingUserID is the Gram user to whom this feature explicitly allocates usage.
+	// BillingUserID is the Speakeasy user to whom this feature explicitly allocates usage.
 	BillingUserID string
 
 	// AssistantID identifies the assistant responsible for this workload when applicable.
@@ -68,7 +68,7 @@ type ExternalMessageWrite struct {
 	// Params contains the SQLc parameters persisted for the imported message.
 	Params repo.CreateExternalChatMessageParams
 
-	// BillingUserID is the Gram user to whom this import explicitly allocates usage.
+	// BillingUserID is the Speakeasy user to whom this import explicitly allocates usage.
 	BillingUserID string
 
 	// WorkloadSource identifies the product path responsible for this imported workload.

@@ -139,7 +139,7 @@ var CodexHookResult = Type("CodexHookResult", func() {
 })
 
 var HookIngestSource = Type("HookIngestSource", func() {
-	Description("Metadata about the local hook adapter that translated a provider event into the Gram hook contract.")
+	Description("Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.")
 	Required("adapter")
 	Attribute("adapter", String, "Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.")
 	Attribute("adapter_version", String, "Adapter implementation version.")
@@ -157,9 +157,9 @@ var HookIngestSession = Type("HookIngestSession", func() {
 })
 
 var HookIngestEvent = Type("HookIngestEvent", func() {
-	Description("Canonical Gram feature event.")
+	Description("Canonical Speakeasy feature event.")
 	Required("type")
-	Attribute("type", String, "Canonical Gram hook event type.", func() {
+	Attribute("type", String, "Canonical Speakeasy hook event type.", func() {
 		Enum("session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted",
 			"tool.requested", "tool.completed", "tool.failed", "assistant.responded",
 			"assistant.thought", "usage.reported", "skill.activated", "notification.reported")
@@ -353,7 +353,7 @@ var _ = Service("hooks", func() {
 			Extend(ClaudeHookPayload)
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
-			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Speakeasy hook plugin.")
 			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 		Result(ClaudeHookResult)
@@ -377,7 +377,7 @@ var _ = Service("hooks", func() {
 			Extend(CursorHookPayload)
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Speakeasy hook plugin.")
 			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 
@@ -403,7 +403,7 @@ var _ = Service("hooks", func() {
 			Extend(CodexHookPayload)
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Speakeasy hook plugin.")
 			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 

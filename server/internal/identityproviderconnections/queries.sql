@@ -64,6 +64,17 @@ WHERE ec.id = @id
   AND ec.provider = 'gcp_iam'
   AND ec.deleted IS FALSE;
 
+-- The service account a platform credential impersonates, tombstones
+-- included: the signer grant made with it outlives the credential.
+-- name: GetPlatformGcpIamCredentialServiceAccount :one
+SELECT gic.impersonate_service_account
+FROM external_credentials AS ec
+JOIN gcp_iam_credentials AS gic ON gic.external_credential_id = ec.id
+WHERE ec.id = @id
+  AND ec.organization_id IS NULL
+  AND ec.project_id IS NULL
+  AND ec.provider = 'gcp_iam';
+
 -- The managed client, its set, and the set's active key. The key join is LEFT
 -- so a revoked connection (live client, live set, no live keys) still resolves.
 -- The set join is LEFT for client-secret clients, which have no set; a client
@@ -120,12 +131,16 @@ SELECT updated_at <= clock_timestamp() - make_interval(secs => @cache_seconds::i
 FROM json_web_keys
 WHERE id = @id AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
 
--- Include tombstones and every organization: resource names are random and
--- global, so a reference anywhere means the key must never be disabled.
+-- Whether the organization has an external key row for this KMS resource,
+-- tombstones included: a reference the organization still holds means the
+-- key must never be disabled. References from other organizations don't count.
 -- name: ManagedKeyResourceExists :one
 SELECT EXISTS (
- SELECT 1 FROM gcp_kms_keys AS k
+ SELECT 1
+ FROM gcp_kms_keys AS k
+ JOIN external_keys AS ek ON ek.id = k.external_key_id AND ek.provider = k.external_keys_provider
  WHERE k.resource_name = @resource_name
+   AND ek.organization_id = @organization_id::text
 );
 
 -- Test fixture: age a pending publication relative to the database clock.
@@ -134,6 +149,13 @@ UPDATE json_web_keys
 SET updated_at = clock_timestamp() - make_interval(secs => @age_seconds::integer)
 WHERE json_web_key_set_id = @json_web_key_set_id
   AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
+
+-- Test fixture: age retired keys relative to the database clock.
+-- name: BackdateRetiredJsonWebKeys :exec
+UPDATE json_web_keys
+SET retired_at = clock_timestamp() - make_interval(secs => @age_seconds::integer)
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND organization_id = @organization_id AND state = 'retired' AND deleted IS FALSE;
 
 -- Connection management API. Every query below is organization-qualified.
 
@@ -478,3 +500,52 @@ WHERE o.identity_provider_connection_id = @identity_provider_connection_id
       AND c.deleted IS FALSE AND c.token_endpoint_auth_method = 'client_secret_basic'
       AND c.client_id = @client_id
   );
+
+-- Organization-owned, unmanaged sign-in clients registered for the recorded
+-- Okta agent under the connection's issuer, with the active signing key.
+-- name: ListOktaSignInClients :many
+SELECT c.id, c.token_endpoint_auth_method, c.token_endpoint_auth_audience_format,
+  c.json_web_key_set_id, c.scope, c.callback_base_url,
+  k.kid AS active_kid, k.public_jwk AS active_public_jwk
+FROM remote_session_clients AS c
+LEFT JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.state = 'active'
+ AND k.deleted IS FALSE
+WHERE c.organization_id = @organization_id
+  AND c.project_id IS NULL
+  AND c.identity_provider_connection_id IS NULL
+  AND c.remote_session_issuer_id = @remote_session_issuer_id
+  AND c.client_id = @client_id
+  AND c.deleted IS FALSE
+ORDER BY c.id;
+
+-- Organization sign-in issuers that trust an unmanaged client of the connection's issuer.
+-- name: ListOktaSignInIssuerTrusts :many
+SELECT u.id, u.slug, c.id AS trusted_client_row_id, c.client_id AS trusted_client_id,
+  c.deleted AS trusted_client_deleted
+FROM user_session_issuers AS u
+JOIN remote_session_clients AS c
+  ON c.organization_id = u.organization_id
+ AND c.id = u.trusted_remote_session_client_id
+WHERE u.organization_id = @organization_id
+  AND u.project_id IS NULL
+  AND u.trusted_remote_session_issuer_id = @remote_session_issuer_id
+  AND u.deleted IS FALSE
+  AND c.identity_provider_connection_id IS NULL
+ORDER BY u.slug, u.id;
+
+-- KMS resource behind any managed key, including enterprise issuer keys that
+-- customer key APIs never see. Used only to disable revoked key versions.
+-- name: GetManagedKeyResource :one
+SELECT gcp.resource_name, ek.external_credential_id
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id
+  AND ek.deleted IS FALSE;

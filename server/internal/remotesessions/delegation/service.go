@@ -18,7 +18,21 @@ var (
 	ErrTemporary        = errors.New("delegation temporarily unavailable")
 	ErrReauthentication = errors.New("delegation reauthentication required")
 	ErrConfiguration    = errors.New("delegation configuration requires remediation")
+
+	// ErrStaleRegistration is the ErrConfiguration a retained delegation
+	// reports when it predates the current trusted registration. Unlike other
+	// configuration failures a fresh sign-in repairs it, because the sign-in
+	// retains a delegation under the current registration. It matches
+	// ErrConfiguration and reads the same, so callers that do not need the
+	// distinction see no change.
+	ErrStaleRegistration error = staleRegistrationError{}
 )
+
+// staleRegistrationError is ErrStaleRegistration's type.
+type staleRegistrationError struct{}
+
+func (staleRegistrationError) Error() string { return ErrConfiguration.Error() }
+func (staleRegistrationError) Unwrap() error { return ErrConfiguration }
 
 // Assertion is an internal-only result, never a management API model.
 type Assertion struct {
@@ -33,7 +47,7 @@ func (a Assertion) Value() string        { return a.value }
 func (a Assertion) ExpiresAt() time.Time { return a.expiresAt }
 
 // Subject is the verified upstream subject the retained assertion restates,
-// distinct from the Gram human it was retained for. Empty when unrecorded.
+// distinct from the Speakeasy human it was retained for. Empty when unrecorded.
 func (a Assertion) Subject() string { return a.subject }
 
 // SessionID identifies the retained trusted issuer session the assertion came
@@ -355,41 +369,82 @@ func (s *Service) RecordOfflineRefusal(ctx context.Context, p Provider, humanID 
 }
 
 // Check reports whether the retained credential still belongs to the current
-// trusted registration, after the caller proves current authority. It neither
+// trusted registration, after the caller proves current authority. One retained
+// under an earlier registration is ErrStaleRegistration. It neither
 // renews nor returns the credential and never contacts the provider. Callers
 // releasing state derived from an earlier assertion use it so a changed
 // registration revokes that state too.
 func (s *Service) Check(ctx context.Context, b Binding, authority Authorizer) error {
+	_, err := s.check(ctx, b, authority)
+	return err
+}
+
+// CheckResolvable is Check plus whether Resolve could return an assertion now
+// without the human signing in again: a retained assertion still outside
+// Resolve's one-minute safety window, or a refresh grant it may renew with. A
+// renewal in flight or backing off is ErrTemporary. Secrets Resolve would
+// need that no longer decrypt are ErrConfiguration, as in Resolve. Like Check
+// it never renews, claims or rewrites the credential and never contacts the
+// provider.
+func (s *Service) CheckResolvable(ctx context.Context, b Binding, authority Authorizer) error {
+	c, err := s.check(ctx, b, authority)
+	if err != nil {
+		return err
+	}
+	now := s.now()
+	switch {
+	case c.claim != uuid.Nil:
+		return ErrTemporary
+	case c.assertion != "" && c.assertionExpiry.After(now.Add(time.Minute)):
+		_, err := s.assertion(c)
+		return err
+	case c.status == "reauthentication_required":
+		return ErrReauthentication
+	case c.retryAfter.After(now):
+		return ErrTemporary
+	case !usableRefresh(c, now):
+		return ErrReauthentication
+	}
+	_, _, _, err = s.refreshSecrets(c)
+	return err
+}
+
+// check is Check, returning the retained credential it judged.
+func (s *Service) check(ctx context.Context, b Binding, authority Authorizer) (delegationCredential, error) {
+	var none delegationCredential
 	if authority == nil || !validDelegationBinding(b) {
-		return ErrConfiguration
+		return none, ErrConfiguration
 	}
 	if err := authority.AuthorizeDelegation(ctx, b); err != nil {
 		if definitiveDelegationFailure(err) {
-			return ErrConfiguration
+			return none, ErrConfiguration
 		}
-		return ErrTemporary
+		return none, ErrTemporary
 	}
 	p, err := s.loadBinding(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
 		if definitiveDelegationFailure(err) {
-			return ErrConfiguration
+			return none, ErrConfiguration
 		}
-		return ErrTemporary
+		return none, ErrTemporary
 	}
 	if p == nil || p.DelegationConfigurationHash() == "" {
-		return ErrConfiguration
+		return none, ErrConfiguration
 	}
 	c, err := s.store.load(ctx, b)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrReauthentication
+		return none, ErrReauthentication
 	}
 	if err != nil {
-		return ErrTemporary
+		return none, ErrTemporary
 	}
-	if c.config != p.DelegationConfigurationHash() || c.status == "configuration_failure" {
-		return ErrConfiguration
+	if c.config != p.DelegationConfigurationHash() {
+		return none, ErrStaleRegistration
 	}
-	return nil
+	if c.status == "configuration_failure" {
+		return none, ErrConfiguration
+	}
+	return c, nil
 }
 
 // Resolve returns an assertion only after the caller proves current authority.
@@ -483,20 +538,9 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	if p == nil || p.DelegationConfigurationHash() != c.config {
 		return Assertion{}, ErrConfiguration
 	}
-	refresh, err := s.decrypt(c.refresh)
+	refresh, subject, nonce, err := s.refreshSecrets(c)
 	if err != nil {
 		return Assertion{}, err
-	}
-	subject, err := s.decrypt(c.subject)
-	if err != nil {
-		return Assertion{}, err
-	}
-	nonce, err := s.decrypt(c.nonce)
-	if err != nil {
-		return Assertion{}, err
-	}
-	if refresh == "" || subject == "" {
-		return Assertion{}, ErrConfiguration
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
 	if err != nil || !marked {
@@ -636,6 +680,24 @@ func (s *Service) assertion(c delegationCredential) (Assertion, error) {
 		return Assertion{}, err
 	}
 	return Assertion{value: value, expiresAt: c.assertionExpiry, subject: subject, sessionID: c.id, obtainedAt: c.obtainedAt}, nil
+}
+
+// refreshSecrets decrypts what a renewal of c sends. A secret that does not
+// decrypt, or a missing refresh token or subject, is ErrConfiguration.
+func (s *Service) refreshSecrets(c delegationCredential) (refresh, subject, nonce string, err error) {
+	if refresh, err = s.decrypt(c.refresh); err != nil {
+		return "", "", "", err
+	}
+	if subject, err = s.decrypt(c.subject); err != nil {
+		return "", "", "", err
+	}
+	if nonce, err = s.decrypt(c.nonce); err != nil {
+		return "", "", "", err
+	}
+	if refresh == "" || subject == "" {
+		return "", "", "", ErrConfiguration
+	}
+	return refresh, subject, nonce, nil
 }
 func clearDelegationSecrets(c delegationCredential) delegationCredential {
 	c.assertion = ""

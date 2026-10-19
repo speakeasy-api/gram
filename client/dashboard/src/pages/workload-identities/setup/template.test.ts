@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
 import { toCatalogEntry } from "./platforms";
-import { testPlatform } from "./testPlatform";
+import { claudeTagPlatform } from "./catalogFixture";
 import { subjectRule, variableProblem } from "./template";
 
-const claudeTag = toCatalogEntry(testPlatform);
+const claudeTag = toCatalogEntry(claudeTagPlatform);
 const orgId = claudeTag.variables[0]!;
 
 it("pins a Claude Tag rule to one organization with a trailing wildcard", () => {

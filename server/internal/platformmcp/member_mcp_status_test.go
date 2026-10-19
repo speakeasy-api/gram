@@ -144,6 +144,7 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 		{name: "active", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}}, state: MCPConnectionStateActive, nextAction: "use_mcp"},
 		{name: "rejected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, ValidationStatus: remotesessions.ValidationOutcomeInactive, ValidationReason: "sensitive provider reason"}}}, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect"},
 		{name: "setup required", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{}}, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
+		{name: "server holds its own credential", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID, CredentialOwner: remotesessions.CredentialOwnerSelf}}}, state: MCPConnectionStateNotApplicable, reason: "upstream_credential_managed", nextAction: "use_mcp"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()

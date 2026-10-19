@@ -5,7 +5,7 @@ Status: Approved
 
 ## Goal
 
-Every table row, card, and list entry in the Gram dashboard that exposes per-entry
+Every table row, card, and list entry in the Speakeasy dashboard that exposes per-entry
 actions (a "⋯" kebab menu or equivalent) also opens the same actions on
 right-click. This finishes the initiative already live for source, environment,
 custom-tool, prompt, resource, and assistant cards (`CardContextMenu`) and for
@@ -122,6 +122,6 @@ table system it uses, confirmed during implementation.
 Two PRs:
 
 1. Moonshine: `renderRow` prop + ref-forwarding `RowContainer`, minor release.
-2. Gram: bump `@speakeasy-api/moonshine`, add `TableRowContextMenu`, wire all
+2. Speakeasy: bump `@speakeasy-api/moonshine`, add `TableRowContextMenu`, wire all
    targets. The DotTable/card work doesn't depend on the moonshine release but
    ships in the same PR for consistent behavior.

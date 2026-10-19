@@ -78,7 +78,7 @@ export type ListSkillsRequest = {
    */
   tags?: Array<string> | undefined;
   /**
-   * Only return skills at least one of these Gram users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
+   * Only return skills at least one of these Speakeasy users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
    */
   accessibleBy?: Array<string> | undefined;
   /**

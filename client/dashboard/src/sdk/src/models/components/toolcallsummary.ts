@@ -17,7 +17,7 @@ export type ToolCallSummary = {
    */
   eventSource?: string | undefined;
   /**
-   * Gram URN associated with this tool call
+   * Speakeasy URN associated with this tool call
    */
   gramUrn: string;
   /**

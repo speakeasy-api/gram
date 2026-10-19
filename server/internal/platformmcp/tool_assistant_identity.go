@@ -12,7 +12,6 @@ import (
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -39,27 +38,20 @@ type UpgradeAssistantIdentityOutput struct {
 	AgentID       *string `json:"agent_id,omitempty"`
 }
 
-// errAssistantIdentityNotEnabled reports an organization outside the
-// assistant workload identity rollout.
-var errAssistantIdentityNotEnabled = errors.New("assistant workload identity is not enabled for this organization")
-
 // AssistantIdentityService backs upgrade_assistant_workload_identity.
 type AssistantIdentityService struct {
 	management     AssistantIdentityManagement
 	resolveProject func(context.Context, string, FindMCPInput) (ResolvedProject, error)
 	organizations  OrganizationSlugResolver
-	flags          feature.Provider
 }
 
 // NewAssistantIdentityService resolves the named project through the same
-// inventory read the other project-scoped tools use, and gates the upgrade on
-// the same rollout flag as the management endpoint.
-func NewAssistantIdentityService(management AssistantIdentityManagement, projects *PostgresReader, flags feature.Provider) *AssistantIdentityService {
+// inventory read the other project-scoped tools use.
+func NewAssistantIdentityService(management AssistantIdentityManagement, projects *PostgresReader) *AssistantIdentityService {
 	return &AssistantIdentityService{
 		management:     management,
 		resolveProject: projects.resolveInventoryProject,
 		organizations:  NewPostgresOrganizationSlugResolver(projects.db),
-		flags:          flags,
 	}
 }
 
@@ -96,13 +88,6 @@ func (s *AssistantIdentityService) upgrade(ctx context.Context, principal Princi
 	if organizationSlug == "" {
 		return zero, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagAgentIdentityCredentials, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, ""))
-	if err != nil {
-		return zero, fmt.Errorf("%w: %w", ErrUnavailable, err)
-	}
-	if evaluation != feature.EvaluationEnabled {
-		return zero, errAssistantIdentityNotEnabled
-	}
 	scoped := *authCtx
 	scoped.OrganizationSlug = organizationSlug
 	scoped.ProjectID = &project.ID
@@ -126,7 +111,7 @@ func registerAssistantIdentityTool(reg *Registrar, service *AssistantIdentitySer
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        upgradeAssistantIdentityToolName,
 		Title:       "Upgrade Assistant Workload Identity",
-		Description: "Explicitly give one assistant in an exact project an agent and per-trigger workload identities. By default a new agent is created, optionally named with agent_name, starting with access to every MCP server and skill in the project and to administering this assistant. With agent_id the assistant uses an existing agent of the project instead, which keeps its policy and gains administration of this assistant; the user must own that agent or hold agent:authorize on it, and an agent backs at most one assistant. Either agent can be refined like any other agent afterwards. Ask the user to confirm the exact project, assistant, and agent choice before setting confirmed: true. Requires organization administrator access and the same project:write authorization as the dashboard. Repeating the upgrade is safe but keeps the existing agent, so it does not replace one that was suspended, revoked, or deleted. Unavailable until assistant workload identity is enabled for the organization; when it is not, tell the user and do not retry. Returns only identity configuration state, never credentials, instructions, bindings, or policy. ACTIVE does not prove execution permission or runtime readiness.",
+		Description: "Explicitly give one assistant in an exact project an agent and per-trigger workload identities. By default a new agent is created, optionally named with agent_name, starting with access to every MCP server and skill in the project and to administering this assistant. With agent_id the assistant uses an existing agent of the project instead, which keeps its policy and gains administration of this assistant; the user must own that agent or hold agent:authorize on it, and an agent backs at most one assistant. Either agent can be refined like any other agent afterwards. Ask the user to confirm the exact project, assistant, and agent choice before setting confirmed: true. Requires organization administrator access and the same project:write authorization as the dashboard. Repeating the upgrade is safe but keeps the existing agent, so it does not replace one that was suspended, revoked, or deleted. Returns only identity configuration state, never credentials, instructions, bindings, or policy. ACTIVE does not prove execution permission or runtime readiness.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: nil, ReadOnlyHint: false, Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpgradeAssistantIdentityInput) (*mcp.CallToolResult, UpgradeAssistantIdentityOutput, error) {
 		return principalToolCall(ctx, assistantIdentityToolResult, func(principal Principal) (UpgradeAssistantIdentityOutput, error) {
@@ -142,8 +127,6 @@ func assistantIdentityToolResult(err error) (*mcp.CallToolResult, bool) {
 	result := featureUnavailableResult{Code: unavailableCode, Feature: "assistant_workload_identity", Message: "Assistant workload identity upgrades are temporarily unavailable."}
 	var shareable *oops.ShareableError
 	switch {
-	case errors.Is(err, errAssistantIdentityNotEnabled):
-		result.Message = "Assistant workload identity is not enabled for this organization."
 	case errors.Is(err, ErrForbidden):
 		result.Code, result.Message = "not_found", "That assistant or project is not available to you."
 	case errors.As(err, &shareable):

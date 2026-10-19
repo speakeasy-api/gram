@@ -8,14 +8,12 @@ import { riskPoliciesGet } from "../funcs/riskPoliciesGet.js";
 import { riskPoliciesList } from "../funcs/riskPoliciesList.js";
 import { riskPoliciesListForMcpServer } from "../funcs/riskPoliciesListForMcpServer.js";
 import { riskPoliciesListMcpPlatformToolsets } from "../funcs/riskPoliciesListMcpPlatformToolsets.js";
-import { riskPoliciesStatus } from "../funcs/riskPoliciesStatus.js";
 import { riskPoliciesTrigger } from "../funcs/riskPoliciesTrigger.js";
 import { riskPoliciesUpdate } from "../funcs/riskPoliciesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListMCPPlatformToolsetsResult } from "../models/components/listmcpplatformtoolsetsresult.js";
 import { ListRiskPoliciesResult } from "../models/components/listriskpoliciesresult.js";
 import { RiskPolicy } from "../models/components/riskpolicy.js";
-import { RiskPolicyStatus } from "../models/components/riskpolicystatus.js";
 import {
   CreateRiskPolicyRequest,
   CreateRiskPolicySecurity,
@@ -28,10 +26,6 @@ import {
   GetRiskPolicyRequest,
   GetRiskPolicySecurity,
 } from "../models/operations/getriskpolicy.js";
-import {
-  GetRiskPolicyStatusRequest,
-  GetRiskPolicyStatusSecurity,
-} from "../models/operations/getriskpolicystatus.js";
 import {
   ListMCPPlatformToolsetsRequest,
   ListMCPPlatformToolsetsSecurity,
@@ -105,25 +99,6 @@ export class Policies extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RiskPolicy> {
     return unwrapAsync(riskPoliciesGet(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * getRiskPolicyStatus risk
-   *
-   * @remarks
-   * Get the analysis status of a risk policy including progress and workflow state.
-   */
-  async status(
-    request: GetRiskPolicyStatusRequest,
-    security?: GetRiskPolicyStatusSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<RiskPolicyStatus> {
-    return unwrapAsync(riskPoliciesStatus(
       this,
       request,
       security,

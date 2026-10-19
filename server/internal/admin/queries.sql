@@ -144,6 +144,9 @@ filtered AS (
         om.name,
         om.slug,
         om.gram_account_type AS account_type,
+        -- Ranks by what the account pays rather than by how its type is spelled:
+        -- enterprise, then pro and payg, then free, then any type off the list.
+        CASE om.gram_account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END AS account_tier,
         om.workos_id,
         bm.stripe_customer_id,
         bm.stripe_subscription_id,
@@ -233,6 +236,8 @@ ORDER BY
     CASE WHEN sqlc.arg('sort_by')::text = 'slug' AND sqlc.arg('sort_dir')::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_tier' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_tier' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'created_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -265,6 +270,8 @@ ORDER BY
     CASE WHEN sqlc.arg('sort_by')::text = 'slug' AND sqlc.arg('sort_dir')::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_tier' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_tier' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'created_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -412,7 +419,7 @@ WHERE id = ANY(@ids::text[])
 RETURNING id;
 
 -- name: AdminDisableOrganization :execrows
--- Operator-initiated disable. Keyed on the Gram organization id rather than
+-- Operator-initiated disable. Keyed on the Speakeasy organization id rather than
 -- workos_id so an organization that was never linked to WorkOS can still be
 -- disabled. Deliberately leaves workos_last_event_id alone: that column is the
 -- WorkOS webhook cursor and this is not a WorkOS event, so stamping it would
@@ -500,7 +507,7 @@ SELECT EXISTS (
 -- name: AdminListProjectMcpServerRows :many
 -- One row per live endpoint, and one with no endpoint columns for a server that
 -- has none. custom_domain is null for an endpoint whose domain cannot serve it;
--- the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
+-- the caller skips those and picks the address with endpointaddr.PrimaryEndpoint.
 SELECT
     m.id,
     m.name,
@@ -661,6 +668,12 @@ WHERE billing_metadata.organization_id = organization_metadata.id
   AND billing_metadata.stripe_customer_id = sqlc.arg('stripe_customer_id')::text
   AND billing_metadata.stripe_subscription_id IS NULL
   AND organization_metadata.gram_account_type = 'payg'
+  -- A redeemed partner's retained anchor is immutable accounting provenance.
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_promotion_applications application
+    WHERE application.organization_id = billing_metadata.organization_id
+      AND application.redeemed_at IS NOT NULL
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM billing_metadata AS other
@@ -933,10 +946,12 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- for a toolset-only server, the toolset id. A toolset-backed wrapper takes its
 -- issuer from its own row, not its toolset's, matching how the MCP endpoint
 -- resolves it; the legacy OAuth columns live on the toolset only.
--- toolset_wrapper_count counts live wrappers of the toolset, so the caller can
--- drop a toolset slug that would also select another wrapper's calls.
+-- toolset_wrapper_count counts the live wrappers competing for the toolset's
+-- slug, so the caller can drop a toolset slug that would also select another
+-- wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
+-- outright: it counts as one, and any other wrapper of that toolset as two.
 -- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
--- endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+-- endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
 -- a domain root has no such path), else the server's own slug, else the
 -- toolset's mcp_slug when no other wrapper shares that toolset.
 SELECT
@@ -962,8 +977,17 @@ SELECT
 FROM mcp_servers m
 LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
 CROSS JOIN LATERAL (
-    SELECT count(*)::bigint AS wrapper_count FROM mcp_servers o
-    WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+    SELECT CASE
+        WHEN m.id = m.toolset_id THEN 1
+        WHEN EXISTS (
+            SELECT 1 FROM mcp_servers c
+            WHERE c.id = m.toolset_id AND c.project_id = m.project_id AND c.deleted IS FALSE
+        ) THEN 2
+        ELSE (
+            SELECT count(*) FROM mcp_servers o
+            WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+        )
+    END::bigint AS wrapper_count
 ) w
 WHERE m.id = @id
   AND m.project_id = @project_id
@@ -1005,6 +1029,9 @@ SELECT
     i.attachment_scope,
     i.client_id_metadata_admission_mode,
     i.use_authentication_host,
+    i.authorization_server_mode,
+    -- Matches authserver.IssuerURLPinned: a pin only counts in shared mode.
+    (i.authorization_server_mode = 'shared' AND i.pinned_issuer_url IS NOT NULL AND i.pinned_issuer_url <> '')::boolean AS issuer_url_pinned,
     i.trusted_remote_session_issuer_id,
     i.trusted_remote_session_client_id,
     i.created_at
@@ -1144,3 +1171,16 @@ FROM organizations
 WHERE (account_type = 'enterprise' AND trial_state NOT IN ('running', 'ending_soon'))
    OR (account_type IN ('pro', 'payg') AND trial_state = 'none')
 ORDER BY lower(name) ASC, id ASC;
+
+-- name: ListSignupOffers :many
+SELECT * FROM signup_offers ORDER BY created_at DESC, id DESC;
+
+-- name: CreateSignupOffer :one
+INSERT INTO signup_offers (name, stripe_promotion_code_id, signup_flow)
+VALUES (@name, @stripe_promotion_code_id, @signup_flow)
+RETURNING *;
+
+-- name: UpdateSignupOffer :one
+UPDATE signup_offers SET name = @name, stripe_promotion_code_id = @stripe_promotion_code_id,
+ signup_flow = @signup_flow, enabled = @enabled, updated_at = clock_timestamp()
+WHERE id = @id RETURNING *;

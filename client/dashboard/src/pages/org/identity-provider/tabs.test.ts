@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { identityProvidersHref, OKTA_VIEWS, oktaViewHref } from "./tabs";
+import {
+  identityProvidersHref,
+  OKTA_VIEWS,
+  oktaViewHref,
+  speakeasyProviderHref,
+} from "./tabs";
 
 describe("identity links", () => {
   it("links to the EMA landing", () => {
     expect(identityProvidersHref()).toBe("?tab=identity-providers");
+  });
+
+  it("links to the Speakeasy provider page", () => {
+    expect(speakeasyProviderHref()).toBe(
+      "?tab=identity-providers&provider=speakeasy",
+    );
   });
 
   it.each(OKTA_VIEWS)("links to the Okta %s view with a section", (view) => {

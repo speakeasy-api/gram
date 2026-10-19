@@ -322,6 +322,17 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	if input.Outcome != "" && !validOutcomeClass(input.Outcome) {
 		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, blocked, unauthorized, client_error, server_error, failed, unknown")
 	}
+	if input.ProjectID == "" || input.MCPID == "" {
+		return QueryMCPTracesOutput{}, fmt.Errorf("project_id and mcp_id are required")
+	}
+	if s.reader == nil {
+		return QueryMCPTracesOutput{}, ErrUnavailable
+	}
+	// Individual calls are the Tool Logs list, so log:read on the project is
+	// required before any budget is spent or row is read.
+	if _, err := s.reader.ResolveProjectLogRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID}); err != nil {
+		return QueryMCPTracesOutput{}, fmt.Errorf("authorize mcp traces: %w", err)
+	}
 	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget, drilldownWindowSpec)
 	if err != nil {
 		return QueryMCPTracesOutput{}, err
@@ -427,13 +438,13 @@ func traceCursorScope(target drilldownTarget, outcome string) string {
 	)
 }
 
-// summaryIdentityParams scopes the summary read to exactly one identity filter.
+// summaryIdentityParams scopes the summary read to one configured server.
 //
-// The two are recorded on different traffic: hosted calls carry
-// gram.toolset.slug and no mcp_server id, so ANDing both matches nothing and
-// silently reports zero latency. The mcp_server id is what scopes the models
-// that carry no slug, where an empty slug would otherwise read as "no filter"
-// and return the whole project under this MCP's name.
+// Older hosted calls carry gram.toolset.slug and no mcp_server id, so ANDing
+// both would drop them; the slug read instead leaves out rows stamped with
+// another server's id. The mcp_server id is what scopes the models that carry
+// no slug, where an empty slug would otherwise read as "no filter" and return
+// the whole project under this MCP's name.
 func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryrepo.GetOverviewSummaryParams {
 	params := telemetryrepo.GetOverviewSummaryParams{
 		GramProjectID: target.projectID,
@@ -442,6 +453,7 @@ func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryre
 	}
 	if slug := target.identity.toolsetSlug; slug != "" {
 		params.ToolsetSlug = slug
+		params.ToolsetSlugServerID = target.identity.mcpServerID
 		return params
 	}
 	params.MCPServerID = target.identity.mcpServerID

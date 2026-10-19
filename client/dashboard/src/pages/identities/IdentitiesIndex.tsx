@@ -29,8 +29,6 @@ import { AgentOwner } from "@/pages/agents/agent-admin";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
@@ -417,7 +415,6 @@ export default function IdentitiesIndex({
 }: {
   kind: RosterKind;
 }): JSX.Element {
-  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   const page = (
     <Page>
       <Page.Header>
@@ -438,32 +435,6 @@ export default function IdentitiesIndex({
       <RequireScope scope={["project:read"]} level="page">
         {page}
       </RequireScope>
-    );
-  }
-
-  // Say the roster is unavailable rather than showing an empty one. Without
-  // the rollout the query never runs, and "no agents" is a claim about the
-  // organization rather than about the feature being off.
-  if (agentManagementFlag.status !== "enabled") {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <Page.Section>
-            <Page.Section.Title>Agents</Page.Section.Title>
-            <Page.Section.Description>
-              {agentManagementFlag.status === "loading"
-                ? "Checking whether agent identities are available here."
-                : agentManagementFlag.status === "disabled"
-                  ? "Agent identities are not enabled for this organization."
-                  : "Could not tell whether agent identities are available here. Try again later."}
-            </Page.Section.Description>
-            <Page.Section.Body>{null}</Page.Section.Body>
-          </Page.Section>
-        </Page.Body>
-      </Page>
     );
   }
 
@@ -503,12 +474,10 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const sdk = useSdkClient();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
-  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
-    agentManagementFlag.status === "enabled" &&
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
     !session.impersonatorEmail &&

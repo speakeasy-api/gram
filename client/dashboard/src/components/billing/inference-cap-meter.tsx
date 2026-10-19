@@ -20,7 +20,7 @@ const usdMeter = new Intl.NumberFormat("en-US", {
 });
 
 /**
- * This calendar month's spend against one Gram-managed inference cap.
+ * This calendar month's spend against one Speakeasy-managed inference cap.
  *
  * Shared by every surface that reports a cap, so none of them can disagree
  * about what has been spent, or about which band the spend is in. It never

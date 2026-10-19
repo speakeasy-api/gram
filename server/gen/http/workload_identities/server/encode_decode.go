@@ -454,6 +454,223 @@ func EncodeListPlatformsError(encoder func(context.Context, http.ResponseWriter)
 	}
 }
 
+// EncodeGetCustomFlowsResponse returns an encoder for responses returned by
+// the workloadIdentities getCustomFlows endpoint.
+func EncodeGetCustomFlowsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*workloadidentities.WorkloadCustomFlows)
+		enc := encoder(ctx, w)
+		body := NewGetCustomFlowsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetCustomFlowsRequest returns a decoder for requests sent to the
+// workloadIdentities getCustomFlows endpoint.
+func DecodeGetCustomFlowsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*workloadidentities.GetCustomFlowsPayload, error) {
+	return func(r *http.Request) (*workloadidentities.GetCustomFlowsPayload, error) {
+		var payload *workloadidentities.GetCustomFlowsPayload
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetCustomFlowsPayload(sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetCustomFlowsError returns an encoder for errors returned by the
+// getCustomFlows workloadIdentities endpoint.
+func EncodeGetCustomFlowsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetCustomFlowsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListTokenEndpointsResponse returns an encoder for responses returned
 // by the workloadIdentities listTokenEndpoints endpoint.
 func EncodeListTokenEndpointsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -2261,6 +2478,76 @@ func marshalWorkloadidentitiesWorkloadPlatformBlockToWorkloadPlatformBlockRespon
 		Variable: v.Variable,
 		Value:    v.Value,
 		Help:     v.Help,
+	}
+
+	return res
+}
+
+// marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody builds a
+// value of type *WorkloadFormResponseBody from a value of type
+// *workloadidentities.WorkloadForm.
+func marshalWorkloadidentitiesWorkloadFormToWorkloadFormResponseBody(v *workloadidentities.WorkloadForm) *WorkloadFormResponseBody {
+	res := &WorkloadFormResponseBody{
+		Title:        v.Title,
+		Description:  v.Description,
+		SubmitLabel:  v.SubmitLabel,
+		PendingLabel: v.PendingLabel,
+	}
+	if v.Steps != nil {
+		res.Steps = make([]*WorkloadFormStepResponseBody, len(v.Steps))
+		for i, val := range v.Steps {
+			if val == nil {
+				res.Steps[i] = nil
+				continue
+			}
+			res.Steps[i] = marshalWorkloadidentitiesWorkloadFormStepToWorkloadFormStepResponseBody(val)
+		}
+	} else {
+		res.Steps = []*WorkloadFormStepResponseBody{}
+	}
+
+	return res
+}
+
+// marshalWorkloadidentitiesWorkloadFormStepToWorkloadFormStepResponseBody
+// builds a value of type *WorkloadFormStepResponseBody from a value of type
+// *workloadidentities.WorkloadFormStep.
+func marshalWorkloadidentitiesWorkloadFormStepToWorkloadFormStepResponseBody(v *workloadidentities.WorkloadFormStep) *WorkloadFormStepResponseBody {
+	res := &WorkloadFormStepResponseBody{
+		ID:    v.ID,
+		Title: v.Title,
+	}
+	if v.Blocks != nil {
+		res.Blocks = make([]*WorkloadFormBlockResponseBody, len(v.Blocks))
+		for i, val := range v.Blocks {
+			if val == nil {
+				res.Blocks[i] = nil
+				continue
+			}
+			res.Blocks[i] = marshalWorkloadidentitiesWorkloadFormBlockToWorkloadFormBlockResponseBody(val)
+		}
+	} else {
+		res.Blocks = []*WorkloadFormBlockResponseBody{}
+	}
+
+	return res
+}
+
+// marshalWorkloadidentitiesWorkloadFormBlockToWorkloadFormBlockResponseBody
+// builds a value of type *WorkloadFormBlockResponseBody from a value of type
+// *workloadidentities.WorkloadFormBlock.
+func marshalWorkloadidentitiesWorkloadFormBlockToWorkloadFormBlockResponseBody(v *workloadidentities.WorkloadFormBlock) *WorkloadFormBlockResponseBody {
+	res := &WorkloadFormBlockResponseBody{
+		Type:        v.Type,
+		Markdown:    v.Markdown,
+		Href:        v.Href,
+		Label:       v.Label,
+		Field:       v.Field,
+		Placeholder: v.Placeholder,
+		Help:        v.Help,
+		Multiline:   v.Multiline,
+		ReadOnly:    v.ReadOnly,
+		Format:      v.Format,
 	}
 
 	return res

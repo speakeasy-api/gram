@@ -21,7 +21,7 @@ export type MigrateOrganizationRemoteSessionIssuerResult = {
    */
   clientsMigrated: number;
   /**
-   * A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
+   * A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
    */
   issuer: RemoteSessionIssuer;
   /**

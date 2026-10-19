@@ -57,7 +57,7 @@ func describeMetaServer(meta *metamcprepo.MetaMcpServer) serverDescription {
 		hints = cacheHintsCallerVarying
 	}
 	return serverDescription{
-		capabilities: map[string]json.RawMessage{"tools": json.RawMessage("{}")},
+		capabilities: map[string]json.RawMessage{"tools": json.RawMessage("{}"), "resources": json.RawMessage("{}")},
 		identity:     serverInfoMetaServer,
 		instructions: metamcp.ResolveInstructions(conv.FromPGText[string](meta.Instructions)),
 		cacheHints:   hints,
@@ -84,7 +84,7 @@ func describeHostedServer(ctx context.Context, logger *slog.Logger, metadataRepo
 
 	description.cacheHints = hostedListCacheHints(!payload.effectiveMCPPrivate(payload.toolsetIsPublic), payload.authenticated)
 
-	metadata, err := metadataRepo.GetMetadataForToolset(ctx, payload.toolsetID)
+	metadata, err := metadataRepo.GetMetadataByBackendID(ctx, metadata_repo.GetMetadataByBackendIDParams{ProjectID: payload.projectID, BackendID: payload.toolsetID.UUID})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.WarnContext(ctx, "failed to fetch MCP metadata for instructions", attr.SlogError(err))

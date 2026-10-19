@@ -49,7 +49,7 @@ func TestPluginAssignmentAdmissionRejectionLeavesNoMutationOrReceipt(t *testing.
 	require.NoError(t, err)
 	store := NewPluginAssignmentMutationReceiptStore(conn)
 	normalized := normalizedPluginAssignmentMutationInput(project.ID, plugin.ID.String(), []string{"everyone"}, "version")
-	_, err = store.Execute(ctx, principal, project, "admission-rejected", normalized, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
+	_, err = store.Execute(ctx, principal, project, "admission-rejected", normalized, noReceiptCharge, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
 		locked, err := pluginassignments.Lock(ctx, tx, principal.OrganizationID, project.ID, plugin.ID)
 		require.NoError(t, err)
 		_, err = pluginassignments.Replace(ctx, tx, audit.NewLogger(), locked, pluginassignments.Input{
@@ -530,7 +530,7 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	admissionResult := DistributionAdmission{State: DistributionAdmissionNotApplicable, Mode: "legacy", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
+	admissionResult := DistributionAdmission{State: DistributionAdmissionNotApplicable, MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
 	service := testPluginTargets(conn).WithDistributionAdmissionReads(stubDistributionAdmissionReader{plugin: admissionResult}).
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
 			PluginSlug: "marketing", NotConfigured: false, Fresh: nil,
@@ -807,7 +807,7 @@ func TestPluginAssignmentMutationReceiptRollsBackDomainAndReceipt(t *testing.T) 
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Rollback", "rollback")
 	store := NewPluginAssignmentMutationReceiptStore(conn)
 	normalized := normalizedPluginAssignmentMutationInput(project.ID, plugin.ID.String(), nil, "version")
-	_, err = store.Execute(ctx, principal, project, "rollback", normalized, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
+	_, err = store.Execute(ctx, principal, project, "rollback", normalized, noReceiptCharge, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
 		_, err := pluginsrepo.New(tx).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
 			PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: urn.PrincipalWildcard,
 		})

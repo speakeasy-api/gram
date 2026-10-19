@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -84,9 +85,9 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				// Use the production resolvers and writers in an explicit transaction
 				// so deletion can start after validation but before the attachment exists.
 				tx := testenv.BeginTx(t, ctx, conn)
-				resolved, err := svc.core.resolveToolsetRefsForWrite(ctx, tx, projectID, payload.Toolsets)
+				resolved, err := svc.core.resolveToolsetRefsForWrite(ctx, tx, projectID, payload.Toolsets, payload.McpServers)
 				require.NoError(t, err)
-				resolvedServers, err := svc.core.resolveMcpServerRefsForWrite(ctx, tx, projectID, payload.McpServers)
+				resolvedServers, err := svc.core.resolveMcpServerRefsForWrite(ctx, tx, projectID, payload.McpServers, toolsetIDSet(resolved))
 				require.NoError(t, err)
 
 				// Mirror the deletion services' target-lock/delete/detach sequence.
@@ -143,8 +144,8 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					require.NoError(t, err)
 				}
 				id := uuid.MustParse(assistantID)
-				require.NoError(t, writeAssistantToolsets(ctx, tx, id, projectID, resolved))
-				require.NoError(t, writeAssistantMcpServers(ctx, tx, id, projectID, resolvedServers))
+				require.NoError(t, enableAssistantToolsets(ctx, tx, newTestAuditLogger(), hostedmcp.Actor{UserID: "user-test", Email: nil}, projectID, resolved, nil, allowAllMCPEnable))
+				require.NoError(t, writeAssistantAttachments(ctx, tx, id, projectID, resolved, true, resolvedServers, true, false))
 				counts, err := testrepo.New(tx).CountAssistantAttachments(ctx, testrepo.CountAssistantAttachmentsParams{
 					ProjectID: projectID, AssistantID: id,
 				})

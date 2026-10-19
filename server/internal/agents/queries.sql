@@ -168,7 +168,6 @@ SELECT id, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = concat('agent:', @agent_id::uuid)
-  AND COALESCE(effect, 'allow') = 'allow'
 ORDER BY scope, selectors, id;
 
 -- name: GetAgentPolicyGrantForUpdate :one
@@ -177,13 +176,12 @@ FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = concat('agent:', @agent_id::uuid)
   AND id = @grant_id
-  AND COALESCE(effect, 'allow') = 'allow'
 LIMIT 1
 FOR UPDATE;
 
 -- name: CreateAgentPolicyGrant :one
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id, concat('agent:', @agent_id::uuid), @scope, NULL, @selectors)
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id, concat('agent:', @agent_id::uuid), @scope, @selectors)
 RETURNING id, scope, selectors, created_at, updated_at;
 
 -- name: UpdateAgentPolicyGrant :one
@@ -194,7 +192,6 @@ SET scope = @scope,
 WHERE organization_id = @organization_id
   AND principal_urn = concat('agent:', @agent_id::uuid)
   AND id = @grant_id
-  AND COALESCE(effect, 'allow') = 'allow'
 RETURNING id, scope, selectors, created_at, updated_at;
 
 -- name: DeleteAgentPolicyGrant :one
@@ -202,7 +199,6 @@ DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = concat('agent:', @agent_id::uuid)
   AND id = @grant_id
-  AND COALESCE(effect, 'allow') = 'allow'
 RETURNING id, scope, selectors, created_at, updated_at;
 
 -- name: ListManagedAgents :many

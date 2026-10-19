@@ -54,7 +54,7 @@ export type UploadImageMutationError =
  * uploadImage assets
  *
  * @remarks
- * Upload an image to Gram.
+ * Upload an image to Speakeasy.
  */
 export function useUploadImageMutation(
   options?: MutationHookOptions<

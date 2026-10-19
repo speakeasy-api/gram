@@ -7,7 +7,7 @@ import { Check } from "lucide-react";
 import { Link } from "react-router";
 import type { CatalogEntry } from "./definition";
 import { connectedIssuer, useCatalogEntries } from "./platforms";
-import { isRelativePath } from "./origin";
+import { isRelativePath } from "@/components/setup-steps/origin";
 
 /** The catalog tab: one card per platform, each opening its own page. */
 export function CatalogPlatforms({

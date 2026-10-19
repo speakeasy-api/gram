@@ -35,7 +35,7 @@ export type CreateOrganizationUserSessionIssuerForm = {
    */
   slug: string;
   /**
-   * Organization-level remote_session_client Gram uses with the trusted issuer. Must be supplied together with trusted_remote_session_issuer_id.
+   * Organization-level remote_session_client Speakeasy uses with the trusted issuer. Must be supplied together with trusted_remote_session_issuer_id.
    */
   trustedRemoteSessionClientId?: string | undefined;
   /**

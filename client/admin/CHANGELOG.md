@@ -1,5 +1,28 @@
 # admin
 
+## 0.9.2
+
+### Patch Changes
+
+- 4c811b0: The admin command palette lists enterprise organizations first, then pro and pay-as-you-go, then free, then any other account type. The organization list and the staff Admin MCP `find_organizations` tool accept the same `account_tier` sort.
+
+## 0.9.1
+
+### Patch Changes
+
+- 4470b2a: Global identity providers created or rediscovered in the admin app keep the authorization grant profiles their discovery document advertises (including the ID-JAG profile), so identity chaining no longer reports them as unsupported. Providers entered by hand omit the field, so the server does not treat them as discovered. Saving a global provider with a changed issuer URL and no rediscovery sends an empty grant profile list.
+
+## 0.9.0
+
+### Minor Changes
+
+- 31aacf8: Staff can see every paying customer's estimated usage on one admin page. Customer usage, under Platform management, shows each customer's estimated cost over time in a grid of cards, bucketed by that customer's own billing cycle, with this cycle's spend, the change against the same point last cycle, and the product breakdown. Search, plan filter, sort, product selection, interval, and the cumulative toggle apply to every card and are kept in the URL.
+
+### Patch Changes
+
+- 3ee542c: Organization admins can set a remote identity provider to send no scope instead of its whole supported list when a sign-in has no other scope source. The provider's Overview, Settings and the admin issuer and server health views show the setting. The issuer scope override is now chosen from a picker of the provider's supported scopes.
+- 35b67b5: User-facing text now names the product Speakeasy instead of Gram across the dashboard, admin dashboard, CLI help and output, server error messages, consent pages, MCP server info, and API descriptions. HTTP header names, environment variables, package names, and code identifiers are unchanged.
+
 ## 0.8.0
 
 ### Minor Changes

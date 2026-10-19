@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
@@ -101,11 +102,16 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			if row.ObservabilityEnabled {
 				hooksOrgName := conv.Default(naming.PublishedHooksOrgName(row.PublishedHooksConfig), row.OrganizationName)
 				observabilitySlug := naming.ObservabilitySlug(hooksOrgName)
+				// Observability carries the hooks that report usage, so users
+				// can't turn it off.
 				plugins = append(plugins, &gen.AgentPlugin{
 					Slug:            observabilitySlug,
 					MarketplaceName: name,
+					InstallMode:     string(installmode.Required),
+					Name:            nil,
+					Description:     nil,
 				})
-				writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, observabilitySlug, int64(0))
+				writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, observabilitySlug, int64(0), installmode.Required)
 			}
 		}
 
@@ -114,11 +120,17 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		// collapsed (losing) project's marketplace isn't served, so its plugins
 		// would reference a repo that doesn't contain them.
 		if row.ProjectID == owner && row.PluginID.Valid && row.PluginSlug.Valid {
+			mode := installmode.FromStored(row.PluginInstallMode)
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            row.PluginSlug.String,
 				MarketplaceName: name,
+				InstallMode:     string(mode),
+				Name:            conv.FromPGText[string](row.PluginName),
+				Description:     conv.FromPGText[string](row.PluginDescription),
 			})
-			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano())
+			// Name and description changes bump plugins.updated_at, so the
+			// timestamp already covers them.
+			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano(), mode)
 		}
 	}
 

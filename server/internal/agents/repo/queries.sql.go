@@ -64,8 +64,8 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 }
 
 const createAgentPolicyGrant = `-- name: CreateAgentPolicyGrant :one
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, concat('agent:', $2::uuid), $3, NULL, $4)
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, concat('agent:', $2::uuid), $3, $4)
 RETURNING id, scope, selectors, created_at, updated_at
 `
 
@@ -195,7 +195,6 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = concat('agent:', $2::uuid)
   AND id = $3
-  AND COALESCE(effect, 'allow') = 'allow'
 RETURNING id, scope, selectors, created_at, updated_at
 `
 
@@ -330,7 +329,6 @@ FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = concat('agent:', $2::uuid)
   AND id = $3
-  AND COALESCE(effect, 'allow') = 'allow'
 LIMIT 1
 FOR UPDATE
 `
@@ -563,7 +561,6 @@ SELECT id, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = concat('agent:', $2::uuid)
-  AND COALESCE(effect, 'allow') = 'allow'
 ORDER BY scope, selectors, id
 `
 
@@ -1093,7 +1090,6 @@ SET scope = $1,
 WHERE organization_id = $3
   AND principal_urn = concat('agent:', $4::uuid)
   AND id = $5
-  AND COALESCE(effect, 'allow') = 'allow'
 RETURNING id, scope, selectors, created_at, updated_at
 `
 

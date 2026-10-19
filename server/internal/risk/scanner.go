@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -39,8 +40,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"math"
-
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -132,8 +131,8 @@ func (p *ShadowMCPPolicy) IsAllowAll() bool {
 // (Claude permissionDecisionReason/SystemMessage; Cursor/Codex UserMessage/
 // AgentMessage) and therefore the local agent transcript. That is by design -
 // the human needs to see what tripped the challenge - but it means the
-// "never leaves the server" invariant is scoped to Gram's own persistence, not
-// the agent host. Any Gram-side ingestion that captures permission-prompt or
+// "never leaves the server" invariant is scoped to Speakeasy's own persistence, not
+// the agent host. Any Speakeasy-side ingestion that captures permission-prompt or
 // transcript content (e.g. a future session-replay path) MUST scrub %{match}
 // before persisting, or the invariant breaks silently.
 type ScanResult struct {
@@ -858,8 +857,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		span.End()
 	}()
 	llmMode := mode == feature.VariantRiskLLMLLM
-	llmCovered := policy.PolicyType != ra.PolicyTypePromptBased && llmanalyzer.CoversAnySource(policy.Sources)
-	if llmMode && llmCovered {
+	standard := policy.PolicyType != ra.PolicyTypePromptBased
+	if llmMode && standard && llmanalyzer.EnforcesAnySource(policy.Sources) {
 		policyStarted := time.Now()
 		defer func() {
 			if retErr != nil {
@@ -868,20 +867,28 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			s.recordLLMPolicyEvaluation(ctx, policy, llmPolicyOutcome(result), time.Since(policyStarted))
 		}()
 	}
-	// The shadow comparison needs the policy's message view, category scope
-	// and finding filter, which are built below; they are declared here so
-	// the deferred comparison sees them, and filter stays nil on the returns
-	// that precede it. legacyUnavailable is set wherever a legacy engine
-	// produced no usable verdict for an in-scope source (a missing or
-	// dead-lettered lane, an incomplete in-process scan), so the comparison
-	// does not read that as clean.
+	// Declared here so the deferred comparison sees the view, scope and
+	// filter built below; filter stays nil on earlier returns.
+	// legacyUnavailable marks a legacy engine with no usable verdict so the
+	// comparison does not read it as clean. Shadow compares every covered
+	// source; llm compares only the compared sources.
 	var (
 		view              ra.MessageView
 		categoryScope     ra.CategoryScope
 		filter            func([]scanners.Finding) []scanners.Finding
 		legacyUnavailable bool
+		compareSources    []string
 	)
-	if mode == feature.VariantRiskLLMShadow && llmCovered {
+	compare := false
+	switch {
+	case mode == feature.VariantRiskLLMShadow && standard && llmanalyzer.CoversAnySource(policy.Sources):
+		compare = true
+	case llmMode && standard && slices.ContainsFunc(policy.Sources, func(source string) bool {
+		return slices.Contains(llmanalyzer.ComparedSources, source)
+	}):
+		compare, compareSources = true, llmanalyzer.ComparedSources
+	}
+	if compare {
 		policyStarted := time.Now()
 		defer func() {
 			if retErr != nil || filter == nil {
@@ -895,6 +902,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				view:              view,
 				categoryScope:     categoryScope,
 				filter:            filter,
+				sources:           compareSources,
 			}, time.Since(policyStarted))
 		}()
 	}
@@ -985,10 +993,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		if !categoryScope.SourceInScope(view, source) {
 			continue
 		}
-		if _, covered := llmanalyzer.RiskKeyForSource(source); covered && llmMode {
+		if llmMode && llmanalyzer.Enforces(source) {
 			// The lane already answered for every covered source at once; no
 			// legacy engine runs for this source, not even when the lane is
-			// degraded (its sentinel denies instead).
+			// degraded (its sentinel denies instead). Compared sources fall
+			// through to their legacy engine below.
 			// The sentinel is taken out before exclusions and disabled rules
 			// apply: those only ever silence real verdicts, never the lane's
 			// own outage signal, or an exclusion would turn a degraded lane
@@ -1177,7 +1186,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			}
 		case ra.SourcePromptInjection:
 			scanStarted := time.Now()
-			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgemessage.New(messageType, toolName, text))
+			judgeMessage := judgemessage.New(messageType, toolName, text)
+			judgeMessage.AnchorID = baseProvenance.ChatMessageID
+			judgeMessage.ChatID = baseProvenance.ChatID
+			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgeMessage)
 			if !scanResult.Completed {
 				incomplete.Store(true)
 				legacyUnavailable = true
@@ -1733,6 +1745,8 @@ type shadowComparisonInput struct {
 	view              ra.MessageView
 	categoryScope     ra.CategoryScope
 	filter            func([]scanners.Finding) []scanners.Finding
+	// sources restricts the comparison; nil compares realtimeLegacySources.
+	sources []string
 }
 
 // recordShadowComparison sets the LLM analyzer lane's verdict for a policy
@@ -1754,6 +1768,9 @@ func (s *Scanner) recordShadowComparison(ctx context.Context, policy repo.RiskPo
 		if !slices.Contains(realtimeLegacySources, source) || !in.categoryScope.SourceInScope(in.view, source) {
 			continue
 		}
+		if in.sources != nil && !slices.Contains(in.sources, source) {
+			continue
+		}
 		compared++
 		laneFindings := llmanalyzer.FindingsForSource(in.llmFindings, source)
 		verdicts := make([]scanners.Finding, 0, len(laneFindings))
@@ -1769,11 +1786,18 @@ func (s *Scanner) recordShadowComparison(ctx context.Context, policy repo.RiskPo
 	if compared == 0 {
 		return
 	}
+	legacy := in.legacy
+	// A restricted comparison reads the policy verdict only when the compared
+	// engine produced it. A verdict from another source (the lane's own
+	// finding or sentinel for an enforced source) means that engine never
+	// ran, so there is nothing to compare.
+	if in.sources != nil && legacy != nil && !slices.Contains(in.sources, legacy.Source) {
+		return
+	}
 	// The sentinel is detected on the lane's raw findings, not per source:
 	// the lane answers for every covered source at once, so its outage is
 	// the same whichever sources the policy compares.
 	llmUnavailable := in.llmFindings == nil || slices.ContainsFunc(in.llmFindings, llmanalyzer.IsDeadLetter)
-	legacy := in.legacy
 	legacyUnavailable := in.legacyUnavailable || (legacy != nil && legacy.DeadLetterReason != "")
 	legacyMatched := legacy != nil && legacy.DeadLetterReason == "" && legacy.Source != ra.SourceCustom
 
@@ -1806,6 +1830,11 @@ func (s *Scanner) recordShadowComparison(ctx context.Context, policy repo.RiskPo
 			attr.RiskScanMode(llmanalyzer.ScanModeSync),
 			attr.Outcome(comparison),
 		))
+	}
+	// A policy that also enforces from the lane already counted its
+	// evaluation in scanPolicy.
+	if in.sources != nil && llmanalyzer.EnforcesAnySource(policy.Sources) {
+		return
 	}
 	s.recordLLMPolicyEvaluation(ctx, policy, llmOutcome, duration)
 }

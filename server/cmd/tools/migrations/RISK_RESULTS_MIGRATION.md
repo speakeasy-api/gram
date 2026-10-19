@@ -83,14 +83,14 @@ copy:
 - **Reveal metadata.** `surface` records which text `start_pos`/`end_pos`
   index. Spans with field attribution map `path != '' → json_path`,
   `tool.args → tool_args`, `content`/`prompt`/`assistant`/`tool_result →
-content`, `tool.server`/`tool.function → derived`; `field` and `path` copy
+  content`, `tool.server`/`tool.function → derived`; `field` and `path` copy
   over verbatim. Span-less rows (and single spans without field attribution)
   map by source: `gitleaks → scan_surface` (offsets index the composed
   content+args scan surface), `presidio → legacy_presidio` (offsets index a
   YAML-reformatted transform; reveal refuses these fast),
   `prompt_injection`/`llm_judge → none` (matches are rendered JSON artifacts),
   `shadow_mcp`/`account_identity`/`destructive_tool`/`cli_destructive →
-derived`, anything else `''`. `tool_call_id` is always left empty: Postgres
+  derived`, anything else `''`. `tool_call_id` is always left empty: Postgres
   spans only carried the tool NAME, not a recorded call id, and faking one
   would poison reveal lookups.
 - **Derived / dropped columns.** `request_id` is not recorded in `risk_results`

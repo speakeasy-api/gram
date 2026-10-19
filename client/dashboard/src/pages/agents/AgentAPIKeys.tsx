@@ -5,8 +5,6 @@ import { Check } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useFeatureFlag, type FeatureFlagResult } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SettingsSection } from "@/components/page-templates";
 import { Button } from "@/components/ui/Button";
 import {
@@ -69,7 +67,6 @@ export function AgentAPIKeys({
   // Delegable candidates are specific to the authorizer, and the signed-in
   // user can change without the organization changing.
   const { user } = useSession();
-  const flag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   if (creation)
     return (
       <AgentAPIKeysContent
@@ -77,7 +74,6 @@ export function AgentAPIKeys({
         agent={agent}
         organizationId={organization.id}
         userId={user.id}
-        flag={flag}
         creation
         onDone={onDone}
         onBusy={onBusy}
@@ -89,7 +85,6 @@ export function AgentAPIKeys({
       agent={agent}
       organizationId={organization.id}
       userId={user.id}
-      flag={flag}
       onCreate={onCreate}
     />
   );
@@ -114,7 +109,6 @@ export function AgentAPIKeys({
             agent={agent}
             organizationId={organization.id}
             userId={user.id}
-            flag={flag}
             onCreate={onCreate}
           />
         </SettingsSection.Body>
@@ -144,7 +138,6 @@ function AgentAPIKeysContent({
   agent,
   organizationId,
   userId,
-  flag,
   creation = false,
   onCreate,
   onDone,
@@ -153,7 +146,6 @@ function AgentAPIKeysContent({
   agent: ManagedAgent;
   organizationId: string;
   userId: string;
-  flag: FeatureFlagResult;
   creation?: boolean;
   onCreate?: () => void;
   onDone?: () => void;
@@ -161,10 +153,9 @@ function AgentAPIKeysContent({
 }) {
   const sdk = useSdkClient();
   const queryClient = useQueryClient();
-  const enabled = flag.status === "enabled";
-  const rolloutEnabled = useRef(enabled);
+  const mounted = useRef(true);
   const canManage = agent.permissions.authorize;
-  const issuanceBlocked = agentIssuanceBlocked(agent, enabled);
+  const issuanceBlocked = agentIssuanceBlocked(agent, canManage);
   const canIssue = issuanceBlocked === null;
   const [open, setOpen] = useState(creation);
   const [step, setStep] = useState(0);
@@ -184,7 +175,7 @@ function AgentAPIKeysContent({
   const [revoke, setRevoke] = useState<Key | null>(null);
   const keys = useListAPIKeys({ agentId: agent.id }, security, {
     queryKeyHashFn: (key) => JSON.stringify([organizationId, key]),
-    enabled: enabled && canManage,
+    enabled: canManage,
     retry: false,
     throwOnError: false,
   });
@@ -252,29 +243,21 @@ function AgentAPIKeysContent({
   useEffect(() => {
     onBusy?.(navigationBusy);
   }, [navigationBusy, onBusy]);
-  const resetCreation = create.reset;
+  // Issuance resolves after this component may have unmounted; the secret is
+  // shown only while it is still on screen.
   useEffect(() => {
-    rolloutEnabled.current = enabled;
-    if (!enabled) {
-      setIssued(false);
-      setOpen(false);
-      setSecret(null);
-      resetCreation();
-      if (creation && flag.status !== "loading") onDone?.();
-    }
+    mounted.current = true;
     return () => {
-      rolloutEnabled.current = false;
+      mounted.current = false;
     };
-  }, [enabled, resetCreation, creation, flag.status, onDone]);
+  }, []);
   const [revokedIds, setRevokedIds] = useState<string[]>([]);
   const knownKeys = keys.data?.keys.filter(
     (key) => !revokedIds.includes(key.id),
   );
   const revocation = useRevokeAPIKeyMutation({ retry: false });
-  const unavailable =
-    keys.isError && "statusCode" in keys.error && keys.error.statusCode === 404;
   const refresh = () => {
-    if (!rolloutEnabled.current) return;
+    if (!mounted.current) return;
     void keys.refetch();
     void queryClient.invalidateQueries({
       queryKey: ["@gram/client", "keys", "list"],
@@ -519,7 +502,7 @@ function AgentAPIKeysContent({
       },
       {
         onSuccess: (key) => {
-          if (rolloutEnabled.current) {
+          if (mounted.current) {
             setIssued(true);
             setSecret(key.key ?? null);
           }
@@ -533,7 +516,7 @@ function AgentAPIKeysContent({
           setReviewGrants([]);
           setReviewAccounts([]);
           setStep(2);
-          if (rolloutEnabled.current) void delegable.refetch();
+          if (mounted.current) void delegable.refetch();
           // A name already in use is the one failure the caller can fix from
           // this screen, and the server names it. Everything else keeps the
           // policy explanation, which is what the other causes have in common.
@@ -593,7 +576,6 @@ function AgentAPIKeysContent({
       ),
     },
   ];
-  if (!enabled) return <Text muted>Agent API keys are unavailable.</Text>;
   if (!canManage)
     return (
       <Text muted>
@@ -604,15 +586,11 @@ function AgentAPIKeysContent({
     <>
       {!creation && (
         <>
-          {enabled && keys.isLoading ? (
+          {keys.isLoading ? (
             <Text muted>Loading API keys…</Text>
-          ) : enabled && keys.isError ? (
+          ) : keys.isError ? (
             <div role="alert">
-              <Text>
-                {unavailable
-                  ? "Agent API keys are unavailable. The credential feature may be disabled."
-                  : "Could not load API keys."}
-              </Text>
+              <Text>Could not load API keys.</Text>
               <Button variant="secondary" onClick={() => void keys.refetch()}>
                 Retry API keys
               </Button>
@@ -625,7 +603,7 @@ function AgentAPIKeysContent({
             <Button
               size="sm"
               variant={knownKeys?.length ? "secondary" : "primary"}
-              disabled={!canIssue || unavailable}
+              disabled={!canIssue}
               onClick={() => {
                 onCreate?.();
               }}
@@ -654,7 +632,7 @@ function AgentAPIKeysContent({
           )}
         </>
       )}
-      {creation && open && enabled && (
+      {creation && open && (
         <div className="space-y-6">
           {/* Each step states its own purpose, so the shell speaks only for
               the one state that has none of its own: the issued key. */}

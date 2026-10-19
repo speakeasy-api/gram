@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("remoteSessionIssuers", func() {
-	Description("Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.")
+	Description("Manage remote_session_issuer records — upstream Authorization Server identity records that Speakeasy talks to as an OAuth client.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -42,7 +42,7 @@ var _ = Service("remoteSessionIssuers", func() {
 	})
 
 	Method("refreshRemoteSessionIssuerMetadata", func() {
-		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.")
+		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_issuer id.", func() {
@@ -545,6 +545,58 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MigrateOrganizationRemoteSessionIssuer"}`)
 	})
 
+	Method("setEMAProviders", func() {
+		Description("Replace the EMA providers the vendor authorization server this issuer names accepts, the providers that may issue ID-JAGs for it. They are stored as an ordered list, but each endpoint can use only the provider its sign-in goes through: the sign-in's trusted external issuer, or the organization's Speakeasy issuer for a sign-in that trusts none. So the list acts as the set of accepted providers, and its order does not change who vouches; a list that leaves out an endpoint's provider leaves that endpoint with nobody to vouch. An empty list restores the derived default, which accepts every provider: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization's Speakeasy issuer when it has one. The list applies organization-wide to every issuer with the same canonical issuer URL. With expected_providers, the write happens only while the saved list still matches it. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("remote_session_issuer_id", String, "Any remote_session_issuer in the caller's organization that names the vendor authorization server.", func() {
+				Format(FormatUUID)
+			})
+			// The handler enforces the 10-provider limit; Goa's length error
+			// would print the decoded entries as Go pointers.
+			Attribute("providers", ArrayOf(shared.EMAProviderInput), "The accepted providers, at most 10; each at most once. Stored in the given order, though each endpoint uses only the one its sign-in goes through. An empty list restores the derived default.")
+			Attribute("expected_providers", ArrayOf(shared.EMAProviderInput), "The saved list the caller started from, in its stored order, empty for the default. When given and the saved list no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Send the list you last read when updating; on conflict, re-read and reconcile the list before retrying. Omit only to replace the list unconditionally.")
+			Required("remote_session_issuer_id", "providers")
+			security.SessionPayload()
+		})
+
+		Result(shared.EMAProviderOrder)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.setEMAProviders")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setOrganizationRemoteSessionIssuerEMAProviders")
+		Meta("openapi:extension:x-speakeasy-name-override", "setEMAProviders")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetOrganizationRemoteSessionIssuerEMAProviders"}`)
+	})
+
+	Method("listEMAServices", func() {
+		Description("List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and the MCP servers that chain through it: counts include every server, the list only those the caller has mcp:read on. Requires org:read.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListEMAServicesResult)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.listEMAServices")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listOrganizationRemoteSessionIssuerEMAServices")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEMAServices")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuerEMAServices"}`)
+	})
+
 	Method("fetchIssuerMetadata", func() {
 		Description("Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.")
 
@@ -570,7 +622,7 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 	})
 
 	Method("refreshIssuerMetadata", func() {
-		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.")
+		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_issuer id.", func() {
@@ -694,7 +746,7 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.")
+	Description("A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.")
 
 	Attribute("id", String, "The remote_session_issuer id.", func() {
 		Format(FormatUUID)
@@ -715,7 +767,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("revocation_endpoint", String, "Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; null for issuers without DCR.")
 	Attribute("jwks_uri", String, "Upstream JWKS URI; null when not advertised.")
-	Attribute("jwks_fetched_at", String, "When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.", func() {
+	Attribute("jwks_fetched_at", String, "When Speakeasy last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("jwks_cache_expires_at", String, "When the persisted JWK Set becomes stale under the upstream cache policy. Null until the first successful refresh.", func() {
@@ -751,6 +803,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	nullableCapability("scope_override", "Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.")
 	Attribute("omit_scope_fallback", Boolean, "When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Null when unset.")
 	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.")
+	Attribute("ema_providers", shared.EMAProviderOrder, "The organization's EMA provider order for this issuer's vendor. Returned by organizationRemoteSessionIssuers.getIssuer only.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

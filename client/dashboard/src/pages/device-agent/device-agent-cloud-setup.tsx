@@ -315,7 +315,7 @@ export function RemoteNetworkAccessStep(): React.JSX.Element {
         for Claude Code on the web.
       </Text>
       <Text small muted>
-        Trusted network access does not include Gram. Set{" "}
+        Trusted network access does not include Speakeasy. Set{" "}
         <strong className="text-foreground">Custom</strong>, check{" "}
         <strong className="text-foreground">
           Also include default list of common package managers

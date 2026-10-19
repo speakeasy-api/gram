@@ -89,9 +89,13 @@ type CreateAssistantPayload struct {
 	Model string
 	// The system instructions for the assistant.
 	Instructions string
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
+	// replaces the assistant's hosted servers.
 	Toolsets []*types.AssistantToolsetRef
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers to attach. When sent, replaces the assistant's servers that are
+	// not hosted (toolset-backed). A hosted server listed here is attached if it
+	// is not already; attached hosted servers are left unchanged, and toolsets
+	// governs them when both are sent.
 	McpServers []*types.AssistantMCPServerRef
 	// Optional warm runtime TTL in seconds.
 	WarmTTLSeconds *int
@@ -224,9 +228,13 @@ type UpdateAssistantPayload struct {
 	Model *string
 	// The system instructions for the assistant.
 	Instructions *string
-	// Toolsets available to the assistant.
+	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
+	// replaces the assistant's hosted servers.
 	Toolsets []*types.AssistantToolsetRef
-	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	// MCP servers to attach. When sent, replaces the assistant's servers that are
+	// not hosted (toolset-backed). A hosted server listed here is attached if it
+	// is not already; attached hosted servers are left unchanged, and toolsets
+	// governs them when both are sent.
 	McpServers []*types.AssistantMCPServerRef
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int

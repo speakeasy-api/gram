@@ -56,6 +56,15 @@ export type DecideAccessTarget = {
 
 export type AccessDecision = "approved" | "denied";
 
+/**
+ * Why deciding waits while the policy list has failed to load: the sheet
+ * writes grants against the policies it can see, so with none loaded an
+ * approval would record a decision that enforces nothing. Every surface that
+ * opens the sheet says this the same way.
+ */
+export const POLICIES_UNAVAILABLE_REASON =
+  "Policy data could not be loaded — deciding now would not be enforced";
+
 type AudienceGroup = {
   heading: string;
   options: { label: string; value: string }[];

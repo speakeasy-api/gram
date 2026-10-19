@@ -67,7 +67,7 @@ func TestService_SetResourceAudience_RoleDelivery(t *testing.T) {
 	for _, action := range []audit.Action{audit.ActionPluginServerAdd, audit.ActionPluginServerRemove} {
 		record, err := audittest.LatestAuditLogByAction(ctx, f.ti.conn, action)
 		require.NoError(t, err)
-		require.Equal(t, "Gram", record.ActorDisplay, "actor label for %s", action)
+		require.Equal(t, "Speakeasy", record.ActorDisplay, "actor label for %s", action)
 		require.Equal(t, "system", record.ActorType)
 		require.Equal(t, "automatic-role-distribution", record.ActorID)
 	}

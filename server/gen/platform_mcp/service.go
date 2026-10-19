@@ -15,7 +15,7 @@ import (
 )
 
 // Session-authenticated onboarding and lifecycle projection for the
-// organization-level Gram Platform MCP.
+// organization-level Speakeasy Platform MCP.
 type Service interface {
 	// Get the current user's safe Platform MCP onboarding projection for the
 	// active organization.

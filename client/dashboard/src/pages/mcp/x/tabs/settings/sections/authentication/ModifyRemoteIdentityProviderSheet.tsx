@@ -36,10 +36,7 @@ import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  IssuerScopeOverrideAlert,
-  LegacyCallbackAlert,
-} from "@/pages/remote-identity-providers/clientAlerts";
+import { LegacyCallbackAlert } from "@/pages/remote-identity-providers/clientAlerts";
 import {
   ClientAssertionAudienceField,
   ClientCredentialsFields,
@@ -196,6 +193,8 @@ function ModifyRemoteIdentityProviderSheetBody({
     jwksUri: issuer.jwksUri ?? "",
     scopesSupported: issuer.scopesSupported ?? [],
     grantTypesSupported: issuer.grantTypesSupported ?? [],
+    authorizationGrantProfilesSupported:
+      issuer.authorizationGrantProfilesSupported ?? [],
     responseTypesSupported: issuer.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       issuer.tokenEndpointAuthMethodsSupported ?? [],
@@ -305,7 +304,7 @@ function ModifyRemoteIdentityProviderSheetBody({
       // NULL"; an omitted field keeps the existing value. Send the trimmed
       // input directly (including "") so blanking out a field in the UI
       // actually clears the saved record — especially registration_endpoint,
-      // which is the signal Gram uses for "DCR is supported on this issuer".
+      // which is the signal Speakeasy uses for "DCR is supported on this issuer".
       await client.remoteSessionIssuers.update({
         updateRemoteSessionIssuerForm: {
           id: issuer.id,
@@ -321,6 +320,9 @@ function ModifyRemoteIdentityProviderSheetBody({
           jwksUri: jwksUri.trim(),
           scopesSupported: discoveredSnapshot?.scopesSupported,
           grantTypesSupported: discoveredSnapshot?.grantTypesSupported,
+          // A reset snapshot means a new issuer URL; its profiles are unknown until rediscovery.
+          authorizationGrantProfilesSupported:
+            discoveredSnapshot?.authorizationGrantProfilesSupported ?? [],
           responseTypesSupported: discoveredSnapshot?.responseTypesSupported,
           tokenEndpointAuthMethodsSupported:
             discoveredSnapshot?.tokenEndpointAuthMethodsSupported,
@@ -594,7 +596,6 @@ function ModifyRemoteIdentityProviderSheetBody({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
-          scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
         />
 
         {submitError && (

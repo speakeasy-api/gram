@@ -33,7 +33,7 @@ export type OktaServerSuggestionState = ClosedEnum<
 >;
 
 /**
- * A Gram-owned catalog entry whose Okta mapping matches at least one active, assigned application in the organization's Okta snapshot. Suggest only; nothing is created until the administrator accepts through the remote MCP install flow.
+ * A Speakeasy-owned catalog entry whose Okta mapping matches at least one active, assigned application in the organization's Okta snapshot. Suggest only; nothing is created until the administrator accepts through the remote MCP install flow.
  */
 export type OktaServerSuggestion = {
   description: string;

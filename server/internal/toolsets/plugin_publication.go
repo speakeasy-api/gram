@@ -8,8 +8,10 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // toolsetCarriedByPlugin reports, inside the mutation's transaction, whether a
@@ -22,6 +24,37 @@ func toolsetCarriedByPlugin(ctx context.Context, tx pgx.Tx, authCtx *contextvalu
 		return false, fmt.Errorf("check toolset plugin membership: %w", err)
 	}
 	return attached, nil
+}
+
+// detachToolsetPluginServers removes a deleted toolset's toolset-keyed plugin
+// entries so they stop holding their display names, auditing each removal.
+func detachToolsetPluginServers(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID) (int, error) {
+	detached, err := pluginsrepo.New(tx).SoftDeletePluginServersByToolsetID(ctx, pluginsrepo.SoftDeletePluginServersByToolsetIDParams{
+		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("detach toolset plugin servers: %w", err)
+	}
+	toolsetURN := urn.NewToolset(toolsetID)
+	for _, server := range detached {
+		if err := auditLogger.LogPluginServerRemove(ctx, tx, audit.LogPluginServerRemoveEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			PluginID:         server.PluginID,
+			PluginName:       server.PluginName,
+			PluginSlug:       server.PluginSlug,
+			ServerID:         server.ID,
+			ToolsetURN:       &toolsetURN,
+			McpServerURN:     nil,
+			MetaMcpServerURN: nil,
+		}); err != nil {
+			return 0, fmt.Errorf("audit toolset plugin server removal: %w", err)
+		}
+	}
+	return len(detached), nil
 }
 
 // requestPluginPublication records a durable package refresh in the

@@ -1,6 +1,6 @@
 ---
 name: gram-audit-logging
-description: Concepts, external interfaces, and conventions for Gram's audit logging subsystem — the internal Go API for recording actor/action/subject events and the `/rpc/auditlogs.*` management API that exposes them. Activate whenever the task involves recording or exposing audit events (adding or changing audit coverage on a service, introducing a new audited subject or action, writing tests that assert an event was recorded, changing how entries are displayed or filtered).
+description: Concepts, external interfaces, and conventions for Speakeasy's audit logging subsystem — the internal Go API for recording actor/action/subject events and the `/rpc/auditlogs.*` management API that exposes them. Activate whenever the task involves recording or exposing audit events (adding or changing audit coverage on a service, introducing a new audited subject or action, writing tests that assert an event was recorded, changing how entries are displayed or filtered).
 metadata:
   relevant_files:
     - "server/internal/audit/**/*.go"
@@ -8,7 +8,7 @@ metadata:
     - "server/design/auditlogs/**"
 ---
 
-Audit logging is how Gram records _who did what to which resource_. Every meaningful mutation on a project- or org-scoped resource is expected to produce one audit entry per affected row, written inside the same database transaction as the mutation so events can't drift from the state they describe. Entries are exposed to Gram users through the `auditlogs` management API.
+Audit logging is how Speakeasy records _who did what to which resource_. Every meaningful mutation on a project- or org-scoped resource is expected to produce one audit entry per affected row, written inside the same database transaction as the mutation so events can't drift from the state they describe. Entries are exposed to Speakeasy users through the `auditlogs` management API.
 
 ## Concepts and terminology
 
@@ -26,7 +26,7 @@ Audit logging is how Gram records _who did what to which resource_. Every meanin
 
 **Atomicity.** Audit entries are written inside the same database transaction as the mutation they describe, so the state and the record of the state commit together or not at all.
 
-**Outbox event.** Every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`.
+**Outbox event.** By default, every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`. Operator backfills construct their logger with `audit.NewLogger(audit.WithoutOutbox())`, which records audit rows but publishes no webhook events, so bulk system writes do not flood customer webhooks.
 
 ## Server
 
@@ -59,7 +59,7 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 | `server/internal/audit/audittest/helpers.go`                         | Test helpers other packages use to assert audit events.                                                                                                                                                                |
 | `server/internal/audit/audittest/queries.sql`                        | SQLc queries backing the test helpers. Regenerates `server/internal/audit/audittest/repo/` via `mise run gen:sqlc-server`.                                                                                             |
 | `server/internal/audit/events.go`                                    | Top-level declarations shared across every subject.                                                                                                                                                                    |
-| `server/internal/audit/logger.go`                                    | `Logger` type, `auditEntry` struct, and the internal `l.log()` method that inserts the DB row then calls `appendToOutbox`.                                                                                             |
+| `server/internal/audit/logger.go`                                    | `Logger` type, the `WithoutOutbox` option, `auditEntry` struct, and the internal `l.log()` method that inserts the DB row then calls `appendToOutbox` unless the outbox is skipped.                                    |
 | `server/internal/audit/outbox.go`                                    | `appendToOutbox` — translates the inserted audit row into an `AuditLogCreatedPayload` and publishes to the outbox under the subject-specific event def.                                                                |
 | `server/internal/auditapi/impl.go`                                   | Implementation of the `/rpc/auditlogs.*` Goa service (reads). Lives in its own package to keep the `audit` writer surface free of `auth/sessions` and `mv` so any service can call `audit.Log*` without import cycles. |
 | `server/internal/audit/queries.sql`                                  | SQLc queries for the audit log table. Regenerates `server/internal/audit/repo/` via `mise run gen:sqlc-server`.                                                                                                        |
@@ -79,7 +79,7 @@ Files under `server/gen/**` and any `repo/` subdirectory carry a `DO NOT EDIT` h
 
 ## Server-client contract
 
-Audit entries are surfaced to Gram users through a small, fixed set of endpoints. New actions and subject types appear automatically — facets are computed from the rows that exist, so there is no registration step outside the Go code.
+Audit entries are surfaced to Speakeasy users through a small, fixed set of endpoints. New actions and subject types appear automatically — facets are computed from the rows that exist, so there is no registration step outside the Go code.
 
 **HTTP routes** (design: `server/design/auditlogs/design.go`):
 

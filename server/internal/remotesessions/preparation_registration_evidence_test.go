@@ -21,6 +21,7 @@ func TestPreparationEvidence_CIMDUnknownRequiresConfirmation(t *testing.T) {
 	user := createUserSessionIssuer(t, ctx, ti.conn, "review-human")
 	client := createCimdClient(t, ctx, ti, issuer.String(), user.String(), []string{"openid"})
 	in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: uuid.MustParse(client.ID), Resource: "https://resource.example.com/", Mechanism: "cimd", Scopes: []string{"openid"}}
+	preparationConfidentialClient(t, ctx, ti, issuer, in.ClientID)
 	preparationRecordGrants(t, ctx, ti, in.ClientID, nil)
 	result, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
@@ -53,7 +54,7 @@ func TestPreparationEvidence_CIMDUnknownRequiresConfirmation(t *testing.T) {
 
 func TestPreparationEvidence_ManualRecordsEvidenceWithoutDiscoveryReadiness(t *testing.T) {
 	t.Parallel()
-	for _, state := range []string{"unsupported_profile", "transient_failure"} {
+	for _, state := range []string{"incomplete_metadata", "transient_failure"} {
 		t.Run(state, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestService(t)
@@ -75,7 +76,7 @@ func TestPreparationEvidence_ManualRecordsEvidenceWithoutDiscoveryReadiness(t *t
 			current, err := ti.service.ReadIdentityChaining(ctx, in)
 			require.NoError(t, err)
 			require.Equal(t, result, current)
-			if state == "unsupported_profile" {
+			if state == "incomplete_metadata" {
 				preparationAdvertise(t, ctx, ti, issuer)
 				current, err = ti.service.ReadIdentityChaining(ctx, in)
 				require.NoError(t, err)
@@ -83,5 +84,22 @@ func TestPreparationEvidence_ManualRecordsEvidenceWithoutDiscoveryReadiness(t *t
 				require.Equal(t, result.Generation, current.Generation)
 			}
 		})
+	}
+}
+
+// The ID-JAG profile limits redemption to confidential clients, so a public
+// CIMD client is never prepared even with exact grants.
+func TestPreparationEvidence_PublicClientRequiresManualSetup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	issuer := createCIMDIssuer(t, ctx, ti, "public-cimd", "https://idp.example.com/authorize", "https://idp.example.com/token")
+	preparationAdvertise(t, ctx, ti, issuer)
+	user := createUserSessionIssuer(t, ctx, ti.conn, "public-human")
+	client := createCimdClient(t, ctx, ti, issuer.String(), user.String(), []string{"openid"})
+	for _, mechanism := range []string{"cimd", "manual"} {
+		in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: uuid.MustParse(client.ID), Resource: "https://resource.example.com/", Mechanism: mechanism, Scopes: []string{"openid"}, ConfirmGrants: []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}}
+		result, err := ti.service.PrepareIdentityChaining(ctx, in)
+		require.NoError(t, err, mechanism)
+		require.Equal(t, "manual_setup_required", result.State, mechanism)
 	}
 }

@@ -1,11 +1,6 @@
 package platformmcp
 
 import (
-	"crypto/hmac"
-
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -43,31 +38,25 @@ func principalCursorBinding(principal Principal) string {
 }
 
 type catalogCursorCodec struct {
-	key []byte
+	key signedCursorKey
 }
 
 func newCatalogCursorCodec(keyMaterial string) (*catalogCursorCodec, error) {
 	if keyMaterial == "" {
 		return nil, ErrCatalogCursorInvalid
 	}
-	key := sha256.Sum256([]byte("platform-mcp-catalog-cursor:" + keyMaterial))
-	return &catalogCursorCodec{key: key[:]}, nil
+	return &catalogCursorCodec{key: newSignedCursorKey("platform-mcp-catalog-cursor", keyMaterial)}, nil
 }
 
 func (c *catalogCursorCodec) Encode(cursor catalogCursor) (string, error) {
 	if c == nil || len(c.key) == 0 || cursor.OrganizationID == "" || cursor.Generation == "" || cursor.Position < 0 {
 		return "", ErrCatalogCursorInvalid
 	}
-	payload, err := json.Marshal(cursor)
+	token, err := sealCursor(c.key, cursor)
 	if err != nil {
 		return "", fmt.Errorf("encode platform mcp catalog cursor: %w", err)
 	}
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	token := make([]byte, 0, len(payload)+sha256.Size)
-	token = append(token, payload...)
-	token = append(token, mac.Sum(nil)...)
-	return base64.RawURLEncoding.EncodeToString(token), nil
+	return token, nil
 }
 
 func (c *catalogCursorCodec) Decode(value string, principal Principal, query, providerKey string) (int, error) {
@@ -75,18 +64,8 @@ func (c *catalogCursorCodec) Decode(value string, principal Principal, query, pr
 	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || binding == "" {
 		return 0, ErrCatalogCursorInvalid
 	}
-	token, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(token) <= sha256.Size {
-		return 0, ErrCatalogCursorInvalid
-	}
-	payload, signature := token[:len(token)-sha256.Size], token[len(token)-sha256.Size:]
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	if !hmac.Equal(signature, mac.Sum(nil)) {
-		return 0, ErrCatalogCursorInvalid
-	}
-	var cursor catalogCursor
-	if err := json.Unmarshal(payload, &cursor); err != nil || cursor.Position < 0 || cursor.OrganizationID != principal.OrganizationID || cursor.Generation != binding || cursor.Query != normalizeCatalogQuery(query) || cursor.ProviderKey != normalizeCatalogProviderKey(providerKey) {
+	cursor, ok := openCursor[catalogCursor](c.key, value)
+	if !ok || cursor.Position < 0 || cursor.OrganizationID != principal.OrganizationID || cursor.Generation != binding || cursor.Query != normalizeCatalogQuery(query) || cursor.ProviderKey != normalizeCatalogProviderKey(providerKey) {
 		return 0, ErrCatalogCursorInvalid
 	}
 	return cursor.Position, nil

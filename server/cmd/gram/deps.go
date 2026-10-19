@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/pubsub/v2"
+	cloudstorage "cloud.google.com/go/storage"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/exaring/otelpgx"
@@ -54,6 +55,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/storage"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
@@ -75,7 +77,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/lake"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
@@ -133,6 +137,10 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, redisClient redis.UniversalClient) (policy *guardian.Policy, err error) {
+	catalogOption, err := guardian.WithHostedMCPFrontEndCIDR(c.String("remote-mcp-catalog-ilb-cidr"))
+	if err != nil {
+		return nil, fmt.Errorf("configure remote MCP catalog: %w", err)
+	}
 	breaker := guardian.NewNoopBreaker(logger, meterProvider)
 	limiter := guardian.NewRedisRateLimiter(logger, meterProvider, redisClient)
 
@@ -166,6 +174,7 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 		}
 	}
 
+	catalogOption(policy)
 	return policy, nil
 }
 
@@ -510,6 +519,8 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
 	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
+	// The issuer kill switch fails closed when unset, so local dev sets it off.
+	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -787,8 +798,9 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 // the dev-idp's WorkOS emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
-		Endpoint: c.String("workos-endpoint"),
-		ClientID: c.String("idp-client-id"),
+		Endpoint:    c.String("workos-endpoint"),
+		ClientID:    c.String("idp-client-id"),
+		RetryConfig: nil,
 	}
 }
 
@@ -1194,11 +1206,11 @@ func newTriggersApp(
 }
 
 // newAssistantIdentities binds assistant trigger workloads to the deployment's
-// Gram signing issuer, the same origin mcpauthz.New takes.
+// Speakeasy signing issuer, the same origin mcpauthz.New takes.
 func newAssistantIdentities(c *cli.Context, auditLogger *audit.Logger) *assistantidentity.Service {
 	issuerURL := c.String("authz-issuer-url")
 	inv.Require("assistant identity issuer",
-		"authz-issuer-url is a Gram issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, c.String("environment") == "local"),
+		"authz-issuer-url is a Speakeasy issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, c.String("environment") == "local"),
 	)
 	return assistantidentity.New(issuerURL, auditLogger)
 }
@@ -1296,6 +1308,46 @@ func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian
 type pubSubBroker interface {
 	gcp.PublisherBroker
 	gcp.SubscriberBroker
+	storage.Broker
+}
+
+func newLakeStorage(ctx context.Context, logger *slog.Logger, c *cli.Context) (storage.Store, map[string]string, func(context.Context) error, error) {
+	buckets, err := storage.ParseBucketMapping(c.String("storage-buckets"))
+	if err != nil {
+		return nil, nil, noopShutdown, fmt.Errorf("parse storage bucket mapping: %w", err)
+	}
+
+	if c.String("environment") == "local" {
+		if buckets["lake"] == "" {
+			buckets["lake"] = "lake"
+		}
+
+		store, err := lake.NewFilesystemStore(ctx, logger, c.String("lake-directory"))
+		if err != nil {
+			return nil, nil, noopShutdown, fmt.Errorf("create filesystem lake: %w", err)
+		}
+
+		return store, buckets, func(context.Context) error { return store.Close() }, nil
+	}
+
+	// Preview environments emulate Pub/Sub and map no lake bucket. They have no
+	// persistent disk either, so the lake is disabled rather than faked: a nil
+	// store tells the caller not to start the lake consumer.
+	if buckets["lake"] == "" && c.String("pubsub-emulator-host") != "" {
+		logger.WarnContext(ctx, "lake disabled: Pub/Sub is emulated and no lake bucket is mapped")
+		return nil, buckets, noopShutdown, nil
+	}
+
+	if buckets["lake"] == "" {
+		return nil, nil, noopShutdown, errors.New("storage bucket mapping for lake is required")
+	}
+
+	client, err := cloudstorage.NewClient(ctx)
+	if err != nil {
+		return nil, nil, noopShutdown, fmt.Errorf("create lake GCS client: %w", err)
+	}
+
+	return &storage.GCSStore{Client: client}, buckets, func(context.Context) error { return client.Close() }, nil
 }
 
 func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, pubSubBroker, func(ctx context.Context) error, error) {
@@ -1507,7 +1559,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 // cloud account authenticate through.
 //
 // Local development gets a stub. The real resolver screens every customer
-// supplied service account against Gram's own project, which requires Gram to be
+// supplied service account against Speakeasy's own project, which requires Speakeasy to be
 // running as a user managed service account. A developer machine authenticates
 // with a personal Google login instead, so the screening cannot be evaluated and
 // every credential and key write fails closed. Stubbing the resolver is what
@@ -1536,7 +1588,7 @@ const defaultLocalSigningAlgorithm = jose.RS256
 //
 // The algorithm it signs with is configurable, and deliberately independent of
 // what any key records. Reporting back whatever the caller expected would make
-// the stand-in agree with Gram by construction, and agreeing by construction is
+// the stand-in agree with Speakeasy by construction, and agreeing by construction is
 // precisely what the verify probe exists to disprove: comparing the key's real
 // algorithm against the recorded one is the check that catches a key pointed at
 // the wrong row. Keeping the two independent is what leaves the mismatch outcome
@@ -1665,6 +1717,7 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 		SigningCredentialID:   credentialID,
 		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
 		ServerURL:             serverURL,
+		AllowLoopbackIssuer:   c.String("environment") == "local",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build identity provider connections provisioner: %w", err)
@@ -1732,4 +1785,38 @@ func preserveLegacyLocalSigningKey(sourcePath, targetPath string) error {
 // capacity.
 func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
 	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
+}
+
+// newInternalSessionIssuerGate reports what each organization may do with its
+// issuer, honoring the startup kill switch.
+func newInternalSessionIssuerGate(c *cli.Context, db *pgxpool.Pool, featureFlags feature.Provider, provisioning bool) *internalsessionissuers.Gate {
+	return internalsessionissuers.NewGate(db, featureFlags, internalsessionissuers.GateConfig{
+		Provisioning:  provisioning,
+		SigningPaused: c.Bool(internalSessionIssuerSigningPausedFlag),
+	})
+}
+
+// internalSessionIssuerManager keeps a nil provisioner a nil interface.
+func internalSessionIssuerManager(provisioner *identityproviderconnections.Provisioner) internalsessionissuers.Manager {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}
+
+// enableIssuerKeyAutoActivation lets the key sweep finish routine rotations,
+// approving each key with the same checks a signature passes.
+func enableIssuerKeyAutoActivation(provisioner *identityproviderconnections.Provisioner, signer *internalsessionissuers.Signer) {
+	if provisioner == nil {
+		return
+	}
+	provisioner.SetEMAIssuerActivationCheck(signer.CheckActivation)
+}
+
+// issuerKeySweeper keeps a nil provisioner a nil interface.
+func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) background.InternalSessionIssuerKeySweeper {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
 }

@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export const UpdateMcpServerFormNetworkAccessMode = {
   PublicOnly: "public_only",
@@ -15,7 +15,7 @@ export const UpdateMcpServerFormNetworkAccessMode = {
   PrivateOnly: "private_only",
 } as const;
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export type UpdateMcpServerFormNetworkAccessMode = ClosedEnum<
   typeof UpdateMcpServerFormNetworkAccessMode
@@ -53,7 +53,7 @@ export type UpdateMcpServerForm = {
    */
   name?: string | undefined;
   /**
-   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
    */
   networkAccessMode?: UpdateMcpServerFormNetworkAccessMode | undefined;
   /**

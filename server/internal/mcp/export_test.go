@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 )
 
@@ -37,7 +38,7 @@ func AdmitWorkloadAssertion(
 		identities: workloadIdentityStoreLookup(db),
 		verifier:   verifier,
 	}
-	_, err := admitWorkloadAssertion(ctx, grant, endpoint, audiences, raw)
+	_, err := admitWorkloadAssertion(ctx, grant, endpoint.workloadTenancy(), audiences, raw)
 	return err
 }
 
@@ -90,4 +91,9 @@ func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32
 // SetRiskScanEvaluator replaces observation only in the test binary.
 func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 	s.scanEvaluator = evaluator
+}
+
+// SetPosthog replaces the product analytics client only in the test binary.
+func (s *Service) SetPosthog(p *posthog.Posthog) {
+	s.posthog = p
 }

@@ -116,6 +116,7 @@ function show(rows: OktaResourceConnectionServer[], placeholder = false) {
               {
                 id: "connection",
                 status: "verified",
+                orgUrl: "https://acme.okta.com",
               } as OktaIdentityProviderConnection
             }
           />
@@ -274,6 +275,7 @@ describe("Server connections section", () => {
                 {
                   id: "connection",
                   status: "verified",
+                  orgUrl: "https://acme.okta.com",
                 } as OktaIdentityProviderConnection
               }
             />
@@ -295,6 +297,14 @@ describe("Server connections section", () => {
         "Not confirmed or not working. The connection may already exist in Okta.",
       ),
     ).toBeTruthy();
+  });
+
+  it("notes the vendor-side trust step with the org's Okta issuer", () => {
+    show([row(0)]);
+    expect(
+      screen.getByText(/Speakeasy cannot do this step for you/),
+    ).toBeTruthy();
+    expect(screen.getByText("https://acme.okta.com")).toBeTruthy();
   });
 });
 

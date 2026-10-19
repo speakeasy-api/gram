@@ -11,6 +11,7 @@ import type { RemoteMcpServerScopes } from "@gram/client/models/components/remot
 import { Info } from "lucide-react";
 import { useId, useMemo } from "react";
 import {
+  PIN_NEEDS_WRITE_ON_ALL,
   scopePinStatus,
   sharedServerLine,
   unadvertisedPinnedScopes,
@@ -44,8 +45,9 @@ export function ResourceScopePinField({
     [scopes, issuerScopes],
   );
   // Flag off, the pin can only be cleared, never added to.
-  const readOnly = !scopes.discoveryEnabled;
-  const canClear = readOnly && pin.value.length > 0;
+  const readOnly = !scopes.discoveryEnabled || !scopes.canPin;
+  const canClear =
+    scopes.canPin && !scopes.discoveryEnabled && pin.value.length > 0;
   const status = scopePinStatus(
     scopes,
     connectedClientId,
@@ -93,6 +95,11 @@ export function ResourceScopePinField({
         }
         disabled={disabled || readOnly}
       />
+      {scopes.canPin ? null : (
+        <Text muted small className="block">
+          {PIN_NEEDS_WRITE_ON_ALL}
+        </Text>
+      )}
       {canClear ? (
         <Button
           variant="secondary"

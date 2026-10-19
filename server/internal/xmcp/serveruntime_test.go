@@ -194,7 +194,7 @@ func TestServeMCP_PublicRemoteBackend_IssuerTokenForwardsUpstream(t *testing.T) 
 	require.NotEmpty(t, sessionID, "proxy must relay Mcp-Session-Id from upstream")
 }
 
-// The issuer gate accepts only user-session JWTs, so a Gram API key — even
+// The issuer gate accepts only user-session JWTs, so a Speakeasy API key — even
 // one in the server's own org — is rejected with an OAuth challenge.
 func TestServeMCP_PrivateRemoteBackend_APIKeyRejectedWithChallenge(t *testing.T) {
 	t.Parallel()
@@ -278,8 +278,8 @@ func TestServeMCP_PublicRemoteBackend_DeleteForwardsSessionTermination(t *testin
 	require.Equal(t, "abc-session", gotSession)
 }
 
-// A Gram API key is rejected at the issuer gate, so no request — and
-// therefore no Gram credential — ever reaches the upstream.
+// A Speakeasy API key is rejected at the issuer gate, so no request — and
+// therefore no Speakeasy credential — ever reaches the upstream.
 func TestServeMCP_PrivateRemoteBackend_APIKeyNeverReachesUpstream(t *testing.T) {
 	t.Parallel()
 
@@ -302,7 +302,7 @@ func TestServeMCP_PrivateRemoteBackend_APIKeyNeverReachesUpstream(t *testing.T) 
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
 	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
-	require.False(t, upstreamCalled, "Gram API key must never leak to the remote MCP server")
+	require.False(t, upstreamCalled, "Speakeasy API key must never leak to the remote MCP server")
 }
 
 // Public mcp_server with an issuer-gated bearer: the proxy strips the inbound
@@ -313,13 +313,16 @@ func TestServeMCP_PublicRemoteBackend_IssuerTokenSendsNoAuthorizationUpstream(t 
 
 	ctx, ti := newTestService(t)
 
-	var gotAuth string
-	done := make(chan struct{}, 1)
+	authorization := make(chan string, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
+		// Metadata probes run concurrently; only capture the proxied MCP request.
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
-		done <- struct{}{}
+		authorization <- r.Header.Get("Authorization")
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -331,9 +334,8 @@ func TestServeMCP_PublicRemoteBackend_IssuerTokenSendsNoAuthorizationUpstream(t 
 	token := mintAccessTokenForSeededEndpoint(t, ctx, ti, slug, mcpServer)
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(token), []byte(initializeBody))
-	<-done
 	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
-	require.Empty(t, gotAuth, "issuer-gated bearer must never leak to the remote MCP server")
+	require.Empty(t, <-authorization, "issuer-gated bearer must never leak to the remote MCP server")
 }
 
 // Public variant of the API-key rejection above.
@@ -359,7 +361,7 @@ func TestServeMCP_PublicRemoteBackend_GramAPIKeyNeverReachesUpstream(t *testing.
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
 	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
-	require.False(t, upstreamCalled, "Gram API key must never leak even on a public mcp_server")
+	require.False(t, upstreamCalled, "Speakeasy API key must never leak even on a public mcp_server")
 }
 
 // The gate only accepts user-session JWTs, so org membership never enters
@@ -709,7 +711,7 @@ func mintIssuerGatedAccessToken(
 // A bearer minted against the mcp_server's issuer must authorise a
 // subsequent ServeMCP request to dispatch through the toolset-backed
 // runtime path (no upstream remote MCP server in this case — the
-// initialize response comes from Gram itself).
+// initialize response comes from Speakeasy itself).
 //
 // Catches the symmetric bug of the one fixed in serveRemoteBackend:
 // inside ServeToolsetResolved the legacy auth chain is skipped on
@@ -1461,4 +1463,17 @@ func TestServeMCP_IssuerGatedToolsetBackend_PrivateHappyPath(t *testing.T) {
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(accessToken), []byte(initializeBody))
 	require.NotEqual(t, http.StatusUnauthorized, rr.Code, "issuer-gated bearer on a private toolset must not be re-rejected; body=%s", rr.Body.String())
 	require.Equal(t, http.StatusOK, rr.Code, "ServeMCP should respond 200; body=%s", rr.Body.String())
+}
+
+// Per-client federated callbacks are minted only under /mcp, so /x/mcp mounts just the shared callback.
+func TestAttach_NoPerClientIDPCallback(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestService(t)
+	mux := goahttp.NewMuxer()
+	xmcp.Attach(mux, ti.service, nil)
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/x/mcp/idp_callback/"+uuid.NewString()+"?state="+uuid.NewString(), nil))
+	require.Equal(t, http.StatusNotFound, w.Code)
 }

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
-  title: Gram API Description
-  description: Gram is the tools platform for AI agents
+  title: Speakeasy API Description
+  description: Speakeasy is the tools platform for AI agents
   version: 0.0.1
 servers:
   - url: /
@@ -465,6 +465,243 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: logout
+  /admin/externalMcpMigration.listCandidates:
+    get:
+      description: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
+      operationId: adminListExternalMcpMigrationCandidates
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminListExternalMcpMigrationCandidatesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listExternalMcpMigrationCandidates admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listExternalMcpMigrationCandidates
+  /admin/externalMcpMigration.migrate:
+    post:
+      description: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
+      operationId: adminMigrateExternalMcpServers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateExternalMcpServersRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminExternalMcpMigrationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: migrateExternalMcpServers admin
+      tags:
+        - admin
+      x-speakeasy-name-override: migrateExternalMcpServers
+  /admin/externalMcpMigration.preview:
+    post:
+      description: Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.
+      operationId: adminPreviewExternalMcpMigration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewExternalMcpMigrationRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminExternalMcpMigrationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: previewExternalMcpMigration admin
+      tags:
+        - admin
+      x-speakeasy-name-override: previewExternalMcpMigration
   /admin/onboarding.playbooks:
     get:
       description: Read every playbook, or, when an organization is named, the shared ones and its own.
@@ -1695,7 +1932,7 @@ paths:
       tags:
         - admin
       summary: createOrganization admin
-      description: 'Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.'
+      description: 'Creates an organization in WorkOS and in Speakeasy, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Speakeasy ID is derived from the WorkOS ID, so both writers converge on one row.'
       operationId: adminCreateOrganization
       requestBody:
         required: true
@@ -2925,6 +3162,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: listOrganizationProjects
+  /admin/organization.repairInferenceKey:
+    post:
+      tags:
+        - admin
+      summary: repairInferenceKey admin
+      description: Removes explicitly selected known disable causes without changing tier, credits, or runtime. Staff confirmation and reason required.
+      operationId: adminRepairInferenceKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepairInferenceKeyRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminInferenceKeyRepairResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: repairInferenceKey
   /admin/organization.resumeStripeSubscription:
     post:
       tags:
@@ -4047,11 +4359,11 @@ paths:
             format: int64
             type: integer
         - allowEmptyValue: true
-          description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
+          description: 'Column to sort by: name, slug, account_type, account_tier, member_count, created_at, disabled_at or trial_ends_at. account_tier ranks enterprise first, then pro and payg, then free, then any other account type; desc reverses that order. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
           in: query
           name: sort
           schema:
-            description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
+            description: 'Column to sort by: name, slug, account_type, account_tier, member_count, created_at, disabled_at or trial_ends_at. account_tier ranks enterprise first, then pro and payg, then free, then any other account type; desc reverses that order. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
             type: string
         - allowEmptyValue: true
           description: Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.
@@ -5951,7 +6263,7 @@ paths:
       x-speakeasy-name-override: migrateToGlobalIssuer
   /admin/remote-session-issuers.refreshGlobalIssuerMetadata:
     post:
-      description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+      description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
       operationId: adminRefreshGlobalIssuerMetadata
       requestBody:
         content:
@@ -6179,6 +6491,225 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getSession
+  /admin/signupOffers:
+    get:
+      tags:
+        - admin
+      summary: listSignupOffers admin
+      description: List staff-managed signup offers. Stripe owns all promotion terms.
+      operationId: adminListSignupOffers
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSignupOffersResponseBody'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listSignupOffers
+  /admin/signupOffers.create:
+    post:
+      tags:
+        - admin
+      summary: createSignupOffer admin
+      description: Create a disabled signup offer mapped to an exact Stripe promotion code ID.
+      operationId: adminCreateSignupOffer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSignupOfferRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSignupOffer'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: createSignupOffer
+  /admin/signupOffers.update:
+    post:
+      tags:
+        - admin
+      summary: updateSignupOffer admin
+      description: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.
+      operationId: adminUpdateSignupOffer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSignupOfferRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSignupOffer'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: updateSignupOffer
   /admin/supportCoverage.get:
     get:
       description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.'
@@ -7126,9 +7657,167 @@ components:
         - pricing_basis
         - queried_at
         - customers
+    AdminExternalMcpMigrationCandidate:
+      type: object
+      properties:
+        action:
+          type: string
+          description: 'What running the candidate does: migrate switches its server in place to a remote MCP server; delete removes the toolset because nothing is left to migrate, along with any server, addresses and plugin entries it still owns. A server already migrated in place is kept and keeps working.'
+          enum:
+            - migrate
+            - delete
+        blockers:
+          type: array
+          items:
+            type: string
+          description: Why the server cannot be migrated. Empty when it can.
+        delete_reasons:
+          type: array
+          items:
+            type: string
+          description: Why the candidate is deleted rather than migrated. Empty when it migrates.
+        mcp_slug:
+          type: string
+          description: The slug in the server's /mcp/<slug> address. Absent when the server has none.
+        organization_id:
+          type: string
+          description: Organization ID.
+        organization_name:
+          type: string
+          description: Organization name.
+        organization_slug:
+          type: string
+          description: Organization slug.
+        project_id:
+          type: string
+          description: Project ID.
+          format: uuid
+        project_name:
+          type: string
+          description: Project name.
+        project_slug:
+          type: string
+          description: Project slug.
+        remote_url:
+          type: string
+          description: The attachment's upstream URL. Absent when the server proxies several.
+        replacement_url:
+          type: string
+          description: 'The upstream URL the server will dial as a remote MCP server: the one resource its signed-in sessions recorded, otherwise the attachment''s URL without unfilled template query parameters.'
+        server_name:
+          type: string
+          description: The server's display name.
+        sign_in_provider:
+          type: string
+          description: The server's user session issuer and the upstream authorization servers behind it. Absent when the server has none.
+        tool_calls:
+          type: integer
+          description: Tool calls over the last tool_call_window_days. Absent when telemetry is unavailable.
+          format: int64
+        toolset_id:
+          type: string
+          description: The toolset behind the server.
+          format: uuid
+        warnings:
+          type: array
+          items:
+            type: string
+          description: What migrating the server drops or cannot carry over. Warnings do not stop it.
+      description: 'A toolset backed by an external MCP attachment, with what running it does: migrate its server in place, or delete it.'
+      required:
+        - toolset_id
+        - organization_id
+        - organization_name
+        - organization_slug
+        - project_id
+        - project_name
+        - project_slug
+        - server_name
+        - action
+        - delete_reasons
+        - blockers
+        - warnings
+    AdminExternalMcpMigrationOutcome:
+      type: object
+      properties:
+        action:
+          type: string
+          description: What the run did, or would do, with the candidate. Absent when it was not attempted.
+          enum:
+            - migrate
+            - delete
+        actions:
+          type: array
+          items:
+            type: string
+          description: Each change, in order.
+        mcp_server_id:
+          type: string
+          description: The server, which keeps its ID.
+          format: uuid
+        mcp_slug:
+          type: string
+          description: The server's /mcp/<slug> address. Migrating keeps it; deleting a server the toolset still owns removes it.
+        migration_status:
+          type: string
+          description: migrated, deleted and previewed completed every step; deleted removed the toolset and any server it still owned, so mcp_server_id, remote_mcp_server_id and remote_url are absent; failed left the server unchanged; not_attempted follows an earlier failure.
+          enum:
+            - migrated
+            - deleted
+            - previewed
+            - failed
+            - not_attempted
+        reason:
+          type: string
+          description: Why the server failed or was not attempted.
+        remote_mcp_server_id:
+          type: string
+          description: The remote MCP source the server proxies once migrated. Absent when the server failed; a preview's source is rolled back.
+          format: uuid
+        remote_url:
+          type: string
+          description: The upstream URL the server dials once migrated. Absent when the server failed.
+        toolset_id:
+          type: string
+          description: The candidate's toolset.
+          format: uuid
+        warnings:
+          type: array
+          items:
+            type: string
+          description: What the migration could not carry over.
+      description: What happened, or in a preview what would happen, to one server.
+      required:
+        - toolset_id
+        - migration_status
+        - actions
+        - warnings
+    AdminExternalMcpMigrationRequest:
+      type: object
+      properties:
+        toolset_id:
+          type: string
+          description: The candidate's toolset.
+          format: uuid
+      required:
+        - toolset_id
+    AdminExternalMcpMigrationResult:
+      type: object
+      properties:
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminExternalMcpMigrationOutcome'
+          description: One outcome per requested server, in request order.
+      required:
+        - outcomes
     AdminInferenceKey:
       type: object
       properties:
+        cause_diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminInferenceKeyCause'
         credits_used:
           type: number
           description: Credits spent this month in USD.
@@ -7155,6 +7844,21 @@ components:
         - monthly_credits
         - disabled
         - disable_causes_classified
+    AdminInferenceKeyCause:
+      type: object
+      properties:
+        blocked_reason:
+          type: string
+        cause:
+          type: string
+        description:
+          type: string
+        removable:
+          type: boolean
+      required:
+        - cause
+        - description
+        - removable
     AdminInferenceKeyLimit:
       type: object
       properties:
@@ -7167,6 +7871,44 @@ components:
       required:
         - key_type
         - monthly_credits
+    AdminInferenceKeyRepairResult:
+      type: object
+      properties:
+        key:
+          $ref: '#/components/schemas/AdminInferenceKeyRepairState'
+        reconciliation_pending:
+          type: boolean
+      required:
+        - key
+        - reconciliation_pending
+    AdminInferenceKeyRepairState:
+      type: object
+      properties:
+        cause_diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminInferenceKeyCause'
+        disable_causes:
+          type: array
+          items:
+            type: string
+        disable_causes_classified:
+          type: boolean
+        disabled:
+          type: boolean
+        key_type:
+          type: string
+        monthly_credits:
+          type: integer
+          format: int64
+      description: Committed local key policy, without provider usage or credentials.
+      required:
+        - key_type
+        - monthly_credits
+        - disabled
+        - disable_causes
+        - disable_causes_classified
+        - cause_diagnostics
     AdminInferenceSpendMonth:
       type: object
       properties:
@@ -7183,6 +7925,21 @@ components:
         - period_start
         - period_end
         - spend_usd
+    AdminListExternalMcpMigrationCandidatesResult:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminExternalMcpMigrationCandidate'
+          description: Every candidate across all organizations.
+        tool_call_window_days:
+          type: integer
+          description: Days of tool calls each candidate's tool_calls covers.
+          format: int64
+      required:
+        - candidates
+        - tool_call_window_days
     AdminListOrganizationActivityResult:
       type: object
       properties:
@@ -7452,7 +8209,7 @@ components:
           description: Display name of the issuer.
         networking:
           type: string
-          description: Whether Gram reaches the issuer over the public internet or a tunnel.
+          description: Whether Speakeasy reaches the issuer over the public internet or a tunnel.
           enum:
             - public
             - tunneled
@@ -7571,7 +8328,7 @@ components:
       properties:
         client_id:
           type: string
-          description: The remote session client ID Gram uses with the trusted issuer.
+          description: The remote session client ID Speakeasy uses with the trusted issuer.
         issuer_id:
           type: string
           description: The trusted remote session issuer ID.
@@ -7595,6 +8352,12 @@ components:
           enum:
             - chain
             - interactive
+        authorization_server_mode:
+          type: string
+          description: 'Which OAuth authorization server the issuer''s MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).'
+          enum:
+            - endpoint
+            - shared
         classification:
           type: string
           description: custom, or project_default_idp for the auto-provisioned issuer of private servers.
@@ -7615,6 +8378,9 @@ components:
         id:
           type: string
           description: The user session issuer ID.
+        issuer_url_pinned:
+          type: boolean
+          description: Whether a shared authorization server's issuer URL is pinned, so it stays the same if the deployment's hosts change.
         other_servers_using_issuer:
           type: array
           items:
@@ -7648,6 +8414,8 @@ components:
         - session_duration_hours
         - attachment_scope
         - use_authentication_host
+        - authorization_server_mode
+        - issuer_url_pinned
         - other_servers_using_issuer
         - created_at
         - sessions
@@ -7759,7 +8527,7 @@ components:
           type: integer
           description: Length of the window in days.
           format: int64
-      description: 'One MCP server''s tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization''s logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.'
+      description: 'One MCP server''s tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization''s logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Speakeasy directly.'
       required:
         - type
     AdminMdmVendorOption:
@@ -8078,7 +8846,7 @@ components:
       properties:
         account_type:
           type: string
-          description: Gram account type (e.g. free, pro, payg, enterprise).
+          description: Speakeasy account type (e.g. free, pro, payg, enterprise).
         created_at:
           type: string
           description: The creation date of the organization.
@@ -8103,9 +8871,17 @@ components:
         slug:
           type: string
           description: The slug of the organization
+        stripe_customer_dashboard_url:
+          type: string
+          description: Link to the Stripe customer in the Stripe dashboard. Absent when the organization has no Stripe customer or the deployment has no Stripe API key configured.
+          format: uri
         stripe_customer_id:
           type: string
           description: Stripe customer ID, if billing metadata has a customer.
+        stripe_subscription_dashboard_url:
+          type: string
+          description: Link to the Stripe subscription in the Stripe dashboard. Absent when the organization has no Stripe subscription or the deployment has no Stripe API key configured.
+          format: uri
         stripe_subscription_id:
           type: string
           description: Current Stripe subscription ID, if subscribed.
@@ -8534,6 +9310,36 @@ components:
           type: string
       required:
         - email
+    AdminSignupOffer:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        signup_flow:
+          type: string
+          enum:
+            - tailscale_partner_gateway
+        stripe_promotion_code_id:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - stripe_promotion_code_id
+        - signup_flow
+        - enabled
+        - created_at
+        - updated_at
     AdminSpendBreakdownResponse:
       type: object
       properties:
@@ -9031,6 +9837,25 @@ components:
       required:
         - slug
         - issuer
+    CreateSignupOfferRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        signup_flow:
+          type: string
+          enum:
+            - tailscale_partner_gateway
+        stripe_promotion_code_id:
+          type: string
+          pattern: ^promo_[A-Za-z0-9_]+$
+          maxLength: 255
+      required:
+        - name
+        - stripe_promotion_code_id
+        - signup_flow
     DeleteOnboardingPlaybookRequestBody:
       type: object
       properties:
@@ -9054,6 +9879,64 @@ components:
           minLength: 1
       required:
         - id
+    EMAProvider:
+      type: object
+      properties:
+        internal_session_issuer_id:
+          type: string
+          description: The organization's internal session issuer, for speakeasy.
+          format: uuid
+        kind:
+          type: string
+          description: external or speakeasy.
+          enum:
+            - external
+            - speakeasy
+        last_accepted_at:
+          type: string
+          description: When the vendor last accepted an assertion from this provider anywhere in the organization, so the vendor already trusts it, from cached credentials that still hold an access token. Attributed to the exact issuer that vouched; the organization-wide default's external entry takes the newest acceptance of any external issuer. Set on every response that returns an order; omitted when the vendor has never accepted it, when acceptance could not be read, or on readEMA when the caller lacks org:read.
+          format: date-time
+        remote_session_issuer_id:
+          type: string
+          description: The external provider's remote session issuer. Omitted for speakeasy, and in the organization-wide default order, where an external entry stands for each endpoint's own trusted issuer.
+          format: uuid
+        unavailable_reason:
+          type: string
+          description: 'Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint''s sign-in doesn''t go through this provider, so it can''t vouch for people there: an external issuer other than the sign-in''s trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer''s state could not be read just now; retry the read.'
+          enum:
+            - deleted
+            - disabled
+            - not_trusted_by_endpoint
+            - signing_unavailable
+            - not_rolled_out
+            - verified_domain_required
+            - setup_required
+            - keyless
+            - signing_paused
+            - sign_in_enforcement_required
+            - readiness_unknown
+      description: One EMA provider a vendor accepts.
+      required:
+        - kind
+    EMAProviderOrder:
+      type: object
+      properties:
+        is_default:
+          type: boolean
+          description: Nothing is saved, so every provider is accepted. An endpoint whose sign-in trusts an external issuer uses that issuer alone; one that trusts none uses the organization's Speakeasy issuer when it has one.
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAProvider'
+          description: The saved providers in their stored order, or the derived default described by is_default.
+        vendor_issuer:
+          type: string
+          description: The vendor authorization server issuer, canonicalized.
+      description: The EMA providers one vendor authorization server accepts, saved or default. They are stored as an ordered list that identity chaining tries in turn, but each endpoint can use only the provider its sign-in goes through, so the list acts as the set of accepted providers.
+      required:
+        - vendor_issuer
+        - is_default
+        - providers
     EnableOrganizationRequestBody:
       type: object
       properties:
@@ -9284,6 +10167,15 @@ components:
       description: Result type for the platform-administrator convergence-candidate listing.
       required:
         - items
+    ListSignupOffersResponseBody:
+      type: object
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSignupOffer'
+      required:
+        - offers
     MarkEnterpriseTrialConvertedRequestBody:
       type: object
       properties:
@@ -9321,6 +10213,18 @@ components:
       required:
         - from
         - to
+    MigrateExternalMcpServersRequestBody:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminExternalMcpMigrationRequest'
+          description: Servers to migrate or delete, in order.
+          minItems: 1
+          maxItems: 100
+      required:
+        - servers
     MigrateRemoteSessionIssuerRequestBody:
       type: object
       properties:
@@ -9352,6 +10256,18 @@ components:
         - issuer
         - clients_migrated
         - source_deleted
+    PreviewExternalMcpMigrationRequestBody:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminExternalMcpMigrationRequest'
+          description: Servers to migrate or delete, in order.
+          minItems: 1
+          maxItems: 100
+      required:
+        - servers
     ProductFeatures:
       type: object
       properties:
@@ -9361,9 +10277,6 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
-        consent_tool_filtering_enabled:
-          type: boolean
-          description: Whether MCP consent screens offer the tool filtering picker for the organization
         custom_model_keys_enabled:
           type: boolean
           description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -9385,9 +10298,12 @@ components:
         network_ingress_enabled:
           type: boolean
           description: Whether the organization has the staff-managed private network ingress entitlement
+        organization_gateway_disabled:
+          type: boolean
+          description: Whether an organization admin turned the organization gateway off, so its routes answer 404
         platform_mcp_enabled:
           type: boolean
-          description: Whether the organization can use the Gram Platform MCP capability
+          description: Whether the organization can use the Speakeasy Platform MCP capability
         remote_session_auto_refresh_enabled:
           type: boolean
           description: Whether consent screens expose automatic remote-session refresh for the organization
@@ -9403,6 +10319,9 @@ components:
         session_portability_enabled:
           type: boolean
           description: 'Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent'
+        signals_intelligence_enabled:
+          type: boolean
+          description: Whether the organization can configure signals intelligence
         skill_capture_metadata_only:
           type: boolean
           description: Whether skill capture stores activation metadata without requesting manifest content
@@ -9432,9 +10351,10 @@ components:
         - customer_managed_encryption_keys_enabled
         - remote_session_auto_refresh_enabled
         - remote_session_auto_refresh_enforced_enabled
-        - consent_tool_filtering_enabled
         - session_portability_enabled
         - network_ingress_enabled
+        - signals_intelligence_enabled
+        - organization_gateway_disabled
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -9490,6 +10410,8 @@ components:
         created_at:
           type: string
           format: date-time
+        ema_providers:
+          $ref: '#/components/schemas/EMAProviderOrder'
         grant_types_supported:
           type: array
           items:
@@ -9522,7 +10444,7 @@ components:
           format: date-time
         jwks_fetched_at:
           type: string
-          description: When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+          description: When Speakeasy last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
           format: date-time
         jwks_uri:
           type: string
@@ -9601,7 +10523,7 @@ components:
         userinfo_endpoint:
           type: string
           description: OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.
-      description: A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
+      description: A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
       required:
         - id
         - project_id
@@ -9791,6 +10713,43 @@ components:
       required:
         - issuer
         - discovery_warnings
+    RepairInferenceKeyRequestBody:
+      type: object
+      properties:
+        confirmation:
+          type: string
+          description: 'Exact staff confirmation: I know what I''m doing'
+          enum:
+            - I know what I'm doing
+        key_type:
+          type: string
+          enum:
+            - chat
+            - internal
+        organization_id:
+          type: string
+        reason:
+          type: string
+          description: Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+          minLength: 1
+        remove_causes:
+          type: array
+          items:
+            type: string
+            enum:
+              - admin_lock
+              - trial_demotion
+              - billing_inactive
+          description: Unique known disable causes to remove.
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+      required:
+        - organization_id
+        - key_type
+        - remove_causes
+        - confirmation
+        - reason
     ResumeStripeSubscriptionRequestBody:
       type: object
       properties:
@@ -9887,9 +10846,10 @@ components:
             - customer_managed_encryption_keys
             - remote_session_auto_refresh
             - remote_session_auto_refresh_enforced
-            - consent_tool_filtering
             - session_portability
             - network_ingress
+            - signals_intelligence
+            - organization_gateway_disabled
           maxLength: 60
         organization_id:
           type: string
@@ -10444,6 +11404,32 @@ components:
       description: Form for updating a remote_session_issuer. All non-id fields are optional patches.
       required:
         - id
+    UpdateSignupOfferRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        signup_flow:
+          type: string
+          enum:
+            - tailscale_partner_gateway
+        stripe_promotion_code_id:
+          type: string
+          pattern: ^promo_[A-Za-z0-9_]+$
+          maxLength: 255
+      required:
+        - name
+        - stripe_promotion_code_id
+        - signup_flow
+        - id
+        - enabled
     UpdateSupportMatrixRequestBody:
       type: object
       properties:
@@ -10476,11 +11462,11 @@ components:
       in: header
     chat_sessions_token_header_Gram-Chat-Session:
       type: http
-      description: Gram Chat Sessions token based auth.
+      description: Speakeasy Chat Sessions token based auth.
       scheme: bearer
     function_token_header_Authorization:
       type: http
-      description: Gram Functions token based auth.
+      description: Speakeasy Functions token based auth.
       scheme: bearer
     project_slug_header_Gram-Project:
       type: apiKey

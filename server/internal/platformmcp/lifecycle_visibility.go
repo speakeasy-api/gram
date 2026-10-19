@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -72,30 +73,41 @@ type LifecycleVisibilityUpdate struct {
 }
 
 type LifecycleVisibilityService struct {
-	db            *pgxpool.Pool
-	audit         *audit.Logger
-	locker        LifecycleVisibilityLocker
-	updater       LifecycleVisibilityUpdater
-	publisher     ProjectPublisher
-	reconcile     func(context.Context, []uuid.UUID) error
-	readiness     *ReadinessService
-	key           []byte
-	now           func() time.Time
-	admission     *admission.Guard
-	organizations OrganizationSlugResolver
+	db        *pgxpool.Pool
+	audit     *audit.Logger
+	locker    LifecycleVisibilityLocker
+	updater   LifecycleVisibilityUpdater
+	publisher ProjectPublisher
+	reconcile func(context.Context, []uuid.UUID) error
+	readiness *ReadinessService
+	key       []byte
+	now       func() time.Time
+	admission *admission.Guard
+	// authorization decides whether the acting user is an organization
+	// administrator, whose re-enabling is recorded as the Shadow MCP approval.
+	authorization *authz.Engine
+}
+
+// WithAdministratorAuthorization lets an organization administrator's
+// re-enabling of a server added by URL stand as the Shadow MCP approval for
+// the audiences it reaches again.
+func (s *LifecycleVisibilityService) WithAdministratorAuthorization(engine *authz.Engine) *LifecycleVisibilityService {
+	if s != nil {
+		s.authorization = engine
+	}
+	return s
 }
 
 func NewLifecycleVisibilityService(db *pgxpool.Pool, auditLogger *audit.Logger, locker LifecycleVisibilityLocker, updater LifecycleVisibilityUpdater, publisher ProjectPublisher, reconcile func(context.Context, []uuid.UUID) error, readiness *ReadinessService, keyMaterial string) (*LifecycleVisibilityService, error) {
 	if db == nil || auditLogger == nil || locker == nil || updater == nil || reconcile == nil || readiness == nil || keyMaterial == "" {
 		return nil, ErrLifecycleVisibilityInvalid
 	}
-	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now, admission: admission.NewGuard(nil, nil), organizations: nil}, nil
+	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now, admission: admission.NewGuard(), authorization: nil}, nil
 }
 
-func (s *LifecycleVisibilityService) WithDistributionAdmission(guard *admission.Guard, organizations OrganizationSlugResolver) *LifecycleVisibilityService {
+func (s *LifecycleVisibilityService) WithDistributionAdmission(guard *admission.Guard) *LifecycleVisibilityService {
 	if s != nil {
 		s.admission = guard
-		s.organizations = organizations
 	}
 	return s
 }
@@ -133,19 +145,6 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, err
 	}
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	if s.organizations == nil {
-		rolloutErr = ErrLifecycleVisibilityUnavailable
-	} else {
-		organizationSlug, slugErr := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-		if slugErr != nil {
-			rolloutErr = slugErr
-		} else {
-			rollout, rolloutErr = s.admission.Resolve(ctx, principal.OrganizationID, organizationSlug, project.Slug)
-		}
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("begin platform mcp visibility update: %w", err)
@@ -188,15 +187,20 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityUnavailable
 	}
 	if to == "private" {
+		// Only a new enabling write consults the policy, so only it asks who is
+		// acting: turning a server off, and replaying a completed receipt, must
+		// keep working through an authorization outage.
+		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authorization, principal.OrganizationID)
+		if err != nil {
+			return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
+		}
 		if err := admission.LockProject(ctx, tx, project.ID); err != nil {
 			return UpdateMCPVisibilityResult{}, fmt.Errorf("lock platform mcp visibility admission: %w", err)
 		}
-		if err := s.admission.CheckMCPServerTarget(ctx, tx, rollout, rolloutErr, principal.OrganizationID, project.ID, mcpID, "", false); err != nil {
+		if err := s.admission.CheckMCPServerTarget(admissionCtx, tx, principal.OrganizationID, project.ID, mcpID, "", false); err != nil {
 			switch {
 			case errors.Is(err, admission.ErrApprovalRequired):
 				return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionBlockedPendingApproval, err)
-			case errors.Is(err, admission.ErrDistributionDisabled):
-				return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionDisabled, err)
 			default:
 				return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
 			}

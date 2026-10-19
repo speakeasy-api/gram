@@ -19,8 +19,8 @@ const (
 	metaKeyServerInfo = "io.modelcontextprotocol/serverInfo"
 
 	// resultTypeComplete is the resultType MCP 2026-07-28 requires on every
-	// ordinary result. Gram implements no multi round-trip requests, so it is
-	// the only value Gram produces.
+	// ordinary result. Speakeasy implements no multi round-trip requests, so it is
+	// the only value Speakeasy produces.
 	resultTypeComplete = "complete"
 )
 
@@ -89,9 +89,9 @@ func hostedListCacheHints(mcpIsPublic, authenticated bool) *cacheHints {
 // so the static version carries no compatibility meaning; keeping it constant
 // also keeps the initialize response and per-result _meta in agreement.
 var (
-	serverInfoHostedToolset   = serverInfo{Name: "Gram", Version: "0.0.0"}
-	serverInfoPlatformToolset = serverInfo{Name: "Gram Platform Toolset", Version: "0.0.0"}
-	serverInfoMetaServer      = serverInfo{Name: "Gram Gateway", Version: "0.0.0"}
+	serverInfoHostedToolset   = serverInfo{Name: "Speakeasy", Version: "0.0.0"}
+	serverInfoPlatformToolset = serverInfo{Name: "Speakeasy Platform Toolset", Version: "0.0.0"}
+	serverInfoMetaServer      = serverInfo{Name: "Speakeasy Gateway", Version: "0.0.0"}
 )
 
 var (
@@ -162,7 +162,7 @@ func (m result[T]) MarshalJSON() ([]byte, error) {
 //
 // A result that is not a JSON object — possible only when an MCP-passthrough
 // tool returns spec-violating output — is returned unchanged: the malformed
-// shape stays the upstream's problem rather than becoming a Gram
+// shape stays the upstream's problem rather than becoming a Speakeasy
 // serialization failure. On the spliced path values are preserved
 // semantically rather than byte-for-byte: top-level (and _meta) keys are
 // re-marshaled in sorted order, and insignificant whitespace and HTML

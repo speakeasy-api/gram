@@ -403,5 +403,7 @@ func keyEvent(authCtx *contextvalues.AuthContext, key repo.JsonWebKey, before, a
 		SetURN:            urn.NewJsonWebKeySet(key.JsonWebKeySetID),
 		KeySnapshotBefore: before,
 		KeySnapshotAfter:  after,
+
+		InternalSessionIssuer: false,
 	}
 }

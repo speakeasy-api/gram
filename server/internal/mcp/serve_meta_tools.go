@@ -267,7 +267,7 @@ func (s *Service) handleMetaExecuteToolCall(
 	// so do not report the synthetic member dispatch as hosted coverage.
 	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.guardianPolicy, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
-		s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
+		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	if err != nil {
 		// A member's execution failure must degrade that member, not the
@@ -408,7 +408,15 @@ func (s *Service) buildMemberDispatch(
 	// consented for a specific member must never reach another member's
 	// tools. No entry degrades to no token rather than an error, so partially
 	// connected meta sessions keep hosted members callable.
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens, member))
+	tokens, err := gate.memberTokens(ctx, member)
+	if err != nil {
+		return nil, nil, err
+	}
+	hostedTokens, err := hostedMemberTokens(tokens, member)
+	if err != nil {
+		return nil, nil, err
+	}
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
@@ -458,16 +466,14 @@ func (s *Service) buildMemberDispatch(
 		apiKeyID:              gate.apiKeyID,
 		toolVariationsGroupID: variationsGroupID,
 		mcpServerID:           &serverID,
+		mcpEndpointID:         nil,
+		attributionServerID:   nil,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
-		wrapperRBACResourceID: "",
-		wrapperIsPublic:       nil,
-		metaMcpServerID:       gate.metaServerID.String(),
-		clientInfoScope:       metaClientInfoScope(gate.metaServerID),
-		// projectID above is the member's, which is what dispatch needs; the
-		// handshake record was written under the gateway's project, so the
-		// client-info lookup has to follow the write.
-		clientInfoProjectID:      gate.projectID,
+		wrapperRBACResourceID:    "",
+		wrapperIsPublic:          nil,
+		metaMcpServerID:          gate.metaServerID.String(),
+		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
 		skipProxyTools:           true,
 		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		toolsetIsPublic:          new(toolset.McpIsPublic),
@@ -485,16 +491,21 @@ func (s *Service) buildMemberDispatch(
 // routeMetaMemberToken applies the same rule. A lone-token fallback would
 // forward a sibling's bearer once partial resolution leaves gaps in the map,
 // and a resource-qualified token is audience-bound to the remote upstream it
-// was consented for; both cases yield no token.
-func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) map[uuid.UUID]remotesessions.UpstreamToken {
+// was consented for; both cases yield no token. A self client whose
+// credential could not be obtained yields the member-scoped remedy instead,
+// so the member's tools never run without the credential it holds.
+func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	if !member.remoteSessionIssuerID.Valid {
-		return nil
+		return nil, nil
 	}
 	entry, ok := tokens[member.remoteSessionIssuerID.UUID]
 	if !ok || entry.Resource != "" {
-		return nil
+		return nil, nil
 	}
-	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}
+	if err := entry.ClientCredentialErr; err != nil {
+		return nil, metaMemberClientCredentialError(member, err)
+	}
+	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}, nil
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member
@@ -521,28 +532,40 @@ func (s *Service) loadMemberToolset(
 	case err != nil:
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
 	}
-	// Matches loadToolset: a toolset with MCP turned off is not servable.
-	if !toolset.McpEnabled {
+	// Match direct wrapper dispatch: only the legacy canonical wrapper uses
+	// the toolset's enablement flag. Independently configured servers use
+	// their own visibility, already checked during member admission.
+	if member.serverID == toolset.ID && !toolset.McpEnabled {
 		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
-	if !toolset.McpIsPublic && !gate.authenticated {
+	allowed, err := s.memberToolsetConnectAllowed(ctx, gate.authenticated, &toolset)
+	if err != nil {
+		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
+	}
+	if !allowed {
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
 		return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
 	}
-	if !toolset.McpIsPublic && gate.authenticated {
-		// Toolset-level mcp:connect gate, matching ServeToolsetResolved's
-		// connection check; the meta MCP maps a denial to nonexistent rather
-		// than Forbidden, per its unauthorized-reads-as-nonexistent rule.
-		// Grants context was prepared in resolveMetaMemberSnapshot.
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
-			var oopsErr *oops.ShareableError
-			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-				return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
-			}
-			return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
-		}
-	}
 	return &toolset, toolset.ProjectID, nil
+}
+
+// memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
+// gate, matching ServeToolsetResolved's connection check. Grants context was
+// prepared when the member snapshot was resolved.
+func (s *Service) memberToolsetConnectAllowed(ctx context.Context, authenticated bool, toolset *toolsets_repo.Toolset) (bool, error) {
+	if toolset.McpIsPublic {
+		return true, nil
+	}
+	if !authenticated {
+		return false, nil
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
+		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
+			return false, nil
+		}
+		return false, fmt.Errorf("check toolset-level authz: %w", err)
+	}
+	return true, nil
 }
 
 // marshalMetaToolCallResult wraps structuredContent in the meta MCP's

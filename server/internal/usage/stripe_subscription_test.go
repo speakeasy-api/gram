@@ -399,3 +399,17 @@ func TestCancelStripeSubscriptionRejectsLocalIdentityChangeAfterStripeUpdate(t *
 	require.NoError(t, err)
 	require.Equal(t, baseline, after)
 }
+
+func TestStripeSubscriptionDiscountView(t *testing.T) {
+	t.Parallel()
+	end := time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC)
+	state := &stripeclient.SubscriptionState{DiscountDescription: new("5 GiB of gateway usage free each month ($100 discount)."), DiscountEndsAt: end, GatewayPromotionApplied: true}
+	view := stripeSubscriptionGenView(buildStripeSubscriptionView(state))
+	require.Equal(t, state.DiscountDescription, view.DiscountDescription)
+	require.Equal(t, "2100-01-01T00:00:00Z", *view.DiscountEndsAt)
+	require.True(t, *view.GatewayPromotionApplied)
+	empty := stripeSubscriptionGenView(buildStripeSubscriptionView(&stripeclient.SubscriptionState{}))
+	require.Nil(t, empty.DiscountDescription)
+	require.Nil(t, empty.DiscountEndsAt)
+	require.False(t, *empty.GatewayPromotionApplied)
+}

@@ -67,7 +67,7 @@ func servePublicHTTP(
 	return servePublicHTTPWithBody(t, ctx, ti, mcpSlug, io.NopCloser(bytes.NewReader(body)), int64(len(body)), authToken, extraHeaders)
 }
 
-// unservedProtocolVersion is a well-formed revision identifier that no Gram
+// unservedProtocolVersion is a well-formed revision identifier that no Speakeasy
 // surface supports, for exercising UnsupportedProtocolVersionError. It is
 // unrecognized rather than a published revision so that raising a surface's
 // ceiling cannot quietly make it supported.
@@ -1181,7 +1181,7 @@ func TestServePublic_CarriesSupportedDeclarationToTheErrorWrapper(t *testing.T) 
 // the provisional half of unsupported-version handling. The request is
 // rejected before dispatch, but the shared error wrapper still needs a
 // supported revision for compatibility-safe encoding; publishing the raw
-// declaration would claim Gram agreed to speak a revision it rejected.
+// declaration would claim Speakeasy agreed to speak a revision it rejected.
 func TestServePublic_UnsupportedDeclarationCarriesFallbackForErrorEncoding(t *testing.T) {
 	t.Parallel()
 

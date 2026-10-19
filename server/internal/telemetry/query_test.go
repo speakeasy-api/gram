@@ -1093,7 +1093,7 @@ func TestQuery_FallsBackToRowCountedToolCalls(t *testing.T) {
 }
 
 // TestQuery_ExcludesAssistantChatCompletions guards the provenance rule: the
-// aggregate covers the three agent surfaces only, so Gram-hosted assistant
+// aggregate covers the three agent surfaces only, so Speakeasy-hosted assistant
 // chat completions never reach attribute_metrics_summaries even when they
 // carry cost.
 func TestQuery_ExcludesAssistantChatCompletions(t *testing.T) {
@@ -1339,8 +1339,8 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 }
 
 // insertRetainedGramAggregateRow seeds attribute_metrics_summaries directly
-// with a Gram-hosted completion row, the shape RETAINED from before the
-// provenance-first MV cutover stopped admitting Gram completions. The
+// with a Speakeasy-hosted completion row, the shape RETAINED from before the
+// provenance-first MV cutover stopped admitting Speakeasy completions. The
 // tokens-under-management reads must exclude these at read time — that
 // exclusion is untestable through the MV (it no longer ingests such rows),
 // hence the direct aggregate-state insert.
@@ -1414,9 +1414,9 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 1000, 200, 50000, 300, "claude-4.6", "fleet@example.com", "Engineering", []string{"dev"}, "main", "", "", "", "")
 	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.2, 400, "gpt-5.4-codex", "codex", "codex@example.com", "Engineering", nil)
 
-	// Gram-hosted completion rows retained in the aggregate from before the
+	// Speakeasy-hosted completion rows retained in the aggregate from before the
 	// provenance-first cutover: a user-facing playground chat and the
-	// platform's scanning inference. Both are Gram-spent inference — never
+	// platform's scanning inference. Both are Speakeasy-spent inference — never
 	// tokens under management — and must not appear anywhere in the details.
 	insertRetainedGramAggregateRow(t, ctx, projectID, ts, "playground", 777)
 	insertRetainedGramAggregateRow(t, ctx, projectID, ts, "risk-analysis", 333)
@@ -1460,7 +1460,7 @@ func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 		}
 	}
 	require.Equal(t, map[string]int64{"claude-code": 1500, "codex": 400}, rowsByKey["hook_source"],
-		"the agent breakdown holds exactly the observed surfaces — no Gram-hosted rows")
+		"the agent breakdown holds exactly the observed surfaces — no Speakeasy-hosted rows")
 	require.Equal(t, map[string]int64{"claude-4.6": 1500, "gpt-5.4-codex": 400}, rowsByKey["model"])
 	require.Equal(t, map[string]int64{"anthropic": 1500, "": 400}, rowsByKey["provider"])
 	require.Equal(t, map[string]int64{"team": 1500, "": 400}, rowsByKey["account_type"])

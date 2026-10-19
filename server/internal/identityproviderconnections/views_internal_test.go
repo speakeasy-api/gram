@@ -78,6 +78,7 @@ func TestBuildConnectionView_ChecklistVerification(t *testing.T) {
 					ChecklistKeyLinkAgentApp:            nil,
 					ChecklistKeyActivateAgentApp:        nil,
 					ChecklistKeyRecordAIAgent:           nil,
+					ChecklistKeyAddAgentPublicKey:       nil,
 					ChecklistKeyFirstResourceConnection: nil,
 				}
 				if method == remotesessions.TokenEndpointAuthMethodBasic {

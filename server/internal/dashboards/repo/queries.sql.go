@@ -457,6 +457,25 @@ func (q *Queries) ListWidgetsForDashboard(ctx context.Context, arg ListWidgetsFo
 	return items, nil
 }
 
+const lockProjectDashboards = `-- name: LockProjectDashboards :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('dashboard-widgets', ($1::uuid)::text)::text,
+        0
+    )
+)
+`
+
+// Serializes a project's writes that reach both dashboards and widgets, so
+// their row locks never cross: a layout change locks a dashboard and then
+// share-locks the widgets it places, while deleting a widget locks the widget
+// and then touches its dashboards. Every write that reaches both tables takes
+// this first; one that locks only its dashboard row does not.
+func (q *Queries) LockProjectDashboards(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockProjectDashboards, projectID)
+	return err
+}
+
 const movePlacement = `-- name: MovePlacement :one
 UPDATE dashboard_widgets
 SET x = $1,

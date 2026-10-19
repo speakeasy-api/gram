@@ -37,8 +37,8 @@ type RemoteSessionIssuer struct {
 	RegistrationEndpoint *string
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.
@@ -107,6 +107,9 @@ type RemoteSessionIssuer struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool
-	CreatedAt                  string
-	UpdatedAt                  string
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrder
+	CreatedAt    string
+	UpdatedAt    string
 }

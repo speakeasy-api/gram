@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -201,13 +201,15 @@ function renderBilling() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = () => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/example/billing"]}>
         <Billing />
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const result = render(view());
+  return { ...result, refresh: () => result.rerender(view()) };
 }
 
 describe("Billing", () => {
@@ -287,6 +289,54 @@ describe("Billing", () => {
     expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
   });
 
+  it.each(["success", "404"])(
+    "recovers a Base subscription lookup failure with %s without premature checkout",
+    (outcome) => {
+      mocks.session.mockReturnValue({ trial: undefined });
+      const refetch = vi.fn();
+      const failed = {
+        data: undefined,
+        error: { statusCode: 503 },
+        isError: true,
+        isFetching: false,
+        refetch,
+      };
+      mocks.subscription.mockReturnValue(failed);
+      const { refresh } = renderBilling();
+      expect(paymentSection()).not.toBeNull();
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Couldn't load your subscription.",
+      );
+      expect(cta()).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "RETRY" }));
+      expect(refetch).toHaveBeenCalledOnce();
+
+      mocks.subscription.mockReturnValue({ ...failed, isFetching: true });
+      refresh();
+      expect(
+        screen
+          .getByRole("button", { name: "RETRYING..." })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+      expect(cta()).toBeNull();
+
+      mocks.subscription.mockReturnValue(
+        outcome === "404"
+          ? { ...failed, error: { statusCode: 404 } }
+          : {
+              ...failed,
+              data: { status: "active", paymentFailed: false },
+              error: null,
+              isError: false,
+            },
+      );
+      refresh();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(cta() !== null).toBe(outcome === "404");
+      expect(paymentSection() !== null).toBe(outcome === "404");
+    },
+  );
+
   // Trials on the enterprise tier must retain the checkout CTA.
   it("offers pay as you go on the enterprise billing view", () => {
     mocks.productTier.mockReturnValue("enterprise");
@@ -336,6 +386,51 @@ describe("Billing", () => {
         screen.getByRole("heading", { name: "Pay as you go pricing" }),
       ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it.each([undefined, "tailscale_partner_gateway"])(
+    "offers Free/Base payment setup without a trial (%s)",
+    (flow) => {
+      mocks.productTier.mockReturnValue("base");
+      mocks.session.mockReturnValue({
+        trial: null,
+        rawGramAccountType: "free",
+        hasActiveSubscription: false,
+        acceptedSignupOfferFlow: flow,
+      });
+      mocks.subscription.mockReturnValue({
+        data: undefined,
+        error: { statusCode: 404 },
+        isError: true,
+        isFetching: false,
+      });
+      renderBilling();
+      expect(paymentSection()).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Add payment method" }),
+      ).toBeTruthy();
+      expect(
+        Boolean(screen.queryByText(/accepted Tailscale partner promotion/)),
+      ).toBe(flow === "tailscale_partner_gateway");
+      expect(screen.queryByText(/when your trial ends/)).toBeNull();
+    },
+  );
+
+  it("does not offer Free/Base setup while subscription status is unknown", () => {
+    mocks.session.mockReturnValue({
+      trial: null,
+      rawGramAccountType: "free",
+      hasActiveSubscription: false,
+    });
+    mocks.subscription.mockReturnValue({
+      isError: true,
+      error: new Error("unavailable"),
+      isFetching: false,
+    });
+    renderBilling();
+    expect(paymentSection()).not.toBeNull();
+    expect(cta()).toBeNull();
+    expect(screen.getByRole("button", { name: "RETRY" })).toBeTruthy();
   });
 
   // Billing notifications are a pay-as-you-go concern: enterprise orgs are

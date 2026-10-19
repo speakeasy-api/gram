@@ -525,7 +525,7 @@ func TestUpsertUserFromIDP_LinksUnlinkedSurvivorBeforeRetiringCollision(t *testi
 	require.NoError(t, err)
 	require.Len(t, current, 1)
 	require.False(t, current[0].DeletedAt.Valid)
-	require.True(t, current[0].UserID.Valid, "surviving new-id assignment must be linked to the Gram user")
+	require.True(t, current[0].UserID.Valid, "surviving new-id assignment must be linked to the Speakeasy user")
 	require.Equal(t, gramUserID, current[0].UserID.String)
 
 	memberRole, err := assignments.GetGlobalRoleBySlug(ctx, authz.SystemRoleMember)

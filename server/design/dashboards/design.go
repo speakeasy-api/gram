@@ -47,9 +47,33 @@ var Dashboard = Type("Dashboard", func() {
 	Required("id", "project_id", "organization_id", "name", "filters", "widgets", "created_at", "updated_at")
 })
 
+var BuiltInCard = Type("BuiltInCard", func() {
+	Description("One card of a Speakeasy-built dashboard: a widget's question and drawing, as a saved widget stores them, with where it sits on the 12-column grid. It is not a saved widget; duplicating the dashboard makes one of it.")
+	Attribute("name", String, "What the card is called")
+	Attribute("description", String, "What the card shows, when there is more to say")
+	Attribute("dataset", String, "The catalog dataset the card asks", func() { Example("tool_calls") })
+	Attribute("query", MapOf(String, Any), "The question: window, grain, dimensions, measures, filters, order and limit, in the shape a saved widget stores.")
+	Attribute("visualization", MapOf(String, Any), "How the question is drawn: a chart type and its options.")
+	Attribute("x", Int, "Column the card starts at, from 0")
+	Attribute("y", Int, "Row the card starts at, from 0")
+	Attribute("w", Int, "Width in columns")
+	Attribute("h", Int, "Height in rows")
+	Required("name", "dataset", "query", "visualization", "x", "y", "w", "h")
+})
+
+var BuiltInDashboard = Type("BuiltInDashboard", func() {
+	Description("A dashboard Speakeasy ships with the product: its cards are laid out in code and are the same in every project. It is read only; duplicating it makes a project dashboard, with a saved widget per card, that can be changed.")
+	Attribute("slug", String, "Names the dashboard in links and when duplicating it", func() { Example("mcp-tools") })
+	Attribute("name", String, "Display name")
+	Attribute("description", String, "What the dashboard is for")
+	Attribute("cards", ArrayOf(BuiltInCard), "Its cards, in no particular order; the grid places them by position")
+	Required("slug", "name", "description", "cards")
+})
+
 var ListDashboardsResult = Type("ListDashboardsResult", func() {
 	Attribute("dashboards", ArrayOf(Dashboard), "Dashboards in the project, most recently updated first")
-	Required("dashboards")
+	Attribute("built_in", ArrayOf(BuiltInDashboard), "The dashboards Speakeasy ships, the same in every project")
+	Required("dashboards", "built_in")
 })
 
 var PlacementInput = Type("PlacementInput", func() {
@@ -278,6 +302,29 @@ var _ = Service("dashboards", func() {
 		Meta("openapi:operationId", "duplicateDashboard")
 		Meta("openapi:extension:x-speakeasy-name-override", "duplicate")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DuplicateDashboard"}`)
+	})
+
+	Method("duplicateBuiltInDashboard", func() {
+		Description("Copy a Speakeasy-built dashboard into a new one the caller owns, named \"<name> (copy)\", with a new saved widget per card, named the same way. The copy is a project dashboard like any other and can be changed; the built-in stays as it is.")
+		Payload(func() {
+			Attribute("slug", String, "The built-in dashboard to copy", func() { Example("mcp-tools") })
+			Required("slug")
+			security.SessionPayload()
+			security.ProjectPayload()
+			// Named explicitly: a slug-only body otherwise dedupes onto an
+			// unrelated schema of the same shape in the generated SDK.
+			Meta("openapi:typename", "DuplicateBuiltInDashboardRequestBody")
+		})
+		Result(Dashboard)
+		HTTP(func() {
+			POST("/rpc/dashboards.duplicateBuiltIn")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "duplicateBuiltInDashboard")
+		Meta("openapi:extension:x-speakeasy-name-override", "duplicateBuiltIn")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DuplicateBuiltInDashboard"}`)
 	})
 
 	Method("deleteDashboard", func() {

@@ -218,7 +218,7 @@ func newTestServiceWithLogger(t *testing.T, logger *slog.Logger) (context.Contex
 }
 
 // gramProjectServiceAccount builds a service account address inside the same
-// project the stub resolver reports as Gram's own — i.e. exactly what the
+// project the stub resolver reports as Speakeasy's own — i.e. exactly what the
 // self-project screening must reject. Derived from the stub's constant so the
 // tests cannot drift from it.
 func gramProjectServiceAccount(name string) string {
@@ -261,7 +261,7 @@ func credentialIDs(result *gen.ListExternalCredentialsResult) []string {
 }
 
 // createAWSExternalIDCredential is a fixture: an AWS credential that assumes a
-// role with a Gram-generated ExternalId.
+// role with a Speakeasy-generated ExternalId.
 func createAWSExternalIDCredential(t *testing.T, ctx context.Context, ti *testInstance, name string) *gen.AwsIamCredential {
 	t.Helper()
 
@@ -311,7 +311,7 @@ func createGCPWifCredentialDirect(t *testing.T, ctx context.Context, ti *testIns
 }
 
 // createGCPUnscreenedCredentialDirect is a fixture for a row written before the
-// impersonation screening existed: it names a service account in Gram's own
+// impersonation screening existed: it names a service account in Speakeasy's own
 // project while carrying no exemption, which the API refuses to produce today.
 func createGCPUnscreenedCredentialDirect(t *testing.T, ctx context.Context, ti *testInstance, name string) *gen.GcpIamCredential {
 	t.Helper()
@@ -328,7 +328,7 @@ func createGCPUnscreenedCredentialDirect(t *testing.T, ctx context.Context, ti *
 
 // createGCPAmbientCredentialDirect is a fixture for the other state the API can
 // no longer produce: an organization GCP credential naming no identity at all,
-// which the resolver would treat as Gram's own ambient one.
+// which the resolver would treat as Speakeasy's own ambient one.
 func createGCPAmbientCredentialDirect(t *testing.T, ctx context.Context, ti *testInstance, name string) *gen.GcpIamCredential {
 	t.Helper()
 

@@ -101,7 +101,7 @@ func (e *RejectError) Error() string {
 //     common path for interceptors that opt into typed rejection: the
 //     interceptor's RejectError survives the run-helper's oops.E wrap and
 //     its Code/Message/Data flow through to the JSON-RPC envelope.
-//   - An [oops.ShareableError] is mapped to a JSON-RPC code by Gram's
+//   - An [oops.ShareableError] is mapped to a JSON-RPC code by Speakeasy's
 //     domain-error class, mirroring the table used by the /mcp endpoint's
 //     own error-shape conversion.
 //   - Anything else falls back to RejectCodeInternalError with a generic

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// gramToolCallBody is the request body Gram sends for a tool call carrying
+// gramToolCallBody is the request body Speakeasy sends for a tool call carrying
 // caller identity. Kept as a literal so a rename of any JSON tag on either
 // side of the wire fails loudly here rather than silently dropping the
 // caller's identity in production.

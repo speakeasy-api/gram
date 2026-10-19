@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -51,7 +50,7 @@ type preparedAgentKey struct {
 }
 
 func (s *Service) createAgentKey(ctx context.Context, payload *gen.CreateKeyPayload) (*gen.Key, error) {
-	if err := s.requireAgentCredentialsEnabled(ctx); err != nil {
+	if err := s.requireAgentCredentialsHuman(ctx); err != nil {
 		return nil, err
 	}
 	if payload.ProjectID != nil {
@@ -87,7 +86,7 @@ func (s *Service) createAgentKey(ctx context.Context, payload *gen.CreateKeyPayl
 }
 
 func (s *Service) listAgentKeys(ctx context.Context, agentIDRaw string) (*gen.ListKeysResult, error) {
-	if err := s.requireAgentCredentialsEnabled(ctx); err != nil {
+	if err := s.requireAgentCredentialsHuman(ctx); err != nil {
 		return nil, err
 	}
 	agentID, err := parseAgentID(agentIDRaw)
@@ -129,7 +128,7 @@ func (s *Service) listAgentKeys(ctx context.Context, agentIDRaw string) (*gen.Li
 }
 
 func (s *Service) RotateKey(ctx context.Context, payload *gen.RotateKeyPayload) (*gen.Key, error) {
-	if err := s.requireAgentCredentialsEnabled(ctx); err != nil {
+	if err := s.requireAgentCredentialsHuman(ctx); err != nil {
 		return nil, err
 	}
 	if len(payload.Scopes) != 0 {
@@ -501,14 +500,11 @@ func agentIDFromKey(key repo.ApiKey) (uuid.UUID, error) {
 	return agentID, nil
 }
 
-func (s *Service) requireAgentCredentialsEnabled(ctx context.Context) error {
-	human, err := s.authorizer.RequireHuman(ctx, s.db)
-	if err != nil {
+// requireAgentCredentialsHuman rejects every caller but an ordinary human
+// session before any key or agent row is read.
+func (s *Service) requireAgentCredentialsHuman(ctx context.Context) error {
+	if _, err := s.authorizer.RequireHuman(ctx, s.db); err != nil {
 		return fmt.Errorf("require human session for agent credentials: %w", err)
-	}
-	evaluation, _ := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentIdentityCredentials, human.Auth.ActiveOrganizationID, feature.OrgProjectGroups(human.Auth.OrganizationSlug, ""))
-	if evaluation != feature.EvaluationEnabled {
-		return oops.C(oops.CodeNotFound)
 	}
 	return nil
 }

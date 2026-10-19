@@ -1,10 +1,10 @@
 # Signed caller identity for MCP tunnels
 
-Gram can add signed caller identity to requests sent through a tunnel to your
+Speakeasy can add signed caller identity to requests sent through a tunnel to your
 private MCP server. Existing MCP servers can ignore the header and keep their
 current authentication. If your server uses these claims for access decisions,
-verify the JWT against Gram's public JWKS. The assertion contains no Gram
-credentials. Gram enforces its consent and tool-access rules before forwarding.
+verify the JWT against Speakeasy's public JWKS. The assertion contains no Speakeasy
+credentials. Speakeasy enforces its consent and tool-access rules before forwarding.
 
 AICP issues the assertions. Pin these values in your verifier:
 
@@ -20,12 +20,12 @@ writes a signing key pair to `mise.local.toml`, and `mise.toml` sets the local
 tunnel gateway as the issuer.
 
 The issuer and JWKS URL are independent of your server's OAuth provider and
-custom domain. You do not need to configure a per-server assertion issuer in Gram.
+custom domain. You do not need to configure a per-server assertion issuer in Speakeasy.
 
 ## Wire contract
 
 The HTTP header is `X-Speakeasy-Identity: <JWT>`, without a `Bearer` prefix.
-Gram removes client-supplied variants of this header, including spellings with
+Speakeasy removes client-supplied variants of this header, including spellings with
 underscores such as `X_Speakeasy_Identity`, in the forwarding proxy before
 adding its own assertion.
 The tunnel gateway and agent forward the assertion to your server. Upstream
@@ -43,17 +43,17 @@ seconds, capped by the source credential's expiry where available.
 | `sub`               | Typed principal identifier, for example `user:<USER_ID>`. The prefix identifies the principal type.        |
 | `organization_id`   | The destination owner's Speakeasy organization ID.                                                         |
 | `organization_slug` | The organization's current slug, for readability in logs. Slugs can change; never authorize on it.         |
-| `email`             | Human user's email from their Gram profile; absent for agents and API keys.                                |
-| `allowed_methods`   | Present only during consent discovery; methods Gram permits in that context.                               |
+| `email`             | Human user's email from their Speakeasy profile; absent for agents and API keys.                           |
+| `allowed_methods`   | Present only during consent discovery; methods Speakeasy permits in that context.                          |
 | `iat`, `exp`        | Issuance and expiry, Unix seconds.                                                                         |
 | `jti`               | Unique assertion identifier for correlation.                                                               |
 
 Set the resource identifier in the tunneled source settings to use your server's
-own audience, such as `https://mcp.internal.example.com/mcp`. Gram copies the
+own audience, such as `https://mcp.internal.example.com/mcp`. Speakeasy copies the
 saved identifier exactly, including trailing slashes and escaped characters,
 and never connects to that address. Client-supplied resource parameters cannot
 change the assertion's audience. Gateway requests use the selected member's
-identifier. If the setting is blank, the audience is the tunneled server's Gram
+identifier. If the setting is blank, the audience is the tunneled server's Speakeasy
 identifier above.
 
 Changing or clearing the setting changes the audience of subsequent assertions;
@@ -65,25 +65,25 @@ upstream OAuth credentials for the new resource; credentials qualified to the
 old resource are not forwarded. Existing saved settings are unchanged by deployment.
 
 Supported subjects are `user:<USER_ID>`, `api_key:<API_KEY_ID>` and
-`agent:<AGENT_ID>`. These are Gram identifiers, not email
+`agent:<AGENT_ID>`. These are Speakeasy identifiers, not email
 addresses or upstream account IDs. API keys and agents are never identified as
 their human creator or owner. Human assertions also carry `email`; use the
 stable `sub` as the identity key because an email can change. The assertion does
 not make an `email_verified` claim.
 
-During OAuth consent, Gram can include the authenticated human's identity with
+During OAuth consent, Speakeasy can include the authenticated human's identity with
 `allowed_methods=["server/discover", "initialize", "notifications/initialized", "ping", "tools/list"]`.
 Runtime assertions omit this claim, so treat a token that carries it as
-discovery-only. Gram enforces the method list and blocks tool calls before
+discovery-only. Speakeasy enforces the method list and blocks tool calls before
 forwarding; upstreams can ignore this claim. An upstream's own access policy
 still determines the tools it exposes.
 
-Gram issues discovery assertions only within ten minutes of the challenge's
+Speakeasy issues discovery assertions only within ten minutes of the challenge's
 creation, with each assertion valid for at most 60 seconds. Impersonated or
 unknown authorizers and agent-selected consent flows receive no discovery
 assertion. HTTP `DELETE` used to close the discovery session also carries it.
 
-Runtime user assertions identify the effective user of the validated Gram
+Runtime user assertions identify the effective user of the validated Speakeasy
 session. Session credentials do not record whether support impersonation
 occurred, so the assertion cannot rule it out.
 
@@ -95,7 +95,7 @@ Servers that choose to require the identity header must account for callers
 without an assertion. Interactive consent validation includes the authenticated
 human's discovery assertion when available.
 
-Gram rejects a request before forwarding if the caller's authenticated
+Speakeasy rejects a request before forwarding if the caller's authenticated
 organization or bound project differs from the destination. Use an API key
 scoped to the destination project.
 
@@ -118,7 +118,7 @@ If your server uses the caller claims:
 4. Require `iat` and `exp`, reject expired/future-dated tokens, and enforce a
    maximum 60-second lifetime with at most five seconds of clock tolerance.
 
-Gram enforces its consent and tool-access rules before forwarding. Use the
+Speakeasy enforces its consent and tool-access rules before forwarding. Use the
 verified caller claims for your server's own access policy.
 
 The tunnel connection is the primary binding: only Speakeasy can deliver

@@ -7,6 +7,7 @@
 cover=false
 open_html=false
 shard=""
+shard_isolate=""
 rerun_fails=""
 args=()
 
@@ -20,6 +21,9 @@ for arg in "$@"; do
       shift ;;
     --shard=*)
       shard="${arg#--shard=}"
+      shift ;;
+    --shard-isolate=*)
+      shard_isolate="${arg#--shard-isolate=}"
       shift ;;
     --rerun-fails=*)
       rerun_fails="${arg#--rerun-fails=}"
@@ -59,7 +63,8 @@ fi
 
 # --shard=<index>/<total> runs a deterministic subset of the packages that have
 # tests, so CI can spread the suite over several runners. See ci/cmd/shard for
-# how packages are distributed.
+# how packages are distributed. --shard-isolate=<import path>[,...] gives each
+# listed package a shard of its own, taking the last shards.
 if [ -n "$shard" ] || [ -n "$rerun_fails" ]; then
   # Only package patterns are sharded. Everything else reaches 'go test' in the
   # order it was given, including values that follow a flag — the 'TestFoo' in
@@ -97,7 +102,7 @@ if [ -n "$shard" ] || [ -n "$rerun_fails" ]; then
 
   if [ -n "$shard" ]; then
     shard_packages=$(go run -buildvcs=false github.com/speakeasy-api/gram/ci/cmd/shard \
-      -i "$shard" "${tags[@]}" "${patterns[@]}") || exit $?
+      -i "$shard" -isolate "$shard_isolate" "${tags[@]}" "${patterns[@]}") || exit $?
 
     packages=()
     while IFS= read -r line; do

@@ -14,10 +14,8 @@ import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { downloadResponse } from "@/pages/plugins/downloadPluginPackage";
 import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import { useRoutes } from "@/routes";
-import type { HookTraceSummary } from "@gram/client/models/components/hooktracesummary.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import { useListHooksTraces } from "@gram/client/react-query/listHooksTraces.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import {
   invalidateRiskListPolicies,
@@ -26,26 +24,23 @@ import {
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type SecretGuideClient = "claude" | "cursor" | "codex";
 
 export const SECRET_GUIDE_CLIENTS: Record<
   SecretGuideClient,
-  { hookSource: string; installDirectory: string; label: string }
+  { installDirectory: string; label: string }
 > = {
   claude: {
-    hookSource: "claude-code",
     installDirectory: "~/.claude/plugins/",
     label: "Claude Code",
   },
   codex: {
-    hookSource: "codex",
     installDirectory: "~/.codex/plugins/",
     label: "Codex",
   },
   cursor: {
-    hookSource: "cursor",
     installDirectory: "~/.cursor/extensions/",
     label: "Cursor",
   },
@@ -56,19 +51,18 @@ const SECRET_GUIDE_PROMPT = `Run this exact command in your shell:
 
 echo "GITHUB_TOKEN=${SECRET_GUIDE_SYNTHETIC_SECRET}"`;
 
-const SECRET_GUIDE_CORRELATION_WINDOW_MS = 60_000;
-
 type ActiveOperation = {
   scope: ProjectGuideOperationScope;
   report: (report: ProjectGuideOperationReport) => void;
   paused: boolean;
 };
 
+// The secrets findings that existed when the guide started listening. A new
+// finding for the guide's policy that matches the synthetic secret is the
+// evidence; hook traces are not read because they need log:read.
 type TelemetryBaseline = {
   capturedAtMs: number;
-  client: SecretGuideClient;
   syntheticSecretRedaction: string;
-  traceIds: Set<string>;
   resultIds: Set<string>;
 };
 
@@ -151,49 +145,15 @@ function newMatchingResults(
           result.createdAt.getTime() > baseline.capturedAtMs &&
           result.policyId === policyId &&
           result.source === "gitleaks" &&
+          // Hook blocks record no outcome; a finding that recorded any other
+          // outcome (logged, withheld, warned) was not a blocked request.
+          (result.enforcementOutcome === undefined ||
+            result.enforcementOutcome === "denied") &&
           matchesSyntheticSecret(result, baseline.syntheticSecretRedaction),
       )
       .sort(
         (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
       ) ?? []
-  );
-}
-
-function matchingBlockedTrace(
-  traces: HookTraceSummary[] | undefined,
-  baseline: TelemetryBaseline,
-  policyName: string | undefined,
-  result: RiskResult,
-): HookTraceSummary | undefined {
-  if (!policyName) return undefined;
-  const expectedPolicyReason = `matched policy ${JSON.stringify(policyName)}`;
-  const resultTimeMs = result.createdAt.getTime();
-  return traces?.find((trace) => {
-    let traceTimeMs: number;
-    try {
-      traceTimeMs = Number(BigInt(trace.startTimeUnixNano) / 1_000_000n);
-    } catch {
-      return false;
-    }
-    return (
-      trace.hookStatus === "blocked" &&
-      !baseline.traceIds.has(trace.traceId) &&
-      traceTimeMs > baseline.capturedAtMs &&
-      trace.hookSource === SECRET_GUIDE_CLIENTS[baseline.client].hookSource &&
-      trace.blockReason?.includes(expectedPolicyReason) === true &&
-      Math.abs(traceTimeMs - resultTimeMs) <= SECRET_GUIDE_CORRELATION_WINDOW_MS
-    );
-  });
-}
-
-function telemetryEvidence(
-  traces: HookTraceSummary[] | undefined,
-  results: RiskResult[] | undefined,
-  baseline: TelemetryBaseline,
-  policy: RiskPolicy | undefined,
-): RiskResult | undefined {
-  return newMatchingResults(results, baseline, policy?.id).find((riskResult) =>
-    matchingBlockedTrace(traces, baseline, policy?.name, riskResult),
   );
 }
 
@@ -253,31 +213,8 @@ export function useSecretGuideOperations(): {
     (!policiesQuery.isPending && policiesQuery.data === undefined);
   const createPolicy = useRiskCreatePolicyMutation();
 
-  const tracesRequest = useMemo(
-    () => ({
-      gramProject,
-      listHooksTracesPayload: {
-        from: new Date(0),
-        to: new Date(),
-        typesToInclude: ["mcp", "local", "skill"] as Array<
-          "mcp" | "local" | "skill"
-        >,
-        limit: 20,
-        sort: "desc" as const,
-      },
-    }),
-    [gramProject],
-  );
   const listening =
     activeOperation?.scope.step === 4 && !activeOperation.paused;
-  const tracesQuery = useListHooksTraces(tracesRequest, undefined, {
-    enabled: listening,
-    refetchInterval: () => {
-      tracesRequest.listHooksTracesPayload.to = new Date();
-      return listening ? 2_000 : false;
-    },
-    throwOnError: false,
-  });
   const resultsQuery = useRiskListResults(
     { gramProject, category: "secrets", policyId, limit: 20 },
     undefined,
@@ -287,7 +224,7 @@ export function useSecretGuideOperations(): {
       throwOnError: false,
     },
   );
-  const telemetryQueryError = tracesQuery.isError || resultsQuery.isError;
+  const telemetryQueryError = resultsQuery.isError;
   const telemetryError = baselineError || telemetryQueryError;
 
   const updateActiveOperation = useCallback(
@@ -311,31 +248,23 @@ export function useSecretGuideOperations(): {
     setBaselineError(false);
     setBaselinePending(true);
     setSuppressTelemetryError(true);
-    tracesRequest.listHooksTracesPayload.to = new Date();
     try {
-      const [traces, results, expectedRedaction] = await Promise.all([
-        tracesQuery.refetch(),
+      const [results, expectedRedaction] = await Promise.all([
         resultsQuery.refetch(),
         syntheticSecretRedaction(organization.id),
       ]);
       if (baselineGenerationRef.current !== generation) return false;
-      if (traces.isError || results.isError || !traces.data || !results.data) {
+      if (results.isError || !results.data) {
         setBaselineError(true);
         return false;
       }
-      const capturedAtMs = Date.now();
-      const baselineClient = client ?? "claude";
       const nextBaseline = {
-        capturedAtMs,
-        client: baselineClient,
+        capturedAtMs: Date.now(),
         syntheticSecretRedaction: expectedRedaction,
-        traceIds: new Set(traces.data.traces.map((trace) => trace.traceId)),
         resultIds: new Set(results.data.results.map((result) => result.id)),
       };
       baselineRef.current = nextBaseline;
       setBaseline(nextBaseline);
-      tracesRequest.listHooksTracesPayload.from = new Date(capturedAtMs);
-      tracesRequest.listHooksTracesPayload.to = new Date();
       return true;
     } catch {
       if (baselineGenerationRef.current !== generation) return false;
@@ -347,15 +276,12 @@ export function useSecretGuideOperations(): {
         setSuppressTelemetryError(false);
       }
     }
-  }, [client, organization.id, resultsQuery, tracesQuery, tracesRequest]);
+  }, [organization.id, resultsQuery]);
 
   const retryTelemetry = useCallback(() => {
     setSuppressTelemetryError(true);
-    tracesRequest.listHooksTracesPayload.to = new Date();
-    void Promise.all([tracesQuery.refetch(), resultsQuery.refetch()]).finally(
-      () => setSuppressTelemetryError(false),
-    );
-  }, [resultsQuery, tracesQuery, tracesRequest]);
+    void resultsQuery.refetch().finally(() => setSuppressTelemetryError(false));
+  }, [resultsQuery]);
 
   const handleSignal = useCallback(
     (
@@ -598,7 +524,7 @@ export function useSecretGuideOperations(): {
     if (!currentBaseline) {
       return;
     }
-    if (tracesQuery.isPending || resultsQuery.isPending) {
+    if (resultsQuery.isPending) {
       return;
     }
     if (telemetryError) {
@@ -611,12 +537,11 @@ export function useSecretGuideOperations(): {
       });
       return;
     }
-    const riskResult = telemetryEvidence(
-      tracesQuery.data?.traces,
+    const riskResult = newMatchingResults(
       resultsQuery.data?.results,
       currentBaseline,
-      policy,
-    );
+      policy?.id,
+    )[0];
     if (!riskResult) return;
     const event: ProjectGuideEventCard = {
       kind: "Denied · risk event",
@@ -638,8 +563,6 @@ export function useSecretGuideOperations(): {
     resultsQuery.isPending,
     suppressTelemetryError,
     telemetryError,
-    tracesQuery.data?.traces,
-    tracesQuery.isPending,
     updateActiveOperation,
     gramProject,
     queryClient,

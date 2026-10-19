@@ -23,10 +23,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -68,9 +70,21 @@ func ExternalTools(admitted []platformmcp.Descriptor, authorizer platformmcp.Aut
 	composed := Tools(admitted, authorizer)
 	tools := make([]platformtools.ExternalTool, 0, len(composed))
 	for _, tool := range composed {
-		tools = append(tools, platformtools.ExternalTool{Executor: tool, RequiredFeature: ""})
+		tools = append(tools, platformtools.ExternalTool{Executor: tool, RequiredFeature: "", RequiredScope: assistantRequiredScope(tool.descriptor)})
 	}
 	return tools
+}
+
+// assistantRequiredScope hides tools that list individual tool calls from an
+// assistant turn without log:read on its project. Every call to them would be
+// refused, and log:read is held by no system role and no agent runtime policy.
+// Other discovery scopes are coarse "held somewhere" hints, so they are not
+// carried here.
+func assistantRequiredScope(descriptor platformmcp.Descriptor) string {
+	if slices.Contains(descriptor.Meta.DiscoveryScopes, authz.ScopeLogRead) {
+		return string(authz.ScopeLogRead)
+	}
+	return ""
 }
 
 func (t Tool) Descriptor() core.ToolDescriptor {

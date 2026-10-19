@@ -249,6 +249,80 @@ func BuildGetUserSessionIssuerPayload(userSessionIssuersGetUserSessionIssuerID s
 	return v, nil
 }
 
+// BuildGetAttachImpactPayload builds the payload for the userSessionIssuers
+// getAttachImpact endpoint from CLI flags.
+func BuildGetAttachImpactPayload(userSessionIssuersGetAttachImpactMcpServerID string, userSessionIssuersGetAttachImpactToolsetID string, userSessionIssuersGetAttachImpactMetaMcpServerID string, userSessionIssuersGetAttachImpactUserSessionIssuerID string, userSessionIssuersGetAttachImpactSessionToken string, userSessionIssuersGetAttachImpactApikeyToken string, userSessionIssuersGetAttachImpactProjectSlugInput string) (*usersessionissuers.GetAttachImpactPayload, error) {
+	var err error
+	var mcpServerID *string
+	{
+		if userSessionIssuersGetAttachImpactMcpServerID != "" {
+			mcpServerID = &userSessionIssuersGetAttachImpactMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var toolsetID *string
+	{
+		if userSessionIssuersGetAttachImpactToolsetID != "" {
+			toolsetID = &userSessionIssuersGetAttachImpactToolsetID
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var metaMcpServerID *string
+	{
+		if userSessionIssuersGetAttachImpactMetaMcpServerID != "" {
+			metaMcpServerID = &userSessionIssuersGetAttachImpactMetaMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var userSessionIssuerID *string
+	{
+		if userSessionIssuersGetAttachImpactUserSessionIssuerID != "" {
+			userSessionIssuerID = &userSessionIssuersGetAttachImpactUserSessionIssuerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", *userSessionIssuerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionIssuersGetAttachImpactSessionToken != "" {
+			sessionToken = &userSessionIssuersGetAttachImpactSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionIssuersGetAttachImpactApikeyToken != "" {
+			apikeyToken = &userSessionIssuersGetAttachImpactApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionIssuersGetAttachImpactProjectSlugInput != "" {
+			projectSlugInput = &userSessionIssuersGetAttachImpactProjectSlugInput
+		}
+	}
+	v := &usersessionissuers.GetAttachImpactPayload{}
+	v.McpServerID = mcpServerID
+	v.ToolsetID = toolsetID
+	v.MetaMcpServerID = metaMcpServerID
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteUserSessionIssuerPayload builds the payload for the
 // userSessionIssuers deleteUserSessionIssuer endpoint from CLI flags.
 func BuildDeleteUserSessionIssuerPayload(userSessionIssuersDeleteUserSessionIssuerID string, userSessionIssuersDeleteUserSessionIssuerSessionToken string, userSessionIssuersDeleteUserSessionIssuerApikeyToken string, userSessionIssuersDeleteUserSessionIssuerProjectSlugInput string) (*usersessionissuers.DeleteUserSessionIssuerPayload, error) {

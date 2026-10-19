@@ -1,8 +1,8 @@
 /**
- * Documented Gram-server-relevant env vars surfaced by the
+ * Documented Speakeasy-server-relevant env vars surfaced by the
  * `/api/gram-mode` endpoint and rendered by `EnvReadout`. The list is
  * deliberately small — focused on the auth/IDP knobs that change which mode
- * Gram talks to. Add new entries here when more configuration becomes
+ * Speakeasy talks to. Add new entries here when more configuration becomes
  * relevant for the dashboard's reader.
  */
 export interface EnvDoc {
@@ -21,7 +21,7 @@ export const ENV_DOCS: readonly EnvDoc[] = [
   {
     name: "WORKOS_API_URL",
     description:
-      "Base URL the Gram server uses to call the WorkOS REST API. Points at the dev-idp /workos surface in both backends; GRAM_DEVIDP_BACKEND decides what serves it.",
+      "Base URL the Speakeasy server uses to call the WorkOS REST API. Points at the dev-idp /workos surface in both backends; GRAM_DEVIDP_BACKEND decides what serves it.",
   },
   {
     name: "GRAM_DEVIDP_EXTERNAL_URL",
@@ -31,7 +31,7 @@ export const ENV_DOCS: readonly EnvDoc[] = [
   {
     name: "GRAM_IDP_CLIENT_SECRET",
     description:
-      "Client secret Gram uses to authenticate to dev-idp. Generated locally and never forwarded to WorkOS.",
+      "Client secret Speakeasy uses to authenticate to dev-idp. Generated locally and never forwarded to WorkOS.",
     sensitive: true,
   },
   {

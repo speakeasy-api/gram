@@ -41,6 +41,7 @@ import (
 type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
+	headerPolicy           proxy.HeaderPolicy
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -62,6 +63,14 @@ func WithoutToolsCallIdentityCoverage() BuildOption {
 func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.metaMCPServerID = metaMCPServerID
+	}}
+}
+
+// WithHeaderPolicy selects how configured and copied client headers are
+// filtered. Without it the proxy uses [proxy.HeaderPolicyRemote].
+func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.headerPolicy = policy
 	}}
 }
 
@@ -245,7 +254,7 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -276,7 +285,7 @@ func (f *ProxyManager) BuildTarget(
 	// have no grants to consult.
 	//
 	// The x-gram-toolset-id strip is attached unconditionally — public AND
-	// private — because the property is Gram's own envelope rather than
+	// private — because the property is Speakeasy's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
 	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
@@ -354,7 +363,7 @@ func (f *ProxyManager) BuildTarget(
 		interceptors.NewFigma(upstreamURL, logger),
 	}
 
-	usageTracking := f.toolsCallUsageTrackingInterceptor
+	usageTracking := f.toolsCallUsageTrackingInterceptor.WithMCPServerID(identity.McpServerID)
 	if identity.MetaMCPServerID != "" {
 		usageTracking = usageTracking.WithMetaMCPServerID(identity.MetaMCPServerID)
 	}
@@ -379,6 +388,7 @@ func (f *ProxyManager) BuildTarget(
 		Identity:                    identity,
 		RemoteURL:                   upstreamURL,
 		Headers:                     headers,
+		HeaderPolicy:                options.headerPolicy,
 		AuthorizationOverride:       upstreamAuth,
 		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,
@@ -406,7 +416,7 @@ func (f *ProxyManager) BuildTarget(
 			f.resourcesReadUsageLimitsInterceptor,
 		},
 		ResourcesReadResponseInterceptors: []proxy.ResourcesReadResponseInterceptor{
-			f.resourcesReadUsageTrackingInterceptor,
+			f.resourcesReadUsageTrackingInterceptor.WithMCPServerID(identity.McpServerID),
 		},
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,

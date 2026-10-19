@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { VendorEmaTrustNotice } from "@/components/vendor-ema-trust-notice";
 import { useRowSelection } from "@/hooks/useRowSelection";
 import { pluralize } from "@/lib/format";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
@@ -26,6 +27,7 @@ import { SESSION_SECURITY } from "../../identityProviderQueries";
 import { isConnected } from "../../connectionView";
 import { OktaLinkButton } from "./OktaLinkButton";
 import {
+  normalizeOktaOrgUrl,
   oktaApplicationsUrl,
   oktaConnectionsUrl,
   oktaConsoleUrl,
@@ -276,6 +278,10 @@ function ReadinessChecklist({
           </Text>
         </Alert>
       )}
+
+      <VendorEmaTrustNotice
+        issuerUrl={normalizeOktaOrgUrl(connection.orgUrl)}
+      />
 
       <StatRow
         metrics={[

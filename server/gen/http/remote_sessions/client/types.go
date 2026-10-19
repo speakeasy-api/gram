@@ -104,6 +104,17 @@ type CommitServerIdentityConfigurationResponseBody struct {
 	Failure *ServerIdentityRegistrationFailureResponseBody `form:"failure,omitempty" json:"failure,omitempty" xml:"failure,omitempty"`
 }
 
+// GetServerIdentityImpactResponseBody is the type of the "remoteSessions"
+// service "getServerIdentityImpact" endpoint HTTP response body.
+type GetServerIdentityImpactResponseBody struct {
+	// Affected MCP servers the caller can read.
+	Servers []*ServerIdentityImpactServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// MCP servers and gateways the caller cannot read; they are not named. When
+	// the change touches an organization-level client this counts every such
+	// server on the issuer, affected or not.
+	HiddenServerCount *int `form:"hidden_server_count,omitempty" json:"hidden_server_count,omitempty" xml:"hidden_server_count,omitempty"`
+}
+
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
 // "listRemoteSessions" endpoint HTTP response body.
 type ListRemoteSessionsResponseBody struct {
@@ -871,6 +882,196 @@ type CommitServerIdentityConfigurationGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetServerIdentityImpactUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetServerIdentityImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerIdentityImpactForbiddenResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "forbidden" error.
+type GetServerIdentityImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerIdentityImpactBadRequestResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "bad_request" error.
+type GetServerIdentityImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerIdentityImpactNotFoundResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "not_found" error.
+type GetServerIdentityImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerIdentityImpactConflictResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "conflict" error.
+type GetServerIdentityImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerIdentityImpactUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetServerIdentityImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerIdentityImpactInvalidResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "invalid" error.
+type GetServerIdentityImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerIdentityImpactInvariantViolationResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetServerIdentityImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerIdentityImpactUnexpectedResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "unexpected" error.
+type GetServerIdentityImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerIdentityImpactGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetServerIdentityImpactGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListRemoteSessionsUnauthorizedResponseBody is the type of the
 // "remoteSessions" service "listRemoteSessions" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1462,14 +1663,14 @@ type RemoteSessionResponseBody struct {
 	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
 	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
-	// Resolved display name when the subject is a Gram user. Absent for
+	// Resolved display name when the subject is a Speakeasy user. Absent for
 	// apikey/anonymous subjects or unresolved users.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
-	// subjects or unresolved users.
+	// Resolved email when the subject is a Speakeasy user. Absent for
+	// apikey/anonymous subjects or unresolved users.
 	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
 	// Stored email of the account at the upstream provider. Absent when no
-	// upstream identity interface supplied it; never inferred from the Gram
+	// upstream identity interface supplied it; never inferred from the Speakeasy
 	// subject.
 	UpstreamEmail *string `form:"upstream_email,omitempty" json:"upstream_email,omitempty" xml:"upstream_email,omitempty"`
 	// Stored display name of the account at the upstream provider. Absent when no
@@ -1647,8 +1848,8 @@ type RemoteSessionIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.
@@ -1716,9 +1917,53 @@ type RemoteSessionIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
+	// Nothing is saved, so every provider is accepted. An endpoint whose sign-in
+	// trusts an external issuer uses that issuer alone; one that trusts none uses
+	// the organization's Speakeasy issuer when it has one.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// The saved providers in their stored order, or the derived default described
+	// by is_default.
+	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
+}
+
+// EMAProviderResponseBody is used to define fields on response body types.
+type EMAProviderResponseBody struct {
+	// external or speakeasy.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's internal session issuer, for speakeasy.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it, from cached credentials
+	// that still hold an access token. Attributed to the exact issuer that
+	// vouched; the organization-wide default's external entry takes the newest
+	// acceptance of any external issuer. Set on every response that returns an
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // RemoteSessionClientResponseBody is used to define fields on response body
@@ -1742,9 +1987,9 @@ type RemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -1760,8 +2005,8 @@ type RemoteSessionClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -1773,11 +2018,23 @@ type RemoteSessionClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ServerIdentityRegistrationFailureResponseBody is used to define fields on
@@ -1790,6 +2047,29 @@ type ServerIdentityRegistrationFailureResponseBody struct {
 	ProviderMessage *string `form:"provider_message,omitempty" json:"provider_message,omitempty" xml:"provider_message,omitempty"`
 	// Optional upstream HTTP status.
 	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+}
+
+// ServerIdentityImpactServerResponseBody is used to define fields on response
+// body types.
+type ServerIdentityImpactServerResponseBody struct {
+	// The MCP server or gateway id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Whether this is an MCP server or a gateway.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The MCP server or gateway name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server slug. Gateways have none.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The owning project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The name of the owning project.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// repoint: its upstream authorization server changes to another single
+	// provider. clear: it is left with no single provider and loses its upstream.
+	// resignin: its upstream is unchanged but its client is replaced, so everyone
+	// signs in again. client_removed: a gateway loses a provider client its
+	// members sign in through.
+	Impact *string `form:"impact,omitempty" json:"impact,omitempty" xml:"impact,omitempty"`
 }
 
 // NewAttachBindingRequestBody builds the HTTP request body from the payload of
@@ -2494,6 +2774,175 @@ func NewCommitServerIdentityConfigurationGatewayError(body *CommitServerIdentity
 	return v
 }
 
+// NewGetServerIdentityImpactServerIdentityImpactResultOK builds a
+// "remoteSessions" service "getServerIdentityImpact" endpoint result from a
+// HTTP "OK" response.
+func NewGetServerIdentityImpactServerIdentityImpactResultOK(body *GetServerIdentityImpactResponseBody) *remotesessions.ServerIdentityImpactResult {
+	v := &remotesessions.ServerIdentityImpactResult{
+		HiddenServerCount: *body.HiddenServerCount,
+	}
+	v.Servers = make([]*remotesessions.ServerIdentityImpactServer, len(body.Servers))
+	for i, val := range body.Servers {
+		if val == nil {
+			v.Servers[i] = nil
+			continue
+		}
+		v.Servers[i] = unmarshalServerIdentityImpactServerResponseBodyToRemotesessionsServerIdentityImpactServer(val)
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactUnauthorized builds a remoteSessions service
+// getServerIdentityImpact endpoint unauthorized error.
+func NewGetServerIdentityImpactUnauthorized(body *GetServerIdentityImpactUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactForbidden builds a remoteSessions service
+// getServerIdentityImpact endpoint forbidden error.
+func NewGetServerIdentityImpactForbidden(body *GetServerIdentityImpactForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactBadRequest builds a remoteSessions service
+// getServerIdentityImpact endpoint bad_request error.
+func NewGetServerIdentityImpactBadRequest(body *GetServerIdentityImpactBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactNotFound builds a remoteSessions service
+// getServerIdentityImpact endpoint not_found error.
+func NewGetServerIdentityImpactNotFound(body *GetServerIdentityImpactNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactConflict builds a remoteSessions service
+// getServerIdentityImpact endpoint conflict error.
+func NewGetServerIdentityImpactConflict(body *GetServerIdentityImpactConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactUnsupportedMedia builds a remoteSessions service
+// getServerIdentityImpact endpoint unsupported_media error.
+func NewGetServerIdentityImpactUnsupportedMedia(body *GetServerIdentityImpactUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactInvalid builds a remoteSessions service
+// getServerIdentityImpact endpoint invalid error.
+func NewGetServerIdentityImpactInvalid(body *GetServerIdentityImpactInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactInvariantViolation builds a remoteSessions service
+// getServerIdentityImpact endpoint invariant_violation error.
+func NewGetServerIdentityImpactInvariantViolation(body *GetServerIdentityImpactInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactUnexpected builds a remoteSessions service
+// getServerIdentityImpact endpoint unexpected error.
+func NewGetServerIdentityImpactUnexpected(body *GetServerIdentityImpactUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerIdentityImpactGatewayError builds a remoteSessions service
+// getServerIdentityImpact endpoint gateway_error error.
+func NewGetServerIdentityImpactGatewayError(body *GetServerIdentityImpactGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListRemoteSessionsResultOK builds a "remoteSessions" service
 // "listRemoteSessions" endpoint result from a HTTP "OK" response.
 func NewListRemoteSessionsResultOK(body *ListRemoteSessionsResponseBody) *remotesessions.ListRemoteSessionsResult {
@@ -3068,6 +3517,25 @@ func ValidateCommitServerIdentityConfigurationResponseBody(body *CommitServerIde
 	if body.Failure != nil {
 		if err2 := ValidateServerIdentityRegistrationFailureResponseBody(body.Failure); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactResponseBody runs the validations defined on
+// GetServerIdentityImpactResponseBody
+func ValidateGetServerIdentityImpactResponseBody(body *GetServerIdentityImpactResponseBody) (err error) {
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.HiddenServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hidden_server_count", "body"))
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateServerIdentityImpactServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -4068,6 +4536,248 @@ func ValidateCommitServerIdentityConfigurationGatewayErrorResponseBody(body *Com
 	return
 }
 
+// ValidateGetServerIdentityImpactUnauthorizedResponseBody runs the validations
+// defined on getServerIdentityImpact_unauthorized_response_body
+func ValidateGetServerIdentityImpactUnauthorizedResponseBody(body *GetServerIdentityImpactUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactForbiddenResponseBody runs the validations
+// defined on getServerIdentityImpact_forbidden_response_body
+func ValidateGetServerIdentityImpactForbiddenResponseBody(body *GetServerIdentityImpactForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactBadRequestResponseBody runs the validations
+// defined on getServerIdentityImpact_bad_request_response_body
+func ValidateGetServerIdentityImpactBadRequestResponseBody(body *GetServerIdentityImpactBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactNotFoundResponseBody runs the validations
+// defined on getServerIdentityImpact_not_found_response_body
+func ValidateGetServerIdentityImpactNotFoundResponseBody(body *GetServerIdentityImpactNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactConflictResponseBody runs the validations
+// defined on getServerIdentityImpact_conflict_response_body
+func ValidateGetServerIdentityImpactConflictResponseBody(body *GetServerIdentityImpactConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactUnsupportedMediaResponseBody runs the
+// validations defined on
+// getServerIdentityImpact_unsupported_media_response_body
+func ValidateGetServerIdentityImpactUnsupportedMediaResponseBody(body *GetServerIdentityImpactUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactInvalidResponseBody runs the validations
+// defined on getServerIdentityImpact_invalid_response_body
+func ValidateGetServerIdentityImpactInvalidResponseBody(body *GetServerIdentityImpactInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactInvariantViolationResponseBody runs the
+// validations defined on
+// getServerIdentityImpact_invariant_violation_response_body
+func ValidateGetServerIdentityImpactInvariantViolationResponseBody(body *GetServerIdentityImpactInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactUnexpectedResponseBody runs the validations
+// defined on getServerIdentityImpact_unexpected_response_body
+func ValidateGetServerIdentityImpactUnexpectedResponseBody(body *GetServerIdentityImpactUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerIdentityImpactGatewayErrorResponseBody runs the validations
+// defined on getServerIdentityImpact_gateway_error_response_body
+func ValidateGetServerIdentityImpactGatewayErrorResponseBody(body *GetServerIdentityImpactGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListRemoteSessionsUnauthorizedResponseBody runs the validations
 // defined on listRemoteSessions_unauthorized_response_body
 func ValidateListRemoteSessionsUnauthorizedResponseBody(body *ListRemoteSessionsUnauthorizedResponseBody) (err error) {
@@ -4968,11 +5678,66 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateEMAProviderOrderResponseBody runs the validations defined on
+// EMAProviderOrderResponseBody
+func ValidateEMAProviderOrderResponseBody(body *EMAProviderOrderResponseBody) (err error) {
+	if body.VendorIssuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendor_issuer", "body"))
+	}
+	if body.IsDefault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
+	}
+	if body.Providers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
+	}
+	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateEMAProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateEMAProviderResponseBody runs the validations defined on
+// EMAProviderResponseBody
+func ValidateEMAProviderResponseBody(body *EMAProviderResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "external" || *body.Kind == "speakeasy") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"external", "speakeasy"}))
+		}
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.InternalSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.internal_session_issuer_id", *body.InternalSessionIssuerID, goa.FormatUUID))
+	}
+	if body.UnavailableReason != nil {
+		if !(*body.UnavailableReason == "deleted" || *body.UnavailableReason == "disabled" || *body.UnavailableReason == "not_trusted_by_endpoint" || *body.UnavailableReason == "signing_unavailable" || *body.UnavailableReason == "not_rolled_out" || *body.UnavailableReason == "verified_domain_required" || *body.UnavailableReason == "setup_required" || *body.UnavailableReason == "keyless" || *body.UnavailableReason == "signing_paused" || *body.UnavailableReason == "sign_in_enforcement_required" || *body.UnavailableReason == "readiness_unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.unavailable_reason", *body.UnavailableReason, []any{"deleted", "disabled", "not_trusted_by_endpoint", "signing_unavailable", "not_rolled_out", "verified_domain_required", "setup_required", "keyless", "signing_paused", "sign_in_enforcement_required", "readiness_unknown"}))
+		}
+	}
+	if body.LastAcceptedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accepted_at", *body.LastAcceptedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -5000,6 +5765,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -5038,8 +5806,16 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
 	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
+	}
 	if body.CallbackURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
+	}
+	if body.FederatedCallbackURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.federated_callback_url", *body.FederatedCallbackURL, goa.FormatURI))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -5070,6 +5846,43 @@ func ValidateServerIdentityRegistrationFailureResponseBody(body *ServerIdentityR
 	if body.Reason != nil {
 		if !(*body.Reason == "dns_error" || *body.Reason == "tls_error" || *body.Reason == "timeout" || *body.Reason == "network_error" || *body.Reason == "rate_limited" || *body.Reason == "upstream_unavailable" || *body.Reason == "authorization_rejected" || *body.Reason == "invalid_success_response") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"dns_error", "tls_error", "timeout", "network_error", "rate_limited", "upstream_unavailable", "authorization_rejected", "invalid_success_response"}))
+		}
+	}
+	return
+}
+
+// ValidateServerIdentityImpactServerResponseBody runs the validations defined
+// on ServerIdentityImpactServerResponseBody
+func ValidateServerIdentityImpactServerResponseBody(body *ServerIdentityImpactServerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.Impact == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("impact", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "mcp_server" || *body.Kind == "gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"mcp_server", "gateway"}))
+		}
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Impact != nil {
+		if !(*body.Impact == "repoint" || *body.Impact == "clear" || *body.Impact == "resignin" || *body.Impact == "client_removed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.impact", *body.Impact, []any{"repoint", "clear", "resignin", "client_removed"}))
 		}
 	}
 	return

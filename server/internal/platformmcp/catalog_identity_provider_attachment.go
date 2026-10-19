@@ -162,7 +162,15 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
 
-	commit := s.identity.Prepare(attachmentIdentityPlan(principal, project, registrationID, registration.UserSessionIssuerID.UUID, metadata, existing, reuse, remote.Url, resourceMetadata))
+	// The registration names what the first login will request: the row's pin
+	// and challenge scopes, else the list this attach just read.
+	registrationResource, _, err := remotesessions.CachedResourceScopes(ctx, s.db, project.ID, remote.Url, true)
+	if err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("read protected resource for attachment: %w", err)
+	}
+	registrationResource.ScopesSupported = append([]string(nil), resourceMetadata.ScopesSupported...)
+	registrationResource.Live = true
+	commit := s.identity.Prepare(attachmentIdentityPlan(principal, project, registrationID, registration.UserSessionIssuerID.UUID, metadata, existing, reuse, remote.Url, resourceMetadata, registrationResource))
 	if err := commit.Preflight(ctx); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("check identity-provider attachment", err)
 	}
@@ -215,6 +223,7 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(project.ID),
 		OrganizationID:      conv.ToPGText(organizationID),
+		OrganizationWide:    false,
 	})
 	if err != nil {
 		return false, fmt.Errorf("list registered identity providers: %w", err)
@@ -232,7 +241,7 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 // for issuerURL, reporting false when none exists and the caller must create one.
 //
 // A stored issuer bound to a tunneled MCP server is refused rather than reused.
-// Everything this flow does reaches the provider over Gram's direct egress —
+// Everything this flow does reaches the provider over Speakeasy's direct egress —
 // the metadata discovery above and the dynamic client registration below — but
 // once the client hangs off a tunnel-bound issuer, its refreshes and
 // revocations go out over the tunnel instead. An issuer is bound precisely
@@ -275,7 +284,7 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 // provider is set up through a Client ID Metadata Document when it supports
 // one, the same path the dashboard's automatic setup takes. A provider offering
 // neither leaves the registration needing manual setup.
-func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata) remotesessions.IdentityPlan {
+func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata, registrationResource remotesessions.ResourceScopes) remotesessions.IdentityPlan {
 	var provider remotesessions.ProviderChoice
 	var allowCIMD bool
 	if reuse {
@@ -295,7 +304,10 @@ func attachmentIdentityPlan(principal Principal, project ResolvedProject, regist
 		UserSessionIssuerID: userSessionIssuerID,
 		Provider:            provider,
 		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
-			Scope:                   append([]string(nil), resourceMetadata.ScopesSupported...),
+			// No copied scope: login discovers what to request live, and the
+			// registration names what that login would request.
+			Scope:                   nil,
+			RegistrationResource:    &registrationResource,
 			Audience:                nil,
 			TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
 			RequireClientSecret:     true,
@@ -373,7 +385,7 @@ func discoveredIssuerParams(principal Principal, project ResolvedProject, regist
 }
 
 // identityProviderRegistrationError preserves the important distinction
-// between a provider rejecting Gram's fixed registration contract (which cannot
+// between a provider rejecting Speakeasy's fixed registration contract (which cannot
 // succeed unchanged) and a temporary upstream/transport failure (which can be
 // retried). It intentionally does not carry an upstream response detail into
 // the MCP tool result or logs.

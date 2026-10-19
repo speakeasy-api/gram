@@ -126,11 +126,14 @@ export function buildAddCandidates(
   const query = search.trim().toLowerCase();
   const matches = (...fields: (string | undefined)[]) =>
     !query || fields.some((f) => f?.toLowerCase().includes(query));
+  // A toolset's own hosted server (id = toolset id) is never a gateway member;
+  // the toolset candidate mints a separate wrapper instead.
+  const pickable = servers.filter((s) => s.id !== s.toolsetId);
   const wrappedToolsetIds = new Set(
-    servers.flatMap((s) => (s.toolsetId ? [s.toolsetId] : [])),
+    pickable.flatMap((s) => (s.toolsetId ? [s.toolsetId] : [])),
   );
 
-  const serverCandidates: AddCandidate[] = servers
+  const serverCandidates: AddCandidate[] = pickable
     .filter((s) => !memberServerIds.has(s.id))
     .filter((s) => matches(s.name, s.slug))
     .map((server) => ({ kind: "server", server }));

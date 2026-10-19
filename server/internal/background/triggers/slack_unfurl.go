@@ -13,13 +13,13 @@ import (
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
-// maxSlackUnfurlLinks caps how many Gram links a single link_shared event can
+// maxSlackUnfurlLinks caps how many Speakeasy links a single link_shared event can
 // unfurl. Slack itself delivers at most a handful of links per event; the cap
 // bounds the chat.unfurl payload if a message pastes many dashboard URLs.
 const maxSlackUnfurlLinks = 10
 
 // unfurlSlackGramLinks answers a Slack link_shared event with a chat.unfurl
-// call for every shared link that points at the Gram dashboard, attaching the
+// call for every shared link that points at the Speakeasy dashboard, attaching the
 // Speakeasy sticker and a title derived from the URL path. Best-effort,
 // mirroring ackSlackThreadStatus: a failure here only costs the link preview.
 //
@@ -96,7 +96,7 @@ func (a *App) unfurlSlackGramLinks(ctx context.Context, instance triggerrepo.Tri
 	}
 }
 
-// isDashboardHost reports whether host serves the Gram dashboard: the site URL
+// isDashboardHost reports whether host serves the Speakeasy dashboard: the site URL
 // host or one of the extra first-party platform hosts.
 func (a *App) isDashboardHost(host string) bool {
 	if strings.EqualFold(host, a.siteURL.Hostname()) {

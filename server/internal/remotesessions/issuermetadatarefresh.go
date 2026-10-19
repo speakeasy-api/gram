@@ -508,7 +508,7 @@ func decodeStoredIssuerDocument(existing repo.RemoteSessionIssuer) (rfc8414Docum
 	if err != nil {
 		return rfc8414Document{}, err
 	}
-	if err := vetRefreshedDocument(doc, existing); err != nil {
+	if err := vetDiscoveredDocument(doc, existing.Issuer); err != nil {
 		return rfc8414Document{}, err
 	}
 	return doc, nil

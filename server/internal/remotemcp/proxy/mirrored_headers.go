@@ -18,7 +18,7 @@ import (
 // interceptors and configured headers have run.
 //
 // The wire format (header names, Base64 sentinel, which params field Mcp-Name
-// mirrors) is shared with Gram's terminating surfaces through httpheaders.
+// mirrors) is shared with Speakeasy's terminating surfaces through httpheaders.
 // Treating an absent header as valid is this intermediary's own policy: the
 // proxy relays protocol revisions that predate request metadata, and it never
 // answers a protocol version itself.

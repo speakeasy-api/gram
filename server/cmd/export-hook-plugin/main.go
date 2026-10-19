@@ -24,10 +24,10 @@ import (
 // publish path instead; this one only names the local-dev copy.
 const localClaudeManifest = `{
   "name": "gram-hooks-local",
-  "description": "Forward Claude Code hooks to Gram for analytics, monitoring, and compliance",
+  "description": "Forward Claude Code hooks to Speakeasy for analytics, monitoring, and compliance",
   "version": "0.0.1",
   "author": {
-    "name": "Gram",
+    "name": "Speakeasy",
     "url": "https://getgram.ai"
   }
 }

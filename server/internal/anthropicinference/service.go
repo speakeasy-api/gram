@@ -101,6 +101,8 @@ type Service struct {
 // storage, metering, and asynchronous analysis as other imported conversations.
 // A nil titles leaves archived conversations with their placeholder title.
 func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner, titles ChatTitleGenerator) *Service {
+	logger = logger.With(attr.SlogComponent("anthropic-inference"))
+
 	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer, titles: titles, logger: logger}, scanner: scanner, metrics: newMetrics(meterProvider, logger)}
 }
 

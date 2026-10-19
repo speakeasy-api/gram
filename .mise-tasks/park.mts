@@ -28,6 +28,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import { fromAllowedPeer } from "./park/peers.mts";
 
 const port = Number(process.env["GRAM_SITE_PORT"]);
 if (!Number.isInteger(port) || port <= 0) {
@@ -310,22 +311,13 @@ function wake(): void {
 }
 
 const creds = tls();
-// The parker holds a dev port and its only endpoint starts a whole stack, so it
-// answers nobody but this machine. Filtering by peer address rather than
-// binding to 127.0.0.1 keeps `localhost` working in the browser: on macOS that
-// resolves to ::1 first, and one Node listener cannot cover both loopback
-// families.
-function fromLoopback(req: http.IncomingMessage): boolean {
-  const addr = req.socket.remoteAddress ?? "";
-  return (
-    addr === "::1" || addr === "::ffff:127.0.0.1" || addr.startsWith("127.")
-  );
-}
 
 const handler = (req: http.IncomingMessage, res: http.ServerResponse): void => {
-  if (!fromLoopback(req)) {
+  if (!fromAllowedPeer(req)) {
     res.writeHead(403, { "content-type": "text/plain" });
-    res.end("This worktree's stack can only be resumed from this machine.\n");
+    res.end(
+      "This worktree's stack can only be resumed locally or over the Tailnet.\n",
+    );
     return;
   }
 

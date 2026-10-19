@@ -1,12 +1,12 @@
 ---
 name: glint
-description: Conventions for authoring or editing analyzers in the `glint/` Go static-analysis package — Gram's custom golangci-lint plugin built on `go/analysis`. Activate this skill whenever the task involves adding, modifying, or testing a `glint` analyzer (new rule key, new diagnostic, settings struct, fixture under `glint/testdata/`, wiring in `BuildAnalyzers`), even if the user does not say "glint" explicitly — phrases like "add a lint rule", "write a custom analyzer", "go/analysis", or "enforce X via golangci-lint" should trigger it.
+description: Conventions for authoring or editing analyzers in the `glint/` Go static-analysis package — Speakeasy's custom golangci-lint plugin built on `go/analysis`. Activate this skill whenever the task involves adding, modifying, or testing a `glint` analyzer (new rule key, new diagnostic, settings struct, fixture under `glint/testdata/`, wiring in `BuildAnalyzers`), even if the user does not say "glint" explicitly — phrases like "add a lint rule", "write a custom analyzer", "go/analysis", or "enforce X via golangci-lint" should trigger it.
 metadata:
   relevant_files:
     - "glint/**/*.go"
 ---
 
-`glint` is Gram's package of custom `go/analysis` analyzers, and `gcl` is the golangci-lint custom-build configuration that loads `glint` as a plugin. Together they automate enforcement of project coding conventions and bug-prevention rules so the same feedback isn't re-litigated in PR review.
+`glint` is Speakeasy's package of custom `go/analysis` analyzers, and `gcl` is the golangci-lint custom-build configuration that loads `glint` as a plugin. Together they automate enforcement of project coding conventions and bug-prevention rules so the same feedback isn't re-litigated in PR review.
 
 - Plugin entry point: [glint/plugin.go](../../../glint/plugin.go) — registers the plugin via `register.Plugin("glint", New)`, defines the `settings`/`ruleSettings` structs, and lists every analyzer in `BuildAnalyzers`.
 - Second plugin: [glint/nolint_plugin.go](../../../glint/nolint_plugin.go) registers `glintnolint`, which polices `//nolint:glint` directives. It is a separate linter name because a `//nolint:glint` directive would otherwise suppress the diagnostic that reports it. It is enabled in `server/.golangci.yaml` next to `glint`, and derives the valid analyzer names from `BuildAnalyzers`, so new analyzers need no extra wiring there.

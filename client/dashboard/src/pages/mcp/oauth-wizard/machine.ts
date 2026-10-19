@@ -352,7 +352,7 @@ export const oauthWizardMachine = setup({
           },
         },
         gramHosted: {
-          meta: { title: "Gram-hosted metadata" },
+          meta: { title: "Speakeasy-hosted metadata" },
           on: {
             FIELD_EXTERNAL: {
               actions: assign({

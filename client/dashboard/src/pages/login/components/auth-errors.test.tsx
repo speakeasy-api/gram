@@ -56,6 +56,14 @@ describe("SigninErrorNotice", () => {
     expect(screen.getByText(message)).toBeTruthy();
   });
 
+  it("explains a revoked sign-in", () => {
+    renderNotice("?signin_error=sign_in_revoked");
+
+    expect(
+      screen.getByText("Your sign-in was ended. Sign in again to continue."),
+    ).toBeTruthy();
+  });
+
   it("falls back to the generic message for an unknown code", () => {
     renderNotice("?signin_error=not_a_real_code");
 

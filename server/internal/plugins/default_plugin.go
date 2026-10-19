@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -129,6 +130,7 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 			PluginID:       created.ID,
 			OrganizationID: organizationID,
 			PrincipalUrn:   urn.PrincipalWildcard,
+			InstallMode:    string(installmode.Default),
 		}); err != nil {
 			return nil, fmt.Errorf("assign default plugin to org: %w", err)
 		}
@@ -161,6 +163,8 @@ type AttachToDefaultPluginParams struct {
 	ToolsetID      uuid.NullUUID
 	McpServerID    uuid.NullUUID
 	DisplayName    string
+	// HostedServerKey stores a wrapped toolset under its canonical server (feature.FlagHostedMCPServerKeyWrites).
+	HostedServerKey bool
 }
 
 // AttachToDefaultPluginResult is nil when AttachToDefaultPlugin no-ops
@@ -249,11 +253,12 @@ func AttachToExistingPluginAudited(ctx context.Context, tx pgx.Tx, auditLogger *
 	}
 
 	attached, err := attachToPlugin(ctx, q, plugin, false, AttachToDefaultPluginParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
-		DisplayName:    displayName,
+		OrganizationID:  organizationID,
+		ProjectID:       projectID,
+		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		DisplayName:     displayName,
+		HostedServerKey: false,
 	})
 	if err != nil || attached == nil {
 		return attached, err
@@ -290,9 +295,11 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 	// before the backend ones, so Postgres reports it first) and the failed
 	// statement aborts the caller's surrounding transaction either way.
 	_, err := q.GetPluginServerByBackend(ctx, repo.GetPluginServerByBackendParams{
-		PluginID:    plugin.ID,
-		ToolsetID:   params.ToolsetID,
-		McpServerID: params.McpServerID,
+		PluginID:       plugin.ID,
+		ProjectID:      plugin.ProjectID,
+		OrganizationID: plugin.OrganizationID,
+		ToolsetID:      params.ToolsetID,
+		McpServerID:    params.McpServerID,
 	})
 	switch {
 	case err == nil:
@@ -312,10 +319,15 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		return nil, err
 	}
 
+	toolsetID, mcpServerID, err := hostedEntryKey(ctx, q, plugin.ProjectID, params.ToolsetID, params.McpServerID, params.HostedServerKey)
+	if err != nil {
+		return nil, err
+	}
+
 	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    plugin.ID,
-		ToolsetID:   params.ToolsetID,
-		McpServerID: params.McpServerID,
+		ToolsetID:   toolsetID,
+		McpServerID: mcpServerID,
 		DisplayName: displayName,
 		Policy:      "required",
 		SortOrder:   0,
@@ -403,6 +415,21 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 	return s[len(s)-4:]
 }
 
+// hostedEntryKey stores a toolset that has a canonical wrapper under the wrapper, which shares its id, once serverKey is on.
+func hostedEntryKey(ctx context.Context, q *repo.Queries, projectID uuid.UUID, toolsetID, mcpServerID uuid.NullUUID, serverKey bool) (uuid.NullUUID, uuid.NullUUID, error) {
+	if !serverKey || !toolsetID.Valid {
+		return toolsetID, mcpServerID, nil
+	}
+	wrapped, err := q.HasCanonicalWrapper(ctx, repo.HasCanonicalWrapperParams{ToolsetID: toolsetID.UUID, ProjectID: projectID})
+	if err != nil {
+		return uuid.NullUUID{}, uuid.NullUUID{}, fmt.Errorf("check canonical wrapper: %w", err)
+	}
+	if !wrapped {
+		return toolsetID, mcpServerID, nil
+	}
+	return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolsetID, nil
+}
+
 // AttachToDefaultAndRolePluginsAudited attaches a newly eligible server to the
 // Default plugin and matching role-audience plugins in the caller's transaction.
 // Callers enqueue publication only after commit; the returned bool reports
@@ -417,6 +444,13 @@ func AttachToDefaultAndRolePluginsAudited(ctx context.Context, dbtx pgx.Tx, audi
 func AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (DefaultPluginAttachOutcome, error) {
 	if err := admission.LockProject(ctx, dbtx, params.ProjectID); err != nil {
 		return DefaultPluginAttachOutcome{}, fmt.Errorf("lock eligible server admission: %w", err)
+	}
+	containsPlatform, err := roledelivery.ContainsPlatformTools(ctx, dbtx, params.OrganizationID, params.ProjectID, params.ToolsetID, params.McpServerID)
+	if err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("classify automatic plugin attachment: %w", err)
+	}
+	if containsPlatform {
+		return DefaultPluginAttachOutcome{Attached: false, PluginCreated: false}, nil
 	}
 	outcome, err := AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params)
 	if err != nil {
@@ -479,16 +513,16 @@ func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, a
 		}
 	}
 
-	// Exactly one of the URNs is set, mirroring params' toolset_id XOR
+	// Exactly one of the URNs is set, mirroring the stored row's toolset_id XOR
 	// mcp_server_id contract.
 	var toolsetURN *urn.Toolset
 	var mcpServerURN *urn.McpServer
-	if params.ToolsetID.Valid {
-		u := urn.NewToolset(params.ToolsetID.UUID)
+	if attached.Server.ToolsetID.Valid {
+		u := urn.NewToolset(attached.Server.ToolsetID.UUID)
 		toolsetURN = &u
 	}
-	if params.McpServerID.Valid {
-		u := urn.NewMcpServer(params.McpServerID.UUID)
+	if attached.Server.McpServerID.Valid {
+		u := urn.NewMcpServer(attached.Server.McpServerID.UUID)
 		mcpServerURN = &u
 	}
 

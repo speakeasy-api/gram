@@ -7,7 +7,10 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AttachedUserSessions } from "./AttachedUserSessions";
+import {
+  AttachedUserSessions,
+  ToolsetAttachedUserSessions,
+} from "./AttachedUserSessions";
 
 const mocks = vi.hoisted(() => ({
   organization: { id: "org", slug: "org" },
@@ -17,6 +20,10 @@ const mocks = vi.hoisted(() => ({
     impersonatorEmail: "",
   },
   scope: null as string | null,
+  target: {
+    url: "https://api.example/mcp/enabled-alternate",
+    userSessionIssuerId: "selected-issuer",
+  },
   list: vi.fn(),
   candidates: vi.fn(),
   listRemoteSessions: vi.fn(),
@@ -44,7 +51,14 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/components/dev-toolbar-utils", () => ({
   getRBACScopeOverrideHeader: () => mocks.scope,
 }));
-vi.mock("@/hooks/useToolsetUrl", () => ({ useInternalMcpUrl: () => "" }));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  firstPartyConnectUrl: (url: string | undefined) =>
+    url ? `${url}/connect/first-party` : undefined,
+}));
+vi.mock("@/hooks/useToolsetUrl", () => ({
+  useToolsetMcpTarget: () => mocks.target,
+}));
 
 const agent = (id: string, authorize = true, lifecycle = "active") => ({
   id,
@@ -222,7 +236,7 @@ describe("AttachedUserSessions container", () => {
           userSessionIssuerId: "source-issuer",
           upstreamDisplayName: "Example upstream user",
           upstreamEmail: "upstream@example.test",
-          subjectDisplayName: "Gram subject",
+          subjectDisplayName: "Speakeasy subject",
         },
       },
     ]);
@@ -234,7 +248,7 @@ describe("AttachedUserSessions container", () => {
       }),
     ).toBeTruthy();
     expect(
-      screen.queryByText(/Gram subject|source-issuer|target-issuer/),
+      screen.queryByText(/Speakeasy subject|source-issuer|target-issuer/),
     ).toBeNull();
   });
   it("does not label a tombstone as active when a new grant reuses its session ID", async () => {
@@ -435,3 +449,38 @@ vi.mock("@gram/client/react-query/remoteSessionsDetachBinding.js", () => ({
     },
   }),
 }));
+
+describe("ToolsetAttachedUserSessions selected target", () => {
+  it("lists the selected server issuer and connects to its endpoint", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <ToolsetAttachedUserSessions
+          toolset={
+            {
+              id: "toolset",
+              userSessionIssuerId: "canonical-issuer",
+            } as Parameters<typeof ToolsetAttachedUserSessions>[0]["toolset"]
+          }
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(mocks.listRemoteSessions).toHaveBeenCalledWith(
+        expect.objectContaining({ userSessionIssuerId: "selected-issuer" }),
+        undefined,
+        expect.anything(),
+      ),
+    );
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    fireEvent.click(screen.getByRole("button", { name: /connect/i }));
+    expect(open).toHaveBeenCalledWith(
+      "https://api.example/mcp/enabled-alternate/connect/first-party",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+  });
+});

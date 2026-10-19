@@ -93,10 +93,10 @@ type methodRange struct {
 
 // clientToServerMethods records every client-to-server method a published
 // revision defines in its core protocol, and the revisions that define it. It
-// is a statement about the specification, not about Gram: each surface's
+// is a statement about the specification, not about Speakeasy: each surface's
 // dispatch decides which of these it implements and answers the rest as
 // method not found. Server-to-client methods (such as the 2025-11-25
-// `notifications/elicitation/complete`) never reach Gram's MCP servers and do
+// `notifications/elicitation/complete`) never reach Speakeasy's MCP servers and do
 // not belong here.
 //
 // Methods that 2026-07-28 moved into an extension (the tasks family) end at

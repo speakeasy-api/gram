@@ -804,7 +804,9 @@ func (q *Queries) ListMetaMCPMembers(ctx context.Context, arg ListMetaMCPMembers
 const listMetaMCPMembersForRemoteSessionIssuer = `-- name: ListMetaMCPMembersForRemoteSessionIssuer :many
 SELECT
     s.id AS mcp_server_id,
+    s.project_id AS project_id,
     s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
     (t.id IS NOT NULL)::boolean AS tunneled
 FROM meta_mcp_server_members m
@@ -837,10 +839,12 @@ type ListMetaMCPMembersForRemoteSessionIssuerParams struct {
 }
 
 type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
-	McpServerID         uuid.UUID
-	McpServerVisibility string
-	UpstreamUrl         string
-	Tunneled            bool
+	McpServerID                uuid.UUID
+	ProjectID                  uuid.UUID
+	McpServerVisibility        string
+	McpServerNetworkAccessMode pgtype.Text
+	UpstreamUrl                string
+	Tunneled                   bool
 }
 
 // The meta MCP's proxied (remote or tunneled) members that authenticate
@@ -867,7 +871,9 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 		var i ListMetaMCPMembersForRemoteSessionIssuerRow
 		if err := rows.Scan(
 			&i.McpServerID,
+			&i.ProjectID,
 			&i.McpServerVisibility,
+			&i.McpServerNetworkAccessMode,
 			&i.UpstreamUrl,
 			&i.Tunneled,
 		); err != nil {
@@ -884,6 +890,9 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 const listMetaMCPProxiedMemberResources = `-- name: ListMetaMCPProxiedMemberResources :many
 SELECT
     s.remote_session_issuer_id,
+    s.id AS mcp_server_id,
+    s.project_id AS project_id,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
@@ -914,8 +923,11 @@ type ListMetaMCPProxiedMemberResourcesParams struct {
 }
 
 type ListMetaMCPProxiedMemberResourcesRow struct {
-	RemoteSessionIssuerID uuid.NullUUID
-	UpstreamUrl           string
+	RemoteSessionIssuerID      uuid.NullUUID
+	McpServerID                uuid.UUID
+	ProjectID                  uuid.UUID
+	McpServerNetworkAccessMode pgtype.Text
+	UpstreamUrl                string
 }
 
 // Every proxied member's authorization server and RFC 8707 resource, filtered
@@ -931,7 +943,13 @@ func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg Lis
 	var items []ListMetaMCPProxiedMemberResourcesRow
 	for rows.Next() {
 		var i ListMetaMCPProxiedMemberResourcesRow
-		if err := rows.Scan(&i.RemoteSessionIssuerID, &i.UpstreamUrl); err != nil {
+		if err := rows.Scan(
+			&i.RemoteSessionIssuerID,
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.McpServerNetworkAccessMode,
+			&i.UpstreamUrl,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1021,6 +1039,156 @@ func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServers
 			&i.MetaMcpServer.DeletedAt,
 			&i.MetaMcpServer.Deleted,
 			&i.MemberCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationMCPServersForRemoteSessionIssuer = `-- name: ListOrganizationMCPServersForRemoteSessionIssuer :many
+SELECT
+    s.id AS mcp_server_id,
+    s.project_id AS project_id,
+    s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
+    (t.id IS NOT NULL)::boolean AS tunneled
+FROM mcp_servers s
+JOIN projects p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+WHERE p.organization_id = $1
+  AND ($2::uuid IS NULL OR s.project_id = $2::uuid)
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
+  AND s.remote_session_issuer_id = $3
+ORDER BY s.project_id, s.slug
+`
+
+type ListOrganizationMCPServersForRemoteSessionIssuerParams struct {
+	OrganizationID        string
+	ProjectID             uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+}
+
+type ListOrganizationMCPServersForRemoteSessionIssuerRow struct {
+	McpServerID                uuid.UUID
+	ProjectID                  uuid.UUID
+	McpServerVisibility        string
+	McpServerNetworkAccessMode pgtype.Text
+	UpstreamUrl                string
+	Tunneled                   bool
+}
+
+// The organization gateway's counterpart to
+// ListMetaMCPMembersForRemoteSessionIssuer: the organization's proxied servers
+// that authenticate against a given authorization server, filtered as
+// ListServableMCPServersByOrganizationID so a server the gateway cannot serve
+// cannot claim a credential either. Returns the same columns, so callers
+// treat both alike.
+//
+// project_id narrows the claim to one project's servers, for a client that a
+// project owns: that client's grant routes only to its own project's members.
+// NULL considers every project, for an organization-level client. Callers
+// apply each server's network access mode for the request's surface, as the
+// member snapshot does.
+func (q *Queries) ListOrganizationMCPServersForRemoteSessionIssuer(ctx context.Context, arg ListOrganizationMCPServersForRemoteSessionIssuerParams) ([]ListOrganizationMCPServersForRemoteSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMCPServersForRemoteSessionIssuer, arg.OrganizationID, arg.ProjectID, arg.RemoteSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationMCPServersForRemoteSessionIssuerRow
+	for rows.Next() {
+		var i ListOrganizationMCPServersForRemoteSessionIssuerRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.McpServerVisibility,
+			&i.McpServerNetworkAccessMode,
+			&i.UpstreamUrl,
+			&i.Tunneled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationProxiedMCPServerResources = `-- name: ListOrganizationProxiedMCPServerResources :many
+SELECT
+    s.remote_session_issuer_id,
+    s.id AS mcp_server_id,
+    s.project_id AS project_id,
+    s.network_access_mode AS mcp_server_network_access_mode,
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
+FROM mcp_servers s
+JOIN projects p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = s.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+WHERE p.organization_id = $1
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+  AND s.remote_session_issuer_id IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
+ORDER BY s.project_id, s.slug
+`
+
+type ListOrganizationProxiedMCPServerResourcesRow struct {
+	RemoteSessionIssuerID      uuid.NullUUID
+	McpServerID                uuid.UUID
+	ProjectID                  uuid.UUID
+	McpServerNetworkAccessMode pgtype.Text
+	UpstreamUrl                string
+}
+
+// The organization gateway's counterpart to ListMetaMCPProxiedMemberResources,
+// over the servers ListOrganizationMCPServersForRemoteSessionIssuer considers.
+// Each row carries its server's project and network access mode, which the
+// caller matches against a card's client and the request's surface.
+func (q *Queries) ListOrganizationProxiedMCPServerResources(ctx context.Context, organizationID string) ([]ListOrganizationProxiedMCPServerResourcesRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationProxiedMCPServerResources, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationProxiedMCPServerResourcesRow
+	for rows.Next() {
+		var i ListOrganizationProxiedMCPServerResourcesRow
+		if err := rows.Scan(
+			&i.RemoteSessionIssuerID,
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.McpServerNetworkAccessMode,
+			&i.UpstreamUrl,
 		); err != nil {
 			return nil, err
 		}

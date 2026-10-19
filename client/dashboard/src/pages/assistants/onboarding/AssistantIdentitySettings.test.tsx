@@ -22,7 +22,6 @@ const mocks = vi.hoisted(() => ({
     lifecycle: string;
     permissions: { authorize: boolean };
   }[],
-  flagStatus: "enabled",
   agentData: { name: "Example agent" } as { name: string } | undefined,
   success: vi.fn(),
   error: vi.fn(),
@@ -33,12 +32,6 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("sonner", () => ({
   toast: { success: mocks.success, error: mocks.error },
-}));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: (flag: string) => {
-    expect(flag).toBe("agent-identity-credentials");
-    return { status: mocks.flagStatus };
-  },
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -119,7 +112,6 @@ beforeEach(() => {
   mocks.canManageMappings = true;
   mocks.members = [];
   mocks.agents = [];
-  mocks.flagStatus = "enabled";
   mocks.agentData = { name: "Example agent" };
   mocks.listAgents = () => Promise.resolve(mocks.agents);
 });
@@ -272,11 +264,6 @@ describe("Assistant identity management", () => {
     expect(
       screen.queryByRole("button", { name: "Set up agent identity" }),
     ).toBeNull();
-  });
-  it("respects the existing organization feature gate", () => {
-    mocks.flagStatus = "disabled";
-    setup();
-    expect(screen.queryByText(/legacy authentication/)).toBeNull();
   });
   it("links the assigned identity by name without diagnostics", () => {
     setup({ ...assistant, identityState: "ACTIVE", agentId: "example-agent" });

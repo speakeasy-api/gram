@@ -160,8 +160,16 @@ func seedBlockingPolicy(t *testing.T, fixture admissionFixture) {
 
 func seedDecision(t *testing.T, fixture admissionFixture, target, decision string, principals []string) uuid.UUID {
 	t.Helper()
+	return seedDecisionOn(t, fixture.conn, fixture, target, decision, principals)
+}
 
-	request, err := approvalrepo.New(fixture.conn).UpsertApprovalRequest(t.Context(), approvalrepo.UpsertApprovalRequestParams{
+// seedDecisionOn writes the decision through db, which may be an open
+// transaction, so a test can prove an approval lives and dies with the write
+// it was recorded for.
+func seedDecisionOn(t *testing.T, db approvalrepo.DBTX, fixture admissionFixture, target, decision string, principals []string) uuid.UUID {
+	t.Helper()
+
+	request, err := approvalrepo.New(db).UpsertApprovalRequest(t.Context(), approvalrepo.UpsertApprovalRequestParams{
 		OrganizationID:            fixture.orgID,
 		ProjectID:                 fixture.projectID,
 		TargetKind:                "server_url",
@@ -173,7 +181,7 @@ func seedDecision(t *testing.T, fixture admissionFixture, target, decision strin
 		RiskPolicyBypassRequestID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
-	_, err = approvalrepo.New(fixture.conn).CreateApprovalDecision(t.Context(), approvalrepo.CreateApprovalDecisionParams{
+	_, err = approvalrepo.New(db).CreateApprovalDecision(t.Context(), approvalrepo.CreateApprovalDecisionParams{
 		OrganizationID:       fixture.orgID,
 		ProjectID:            fixture.projectID,
 		McpApprovalRequestID: request.ID,

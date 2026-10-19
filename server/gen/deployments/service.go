@@ -33,6 +33,13 @@ type Service interface {
 	ListDeployments(context.Context, *ListDeploymentsPayload) (res *ListDeploymentResult, err error)
 	// Get logs for a deployment.
 	GetDeploymentLogs(context.Context, *GetDeploymentLogsPayload) (res *GetDeploymentLogsResult, err error)
+	// Compare an uploaded OpenAPI document with the version of the same source in
+	// the active deployment. Reports changes to tools, inputs and security without
+	// deploying anything.
+	EvaluateOpenAPIv3(context.Context, *EvaluateOpenAPIv3Payload) (res *OpenAPIv3Evaluation, err error)
+	// Compare the OpenAPI documents in a deployment with the deployment it was
+	// created from.
+	GetDeploymentEvaluation(context.Context, *GetDeploymentEvaluationPayload) (res *GetDeploymentEvaluationResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -55,7 +62,7 @@ const ServiceName = "deployments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"getDeployment", "getLatestDeployment", "getActiveDeployment", "createDeployment", "evolve", "redeploy", "listDeployments", "getDeploymentLogs"}
+var MethodNames = [10]string{"getDeployment", "getLatestDeployment", "getActiveDeployment", "createDeployment", "evolve", "redeploy", "listDeployments", "getDeploymentLogs", "evaluateOpenAPIv3", "getDeploymentEvaluation"}
 
 type AddDeploymentPackageForm struct {
 	// The name of the package.
@@ -189,6 +196,21 @@ type DeploymentSummary struct {
 	ExternalMcpToolCount int64
 }
 
+// EvaluateOpenAPIv3Payload is the payload type of the deployments service
+// evaluateOpenAPIv3 method.
+type EvaluateOpenAPIv3Payload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the uploaded OpenAPI document asset to evaluate.
+	AssetID string
+	// The slug of the OpenAPI source the document will replace. A slug that is not
+	// in the active deployment is evaluated as a new source.
+	Slug string
+	// The display name of the source. Defaults to the deployed name or the slug.
+	Name *string
+}
+
 // EvolvePayload is the payload type of the deployments service evolve method.
 type EvolvePayload struct {
 	ApikeyToken      *string
@@ -242,6 +264,28 @@ type GetActiveDeploymentPayload struct {
 type GetActiveDeploymentResult struct {
 	// The active deployment for a project if available.
 	Deployment *types.Deployment
+}
+
+// GetDeploymentEvaluationPayload is the payload type of the deployments
+// service getDeploymentEvaluation method.
+type GetDeploymentEvaluationPayload struct {
+	// The ID of the deployment to evaluate.
+	DeploymentID     string
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetDeploymentEvaluationResult is the result type of the deployments service
+// getDeploymentEvaluation method.
+type GetDeploymentEvaluationResult struct {
+	// The ID of the evaluated deployment.
+	DeploymentID string
+	// The ID of the deployment it is compared with. Absent for the first
+	// deployment in a project.
+	BaseDeploymentID *string
+	// One evaluation per OpenAPI source that was added, changed or removed.
+	Documents []*OpenAPIv3Evaluation
 }
 
 // GetDeploymentLogsPayload is the payload type of the deployments service
@@ -358,6 +402,100 @@ type ListDeploymentsPayload struct {
 	ProjectSlugInput *string
 	// The cursor to fetch results from
 	Cursor *string
+}
+
+type OpenAPIv3AffectedToolset struct {
+	// The ID of the toolset.
+	ID string
+	// The name of the toolset.
+	Name string
+	// The slug of the toolset.
+	Slug string
+	// The MCP slug of the toolset, when it is served as an MCP server.
+	McpSlug *string
+	// Whether the toolset is served as an MCP server.
+	McpEnabled bool
+	// Whether the MCP server has OAuth configured.
+	OauthConfigured bool
+	// The number of tools from this source in the toolset.
+	ToolCount int
+	// The number of those tools with breaking changes or changes that need
+	// attention.
+	AffectedToolCount int
+}
+
+type OpenAPIv3DocumentSnapshot struct {
+	// The number of tools the document produces.
+	ToolCount int
+	// The number of operations that cannot be turned into tools.
+	SkippedOperationCount int
+	// The security schemes tools can use.
+	SecuritySchemes []*OpenAPIv3SecuritySchemeSummary
+	// The document-level security requirement.
+	DefaultSecurity string
+	// The default server URL tools call.
+	ServerURL *string
+}
+
+// OpenAPIv3Evaluation is the result type of the deployments service
+// evaluateOpenAPIv3 method.
+type OpenAPIv3Evaluation struct {
+	// The slug of the OpenAPI source.
+	Slug string
+	// The display name of the OpenAPI source.
+	Name string
+	// Whether the source is new, changed, unchanged or removed.
+	Status string
+	// The asset ID of the evaluated document. Absent when the source was removed.
+	AssetID *string
+	// The asset ID of the deployed document. Absent for a new source.
+	BaseAssetID *string
+	// A summary of the deployed document.
+	Base *OpenAPIv3DocumentSnapshot
+	// A summary of the evaluated document.
+	Next *OpenAPIv3DocumentSnapshot
+	// Every change found, most severe first.
+	Changes []*OpenAPIv3EvaluationChange
+	// The number of breaking changes.
+	BreakingCount int
+	// The number of changes that need attention.
+	WarningCount int
+	// The number of informational changes.
+	InfoCount int
+	// Toolsets (MCP servers) that include tools from this source.
+	AffectedToolsets []*OpenAPIv3AffectedToolset
+}
+
+// The part of the MCP an OpenAPI change affects.
+type OpenAPIv3EvaluationCategory string
+
+type OpenAPIv3EvaluationChange struct {
+	// How likely the change is to break existing MCP servers.
+	Severity OpenAPIv3EvaluationSeverity
+	// The part of the MCP the change affects.
+	Category OpenAPIv3EvaluationCategory
+	// A stable identifier for the kind of change.
+	Code string
+	// A one-line summary of the change.
+	Title string
+	// Supporting lines, such as before and after values.
+	Details []string
+	// The names of the tools the change affects.
+	Tools []string
+}
+
+// How likely an OpenAPI change is to break existing MCP servers.
+type OpenAPIv3EvaluationSeverity string
+
+type OpenAPIv3SecuritySchemeSummary struct {
+	// The name of the scheme under components.securitySchemes.
+	Key string
+	// The OpenAPI security scheme type.
+	Type string
+	// A short description of the scheme.
+	Summary string
+	// The environment variables that supply credentials for the scheme.
+	EnvVariables []string
 }
 
 // RedeployPayload is the payload type of the deployments service redeploy

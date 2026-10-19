@@ -121,7 +121,7 @@ func NewGate(logger *slog.Logger, cacheImpl cache.Cache, celEng *celenv.Engine) 
 }
 
 // CheckBlocked reports whether the given actor is currently blocked by a spend
-// rule. The actor is looked up only by stable Gram user ID. A nil Block means
+// rule. The actor is looked up only by stable Speakeasy user ID. A nil Block means
 // the actor is not blocked. Errors are cache infrastructure failures — callers
 // should treat them as "not blocked" (fail-open); they are returned for logging.
 func (g *Gate) CheckBlocked(ctx context.Context, organizationID, userID string) (*Block, error) {

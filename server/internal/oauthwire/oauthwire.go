@@ -82,6 +82,16 @@ const (
 	TokenTypeBearer = "Bearer"
 )
 
+// Authorization response parameters shared with the requesting client.
+const (
+	// ParamState binds the authorization response to the client's request
+	// (RFC 6749 §4.1.1, §4.1.2).
+	ParamState = "state"
+
+	// ParamError identifies an OAuth error response (RFC 6749 §4.1.2.1).
+	ParamError = "error"
+)
+
 // Client authentication parameters as they appear in a token or revocation
 // request body.
 const (
@@ -140,7 +150,46 @@ const (
 	// ParamRefreshToken carries the refresh token of a refresh_token grant
 	// (RFC 6749 §6).
 	ParamRefreshToken = "refresh_token"
+
+	// ParamToken carries the token a revocation request revokes (RFC 7009
+	// §2.1).
+	ParamToken = "token"
+
+	// ParamTokenTypeHint carries a revocation request's hint about the type
+	// of the token it revokes (RFC 7009 §2.1).
+	ParamTokenTypeHint = "token_type_hint"
 )
+
+// Scope values OpenID Connect reserves (OIDC Core §5.4, §11).
+const (
+	// ScopeOpenID marks an OpenID Connect request.
+	ScopeOpenID = "openid"
+
+	// ScopeProfile requests the default profile claims.
+	ScopeProfile = "profile"
+
+	// ScopeEmail requests the email and email_verified claims.
+	ScopeEmail = "email"
+
+	// ScopeAddress requests the address claim.
+	ScopeAddress = "address"
+
+	// ScopePhone requests the phone_number and phone_number_verified claims.
+	ScopePhone = "phone"
+
+	// ScopeOfflineAccess requests a refresh token.
+	ScopeOfflineAccess = "offline_access"
+)
+
+// IsOIDCReservedScope reports whether scope is one OpenID Connect reserves.
+func IsOIDCReservedScope(scope string) bool {
+	switch scope {
+	case ScopeOpenID, ScopeProfile, ScopeEmail, ScopeAddress, ScopePhone, ScopeOfflineAccess:
+		return true
+	default:
+		return false
+	}
+}
 
 // Error carries an OAuth wire error: the shared shape used across the
 // issuer-gated endpoints (RFC 6749 / RFC 7591 / RFC 7009). The structure is

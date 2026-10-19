@@ -73,10 +73,27 @@ func missingScopes(granted []string) []string {
 	return missing
 }
 
+func (r connectionRows) checklist(missing []string, agent AgentObservation) []ChecklistItem {
+	return OktaChecklist(r.authMethod(), ChecklistSignal{
+		Checked:           r.checked() && r.lastError() == nil,
+		ClientIDSubmitted: r.clientIDSubmitted(),
+		DPoPBound:         r.Okta.DpopRequired,
+		MissingScopes:     missing,
+		Reasons:           r.reasons(),
+		AgentRecorded:     r.Okta.AgentID.Valid && r.Okta.AgentID.String != "",
+		Agent:             agent,
+	})
+}
+
 func buildConnectionView(r connectionRows, agent AgentObservation) *gen.OktaIdentityProviderConnection {
 	var clientID *string
 	if r.clientIDSubmitted() {
 		clientID = conv.PtrEmpty(r.Managed.ClientID)
+	}
+
+	var remoteSessionIssuerID *string
+	if r.Managed != nil {
+		remoteSessionIssuerID = new(r.Managed.IssuerID.String())
 	}
 
 	var activeKey *gen.IdentityProviderConnectionActiveKey
@@ -97,15 +114,7 @@ func buildConnectionView(r connectionRows, agent AgentObservation) *gen.OktaIden
 		missing = missingScopes(granted)
 	}
 
-	checklist := OktaChecklist(r.authMethod(), ChecklistSignal{
-		Checked:           r.checked() && r.lastError() == nil,
-		ClientIDSubmitted: r.clientIDSubmitted(),
-		DPoPBound:         r.Okta.DpopRequired,
-		MissingScopes:     missing,
-		Reasons:           r.reasons(),
-		AgentRecorded:     r.Okta.AgentID.Valid && r.Okta.AgentID.String != "",
-		Agent:             agent,
-	})
+	checklist := r.checklist(missing, agent)
 	items := make([]*gen.IdentityProviderConnectionChecklistItem, 0, len(checklist))
 	for _, item := range checklist {
 		items = append(items, &gen.IdentityProviderConnectionChecklistItem{
@@ -119,30 +128,31 @@ func buildConnectionView(r connectionRows, agent AgentObservation) *gen.OktaIden
 	}
 
 	return &gen.OktaIdentityProviderConnection{
-		ID:                  r.Connection.ID.String(),
-		OrganizationID:      r.Connection.OrganizationID,
-		Provider:            r.Connection.Provider,
-		Status:              r.Connection.Status,
-		OrgURL:              r.Okta.OrgUrl,
-		IssuerURL:           r.Okta.IssuerUrl,
-		ListingMode:         r.Okta.ListingMode,
-		JwksURL:             conv.PtrEmpty(r.jwksURL()),
-		ClientID:            clientID,
-		ClientIDSubmitted:   r.clientIDSubmitted(),
-		DpopRequired:        r.Okta.DpopRequired,
-		RequiredScopes:      slices.Clone(RequiredOktaScopes),
-		GrantedScopes:       slices.Clone(granted),
-		MissingScopes:       missing,
-		VerificationReasons: r.reasons(),
-		LastVerifiedAt:      conv.PtrEmpty(conv.FromPGTimestamptz(r.Connection.LastVerifiedAt)),
-		LastError:           r.lastError(),
-		AgentID:             conv.FromPGText[string](r.Okta.AgentID),
-		AgentAppID:          conv.FromPGText[string](r.Okta.AgentAppID),
-		ActiveKey:           activeKey,
-		Checklist:           items,
-		ApplicationsSync:    buildApplicationsSyncView(r.Okta),
-		CreatedAt:           conv.FromPGTimestamptz(r.Connection.CreatedAt),
-		UpdatedAt:           r.updatedAt().UTC().Format(time.RFC3339),
+		ID:                    r.Connection.ID.String(),
+		OrganizationID:        r.Connection.OrganizationID,
+		Provider:              r.Connection.Provider,
+		Status:                r.Connection.Status,
+		OrgURL:                r.Okta.OrgUrl,
+		IssuerURL:             r.Okta.IssuerUrl,
+		ListingMode:           r.Okta.ListingMode,
+		JwksURL:               conv.PtrEmpty(r.jwksURL()),
+		ClientID:              clientID,
+		ClientIDSubmitted:     r.clientIDSubmitted(),
+		RemoteSessionIssuerID: remoteSessionIssuerID,
+		DpopRequired:          r.Okta.DpopRequired,
+		RequiredScopes:        slices.Clone(RequiredOktaScopes),
+		GrantedScopes:         slices.Clone(granted),
+		MissingScopes:         missing,
+		VerificationReasons:   r.reasons(),
+		LastVerifiedAt:        conv.PtrEmpty(conv.FromPGTimestamptz(r.Connection.LastVerifiedAt)),
+		LastError:             r.lastError(),
+		AgentID:               conv.FromPGText[string](r.Okta.AgentID),
+		AgentAppID:            conv.FromPGText[string](r.Okta.AgentAppID),
+		ActiveKey:             activeKey,
+		Checklist:             items,
+		ApplicationsSync:      buildApplicationsSyncView(r.Okta),
+		CreatedAt:             conv.FromPGTimestamptz(r.Connection.CreatedAt),
+		UpdatedAt:             r.updatedAt().UTC().Format(time.RFC3339),
 	}
 }
 

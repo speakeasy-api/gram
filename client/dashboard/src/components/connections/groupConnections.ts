@@ -30,7 +30,7 @@ export const CONNECTION_GROUPING_LABELS: Record<ConnectionGrouping, string> = {
   // this column. A machine under a heading reading "Person" contradicts the
   // row's own icon and badge.
   subject: "Identity",
-  // The Gram MCP server the session was issued through, which is what the rest
+  // The Speakeasy MCP server the session was issued through, which is what the rest
   // of the product means by "MCP server" — distinct from "Provider", the
   // upstream the server holds tokens for.
   issuer: "MCP server",
@@ -103,7 +103,7 @@ export type ConnectionGroup = {
 };
 
 /**
- * A session can belong to several provider groups at once — one Gram server can
+ * A session can belong to several provider groups at once — one Speakeasy server can
  * front several upstreams — so grouping by provider intentionally repeats a
  * session under each provider it reaches. Grouping by person or client always
  * files a session exactly once.

@@ -20,7 +20,7 @@ type Member struct {
 	UpdatedAt      string
 }
 
-// User represents a WorkOS user with the fields used by Gram.
+// User represents a WorkOS user with the fields used by Speakeasy.
 type User struct {
 	ID                string
 	FirstName         string
@@ -294,4 +294,12 @@ func (wc *Client) ListOrgMemberships(ctx context.Context, orgID string) ([]Membe
 	}
 
 	return all, nil
+}
+
+// RevokeSession ends a WorkOS AuthKit session.
+func (wc *Client) RevokeSession(ctx context.Context, sessionID string) error {
+	if err := wc.um.RevokeSession(ctx, usermanagement.RevokeSessionOpts{SessionID: sessionID}); err != nil {
+		return fmt.Errorf("revoke workos session: %w", err)
+	}
+	return nil
 }

@@ -737,12 +737,18 @@ func TestSearchUsers_CanonicalFold_CursorPagination(t *testing.T) {
 	require.Equal(t, workEmail, first.Users[0].UserID, "the merged identity sorts by its latest (personal) row")
 	require.Equal(t, int64(300), first.Users[0].TotalInputTokens, "the merged summary carries both emails' tokens")
 	require.NotNil(t, first.NextCursor)
-	require.Equal(t, workEmail, *first.NextCursor, "the cursor handed out is the merged canonical key")
 
 	second := page(1, first.NextCursor)
 	require.Len(t, second.Users, 1, "a canonical cursor resolves through the fold")
 	require.Equal(t, strangerB, second.Users[0].UserID)
 	require.NotNil(t, second.NextCursor)
+
+	// A bare canonical key (the cursor shape handed out before the boundary
+	// was sealed) re-derives its boundary, and that lookup must fold too.
+	bareKey := workEmail
+	bareSecond := page(1, &bareKey)
+	require.Len(t, bareSecond.Users, 1, "a bare canonical key resolves through the fold")
+	require.Equal(t, strangerB, bareSecond.Users[0].UserID)
 
 	third := page(1, second.NextCursor)
 	require.Len(t, third.Users, 1)

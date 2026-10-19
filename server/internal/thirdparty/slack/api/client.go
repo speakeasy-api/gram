@@ -1,5 +1,5 @@
 // Package api provides the shared low-level Slack Web API client used across
-// Gram. It owns the wire-level concerns of talking to slack.com/api:
+// Speakeasy. It owns the wire-level concerns of talking to slack.com/api:
 // form-encoding request payloads, Bearer-token resolution from the tool-call
 // environment, and parsing the standard Slack response envelope. Higher-level
 // callers (the platform Slack tools and the third-party Slack integration)

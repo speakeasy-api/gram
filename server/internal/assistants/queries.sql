@@ -1,8 +1,10 @@
 -- name: ReapStuckAssistantRuntimes :many
 -- Short-horizon reaper for rows the happy-path can no longer move — crash
--- recovery only. Idle runtimes are deliberately not collected: a VM with no
--- traffic stays up until its assistant is deleted. Both branches cover rows
--- stranded by a dead process, and the next admit recreates the runtime:
+-- recovery only. Idle runtimes are collected separately through
+-- ListIdleAssistantRuntimes, which must poll the runner before stopping. Both
+-- branches cover rows stranded by a dead process, and the next admit
+-- recreates the runtime. Stuck `expiring` v2 rows on an idle-expiring backend
+-- are left to the idle sweep, which stops the backend before retiring them:
 --   - 'starting' rows that never transitioned to active within the startup
 --     grace window (server crashed mid-boot).
 --   - 'expiring' rows older than the ExpireThreadRuntime activity's full
@@ -18,7 +20,11 @@ SET
 WHERE deleted IS FALSE
   AND (
     (state = @starting_state AND updated_at < @starting_cutoff)
-    OR (state = @expiring_state AND updated_at < @expiring_cutoff)
+    OR (
+      state = @expiring_state
+      AND updated_at < @expiring_cutoff
+      AND (runtime_version <> 2 OR backend <> ALL(@idle_expiring_backends::text[]))
+    )
   )
 RETURNING assistant_id;
 
@@ -112,15 +118,28 @@ WHERE id = @chat_id
 LIMIT 1;
 
 -- name: ResolveToolsetsForWrite :many
-SELECT id, slug
-FROM toolsets
-WHERE project_id = @project_id
-  AND slug = ANY(@slugs::TEXT[])
-  AND deleted IS FALSE
+-- Also locks the toolsets behind canonical wrappers named by slug, so server
+-- attachments take the toolset lock before the server lock, as deletion does.
+SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
+FROM toolsets t
+WHERE t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND (
+    t.slug = ANY(@slugs::TEXT[])
+    OR EXISTS (
+      SELECT 1
+      FROM mcp_servers ms
+      WHERE ms.id = t.id
+        AND ms.toolset_id = ms.id
+        AND ms.project_id = t.project_id
+        AND ms.slug = ANY(@mcp_server_slugs::TEXT[])
+        AND ms.deleted IS FALSE
+    )
+  )
 -- Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
 -- locks when an MCP server concurrently switches to this toolset backend.
-ORDER BY id
-FOR NO KEY UPDATE;
+ORDER BY t.id
+FOR NO KEY UPDATE OF t;
 
 -- name: ListAttachmentTargetIDs :many
 -- Resolves the toolsets and MCP servers a write would attach so the handler
@@ -343,12 +362,10 @@ INSERT INTO assistant_toolsets (
   @project_id
 );
 
--- name: EnableMCPForToolsets :exec
--- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
--- toolset attached to an assistant must be MCP-reachable for the runtime's
--- startup config to build; we enable on attach so users don't have to do it
--- separately. mcp_slug is required for an MCP-reachable toolset, so we skip
--- rows that lack one.
+-- name: EnableMCPForToolsets :many
+-- Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
+-- attached toolsets are enabled so users don't have to do it separately; the
+-- caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
 UPDATE toolsets
 SET mcp_enabled = TRUE,
     updated_at = clock_timestamp()
@@ -356,68 +373,158 @@ WHERE id = ANY(@toolset_ids::UUID[])
   AND project_id = @project_id
   AND mcp_enabled IS FALSE
   AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+RETURNING id;
 
 -- name: LoadAssistantMcpServers :many
--- Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
--- Gram-hosted endpoint slug (custom_domain_id IS NULL), and the bound
--- environment. Soft-deleted servers are skipped so the runtime never targets a
--- dead endpoint; a row whose server has no Gram-hosted endpoint yields a NULL
--- endpoint_slug and is filtered out in Go. Visibility is returned rather than
--- filtered here so API reads still show disabled attachments while the runtime
--- resolver skips them. Mirrors LoadAssistantToolsets: one read supplies
--- everything dispatch needs to build the MCP URL.
+-- Both attachment tables; hosted rows (toolset id = canonical wrapper id) keep
+-- the toolset slug, mcp_enabled, /mcp/{mcp_slug} address and default
+-- environment, and sort first so they win runtime id collisions. Legacy rows
+-- read the toolset whatever the wrapper's current shape.
+WITH attachments AS (
+  SELECT at.assistant_id, at.toolset_id AS mcp_server_id, at.environment_id, at.created_at, TRUE AS legacy
+  FROM assistant_toolsets at
+  WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
+    AND at.project_id = @project_id
+  UNION ALL
+  SELECT ams.assistant_id, ams.mcp_server_id, ams.environment_id, ams.created_at, FALSE AS legacy
+  FROM assistant_mcp_servers ams
+  WHERE ams.assistant_id = ANY(@assistant_ids::UUID[])
+    AND ams.project_id = @project_id
+)
 SELECT
-  ams.assistant_id,
-  ams.mcp_server_id,
+  a.assistant_id,
+  a.mcp_server_id,
+  a.legacy::bool AS legacy,
   ms.slug AS server_slug,
-  ms.visibility,
-  COALESCE((
+  t.slug AS toolset_slug,
+  CASE WHEN t.id IS NOT NULL THEN CASE
+    WHEN t.mcp_enabled IS NOT TRUE THEN 'disabled'
+    WHEN t.mcp_is_public THEN 'public'
+    ELSE 'private'
+  END ELSE ms.visibility END::text AS visibility,
+  CASE WHEN t.id IS NOT NULL THEN COALESCE(t.mcp_slug, '') ELSE COALESCE((
     SELECT me.slug
     FROM mcp_endpoints me
     WHERE me.mcp_server_id = ms.id
+      AND me.project_id = ms.project_id
       AND me.custom_domain_id IS NULL
       AND me.deleted IS FALSE
     ORDER BY me.created_at
     LIMIT 1
-  ), '')::text AS endpoint_slug,
-  ams.environment_id,
+  ), '') END::text AS endpoint_slug,
+  t.default_environment_slug,
+  a.environment_id,
   e.slug AS environment_slug
-FROM assistant_mcp_servers ams
-JOIN mcp_servers ms ON ms.id = ams.mcp_server_id AND ms.deleted IS FALSE
-LEFT JOIN environments e ON e.id = ams.environment_id
-WHERE ams.assistant_id = ANY(@assistant_ids::UUID[])
+FROM attachments a
+LEFT JOIN mcp_servers ms
+  ON ms.id = a.mcp_server_id
+  AND ms.project_id = @project_id
+  AND ms.deleted IS FALSE
+  AND (NOT a.legacy OR ms.toolset_id = ms.id)
+LEFT JOIN toolsets t
+  ON t.id = a.mcp_server_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND (a.legacy OR ms.toolset_id = ms.id)
+LEFT JOIN environments e ON e.id = a.environment_id AND e.project_id = @project_id
+WHERE (a.legacy AND t.id IS NOT NULL)
+   OR (NOT a.legacy AND ms.id IS NOT NULL)
+ORDER BY (t.id IS NULL), a.created_at, a.legacy DESC, a.mcp_server_id;
+
+-- name: ClearAssistantHostedMcpServers :exec
+-- Detaches the assistant's toolset-backed (canonical wrapper) servers only.
+DELETE FROM assistant_mcp_servers ams
+USING mcp_servers ms
+WHERE ams.mcp_server_id = ms.id
+  AND ms.project_id = ams.project_id
+  AND ms.toolset_id = ms.id
+  AND ams.assistant_id = @assistant_id
+  AND ams.project_id = @project_id;
+
+-- name: ClearAssistantDirectMcpServers :exec
+-- Detaches the assistant's servers that are not canonical hosted wrappers.
+DELETE FROM assistant_mcp_servers ams
+WHERE ams.assistant_id = @assistant_id
   AND ams.project_id = @project_id
-ORDER BY ams.created_at;
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers ms
+    WHERE ms.id = ams.mcp_server_id
+      AND ms.project_id = ams.project_id
+      AND ms.toolset_id = ms.id
+  );
+
+-- name: ListAssistantAttachedServerIDs :many
+SELECT at.toolset_id AS mcp_server_id
+FROM assistant_toolsets at
+WHERE at.assistant_id = @assistant_id
+  AND at.project_id = @project_id
+UNION
+SELECT ams.mcp_server_id
+FROM assistant_mcp_servers ams
+WHERE ams.assistant_id = @assistant_id
+  AND ams.project_id = @project_id;
+
+-- name: ListCanonicalWrapperIDs :many
+-- Dialable toolsets with a live canonical wrapper (same id): the attachments the dependent move re-keys.
+SELECT ms.id
+FROM mcp_servers ms
+JOIN toolsets t ON t.id = ms.id AND t.project_id = ms.project_id
+WHERE ms.project_id = @project_id
+  AND ms.id = ANY(@toolset_ids::UUID[])
+  AND ms.toolset_id = ms.id
+  AND ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND t.mcp_enabled IS TRUE
+  AND t.mcp_slug IS NOT NULL
+  AND t.deleted IS FALSE;
+
+-- name: ClearAssistantToolsetsForServers :exec
+DELETE FROM assistant_toolsets
+WHERE assistant_id = @assistant_id
+  AND project_id = @project_id
+  AND toolset_id = ANY(@mcp_server_ids::UUID[]);
+
+-- name: ClearAssistantMcpServersForServers :exec
+DELETE FROM assistant_mcp_servers
+WHERE assistant_id = @assistant_id
+  AND project_id = @project_id
+  AND mcp_server_id = ANY(@mcp_server_ids::UUID[]);
 
 -- name: ResolveMcpServersForWrite :many
 -- Besides resolving slugs to ids, this returns everything attach-time
 -- validation needs to reject servers the assistant runtime cannot reach:
 -- the backend kind (tunnelled servers have no serving path), visibility,
--- and whether a Gram-hosted endpoint exists to build the /mcp/{slug} URL.
+-- and whether a Speakeasy-hosted endpoint exists to build the /mcp/{slug} URL.
+-- A canonical hosted wrapper may use its toolset's legacy mcp_slug address.
 SELECT
   ms.id,
   ms.slug,
   ms.visibility,
   (ms.tunneled_mcp_server_id IS NOT NULL)::bool AS tunneled,
-  EXISTS (
+  (ms.toolset_id IS NOT NULL AND ms.toolset_id = ms.id)::bool AS hosted,
+  (EXISTS (
     SELECT 1
     FROM mcp_endpoints me
     WHERE me.mcp_server_id = ms.id
+      AND me.project_id = ms.project_id
       AND me.custom_domain_id IS NULL
       AND me.deleted IS FALSE
-  ) AS has_gram_endpoint
+  ) OR (ms.toolset_id = ms.id AND EXISTS (
+    SELECT 1
+    FROM toolsets t
+    WHERE t.id = ms.toolset_id
+      AND t.project_id = ms.project_id
+      AND t.mcp_slug IS NOT NULL
+      AND t.deleted IS FALSE
+  )))::bool AS has_gram_endpoint
 FROM mcp_servers ms
 WHERE ms.project_id = @project_id
   AND ms.slug = ANY(@slugs::TEXT[])
   AND ms.deleted IS FALSE
 ORDER BY ms.id
 FOR NO KEY UPDATE OF ms;
-
--- name: ClearAssistantMcpServers :exec
-DELETE FROM assistant_mcp_servers
-WHERE assistant_id = @assistant_id
-  AND project_id = @project_id;
 
 -- name: AddAssistantMcpServers :copyfrom
 INSERT INTO assistant_mcp_servers (
@@ -569,7 +676,7 @@ RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_
 -- name: UpsertAssistantChat :exec
 -- user_id is the conversation owner — stamped on first insert so reads can
 -- scope to the user who started the chat. The dashboard source passes the
--- Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
+-- Speakeasy user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
 -- the existing user_id is preserved when already set so a later NULL-user-id
 -- retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 -- backfilled on first owned send so dashboard ownership checks accept the
@@ -1107,8 +1214,8 @@ WHERE project_id = @project_id
 
 -- name: ListAssistantRuntimesForReap :many
 -- Returns every runtime row for an assistant that still carries backend
--- metadata, regardless of soft-delete state. A stopped row whose Fly app
--- was not collected leaves its app_name in metadata and would otherwise
+-- metadata, regardless of soft-delete state. A stopped row whose resources
+-- were not collected retains backend metadata and would otherwise
 -- be invisible to deleted-aware queries.
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
@@ -1213,7 +1320,7 @@ WHERE r.state = @active_state
 ORDER BY r.updated_at ASC;
 
 -- name: MarkAssistantRuntimeReaped :exec
--- Records that the backend resource (e.g. Fly app) for this runtime has
+-- Records that the backend resource (e.g. sandbox claim) for this runtime has
 -- been torn down. Clearing backend_metadata_json removes it from the reap
 -- candidate set so the janitor stops re-scanning it.
 UPDATE assistant_runtimes
@@ -1232,7 +1339,7 @@ WHERE id = @runtime_id
 -- indefinitely. The NOT EXISTS guard restricts the candidate to the most
 -- recent non-reaped row per thread: ReserveAssistantRuntime copies the latest
 -- non-empty metadata into each new row, so a stale older sibling can share
--- `machine_id` with the current owner — destroying it would yank the live
+-- resource metadata with the current owner — destroying it would yank the live
 -- machine out from under a fresher row that is still inside its own TTL.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
@@ -1251,15 +1358,12 @@ ORDER BY r.updated_at ASC
 LIMIT @limit_count;
 
 -- name: MarkAssistantRuntimeMachineReaped :execrows
--- Per-thread reap: strips the machine slot from backend metadata while
--- preserving app-level fields (app_name, app_id, app_url, app_ip, region) so
--- the next admit for the same thread cold-launches into the same Fly app and
--- keeps its allocated IP and secrets. Filters by current state so a row that
--- raced into starting/active between selection and update is left alone — the
--- 0-rows return signals the caller to skip the destructive backend call.
+-- Per-thread reap: marks the stopped resource reaped while retaining backend
+-- metadata for full cleanup (e.g. local workspace volumes). Filters by current
+-- state so a row that raced into starting/active between selection and
+-- update is left alone.
 UPDATE assistant_runtimes
 SET state = @reaped_state,
-    backend_metadata_json = backend_metadata_json - 'machine_id' - 'last_boot_id',
     updated_at = clock_timestamp(),
     ended_at = COALESCE(ended_at, clock_timestamp()),
     deleted_at = COALESCE(deleted_at, clock_timestamp())
@@ -1272,6 +1376,9 @@ WHERE id = @runtime_id
 -- Stop failed mid-flight) re-enters the Status/Stop path idempotently.
 -- ErrNoRows means another actor (Stop, reaper, manual API) already finalized
 -- the row; callers must not then call Stop.
+--
+-- Only rows on an idle-expiring backend match; thread workflows on any other
+-- backend exit the expiry loop and leave the runtime up.
 --
 -- v2 (single-VM-per-assistant) rows pin assistant_thread_id to the admitting
 -- thread, but every thread workflow under the assistant runs its own warm
@@ -1297,6 +1404,7 @@ WHERE id = (
     AND r.state IN (@active_state, @expiring_state)
     AND r.deleted IS FALSE
     AND r.ended IS FALSE
+    AND r.backend = ANY(@idle_expiring_backends::text[])
   ORDER BY r.runtime_version DESC, r.created_at DESC
   LIMIT 1
 )
@@ -1304,6 +1412,58 @@ WHERE id = (
   AND state IN (@active_state, @expiring_state)
   AND deleted IS FALSE
   AND ended IS FALSE
+RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
+
+-- name: ListIdleAssistantRuntimes :many
+-- Idle-sweep candidates on an idle-expiring backend:
+--   - `active` v2 rows whose warm window lapsed before @warm_until_before, with
+--     no thread workflow left to expire them.
+--   - `expiring` rows untouched since @expiring_before, whose expire gave up
+--     before stopping the backend.
+-- Assistants with a turn in flight are skipped: warm_until only advances when
+-- a turn ends, so a long turn can outlive its window.
+SELECT r.id, r.project_id, a.warm_ttl_seconds
+FROM assistant_runtimes r
+JOIN assistants a
+  ON a.id = r.assistant_id
+ AND a.project_id = r.project_id
+ AND a.deleted IS FALSE
+WHERE r.runtime_version = 2
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.backend = ANY(@idle_expiring_backends::text[])
+  AND (
+    (r.state = @active_state AND r.warm_until < @warm_until_before)
+    OR (r.state = @expiring_state AND r.updated_at < @expiring_before)
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.assistant_id = r.assistant_id
+      AND e.project_id = r.project_id
+      AND e.deleted IS FALSE
+      AND e.status = @processing_status
+  )
+ORDER BY r.updated_at ASC
+LIMIT @max_rows;
+
+-- name: BeginExpireIdleAssistantRuntime :one
+-- Runtime-id counterpart of BeginExpireAssistantRuntime for the reaper's idle
+-- sweep. Takes `active` rows, and `expiring` rows untouched since
+-- @expiring_before so a stalled expire is retried rather than left holding the
+-- v2 unique index. ErrNoRows means another actor moved the row first.
+UPDATE assistant_runtimes
+SET
+  state = @expiring_state,
+  updated_at = clock_timestamp()
+WHERE id = @runtime_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND ended IS FALSE
+  AND (
+    state = @active_state
+    OR (state = @expiring_state AND updated_at < @expiring_before)
+  )
 RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
 
 -- name: RevertExpireAssistantRuntimeToActive :exec
@@ -1354,6 +1514,16 @@ INSERT INTO assistant_runtimes (
   @ended_at,
   @deleted_at
 );
+
+-- name: SetAssistantRuntimeStateForTest :exec
+-- Test fixture: forces a runtime row into a state with a chosen updated_at so
+-- tests can simulate an expire that stalled long ago.
+UPDATE assistant_runtimes
+SET
+  state = @state,
+  updated_at = @updated_at
+WHERE id = @runtime_id
+  AND project_id = @project_id;
 
 -- name: GetAssistantRuntime :one
 SELECT * FROM assistant_runtimes

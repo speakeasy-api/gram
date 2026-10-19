@@ -76,7 +76,7 @@ type Instance struct {
 	Issuer string
 
 	// OAuth21URL is the issuer URL of the OAuth 2.1 mode handler
-	// (Issuer + "/oauth2-1"). Use this wherever a Gram toolset or
+	// (Issuer + "/oauth2-1"). Use this wherever a Speakeasy toolset or
 	// external_oauth_server_metadata row references the upstream OAuth
 	// 2.1 authorization server.
 	OAuth21URL string
@@ -122,7 +122,7 @@ type LaunchOpts struct {
 	Key *rsa.PrivateKey
 
 	// TLS serves the instance over HTTPS with a self-signed certificate,
-	// for callers that require https, such as Gram's JWKS resolver. Trust
+	// for callers that require https, such as Speakeasy's JWKS resolver. Trust
 	// it with Instance.Client or Instance.RootCAs.
 	TLS bool
 }
@@ -305,7 +305,7 @@ func (i *Instance) RootCAs() *x509.CertPool {
 
 // OAuth21Metadata fetches the dev-idp's RFC 8414 authorization-server
 // metadata for the oauth2-1 mode. The bytes are suitable for storing in the
-// Gram-side external_oauth_server_metadata table.
+// Speakeasy-side external_oauth_server_metadata table.
 func (i *Instance) OAuth21Metadata(t *testing.T) []byte {
 	t.Helper()
 	return fetchMetadata(t, i.Client(), i.Issuer, oauth21.Prefix)

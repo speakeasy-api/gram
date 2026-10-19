@@ -351,17 +351,19 @@ func TestResolveClientIdentity_CrossProjectMemberFindsGatewayHandshake(t *testin
 
 	member := *gateway
 	// The member's own project: what dispatch needs, and not where the
-	// handshake record lives.
+	// handshake record lives. A gateway scope names one gateway uniquely, so
+	// the record is keyed without a project and the dispatch still finds it.
 	member.projectID = uuid.New()
-	member.clientInfoProjectID = gateway.projectID
 
 	identity, _ := resolveClientIdentity(ctx, logger, store, &member, nil)
 	require.Equal(t, "gateway-client", identity.Name)
 	require.Equal(t, "4.5.6", identity.Version)
 
-	// Without the override the lookup follows the member's project and misses.
-	unfixed := member
-	unfixed.clientInfoProjectID = uuid.Nil
-	missed, _ := resolveClientIdentity(ctx, logger, store, &unfixed, nil)
+	// A hosted scope keys by project, so the same member project misses —
+	// which is what the gateway scope exists to avoid.
+	hosted := member
+	hosted.clientInfoScope = ""
+	hosted.toolset = "some-toolset"
+	missed, _ := resolveClientIdentity(ctx, logger, store, &hosted, nil)
 	require.Empty(t, missed.Name)
 }

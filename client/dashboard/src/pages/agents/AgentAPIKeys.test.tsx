@@ -32,7 +32,6 @@ const mocks = vi.hoisted(() => ({
   toolsets: vi.fn(),
   mcpServers: vi.fn(),
   toolMetadata: vi.fn(),
-  flag: "enabled",
   org: "org_example",
   user: "user_example",
   projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
@@ -55,9 +54,6 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: mocks.user } }),
 }));
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ agents: mocks }) }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: mocks.flag }),
-}));
 vi.mock("@gram/client/react-query/listAPIKeys", () => ({
   useListAPIKeys: (request: unknown, security: unknown, options: object) =>
     useQuery({
@@ -288,7 +284,6 @@ beforeEach(() => {
   mocks.serverScoping = false;
   mocks.selectedServerId = "server_one";
   mocks.selectedIssuerId = undefined;
-  mocks.flag = "enabled";
   mocks.org = "org_example";
   mocks.user = "user_example";
   mocks.projects = [
@@ -609,68 +604,6 @@ describe("Agent API keys", () => {
     await screen.findByText("Example key");
     expect(screen.queryByText("secret_example_once")).toBeNull();
   });
-  it("closes creation and clears the secret on rollout loss", async () => {
-    const { change } = setup();
-    await createWithGrant();
-    await screen.findByText("secret_example_once");
-    mocks.flag = "disabled";
-    change();
-    expect(screen.queryByText("secret_example_once")).toBeNull();
-    mocks.flag = "enabled";
-    change();
-    await openCreate();
-    expect(screen.queryByText("secret_example_once")).toBeNull();
-  });
-  it("does not reveal an in-flight creation after rollout loss", async () => {
-    let resolve!: (value: unknown) => void;
-    mocks.create.mockImplementation(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        }),
-    );
-    const { change } = setup();
-    await createWithGrant();
-    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
-    mocks.flag = "disabled";
-    change();
-    mocks.list.mockClear();
-    resolve({ ...key, key: "secret_example_once" });
-    await waitFor(() =>
-      expect(screen.queryByText("secret_example_once")).toBeNull(),
-    );
-    expect(mocks.list).not.toHaveBeenCalled();
-    mocks.flag = "enabled";
-    change();
-    await openCreate();
-    expect(screen.queryByText("secret_example_once")).toBeNull();
-  });
-  it.each(["agent", "organization", "permission"])(
-    "clears known keys and confirmation on %s change while disabled",
-    async (kind) => {
-      const { change } = setup();
-      fireEvent.click(
-        await screen.findByRole("button", { name: /^Revoke API key/ }),
-      );
-      mocks.flag = "disabled";
-      change();
-      if (kind === "organization") mocks.org = "org_other";
-      change(
-        kind === "agent"
-          ? { ...agent, id: "agent_other" }
-          : kind === "permission"
-            ? {
-                ...agent,
-                permissions: { ...agent.permissions, authorize: false },
-              }
-            : agent,
-      );
-      expect(screen.queryByText("Example key")).toBeNull();
-      expect(
-        screen.queryByRole("button", { name: "Confirm revoke" }),
-      ).toBeNull();
-    },
-  );
   it("loads candidates only once creation opens, with nothing selected by default", async () => {
     mocks.listDelegableGrants.mockResolvedValue([
       {
@@ -713,16 +646,6 @@ describe("Agent API keys", () => {
       },
     ]);
   });
-  it.each(["disabled", "missing", "error", "loading"])(
-    "does not expose credential UI or discovery when flag is %s",
-    async (status) => {
-      mocks.flag = status;
-      setup();
-      expect(screen.queryByRole("button", { name: "Issue a key" })).toBeNull();
-      expect(mocks.listDelegableGrants).not.toHaveBeenCalled();
-      expect(mocks.list).not.toHaveBeenCalled();
-    },
-  );
   it.each([404, 500])(
     "shows list failure %s rather than empty",
     async (statusCode) => {
@@ -730,9 +653,7 @@ describe("Agent API keys", () => {
       setup();
       expect(await screen.findByRole("alert")).toHaveProperty(
         "textContent",
-        expect.stringContaining(
-          statusCode === 404 ? "unavailable" : "Could not load",
-        ),
+        expect.stringContaining("Could not load"),
       );
       expect(screen.queryByText(/No key issued yet/)).toBeNull();
     },
@@ -1032,15 +953,6 @@ describe("Agent API keys", () => {
       );
     },
   );
-  it("hides cached key rows and dialogs on rollout loss", async () => {
-    const { change } = setup();
-    await screen.findByText("Example key");
-    mocks.flag = "disabled";
-    change();
-    expect(screen.queryByText("Example key")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Issue a key" })).toBeNull();
-    expect(mocks.listDelegableGrants).not.toHaveBeenCalled();
-  });
   it.each([403, 500])(
     "withdraws reviewed permissions and refetches after issuance fails with %s",
     async (statusCode) => {

@@ -92,7 +92,7 @@ type ClaudePayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
-	// Optional endpoint hostname supplied by the Gram hook plugin.
+	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
 	HookHostname *string
 	// Optional per-invocation token reused across retries so the server stores a
 	// redelivered event exactly once.
@@ -154,7 +154,7 @@ type CodexHookResult struct {
 type CodexPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Optional endpoint hostname supplied by the Gram hook plugin.
+	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
 	HookHostname *string
 	// Optional per-invocation token reused across retries so the server stores a
 	// redelivered event exactly once.
@@ -203,7 +203,7 @@ type CursorHookResult struct {
 type CursorPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Optional endpoint hostname supplied by the Gram hook plugin.
+	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
 	HookHostname *string
 	// Optional per-invocation token reused across retries so the server stores a
 	// redelivered event exactly once.
@@ -308,9 +308,9 @@ type HookIngestData struct {
 	PromptAttachments []*HookPromptAttachmentEntry
 }
 
-// Canonical Gram feature event.
+// Canonical Speakeasy feature event.
 type HookIngestEvent struct {
-	// Canonical Gram hook event type.
+	// Canonical Speakeasy hook event type.
 	Type string
 	// RFC3339 timestamp from the local agent. Defaults to receive time when absent.
 	OccurredAt *string
@@ -329,7 +329,7 @@ type HookIngestSession struct {
 }
 
 // Metadata about the local hook adapter that translated a provider event into
-// the Gram hook contract.
+// the Speakeasy hook contract.
 type HookIngestSource struct {
 	// Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.
 	Adapter string

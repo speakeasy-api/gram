@@ -33,17 +33,16 @@ import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/wit
 import { WithdrawIssuerDialog } from "./WithdrawIssuerDialog";
 import { RemoveSubjectDialog } from "./RemoveSubjectDialog";
 import { Pencil, Plus } from "lucide-react";
-import {
-  RegisterIssuerSheet,
-  type RegisterIssuerValues,
-} from "./RegisterIssuerSheet";
+import { AccessRuleSheet } from "./custom/AccessRuleSheet";
+import { useCustomFlows } from "./custom/flows";
+import { PlatformFormSheet } from "./custom/PlatformFormSheet";
+import type {
+  AdmitSubjectInitialValues,
+  AdmitSubjectValues,
+  RegisterIssuerValues,
+} from "./formValues";
 import { changedIssuerFields } from "./issuerEdit";
 import { changedAdmissionFields } from "./admissionEdit";
-import {
-  AdmitSubjectSheet,
-  type AdmitSubjectInitialValues,
-  type AdmitSubjectValues,
-} from "./AdmitSubjectSheet";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
@@ -214,6 +213,8 @@ export function IssuerDetail({
       collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
     throwOnError: false,
   });
+  // Fetched with the page so the edit and access sheets open on their forms.
+  useCustomFlows();
 
   const issuer = useMemo(
     () => data?.issuers?.find((candidate) => candidate.id === issuerId),
@@ -483,7 +484,7 @@ export function IssuerDetail({
       <InlineEmptyState
         icon="cpu"
         heading="No machines allowed from this platform"
-        description="Trusting a platform allows nothing on its own. Allow access for a machine so it can exchange its identity token for a Gram session."
+        description="Trusting a platform allows nothing on its own. Allow access for a machine so it can exchange its identity token for a Speakeasy session."
       />
     );
   } else {
@@ -680,7 +681,7 @@ export function IssuerDetail({
       />
 
       {editValues && (
-        <RegisterIssuerSheet
+        <PlatformFormSheet
           open={editOpen}
           onOpenChange={setEditOpen}
           onSubmit={handleEdit}
@@ -690,7 +691,7 @@ export function IssuerDetail({
       )}
 
       {issuer && (
-        <AdmitSubjectSheet
+        <AccessRuleSheet
           open={admitOpen}
           onOpenChange={setAdmitOpen}
           onSubmit={handleAllow}
@@ -701,7 +702,7 @@ export function IssuerDetail({
       )}
 
       {issuer && editingAdmission && (
-        <AdmitSubjectSheet
+        <AccessRuleSheet
           open={editAdmissionOpen}
           onOpenChange={setEditAdmissionOpen}
           onSubmit={handleEditAdmission}

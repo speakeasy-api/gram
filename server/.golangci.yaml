@@ -91,6 +91,12 @@ linters:
         linters:
           - exhaustruct
         text: InsertAuditLogParams is missing fields ActingSurface, ActingClientID
+      # The analytics catalog declares each field with only what it has; an
+      # omitted field is its zero value by design, and spelling every empty
+      # one out hides the declaration behind noise.
+      - path: internal/telemetry/analytics/datasets\.go
+        linters:
+          - exhaustruct
       - path: internal/dns/net_resolver\.go
         linters:
           - wrapcheck
@@ -224,7 +230,7 @@ linters:
     custom:
       glint:
         type: module
-        description: Gram-specific lint rules.
+        description: Speakeasy-specific lint rules.
         original-url: github.com/speakeasy-api/gram/glint
         settings:
           rules:

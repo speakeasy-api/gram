@@ -25,7 +25,7 @@ export type HooksNumberCodexRequest = {
    */
   gramProject?: string | undefined;
   /**
-   * Optional endpoint hostname supplied by the Gram hook plugin.
+   * Optional endpoint hostname supplied by the Speakeasy hook plugin.
    */
   xGramHookHostname?: string | undefined;
   /**

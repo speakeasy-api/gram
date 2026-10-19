@@ -12,7 +12,7 @@ var ChecklistItem = Type("IdentityProviderConnectionChecklistItem", func() {
 	Description("One step the organization administrator completes in the identity provider's console. Ordered; keys are stable across responses.")
 	Required("key", "group", "title", "description", "details")
 	Attribute("key", String, "Stable step identifier.", func() {
-		Enum("add_oin_app", "create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id", "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection")
+		Enum("add_oin_app", "create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id", "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "add_agent_public_key", "first_resource_connection")
 	})
 	Attribute("group", String, "Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).", func() {
 		Enum("connect", "cross_app_access")
@@ -102,7 +102,7 @@ var ListApplicationsResult = Type("ListIdentityProviderConnectionApplicationsRes
 })
 
 var Connection = Type("OktaIdentityProviderConnection", func() {
-	Description("An organization's Okta connection: the service application Gram authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.")
+	Description("An organization's Okta connection: the service application Speakeasy authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.")
 	Required("id", "organization_id", "provider", "status", "org_url", "issuer_url", "listing_mode", "client_id_submitted", "dpop_required", "required_scopes", "granted_scopes", "missing_scopes", "verification_reasons", "checklist", "applications_sync", "created_at", "updated_at")
 	Attribute("id", String, "Connection ID.", func() {
 		Format(FormatUUID)
@@ -122,6 +122,9 @@ var Connection = Type("OktaIdentityProviderConnection", func() {
 	Attribute("jwks_url", String, "Public JWKS URL the Okta app is configured to trust for private_key_jwt. Omitted for connections installed from the Okta Integration Network, which authenticate with a client secret.")
 	Attribute("client_id", String, "Okta application client ID. Omitted until submitted.")
 	Attribute("client_id_submitted", Boolean, "Whether the real Okta client ID has replaced the provisioning placeholder.")
+	Attribute("remote_session_issuer_id", String, "Organization remote session issuer that backs this connection. Omitted until the managed client is provisioned.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("dpop_required", Boolean, "Whether Okta issued a DPoP-bound token at the last verification.")
 	Attribute("required_scopes", ArrayOf(String), "Okta API scopes the integration needs.")
 	Attribute("granted_scopes", ArrayOf(String), "Scopes Okta granted at the last verification.")

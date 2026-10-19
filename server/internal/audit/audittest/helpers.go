@@ -26,7 +26,7 @@ type LogRecord struct {
 	ActorDisplayName *string
 	ActorDisplay     string
 	// The feed returns this alongside the display name, and the staff mask
-	// clears it only for an actor id that resolves to a Gram user.
+	// clears it only for an actor id that resolves to a Speakeasy user.
 	ActorSlug      string
 	SubjectID      string
 	SubjectType    string

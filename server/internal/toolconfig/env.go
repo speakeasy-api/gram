@@ -160,7 +160,7 @@ type ToolCallEnv struct {
 	SystemEnv  *CaseInsensitiveEnv
 	UserConfig *CaseInsensitiveEnv
 	OAuthToken string // OAuth token for external MCP servers (empty if not applicable)
-	GramEmail  string // Authenticated Gram user's email (empty if not applicable)
+	GramEmail  string // Authenticated Speakeasy user's email (empty if not applicable)
 	// GramChatID is the authoritative assistant chat UUID when supplied by the caller.
 	GramChatID string
 	// MCPClient identifies the MCP caller, when the tool was called over MCP.

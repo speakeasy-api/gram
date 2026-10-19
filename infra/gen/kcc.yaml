@@ -87,6 +87,7 @@ pubsub:
             string account_type = 8;
             string billing_mode = 9;
             bool replayed = 10;
+            map<string, string> attributes = 11;
           }
           string id = 1;
           Type type = 2;
@@ -1289,6 +1290,7 @@ pubsub:
           string hook_source = 23;
           string policy_link_reason = 26;
           string external_conversation_id = 27;
+          bool run_judge = 28;
           string prior_user_request = 16;
           string recent_untrusted_content = 17;
           message ToolCall {
@@ -1331,6 +1333,7 @@ pubsub:
           string hook_source = 24;
           string policy_link_reason = 25;
           string external_conversation_id = 26;
+          bool run_judge = 27;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -1350,6 +1353,185 @@ pubsub:
           string global_role_id = 3;
           string bootstrap_organization_id = 4;
           string cursor = 5;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-outcome
+    name: gram-sigint-v1-outcome
+    spec:
+      definition: |
+        edition = "2024";
+        message Outcome {
+          message Actor {
+            string user_id = 1;
+            string external_user_id = 2;
+            string user_email = 3;
+          }
+          message Account {
+            string user_account_id = 1;
+            string account_type = 2;
+            string billing_mode = 3;
+          }
+          message Event {
+            string kind = 1;
+            string id = 2;
+            string occurred_at = 3;
+            oneof context {
+              ConversationMessage conversation_message = 4;
+              ToolCall tool_call = 5;
+            }
+          }
+          message ConversationMessage {
+            enum Role {
+              ROLE_UNSPECIFIED = 0;
+              ROLE_USER = 1;
+              ROLE_ASSISTANT = 2;
+            }
+            string conversation_id = 1;
+            Role role = 2;
+          }
+          message ToolCall {
+            string tool_name = 1;
+            string tool_call_id = 2;
+            string mcp_server_id = 3;
+          }
+          message Input {
+            string strategy = 1;
+            int32 requested_message_count = 2;
+            int32 message_count = 3;
+            bool truncated = 4;
+          }
+          enum Status {
+            STATUS_UNSPECIFIED = 0;
+            STATUS_NOT_APPLICABLE = 1;
+            STATUS_DRAFT = 2;
+            STATUS_FAILED = 3;
+          }
+          string id = 1;
+          string evaluation_attempt_id = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          Event event = 5;
+          string sensor_id = 6;
+          string sensor_slug = 7;
+          string evaluated_at = 8;
+          string definition_hash = 9;
+          string configured_model = 10;
+          repeated string models = 11;
+          string compiler_version = 12;
+          Actor actor = 13;
+          string billing_user_id = 14;
+          string source = 15;
+          Account account = 16;
+          string assistant_id = 17;
+          bool replayed = 18;
+          Status status = 19;
+          string failure_reason = 20;
+          reserved 21;
+          string provider = 22;
+          map<string, string> attributes = 23;
+          Input input = 24;
+          string trigger_kind = 25;
+          string run_id = 26;
+          string evaluation_requested_at = 27;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading
+    spec:
+      definition: |
+        edition = "2024";
+        message Reading {
+          message Actor {
+            string user_id = 1;
+            string external_user_id = 2;
+            string user_email = 3;
+          }
+          message Account {
+            string user_account_id = 1;
+            string account_type = 2;
+            string billing_mode = 3;
+          }
+          message Event {
+            string kind = 1;
+            string id = 2;
+            string occurred_at = 3;
+            oneof context {
+              ConversationMessage conversation_message = 4;
+              ToolCall tool_call = 5;
+            }
+          }
+          message ConversationMessage {
+            enum Role {
+              ROLE_UNSPECIFIED = 0;
+              ROLE_USER = 1;
+              ROLE_ASSISTANT = 2;
+            }
+            string conversation_id = 1;
+            Role role = 2;
+          }
+          message ToolCall {
+            string tool_name = 1;
+            string tool_call_id = 2;
+            string mcp_server_id = 3;
+          }
+          message Probability {
+            string signal_id = 1;
+            double probability = 2;
+            string signal_slug = 3;
+          }
+          message MultiLabel {
+            repeated Probability signals = 1;
+          }
+          message Choice {
+            string selected_signal_id = 1;
+            repeated Probability distribution = 2;
+            double confidence = 3;
+            string selected_signal_slug = 4;
+          }
+          message Score {
+            double expected_index = 1;
+            repeated Probability distribution = 2;
+            double confidence = 3;
+          }
+          string id = 1;
+          string evaluation_attempt_id = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          Event event = 5;
+          string sensor_id = 6;
+          string sensor_slug = 7;
+          string evaluated_at = 8;
+          string definition_hash = 9;
+          string configured_model = 10;
+          repeated string models = 11;
+          string compiler_version = 12;
+          Actor actor = 13;
+          string billing_user_id = 14;
+          string source = 15;
+          Account account = 16;
+          string assistant_id = 17;
+          bool replayed = 18;
+          oneof result {
+            MultiLabel multi_label = 19;
+            Choice choice = 20;
+            Score score = 21;
+          }
+          string provider = 22;
+          map<string, string> attributes = 23;
+          message Input {
+            string strategy = 1;
+            int32 requested_message_count = 2;
+            int32 message_count = 3;
+            bool truncated = 4;
+          }
+          Input input = 24;
+          string trigger_kind = 25;
+          string run_id = 26;
+          string evaluation_requested_at = 27;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1834,6 +2016,62 @@ pubsub:
         name: gram-role-distribution-v1-role-distribution-setup-requested-v1
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-evaluator
+      topic_proto_message: gram-conversation-v1-message-event
+    name: gram-sigint-v1-evaluator
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-conversation-v1-message-event
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-lake-primary
+      topic_proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-lake-primary
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-sigint-v1-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-outcome-ch-writer
+      topic_proto_message: gram-sigint-v1-outcome
+    name: gram-sigint-v1-outcome-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-sigint-v1-outcome
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading-ch-writer
+      topic_proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-sigint-v1-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-noop
       topic_proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-noop
@@ -2129,6 +2367,26 @@ pubsub:
           name: gram-role-distribution-v1-role-distribution-setup-requested-v1
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-outcome
+    name: gram-sigint-v1-outcome
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-sigint-v1-outcome
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-sigint-v1-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-log-record
     spec:
@@ -2157,3 +2415,16 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-webhooks-v1-event
+storage:
+  apis:
+  - storage.googleapis.com
+  buckets:
+  - annotations:
+      cnrm.cloud.google.com/deletion-policy: abandon
+      cnrm.cloud.google.com/force-destroy: "false"
+    labels:
+      managed_by: proto-pubsub-orchestrator
+    name: lake
+    spec:
+      publicAccessPrevention: enforced
+      uniformBucketLevelAccess: true

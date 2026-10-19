@@ -93,6 +93,7 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 	require.NoError(t, err)
 	require.Equal(t, issuerAuditBefore+1, issuerAuditAfter)
 	require.Equal(t, clientAuditBefore+1, clientAuditAfter)
+	requireLatestClientCreateSnapshot(t, ctx, ti, result.Client.ID)
 }
 
 func TestCommitServerIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
@@ -165,6 +166,129 @@ func TestCommitServerIdentityConfigurationAutoRegistersOnceWithDCR(t *testing.T)
 	require.NoError(t, err)
 	require.True(t, stored.RemoteSessionClient.ClientSecretEncrypted.Valid)
 	require.NotEqual(t, "registered-secret", stored.RemoteSessionClient.ClientSecretEncrypted.String)
+}
+
+// An automatically registered client stores no scope, but its registration
+// still names what logins discover for the server's protected resource.
+func TestCommitServerIdentityConfigurationNamesDiscoveredScopesAtRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-discovered-target")
+	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), closedTargetURL("dcr-discovered-target"), protectedResourceSeed{scopesSupported: []string{"files:read", "files:write"}})
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "discovered-client",
+			"client_secret":              "discovered-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-discovered-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "files:read files:write", requestedScope.Load())
+
+	clientID, err := uuid.Parse(result.Client.ID)
+	require.NoError(t, err)
+	stored, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ProjectID:      projectIDFromContext(t, ctx),
+		OrganizationID: activeOrganizationID(t, ctx),
+		ID:             clientID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, stored.RemoteSessionClient.Scope, "the discovered scopes are not stored on the client")
+}
+
+// With no resource row the registration names what the login would then
+// request: the provider's scope override.
+func TestCommitServerIdentityConfigurationNamesProviderScopesWithoutResourceRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-override-target")
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "override-client",
+			"client_secret":              "override-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-override-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+	_, err := repo.New(ti.conn).UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
+		ScopeOverride: []string{"tickets:read"},
+		ID:            providerID,
+		ProjectID:     conv.ToNullUUID(projectIDFromContext(t, ctx)),
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "tickets:read", requestedScope.Load())
+}
+
+// A cached row past its last-good window does not decide: registration reads
+// the resource live, as the first login will.
+func TestCommitServerIdentityConfigurationReadsTheResourceLiveAtRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	resource, hits := fakeResource(t, []string{"files:read", "files:write"})
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dcr-live-target-issuer")
+	targetID := createServerIdentityTargetAt(t, ctx, ti, "dcr-live-target", resource.URL, userIssuerID)
+	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), resource.URL, protectedResourceSeed{scopesSupported: []string{"old:read"}, fetchedAgo: 8 * 24 * time.Hour})
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "live-client",
+			"client_secret":              "live-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-live-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "files:read files:write", requestedScope.Load())
+	require.EqualValues(t, 1, hits.Load())
 }
 
 func TestCommitServerIdentityConfigurationReturnsDCRRefusalWithoutChangingState(t *testing.T) {
@@ -537,7 +661,19 @@ func createServerIdentityTarget(t *testing.T, ctx context.Context, ti *testInsta
 	return createServerIdentityTargetOnIssuer(t, ctx, ti, slug, userIssuerID), userIssuerID
 }
 
+// createServerIdentityTargetOnIssuer serves from loopback port 0, which no
+// listener can hold, so the live resource read at registration fails fast
+// without leaving the host.
 func createServerIdentityTargetOnIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string, userIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	return createServerIdentityTargetAt(t, ctx, ti, slug, closedTargetURL(slug), userIssuerID)
+}
+
+func closedTargetURL(slug string) string {
+	return "http://127.0.0.1:0/" + slug
+}
+
+func createServerIdentityTargetAt(t *testing.T, ctx context.Context, ti *testInstance, slug, serverURL string, userIssuerID uuid.UUID) uuid.UUID {
 	t.Helper()
 	projectID := projectIDFromContext(t, ctx)
 	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
@@ -546,7 +682,7 @@ func createServerIdentityTargetOnIssuer(t *testing.T, ctx context.Context, ti *t
 		Name:          conv.ToPGText(slug),
 		Slug:          conv.ToPGText(slug),
 		TransportType: "streamable-http",
-		Url:           "https://mcp.example.com/" + slug,
+		Url:           serverURL,
 	})
 	require.NoError(t, err)
 	target, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{

@@ -4,7 +4,7 @@ package identitychaining
 type Confidence string
 
 const (
-	// ConfidenceVerified: Gram checked the fact itself.
+	// ConfidenceVerified: Speakeasy checked the fact itself.
 	ConfidenceVerified Confidence = "verified"
 
 	// ConfidenceInferred: a specific provider error code implies it.

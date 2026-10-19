@@ -145,6 +145,64 @@ func TestAssign_IgnoresInputOrder(t *testing.T) {
 	}
 }
 
+func TestPick_IsolatedPackagesTakeTheLastShards(t *testing.T) {
+	t.Parallel()
+
+	const total = 5
+	pkgs := testPackages(40)
+	isolated := []string{"example.com/mod/pkg07", "example.com/mod/pkg31"}
+
+	got4, err := pick(pkgs, isolated, 4, total)
+	require.NoError(t, err)
+	require.Equal(t, []pkg{pkgs[7]}, got4)
+
+	got5, err := pick(pkgs, isolated, 5, total)
+	require.NoError(t, err)
+	require.Equal(t, []pkg{pkgs[31]}, got5)
+
+	var shared []string
+	for index := 1; index <= 3; index++ {
+		got, err := pick(pkgs, isolated, index, total)
+		require.NoError(t, err)
+		for _, p := range got {
+			shared = append(shared, p.ImportPath)
+		}
+	}
+
+	var want []string
+	for _, p := range pkgs {
+		if !slices.Contains(isolated, p.ImportPath) {
+			want = append(want, p.ImportPath)
+		}
+	}
+
+	slices.Sort(shared)
+	require.Equal(t, want, shared, "the other shards must partition everything that is not isolated")
+}
+
+func TestPick_WithoutIsolationMatchesAssign(t *testing.T) {
+	t.Parallel()
+
+	pkgs := testPackages(20)
+	for index := 1; index <= 4; index++ {
+		got, err := pick(pkgs, nil, index, 4)
+		require.NoError(t, err)
+		require.Equal(t, assign(pkgs, index, 4), got)
+	}
+}
+
+func TestPick_Invalid(t *testing.T) {
+	t.Parallel()
+
+	pkgs := testPackages(5)
+
+	_, err := pick(pkgs, []string{"example.com/mod/missing"}, 1, 2)
+	require.ErrorContains(t, err, `isolated package "example.com/mod/missing" is not a test package`)
+
+	_, err = pick(pkgs, []string{"example.com/mod/pkg00", "example.com/mod/pkg01"}, 1, 2)
+	require.ErrorContains(t, err, "2 isolated packages need more than 2 shards")
+}
+
 // testPackages builds n packages whose weights vary over a wide range so that
 // balancing has something to do.
 func testPackages(n int) []pkg {

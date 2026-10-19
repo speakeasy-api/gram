@@ -142,7 +142,7 @@ SELECT EXISTS(
 ) AS exists;
 
 -- name: HasActiveOrganizationUser :one
--- Returns whether a Gram user is an active member of the organization.
+-- Returns whether a Speakeasy user is an active member of the organization.
 SELECT EXISTS(
   SELECT 1
   FROM users
@@ -185,7 +185,7 @@ WHERE our.organization_id = @organization_id
   AND u.deleted_at IS NULL;
 
 -- name: ListActiveOrganizationUserIDs :many
--- Returns the Gram user IDs of active members of the organization. Used to
+-- Returns the Speakeasy user IDs of active members of the organization. Used to
 -- suppress challenges raised by users outside the organization (e.g. Speakeasy
 -- staff impersonating a customer org) from the Challenge UI.
 SELECT u.id
@@ -196,7 +196,7 @@ WHERE our.organization_id = @organization_id
   AND u.deleted_at IS NULL;
 
 -- name: FilterOrganizationMemberUserIDs :many
--- Returns the subset of the given Gram user IDs that are active members of
+-- Returns the subset of the given Speakeasy user IDs that are active members of
 -- the organization. Used to mask Speakeasy staff identities in customer-facing
 -- audit feeds.
 SELECT user_id::text AS user_id
@@ -572,7 +572,7 @@ UNION ALL
 SELECT user_id FROM inserted;
 
 -- name: SyncUserOrganizationRoleAssignments :exec
--- Declaratively set all WorkOS role assignments for a known Gram user in an
+-- Declaratively set all WorkOS role assignments for a known Speakeasy user in an
 -- org. Role slugs are resolved from role sync tables and stale assignments for
 -- this WorkOS user are removed.
 WITH input_role_urns AS (
@@ -609,7 +609,7 @@ upserted AS (
         @workos_last_event_id
     FROM input_role_urns
     ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
-        -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
+        -- COALESCE preserves a backfilled user_id if the sync fires before the Speakeasy user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,
         workos_updated_at = EXCLUDED.workos_updated_at,
@@ -723,7 +723,7 @@ WHERE organization_id = @organization_id
   AND deleted_at IS NULL;
 
 -- name: ReassignOrganizationUserWorkOSID :exec
--- Login reuses a Gram user after WorkOS delete-and-signup, so membership
+-- Login reuses a Speakeasy user after WorkOS delete-and-signup, so membership
 -- rows still pointing at a previous WorkOS user id must follow the new one.
 -- Matches any leftover id so a retry after overwrite still converges.
 UPDATE organization_user_relationships
@@ -795,9 +795,9 @@ ORDER BY role_urn;
 SELECT pg_advisory_xact_lock(hashtext(@slug));
 
 -- name: CreateOrganizationMetadataFromWorkOSWithRequests :one
--- Create a Gram organization row from a WorkOS organization event. The caller
--- chooses the Gram org ID from WorkOS external_id or a deterministic fallback.
--- Slug is a Gram-owned initial value and is never updated by WorkOS sync.
+-- Create a Speakeasy organization row from a WorkOS organization event. The caller
+-- chooses the Speakeasy org ID from WorkOS external_id or a deterministic fallback.
+-- Slug is a Speakeasy-owned initial value and is never updated by WorkOS sync.
 WITH written AS (
 INSERT INTO organization_metadata (
     id,
@@ -845,9 +845,9 @@ SELECT
 FROM written;
 
 -- name: UpsertOrganizationMetadataFromWorkOSWithRequests :one
--- Upsert a Gram organization row from a WorkOS organization event.
--- The caller must only use this when WorkOS external_id is set and is the Gram
--- org ID. Slug is a Gram-owned initial value chosen by the caller and is never
+-- Upsert a Speakeasy organization row from a WorkOS organization event.
+-- The caller must only use this when WorkOS external_id is set and is the Speakeasy
+-- org ID. Slug is a Speakeasy-owned initial value chosen by the caller and is never
 -- updated by WorkOS sync after creation.
 WITH written AS (
 INSERT INTO organization_metadata (
@@ -903,8 +903,8 @@ FROM written;
 
 -- name: UpdateOrganizationMetadataFromWorkOS :one
 -- Update an existing organization row from a WorkOS organization event. Caller
--- must have already resolved the Gram organization and passed the row through
--- ShouldProcessEvent. WorkOS does not own Gram slugs, so this only updates
+-- must have already resolved the Speakeasy organization and passed the row through
+-- ShouldProcessEvent. WorkOS does not own Speakeasy slugs, so this only updates
 -- WorkOS-owned metadata and cursor columns.
 UPDATE organization_metadata
 SET name = @name,
@@ -1412,3 +1412,34 @@ JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL
 JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
 WHERE s.slug = ANY(@step_slugs::text[])
 ORDER BY s.slug, m.sort_order, m.slug;
+
+-- Acceptance is immutable even after redemption. Call only during signup or a
+-- verified first partner Checkout, under the billing/offer acceptance locks.
+-- name: AttributePartnerSignup :execrows
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
+SELECT sqlc.narg(organization_id), @stripe_promotion_code_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_promotion_applications WHERE organization_id = sqlc.narg(organization_id)
+)
+ON CONFLICT DO NOTHING;
+
+-- name: GetOrganizationPromotionApplication :one
+SELECT * FROM organization_promotion_applications
+WHERE organization_id = @organization_id::text
+ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+LIMIT 1;
+
+-- name: GetEnabledSignupOffer :one
+SELECT id FROM signup_offers
+WHERE stripe_promotion_code_id = @stripe_promotion_code_id
+  AND signup_flow = 'tailscale_partner_gateway' AND enabled
+FOR SHARE;
+
+-- name: GetAcceptedSignupOfferFlow :one
+-- All accepted applications originate in the partner gateway signup path.
+-- Derive display context from that immutable acceptance, not mutable offer mappings.
+-- Persist the accepted flow before introducing another signup flow or ledger writer.
+SELECT 'tailscale_partner_gateway'::text AS signup_flow
+FROM organization_promotion_applications
+WHERE organization_id = @organization_id::text
+LIMIT 1;

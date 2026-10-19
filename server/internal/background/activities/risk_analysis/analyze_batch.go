@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -244,6 +245,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	args.ApprovedEmailDomains = ApprovedEmailDomainsFromConfig(policy.AnalyzerConfig)
 	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
 	args.DetectionScopes = DetectionScopesFromConfig(policy.AnalyzerConfig)
+	judgeInHandlers := false
+	if policy.PolicyType == PolicyTypePromptBased || slices.Contains(args.Sources, SourcePromptInjection) {
+		judgeInHandlers = a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
+	}
 
 	messages, err := a.fetchContent(ctx, args)
 	if err != nil {
@@ -292,12 +297,12 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 		switch policy.PolicyType {
 		case PolicyTypePromptBased:
-			findings, err = a.scanPromptPolicy(ctx, args, policy, messages, masks)
+			findings, err = a.scanPromptPolicy(ctx, args, policy, messages, masks, judgeInHandlers)
 			if err != nil {
 				return nil, err
 			}
 		default:
-			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks)
+			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks, judgeInHandlers)
 			if err != nil {
 				return nil, err
 			}

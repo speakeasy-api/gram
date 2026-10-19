@@ -267,7 +267,7 @@ var tumBreakdownDims = []string{"model", "hook_source", "provider", "account_typ
 //
 // Tokens under management are the agent traffic the platform OBSERVES from
 // the customer's users (Claude Code, Cursor, Codex sessions), excluding
-// cache reads — never the inference Gram itself spends (risk-policy judges,
+// cache reads — never the inference Speakeasy itself spends (risk-policy judges,
 // hosted chat surfaces). Reads attribute_metrics_summaries scoped exactly
 // like the billed totals (same source exclusions and measure), so the page
 // reports the billed population exactly.

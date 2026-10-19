@@ -70,7 +70,7 @@ func (u *rotatingUpstream) refreshAttempts() int {
 }
 
 // consumedReplays reports how many grants presented an already-rotated refresh
-// token. This mock answers one with a 401, which Gram recovers from, but a
+// token. This mock answers one with a 401, which Speakeasy recovers from, but a
 // provider implementing reuse detection revokes the whole token family instead,
 // killing the winner's fresh pair with no local symptom.
 func (u *rotatingUpstream) consumedReplays() int {

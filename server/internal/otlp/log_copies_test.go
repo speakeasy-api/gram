@@ -6,7 +6,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// logCopy describes one self-contained Gram copy of the OTLP log schema.
+// logCopy describes one self-contained Speakeasy copy of the OTLP log schema.
 // Wire round-trip and descriptor drift tests range over this registry.
 type logCopy struct {
 	name                 string

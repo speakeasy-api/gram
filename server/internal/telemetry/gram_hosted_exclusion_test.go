@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// insertGramHostedCompletionLog writes a completion row the way Gram-hosted
+// insertGramHostedCompletionLog writes a completion row the way Speakeasy-hosted
 // inference produces them (completionTelemetryIdentity in the openrouter
 // client): resource URN chat:completion, a non-empty hook_source naming the
 // surface, and — for platform-initiated sources like the risk-analysis
@@ -139,7 +139,7 @@ func TestEnrollmentDirectory_ExcludesGramHostedPhantomIdentities(t *testing.T) {
 	}
 }
 
-// The per-user surfaces must never count Gram-hosted inference as the
+// The per-user surfaces must never count Speakeasy-hosted inference as the
 // employee's usage: judge completions log under the session owner's email,
 // and before the exclusion one employee's page showed 60M+ judge tokens as
 // their own. Org-scope reads deliberately keep counting them, matching the
@@ -233,7 +233,7 @@ func TestEmployeeSurfaces_ExcludeGramHostedInference(t *testing.T) {
 }
 
 // An external user (Elements / hosted-chat consumer) has NO token-bearing
-// rows other than Gram-hosted completions — every hosted completion carries
+// rows other than Speakeasy-hosted completions — every hosted completion carries
 // a hook_source from the exclusion set. The exclusion therefore applies to
 // employee scope only; applying it to external scope would erase these users
 // entirely.

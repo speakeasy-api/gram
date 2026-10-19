@@ -172,7 +172,7 @@ func TestRiskPolicyPlatformMCPScopeValidatesListsAndMatches(t *testing.T) {
 	require.Len(t, catalog.Toolsets, 1)
 	require.Equal(t, platformID.String(), catalog.Toolsets[0].ID)
 	require.Equal(t, slug, catalog.Toolsets[0].Slug)
-	require.Equal(t, "Gram managed assistant tools", catalog.Toolsets[0].Name)
+	require.Equal(t, "Speakeasy managed assistant tools", catalog.Toolsets[0].Name)
 	require.Len(t, catalog.Toolsets[0].Tools, 1)
 	require.Equal(t, "danger", catalog.Toolsets[0].Tools[0].Name)
 	require.NotNil(t, catalog.Toolsets[0].Tools[0].Annotations)

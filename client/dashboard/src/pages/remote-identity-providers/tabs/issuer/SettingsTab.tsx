@@ -3,9 +3,9 @@ import { RequireScope } from "@/components/require-scope";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Label } from "@/components/ui/Label";
-import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { ScopeMultiSelect } from "@/lib/remote-identity";
 import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
@@ -16,7 +16,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ExistingIssuerLink } from "../../ExistingIssuerLink";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   EndpointsFields,
@@ -57,14 +57,6 @@ export function SettingsTab({
   // on the next unrelated save.
   const [scopeOverride, setScopeOverride] = useState<string[]>(
     issuer.scopeOverride ?? [],
-  );
-  // Typed scopes join the list so the menu shows every selection.
-  const scopeOptions = useMemo(
-    () =>
-      [...new Set([...(issuer.scopesSupported ?? []), ...scopeOverride])].map(
-        (scope) => ({ label: scope, value: scope }),
-      ),
-    [issuer.scopesSupported, scopeOverride],
   );
   // Undefined until the operator flips the switch, so it tracks the saved
   // value and a save only sends the flag when it was deliberately changed:
@@ -111,6 +103,8 @@ export function SettingsTab({
       jwksUri: issuer.jwksUri ?? "",
       scopesSupported: issuer.scopesSupported ?? [],
       grantTypesSupported: issuer.grantTypesSupported ?? [],
+      authorizationGrantProfilesSupported:
+        issuer.authorizationGrantProfilesSupported ?? [],
       responseTypesSupported: issuer.responseTypesSupported ?? [],
       tokenEndpointAuthMethodsSupported:
         issuer.tokenEndpointAuthMethodsSupported ?? [],
@@ -245,6 +239,7 @@ export function SettingsTab({
           registrationEndpoint,
           jwksUri,
           discoveredSnapshot,
+          savedIssuerUrl: issuer.issuer,
           scopeOverride,
           omitScopeFallback:
             omitScopeFallback !== undefined &&
@@ -376,29 +371,24 @@ export function SettingsTab({
 
       <SettingsSection
         title="Scopes"
-        description="When set, the override is requested exactly as chosen in place of this provider's supported scopes."
+        description="Requested exactly as chosen when neither the client nor the MCP server names scopes, in place of this provider's supported scopes."
       >
         <div className="flex flex-col gap-1.5">
           <Label id="scope-override-label" htmlFor="scope-override">
             Scope override
           </Label>
-          <MultiSelect
+          <ScopeMultiSelect
             id="scope-override"
-            aria-labelledby="scope-override-label"
-            options={scopeOptions}
+            labelId="scope-override-label"
+            options={issuer.scopesSupported ?? []}
             value={scopeOverride}
             onValueChange={setScopeOverride}
             placeholder="No override"
-            emptyIndicator="Type a scope to add it."
-            badgeClassName="normal-case tracking-normal"
-            maxCount={8}
-            creatable
-            caseSensitiveCreate
-            hideSelectAll
+            disabled={!hasOrgAdminScope}
           />
           <Text small muted>
-            Choose from the scopes this provider advertises, or type one to add
-            it.
+            Choose from the scopes this identity provider advertises, or type
+            one to add it.
           </Text>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -456,7 +446,7 @@ export function SettingsTab({
       </div>
 
       <div className="border-destructive/30 flex flex-col gap-2 border p-4">
-        <Text className="font-medium">Danger Zone</Text>
+        <Text className="font-medium">Danger zone</Text>
         <Text small muted>
           Deleting this provider is permanent. All clients must be deleted
           first.

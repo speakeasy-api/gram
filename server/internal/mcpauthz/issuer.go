@@ -23,7 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
 
-// Header is reserved for Gram's signed caller assertion, without a Bearer prefix.
+// Header is reserved for Speakeasy's signed caller assertion, without a Bearer prefix.
 const Header = "X-Speakeasy-Identity"
 
 // Lifetime bounds the bearer assertion's replay window.

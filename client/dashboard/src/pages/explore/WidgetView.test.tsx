@@ -32,6 +32,7 @@ vi.mock("react-chartjs-2", () => ({
 vi.mock("@/lib/theme", () => ({ useIsDarkTheme: () => false }));
 vi.mock("@/components/chart/useSeriesColors", () => ({
   useSeriesColors: () => ["#000", "#111"],
+  useOtherSeriesColor: () => "#888",
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({

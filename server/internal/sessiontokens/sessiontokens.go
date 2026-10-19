@@ -1,5 +1,5 @@
 // Package sessiontokens implements the product-neutral JWT and revocation
-// primitives used by Gram-issued session tokens.
+// primitives used by Speakeasy-issued session tokens.
 package sessiontokens
 
 import (
@@ -20,14 +20,14 @@ type RevocationChecker interface {
 	IsTokenRevoked(ctx context.Context, jti string) (bool, error)
 }
 
-// SessionClaims is the standard claim shape for Gram-issued user sessions.
+// SessionClaims is the standard claim shape for Speakeasy-issued user sessions.
 type SessionClaims struct {
 	jwt.RegisteredClaims
 
 	ClientID string `json:"client_id,omitempty"`
 }
 
-// FirstPartyClientID identifies a token minted for a Gram surface without a
+// FirstPartyClientID identifies a token minted for a Speakeasy surface without a
 // registered OAuth client. It is deliberately not an HTTPS URL: URL-shaped
 // client IDs are resolved as OAuth Client ID Metadata Documents.
 const FirstPartyClientID = "client:first-party"
@@ -247,7 +247,7 @@ func validSuppliedJTI(jti string) bool {
 }
 
 // VerifiedJTI extracts a JTI after verifying the token's signature. It skips
-// expiry validation so clients can revoke an expired token, but a valid Gram
+// expiry validation so clients can revoke an expired token, but a valid Speakeasy
 // signature is required before the caller can affect the revocation cache.
 func (s *Signer) VerifiedJTI(token string) (string, error) {
 	claims, err := s.signatureVerifiedClaims(token)

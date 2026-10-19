@@ -186,6 +186,10 @@ export function CommandPalette(): JSX.Element {
       // how an operator reaches a record they already have in mind, and a
       // disabled organization is a leading reason to go looking for one.
       disabled_status: "all",
+      // Paying accounts first. The limit cuts the list off, and a search on a
+      // common word should not spend its rows on free organizations while the
+      // enterprise customer the operator meant sits below the cut.
+      sort: "account_tier",
       limit: RESULT_LIMIT,
     }),
     // Nothing to ask until something has been typed, and nothing to ask for a

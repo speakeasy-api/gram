@@ -1,6 +1,6 @@
 # HookIngestSource
 
-Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
 
 
 ## Fields

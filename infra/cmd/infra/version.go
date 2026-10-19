@@ -9,7 +9,7 @@ import (
 func newVersionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "version",
-		Usage: "Print the version of the Gram infrastructure CLI",
+		Usage: "Print the version of the Speakeasy infrastructure CLI",
 		Action: func(c *cli.Context) error {
 			fmt.Println(GitSHA)
 

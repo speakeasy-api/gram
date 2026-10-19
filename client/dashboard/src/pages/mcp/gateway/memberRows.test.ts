@@ -232,6 +232,18 @@ describe("buildAddCandidates", () => {
     ]);
   });
 
+  it("offers the toolset instead of its own hosted server", () => {
+    const candidates = buildAddCandidates(
+      [server({ id: "ts-1", name: "Linear", toolsetId: "ts-1" })],
+      [toolset()],
+      new Set(),
+      "",
+    );
+    expect(candidates).toEqual([
+      { kind: "toolset", toolset: expect.objectContaining({ id: "ts-1" }) },
+    ]);
+  });
+
   it("drops servers that are already members and trims the search", () => {
     const candidates = buildAddCandidates(
       [server({ id: "s-1", name: "Linear" })],

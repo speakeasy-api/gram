@@ -14,7 +14,7 @@ const (
 	pauseDataExportToolName  = operationPauseDataExport
 	resumeDataExportToolName = operationResumeDataExport
 
-	dataExportToggleScopeNote = "Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Gram does not record when a route last delivered, so the result says that rather than giving a time. "
+	dataExportToggleScopeNote = "Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Speakeasy does not record when a route last delivered, so the result says that rather than giving a time. "
 	dataExportToggleDataNote  = "While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. "
 )
 

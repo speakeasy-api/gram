@@ -37,6 +37,22 @@ describe("formatPlatform", () => {
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
 
+  it("distinguishes Copilot CLI from Microsoft Copilot", () => {
+    for (const source of [
+      "copilot",
+      "github-copilot",
+      "copilot-cli",
+      "GitHub Copilot CLI",
+    ]) {
+      expect(formatPlatform(source)).toBe("Copilot CLI");
+    }
+    expect(formatPlatform("microsoft-copilot")).toBe("Microsoft Copilot");
+  });
+
+  it("preserves a literal prefix in an arbitrary harness name", () => {
+    expect(formatPlatform("ahp-harness:kit")).toBe("Ahp Harness:kit");
+  });
+
   it("title-cases unknown delimited sources", () => {
     expect(formatPlatform("new_agent-client")).toBe("New Agent Client");
   });

@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * removeUser organizations
  *
  * @remarks
- * Remove a user from the active organization in Gram and delete their WorkOS organization membership.
+ * Remove a user from the active organization in Speakeasy and delete their WorkOS organization membership.
  */
 export function organizationsRemoveUser(
   client: GramCore,

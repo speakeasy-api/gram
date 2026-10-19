@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
@@ -26,7 +27,7 @@ const keyGenerationTimeout = 2 * time.Minute
 const keyCleanupTimeout = 10 * time.Second
 
 // CreateSigningKey creates the key and waits for its first version to leave
-// PENDING_GENERATION. The version name returned is what Gram records; the key
+// PENDING_GENERATION. The version name returned is what Speakeasy records; the key
 // name is what IAM bindings attach to.
 func (c *kmsSigningClient) CreateSigningKey(ctx context.Context, params CreateSigningKeyParams) (*CreatedSigningKey, error) {
 	if err := validateCreateSigningKeyParams(params); err != nil {
@@ -196,8 +197,9 @@ func isTransientKMSError(err error) bool {
 	}
 }
 
-// DisableKeyVersion moves a version to DISABLED. Idempotent on an already
-// disabled version.
+// DisableKeyVersion moves a version to DISABLED. A version already disabled,
+// scheduled for destruction or destroyed can't sign either, so it counts as
+// done.
 func (c *kmsSigningClient) DisableKeyVersion(ctx context.Context, versionName string) error {
 	if err := ValidateKeyVersionName(versionName); err != nil {
 		return err
@@ -224,11 +226,22 @@ func (c *kmsSigningClient) DisableKeyVersion(ctx context.Context, versionName st
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
 	})
+	if status.Code(err) == codes.FailedPrecondition {
+		version, getErr := c.kms.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
+		if getErr == nil && cannotSign(version.GetState()) {
+			return nil
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("disable gcp kms crypto key version %s: %w", versionName, err)
 	}
 
 	return nil
+}
+
+// cannotSign reports whether a version in state can no longer sign.
+func cannotSign(state kmspb.CryptoKeyVersion_CryptoKeyVersionState) bool {
+	return state == kmspb.CryptoKeyVersion_DISABLED || state == kmspb.CryptoKeyVersion_DESTROY_SCHEDULED || state == kmspb.CryptoKeyVersion_DESTROYED
 }
 
 // GrantSignerVerifier adds the service account to the key's IAM policy under
@@ -248,7 +261,7 @@ func (c *kmsSigningClient) GrantSignerVerifier(ctx context.Context, keyName, ser
 		return fmt.Errorf("read gcp kms key iam policy: %w", err)
 	}
 
-	member := "serviceAccount:" + serviceAccountEmail
+	member := "serviceAccount:" + strings.ToLower(serviceAccountEmail)
 	if policy.HasRole(member, SignerVerifierRole) {
 		return nil
 	}
@@ -277,7 +290,7 @@ func (c *kmsSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, se
 		return fmt.Errorf("read gcp kms key iam policy: %w", err)
 	}
 
-	member := "serviceAccount:" + serviceAccountEmail
+	member := "serviceAccount:" + strings.ToLower(serviceAccountEmail)
 	if !policy.HasRole(member, SignerVerifierRole) {
 		return nil
 	}

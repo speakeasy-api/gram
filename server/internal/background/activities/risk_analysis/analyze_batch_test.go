@@ -41,6 +41,7 @@ import (
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -152,6 +153,19 @@ func capturingPromptPolicyPub(t *testing.T) (*gcp.MockPublisher[*riskv1.PromptPo
 			msg, ok := args.Get(1).(*riskv1.PromptPolicyAnalysis)
 			require.True(t, ok)
 			published = append(published, msg)
+		})
+	return pub, &published
+}
+func capturingMeterPub(t *testing.T) (*gcp.MockPublisher[*meteringv1.MeterReading], *[]*meteringv1.MeterReading) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	var published []*meteringv1.MeterReading
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			reading, ok := args.Get(1).(*meteringv1.MeterReading)
+			require.True(t, ok)
+			published = append(published, reading)
 		})
 	return pub, &published
 }
@@ -559,7 +573,7 @@ func TestBatchContentQueriesRejectForeignChatsAndMismatchedParent(t *testing.T) 
 	require.Empty(t, rows[0].ChatUserID)
 }
 
-func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *testing.T) {
+func TestAnalyzeBatch_PromptInjectionCutoverPublishesRealJudgeRequests(t *testing.T) {
 	t.Parallel()
 
 	conn := cloneDB(t)
@@ -597,6 +611,12 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	})
 	require.NoError(t, err)
 	promptInjectionPub, published := capturingPromptInjectionPub(t)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, td.orgID, true)
+	inlineScanner := promptinjection.NewScanner(testenv.NewLogger(t), func(context.Context, promptinjection.Request) ([]promptinjection.Result, error) {
+		t.Fatal("inline prompt injection judge must not run after cutover")
+		return nil, nil
+	})
 
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
@@ -605,11 +625,11 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		conn,
 		assetStorage,
 		&risk_analysis.StubPIIScanner{},
+		inlineScanner,
 		nil,
 		nil,
 		nil,
-		nil,
-		&feature.InMemory{},
+		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
 		promptInjectionPub,
@@ -644,6 +664,9 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
 	require.Len(t, *published, len(msgIDs)+1)
+	for _, req := range *published {
+		require.True(t, req.GetRunJudge())
+	}
 
 	var partRequest *riskv1.PromptInjectionAnalysis
 	for _, req := range *published {
@@ -658,7 +681,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	require.Equal(t, td.chatID.String(), partRequest.GetChatId())
 	require.Empty(t, partRequest.GetParentChatMessageId())
 	require.Equal(t, "content_part_unlinked", partRequest.GetMessageLinkReason())
-	require.Equal(t, "shadow_stream", partRequest.GetExecutionPath())
+	require.Equal(t, "judge_handler_stream", partRequest.GetExecutionPath())
 	require.Equal(t, td.policyID.String(), partRequest.GetOriginRiskPolicyId())
 	require.Equal(t, td.policyVersion, partRequest.GetOriginRiskPolicyVersion())
 	require.NotEmpty(t, partRequest.GetRequestId())
@@ -755,30 +778,33 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 	t.Parallel()
 
 	const bound = 50 * 1024
+	// Oversized inputs are spaced words, not one repeated character: the token
+	// counter's BPE merge is quadratic on a single unbroken run, which turned
+	// this test into ten minutes of tokenizing under -race.
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 	userID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   strings.Repeat("u", 4*bound),
+		Content:   strings.Repeat("u ", 2*bound),
 	})
 	require.NoError(t, err)
-	toolID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": strings.Repeat("c", 4*bound)})
+	toolID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": strings.Repeat("c ", 2*bound)})
 	// Several calls publish as structured tool calls; the last runs past the budget.
 	multiID := insertAssistantToolCallsWithArgs(t, conn, td, []struct {
 		name string
 		args map[string]any
 	}{
 		{name: "Bash", args: map[string]any{"command": "ls"}},
-		{name: "Write", args: map[string]any{"content": strings.Repeat("w", 4*bound)}},
-		{name: "Bash", args: map[string]any{"command": strings.Repeat("c", 4*bound)}},
+		{name: "Write", args: map[string]any{"content": strings.Repeat("w ", 2*bound)}},
+		{name: "Bash", args: map[string]any{"command": strings.Repeat("c ", 2*bound)}},
 	})
 
 	assetStorage := assetstest.NewTestBlobStore(t)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetStorage)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	assetURL, err := writer.WriteContentPartAsset(t.Context(), td.projectID, td.chatID, []byte(strings.Repeat("p", 4*bound)))
+	assetURL, err := writer.WriteContentPartAsset(t.Context(), td.projectID, td.chatID, []byte(strings.Repeat("p ", 2*bound)))
 	require.NoError(t, err)
 	partID, err := riskrepo.New(conn).CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
 		ChatID:              td.chatID,
@@ -790,6 +816,27 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 	require.NoError(t, err)
 
 	promptInjectionPub, published := capturingPromptInjectionPub(t)
+	classifierCalls := 0
+	inlineScanner := promptinjection.NewScanner(testenv.NewLogger(t), func(_ context.Context, req promptinjection.Request) ([]promptinjection.Result, error) {
+		classifierCalls++
+		results := make([]promptinjection.Result, len(req.Messages))
+		for i := range results {
+			results[i] = promptinjection.Result{
+				Label:         promptinjection.LabelSafe,
+				Score:         0,
+				Rationale:     "",
+				DirectiveKind: "",
+				Target:        "",
+				Operational:   false,
+				STokens:       1,
+				Completed:     true,
+				Model:         "test-model",
+				Provider:      "test-provider",
+			}
+		}
+		return results, nil
+	})
+	meterPub, readings := capturingMeterPub(t)
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
@@ -797,7 +844,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 		conn,
 		assetStorage,
 		&risk_analysis.StubPIIScanner{},
-		nil,
+		inlineScanner,
 		nil,
 		nil,
 		nil,
@@ -812,7 +859,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 		mustCELEngine(t),
 		nil,
 		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		metering.NewRiskRecorder(meterPub),
 		false,
 	)
 	require.NoError(t, err)
@@ -836,8 +883,11 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 	require.NoError(t, val.Get(&result))
 
 	require.Len(t, *published, 4)
+	require.Equal(t, 1, classifierCalls)
+	require.Len(t, *readings, 4)
 	sawToolCalls := false
 	for _, req := range *published {
+		require.False(t, req.GetRunJudge())
 		require.LessOrEqual(t, len(req.GetContent()), bound)
 		require.LessOrEqual(t, len(req.GetBody()), bound)
 		argBytes := 0
@@ -855,7 +905,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 	require.True(t, sawToolCalls, "expected a multi-call request with structured tool calls")
 }
 
-func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(t *testing.T) {
+func TestAnalyzeBatch_PromptPolicyCutoverPublishesRealJudgeRequests(t *testing.T) {
 	t.Parallel()
 
 	conn := cloneDB(t)
@@ -879,7 +929,10 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 	msgIDs := seedMessages(t, conn, td, 2)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, td.orgID, true)
 	promptPolicyPub, published := capturingPromptPolicyPub(t)
+	judge := &recordingPromptJudge{}
+	meterPub, readings := capturingMeterPub(t)
 
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
@@ -891,7 +944,7 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 		nil,
 		nil,
 		nil,
-		(&recordingPromptJudge{}).Evaluate,
+		judge.Evaluate,
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
@@ -903,7 +956,7 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 		mustCELEngine(t),
 		nil,
 		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		metering.NewRiskRecorder(meterPub),
 		false,
 	)
 	require.NoError(t, err)
@@ -926,6 +979,12 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
 	require.Len(t, *published, len(msgIDs))
+	require.Empty(t, judge.recorded())
+	require.Empty(t, *readings)
+	for _, req := range *published {
+		require.True(t, req.GetRunJudge())
+		require.Equal(t, "judge_handler_stream", req.GetExecutionPath())
+	}
 }
 
 func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
@@ -984,6 +1043,8 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 	judge := &recordingPromptJudge{}
+	promptPolicyPub, published := capturingPromptPolicyPub(t)
+	meterPub, readings := capturingMeterPub(t)
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
@@ -999,14 +1060,14 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		newPresidioPub(),
 		newGitleaksPub(),
 		newPromptInjectionPub(),
-		newPromptPolicyPub(),
+		promptPolicyPub,
 		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		metering.NewRiskRecorder(meterPub),
 		false,
 	)
 	require.NoError(t, err)
@@ -1033,6 +1094,9 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	require.Equal(t, 1, result.Findings)
 	inputs := judge.recorded()
 	require.Len(t, inputs, 1)
+	require.Len(t, *published, 1)
+	require.False(t, (*published)[0].GetRunJudge())
+	require.Len(t, *readings, 1)
 	msg := inputs[0].Message
 	require.Equal(t, message.ToolRequest, msg.Type)
 	require.Equal(t, "Bash", msg.ToolName)
@@ -1242,7 +1306,7 @@ func TestAnalyzeBatch_ShadowMCPPublishesFindingsToTopic(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	// An MCP-shaped tool call with no Gram toolset marker and no recorded
+	// An MCP-shaped tool call with no Speakeasy toolset marker and no recorded
 	// provenance is shadow MCP by signature validation.
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__rogue__exfiltrate", map[string]any{"target": "data"})
 
@@ -1731,7 +1795,7 @@ func TestAnalyzeBatch_CustomDetectionRuleToolServer(t *testing.T) {
 }
 
 // insertAssistantToolCallWithArgs is a sibling of insertAssistantToolCall for
-// CLI scenarios where the recorded arguments don't carry a Gram toolset id -
+// CLI scenarios where the recorded arguments don't carry a Speakeasy toolset id -
 // the cli_destructive scanner is content-driven, so the args field is the
 // thing under test.
 func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testData, callName string, argsMap map[string]any) uuid.UUID {

@@ -464,7 +464,7 @@ func TestProxy_Post_StripsAuthorizationHeader(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, p.Post(rr, req))
-	require.Empty(t, gotAuth, "Gram API key must never be forwarded to the remote MCP server")
+	require.Empty(t, gotAuth, "Speakeasy API key must never be forwarded to the remote MCP server")
 }
 
 func TestProxy_Post_StripsBrowserHeaders(t *testing.T) {
@@ -891,7 +891,10 @@ func TestProxy_Post_HeadersPhaseTimeoutReturnsGatewayError(t *testing.T) {
 
 	// Upstream never writes headers, blocks until canceled. Phase 1 timer
 	// fires and surfaces a CodeGatewayError "remote mcp server timed out".
+	// Draining the body first lets the server notice the proxy disconnect and
+	// cancel r.Context().
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
 		select {
 		case <-time.After(2 * time.Second):
 			w.WriteHeader(http.StatusOK)
@@ -1572,7 +1575,10 @@ func TestProxy_Post_RecordsErrorStatusClassOnUpstreamFailure(t *testing.T) {
 func TestProxy_Post_ClientCancellationReturnsBadRequest(t *testing.T) {
 	t.Parallel()
 
+	// Draining the body first lets the server notice the proxy disconnect and
+	// cancel r.Context().
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
 		select {
 		case <-r.Context().Done():
 		case <-time.After(3 * time.Second):

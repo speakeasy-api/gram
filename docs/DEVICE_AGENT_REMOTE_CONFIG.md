@@ -1,6 +1,6 @@
 # Device agent remote configuration
 
-Gram stores one versioned, non-secret device-agent configuration document per
+Speakeasy stores one versioned, non-secret device-agent configuration document per
 organization. Enrolled agents receive it in the existing
 `agent.getPlugins` response, authenticated by their `agent_user` key (or the
 legacy organization `agent` install key).
@@ -42,9 +42,9 @@ server-injected keys (below) are bounded separately. The envelope
 carries `schema_version`; it is metadata, not a remotely editable setting.
 Agents must ignore unknown document keys so additive settings remain forward
 compatible. An update replaces the known settings above wholesale — omitting
-one removes it — while Gram preserves stored keys the serving version does not
+one removes it — while Speakeasy preserves stored keys the serving version does not
 recognize, so an older server cannot delete settings understood only by newer
-agents. Gram also rejects updates when the stored document carries a newer
+agents. Speakeasy also rejects updates when the stored document carries a newer
 `schema_version` than the serving version understands.
 
 `update_channel` and `blocked_versions` are Speakeasy-internal release
@@ -53,14 +53,14 @@ Speakeasy platform administrator, and updates from org admins preserve any
 stored values instead of removing them by omission. The dashboard only shows
 these fields to platform administrators.
 
-Gram rejects the device-local keys `email`, `org_token`, `org_slug`, `org_name`,
+Speakeasy rejects the device-local keys `email`, `org_token`, `org_slug`, `org_name`,
 and `v`. Identity, credentials, and the local configuration schema always stay
 on the device.
 
 ## Server-injected keys
 
 Some keys in the document agents receive are not organization settings at all:
-Gram adds them to the `config` map at serve time on `agent.getPlugins`, never
+Speakeasy adds them to the `config` map at serve time on `agent.getPlugins`, never
 stores them, and rejects any update that tries to set them.
 
 - `ai_scan`: the Shadow AI scan targets the organization's device agents probe
@@ -74,7 +74,7 @@ stores them, and rejects any update that tries to set them.
   `list_version` (which agents echo as `target_list_version` on every scan
   receipt; a receipt carries `0` when the agent scanned with the list embedded
   in its binary because it has not received one), `etag`, and `targets`.
-  `list_version` moves whenever the organization edits its list or Gram ships
+  `list_version` moves whenever the organization edits its list or Speakeasy ships
   new defaults. Organization admins manage the list through
   `agent.listAiScanTargets`, `agent.upsertAiScanTarget`, and
   `agent.deleteAiScanTarget`; every change lands in the organization's audit
@@ -96,7 +96,7 @@ fetch, its shareable settings override the same settings from local
 `managed.json` and `local.json`; device-local identity and credentials are never
 overridden.
 
-The agent caches the last successfully fetched remote document. If Gram is
+The agent caches the last successfully fetched remote document. If Speakeasy is
 temporarily unavailable, it continues using that last-known document. If the
 agent has never fetched a remote document (the response omits
 `configuration`), it resolves only its local sources. This preserves the

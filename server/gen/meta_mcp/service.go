@@ -187,11 +187,11 @@ type UpdateMetaMcpServerPayload struct {
 	Visibility *types.MetaMcpServerVisibility
 	// The allowed network surfaces. Omit to preserve the stored mode.
 	NetworkAccessMode *types.NetworkAccessMode
-	// Custom server instructions replace Gram's built-in gateway instructions in
-	// MCP initialize and server/discover responses. Omit to leave them unchanged;
-	// send an empty string to restore Gram's built-in gateway instructions.
-	// Limited to 10000 Unicode characters after removing NUL characters and
-	// trimming whitespace.
+	// Custom server instructions replace Speakeasy's built-in gateway instructions
+	// in MCP initialize and server/discover responses. Omit to leave them
+	// unchanged; send an empty string to restore Speakeasy's built-in gateway
+	// instructions. Limited to 10000 Unicode characters after removing NUL
+	// characters and trimming whitespace.
 	Instructions *string
 }
 

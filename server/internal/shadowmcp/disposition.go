@@ -7,7 +7,7 @@ import (
 )
 
 // Default dispositions for shadow MCP blocking policies. DispositionBlockAll
-// denies every non-Gram-hosted server unless explicitly allowed (the original
+// denies every non-Speakeasy-hosted server unless explicitly allowed (the original
 // behavior); DispositionAllowAll permits every server unless it appears on
 // the policy's blocked-URL list.
 //

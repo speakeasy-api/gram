@@ -154,7 +154,7 @@ function attachmentMetadata(part: ChatContentPart): {
   };
 }
 
-function promptAttachmentFromContentPart(
+export function promptAttachmentFromContentPart(
   part: ChatContentPart,
 ): PromptAttachment {
   const metadata = attachmentMetadata(part);

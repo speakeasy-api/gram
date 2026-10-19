@@ -217,6 +217,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		Raw: nil,
 	}
 	outcome, err := s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     false,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),
@@ -347,6 +348,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		Raw: nil,
 	}
 	_, err = s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     false,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),
@@ -445,12 +447,28 @@ type agentAttribution struct {
 	TurnID            string
 }
 
+// speakeasyAIAttributionHeaders maps each canonical LiteLLM attribution
+// header to the deprecated x-gram-* header it replaces.
+var speakeasyAIAttributionHeaders = map[string]string{
+	"speakeasy-ai-session-id":       "x-gram-session-id",
+	"speakeasy-ai-agent-session-id": "x-gram-agent-session-id",
+	"speakeasy-ai-agent-provider":   "x-gram-agent-provider",
+	"speakeasy-ai-agent-turn-id":    "x-gram-agent-turn-id",
+}
+
 func agentAttributionFromHeaders(headers map[string]string) agentAttribution {
 	normalized := make(map[string]string, len(headers))
 	for key, value := range headers {
 		value = strings.TrimSpace(value)
 		if value != "" && !strings.EqualFold(value, "[present]") {
 			normalized[strings.ToLower(strings.TrimSpace(key))] = value
+		}
+	}
+	// The speakeasy-ai-* names are canonical; the x-gram-* names they
+	// replace stay accepted. The new name wins when a request sends both.
+	for name, legacy := range speakeasyAIAttributionHeaders {
+		if value := normalized[name]; value != "" {
+			normalized[legacy] = value
 		}
 	}
 

@@ -63,7 +63,7 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	Attribute("id", String, "The ID of the organization")
 	Attribute("name", String, "The name of the organization")
 	Attribute("slug", String, "The slug of the organization")
-	Attribute("account_type", String, "Gram account type (e.g. free, pro, payg, enterprise).")
+	Attribute("account_type", String, "Speakeasy account type (e.g. free, pro, payg, enterprise).")
 	Attribute("workos_id", String, "WorkOS organization ID, if linked.")
 	Attribute("workos_dashboard_url", String, func() {
 		Description("Link to the organization in the WorkOS dashboard. Absent when the organization is not linked to WorkOS or the deployment has no WorkOS environment configured.")
@@ -71,6 +71,14 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	})
 	Attribute("stripe_customer_id", String, "Stripe customer ID, if billing metadata has a customer.")
 	Attribute("stripe_subscription_id", String, "Current Stripe subscription ID, if subscribed.")
+	Attribute("stripe_customer_dashboard_url", String, func() {
+		Description("Link to the Stripe customer in the Stripe dashboard. Absent when the organization has no Stripe customer or the deployment has no Stripe API key configured.")
+		Format(FormatURI)
+	})
+	Attribute("stripe_subscription_dashboard_url", String, func() {
+		Description("Link to the Stripe subscription in the Stripe dashboard. Absent when the organization has no Stripe subscription or the deployment has no Stripe API key configured.")
+		Format(FormatURI)
+	})
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
 	Attribute("disabled_at", String, func() {
 		Description("The time at which the organization was disabled, if any.")
@@ -278,6 +286,31 @@ var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
 	Required("status", "current_period_start", "current_period_end", "cancel_at_period_end", "payment_failed")
 })
 
+var AdminInferenceKeyCause = Type("AdminInferenceKeyCause", func() {
+	Attribute("cause", String)
+	Attribute("description", String)
+	Attribute("removable", Boolean)
+	Attribute("blocked_reason", String)
+	Required("cause", "description", "removable")
+})
+
+var AdminInferenceKeyRepairState = Type("AdminInferenceKeyRepairState", func() {
+	Description("Committed local key policy, without provider usage or credentials.")
+	Attribute("key_type", String)
+	Attribute("monthly_credits", Int64)
+	Attribute("disabled", Boolean)
+	Attribute("disable_causes", ArrayOf(String))
+	Attribute("disable_causes_classified", Boolean)
+	Attribute("cause_diagnostics", ArrayOf(AdminInferenceKeyCause))
+	Required("key_type", "monthly_credits", "disabled", "disable_causes", "disable_causes_classified", "cause_diagnostics")
+})
+
+var AdminInferenceKeyRepairResult = Type("AdminInferenceKeyRepairResult", func() {
+	Attribute("key", AdminInferenceKeyRepairState)
+	Attribute("reconciliation_pending", Boolean)
+	Required("key", "reconciliation_pending")
+})
+
 var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Description("Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.")
 	Attribute("key_type", String)
@@ -285,6 +318,7 @@ var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Attribute("monthly_credits", Int64)
 	Attribute("disabled", Boolean)
 	Attribute("disable_causes", ArrayOf(String), "Active internal disable causes. Omitted for legacy unclassified rows.")
+	Attribute("cause_diagnostics", ArrayOf(AdminInferenceKeyCause))
 	Attribute("disable_causes_classified", Boolean, "Whether disable_causes is classified, including an explicitly empty cause set.")
 	Required("key_type", "credits_used", "monthly_credits", "disabled", "disable_causes_classified")
 })
@@ -885,7 +919,7 @@ var _ = Service("admin", func() {
 			Attribute("created_to", String, "Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.")
 			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
-			Attribute("sort", String, "Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.")
+			Attribute("sort", String, "Column to sort by: name, slug, account_type, account_tier, member_count, created_at, disabled_at or trial_ends_at. account_tier ranks enterprise first, then pro and payg, then free, then any other account type; desc reverses that order. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.")
 			Attribute("direction", String, "Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.")
 			Attribute("page", Int, "1-based page number for offset paging (default 1). Supplying it selects offset paging.")
 		})
@@ -959,7 +993,7 @@ var _ = Service("admin", func() {
 	// mid-block makes goa reorder every declaration below it. A new method goes
 	// after this one.
 	Method("createOrganization", func() {
-		Description("Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.")
+		Description("Creates an organization in WorkOS and in Speakeasy, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Speakeasy ID is derived from the WorkOS ID, so both writers converge on one row.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -1028,6 +1062,31 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminGetOrganizationStats")
+	})
+
+	Method("repairInferenceKey", func() {
+		Description("Removes explicitly selected known disable causes without changing tier, credits, or runtime. Staff confirmation and reason required.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("key_type", String, func() { Enum("chat", "internal") })
+			Attribute("remove_causes", ArrayOf(String, func() {
+				Enum("admin_lock", "trial_demotion", "billing_inactive")
+			}), "Unique known disable causes to remove.", func() {
+				MinLength(1)
+				MaxLength(3)
+			})
+			Attribute("confirmation", String, "Exact staff confirmation: I know what I'm doing", func() {
+				Enum("I know what I'm doing")
+			})
+			Attribute("reason", String, "Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).", func() {
+				MinLength(1)
+			})
+			Required("organization_id", "key_type", "remove_causes", "confirmation", "reason")
+		})
+		Result(AdminInferenceKeyRepairResult)
+		HTTP(func() { POST("/admin/organization.repairInferenceKey"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminRepairInferenceKey")
 	})
 
 	Method("getInferenceKeys", func() {
@@ -1306,9 +1365,11 @@ var _ = Service("admin", func() {
 	supportMatrixMethods()
 	supportCoverageMethods()
 	mcpServerHealthMethods()
+	externalMcpMigrationMethods()
 	registryDesign()
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
+	signupOfferMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
 		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")

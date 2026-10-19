@@ -19,6 +19,7 @@ import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
+import { SharedAuthorizationServerField } from "./SharedAuthorizationServerField";
 import { UserSessionIssuerField } from "./UserSessionIssuerField";
 import { useSelectableUserSessionIssuers } from "./useSelectableUserSessionIssuers";
 import { UserIdentitySessionControls } from "./UserIdentitySessionControls";
@@ -51,12 +52,15 @@ function authenticationSectionDescription(
  */
 export function AuthenticationSection({
   mcpServer,
+  mcpUrl,
 }: {
   mcpServer: McpServer;
+  /** The URL clients connect to; undefined while it is unknown. */
+  mcpUrl?: string;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
   const isRemoteMcp = !!mcpServer.remoteMcpServerId;
-  const target = useMcpServerAuthTarget(mcpServer);
+  const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
 
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
@@ -218,6 +222,10 @@ function StandardAuthenticationSectionBody({
     authenticationFields = (
       <>
         <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
+        <SharedAuthorizationServerField
+          userSessionIssuer={userSessionIssuer}
+          mcpUrl={target.mcpUrl}
+        />
         <RemoteIdentityProvidersField
           associatedIssuers={associatedIssuers}
           allowAdditionalProviders={!!target.multipleProviders}

@@ -13,7 +13,7 @@ import (
 )
 
 // The emulator is exercised through the real workos-go client so the wire
-// shapes stay decodable by Gram's WorkOS wrapper.
+// shapes stay decodable by Speakeasy's WorkOS wrapper.
 func TestDirectorySyncThroughSDK(t *testing.T) {
 	t.Parallel()
 	_, handler := openOrganizationEmulator(t, filepath.Join(t.TempDir(), "devidp.db"))
@@ -61,6 +61,23 @@ func TestDirectorySyncThroughSDK(t *testing.T) {
 	}
 	slices.Sort(emails)
 	require.Equal(t, []string{"alex.rivera@example.com", "jordan.lee@example.com", "sam.taylor@example.com"}, emails)
+
+	// WorkOS also lists a group's members from the group alone.
+	var groupOnlyEmails []string
+	groupAfter := ""
+	for {
+		page, err := client.ListUsers(ctx, directorysync.ListUsersOpts{Directory: "", Group: engineering.ID, Limit: 2, Order: "", Before: "", After: groupAfter})
+		require.NoError(t, err)
+		for _, u := range page.Data {
+			groupOnlyEmails = append(groupOnlyEmails, u.Email)
+		}
+		if page.ListMetadata.After == "" {
+			break
+		}
+		groupAfter = page.ListMetadata.After
+	}
+	slices.Sort(groupOnlyEmails)
+	require.Equal(t, emails, groupOnlyEmails)
 
 	alex := members.Data[slices.IndexFunc(members.Data, func(u directorysync.User) bool { return u.Email == "alex.rivera@example.com" })]
 	user, err := client.GetUser(ctx, directorysync.GetUserOpts{User: alex.ID})

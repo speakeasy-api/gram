@@ -4,8 +4,8 @@ import type { UserSession } from "@gram/client/models/components/usersession.js"
 import type { UserSessionUpstream } from "@gram/client/models/components/usersessionupstream.js";
 
 /**
- * A brokered connection is two legs — an agent's session against a Gram MCP
- * server, and the upstream tokens Gram holds on that subject's behalf — and its
+ * A brokered connection is two legs — an agent's session against a Speakeasy MCP
+ * server, and the upstream tokens Speakeasy holds on that subject's behalf — and its
  * health is the worse of the two. A session whose own refresh token is healthy
  * still can't do anything useful if the upstream it fronts has lost its grant.
  *

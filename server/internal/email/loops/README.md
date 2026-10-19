@@ -1,6 +1,6 @@
 # Transactional email templates
 
-This directory is the source of truth for Gram transactional email content.
+This directory is the source of truth for Speakeasy transactional email content.
 Every application template has:
 
 - a stable logical key in `server/internal/email/templates.go`;

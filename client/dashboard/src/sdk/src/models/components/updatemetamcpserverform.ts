@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export const UpdateMetaMcpServerFormNetworkAccessMode = {
   PublicOnly: "public_only",
@@ -15,7 +15,7 @@ export const UpdateMetaMcpServerFormNetworkAccessMode = {
   PrivateOnly: "private_only",
 } as const;
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export type UpdateMetaMcpServerFormNetworkAccessMode = ClosedEnum<
   typeof UpdateMetaMcpServerFormNetworkAccessMode
@@ -44,7 +44,7 @@ export type UpdateMetaMcpServerForm = {
    */
   id: string;
   /**
-   * Custom server instructions replace Gram's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
+   * Custom server instructions replace Speakeasy's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Speakeasy's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
    */
   instructions?: string | undefined;
   /**
@@ -52,7 +52,7 @@ export type UpdateMetaMcpServerForm = {
    */
   name: string;
   /**
-   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
    */
   networkAccessMode?: UpdateMetaMcpServerFormNetworkAccessMode | undefined;
   /**

@@ -135,7 +135,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			SkillCount:            1,
 			Assignments:           &PluginAssignmentSummary{AllMembers: true},
 			Publication:           PluginPublicationUnpublished,
-			DistributionAdmission: &DistributionAdmission{State: DistributionAdmissionCovered, Mode: string(admission.ModeEnforce), MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-04T12:00:00Z", Complete: true},
+			DistributionAdmission: &DistributionAdmission{State: DistributionAdmissionCovered, MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-04T12:00:00Z", Complete: true},
 		},
 		Servers: []PluginServer{{
 			DisplayName: "Billing",
@@ -165,7 +165,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"plugin", "id", "name", "slug", "is_default", "auto_created",
 		"server_count", "skill_count",
 		"assignments", "all_members", "roles", "users",
-		"publication", "distribution_admission", "state", "mode", "missing_audience_counts", "everyone", "roles", "groups", "attributes", "users", "checked_at", "complete",
+		"publication", "distribution_admission", "state", "missing_audience_counts", "everyone", "roles", "groups", "attributes", "users", "checked_at", "complete",
 		"servers", "display_name", "backend", "mcp_slug", "policy", "enabled",
 		"skills", "name", "follows_latest",
 		"assignment_version",

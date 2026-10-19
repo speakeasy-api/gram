@@ -1,4 +1,19 @@
+import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import {
+  AvailabilityBadge,
+  KeySetPicker,
+  keySetChoiceReady,
+  RadioRows,
+  useCustomerManagedKeys,
+  useResolveKeySet,
+  type KeySetChoice,
+} from "@/lib/remote-identity";
+import { useRoutes } from "@/routes";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildOrganizationRemoteSessionClientsQuery } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { Bot, User } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -28,7 +43,7 @@ import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/reac
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -43,7 +58,6 @@ import {
   parseScopes,
   TUNNELED_DCR_PERMISSION_MESSAGE,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
-import { IssuerScopeOverrideAlert } from "./clientAlerts";
 import { issuerDocumentationLinks } from "./issuerDocumentationLinks";
 
 // Sentinel for the unselected project in the org-level-issuer scope picker.
@@ -53,7 +67,7 @@ const UNSELECTED_PROJECT = "";
 
 // DocumentationLinks surfaces the issuer's documentation so customers can create
 // the upstream OAuth client themselves, owning its credentials, access, and rate
-// limits rather than sharing a Gram-owned client. Renders nothing when the
+// limits rather than sharing a Speakeasy-owned client. Renders nothing when the
 // issuer carries no documentation URLs.
 function DocumentationLinks({ issuer }: { issuer: RemoteSessionIssuer }) {
   const links = issuerDocumentationLinks(issuer);
@@ -162,6 +176,39 @@ export function CreateRemoteSessionClientSheet({
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
 
+  // Who the upstream credential belongs to, fixed at creation. A service
+  // account only needs the token endpoint, so a provider without one can't
+  // offer it.
+  const routes = useRoutes();
+  const gramClient = useGramContext();
+  const { entitled: customerManagedKeys } = useCustomerManagedKeys();
+  const resolveKeySet = useResolveKeySet();
+  const hasTokenEndpoint = !!issuer.tokenEndpoint?.trim();
+  const [owner, setOwner] = useState<"subject" | "self">("subject");
+  const [selfMethod, setSelfMethod] = useState<
+    "client_secret_basic" | "client_secret_post" | "private_key_jwt"
+  >("client_secret_basic");
+  const [keySet, setKeySet] = useState<KeySetChoice | null>(null);
+  const [assertionAudience, setAssertionAudience] = useState<
+    "issuer" | "token_endpoint"
+  >("issuer");
+  const selfKey = owner === "self" && selfMethod === "private_key_jwt";
+
+  // Suggest the key set another client at this provider already signs with.
+  const siblingsQuery = buildOrganizationRemoteSessionClientsQuery(gramClient, {
+    issuerId: issuer.id,
+  });
+  const { data: siblingsData, isLoading: siblingsLoading } = useQuery({
+    ...siblingsQuery,
+    queryKey: [...siblingsQuery.queryKey, { organizationId: organization.id }],
+    enabled: open && selfKey,
+  });
+  const suggestedKeySetId =
+    (siblingsData?.result.items ?? [])
+      .map((item) => item.client)
+      .find((sibling) => sibling.jsonWebKeySetId != null)?.jsonWebKeySetId ??
+    null;
+
   // One mutation drives all client types. Its mutationFn does whatever async
   // work the chosen type needs — a DCR proxy registration pre-step, or a direct
   // create — so isPending/error are a single source of truth (no separate
@@ -170,6 +217,7 @@ export function CreateRemoteSessionClientSheet({
   const createMutation = useMutation({
     mutationFn: async (): Promise<{
       unsupportedDcrAuthMethod: string | null;
+      serviceAccountId?: string;
     }> => {
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
@@ -178,6 +226,30 @@ export function CreateRemoteSessionClientSheet({
       // client (no project); sending it downscopes to the chosen project.
       const projectIdForOrg =
         isOrganizational && scope === "project" ? projectId : undefined;
+
+      // A service account always pastes what the provider issued; the key set
+      // is created first when it is a new one.
+      if (owner === "self") {
+        const jsonWebKeySetId =
+          selfKey && keySet ? await resolveKeySet(keySet) : undefined;
+        const created = await client.organizationRemoteSessionClients.create({
+          createOrganizationRemoteSessionClientForm: {
+            remoteSessionIssuerId: issuer.id,
+            projectId: projectIdForOrg,
+            clientId: clientId.trim(),
+            credentialOwner: "self",
+            tokenEndpointAuthMethod: selfMethod,
+            clientSecret: selfKey ? undefined : clientSecret.trim(),
+            jsonWebKeySetId,
+            tokenEndpointAuthAudienceFormat: selfKey
+              ? assertionAudience
+              : undefined,
+            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+            audience: trimmedAudience || undefined,
+          },
+        });
+        return { unsupportedDcrAuthMethod: null, serviceAccountId: created.id };
+      }
 
       // CIMD: the platform generates the client_id and hosts the metadata
       // document, so there are no credentials to collect.
@@ -249,7 +321,7 @@ export function CreateRemoteSessionClientSheet({
 
       return { unsupportedDcrAuthMethod };
     },
-    onSuccess: async ({ unsupportedDcrAuthMethod }) => {
+    onSuccess: async ({ unsupportedDcrAuthMethod, serviceAccountId }) => {
       await Promise.all([
         invalidateAllOrganizationRemoteSessionClients(queryClient, {
           refetchType: "all",
@@ -269,6 +341,13 @@ export function CreateRemoteSessionClientSheet({
         );
       }
       onOpenChange(false);
+      // The key set URL to register with the provider lives on the client.
+      if (serviceAccountId) {
+        routes.remoteIdentityProviders.clientDetail.goTo(
+          issuer.id,
+          serviceAccountId,
+        );
+      }
     },
     onError: (error) => {
       // useMutation surfaces error.message via createMutation.error (shown in
@@ -297,6 +376,10 @@ export function CreateRemoteSessionClientSheet({
     setScopeOverride("");
     setAudienceOverride("");
     setClientType(defaultClientType);
+    setOwner("subject");
+    setSelfMethod("client_secret_basic");
+    setKeySet(null);
+    setAssertionAudience("issuer");
     resetCreateMutation();
   }, [open, defaultClientType, resetCreateMutation]);
 
@@ -311,11 +394,16 @@ export function CreateRemoteSessionClientSheet({
     clientType !== "dcr" ||
     !issuer.tunneledMcpServerId ||
     issuerProjectSlug !== undefined;
+  const selfReady =
+    clientId.trim() !== "" &&
+    (selfKey ? keySetChoiceReady(keySet) : clientSecret.trim() !== "");
   const submittable =
     projectChosen &&
-    credentialsReady &&
-    tunnelRouteReady &&
-    clientTypes.includes(clientType);
+    (owner === "self"
+      ? hasTokenEndpoint && selfReady
+      : credentialsReady &&
+        tunnelRouteReady &&
+        clientTypes.includes(clientType));
 
   const handleSubmit = () => {
     if (!submittable || submitting) return;
@@ -391,19 +479,185 @@ export function CreateRemoteSessionClientSheet({
               </Text>
             )}
 
-            <ClientTypeFields
-              availableTypes={clientTypes}
-              clientType={clientType}
-              onClientTypeChange={setClientType}
-              clientId={clientId}
-              clientSecret={clientSecret}
-              tokenEndpointAuthMethod={tokenEndpointAuthMethod}
-              onClientIdChange={setClientId}
-              onClientSecretChange={setClientSecret}
-              onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
-            />
+            <Stack gap={2}>
+              <Label className="text-muted-foreground text-xs">
+                Signs in as
+              </Label>
+              <RadioCardGroup
+                aria-label="Signs in as"
+                size="sm"
+                showIndicator={false}
+                orientation="horizontal"
+                value={owner}
+                onValueChange={(next) => setOwner(next as "subject" | "self")}
+                className="grid-cols-1 sm:grid-cols-2"
+              >
+                <RadioCard
+                  value="subject"
+                  leading={<User className="size-4" />}
+                  title="Each user"
+                >
+                  Every caller connects their own {issuer.name} account.
+                </RadioCard>
+                <RadioCard
+                  value="self"
+                  disabled={!hasTokenEndpoint}
+                  leading={<Bot className="size-4" />}
+                  title="Service account"
+                >
+                  The client gets one token for itself, and every caller shares
+                  it.
+                </RadioCard>
+              </RadioCardGroup>
+              {!hasTokenEndpoint && (
+                <Text muted small>
+                  {issuer.name} publishes no token endpoint, so a service
+                  account client cannot get a token. Add one in Settings to
+                  enable it.
+                </Text>
+              )}
+              <Text muted small>
+                Fixed once the client is created.
+              </Text>
+            </Stack>
 
-            {tunneledDcrRestricted && (
+            {owner === "self" ? (
+              <Stack gap={4} className="border-t pt-5">
+                <Text muted small>
+                  Create a machine-to-machine app in {issuer.name} that is
+                  allowed the client credentials grant, then paste its
+                  credentials here. Speakeasy requests tokens from{" "}
+                  {issuer.tokenEndpoint}. Turn off DPoP for the app: Speakeasy
+                  doesn&apos;t send DPoP proofs.
+                </Text>
+                <Stack gap={2}>
+                  <Label
+                    htmlFor="self-client-id"
+                    className="text-muted-foreground text-xs"
+                  >
+                    Client ID
+                  </Label>
+                  <Input
+                    id="self-client-id"
+                    value={clientId}
+                    onChange={setClientId}
+                    placeholder="client_abc123"
+                    className="font-mono"
+                  />
+                </Stack>
+                <Stack gap={2}>
+                  <Label className="text-muted-foreground text-xs">
+                    Token Endpoint Auth Method
+                  </Label>
+                  <RadioRows
+                    label="Token Endpoint Auth Method"
+                    value={selfMethod}
+                    onValueChange={(next) =>
+                      setSelfMethod(next as typeof selfMethod)
+                    }
+                    rows={[
+                      {
+                        value: "client_secret_basic",
+                        title: "client_secret_basic",
+                        description:
+                          "Secret in the Authorization header (default)",
+                        mono: true,
+                      },
+                      {
+                        value: "client_secret_post",
+                        title: "client_secret_post",
+                        description: "Secret in the request body",
+                        mono: true,
+                      },
+                      {
+                        value: "private_key_jwt",
+                        title: "private_key_jwt",
+                        description:
+                          "Assertion signed with one of your key sets",
+                        mono: true,
+                        disabled: !customerManagedKeys,
+                        badge: customerManagedKeys ? undefined : (
+                          <AvailabilityBadge>Requires KMS</AvailabilityBadge>
+                        ),
+                      },
+                    ]}
+                  />
+                </Stack>
+                {selfKey ? (
+                  <Stack gap={4}>
+                    <KeySetPicker
+                      value={keySet}
+                      onChange={setKeySet}
+                      suggestedSetId={suggestedKeySetId}
+                      suggestionLoading={siblingsLoading}
+                      newSetPlaceholder={`${issuer.name} signing key`}
+                      disabled={submitting}
+                    />
+                    <Text muted small>
+                      Register the key set&apos;s public keys with {issuer.name}{" "}
+                      after you create the client: its key set URL is on the
+                      client&apos;s page.
+                    </Text>
+                    <Stack gap={2}>
+                      <Label className="text-muted-foreground text-xs">
+                        Client assertion audience
+                      </Label>
+                      <Select
+                        value={assertionAudience}
+                        onValueChange={(next) =>
+                          setAssertionAudience(
+                            next as "issuer" | "token_endpoint",
+                          )
+                        }
+                      >
+                        <SelectTrigger aria-label="Client assertion audience">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="issuer">
+                            Issuer URL (default)
+                          </SelectItem>
+                          <SelectItem value="token_endpoint">
+                            Token endpoint URL
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Stack>
+                  </Stack>
+                ) : (
+                  <Stack gap={2}>
+                    <Label
+                      htmlFor="self-client-secret"
+                      className="text-muted-foreground text-xs"
+                    >
+                      Client Secret
+                    </Label>
+                    <Input
+                      id="self-client-secret"
+                      type="password"
+                      reveal
+                      value={clientSecret}
+                      onChange={setClientSecret}
+                      placeholder="Paste the client secret"
+                    />
+                  </Stack>
+                )}
+              </Stack>
+            ) : (
+              <ClientTypeFields
+                availableTypes={clientTypes}
+                clientType={clientType}
+                onClientTypeChange={setClientType}
+                clientId={clientId}
+                clientSecret={clientSecret}
+                tokenEndpointAuthMethod={tokenEndpointAuthMethod}
+                onClientIdChange={setClientId}
+                onClientSecretChange={setClientSecret}
+                onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
+              />
+            )}
+
+            {owner === "subject" && tunneledDcrRestricted && (
               <Text muted small>
                 {TUNNELED_DCR_PERMISSION_MESSAGE}
               </Text>
@@ -414,7 +668,6 @@ export function CreateRemoteSessionClientSheet({
               audienceOverride={audienceOverride}
               onScopeOverrideChange={setScopeOverride}
               onAudienceOverrideChange={setAudienceOverride}
-              scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
             />
           </Stack>
 

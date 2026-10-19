@@ -11,7 +11,7 @@ export type ListIdentityAccessSecurity = {
 
 export type ListIdentityAccessRequest = {
   /**
-   * The Gram user ID to look up accessible resources for.
+   * The Speakeasy user ID to look up accessible resources for.
    */
   userId: string;
   /**

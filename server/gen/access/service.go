@@ -10,6 +10,7 @@ package access
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -32,9 +33,13 @@ type Service interface {
 	// Fetch the organization's directory groups from WorkOS and save any that are
 	// new or changed.
 	SyncDirectoryGroups(context.Context, *SyncDirectoryGroupsPayload) (res *SyncDirectoryGroupsResult, err error)
-	// Map a directory group or attribute value to a role, replacing any role it
-	// was mapped to before.
+	// Deprecated compatibility endpoint for older dashboard clients. Use
+	// setDirectoryRoleMappings. Rejects replacement when the source already grants
+	// multiple roles.
 	SetDirectoryRoleMapping(context.Context, *SetDirectoryRoleMappingPayload) (res *DirectoryRoleMapping, err error)
+	// Replace the full set of roles granted by a directory group or attribute
+	// value. An empty role list removes all mappings for the source.
+	SetDirectoryRoleMappings(context.Context, *SetDirectoryRoleMappingsPayload) (res []*DirectoryRoleMapping, err error)
 	// Remove a directory role mapping.
 	DeleteDirectoryRoleMapping(context.Context, *DeleteDirectoryRoleMappingPayload) (err error)
 	// List all available scopes and their resource types.
@@ -92,13 +97,13 @@ type Service interface {
 	// Record whether a detected AI tool may reach this organization's MCP gateway.
 	// The decision is organization-level and applies to every server: a blocked
 	// tool is refused when it authenticates, so its users see an error their
-	// client cannot recover from. Enforcement needs a credential Gram can verify,
-	// so a tool that carries no verifiable gateway matcher — one linked only by a
-	// self-reported client name, or by nothing at all — cannot be decided on: the
-	// request is rejected with bad_request, nothing is recorded, and no summary is
-	// returned. An id the organization's scan target catalog does not know is
-	// rejected with not_found. Requires an authenticated session authorized for
-	// org:admin on the active organization.
+	// client cannot recover from. Enforcement needs a credential Speakeasy can
+	// verify, so a tool that carries no verifiable gateway matcher — one linked
+	// only by a self-reported client name, or by nothing at all — cannot be
+	// decided on: the request is rejected with bad_request, nothing is recorded,
+	// and no summary is returned. An id the organization's scan target catalog
+	// does not know is rejected with not_found. Requires an authenticated session
+	// authorized for org:admin on the active organization.
 	SetAIToolDecision(context.Context, *SetAIToolDecisionPayload) (res *SetAIToolDecisionResult, err error)
 	// List who can reach one resource: the principals granted or blocked on it,
 	// and the organization-wide rules they inherit.
@@ -158,7 +163,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [32]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [33]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -188,7 +193,7 @@ type AIDetection struct {
 	FirstSeen string
 	// When this tool was most recently detected.
 	LastSeen string
-	Access   *AIToolAccessSummary
+	Access   *types.AIToolAccessSummary
 }
 
 // One enrolled user a detection target was found for, with that user's share
@@ -209,34 +214,6 @@ type AIDetectionUser struct {
 	FirstSeen string
 	// When this tool was most recently detected for this user.
 	LastSeen string
-}
-
-// The enforcement verdict for one detected AI tool, computed server-side so a
-// client renders wording without re-deriving it. state shares its vocabulary
-// with the shadow MCP inventory's access summary, so one column describes both
-// halves of the Shadow AI section.
-type AIToolAccessSummary struct {
-	// The effective decision as a table renders it: allowed and blocked mean an
-	// organization decision is recorded and in force, unreviewed means nothing is
-	// enforced — either because nobody has decided or because the tool is not
-	// enforceable, in which case a stored decision is projected as unreviewed.
-	// Read enforceable to tell the two apart.
-	State string
-	// The effective organization decision behind state, which is not always the
-	// stored one. Absent rows read as unreviewed, so every tool has a value, and a
-	// tool that is not enforceable reads as unreviewed however it was decided —
-	// the stored decision is left untouched and takes effect again if the tool
-	// gains a verifiable gateway matcher.
-	Decision string
-	// Whether a block on this tool would actually reach the gateway. False when
-	// the tool is linked only by a self-reported client name, or by nothing at
-	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
-	// admin is never told a tool is blocked when it is not.
-	Enforceable bool
-	// Why the decision was made, when an admin gave a reason. Who recorded it and
-	// when are in the audit log rather than here, so there is one record of that
-	// and not two.
-	Rationale *string
 }
 
 // AccessMember is the result type of the access service updateMemberRoles
@@ -756,7 +733,7 @@ type ListGrantsPayload struct {
 // ListIdentityAccessPayload is the payload type of the access service
 // listIdentityAccess method.
 type ListIdentityAccessPayload struct {
-	// The Gram user ID to look up accessible resources for.
+	// The Speakeasy user ID to look up accessible resources for.
 	UserID       string
 	SessionToken *string
 }
@@ -991,11 +968,26 @@ type ResourceAudienceEntry struct {
 // ResourceAudienceResult is the result type of the access service
 // listResourceAudience method.
 type ResourceAudienceResult struct {
+	// Live plugins containing this resource and assigned to an exact audience
+	// role. Omitted without plugin read and administrator access; not evidence of
+	// authorization or installation.
+	RolePlugins []*ResourceAudienceRolePlugin `json:"role_plugins,omitzero"`
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntry
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
 	// change made elsewhere is a conflict rather than a silent overwrite.
 	Version string
+}
+
+type ResourceAudienceRolePlugin struct {
+	// Exact role assigned to the plugin.
+	PrincipalUrn string
+	// Plugin ID.
+	PluginID string
+	// Plugin name.
+	Name string
+	// Plugin slug.
+	Slug string
 }
 
 // Role is the result type of the access service getRole method.
@@ -1082,7 +1074,7 @@ type SetAIToolDecisionPayload struct {
 type SetAIToolDecisionResult struct {
 	// The detection target the decision was recorded for.
 	TargetID string
-	Access   *AIToolAccessSummary
+	Access   *types.AIToolAccessSummary
 }
 
 // SetDirectoryRoleMappingPayload is the payload type of the access service
@@ -1098,8 +1090,30 @@ type SetDirectoryRoleMappingPayload struct {
 	AttributeKey *string
 	// Attribute value to match. Required when source_kind is attribute.
 	AttributeValue *string
-	// Principal URN of the role to grant, from Role.principal_urn.
+	// Role principal URN to grant.
 	RoleUrn string
+}
+
+// SetDirectoryRoleMappingsPayload is the payload type of the access service
+// setDirectoryRoleMappings method.
+type SetDirectoryRoleMappingsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// What the mapping matches.
+	SourceKind string
+	// Directory group to map. Required when source_kind is group.
+	DirectoryGroupID *string
+	// Attribute key to match. Required when source_kind is attribute.
+	AttributeKey *string
+	// Attribute value to match. Required when source_kind is attribute.
+	AttributeValue *string
+	// Optional compare-and-set precondition. The normalized current role set must
+	// match or the request returns conflict without changes. Omit for
+	// unconditional replacement; an empty array requires an unmapped source.
+	ExpectedRoleUrns []string
+	// The complete set of role principal URNs to grant, from Role.principal_urn.
+	// Empty removes every mapping for the source.
+	RoleUrns []string
 }
 
 type SetResourceAudienceEntry struct {

@@ -24,8 +24,10 @@ describe("agentIssuanceBlocked", () => {
 
   // Each of these was a way the provisioning review's button could be offered
   // while the panel that performs the issue refused it.
-  it("blocks when the credential rollout is off", () => {
-    expect(agentIssuanceBlocked(agent(), false)).toMatch(/not enabled/i);
+  it("blocks a caller who may not manage the agent", () => {
+    expect(agentIssuanceBlocked(agent(), false)).toMatch(
+      /do not have permission/i,
+    );
   });
 
   it("blocks without the authorize permission", () => {
@@ -56,17 +58,12 @@ describe("agentIssuanceBlocked", () => {
     expect(agentIssuanceBlocked(orphaned, true)).toMatch(/new owner/i);
   });
 
-  // The rollout is checked before anything else: an organization without the
-  // feature should not be told it is a permission problem.
-  it("reports the rollout before the permission", () => {
-    const denied = agent({
-      permissions: {
-        read: true,
-        write: false,
-        authorize: false,
-        transfer: false,
-      },
-    });
-    expect(agentIssuanceBlocked(denied, false)).toMatch(/not enabled/i);
+  // A caller who cannot manage the agent is told that, not that the agent's
+  // lifecycle is the problem: the lifecycle is not theirs to act on.
+  it("reports the permission before the lifecycle", () => {
+    const suspended = agent({ lifecycle: "suspended" });
+    expect(agentIssuanceBlocked(suspended, false)).toMatch(
+      /do not have permission/i,
+    );
   });
 });

@@ -102,7 +102,7 @@ func TestSearchUsersIdentityContainsMatchesTheWholeSummary(t *testing.T) {
 }
 
 // foldedUserSummary runs one person's summary the way Platform MCP's
-// get_user_metrics_summary runs it: Gram-hosted hook sources excluded, with
+// get_user_metrics_summary runs it: Speakeasy-hosted hook sources excluded, with
 // whichever of the two identity scopes the caller supplies.
 func foldedUserSummary(t *testing.T, ctx context.Context, queries *repo.Queries, projectID uuid.UUID, window time.Time, identity repo.UserIdentity, canonical repo.CanonicalUserIdentity) *repo.MetricsSummaryRow {
 	t.Helper()

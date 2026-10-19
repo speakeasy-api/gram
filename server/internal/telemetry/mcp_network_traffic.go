@@ -32,7 +32,7 @@ var mcpNetworkTrafficWindowHours = map[string]int{
 
 // GetMcpNetworkTraffic returns hourly observed public and private request
 // counts for one MCP server or gateway in the caller's project. Counts only
-// cover requests Gram observed while telemetry logs were enabled, so a quiet
+// cover requests Speakeasy observed while telemetry logs were enabled, so a quiet
 // surface is evidence, not proof, that clients have moved.
 func (s *Service) GetMcpNetworkTraffic(ctx context.Context, payload *telem_gen.GetMcpNetworkTrafficPayload) (*telem_gen.GetMcpNetworkTrafficResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

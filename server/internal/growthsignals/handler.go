@@ -31,7 +31,7 @@ const propertyInsertID = "$insert_id"
 // EventHandler turns audited mutations into growth activities.
 //
 // It reads the webhook stream the audit logger already publishes, so every
-// mutation Gram records reaches PostHog without any service having to emit
+// mutation Speakeasy records reaches PostHog without any service having to emit
 // analytics of its own.
 type EventHandler struct {
 	logger  *slog.Logger

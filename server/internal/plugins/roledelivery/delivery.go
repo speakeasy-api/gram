@@ -38,6 +38,13 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 	if err != nil {
 		return nil, fmt.Errorf("list role delivery server candidates: %w", err)
 	}
+	for i := range candidates {
+		s := &candidates[i]
+		// Keep the row for removals; only automatic additions use eligibility.
+		if HasPlatformTool(s.ToolUrns) {
+			s.Eligible = false
+		}
+	}
 	return candidates, nil
 }
 
@@ -128,8 +135,10 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		return false, nil
 	}
 	if s.BackendKind == "mcp_server" {
-		// An absent rollout context fails closed for provenance-bound remotes, while
-		// CheckAttachment leaves legacy/non-remote backends unaffected.
+		// CheckAttachment applies only to provenance-bound remotes; other
+		// backends pass untouched. For those remotes it fails closed: it refuses
+		// when the project's Shadow MCP policy does not permit the audience, and
+		// also when provenance or the policy cannot be evaluated.
 		if err := checkAttachment(ctx, tx, guard, org, s.ProjectID, pluginID, s.ID); err != nil {
 			return false, err
 		}

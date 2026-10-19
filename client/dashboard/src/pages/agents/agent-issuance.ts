@@ -13,10 +13,10 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
  */
 export function agentIssuanceBlocked(
   agent: ManagedAgent,
-  credentialsEnabled: boolean,
+  canManage: boolean,
 ): string | null {
-  if (!credentialsEnabled) {
-    return "Issuing agent keys is not enabled for this organization.";
+  if (!canManage) {
+    return "You do not have permission to issue keys for this agent.";
   }
   if (!agent.permissions.authorize) {
     return "You do not have permission to issue keys for this agent.";

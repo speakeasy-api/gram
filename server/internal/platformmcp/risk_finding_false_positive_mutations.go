@@ -208,7 +208,7 @@ func (s *riskFindingFalsePositiveService) apply(ctx context.Context, principal P
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operation, IdempotencyKey: input.IdempotencyKey,
 		Input: normalizedRiskFindingFalsePositive{ProjectSlug: project.Slug, FindingIDs: normalizedIDs, Reason: reason},
-	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		existing, err := riskrepo.New(tx).GetRiskResultsByIDs(ctx, riskrepo.GetRiskResultsByIDsParams{ProjectID: project.ID, Ids: ids})
 		if err != nil {
 			return nil, riskMutationUnavailableWithCause(fmt.Errorf("read risk findings for false positive mutation: %w", err))

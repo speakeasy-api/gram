@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { CatalogPlatformPage } from "./CatalogPlatformPage";
 import { CatalogPlatforms } from "./CatalogPlatforms";
-import { testPlatform } from "./testPlatform";
+import { claudeTagPlatform } from "./catalogFixture";
 
 const policy = vi.hoisted(() => ({
   issuers: [] as unknown[],
@@ -70,7 +70,7 @@ vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
     catalogQuery.isError
       ? { data: undefined, isPending: false, isError: true, refetch: vi.fn() }
       : {
-          data: { platforms: [testPlatform] },
+          data: { platforms: [claudeTagPlatform] },
           isPending: false,
           isError: false,
         },

@@ -27,7 +27,7 @@ type PublicationPackageAddress struct {
 }
 
 // ResolvePublicationEvidence returns freshness and selected package addresses
-// for exact plugin slugs in a project. It only reads Gram's current package
+// for exact plugin slugs in a project. It only reads Speakeasy's current package
 // inputs and stored publication fingerprints. It does not contact GitHub, expose
 // the marketplace bearer URL, or mint credentials.
 func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID string, projectID uuid.UUID, pluginSlugs []string) ([]PublicationEvidence, error) {

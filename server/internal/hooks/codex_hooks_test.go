@@ -109,7 +109,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 	require.NotNil(t, result.Decision)
 	require.Equal(t, "deny", *result.Decision)
 	require.NotNil(t, result.Reason)
-	require.Contains(t, *result.Reason, "not Gram-hosted")
+	require.Contains(t, *result.Reason, "not Speakeasy-hosted")
 	require.Contains(t, *result.Reason, "https://external.example.com/mcp/speakeasy-team-62awx")
 	require.Contains(t, *result.Reason, "Request access:")
 }

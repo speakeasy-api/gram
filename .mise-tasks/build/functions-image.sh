@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Build a Gram Functions runner image"
+#MISE description="Build a Speakeasy Functions runner image"
 #MISE dir="{{ config_root }}/functions"
 #MISE hide=true
 

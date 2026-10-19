@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * createCimd remoteSessionClients
  *
  * @remarks
- * Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
+ * Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Speakeasy generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
  */
 export function remoteSessionClientsCreateCimd(
   client: GramCore,

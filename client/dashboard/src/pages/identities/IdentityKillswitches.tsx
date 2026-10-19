@@ -110,7 +110,7 @@ function IdentityKillswitchesPanel({
   const [params, setParams] = useSearchParams();
   const [requestOpen, setRequestOpen] = useState(false);
 
-  // Killswitches key on the Gram user id. An identity with no member row —
+  // Killswitches key on the Speakeasy user id. An identity with no member row —
   // an address an agent reported, an api-key subject — names nobody the
   // capability service can restrict, so there is nothing to list or create.
   const { member, query: membersQuery } = useIdentityMember(identity);

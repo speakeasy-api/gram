@@ -129,7 +129,7 @@ func TestAuthorizationOrChatSessionToken_BearerWinsWhenBothSet(t *testing.T) {
 }
 
 // TestAuthorizationOrChatSessionToken_RawKeyWinsOverChatSession is the
-// regression guard for the hosted install-page snippets: a raw Gram API
+// regression guard for the hosted install-page snippets: a raw Speakeasy API
 // key with no Bearer prefix must round-trip through the identity-auth
 // helper untouched and pre-empt the chat-session fallback. See the
 // [httpheaders.AuthorizationOrChatSessionToken] docstring.

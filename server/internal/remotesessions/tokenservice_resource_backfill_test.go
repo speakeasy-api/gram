@@ -264,9 +264,9 @@ func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testi
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, derived, spy.form.Get("resource"), "the refresh grant must have carried the derived resource")
 
-	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, RemoteSessionClientID: clientID}, tokenCredential(tokens[refreshedClient.RemoteSessionIssuerID]),
+	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}, tokenCredential(tokens[refreshedClient.RemoteSessionIssuerID]),
 		"the request that backfills the resource must itself carry it, not the pre-refresh empty value")
-	require.Equal(t, remotesessions.UpstreamToken{Token: "second-token", Resource: "https://second.example.com/mcp", RemoteSessionClientID: secondClient}, tokenCredential(tokens[secondIssuer]))
+	require.Equal(t, remotesessions.UpstreamToken{Token: "second-token", Resource: "https://second.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: secondClient}, tokenCredential(tokens[secondIssuer]))
 
 	sess := getRemoteSessionRow(t, ctx, ti, clientID, subject)
 	require.Equal(t, derived, conv.FromPGTextOrEmpty[string](sess.Resource), "the backfill must also have been persisted")
@@ -274,7 +274,7 @@ func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testi
 
 // seedRemoteMCPServerForIssuer binds one remote MCP server at mcpURL to the
 // user session issuer so FallbackResourceForClient derives it unambiguously.
-func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID uuid.UUID, slug, mcpURL string) {
+func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID uuid.UUID, slug, mcpURL string) uuid.UUID {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -289,7 +289,7 @@ func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testIns
 	})
 	require.NoError(t, err)
 
-	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  uuid.New(),
 		ProjectID:           *authCtx.ProjectID,
 		Name:                conv.ToPGText(slug),
@@ -299,6 +299,7 @@ func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testIns
 		UserSessionIssuerID: conv.ToNullUUID(userIssuerID),
 	})
 	require.NoError(t, err)
+	return server.ID
 }
 
 // attachClientUpstream gives one client a private user session issuer carrying
@@ -369,8 +370,8 @@ func TestResolveAccessTokens_BackfillStampsTheRefreshedClientsOwnResource(t *tes
 	sess := getRemoteSessionRow(t, ctx, ti, clientID, subject)
 	require.Equal(t, derived, conv.FromPGTextOrEmpty[string](sess.Resource), "the backfill must stamp the refreshed client's own resource, never a sibling's")
 
-	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, RemoteSessionClientID: clientID}, tokenCredential(tokens[refreshedClient.RemoteSessionIssuerID]))
-	require.Equal(t, remotesessions.UpstreamToken{Token: "sibling-token", Resource: siblingResource, RemoteSessionClientID: siblingClient}, tokenCredential(tokens[siblingIssuer]))
+	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: clientID}, tokenCredential(tokens[refreshedClient.RemoteSessionIssuerID]))
+	require.Equal(t, remotesessions.UpstreamToken{Token: "sibling-token", Resource: siblingResource, CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: siblingClient}, tokenCredential(tokens[siblingIssuer]))
 
 	siblingSess := getRemoteSessionRow(t, ctx, ti, siblingClient, subject)
 	require.Equal(t, siblingResource, conv.FromPGTextOrEmpty[string](siblingSess.Resource), "the sibling's own binding must survive a neighbour's backfill")
@@ -393,7 +394,7 @@ func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
 	const mcpURL = "https://mcp.example.com/mcp"
 	seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-sweep-mcp", mcpURL)
 
-	// Make the row a due keepalive candidate: stale, org-enforced, live Gram session.
+	// Make the row a due keepalive candidate: stale, org-enforced, live Speakeasy session.
 	require.NoError(t, repo.New(ti.conn).SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{
 		ID:        row.ID,
 		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),

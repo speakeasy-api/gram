@@ -148,9 +148,8 @@ type Service struct {
 	// the realtime scanner uses. Optional: when nil the eval endpoint returns
 	// un-matched verdicts (judge unavailable).
 	promptJudge promptpolicy.Evaluator
-	// findingsCH reads the ClickHouse risk_findings table: always for the
-	// project-wide listing and reveal, and for the overview endpoint when
-	// FlagRiskOverviewFromClickHouse is on for the org.
+	// findingsCH reads the ClickHouse risk_findings table for the project-wide
+	// listing, reveal, overview and signals.
 	findingsCH      *chrepo.Queries
 	findingEvidence *MCPFindingEvidenceStore
 	// assetStorage reads chat content part assets for the ClickHouse reveal
@@ -858,7 +857,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
-	mcpScope := policycore.Project(current, nil, nil).MCPScope
+	mcpScope := policycore.Project(current, nil).MCPScope
 	mcpScopeJSON := current.McpScope
 	if payload.McpScope != nil {
 		mcpScope, mcpScopeJSON, err = s.normalizeMCPScope(ctx, *authCtx.ProjectID, payload.McpScope)
@@ -986,33 +985,48 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
 		}
 	}
-	// The disposition is immutable: accept only the policy's current effective
-	// value (so form round-trips stay valid); anything else is a posture
-	// switch, which requires delete + recreate. A policy with an explicitly
-	// stored disposition also cannot morph away from being a blocking shadow
-	// MCP policy via a sources/action change — that would silently drop the
-	// posture and orphan the blocked-URL list.
+	// A blocking shadow MCP policy is one that detects shadow_mcp and denies;
+	// its disposition says whether the server list it carries is a set of
+	// allowed exceptions (block_all) or a set of blocked servers (allow_all).
+	currentDisposition := shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, current.Sources, current.Action)
 	effectiveDisposition := shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, sources, action)
-	if current.ShadowMcpDisposition.Valid && current.ShadowMcpDisposition.String != "" && effectiveDisposition == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
+	// This edit retires the blocking posture: shadow_mcp left the sources, the
+	// action left block, or both.
+	retiresBlockingPosture := currentDisposition != "" && effectiveDisposition == ""
+	// An allow_all policy is its blocked-server list — outside the blocking
+	// posture there is nothing for that list to deny, and the policy would sit
+	// in the project's single blocking-policy slot enforcing nothing. A
+	// block_all policy's list is only a set of exceptions to a default deny,
+	// so it can retire the posture and give the exceptions up.
+	if retiresBlockingPosture && currentDisposition == ShadowMCPDispositionAllowAll {
+		return nil, oops.E(oops.CodeInvalid, nil, "%s", ShadowMCPRetiredAllowAllMessage(current.Sources, current.Action, sources, action))
 	}
 
 	if payload.ShadowMcpDisposition != nil {
 		if effectiveDisposition == "" {
-			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow_mcp_disposition only applies to a policy that detects shadow_mcp and denies, and this update leaves it %s", shadowMCPPolicyShape(sources, action))
 		}
 		if *payload.ShadowMcpDisposition != effectiveDisposition {
-			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition is immutable; delete and recreate the policy to switch posture")
+			return nil, oops.E(oops.CodeInvalid, nil, "a shadow mcp policy's disposition is chosen when it is created and cannot be edited: this policy is %q and cannot become %q. Delete it and create a %q policy instead", effectiveDisposition, *payload.ShadowMcpDisposition, *payload.ShadowMcpDisposition)
 		}
 	}
 
 	var shadowMCPAllowedURLs []string
+	allowedURLsSet := payload.ShadowMcpAllowedUrls != nil
 	audienceUpdateRequested := payload.AudienceType != nil || payload.AudiencePrincipalUrns != nil
 	if payload.ShadowMcpAllowedUrls != nil {
 		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, effectiveDisposition, payload.ShadowMcpAllowedUrls)
 		if err != nil {
 			return nil, err
 		}
+	}
+	// Retiring the posture retires the allowed-server exceptions with it,
+	// whether or not the caller thought to send an empty list. Leaving the
+	// bypass grants behind would silently reinstate them the next time the
+	// policy blocks again. The empty slice is load-bearing: a nil desired set
+	// means "preserve" to the grant reconciler.
+	if retiresBlockingPosture {
+		shadowMCPAllowedURLs, allowedURLsSet = []string{}, true
 	}
 
 	var shadowMCPBlockedURLs []string
@@ -1110,7 +1124,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		AudienceChanged:      audienceUpdateRequested,
 		AudienceDelta:        nil,
 		AllowedURLs:          shadowMCPAllowedURLs,
-		AllowedURLsSet:       payload.ShadowMcpAllowedUrls != nil,
+		AllowedURLsSet:       allowedURLsSet,
 		BlockedURLs:          shadowMCPBlockedURLs,
 		BlockedURLsSet:       payload.ShadowMcpBlockedUrls != nil,
 		EffectiveDisposition: effectiveDisposition,
@@ -1733,105 +1747,11 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		return nil, oops.E(oops.CodeInvalid, err, "invalid overview window").LogError(ctx, s.logger)
 	}
 
-	if s.overviewFromClickHouse(ctx, authCtx) {
-		return s.getRiskOverviewFromClickHouse(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, from, to)
+	if s.findingsCH == nil {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "risk overview requires the ClickHouse findings store").LogError(ctx, s.logger)
 	}
 
-	window := riskOverviewWindowParams(from, to)
-	scanCounts, err := s.repo.GetRiskOverviewScanCounts(ctx, repo.GetRiskOverviewScanCountsParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview scan counts").LogError(ctx, s.logger)
-	}
-
-	findingCounts, err := s.repo.GetRiskOverviewFindingCounts(ctx, repo.GetRiskOverviewFindingCountsParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview finding counts").LogError(ctx, s.logger)
-	}
-
-	userRows, err := s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-		// Returns enough rows for the "view all users" page to show the full
-		// long-tail without pagination. The main /risk-overview widget only
-		// renders the top 10 of these.
-		RowLimit: 200,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top users").LogError(ctx, s.logger)
-	}
-
-	timeSeriesRows, err := s.repo.ListRiskOverviewTimeSeriesFindings(ctx, repo.ListRiskOverviewTimeSeriesFindingsParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview time series findings").LogError(ctx, s.logger)
-	}
-
-	ruleRows, err := s.repo.ListRiskOverviewTopRules(ctx, repo.ListRiskOverviewTopRulesParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-		// Returns enough rows for the "view all rules" page to show the long
-		// tail without pagination. The main /risk-overview widget only renders
-		// the top 10 of these.
-		RowLimit: 200,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top rules").LogError(ctx, s.logger)
-	}
-
-	topCategories := riskOverviewTopCategories(timeSeriesRows, 10)
-
-	topRules := make([]*gen.RiskRuleBreakdownEntry, 0, len(ruleRows))
-	for _, row := range ruleRows {
-		topRules = append(topRules, &gen.RiskRuleBreakdownEntry{
-			RuleID:   row.RuleID,
-			Source:   row.Source,
-			Findings: row.Findings,
-		})
-	}
-
-	topUsers := make([]*gen.RiskOverviewUser, 0, len(userRows))
-	for _, row := range userRows {
-		topUsers = append(topUsers, &gen.RiskOverviewUser{
-			Email:          row.Email,
-			ExternalUserID: row.ExternalUserID,
-			Findings:       row.Findings,
-		})
-	}
-
-	timeSeriesFindings := make([]*gen.RiskOverviewTimeSeriesFinding, 0, len(timeSeriesRows))
-	for _, row := range timeSeriesRows {
-		timeSeriesFindings = append(timeSeriesFindings, &gen.RiskOverviewTimeSeriesFinding{
-			BucketStart: row.BucketStart.Time.UTC().Format(time.RFC3339),
-			Category:    row.Category,
-			Findings:    row.Findings,
-		})
-	}
-
-	return &gen.RiskOverviewResult{
-		From:               from.UTC().Format(time.RFC3339),
-		To:                 to.UTC().Format(time.RFC3339),
-		MessagesScanned:    scanCounts.MessagesScanned,
-		Findings:           findingCounts.Findings,
-		FlaggedSessions:    findingCounts.FlaggedSessions,
-		ActivePolicies:     scanCounts.ActivePolicies,
-		TopCategories:      topCategories,
-		TopUsers:           topUsers,
-		TopRules:           topRules,
-		TimeSeriesFindings: timeSeriesFindings,
-	}, nil
+	return s.getRiskOverviewFromClickHouse(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, from, to)
 }
 
 type riskOverviewWindow struct {
@@ -1878,17 +1798,7 @@ func riskOverviewWindowParams(from, to time.Time) riskOverviewWindow {
 	}
 }
 
-func riskOverviewTopCategories(rows []repo.ListRiskOverviewTimeSeriesFindingsRow, limit int) []*gen.RiskOverviewCategory {
-	counts := make(map[string]int64)
-	for _, row := range rows {
-		counts[row.Category] += row.Findings
-	}
-
-	return topCategoriesFromCounts(counts, limit)
-}
-
-// topCategoriesFromCounts is the shared tail of the Postgres and ClickHouse
-// top-categories derivations: rank per-category totals, drop empty ones.
+// topCategoriesFromCounts ranks per-category totals and drops empty ones.
 func topCategoriesFromCounts(counts map[string]int64, limit int) []*gen.RiskOverviewCategory {
 	if limit <= 0 {
 		return nil
@@ -2107,121 +2017,6 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 		Findings:       total,
 		Categories:     categories,
 		Rules:          rules,
-	}, nil
-}
-
-func (s *Service) GetRiskRuleBreakdown(ctx context.Context, payload *gen.GetRiskRuleBreakdownPayload) (*gen.RiskRuleBreakdownResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid window").LogError(ctx, s.logger)
-	}
-
-	window := riskOverviewWindowParams(from, to)
-	rows, err := s.repo.ListRiskRulesByCategory(ctx, repo.ListRiskRulesByCategoryParams{
-		ProjectID: *authCtx.ProjectID,
-		FromTime:  window.from,
-		ToTime:    window.to,
-		Category:  payload.Category,
-		// The dashboard renders every rule; a NULL limit is LIMIT ALL.
-		PageLimit: pgtype.Int4{Int32: 0, Valid: false},
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list rule breakdown").LogError(ctx, s.logger)
-	}
-
-	rules := make([]*gen.RiskRuleBreakdownEntry, 0, len(rows))
-	var total int64
-	for _, row := range rows {
-		rules = append(rules, &gen.RiskRuleBreakdownEntry{
-			RuleID:   row.RuleID,
-			Source:   row.Source,
-			Findings: row.Findings,
-		})
-		total += row.Findings
-	}
-
-	return &gen.RiskRuleBreakdownResult{
-		From:     from.UTC().Format(time.RFC3339),
-		To:       to.UTC().Format(time.RFC3339),
-		Category: payload.Category,
-		Rules:    rules,
-		Total:    total,
-	}, nil
-}
-
-func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskPolicyStatusPayload) (*types.RiskPolicyStatus, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	id, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.C(oops.CodeInvalid)
-	}
-
-	policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
-	}
-
-	totalMessages, err := s.repo.CountTotalMessages(ctx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count total messages").LogError(ctx, s.logger)
-	}
-
-	analyzedMessages, err := s.repo.CountAnalyzedMessages(ctx, repo.CountAnalyzedMessagesParams{
-		ProjectID:         *authCtx.ProjectID,
-		RiskPolicyID:      id,
-		RiskPolicyVersion: policy.Version,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count analyzed messages").LogError(ctx, s.logger)
-	}
-
-	findingsCount, err := s.repo.CountFindingsByPolicy(ctx, repo.CountFindingsByPolicyParams{
-		ProjectID:         *authCtx.ProjectID,
-		RiskPolicyID:      id,
-		RiskPolicyVersion: policy.Version,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count findings").LogError(ctx, s.logger)
-	}
-
-	pending := max(totalMessages-analyzedMessages, 0)
-
-	// We report a simplified workflow status based on pending work.
-	workflowStatus := "not_started"
-	if pending > 0 && policy.Enabled {
-		workflowStatus = "running"
-	} else if pending == 0 && policy.Enabled {
-		workflowStatus = "sleeping"
-	}
-
-	return &types.RiskPolicyStatus{
-		PolicyID:         id.String(),
-		PolicyVersion:    policy.Version,
-		TotalMessages:    totalMessages,
-		AnalyzedMessages: analyzedMessages,
-		PendingMessages:  pending,
-		FindingsCount:    findingsCount,
-		WorkflowStatus:   workflowStatus,
 	}, nil
 }
 
@@ -3720,7 +3515,7 @@ func findingToMatch(f scanners.Finding) *gen.TestDetectionRuleMatch {
 // policyToType converts an already-loaded database row to the API type,
 // enriching it through the shared transport-neutral policy core.
 func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types.RiskPolicy, error) {
-	policy, err := s.policies.ProjectWithProgress(ctx, row)
+	policy, err := s.policies.ProjectWithAudience(ctx, row)
 	if err != nil {
 		return nil, fmt.Errorf("project risk policy: %w", err)
 	}

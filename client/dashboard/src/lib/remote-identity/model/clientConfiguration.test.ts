@@ -3,28 +3,8 @@ import {
   advertisedScopes,
   normalizeScopes,
   pickPreferredAuthMethod,
-  preferredScopes,
   serverIdentityAuthMethod,
 } from "./clientConfiguration";
-
-describe("preferredScopes", () => {
-  it("prefers the protected resource's scopes over the issuer's", () => {
-    expect(
-      preferredScopes(["read", "write"], ["read", "write", "admin"]),
-    ).toEqual(["read", "write"]);
-  });
-
-  it("falls back to the issuer's scopes when the resource names none", () => {
-    expect(preferredScopes([], ["openid"])).toEqual(["openid"]);
-    expect(preferredScopes(undefined, ["openid"])).toEqual(["openid"]);
-    expect(preferredScopes(null, null)).toEqual([]);
-  });
-
-  it("ignores blank entries and trims the rest", () => {
-    expect(preferredScopes([" ", ""], [" openid ", ""])).toEqual(["openid"]);
-    expect(preferredScopes([" read "], ["openid"])).toEqual(["read"]);
-  });
-});
 
 describe("advertisedScopes", () => {
   it("lists the resource's scopes first, then the issuer's others", () => {

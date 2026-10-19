@@ -64,5 +64,5 @@ func TestMCPConsentBindingWiringMatchesMonolith(t *testing.T) {
 		require.NoError(t, format.Node(&body, fset, authorizer.Args[0]))
 		authorizers[path] = body.String()
 	}
-	require.Equal(t, authorizers["start.go"], authorizers["mcp.go"], "both listeners must enforce identical rollout, authenticated-human and transactional owner checks")
+	require.Equal(t, authorizers["start.go"], authorizers["mcp.go"], "both listeners must enforce identical authenticated-human and transactional owner checks")
 }

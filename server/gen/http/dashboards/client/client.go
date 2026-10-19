@@ -53,6 +53,10 @@ type Client struct {
 	// duplicateDashboard endpoint.
 	DuplicateDashboardDoer goahttp.Doer
 
+	// DuplicateBuiltInDashboard Doer is the HTTP client used to make requests to
+	// the duplicateBuiltInDashboard endpoint.
+	DuplicateBuiltInDashboardDoer goahttp.Doer
+
 	// DeleteDashboard Doer is the HTTP client used to make requests to the
 	// deleteDashboard endpoint.
 	DeleteDashboardDoer goahttp.Doer
@@ -77,21 +81,22 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListDashboardsDoer:        doer,
-		GetDashboardDoer:          doer,
-		CreateDashboardDoer:       doer,
-		UpdateDashboardDoer:       doer,
-		SaveDashboardLayoutDoer:   doer,
-		AddDashboardWidgetDoer:    doer,
-		RemoveDashboardWidgetDoer: doer,
-		SaveDashboardFiltersDoer:  doer,
-		DuplicateDashboardDoer:    doer,
-		DeleteDashboardDoer:       doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		ListDashboardsDoer:            doer,
+		GetDashboardDoer:              doer,
+		CreateDashboardDoer:           doer,
+		UpdateDashboardDoer:           doer,
+		SaveDashboardLayoutDoer:       doer,
+		AddDashboardWidgetDoer:        doer,
+		RemoveDashboardWidgetDoer:     doer,
+		SaveDashboardFiltersDoer:      doer,
+		DuplicateDashboardDoer:        doer,
+		DuplicateBuiltInDashboardDoer: doer,
+		DeleteDashboardDoer:           doer,
+		RestoreResponseBody:           restoreBody,
+		scheme:                        scheme,
+		host:                          host,
+		decoder:                       dec,
+		encoder:                       enc,
 	}
 }
 
@@ -306,6 +311,30 @@ func (c *Client) DuplicateDashboard() goa.Endpoint {
 		resp, err := c.DuplicateDashboardDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("dashboards", "duplicateDashboard", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DuplicateBuiltInDashboard returns an endpoint that makes HTTP requests to
+// the dashboards service duplicateBuiltInDashboard server.
+func (c *Client) DuplicateBuiltInDashboard() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDuplicateBuiltInDashboardRequest(c.encoder)
+		decodeResponse = DecodeDuplicateBuiltInDashboardResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDuplicateBuiltInDashboardRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DuplicateBuiltInDashboardDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("dashboards", "duplicateBuiltInDashboard", err)
 		}
 		return decodeResponse(resp)
 	}

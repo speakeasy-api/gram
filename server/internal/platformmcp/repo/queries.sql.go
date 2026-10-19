@@ -1264,6 +1264,31 @@ func (q *Queries) DeleteExpiredPlatformMCPOperationReceipt(ctx context.Context, 
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredPlatformMCPOperationReceiptsBatch = `-- name: DeleteExpiredPlatformMCPOperationReceiptsBatch :execrows
+DELETE FROM platform_mcp_operation_receipts
+WHERE id IN (
+    SELECT id
+    FROM platform_mcp_operation_receipts
+    WHERE expires_at <= clock_timestamp()
+    ORDER BY expires_at
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+)
+`
+
+// The periodic sweep that bounds the receipt table. The per-key reclaim in the
+// receipt transaction only reaches a key that is written again, and a
+// project-creation receipt is never reclaimed that way at all. Bounded by
+// batch so one tick never holds a long delete; SKIP LOCKED leaves rows a
+// receipt transaction is touching to the next tick.
+func (q *Queries) DeleteExpiredPlatformMCPOperationReceiptsBatch(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPlatformMCPOperationReceiptsBatch, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredPlatformMCPReadiness = `-- name: DeleteExpiredPlatformMCPReadiness :execrows
 DELETE FROM platform_mcp_readiness AS stale
 WHERE stale.organization_id = $1
@@ -2385,7 +2410,8 @@ LEFT JOIN LATERAL (
      AND plugin.organization_id = $3
      AND plugin.deleted IS FALSE
     WHERE membership.deleted IS FALSE
-      AND (($1::text = 'mcp_server' AND membership.mcp_server_id = server.id)
+      AND (($1::text = 'mcp_server' AND (membership.mcp_server_id = server.id
+          OR (membership.toolset_id = server.id AND server.toolset_id = membership.toolset_id)))
         OR ($1::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
 ) memberships ON TRUE
 WHERE project.id = $4
@@ -2563,7 +2589,7 @@ type GetPlatformMCPInstallTargetRow struct {
 
 // Tenant-scoped exact MCP target plus its canonical public endpoint. Disabled
 // and unproxied servers deliberately expose no endpoint even if an endpoint row
-// remains, because neither can be dispatched through Gram's public MCP route.
+// remains, because neither can be dispatched through Speakeasy's public MCP route.
 func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatformMCPInstallTargetParams) (GetPlatformMCPInstallTargetRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformMCPInstallTarget, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
 	var i GetPlatformMCPInstallTargetRow
@@ -3460,8 +3486,8 @@ type GetPlatformMCPServerToolExposureRow struct {
 }
 
 // The tool list one hosted MCP server exposes, read through its modern server
-// record. A server whose backend is not a Gram toolset, or a bare toolset with
-// no server record, deliberately returns no row: its tool list is not Gram's
+// record. A server whose backend is not a Speakeasy toolset, or a bare toolset with
+// no server record, deliberately returns no row: its tool list is not Speakeasy's
 // to change from here.
 // The columns this returns are only the ones the caller cannot already supply:
 // the organization, project and MCP server ids are query inputs, so echoing
@@ -3828,6 +3854,71 @@ func (q *Queries) GetPlatformMCPSubjectConnectionAuthState(ctx context.Context, 
 		&i.LatestRefreshExpiresAt,
 		&i.LatestSessionRevokedAt,
 		&i.Ready,
+	)
+	return i, err
+}
+
+const getUnexpiredPlatformMCPOperationReceipt = `-- name: GetUnexpiredPlatformMCPOperationReceipt :one
+SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.result_payload, receipt.expires_at, receipt.created_at, receipt.updated_at
+FROM platform_mcp_operation_receipts AS receipt
+LEFT JOIN platform_mcp_connections AS connection
+  ON connection.id = receipt.connection_id
+ AND connection.organization_id = receipt.organization_id
+WHERE receipt.organization_id = $1
+  AND receipt.project_id = $2
+  AND receipt.operation = $3
+  AND receipt.idempotency_key = $4
+  AND receipt.expires_at > clock_timestamp()
+  AND (
+    receipt.user_id = $5
+    OR (receipt.user_id IS NULL AND connection.subject_urn = $6)
+  )
+ORDER BY receipt.created_at DESC, receipt.id DESC
+LIMIT 1
+`
+
+type GetUnexpiredPlatformMCPOperationReceiptParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Operation      string
+	IdempotencyKey string
+	UserID         pgtype.Text
+	SubjectUrn     string
+}
+
+// The unlocked replay pre-check that runs before a write charges its budget.
+// Same match as GetPlatformMCPOperationReceipt, but expiry is judged here with
+// the database clock, the same clock DeleteExpiredPlatformMCPOperationReceipt
+// uses under the lock, so the pre-check can never replay a receipt the locked
+// path would already treat as expired.
+func (q *Queries) GetUnexpiredPlatformMCPOperationReceipt(ctx context.Context, arg GetUnexpiredPlatformMCPOperationReceiptParams) (PlatformMcpOperationReceipt, error) {
+	row := q.db.QueryRow(ctx, getUnexpiredPlatformMCPOperationReceipt,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Operation,
+		arg.IdempotencyKey,
+		arg.UserID,
+		arg.SubjectUrn,
+	)
+	var i PlatformMcpOperationReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
+		&i.Operation,
+		&i.IdempotencyKey,
+		&i.InputHash,
+		&i.Status,
+		&i.ResultCode,
+		&i.ResultPayload,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -5824,28 +5915,29 @@ SELECT
     ps.policy,
     ps.sort_order,
     CASE
+      WHEN ps.mcp_server_id IS NOT NULL OR s.id IS NOT NULL THEN 'mcp_server'
       WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
-      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
       WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
     END::text AS target_kind,
     COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
 CROSS JOIN membership_version
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
-LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
-  AND t.project_id = p.project_id
-  AND t.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = ps.mcp_server_id
+  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
+LEFT JOIN toolsets t
+  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -5951,22 +6043,23 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    (ps.toolset_id IS NOT NULL)::boolean AS toolset_backed,
+    (ps.toolset_id IS NOT NULL AND s.id IS NULL)::boolean AS toolset_backed,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
-LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
-  AND t.project_id = p.project_id
-  AND t.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = ps.mcp_server_id
+  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
+LEFT JOIN toolsets t
+  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -6013,6 +6106,8 @@ type ListPlatformMCPPluginServersRow struct {
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
+// A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists;
+// a server-keyed canonical wrapper still falls back to its toolset's MCP slug.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6460,6 +6555,87 @@ func (q *Queries) ListPlatformMCPProjects(ctx context.Context, arg ListPlatformM
 	return items, nil
 }
 
+const listPlatformMCPRoleDirectorySources = `-- name: ListPlatformMCPRoleDirectorySources :many
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value,
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_user_group_memberships AS m
+        JOIN directory_users AS du
+          ON du.id = m.directory_user_id
+          AND du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+        WHERE m.directory_group_id = dg.id
+          AND m.deleted IS FALSE
+      )
+      ELSE (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::bigint AS member_count
+FROM directory_role_mappings AS drm
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+ORDER BY drm.role_urn, drm.source_kind DESC, dg.name, drm.attribute_key, drm.attribute_value, drm.id
+`
+
+type ListPlatformMCPRoleDirectorySourcesRow struct {
+	RoleUrn            string
+	SourceKind         string
+	DirectoryGroupName pgtype.Text
+	AttributeKey       pgtype.Text
+	AttributeValue     pgtype.Text
+	MemberCount        int64
+}
+
+// Each live directory role mapping in the organization, with how many active
+// directory users its group or attribute value matches today, counted by
+// distinct email as the dashboard counts them. Mappings whose group is gone
+// still list, matching nobody.
+func (q *Queries) ListPlatformMCPRoleDirectorySources(ctx context.Context, organizationID string) ([]ListPlatformMCPRoleDirectorySourcesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPRoleDirectorySources, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPRoleDirectorySourcesRow
+	for rows.Next() {
+		var i ListPlatformMCPRoleDirectorySourcesRow
+		if err := rows.Scan(
+			&i.RoleUrn,
+			&i.SourceKind,
+			&i.DirectoryGroupName,
+			&i.AttributeKey,
+			&i.AttributeValue,
+			&i.MemberCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPServerIdentities = `-- name: ListPlatformMCPServerIdentities :many
 WITH server AS (
     SELECT
@@ -6467,7 +6643,16 @@ WITH server AS (
         m.toolset_id,
         COALESCE(m.name, '')::text AS mcp_name,
         COALESCE(m.slug, '')::text AS mcp_slug,
-        COALESCE(toolset.slug, '')::text AS toolset_slug
+        COALESCE(toolset.slug, '')::text AS toolset_slug,
+        (m.toolset_id IS NOT NULL AND (m.id = m.toolset_id OR NOT EXISTS (
+            SELECT 1 FROM mcp_servers AS canonical
+            WHERE canonical.id = m.toolset_id AND canonical.project_id = m.project_id AND canonical.deleted IS FALSE
+        )))::boolean AS hosts_toolset,
+        EXISTS (
+            SELECT 1 FROM mcp_servers AS sibling
+            WHERE sibling.toolset_id = m.toolset_id AND sibling.project_id = m.project_id
+              AND sibling.deleted IS FALSE AND sibling.id <> m.id
+        )::boolean AS toolset_shared
     FROM mcp_servers AS m
     JOIN projects AS project
       ON project.id = m.project_id
@@ -6511,13 +6696,14 @@ server_membership AS (
     FROM server
     JOIN membership
       ON membership.toolset_id = server.toolset_id
-    WHERE server.toolset_id IS NOT NULL
+    WHERE server.hosts_toolset
 )
 SELECT
     server.id AS mcp_server_id,
     server.mcp_name,
     server.mcp_slug,
-    server.toolset_slug,
+    (CASE WHEN server.hosts_toolset THEN server.toolset_slug ELSE '' END)::text AS toolset_slug,
+    (server.hosts_toolset AND server.toolset_shared)::boolean AS toolset_shared,
     COALESCE(server_membership.plugin_slug, '')::text AS plugin_slug,
     COALESCE(server_membership.display_name, '')::text AS plugin_display_name
 FROM server
@@ -6536,6 +6722,7 @@ type ListPlatformMCPServerIdentitiesRow struct {
 	McpName           string
 	McpSlug           string
 	ToolsetSlug       string
+	ToolsetShared     bool
 	PluginSlug        string
 	PluginDisplayName string
 }
@@ -6546,10 +6733,13 @@ type ListPlatformMCPServerIdentitiesRow struct {
 // display name (the key the plugin's mcp.json ships it under). One row per
 // (server, membership); a server with no membership yields one row with empty
 // plugin columns. Hosted servers are also reached through memberships attached
-// by toolset, so those memberships are included for the server fronting that
-// toolset. Memberships are gathered from the project's live plugins through the
-// (plugin_id, backend) indexes, one arm per backend kind: a live membership has
-// exactly one backend, so the arms never repeat a row.
+// by toolset, so those memberships, and the toolset slug, belong to the
+// toolset's hosting server: its canonical row (id = toolset id), or every
+// server fronting it when it has none. Memberships are gathered from the
+// project's live plugins through the (plugin_id, backend) indexes, one arm per
+// backend kind: a live membership has exactly one backend, so the arms never
+// repeat a row. toolset_shared marks a hosting server whose toolset other live
+// servers also front, since their calls carry the same toolset slug.
 func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListPlatformMCPServerIdentitiesParams) ([]ListPlatformMCPServerIdentitiesRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPServerIdentities, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -6564,6 +6754,7 @@ func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListP
 			&i.McpName,
 			&i.McpSlug,
 			&i.ToolsetSlug,
+			&i.ToolsetShared,
 			&i.PluginSlug,
 			&i.PluginDisplayName,
 		); err != nil {
@@ -6965,6 +7156,38 @@ func (q *Queries) LockPlatformMCPOperationReceipt(ctx context.Context, arg LockP
 	return err
 }
 
+const lockPlatformMCPOperationReceiptInput = `-- name: LockPlatformMCPOperationReceiptInput :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-receipt-input', $1::text, $2::text, $3::text, $4::text, $5::text)::text,
+        0
+    )
+)
+`
+
+type LockPlatformMCPOperationReceiptInputParams struct {
+	OrganizationID string
+	SubjectUrn     string
+	ProjectID      string
+	Operation      string
+	InputHash      string
+}
+
+// A single-use preview is claimed by its input, so confirmations racing for
+// one input serialize here. The namespace differs from the key lock above so
+// a caller-chosen idempotency key can never name this lock, which is what
+// keeps two confirmations from taking the pair in opposite orders.
+func (q *Queries) LockPlatformMCPOperationReceiptInput(ctx context.Context, arg LockPlatformMCPOperationReceiptInputParams) error {
+	_, err := q.db.Exec(ctx, lockPlatformMCPOperationReceiptInput,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.ProjectID,
+		arg.Operation,
+		arg.InputHash,
+	)
+	return err
+}
+
 const lockPlatformMCPRemoteIssuerAttachment = `-- name: LockPlatformMCPRemoteIssuerAttachment :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -7085,9 +7308,9 @@ type LockPlatformMCPToolsetForToolExposureParams struct {
 // Takes the toolset row lock, and must run BEFORE the server row is locked.
 //
 // The order is the constraint, not the lock. toolsets.UpdateToolset holds this
-// same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
-// updates the hosted mcp_servers row — an exclusive row lock taken by a plain
-// UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+// same row (via GetToolsetForUpdate) and then, inside hostedmcp.Sync, locks
+// the hosted mcp_servers row FOR UPDATE (LockMCPServerByIDAndProjectID) before
+// writing it. For a hosted server both ids are
 // the toolset id, so it is the same pair of rows this path touches. Locking the
 // server first here and the toolset first there is an ABBA cycle that
 // PostgreSQL resolves by aborting one side with deadlock_detected, so both
@@ -7144,6 +7367,45 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const platformMCPOperationReceiptInputClaimed = `-- name: PlatformMCPOperationReceiptInputClaimed :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_operation_receipts
+    WHERE organization_id = $1
+      AND project_id = $2
+      AND operation = $3
+      AND user_id = $4
+      AND input_hash = $5
+      AND idempotency_key <> $6
+)
+`
+
+type PlatformMCPOperationReceiptInputClaimedParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Operation      string
+	UserID         pgtype.Text
+	InputHash      string
+	IdempotencyKey string
+}
+
+// Whether another idempotency key already holds this exact input for the same
+// user, project and operation. A write whose input is single-use, such as a
+// preview token, commits under one key only.
+func (q *Queries) PlatformMCPOperationReceiptInputClaimed(ctx context.Context, arg PlatformMCPOperationReceiptInputClaimedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, platformMCPOperationReceiptInputClaimed,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Operation,
+		arg.UserID,
+		arg.InputHash,
+		arg.IdempotencyKey,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const recordPlatformMCPCatalogExplored = `-- name: RecordPlatformMCPCatalogExplored :execrows
@@ -8144,47 +8406,56 @@ WITH member_roles AS (
     AND COALESCE(r.id, g.id) IS NOT NULL
   GROUP BY ora.workos_user_id
 ), matching AS (
-  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
+  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids,
+    ($3::text <> '' AND lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))) = $3::text) AS exact_email_match
   FROM organization_user_relationships rel
   JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
   LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
   WHERE rel.organization_id = $2 AND rel.deleted IS FALSE
-    AND ($3::text = '' OR $3::text = ANY(m.role_ids))
-    AND ($4::text = ''
-      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
-      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
+    AND ($4::text = '' OR $4::text = ANY(m.role_ids))
+    AND ($3::text = ''
+      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), $3::text) > 0
+      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), $3::text) > 0
       OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
-        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0))
+        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), $3::text) > 0))
 )
-SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
+SELECT id, display_name, email, role_ids, exact_email_match,
+  count(*) FILTER (WHERE exact_email_match) OVER ()::bigint AS exact_email_matches,
+  count(*) OVER ()::bigint AS total_matches
 FROM matching
-ORDER BY email, id
+ORDER BY exact_email_match DESC, email, id
 LIMIT $1
 `
 
 type SearchPlatformMCPAccessMembersParams struct {
 	ResultLimit    int32
 	OrganizationID string
-	RoleID         string
 	Query          string
+	RoleID         string
 }
 
 type SearchPlatformMCPAccessMembersRow struct {
-	ID           string
-	DisplayName  string
-	Email        string
-	RoleIds      []string
-	TotalMatches int64
+	ID                string
+	DisplayName       string
+	Email             string
+	RoleIds           []string
+	ExactEmailMatch   pgtype.Bool
+	ExactEmailMatches int64
+	TotalMatches      int64
 }
 
 // Count distinct members and return only a bounded page from the same snapshot.
 // Active local role assignments follow the access roster's WorkOS identity join.
+// A member whose whole normalized email equals the query sorts first, so a
+// small result page always carries the exact match the caller asked for.
+// Emails are unique only case-sensitively, so exact_email_matches counts every
+// member the normalized query names, including any cut off by the page limit.
 func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg SearchPlatformMCPAccessMembersParams) ([]SearchPlatformMCPAccessMembersRow, error) {
 	rows, err := q.db.Query(ctx, searchPlatformMCPAccessMembers,
 		arg.ResultLimit,
 		arg.OrganizationID,
-		arg.RoleID,
 		arg.Query,
+		arg.RoleID,
 	)
 	if err != nil {
 		return nil, err
@@ -8198,6 +8469,8 @@ func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg Search
 			&i.DisplayName,
 			&i.Email,
 			&i.RoleIds,
+			&i.ExactEmailMatch,
+			&i.ExactEmailMatches,
 			&i.TotalMatches,
 		); err != nil {
 			return nil, err

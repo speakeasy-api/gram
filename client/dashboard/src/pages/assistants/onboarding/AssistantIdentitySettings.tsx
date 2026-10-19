@@ -3,8 +3,6 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
@@ -30,7 +28,6 @@ export function AssistantIdentitySettings({
   onUpdated?: () => void;
 }): JSX.Element | null {
   const sdk = useSdkClient();
-  const identityFlag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   const { hasScope } = useRBAC();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
@@ -99,8 +96,6 @@ export function AssistantIdentitySettings({
   const canUpgrade =
     hasScope("project:write", assistant.projectId) &&
     agentIdentityIsNotConfigured;
-
-  if (identityFlag.status !== "enabled") return null;
 
   if (!agentIdentityIsNotConfigured)
     return <ConfiguredIdentity assistant={assistant} />;

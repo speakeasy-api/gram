@@ -15,7 +15,7 @@ export function httpsUrlProblem(raw: string, isIssuer: boolean): string | null {
   }
 
   if (parsed.protocol !== "https:") {
-    return "Must use https. Gram fetches the signing keys over this URL, so http would put key retrieval in the clear.";
+    return "Must use https. Speakeasy fetches the signing keys over this URL, so http would put key retrieval in the clear.";
   }
   // The browser repairs "https:host" and "https:/host" into a URL with a host;
   // the server parses the raw string and finds none. Require the authority as

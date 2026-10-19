@@ -10,19 +10,34 @@ import (
 )
 
 type DirectoryUser struct {
-	ID                    uuid.UUID
-	OrganizationID        string
-	UserID                pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
 	WorkosDirectoryUserID string
-	Email                 pgtype.Text
-	Attributes            []byte
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
-	WorkosCreatedAt       pgtype.Timestamptz
-	WorkosUpdatedAt       pgtype.Timestamptz
-	WorkosDeletedAt       pgtype.Timestamptz
-	WorkosDeleted         bool
-	WorkosLastEventID     pgtype.Text
+	// @access: confidential-pii
+	Email pgtype.Text
+	// @access: opaque-restricted
+	Attributes []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+	// @access: confidential
+	WorkosCreatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosDeletedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosDeleted bool
+	// @access: confidential
+	WorkosLastEventID pgtype.Text
 }

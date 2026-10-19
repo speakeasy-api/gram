@@ -104,6 +104,19 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 func newTestPluginsServiceWithLockTimeout(t *testing.T, lockTimeout time.Duration) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestPluginsServiceWithOptions(t, lockTimeout, nil)
+}
+
+// newServerKeyPluginsService writes hosted entries with the server-key rollout on (phase B).
+func newServerKeyPluginsService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, true)
+	return newTestPluginsServiceWithOptions(t, 0, flags)
+}
+
+func newTestPluginsServiceWithOptions(t *testing.T, lockTimeout time.Duration, features feature.Provider) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := context.Background()
 
@@ -136,7 +149,7 @@ func newTestPluginsServiceWithLockTimeout(t *testing.T, lockTimeout time.Duratio
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil, nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -419,7 +432,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 
 // createTestUnproxiedMcpServer creates an unproxied-backed mcp_server
 // with no mcp_endpoints row, mirroring how the real create flow leaves it
-// (there is no Gram-hosted endpoint to serve for a server Gram never
+// (there is no Speakeasy-hosted endpoint to serve for a server Speakeasy never
 // proxies). visibility controls publishability.
 func createTestUnproxiedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name, visibility string) mcpServerFixture {
 	t.Helper()

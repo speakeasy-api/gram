@@ -65,7 +65,7 @@ type Config struct {
 	// RemoteSessionClientID is the remote_session_clients row id.
 	RemoteSessionClientID uuid.UUID
 
-	// OrganizationID is the Gram organization that owns the credential.
+	// OrganizationID is the Speakeasy organization that owns the credential.
 	OrganizationID string
 
 	// AuthMethod is the token endpoint client authentication; empty means

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 96 96">
   <!-- Adapts to the browser's color scheme rather than the theme chosen inside
-       Gram: the tab strip follows the OS/browser, so keying the icon off the
+       Speakeasy: the tab strip follows the OS/browser, so keying the icon off the
        app theme left a white mark on a light tab. The artwork is the same
        favicon.png / favicon-dark.png pair, inlined so one file can do both. -->
   <style>

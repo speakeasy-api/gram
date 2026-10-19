@@ -1,8 +1,8 @@
 ## This file contains configuration overrides that are used when building the
-## Gram dashboard with Vite for production.
+## Speakeasy dashboard with Vite for production.
 
 [env]
-## Both the Gram server and dashboard (client) are accessed on
+## Both the Speakeasy server and dashboard (client) are accessed on
 ## https://app.getgram.ai.
 GRAM_SERVER_URL = false
 ## Unset on purpose: one image serves every environment, so any value here

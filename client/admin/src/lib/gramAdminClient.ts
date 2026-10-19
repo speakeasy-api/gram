@@ -1,3 +1,8 @@
+import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
+import { buildAdminGetInferenceKeysQuery } from "@gram/admin-client/react-query/adminGetInferenceKeys.core";
+import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
+import { buildAdminRepairInferenceKeyMutation } from "@gram/admin-client/react-query/adminRepairInferenceKey";
+import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import type {
   AdminSetRegistryEntryPublishedMutationData,
   AdminSetRegistryEntryPublishedMutationError,
@@ -35,6 +40,15 @@ import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react
 import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
+import { buildAdminListExternalMcpMigrationCandidatesQuery } from "@gram/admin-client/react-query/adminListExternalMcpMigrationCandidates.core";
+import {
+  buildAdminPreviewExternalMcpMigrationMutation,
+  type AdminPreviewExternalMcpMigrationMutationVariables,
+} from "@gram/admin-client/react-query/adminPreviewExternalMcpMigration";
+import {
+  buildAdminMigrateExternalMcpServersMutation,
+  type AdminMigrateExternalMcpServersMutationVariables,
+} from "@gram/admin-client/react-query/adminMigrateExternalMcpServers";
 import {
   buildAdminUploadPlatformImageMutation,
   type AdminUploadPlatformImageMutationVariables,
@@ -501,6 +515,8 @@ export function organizationFromSdk(
     workos_dashboard_url: org.workosDashboardUrl,
     stripe_customer_id: org.stripeCustomerId,
     stripe_subscription_id: org.stripeSubscriptionId,
+    stripe_customer_dashboard_url: org.stripeCustomerDashboardUrl,
+    stripe_subscription_dashboard_url: org.stripeSubscriptionDashboardUrl,
     whitelisted: org.whitelisted,
     disabled_at: org.disabledAt?.toISOString(),
     trial_state: org.trialState,
@@ -1030,4 +1046,71 @@ export function registryOktaUnmappedQuery(): ReturnType<
   typeof createRegistryOktaUnmappedQuery
 > {
   return createRegistryOktaUnmappedQuery();
+}
+
+const generatedRepairInferenceKeyMutation =
+  buildAdminRepairInferenceKeyMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function repairInferenceKey(
+  request: RepairInferenceKeyRequestBody,
+): Promise<AdminInferenceKeyRepairResult> {
+  return redirecting(
+    generatedRepairInferenceKeyMutation.mutationFn({ request }),
+  );
+}
+
+export function inferenceKeysQuery(
+  organizationID: string,
+): UseQueryOptions<AdminInferenceKey[]> {
+  const generated = buildAdminGetInferenceKeysQuery(
+    redirectingClient,
+    { organizationId: organizationID },
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+function createAdminListExternalMcpMigrationCandidatesQuery() {
+  const generated =
+    buildAdminListExternalMcpMigrationCandidatesQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function adminListExternalMcpMigrationCandidatesQuery(): ReturnType<
+  typeof createAdminListExternalMcpMigrationCandidatesQuery
+> {
+  return createAdminListExternalMcpMigrationCandidatesQuery();
+}
+
+export function adminPreviewExternalMcpMigration(
+  request: AdminPreviewExternalMcpMigrationMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminPreviewExternalMcpMigrationMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminPreviewExternalMcpMigrationMutation(redirectingClient).mutationFn(
+      { request },
+    ),
+  );
+}
+
+export function adminMigrateExternalMcpServers(
+  request: AdminMigrateExternalMcpServersMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminMigrateExternalMcpServersMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminMigrateExternalMcpServersMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
 }

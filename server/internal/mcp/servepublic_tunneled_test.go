@@ -64,7 +64,7 @@ type fakeTunnelGateway struct {
 	// busy simulates a live gateway that cannot accept another backend request.
 	busy bool
 	// challenge, when set, is emitted as WWW-Authenticate on every backend
-	// response to prove Gram strips it for anonymous callers.
+	// response to prove Speakeasy strips it for anonymous callers.
 	challenge string
 
 	mu       sync.Mutex
@@ -285,7 +285,7 @@ func initializeTunneledPublicSession(t *testing.T, ti *testInstance, fixture pub
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "initialize response: %s", w.Body.String())
 	sid := w.Header().Get("Mcp-Session-Id")
-	require.True(t, strings.HasPrefix(sid, "gsid_"), "expected Gram-owned session id, got %q", sid)
+	require.True(t, strings.HasPrefix(sid, "gsid_"), "expected Speakeasy-owned session id, got %q", sid)
 	return sid
 }
 
@@ -300,8 +300,42 @@ func TestServePublic_Tunneled_AnonymousInitializeMintsGramSession(t *testing.T) 
 	require.NotEqual(t, "backend-secret-session", sid)
 
 	forwarded := gateway.lastForward()
-	require.Empty(t, forwarded.Get("Authorization"), "Gram credentials must never reach the tunnel")
+	require.Empty(t, forwarded.Get("Authorization"), "Speakeasy credentials must never reach the tunnel")
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelAgentSession), "initialize must not pin an exact target")
+}
+
+func TestServePublic_Tunneled_AnonymousToolCallRecordsTelemetry(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		stateful bool
+	}{
+		{name: "stateless", stateful: false},
+		{name: "stateful", stateful: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1"}
+			if tc.stateful {
+				gateway.backendSessionID = "backend-session"
+			}
+			fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+			sessionID := ""
+			if tc.stateful {
+				sessionID = initializeTunneledPublicSession(t, ti, fixture)
+			}
+			w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost,
+				[]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{}}}`), sessionID)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Contains(t, w.Body.String(), "pong through the tunnel")
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			requireTelemetryRowCount(t, "gram_project_id = ? AND toString(attributes.gram.tunneled_mcp_server.id) = ? AND tool_name = ? AND user_id = ''", 1, authCtx.ProjectID.String(), fixture.tunnelID.String(), "ping")
+		})
+	}
 }
 
 func TestServePublic_Tunneled_BusyGatewayReturnsGenericJSONRPCError(t *testing.T) {
@@ -348,7 +382,7 @@ func TestServePublic_Tunneled_SessionRequestPinsExactTarget(t *testing.T) {
 	require.NotEmpty(t, forwarded.Get(wire.HeaderTunnelConsumerSession))
 }
 
-// Session ids that are not Gram-minted, or valid-shaped but unknown, must
+// Session ids that are not Speakeasy-minted, or valid-shaped but unknown, must
 // never be forwarded into the tunnel.
 func TestServePublic_Tunneled_UnknownOrMalformedSessionIs404(t *testing.T) {
 	t.Parallel()
@@ -475,7 +509,7 @@ func TestServePublic_Tunneled_DeleteTerminatesSession(t *testing.T) {
 }
 
 // A backend that returns no Mcp-Session-Id is sessionless per the MCP spec;
-// Gram must not synthesize a session header the backend did not produce.
+// Speakeasy must not synthesize a session header the backend did not produce.
 func TestServePublic_Tunneled_SessionlessBackendGetsNoSyntheticSession(t *testing.T) {
 	t.Parallel()
 
@@ -507,7 +541,7 @@ func TestServePublic_Tunneled_LegacyGatewayFailsClosed(t *testing.T) {
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	// A gateway that cannot pin the session is a Gram-side availability
+	// A gateway that cannot pin the session is a Speakeasy-side availability
 	// failure (503), not an upstream fault.
 	require.Equal(t, oops.CodeUnavailable, oopsErr.Code)
 }
@@ -526,8 +560,8 @@ func TestServePublic_Tunneled_StripsBackendChallenge(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
-	require.Empty(t, w.Header().Get("Set-Cookie"), "backend cookies must not reach the Gram origin")
-	require.Empty(t, w.Header().Get("Clear-Site-Data"), "backend must not wipe state on the Gram origin")
+	require.Empty(t, w.Header().Get("Set-Cookie"), "backend cookies must not reach the Speakeasy origin")
+	require.Empty(t, w.Header().Get("Clear-Site-Data"), "backend must not wipe state on the Speakeasy origin")
 	require.Empty(t, w.Header().Get(wire.HeaderTunnelAgentSession), "internal tunnel headers must not leak")
 }
 

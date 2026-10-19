@@ -123,6 +123,9 @@ type CreateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -135,7 +138,7 @@ type CreateMcpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -144,6 +147,17 @@ type CreateMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -161,6 +175,9 @@ type GetMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -173,7 +190,7 @@ type GetMcpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -182,6 +199,17 @@ type GetMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -211,6 +239,9 @@ type UpdateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -223,7 +254,7 @@ type UpdateMcpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -232,6 +263,17 @@ type UpdateMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -2779,6 +2821,33 @@ type DeleteMcpServerUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// McpServerToolsetSummaryResponseBody is used to define fields on response
+// body types.
+type McpServerToolsetSummaryResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The number of distinct configured tools in the latest toolset version,
+	// excluding external MCP proxy tools. Counts configured tool URNs, so it may
+	// differ from the number of tools that resolve against the active deployment.
+	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	// The toolset's tool selection mode
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The distinct slugs of the external MCP sources the toolset's configured
+	// tools come from, sorted
+	ExternalMcpSlugs []string `form:"external_mcp_slugs" json:"external_mcp_slugs" xml:"external_mcp_slugs"`
+	// Whether every configured tool is an external MCP proxy tool, so the real
+	// tool count is unknown until a user signs in
+	ExternalMcpProxyOnly bool `form:"external_mcp_proxy_only" json:"external_mcp_proxy_only" xml:"external_mcp_proxy_only"`
+	// The ID of the external OAuth server attached to the toolset, if any
+	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
+	// The registry specifier the toolset originated from, if any
+	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
+}
+
 // McpServerResponseBody is used to define fields on response body types.
 type McpServerResponseBody struct {
 	// The ID of the MCP server
@@ -2789,6 +2858,9 @@ type McpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -2801,7 +2873,7 @@ type McpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -2810,6 +2882,17 @@ type McpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -2886,6 +2969,7 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		ProjectID:             res.ProjectID,
 		Name:                  res.Name,
 		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
@@ -2895,8 +2979,13 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		Visibility:            string(res.Visibility),
 		NetworkAccessMode:     string(res.NetworkAccessMode),
+		PrimaryEndpointID:     res.PrimaryEndpointID,
+		PrimaryEndpointURL:    res.PrimaryEndpointURL,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Toolset != nil {
+		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
 	}
 	return body
 }
@@ -2909,6 +2998,7 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		ProjectID:             res.ProjectID,
 		Name:                  res.Name,
 		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
@@ -2918,8 +3008,13 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		Visibility:            string(res.Visibility),
 		NetworkAccessMode:     string(res.NetworkAccessMode),
+		PrimaryEndpointID:     res.PrimaryEndpointID,
+		PrimaryEndpointURL:    res.PrimaryEndpointURL,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Toolset != nil {
+		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
 	}
 	return body
 }
@@ -2970,6 +3065,7 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		ProjectID:             res.ProjectID,
 		Name:                  res.Name,
 		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
@@ -2979,8 +3075,13 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
 		Visibility:            string(res.Visibility),
 		NetworkAccessMode:     string(res.NetworkAccessMode),
+		PrimaryEndpointID:     res.PrimaryEndpointID,
+		PrimaryEndpointURL:    res.PrimaryEndpointURL,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Toolset != nil {
+		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
 	}
 	return body
 }
@@ -5039,10 +5140,11 @@ func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *s
 
 // NewGetMcpServerPayload builds a mcpServers service getMcpServer endpoint
 // payload.
-func NewGetMcpServerPayload(id *string, slug *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
+func NewGetMcpServerPayload(id *string, slug *string, toolsetID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
 	v := &mcpservers.GetMcpServerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

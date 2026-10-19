@@ -26,11 +26,11 @@ import (
 //     the header, making it the only source for those clients.
 //
 // The proxy therefore reads both: the header wherever it appears, and the
-// handshake where one happens. Gram is a pass-through on this path, so the
+// handshake where one happens. Speakeasy is a pass-through on this path, so the
 // values are agreed between the client and the upstream server and are recorded
 // on the proxy's own spans, keeping them attributable to the upstream leg.
 //
-// Values reaching these functions are supplied by a client or by a server Gram
+// Values reaching these functions are supplied by a client or by a server Speakeasy
 // does not control, so they are bounded before being recorded. They are not
 // clamped to the known revision set: on a span an unrecognized revision is the
 // diagnostic payload, and bucketing belongs on metric dimensions, whose series

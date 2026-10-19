@@ -2,7 +2,9 @@ package assistants
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +33,35 @@ import (
 //
 //go:embed managed_assistant_instructions.txt
 var managedAssistantInstructions string
+
+// shippedManagedAssistantInstructions holds the SHA-256 of every version of
+// managed_assistant_instructions.txt that has shipped. A managed assistant
+// copies the prompt into assistants.instructions when it is created, so older
+// assistants keep the version they started with. A saved prompt that matches
+// one of these hashes was never edited and is safe to replace with the
+// current one. Add the new hash here whenever the file changes.
+var shippedManagedAssistantInstructions = map[string]struct{}{
+	"8e8167b18cc482675617a19c664df4c0438662d09d4a90ef3e57fb82d63a7c8c": {},
+	"2b689a080a550bb3246f0ad754f4d2ef8d097919bcc04a38f29dd75bc8413c28": {},
+	"86d661fbc2826e9390514a134504bbc2a2cbd3d43d032cf8c63a152823117e1c": {},
+	"74e42ada0f39448be615caeba516b84427abd7382176188269dbc384ea0355e5": {},
+	"317a8cf3b9316d7d8b810ccfc70b1c82fc2c3e93a886c0806337016cf1fd475e": {},
+	"98aa6db53322c6a396928b5709d31a8a5a37249e0467d6e4350aadcc452994cc": {},
+	"a4cb9ab5e1611176e055a1cef69bbd1ba2b293512be8f20e56ede6a9290939df": {},
+	"2c9926a47e4ff5c3d100c6a1dd60daebf0aa8bcafa57ee4d26cca5436cfa5e48": {},
+	"05c5372488ef5589f93df91b1fe5f23ead57e9a78a21cb8105c658354ef2ccf0": {},
+	"5611c835404ef600152cce9eb90a494780524ad6894d598c5c41205b5222a81d": {},
+}
+
+// currentAssistantInstructions returns the current managed prompt when stored
+// is an unedited copy of any shipped version, and stored otherwise.
+func currentAssistantInstructions(stored string) string {
+	sum := sha256.Sum256([]byte(stored))
+	if _, ok := shippedManagedAssistantInstructions[hex.EncodeToString(sum[:])]; ok {
+		return managedAssistantInstructions
+	}
+	return stored
+}
 
 const (
 	// managedAssistantModel is the default model for the platform-managed
@@ -337,7 +368,6 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		Name:            row.Name,
 		Model:           row.Model,
 		Instructions:    row.Instructions,
-		Toolsets:        nil,
 		MCPServers:      nil,
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),

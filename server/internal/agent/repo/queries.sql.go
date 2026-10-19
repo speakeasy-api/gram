@@ -190,7 +190,25 @@ SELECT
   )) AS is_default_project,
   p.id AS plugin_id,
   p.slug AS plugin_slug,
-  p.updated_at AS plugin_updated_at
+  p.name AS plugin_name,
+  p.description AS plugin_description,
+  p.updated_at AS plugin_updated_at,
+  -- When several of the caller's assignments match one plugin, the strictest
+  -- install mode wins: required, then default, then available. An unrecognized
+  -- stored value ranks as default. Empty when no plugin matched.
+  COALESCE((
+    SELECT (ARRAY['required', 'default', 'available'])[MIN(
+      CASE pa.install_mode
+        WHEN 'required' THEN 1
+        WHEN 'available' THEN 3
+        ELSE 2
+      END
+    )]
+    FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = $1
+      AND pa.principal_urn = ANY($2::text[])
+  ), '')::text AS plugin_install_mode
 FROM plugin_github_connections pgc
 JOIN projects pr
   ON pr.id = pgc.project_id
@@ -249,7 +267,10 @@ type GetAgentPluginSetRow struct {
 	IsDefaultProject        bool
 	PluginID                uuid.NullUUID
 	PluginSlug              pgtype.Text
+	PluginName              pgtype.Text
+	PluginDescription       pgtype.Text
 	PluginUpdatedAt         pgtype.Timestamptz
+	PluginInstallMode       string
 }
 
 // Returns the device agent's full plugin set for an org, marketplace-first.
@@ -298,7 +319,10 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 			&i.IsDefaultProject,
 			&i.PluginID,
 			&i.PluginSlug,
+			&i.PluginName,
+			&i.PluginDescription,
 			&i.PluginUpdatedAt,
+			&i.PluginInstallMode,
 		); err != nil {
 			return nil, err
 		}

@@ -318,7 +318,7 @@ export function ProjectDashboard(): JSX.Element {
   });
 
   // Top end-users by MCP tool-call volume. External IDs are customer-supplied,
-  // not Gram members, so they render raw (no member resolution).
+  // not Speakeasy members, so they render raw (no member resolution).
   const topEndUsers = useMemo(
     () =>
       [...(externalUsersData ?? [])]

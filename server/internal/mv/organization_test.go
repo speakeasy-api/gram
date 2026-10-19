@@ -2,6 +2,7 @@ package mv_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -21,6 +22,69 @@ type organizationBillingRepo struct {
 
 func (r *organizationBillingRepo) GetCustomerTier(ctx context.Context, orgID string) (*billing.Tier, bool, error) {
 	return r.getCustomerTier(ctx, orgID)
+}
+
+func TestResolveOrganizationTier(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		persisted  billing.Tier
+		customer   *billing.Tier
+		active     bool
+		err        error
+		nilRepo    bool
+		want       billing.Tier
+		wantActive bool
+		wantCalls  int
+	}{
+		{name: "upgrade", persisted: billing.TierBase, customer: new(billing.TierPro), active: true, want: billing.TierPro, wantActive: true, wantCalls: 1},
+		{name: "downgrade", persisted: billing.TierPro, customer: new(billing.TierBase), want: billing.TierBase, wantCalls: 1},
+		{name: "enterprise", persisted: billing.TierEnterprise, customer: new(billing.TierBase), want: billing.TierEnterprise, wantActive: true},
+		{name: "payg", persisted: billing.TierPayg, customer: new(billing.TierBase), want: billing.TierPayg, wantActive: true},
+		{name: "nil repository", persisted: billing.TierPro, nilRepo: true, want: billing.TierPro},
+		{name: "provider error", persisted: billing.TierPro, err: errors.New("billing unavailable"), want: billing.TierPro, wantCalls: 1},
+		{name: "nil tier", persisted: billing.TierPro, active: true, want: billing.TierPro, wantActive: true, wantCalls: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			calls := 0
+			var repo billing.Repository
+			if !tc.nilRepo {
+				repo = &organizationBillingRepo{getCustomerTier: func(_ context.Context, orgID string) (*billing.Tier, bool, error) {
+					require.Equal(t, "test-organization", orgID)
+					calls++
+					return tc.customer, tc.active, tc.err
+				}}
+			}
+
+			tier, active := mv.ResolveOrganizationTier(t.Context(), testenv.NewLogger(t), repo, "test-organization", tc.persisted)
+			require.Equal(t, tc.want, tier)
+			require.Equal(t, tc.wantActive, active)
+			require.Equal(t, tc.wantCalls, calls)
+		})
+	}
+}
+
+func TestDescribeOrganizationReconcilesResolvedTier(t *testing.T) {
+	t.Parallel()
+
+	queries, orgID := seedOrganization(t, billing.TierBase)
+	repo := &organizationBillingRepo{
+		getCustomerTier: func(context.Context, string) (*billing.Tier, bool, error) {
+			return new(billing.TierPro), true, nil
+		},
+	}
+
+	got, err := mv.DescribeOrganization(t.Context(), testenv.NewLogger(t), queries, repo, orgID)
+	require.NoError(t, err)
+	require.Equal(t, string(billing.TierPro), got.GramAccountType)
+	require.True(t, got.HasActiveSubscription)
+
+	persisted, err := queries.GetOrganizationMetadata(t.Context(), orgID)
+	require.NoError(t, err)
+	require.Equal(t, string(billing.TierPro), persisted.GramAccountType)
 }
 
 func TestDescribeOrganizationPaygIsAuthoritative(t *testing.T) {
