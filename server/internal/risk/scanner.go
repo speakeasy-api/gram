@@ -285,7 +285,7 @@ func newScannerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) 
 
 	llmPolicyDuration, err := meter.Float64Histogram(
 		meterRiskLLMPolicyDuration,
-		metric.WithDescription("Duration of one policy evaluation on the LLM analyzer lane in seconds, including the wait for the model reply"),
+		metric.WithDescription("Duration of one policy evaluation on the LLM analyzer lane in seconds: the lane's latency for compared-only policies, the evaluation after the awaited reply for policies enforcing from the lane"),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.25, 0.5, 1, 2, 3, 5, 8, 10, 12, 15, 20),
 	)
