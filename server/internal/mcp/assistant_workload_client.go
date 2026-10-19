@@ -100,10 +100,11 @@ func (s *Service) provisionAssistantWorkloadClient(ctx context.Context, p Provis
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := usersessions_repo.New(tx)
+	var noSecretExpiry pgtype.Timestamptz
 	row, err := q.CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
 		UserSessionIssuerID: p.UserSessionIssuerID, ClientID: uuid.NewString(), ClientSecretHash: hash,
 		ClientName: "Assistant workload", RedirectUris: []string{}, TokenEndpointAuthMethod: p.AuthMethod,
-		ClientSecretExpiresAt: pgtype.Timestamptz{}, ClientJwks: inline, ClientJwksUri: conv.ToPGTextEmpty(p.JWKSURI),
+		ClientSecretExpiresAt: noSecretExpiry, ClientJwks: inline, ClientJwksUri: conv.ToPGTextEmpty(p.JWKSURI),
 	})
 	if err != nil {
 		return zero, fmt.Errorf("provision assistant workload client: %w", err)
