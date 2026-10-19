@@ -79072,6 +79072,8 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
         - session_header_Gram-Session: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
