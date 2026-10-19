@@ -34,7 +34,7 @@ func (m *Manager) IssueKitAPIKey(ctx context.Context, in InferenceIssueInput, en
 	if in.RuntimeID == uuid.Nil || in.Lifetime <= 0 || in.Lifetime > MaxInferenceLifetime {
 		return KitAPIKey{}, fmt.Errorf("invalid Kit API-key runtime or lifetime")
 	}
-	ceiling, err := new(assistantidentity.Service).SnapshotCeiling(ctx, m.db, in.Identity)
+	ceiling, err := m.snapshotInferenceCeiling(ctx, in.Identity)
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("resolve Kit workload authority: %w", err)
 	}
@@ -59,7 +59,7 @@ func (m *Manager) IssueKitAPIKey(ctx context.Context, in InferenceIssueInput, en
 	if err != nil {
 		return KitAPIKey{}, fmt.Errorf("load Kit agent: %w", err)
 	}
-	expires := pgtype.Timestamptz{Time: time.Now().Add(in.Lifetime), Valid: true}
+	expires := pgtype.Timestamptz{InfinityModifier: pgtype.Finite, Time: time.Now().Add(in.Lifetime), Valid: true}
 	key, err := keysrepo.New(tx).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
 		OrganizationID: in.Identity.OrganizationID, CreatedByUserID: agent.OwnerUserID,
 		Name: "assistant-runtime-" + in.RuntimeID.String(), KeyPrefix: prefix, KeyHash: hash,

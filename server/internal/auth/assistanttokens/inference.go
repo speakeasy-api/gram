@@ -56,8 +56,7 @@ func (m *Manager) IssueInferenceCredential(ctx context.Context, in InferenceIssu
 	if in.Lifetime <= 0 || in.Lifetime > MaxInferenceLifetime || in.RuntimeID == uuid.Nil {
 		return InferenceCredential{}, fmt.Errorf("invalid inference credential lifetime or runtime")
 	}
-	identities := new(assistantidentity.Service)
-	ceiling, err := identities.SnapshotCeiling(ctx, m.db, in.Identity)
+	ceiling, err := m.snapshotInferenceCeiling(ctx, in.Identity)
 	if err != nil {
 		return InferenceCredential{}, fmt.Errorf("snapshot inference credential ceiling: %w", err)
 	}
@@ -108,12 +107,12 @@ func (m *Manager) AuthorizeInference(ctx context.Context, header string) (contex
 	if err := new(assistantidentity.Service).Validate(ctx, m.db, identity); err != nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(row.PolicyVersion), row.PolicyJson)
+	_, err = runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(row.PolicyVersion), row.PolicyJson)
 	if err != nil {
 		return ctx, fmt.Errorf("decode inference policy: %w", err)
 	}
 	// Reuse the ordinary workload credential profile and live policy admission.
-	assertion, _, err := m.credentials.Mint(principalcredential.Credential{OrganizationID: identity.OrganizationID, ProjectID: identity.ProjectID, Principal: urn.NewWorkloadPrincipal(identity.IssuerID, identity.Subject), Grants: policy.RuntimeGrants(), AuthorizerUserID: ""})
+	assertion, _, err := m.credentials.Mint(principalcredential.Credential{OrganizationID: identity.OrganizationID, ProjectID: identity.ProjectID, Principal: urn.NewWorkloadPrincipal(identity.IssuerID, identity.Subject), AuthorizerUserID: ""})
 	if err != nil {
 		return ctx, fmt.Errorf("mint inference assertion: %w", err)
 	}
@@ -121,6 +120,17 @@ func (m *Manager) AuthorizeInference(ctx context.Context, header string) (contex
 	if err != nil {
 		return ctx, fmt.Errorf("authenticate inference assertion: %w", err)
 	}
+	// Principal assertions now derive live policy. This persisted runtime bearer
+	// must instead retain its issuance ceiling, intersected with live authority.
+	ac, ok := contextvalues.GetAuthContext(authed)
+	if !ok || ac == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	authed = contextvalues.WithPrincipalCredentialAuthorization(authed, ac,
+		urn.NewWorkloadPrincipal(identity.IssuerID, identity.Subject), contextvalues.PrincipalCredential{
+			DelegatedGrants: row.PolicyJson, DelegatedGrantsVersion: row.PolicyVersion,
+			DerivesPolicyAtAdmission: false,
+		})
 	authed, err = m.authz.PrepareContext(authed)
 	if err != nil {
 		return ctx, fmt.Errorf("prepare inference authorization: %w", err)
@@ -152,4 +162,49 @@ func (m *Manager) RevokeRuntimeInferenceCredentials(ctx context.Context, project
 		return fmt.Errorf("revoke runtime inference credentials: %w", err)
 	}
 	return nil
+}
+
+// snapshotInferenceCeiling keeps startup credentials bounded by the agent's
+// issuance-time policy even though ordinary principal assertions derive it live.
+func (m *Manager) snapshotInferenceCeiling(ctx context.Context, identity assistantidentity.Identity) (inferenceCeiling, error) {
+	if err := new(assistantidentity.Service).Validate(ctx, m.db, identity); err != nil {
+		return inferenceCeiling{}, err
+	}
+	assertion, _, err := m.credentials.Mint(principalcredential.Credential{
+		OrganizationID: identity.OrganizationID, ProjectID: identity.ProjectID,
+		Principal: urn.NewWorkloadPrincipal(identity.IssuerID, identity.Subject),
+	})
+	if err != nil {
+		return inferenceCeiling{}, err
+	}
+	authed, err := m.credentials.Authenticate(ctx, assertion)
+	if err != nil {
+		return inferenceCeiling{}, err
+	}
+	admission, err := runtimepolicy.AdmitWorkloadSession(authed, m.db)
+	if err != nil {
+		return inferenceCeiling{}, err
+	}
+	if admission.AgentPrincipal != urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String()).String() {
+		return inferenceCeiling{}, oops.C(oops.CodeUnauthorized)
+	}
+	grants, err := runtimepolicy.DelegableGrantsWithExclusions(admission.Agent, admission.Agent, admission.Agent)
+	if err != nil {
+		return inferenceCeiling{}, err
+	}
+	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, grants)
+	if err != nil {
+		return inferenceCeiling{}, err
+	}
+	raw, err := runtimepolicy.EncodeDelegatedPolicy(version, policy)
+	if err != nil {
+		return inferenceCeiling{}, err
+	}
+	return inferenceCeiling{Policy: raw, EncodingVersion: version}, nil
+}
+
+type inferenceCeiling struct {
+	Policy          []byte
+	EncodingVersion runtimepolicy.DelegatedPolicyVersion
 }
