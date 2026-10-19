@@ -72,7 +72,10 @@ var (
 var deviceAgentScopes = []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest}
 
 // requireDeviceAgentGrants refuses a join token for an agent whose live policy
-// lacks the device-agent scopes, naming each one missing.
+// lacks the device-agent scopes, naming each one missing. The hooks check names
+// no project, so a grant bounded to any one project satisfies it: which
+// project a hook may reach is decided per request, against the project the
+// hook names.
 func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID string, agentID uuid.UUID) error {
 	grants, err := runtimepolicy.LoadAgentPolicy(ctx, s.db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
 	if err != nil {
