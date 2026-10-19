@@ -120,7 +120,7 @@
     "happy-dom": "^20.11.1",
     "knip": "^6.20.0",
     "oxlint": "^1.87.0",
-    "oxlint-tsgolint": "^7.0.2003",
+    "oxlint-tsgolint": "^7.0.2004",
     "react-grab": "^0.2.0",
     "storybook": "^10.6.1",
     "svix": "2.6.0",
