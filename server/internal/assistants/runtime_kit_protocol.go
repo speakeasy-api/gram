@@ -145,10 +145,14 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if req.MCPServers != nil {
 		params["mcpServers"] = servers
 	}
+	// session/new gives this connection control of the new session. A second
+	// resume on that same connection is rejected by the gateway.
+	var startup json.RawMessage
+	needsResume := found
 	if !found {
 		raw, e := c.Call(ctx, "session/new", params, "")
 		if e != nil {
-			return fmt.Errorf("kit session operation: %w", e)
+			return fmt.Errorf("kit session/new: %w", e)
 		}
 		var created struct {
 			SessionID string `json:"sessionId"`
@@ -158,8 +162,12 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		}
 		session, err = p.config.Core.StoreKitRuntimeSession(ctx, key, created.SessionID)
 		if err != nil {
-			return fmt.Errorf("kit protocol operation: %w", err)
+			return fmt.Errorf("persist kit session/new winner: %w", err)
 		}
+		startup = raw
+		// A concurrent creator can win persistence. Only that winning mapping may
+		// receive a prompt; attach and resume it instead of using our empty orphan.
+		needsResume = session.SessionID != created.SessionID
 	}
 	if err = c.AttachSession(ctx, session.SessionID); err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
@@ -216,20 +224,21 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			}
 		}
 	}()
-	// Replay even a newly persisted session: a concurrent creator may have won.
-	params["sessionId"] = session.SessionID
-	params["replayFrom"] = map[string]string{"type": "start"}
-	resume, err := c.Call(work, "session/resume", params, session.SessionID)
-	if err != nil {
-		return fmt.Errorf("kit protocol operation: %w", err)
+	if needsResume {
+		params["sessionId"] = session.SessionID
+		params["replayFrom"] = map[string]string{"type": "start"}
+		startup, err = c.Call(work, "session/resume", params, session.SessionID)
+		if err != nil {
+			return fmt.Errorf("kit session/resume: %w", err)
+		}
 	}
-	selection, _, err := kitProtocolModelOption(resume, req.Model)
+	selection, _, err := kitProtocolModelOption(startup, req.Model)
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
 	configured, err := c.Call(work, "session/set_config_option", map[string]string{"sessionId": session.SessionID, "configId": "model", "type": "id", "value": selection}, session.SessionID)
 	if err != nil {
-		return fmt.Errorf("kit protocol operation: %w", err)
+		return fmt.Errorf("kit session/set_config_option: %w", err)
 	}
 	_, current, err := kitProtocolModelOption(configured, req.Model)
 	if err != nil {
@@ -240,7 +249,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	}
 	raw, err := c.Call(work, "session/prompt", map[string]any{"sessionId": session.SessionID, "prompt": prompt}, session.SessionID)
 	if err != nil {
-		return fmt.Errorf("kit protocol operation: %w", err)
+		return fmt.Errorf("kit session/prompt: %w", err)
 	}
 	var ack struct {
 		MessageID string `json:"messageId"`

@@ -211,6 +211,8 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	var mu sync.Mutex
 	streams := map[string]chan string{}
 	methods := []string{}
+	connections := 0
+	controls := map[string]bool{}
 	prompts := 0
 	selectedModel := "speakeasy:gpt-5.4"
 	catalog := func() string {
@@ -234,7 +236,11 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				return
 			}
 			if msg.Method == "initialize" {
-				w.Header().Set("Acp-Connection-Id", "connection")
+				mu.Lock()
+				connections++
+				connection := fmt.Sprintf("connection-%d", connections)
+				mu.Unlock()
+				w.Header().Set("Acp-Connection-Id", connection)
 				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
 				return
 			}
@@ -250,6 +256,17 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 			result := `{}`
 			switch msg.Method {
 			case "session/new", "session/resume":
+				// Match the pinned gateway: creation already grants connection control.
+				connection := r.Header.Get("Acp-Connection-Id")
+				mu.Lock()
+				alreadyControls := controls[connection]
+				controls[connection] = true
+				mu.Unlock()
+				if msg.Method == "session/resume" && alreadyControls {
+					w.WriteHeader(http.StatusAccepted)
+					ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":-32000,\"message\":\"connection already controls session\"}}\n\n", msg.ID)
+					return
+				}
 				if _, supplied := msg.Params["mcpServers"]; supplied {
 					t.Error("filesystem-owned MCP must not replace the session overlay")
 				}
@@ -259,7 +276,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 					t.Error("missing canonical chat metadata")
 				}
 				if msg.Method == "session/new" {
-					result = `{"sessionId":"session-one"}`
+					result = strings.TrimSuffix(catalog(), "}") + `,"sessionId":"session-one"}`
 				} else if string(msg.Params["replayFrom"]) != `{"type":"start"}` {
 					t.Error("missing replay")
 				}
@@ -366,7 +383,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, interrupted)
 	mu.Lock()
-	require.Equal(t, []string{"session/new", "session/resume", "session/set_config_option", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/prompt", "kit/session/status", "session/cancel"}, methods)
+	require.Equal(t, []string{"session/new", "session/set_config_option", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/prompt", "kit/session/status", "session/cancel"}, methods)
 	mu.Unlock()
 }
 
