@@ -698,7 +698,10 @@ func TestPresidioClientTruncatesOversizedMessages(t *testing.T) {
 	client := newTestPresidioClient(t, srv.URL)
 	// Build an input that is double the limit and contains a multibyte rune
 	// straddling the truncation point so we exercise the UTF-8 walk-back.
-	body := strings.Repeat("a", presidioMaxMessageBytes-1) + "€" + strings.Repeat("b", presidioMaxMessageBytes)
+	// Spaced words keep the token count fast: BPE is quadratic on one unbroken
+	// run of a repeated character.
+	prefix := strings.Repeat("a ", presidioMaxMessageBytes/2)[:presidioMaxMessageBytes-1]
+	body := prefix + "€" + strings.Repeat("b ", presidioMaxMessageBytes/2)
 	results, err := client.AnalyzeBatch(t.Context(), []string{body}, nil, 0, nil)
 	require.NoError(t, err)
 

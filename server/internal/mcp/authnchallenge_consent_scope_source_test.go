@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -83,7 +82,6 @@ func TestServeConsentAction_MultiBindingConnectRequestsOwnResourceScopes(t *test
 	t.Parallel()
 
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-multi")
-	fx.ti.features.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, fx.orgID, true)
 	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read"})
 	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-multi-a", "", []uuid.UUID{fx.shared})
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-multi-b", "", []uuid.UUID{fx.shared, other})
@@ -99,7 +97,6 @@ func TestServeConsentAction_SoleSharedClientRequestsEndpointResourceScopes(t *te
 	t.Parallel()
 
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-sole")
-	fx.ti.features.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, fx.orgID, true)
 	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read"})
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-sole", "", []uuid.UUID{fx.shared, other})
 	advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, shared), []string{"b:read"})
@@ -114,7 +111,6 @@ func TestServeConsent_MultiBindingCardReadsOwnResourceScopes(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-card")
-	fx.ti.features.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, fx.orgID, true)
 	registerPageClient(t, ctx, fx)
 	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read", "openid"})
 	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-card-a", "", []uuid.UUID{fx.shared})
@@ -130,14 +126,15 @@ func TestServeConsent_MultiBindingCardReadsOwnResourceScopes(t *testing.T) {
 	require.Equal(t, "b:read", connectScope(t, fx, shared))
 }
 
-// A gateway's login consults no resource row, so neither does its consent
-// card: a cached row for the resource the client claims must not offer a
-// reconnect that the login's issuer-override request can never satisfy.
+// A gateway client's login reads the claiming member's resource row, never
+// the resource the client claims, so neither does its consent card: a cached
+// row for the client's claimed resource must not offer a reconnect that the
+// login's issuer-override request can never satisfy.
 func TestServeConsent_GatewayIdentityReconnectFollowsLogin(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, _, clientID, issuerID := metaConsent(t, "scope-gw")
-	fx.ti.features.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, fx.orgID, true)
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "scope-gw")
+	fx = focusClaimingMember(t, ctx, fx, metaID, issuerID, "scope-gw-member")
 	const claimed = "https://claimed.example.com/mcp"
 	claimResource(t, ctx, fx, clientID, claimed)
 	cacheResourceScopes(t, ctx, fx, claimed, []string{"read"})
@@ -162,7 +159,6 @@ func TestServeConsent_RemoteEndpointIdentityReconnectFollowsLogin(t *testing.T) 
 	ctx, fx := standaloneConsent(t, "scope-remote", upstream.URL, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, upstream.URL)
 	})
-	fx.ti.features.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, fx.orgID, true)
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-remote", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 	const claimed = "https://claimed.example.com/mcp"
@@ -176,4 +172,25 @@ func TestServeConsent_RemoteEndpointIdentityReconnectFollowsLogin(t *testing.T) 
 	loc := postConnectAction(t, fx, clientID)
 	require.Equal(t, "read", loc.Query().Get("scope"))
 	require.Equal(t, upstream.URL, loc.Query().Get("resource"), "the login is for the server's own resource")
+}
+
+// A gateway login reads the resource of the member it qualifies the client
+// to, ahead of the issuer override, and the card offers what that login
+// requests.
+func TestServeConsent_GatewayMemberResourceDecidesScopes(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "scope-gw-member")
+	const member = "https://member.example.com/mcp"
+	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "scope-gw-member-m", member, conv.ToNullUUID(issuerID), 0)
+	fx.server = "scope-gw-member-m"
+	cacheResourceScopes(t, ctx, fx, member, []string{"m:read", "openid"})
+	advertise(t, ctx, fx, issuerID, []string{"admin", "openid"})
+	overrideIssuerScopes(t, ctx, fx, issuerID, []string{"admin"})
+	grantScopedTo(t, ctx, fx, clientID, []string{"m:read"}, member)
+
+	expectIdentityHint(t, fx, true)
+	loc := postConnectAction(t, fx, clientID)
+	require.Equal(t, "m:read openid", loc.Query().Get("scope"))
+	require.Equal(t, member, loc.Query().Get("resource"))
 }

@@ -227,18 +227,27 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if !llmMode && sources.Has(SourceGitleaks) {
+	// llm mode: the lane replaces the enforced sources' engines (no inline
+	// scan, no legacy request, no Postgres rows). prompt_injection is only
+	// compared, so its cascade still runs. shadow mode: everything runs as
+	// under off.
+	legacyRuns := func(source string) bool {
+		return !llmMode || !llmanalyzer.Enforces(source)
+	}
+	if legacyRuns(SourceGitleaks) && sources.Has(SourceGitleaks) {
 		wg.Go(func() {
-			findings, err := a.scanGitleaks(ctx, args, messages, contents)
+			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourceGitleaks])
+			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourceGitleaks, masks.RecommendedPrefilteredCount(sourceCategories[SourceGitleaks]))
+			findings, err := a.scanGitleaks(ctx, args, subMessages, subContents)
 			if err != nil {
 				gitleaksErr = err
 				return
 			}
-			gitleaksFindings = findings
+			gitleaksFindings = scatterFindings(n, indices, findings)
 		})
 	}
 
-	if !llmMode && sources.Has(SourcePresidio) {
+	if legacyRuns(SourcePresidio) && sources.Has(SourcePresidio) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePresidio, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
@@ -260,7 +269,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if !llmMode && sources.Has(SourcePromptInjection) {
+	if legacyRuns(SourcePromptInjection) && sources.Has(SourcePromptInjection) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
@@ -275,12 +284,14 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	if len(customRuleIDs) > 0 {
 		wg.Go(func() {
-			findings, err := a.scanCustomRules(ctx, args, messages, customRuleIDs)
+			subMessages, _, indices := masks.Subset(messages, contents, sourceCategories[SourceCustom])
+			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourceCustom, masks.RecommendedPrefilteredCount(sourceCategories[SourceCustom]))
+			findings, err := a.scanCustomRules(ctx, args, subMessages, customRuleIDs)
 			if err != nil {
 				customErr = err
 				return
 			}
-			customFindings = findings
+			customFindings = scatterFindings(n, indices, findings)
 		})
 	}
 
@@ -335,11 +346,11 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, args.RiskPolicyID, messages)
 		activity.RecordHeartbeat(ctx, shadowmcp.SourceShadowMCP)
 	}
-	if !llmMode && sources.Has(shadowmcp.SourceDestructiveTool) {
+	if legacyRuns(shadowmcp.SourceDestructiveTool) && sources.Has(shadowmcp.SourceDestructiveTool) {
 		destructiveToolFindings = a.scanDestructiveToolAnnotations(ctx, args.OrganizationID, messages)
 		activity.RecordHeartbeat(ctx, shadowmcp.SourceDestructiveTool)
 	}
-	if !llmMode && sources.Has(SourceCLIDestructive) {
+	if legacyRuns(SourceCLIDestructive) && sources.Has(SourceCLIDestructive) {
 		findings, err := a.scanDestructiveCLICommands(ctx, args, messages)
 		if err != nil {
 			scanSpan.SetStatus(codes.Error, err.Error())

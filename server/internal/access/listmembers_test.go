@@ -17,7 +17,7 @@ func TestService_ListMembers(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	// Seed local users so that the WorkOS-to-Gram ID resolution succeeds.
+	// Seed local users so that the WorkOS-to-Speakeasy ID resolution succeeds.
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "grace@example.com", "Grace", "user_2", "membership_2")
 
@@ -35,7 +35,7 @@ func TestService_ListMembers(t *testing.T) {
 		byID[member.ID] = member
 	}
 
-	// IDs should be Gram user IDs, not WorkOS user IDs.
+	// IDs should be Speakeasy user IDs, not WorkOS user IDs.
 	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
 	require.Equal(t, "user:local_user_1", byID["local_user_1"].PrincipalUrn)
 	require.Equal(t, "ada@example.com", byID["local_user_1"].Email)

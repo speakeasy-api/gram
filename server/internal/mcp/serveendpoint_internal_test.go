@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -26,7 +27,7 @@ func TestRouteUpstreamToken_EmptyMapReturnsEmpty(t *testing.T) {
 
 	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), nil, "https://upstream.example.com/mcp", false, noIssuer)
 	require.NoError(t, err)
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 func TestRouteUpstreamToken_SingleMatchingEntryReturnsToken(t *testing.T) {
@@ -36,7 +37,7 @@ func TestRouteUpstreamToken_SingleMatchingEntryReturnsToken(t *testing.T) {
 		uuid.New(): {Token: "upstream-token", Resource: "https://upstream.example.com/mcp/", RemoteSessionClientID: uuid.New()},
 	}, "https://upstream.example.com/mcp", false, noIssuer)
 	require.NoError(t, err)
-	require.Equal(t, "upstream-token", token)
+	require.Equal(t, "upstream-token", token.Token)
 }
 
 func TestRouteUpstreamToken_LoneMismatchedEntryFailsClosed(t *testing.T) {
@@ -48,7 +49,7 @@ func TestRouteUpstreamToken_LoneMismatchedEntryFailsClosed(t *testing.T) {
 		uuid.New(): {Token: "upstream-token", Resource: "https://other.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://upstream.example.com/mcp", false, noIssuer)
 	requireRoutingError(t, err, "no_match")
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 func TestRouteUpstreamToken_LoneUnqualifiedEntryFailsClosed(t *testing.T) {
@@ -60,7 +61,7 @@ func TestRouteUpstreamToken_LoneUnqualifiedEntryFailsClosed(t *testing.T) {
 		uuid.New(): {Token: "upstream-token", Resource: "", RemoteSessionClientID: uuid.New()},
 	}, "https://upstream.example.com/mcp", false, noIssuer)
 	requireRoutingError(t, err, "legacy_null_resource")
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 func TestRouteUpstreamToken_NoResourceRoutesByTunneledIssuer(t *testing.T) {
@@ -74,7 +75,7 @@ func TestRouteUpstreamToken_NoResourceRoutesByTunneledIssuer(t *testing.T) {
 		uuid.New(): {Token: "sibling-token", Resource: "https://b.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "", true, uuid.NullUUID{UUID: issuerID, Valid: true})
 	require.NoError(t, err)
-	require.Equal(t, "own-token", token)
+	require.Equal(t, "own-token", token.Token)
 }
 
 func TestRouteUpstreamToken_NoResourceSiblingTokenIsAnonymous(t *testing.T) {
@@ -87,7 +88,7 @@ func TestRouteUpstreamToken_NoResourceSiblingTokenIsAnonymous(t *testing.T) {
 		uuid.New(): {Token: "sibling-token", Resource: "", RemoteSessionClientID: uuid.New()},
 	}, "", true, uuid.NullUUID{UUID: issuerID, Valid: true})
 	require.NoError(t, err)
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 func TestRouteUpstreamToken_NoResourceQualifiedIssuerEntryIsAnonymous(t *testing.T) {
@@ -100,7 +101,7 @@ func TestRouteUpstreamToken_NoResourceQualifiedIssuerEntryIsAnonymous(t *testing
 		issuerID: {Token: "qualified-token", Resource: "https://a.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "", true, uuid.NullUUID{UUID: issuerID, Valid: true})
 	require.NoError(t, err)
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 func TestRouteUpstreamToken_NoResourceNoIssuerIsAnonymous(t *testing.T) {
@@ -113,7 +114,7 @@ func TestRouteUpstreamToken_NoResourceNoIssuerIsAnonymous(t *testing.T) {
 		uuid.New(): {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "", false, noIssuer)
 	require.NoError(t, err)
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 func TestRouteUpstreamToken_TunneledIssuerBacksUnmatchedResource(t *testing.T) {
@@ -127,7 +128,7 @@ func TestRouteUpstreamToken_TunneledIssuerBacksUnmatchedResource(t *testing.T) {
 		issuerID: {Token: "own-token", Resource: "", RemoteSessionClientID: uuid.New()},
 	}, "https://tunneled.internal/mcp", true, uuid.NullUUID{UUID: issuerID, Valid: true})
 	require.NoError(t, err)
-	require.Equal(t, "own-token", token)
+	require.Equal(t, "own-token", token.Token)
 }
 
 func TestRouteUpstreamToken_TunneledIdentifierMatchesItsOwnGrant(t *testing.T) {
@@ -138,7 +139,7 @@ func TestRouteUpstreamToken_TunneledIdentifierMatchesItsOwnGrant(t *testing.T) {
 		issuerID: {Token: "own-token", Resource: "https://tunneled.internal/mcp/", RemoteSessionClientID: uuid.New()},
 	}, "https://tunneled.internal/mcp", true, uuid.NullUUID{UUID: issuerID, Valid: true})
 	require.NoError(t, err)
-	require.Equal(t, "own-token", token)
+	require.Equal(t, "own-token", token.Token)
 }
 
 func TestRouteUpstreamToken_TunneledIdentifierNeverSelectsAcrossIssuers(t *testing.T) {
@@ -153,7 +154,7 @@ func TestRouteUpstreamToken_TunneledIdentifierNeverSelectsAcrossIssuers(t *testi
 		uuid.New(): {Token: "sibling-token", Resource: "https://api.vendor.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://api.vendor.com/mcp", true, uuid.NullUUID{UUID: issuerID, Valid: true})
 	require.NoError(t, err)
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 func TestRouteUpstreamToken_TunneledGrantQualifiedElsewhereIsAnonymous(t *testing.T) {
@@ -166,7 +167,7 @@ func TestRouteUpstreamToken_TunneledGrantQualifiedElsewhereIsAnonymous(t *testin
 		issuerID: {Token: "own-token", Resource: "https://a.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://tunneled.internal/mcp", true, uuid.NullUUID{UUID: issuerID, Valid: true})
 	require.NoError(t, err)
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 func TestRouteUpstreamToken_MultipleEntriesRoutesByResource(t *testing.T) {
@@ -177,7 +178,7 @@ func TestRouteUpstreamToken_MultipleEntriesRoutesByResource(t *testing.T) {
 		uuid.New(): {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://b.example.com/mcp", false, noIssuer)
 	require.NoError(t, err)
-	require.Equal(t, "token-b", token)
+	require.Equal(t, "token-b", token.Token)
 }
 
 func TestRouteUpstreamToken_ResourceMatchIgnoresTrailingSlash(t *testing.T) {
@@ -188,7 +189,7 @@ func TestRouteUpstreamToken_ResourceMatchIgnoresTrailingSlash(t *testing.T) {
 		uuid.New(): {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://a.example.com/mcp", false, noIssuer)
 	require.NoError(t, err)
-	require.Equal(t, "token-a", token)
+	require.Equal(t, "token-a", token.Token)
 }
 
 func TestRouteUpstreamToken_MultipleEntriesNoMatchFailsClosed(t *testing.T) {
@@ -199,7 +200,7 @@ func TestRouteUpstreamToken_MultipleEntriesNoMatchFailsClosed(t *testing.T) {
 		uuid.New(): {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://c.example.com/mcp", false, noIssuer)
 	requireRoutingError(t, err, "no_match")
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 func TestRouteUpstreamToken_DuplicateResourceFailsClosed(t *testing.T) {
@@ -210,7 +211,7 @@ func TestRouteUpstreamToken_DuplicateResourceFailsClosed(t *testing.T) {
 		uuid.New(): {Token: "token-b", Resource: "https://a.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://a.example.com/mcp", false, noIssuer)
 	requireRoutingError(t, err, "duplicate_resource")
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
 }
 
 // A fail-closed routing outcome must surface as the typed error, because that
@@ -263,5 +264,104 @@ func TestRouteUpstreamToken_TunnelWithoutIssuerIsAnonymous(t *testing.T) {
 		uuid.New(): {Token: "sibling-token", Resource: "https://api.vendor.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://api.vendor.com/mcp", true, noIssuer)
 	require.NoError(t, err)
-	require.Empty(t, token)
+	require.Empty(t, token.Token)
+}
+
+func TestRouteUpstreamToken_SelfCredentialRoutesByBackendIssuer(t *testing.T) {
+	t.Parallel()
+
+	issuer := uuid.New()
+	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer:     {Token: "self-token", CredentialOwner: remotesessions.CredentialOwnerSelf},
+		uuid.New(): {Token: "other-token", Resource: "https://other.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSubject},
+	}, "https://upstream.example.com/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, "self-token", token.Token)
+	require.Equal(t, remotesessions.CredentialOwnerSelf, token.CredentialOwner)
+}
+
+func TestRouteUpstreamToken_SelfCredentialForAnotherIssuerFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	// A self credential records no resource, so it never matches a remote
+	// backend by URL; only the backend's own issuer selects it.
+	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		uuid.New(): {Token: "self-token", CredentialOwner: remotesessions.CredentialOwnerSelf},
+	}, "https://upstream.example.com/mcp", false, uuid.NullUUID{UUID: uuid.New(), Valid: true})
+	requireRoutingError(t, err, "no_match")
+	require.Empty(t, token.Token)
+}
+
+func TestRouteUpstreamToken_SelfAndSubjectClaimingOneBackendFailClosed(t *testing.T) {
+	t.Parallel()
+
+	issuer := uuid.New()
+	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer:     {Token: "self-token", CredentialOwner: remotesessions.CredentialOwnerSelf},
+		uuid.New(): {Token: "subject-token", Resource: "https://upstream.example.com/mcp", CredentialOwner: remotesessions.CredentialOwnerSubject},
+	}, "https://upstream.example.com/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true})
+	requireRoutingError(t, err, "duplicate_resource")
+	require.Empty(t, token.Token)
+}
+
+func TestRouteUpstreamToken_UnavailableSelfCredentialReturnsItsError(t *testing.T) {
+	t.Parallel()
+
+	issuer := uuid.New()
+	cause := fmt.Errorf("%w: invalid_client", remotesessions.ErrClientCredentialMisconfigured)
+	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer: {CredentialOwner: remotesessions.CredentialOwnerSelf, ClientCredentialErr: cause},
+	}, "https://upstream.example.com/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true})
+	require.ErrorIs(t, err, remotesessions.ErrClientCredentialMisconfigured)
+	require.Empty(t, token.Token)
+}
+
+func TestRouteUpstreamToken_TunneledSelfCredentialRoutesByIssuer(t *testing.T) {
+	t.Parallel()
+
+	issuer := uuid.New()
+	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer: {Token: "self-token", CredentialOwner: remotesessions.CredentialOwnerSelf},
+	}, "https://tunneled.internal/mcp", true, uuid.NullUUID{UUID: issuer, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, "self-token", token.Token)
+}
+
+func TestRouteUpstreamToken_TunneledUnavailableSelfCredentialReturnsItsError(t *testing.T) {
+	t.Parallel()
+
+	issuer := uuid.New()
+	_, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer: {CredentialOwner: remotesessions.CredentialOwnerSelf, ClientCredentialErr: remotesessions.ErrClientCredentialUnavailable},
+	}, "https://tunneled.internal/mcp", true, uuid.NullUUID{UUID: issuer, Valid: true})
+	require.ErrorIs(t, err, remotesessions.ErrClientCredentialUnavailable)
+}
+
+func TestRouteUpstreamToken_SelfCredentialRequiresItsResource(t *testing.T) {
+	t.Parallel()
+
+	issuer := uuid.New()
+	backendIssuer := uuid.NullUUID{UUID: issuer, Valid: true}
+	self := map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer: {Token: "self-token", Resource: "https://a.example.com/mcp/", CredentialOwner: remotesessions.CredentialOwnerSelf},
+	}
+
+	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), self, "https://a.example.com/mcp", false, backendIssuer)
+	require.NoError(t, err)
+	require.Equal(t, "self-token", token.Token)
+
+	// A sibling trusting the same issuer never receives a credential minted
+	// for another upstream.
+	token, err = routeUpstreamToken(t.Context(), testenv.NewLogger(t), self, "https://b.example.com/mcp", false, backendIssuer)
+	requireRoutingError(t, err, "client_credential_resource_mismatch")
+	require.Empty(t, token.Token)
+}
+
+func TestRouteUpstreamToken_SelfCredentialWithoutBackendIssuerNamesCause(t *testing.T) {
+	t.Parallel()
+
+	_, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		uuid.New(): {Token: "self-token", CredentialOwner: remotesessions.CredentialOwnerSelf},
+	}, "https://upstream.example.com/mcp", false, noIssuer)
+	requireRoutingError(t, err, "client_credential_without_backend_issuer")
 }

@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -151,10 +153,49 @@ func (s *Service) SyncDirectoryGroups(ctx context.Context, _ *gen.SyncDirectoryG
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "save directory group").LogError(ctx, s.logger)
 			}
+
+			if err := s.reconcileDirectoryGroupMembers(ctx, ac.ActiveOrganizationID, group.ID); err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	return &gen.SyncDirectoryGroupsResult{GroupCount: groupCount}, nil
+}
+
+// reconcileDirectoryGroupMembers makes a group's memberships match its full
+// WorkOS member list, so members who joined before the organization's event
+// cursor still get the roles the group grants.
+func (s *Service) reconcileDirectoryGroupMembers(ctx context.Context, organizationID, workosGroupID string) error {
+	// Taken before the listing, so an event processed while it runs wins.
+	listedAt := time.Now()
+	members, err := s.roleMgr.roles.ListDirectoryGroupUsers(ctx, workosGroupID)
+	if err != nil {
+		return oops.E(oops.CodeGatewayError, err, "list directory group members").LogError(ctx, s.logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin directory group members transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	result, err := directory.ReconcileGroupMembers(ctx, dbtx, organizationID, workosGroupID, members, listedAt)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "save directory group members").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit directory group members").LogError(ctx, s.logger)
+	}
+
+	if result.Opened > 0 || result.Closed > 0 {
+		s.logger.InfoContext(ctx, "reconciled directory group members",
+			attr.SlogWorkOSDirectoryGroupID(workosGroupID),
+			attr.SlogDirectoryMembershipsOpened(result.Opened),
+			attr.SlogDirectoryMembershipsClosed(result.Closed),
+		)
+	}
+	return nil
 }
 
 // SetDirectoryRoleMapping maps a directory group or attribute value to a role,

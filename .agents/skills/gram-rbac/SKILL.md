@@ -1,6 +1,6 @@
 ---
 name: gram-rbac
-description: Concepts, external interfaces, and conventions for Gram's role-based access control (RBAC) subsystem — scopes, grants, principals, system roles, and the `authz.Engine.Require` enforcement path used inside handlers. Activate whenever the task involves authorization (adding or modifying a scope or resource type, declaring a new role or grant, gating a handler, changing scope inheritance, exposing RBAC state through the dashboard).
+description: Concepts, external interfaces, and conventions for Speakeasy's role-based access control (RBAC) subsystem — scopes, grants, principals, system roles, and the `authz.Engine.Require` enforcement path used inside handlers. Activate whenever the task involves authorization (adding or modifying a scope or resource type, declaring a new role or grant, gating a handler, changing scope inheritance, exposing RBAC state through the dashboard).
 metadata:
   relevant_files:
     - "server/internal/authz/**/*.go"
@@ -11,7 +11,7 @@ metadata:
     - "client/dashboard/src/pages/access/**"
 ---
 
-Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of **scopes** grouped into **system roles** (admin, member). A **grant** binds a scope to a **selector** (a Kubernetes-style `map[string]string` of `resource_kind`, `resource_id`, plus optional narrowing dimensions like `tool` or `disposition`) for a given **principal** (user or custom role). Handlers enforce scopes by calling `authz.Engine.Require(ctx, authz.Check{...})`; the dashboard renders the same scope vocabulary through a matching TypeScript union that is hand-maintained in lockstep with the server.
+Speakeasy's RBAC is a scope-and-selector model. The server ships with a fixed set of **scopes** grouped into **system roles** (admin, member). A **grant** binds a scope to a **selector** (a Kubernetes-style `map[string]string` of `resource_kind`, `resource_id`, plus optional narrowing dimensions like `tool` or `disposition`) for a given **principal** (user or custom role). Handlers enforce scopes by calling `authz.Engine.Require(ctx, authz.Check{...})`; the dashboard renders the same scope vocabulary through a matching TypeScript union that is hand-maintained in lockstep with the server.
 
 ## Concepts and terminology
 
@@ -35,7 +35,7 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Disposition.** A snake_case bucket derived from MCP tool annotation hints — `read_only`, `destructive`, `idempotent`, `open_world`. Constants live in `authz/selector.go`; `conv.DispositionFromAnnotations(annotations)` is the canonical conversion from `*types.ToolAnnotations`.
 
-**System role.** A built-in role shipped with the server. Gram defines two: **admin** (every scope) and **member** (the read-and-connect subset). Constants `authz.SystemRoleAdmin` and `authz.SystemRoleMember`.
+**System role.** A built-in role shipped with the server. Speakeasy defines two: **admin** (every scope) and **member** (the read-and-connect subset). Constants `authz.SystemRoleAdmin` and `authz.SystemRoleMember`.
 
 **Enforcement.** Inside a handler, authorization is an explicit one-line check: the handler names the scope (and resource, if project-scoped) it needs, and the RBAC engine either allows the call or returns a forbidden error.
 
@@ -55,7 +55,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 **`authz.Engine`.** The central enforcer. Methods: `PrepareContext`, `Require(ctx, checks...)`, `RequireAny(ctx, checks...)`, `Filter(ctx, scope, ids)`, `ShouldEnforce`, `InvalidateRoleCache`, `InvalidateAllRoleCaches`, `GetScopeOverrides`. Constructed in `server/cmd/gram/start.go` via `authz.NewEngine(logger, db, chDB, challengeLogging, membership, opts...)` and injected into every service that gates on RBAC. RBAC is always enforced for eligible authenticated requests; the `MembershipFetcher` is the WorkOS client used for role-slug lookups.
 
-**Organization provisioning.** `authz.Provisioner` seeds both built-in roles and their grants for every organization created through Gram. `ProvisionOrganizationAdmin` performs that seed and assigns the first user to `SystemRoleAdmin` in one transaction. The `identity` leaf package never imports `authz`. WorkOS organization event reconciliation calls `SeedSystemRoleGrantsTx` for organizations discovered through WorkOS.
+**Organization provisioning.** `authz.Provisioner` seeds both built-in roles and their grants for every organization created through Speakeasy. `ProvisionOrganizationAdmin` performs that seed and assigns the first user to `SystemRoleAdmin` in one transaction. The `identity` leaf package never imports `authz`. WorkOS organization event reconciliation calls `SeedSystemRoleGrantsTx` for organizations discovered through WorkOS.
 
 **`authz.Check`.** `{Scope, ResourceKind, ResourceID, Dimensions}` — the thing a handler asks `Require` to enforce. For the common single-resource case, leave `ResourceKind: ""` (auto-derived from the scope family) and `Dimensions: nil`; exhaustruct requires every field at every call site. `ResourceID` is typically `authCtx.ProjectID.String()` for project-scoped scopes. Defined in [server/internal/authz/access.go](server/internal/authz/access.go).
 

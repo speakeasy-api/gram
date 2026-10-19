@@ -21,7 +21,7 @@ import (
 func newProvisioningCore(t *testing.T, conn *pgxpool.Pool) *ServiceCore {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 }
 
 func newProvisioningProject(t *testing.T, conn *pgxpool.Pool, slug string) uuid.UUID {
@@ -105,7 +105,10 @@ func TestEnableManagedAssistantAttachesNoToolsets(t *testing.T) {
 	record, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 
-	require.Empty(t, record.Toolsets, "managed assistant must not attach project toolsets by default")
+	hydrated, err := core.GetManagedAssistant(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, record.ID, hydrated.ID)
+	require.Empty(t, hydrated.MCPServers, "managed assistant must not attach project toolsets by default")
 
 	// Provisioning must not touch the project's toolsets — MCP stays as it was.
 	reloaded, err := toolsetsQ.GetToolset(ctx, toolsetsrepo.GetToolsetParams{
@@ -182,7 +185,7 @@ func TestEnableManagedAssistantFailsWhenNameTaken(t *testing.T) {
 	// A user creates an assistant that happens to occupy the managed name.
 	_, err = core.CreateAssistant(ctx, "org-test", projectID, "user-1",
 		managedAssistantName("managed-taken"), managedAssistantModel, "hi", nil, nil,
-		int(managedAssistantWarmTTLSeconds), int(managedAssistantMaxConcurrency), StatusActive, true)
+		int(managedAssistantWarmTTLSeconds), int(managedAssistantMaxConcurrency), StatusActive, true, nil)
 	require.NoError(t, err)
 
 	_, err = core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)

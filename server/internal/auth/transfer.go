@@ -281,7 +281,11 @@ func (s *Service) transferOut(ctx context.Context, logger *slog.Logger, payload 
 
 	// Create refuses support and impersonation sessions too, but those were
 	// refused above, so any error here is a backend failure.
-	code, err := s.transferManager.Create(ctx, session, nonce, sourceURL.Host, targetURL.Host)
+	issuedAt, _, err := s.sessions.IssuedAt(ctx, sessionID)
+	if err != nil {
+		return "", failTransfer(signinTransferTemporaryError, "session_issuance_lookup_failed", err)
+	}
+	code, err := s.transferManager.Create(ctx, session, issuedAt, nonce, sourceURL.Host, targetURL.Host)
 	if err != nil {
 		return "", failTransfer(signinTransferTemporaryError, "code_create_failed", err)
 	}
@@ -447,6 +451,19 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 	if !isMember {
 		return nil, failTransfer(signinTransferAccessChanged, "not_a_member", nil)
 	}
+	issuedAt, known := time.UnixMicro(record.SourceIssuedAt), record.SourceIssuedAt != 0
+	predates, err := s.sessions.IssuedBeforeEpoch(ctx, record.UserID, issuedAt, known)
+	if err != nil {
+		return nil, failTransfer(signinTransferTemporaryError, "session_epoch_lookup_failed", err)
+	}
+	if predates {
+		return nil, failTransfer(signinTransferAccessChanged, "signed_out_everywhere", nil)
+	}
+	if !known {
+		// Unknown issuance stays before any epoch, so a sign-out everywhere
+		// racing this transfer still ends the new session.
+		issuedAt = authsessions.EpochZero
+	}
 
 	// Consume only after every check passes, so a transient failure above
 	// leaves the code redeemable. Consume is atomic: a concurrent second use
@@ -472,7 +489,7 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 		SupportOrganizationID: "", // TransferOut refuses support sessions.
 		SupportExpiresAt:      time.Time{},
 	}
-	if err := s.sessions.StoreSession(ctx, newSession); err != nil {
+	if err := s.sessions.StoreSessionIssuedAt(ctx, newSession, issuedAt); err != nil {
 		return nil, failTransfer(signinTransferTemporaryError, "session_store_failed", fmt.Errorf("store session: %w", err))
 	}
 

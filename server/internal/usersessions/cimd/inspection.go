@@ -39,7 +39,7 @@ type Inspection struct {
 // Inspect resolves the document like Resolve, but reports the full outcome
 // taxonomy instead of an opaque error. It is for AUTHENTICATED management
 // surfaces only — never the OAuth endpoints, whose callers must not be able
-// to use Gram as a probe oracle for external hosts.
+// to use Speakeasy as a probe oracle for external hosts.
 func (r *Resolver) Inspect(ctx context.Context, clientID string) Inspection {
 	// Always uncached. An operator asking what a URL serves is asking about
 	// right now, so answering from the copy the authorize path stored would
@@ -112,9 +112,9 @@ func (i inspection) detail() string {
 		case i.tooLarge:
 			return fmt.Sprintf("The document endpoint responded, but the document is larger than the %d byte limit.", maxDocumentBytes)
 		case i.status == 0:
-			return "Gram could not reach the document endpoint."
+			return "Speakeasy could not reach the document endpoint."
 		case i.status == http.StatusOK:
-			return "The document endpoint responded, but Gram could not read the document to completion."
+			return "The document endpoint responded, but Speakeasy could not read the document to completion."
 		default:
 			return fmt.Sprintf("The document endpoint returned HTTP %d. It must return 200 without redirecting.", i.status)
 		}

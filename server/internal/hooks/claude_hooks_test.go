@@ -275,7 +275,7 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 		"deny reason should tell the user to retry or restart so they aren't stuck guessing")
 }
 
-// Gram-hosted MCP servers are permitted by the shadow-MCP guard. A server
+// Speakeasy-hosted MCP servers are permitted by the shadow-MCP guard. A server
 // present in the cache is rejected when its URL points elsewhere.
 func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	t.Parallel()
@@ -289,7 +289,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	userEmail := "claude-non-gram@example.com"
 
 	// Seed the cache with an entry that resolves the tool's server prefix
-	// but points at a non-Gram host.
+	// but points at a non-Speakeasy host.
 	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "plugin", PluginName: "slack", Name: "slack", URL: "https://mcp.slack.com/mcp"}},
 		sessionMCPListTTL,
@@ -314,7 +314,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 
 // Local stdio MCP servers (no URL — Command-only entries from
 // `claude mcp list`) must be denied by the shadow-MCP guard for the same
-// reason a non-Gram-hosted HTTP server is: they're not under the org's
+// reason a non-Speakeasy-hosted HTTP server is: they're not under the org's
 // control. The deny reason should name the command so the user knows
 // which server to allowlist.
 func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
@@ -391,7 +391,7 @@ func TestClaude_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testin
 }
 
 // Allow path: a cached entry that resolves the tool's server prefix and
-// points at a Gram-hosted URL must succeed even under a blocking policy.
+// points at a Speakeasy-hosted URL must succeed even under a blocking policy.
 func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -429,7 +429,7 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 // carried in the request payload — replayed from the SessionStart inventory
 // file by hook.sh — not only the server-side cache. Here no snapshot is
 // cached, yet a payload-supplied inventory that resolves the tool's server to
-// a Gram-hosted URL must ALLOW, proving the payload path is consulted. Before
+// a Speakeasy-hosted URL must ALLOW, proving the payload path is consulted. Before
 // the fix this session would have denied with the retry/restart message
 // because the cache races the async SessionStart snapshot.
 func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T) {
@@ -472,7 +472,7 @@ func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T
 	assert.Equal(t, "https://app.getgram.ai/mcp/team-foo", cached[0].URL)
 }
 
-// A payload-supplied inventory that resolves the server to a non-Gram URL must
+// A payload-supplied inventory that resolves the server to a non-Speakeasy URL must
 // block with the shadow-MCP policy decision — not the "snapshot unavailable"
 // retry/restart message — confirming the inventory was consumed for
 // enforcement rather than triggering the fail-closed cache-miss branch.
@@ -512,8 +512,8 @@ func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
 
 // A payload inventory gathered live this call (mcp_inventory_fresh) must
 // supersede a stale cached snapshot. Here the cache resolves "gram" to a
-// Gram-hosted URL (would allow), but the fresh payload resolves the same server
-// to a non-Gram URL — the fresh inventory must win and BLOCK, and overwrite the
+// Speakeasy-hosted URL (would allow), but the fresh payload resolves the same server
+// to a non-Speakeasy URL — the fresh inventory must win and BLOCK, and overwrite the
 // cache. This is the inline-gather path hook.sh takes on a session's first tool
 // call when the SessionStart file does not exist yet.
 func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
@@ -527,7 +527,7 @@ func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
 	toolUseID := "toolu_fresh_supersedes"
 	userEmail := "claude-fresh-supersedes@example.com"
 
-	// Cache holds a Gram-hosted entry that would allow on its own.
+	// Cache holds a Speakeasy-hosted entry that would allow on its own.
 	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
@@ -565,8 +565,8 @@ func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
 // A replayed (non-fresh) payload inventory must NOT override a cached snapshot.
 // This guards the ConfigChange race danielkov flagged: the server may already
 // hold a fresher inventory (cached synchronously on ConfigChange) while hook.sh
-// replays an older per-session file. Here the cache allows (Gram-hosted) and
-// the non-fresh replayed payload would block (non-Gram) — the cache must win.
+// replays an older per-session file. Here the cache allows (Speakeasy-hosted) and
+// the non-fresh replayed payload would block (non-Speakeasy) — the cache must win.
 func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -604,7 +604,7 @@ func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
 	assert.Equal(t, "allow", *output.PermissionDecision,
 		"a non-fresh replayed inventory must not override the cached snapshot")
 
-	// The cache must remain the Gram-hosted entry, untouched by the replay.
+	// The cache must remain the Speakeasy-hosted entry, untouched by the replay.
 	cached, cacheErr := ti.service.getCachedMCPList(ctx, sessionID)
 	require.NoError(t, cacheErr)
 	require.Len(t, cached, 1)

@@ -115,7 +115,7 @@ func TestNewAdminWorkOSOrganizationCreator(t *testing.T) {
 
 			if tc.wantUnavailable {
 				require.IsType(t, orgprovision.Unavailable{}, got,
-					"an unconfigured deployment must refuse rather than mint organizations only Gram knows about")
+					"an unconfigured deployment must refuse rather than mint organizations only Speakeasy knows about")
 				return
 			}
 

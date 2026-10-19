@@ -37,7 +37,7 @@ export type UserAccount = {
    */
   provider: string;
   /**
-   * Gram user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member
+   * Speakeasy user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member
    */
   userId?: string | undefined;
 };

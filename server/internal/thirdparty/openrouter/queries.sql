@@ -44,8 +44,8 @@ WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE;
 
--- name: PrepareEnterpriseTrialConversionKey :one
--- Local-only conversion preparation. The caller owns the transaction and has
+-- name: PrepareAPIKeyPolicy :one
+-- Local-only policy preparation. The caller owns the transaction and has
 -- already acquired lifecycle and per-key advisory locks in canonical order.
 WITH existing AS MATERIALIZED (
   SELECT keys.key_type, keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
@@ -53,15 +53,14 @@ WITH existing AS MATERIALIZED (
   WHERE keys.organization_id = @organization_id
     AND keys.key_type = @key_type
     AND keys.deleted IS FALSE
+  FOR UPDATE
 ), desired AS (
   SELECT
     key_type,
     key_hash,
-    GREATEST(monthly_credits, @enterprise_floor::bigint) AS monthly_credits,
-    CASE
-      WHEN key_type = 'chat' THEN array_remove(array_remove(disable_causes, 'trial_demotion'), 'billing_inactive')
-      ELSE array_remove(disable_causes, 'trial_demotion')
-    END AS disable_causes
+    COALESCE(sqlc.narg(monthly_credits)::bigint, GREATEST(monthly_credits, sqlc.narg(enterprise_floor)::bigint)) AS monthly_credits,
+    ARRAY(SELECT cause FROM unnest(disable_causes) WITH ORDINALITY AS causes(cause, position)
+      WHERE NOT (cause = ANY(@remove_causes::text[])) ORDER BY position) AS disable_causes
   FROM existing
 ), updated AS (
   UPDATE openrouter_api_keys AS keys

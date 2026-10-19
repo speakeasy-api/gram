@@ -235,11 +235,11 @@ func TestServerIdentity_OutcomeParamsNeverBroaden(t *testing.T) {
 	require.Equal(t, int64(2), params.TimeEnd)
 }
 
-// TestSummaryIdentityParams_UsesExactlyOneIdentityFilter pins that the summary
-// read never ANDs the two identity filters. Hosted telemetry carries a toolset
-// slug and no mcp_server id, so requiring both matches nothing — and the
-// failure is silent, surfacing as a latency of zero rather than an error.
-func TestSummaryIdentityParams_UsesExactlyOneIdentityFilter(t *testing.T) {
+// TestSummaryIdentityParams_ExcludesOtherServersPreservingLegacyHostedRows pins
+// that hosted reads keep unstamped legacy rows and the selected server's rows,
+// while excluding other servers on the toolset. Non-hosted reads use the
+// configured server id alone, never an unscoped empty toolset slug.
+func TestSummaryIdentityParams_ExcludesOtherServersPreservingLegacyHostedRows(t *testing.T) {
 	t.Parallel()
 
 	hosted := drilldownTarget{
@@ -248,6 +248,7 @@ func TestSummaryIdentityParams_UsesExactlyOneIdentityFilter(t *testing.T) {
 	}
 	params := summaryIdentityParams(hosted, 1, 2)
 	require.Equal(t, "billing", params.ToolsetSlug)
+	require.Equal(t, "mcp-1", params.ToolsetSlugServerID)
 	require.Empty(t, params.MCPServerID)
 
 	// A remote, tunneled, or unproxied server carries no slug, so it is scoped
@@ -259,6 +260,7 @@ func TestSummaryIdentityParams_UsesExactlyOneIdentityFilter(t *testing.T) {
 	}
 	params = summaryIdentityParams(remote, 1, 2)
 	require.Empty(t, params.ToolsetSlug)
+	require.Empty(t, params.ToolsetSlugServerID)
 	require.Equal(t, "mcp-1", params.MCPServerID)
 	require.Equal(t, "project-1", params.GramProjectID)
 }

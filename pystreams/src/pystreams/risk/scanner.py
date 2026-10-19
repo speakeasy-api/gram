@@ -85,6 +85,14 @@ class ScanSlotTimeout(Exception):
     """
 
 
+class ScanInputError(Exception):
+    """The analyzer rejected the input; retrying the same message cannot succeed.
+
+    Carries only the original exception type name, never its message, which
+    could echo scanned content.
+    """
+
+
 @dataclass(frozen=True)
 class Detection:
     """A real (non-false-positive) PII match found in scanned content.
@@ -540,12 +548,15 @@ def _scan_to_detections(
     embedded ASN database), and the byte-offset conversion all stay off the event
     loop wherever it runs.
     """
-    results = analyzer.analyze(
-        text=content,
-        entities=entities,
-        language="en",
-        score_threshold=score_threshold,
-    )
+    try:
+        results = analyzer.analyze(
+            text=content,
+            entities=entities,
+            language="en",
+            score_threshold=score_threshold,
+        )
+    except ValueError as exc:
+        raise ScanInputError(type(exc).__name__) from None
     if not results:
         return []
     n = len(content)

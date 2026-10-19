@@ -123,7 +123,7 @@ describe("AgentKeyReview", () => {
     ).toEqual([]);
     setup([], { servers: [unproxied] });
     expect(
-      screen.getByText("This server does not use a Gram API key."),
+      screen.getByText("This server does not use a Speakeasy API key."),
     ).toBeTruthy();
   });
 

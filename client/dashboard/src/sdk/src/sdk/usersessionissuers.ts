@@ -5,10 +5,12 @@
 import { userSessionIssuersCreate } from "../funcs/userSessionIssuersCreate.js";
 import { userSessionIssuersDelete } from "../funcs/userSessionIssuersDelete.js";
 import { userSessionIssuersGet } from "../funcs/userSessionIssuersGet.js";
+import { userSessionIssuersGetAttachImpact } from "../funcs/userSessionIssuersGetAttachImpact.js";
 import { userSessionIssuersList } from "../funcs/userSessionIssuersList.js";
 import { userSessionIssuersUpdate } from "../funcs/userSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { UserSessionIssuer } from "../models/components/usersessionissuer.js";
+import { UserSessionIssuerAttachImpact } from "../models/components/usersessionissuerattachimpact.js";
 import {
   CreateUserSessionIssuerRequest,
   CreateUserSessionIssuerSecurity,
@@ -21,6 +23,10 @@ import {
   GetUserSessionIssuerRequest,
   GetUserSessionIssuerSecurity,
 } from "../models/operations/getusersessionissuer.js";
+import {
+  GetUserSessionIssuerAttachImpactRequest,
+  GetUserSessionIssuerAttachImpactSecurity,
+} from "../models/operations/getusersessionissuerattachimpact.js";
 import {
   ListUserSessionIssuersRequest,
   ListUserSessionIssuersResponse,
@@ -84,6 +90,25 @@ export class UserSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<UserSessionIssuer> {
     return unwrapAsync(userSessionIssuersGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getAttachImpact userSessionIssuers
+   *
+   * @remarks
+   * Preview what attaching a user_session_issuer to an existing MCP server, toolset, or meta MCP server changes for its clients, before calling the matching update. Name exactly one of mcp_server_id, toolset_id, or meta_mcp_server_id; omit user_session_issuer_id to preview detaching the current issuer. Clients and sessions belong to an issuer, so any change of issuer requires the server's clients to authorize again. Advisory only: the update does not require it. Requires the mcp:write access the matching update requires.
+   */
+  async getAttachImpact(
+    request?: GetUserSessionIssuerAttachImpactRequest | undefined,
+    security?: GetUserSessionIssuerAttachImpactSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionIssuerAttachImpact> {
+    return unwrapAsync(userSessionIssuersGetAttachImpact(
       this,
       request,
       security,

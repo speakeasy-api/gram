@@ -14,7 +14,7 @@ const (
 	listProjectToolsToolName    = "list_project_tools"
 	addToolsToMCPToolName       = "add_tools_to_mcp"
 	removeToolsFromMCPToolName  = "remove_tools_from_mcp"
-	toolExposureBlastRadiusNote = "Changing this list republishes every plugin that carries the server, so everyone holding one of those plugins gets the change immediately; the result names those plugins."
+	toolExposureBlastRadiusNote = "Changing this list requests publication for affected plugins. If the edited toolset contains any platform tool, proven automatic role-plugin memberships are removed; explicit manual memberships and MCP access are preserved. Removing the last platform tool restores automatic-distribution eligibility while preserving prior removal history. The result names current distributions and plugins removed by this edit. Supported clients receive updates on their normal refresh cycle; locally installed ZIPs require replacement."
 )
 
 // registerToolExposureTools keeps the live and unavailable manifests identical
@@ -72,7 +72,7 @@ func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, 
 		Name:  addToolsToMCPToolName,
 		Title: "Put Tools on an MCP Server",
 		Description: "Add named tools to one exact MCP server in an explicit project, without disturbing the tools it already exposes. " +
-			"Supply exact tool URNs from list_project_tools, the exposure_version from the latest get_mcp read of that server, an idempotency key, and confirmed: true only after the user confirms the exact server and tool list. " +
+			"Supply exact tool URNs from list_project_tools, the exposure_version from the page that completes the latest get_mcp read of that server, an idempotency key, and confirmed: true only after the user confirms the exact server and tool list. " +
 			toolExposureBlastRadiusNote + " " +
 			"A tool that is neither produced by this project nor already on this server is refused by name and nothing is changed. A tool the server already exposes is reported as unchanged rather than added. Only a server whose tools come from this project can be changed here, and when another server offers the same tool list the change moves both, so it is allowed only with permission to change every one of them.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
@@ -81,7 +81,7 @@ func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, 
 		Name:  removeToolsFromMCPToolName,
 		Title: "Take Tools off an MCP Server",
 		Description: "Remove named tools from one exact MCP server in an explicit project, leaving the rest of its tools in place. " +
-			"Supply exact tool URNs, the exposure_version from the latest get_mcp read of that server, an idempotency key, and confirmed: true only after the user confirms the exact server and tool list. " +
+			"Supply exact tool URNs, the exposure_version from the page that completes the latest get_mcp read of that server, an idempotency key, and confirmed: true only after the user confirms the exact server and tool list. " +
 			toolExposureBlastRadiusNote + " " +
 			"People using the server lose those tools as soon as the change reaches them. A tool that is neither produced by this project nor already on this server is refused by name and nothing is changed; a tool this project produces but the server does not expose is reported as unchanged rather than removed.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},

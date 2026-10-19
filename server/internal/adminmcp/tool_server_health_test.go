@@ -51,6 +51,8 @@ func testServerHealth() *gen.AdminMcpServerHealth {
 			ID: testHealthIssuerID, Slug: "example-issuer", Classification: "custom", AuthnChallengeMode: "interactive",
 			SessionDurationHours: 24, AttachmentScope: "project", ClientIDMetadataAdmissionMode: new("presets"),
 			UseAuthenticationHost:   true,
+			AuthorizationServerMode: "shared",
+			IssuerURLPinned:         true,
 			TrustedRemoteSession:    &gen.AdminMcpServerHealthTrustedRemoteSession{IssuerID: testHealthRemoteID, ClientID: "trusted-client"},
 			OtherServersUsingIssuer: []*gen.AdminMcpServerHealthServerRef{{ID: testHealthOtherID, Name: "Other"}},
 			CreatedAt:               "2026-01-02T00:00:00Z",
@@ -149,6 +151,8 @@ func TestDescribeMCPServerHealthExactTargetAndProjection(t *testing.T) {
 	require.Equal(t, "example", *output.Correlation.URLSlug)
 	require.Nil(t, output.LegacyAuth)
 	require.NotNil(t, output.UserSessionIssuer)
+	require.Equal(t, "shared", output.UserSessionIssuer.AuthorizationServerMode)
+	require.True(t, output.UserSessionIssuer.IssuerURLPinned)
 	require.Len(t, output.UserSessionIssuer.RemoteSessionClients, 2)
 	client := output.UserSessionIssuer.RemoteSessionClients[0]
 	require.Equal(t, MCPServerHealthValidationCounts{Valid: 2, RejectedByMember: 1}, client.Sessions.ValidationStatusCounts)
@@ -306,10 +310,13 @@ func TestDescribeMCPServerHealthFailsClosedOnMalformedResults(t *testing.T) {
 		"legacy with issuer":  func(h *gen.AdminMcpServerHealth) { h.LegacyAuth = new("gram_private") },
 		"unknown legacy":      func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer = nil; h.LegacyAuth = new("basic") },
 		"unscoped attachment": func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.AttachmentScope = "project:" + testProjectID },
-		"unknown authn mode":  func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.AuthnChallengeMode = "silent" },
-		"unknown admission":   func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.ClientIDMetadataAdmissionMode = new("any") },
-		"nil user sessions":   func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.Sessions = nil },
-		"negative live":       func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.Sessions.Live = -1 },
+		"unknown authorization server mode": func(h *gen.AdminMcpServerHealth) {
+			h.UserSessionIssuer.AuthorizationServerMode = "per-request"
+		},
+		"unknown authn mode": func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.AuthnChallengeMode = "silent" },
+		"unknown admission":  func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.ClientIDMetadataAdmissionMode = new("any") },
+		"nil user sessions":  func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.Sessions = nil },
+		"negative live":      func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.Sessions.Live = -1 },
 		"nil other server": func(h *gen.AdminMcpServerHealth) {
 			h.UserSessionIssuer.OtherServersUsingIssuer = append(h.UserSessionIssuer.OtherServersUsingIssuer, nil)
 		},

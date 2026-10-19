@@ -88,7 +88,7 @@ type oauthPageData struct {
 	AutoClose        bool
 }
 
-// BrowserIdentity resolves a real Gram user from the product identity provider.
+// BrowserIdentity resolves a real Speakeasy user from the product identity provider.
 type BrowserIdentity interface {
 	BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error)
 	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)

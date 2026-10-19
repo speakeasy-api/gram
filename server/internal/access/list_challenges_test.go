@@ -208,7 +208,7 @@ func TestListChallenges_EnrichesWithUserData(t *testing.T) {
 
 // TestListChallenges_SuppressesUsersOutsideOrg proves the suppression boundary:
 // challenges from active org members and from unknown/external principals (no
-// Gram user identity, e.g. api keys) are still returned, while challenges from
+// Speakeasy user identity, e.g. api keys) are still returned, while challenges from
 // Gram users who are NOT members of the org (e.g. Speakeasy staff impersonating
 // a customer org) are suppressed.
 func TestListChallenges_SuppressesUsersOutsideOrg(t *testing.T) {
@@ -222,7 +222,7 @@ func TestListChallenges_SuppressesUsersOutsideOrg(t *testing.T) {
 	memberChallenge := uuid.NewString()
 	insertCHChallengeWithUser(t, ti, orgID, memberChallenge, "deny", "user:"+memberID, "org:read", &memberID, nil)
 
-	// 2. Unknown principal with no Gram user identity (api key / external
+	// 2. Unknown principal with no Speakeasy user identity (api key / external
 	//    end-user) — kept; user_id is NULL.
 	unknownChallenge := uuid.NewString()
 	insertCHChallengeWithUser(t, ti, orgID, unknownChallenge, "deny", "api_key:ext", "org:read", nil, nil)
@@ -424,7 +424,7 @@ func newChallengeTestService(t *testing.T) (context.Context, *testInstance) {
 	return ctx, ti
 }
 
-// seedOrgMember creates a Gram user and makes them an active member of the org,
+// seedOrgMember creates a Speakeasy user and makes them an active member of the org,
 // returning the user ID.
 func seedOrgMember(t *testing.T, ctx context.Context, ti *testInstance, orgID, email string) string {
 	t.Helper()

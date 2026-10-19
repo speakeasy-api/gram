@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,10 +36,13 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -48,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -126,13 +131,55 @@ const (
 	// ScheduleToCloseTimeout = 25m) so a still-retrying activity isn't
 	// stomped mid-flight; the row only becomes reapable after Temporal
 	// gives up.
-	runtimeExpiringReapGrace     = 30 * time.Minute
+	runtimeExpiringReapGrace = 30 * time.Minute
+	// runtimeIdleSweepGrace is how long past warm_until the reaper waits
+	// before expiring an idle runtime itself. Thread workflows expire their
+	// runtime when the warm timer fires; the grace keeps the sweep off those
+	// timers so it only collects runtimes no workflow is watching.
+	runtimeIdleSweepGrace = 10 * time.Minute
+	// runtimeIdleSweepBatch bounds how many idle runtimes one reaper tick
+	// expires; later ticks pick up the rest.
+	runtimeIdleSweepBatch = 25
+	// runtimeIdleSweepRowTimeout bounds one sweep expire (runner /state poll
+	// plus backend delete), so a hung runner costs one row, not the reaper's
+	// whole 2-minute activity. A healthy runner answers /state in well under
+	// a second and a claim delete in a few.
+	runtimeIdleSweepRowTimeout = 20 * time.Second
+	// runtimeIdleSweepRevertTimeout bounds the detached write that hands a
+	// failed sweep row back to `active` for the next tick.
+	runtimeIdleSweepRevertTimeout = 5 * time.Second
+	// runtimeExpireStatusTimeout bounds the runner /state poll inside an
+	// expire, so a hung runner still leaves the rest of the caller's budget
+	// for the backend Stop that tears it down. A healthy runner answers in
+	// well under a second.
+	runtimeExpireStatusTimeout = 5 * time.Second
+	// busyRuntimeRecheckSeconds is the warm window handed back when the
+	// runner reports a turn in flight and the assistant's own TTL is zero, so
+	// a busy runtime is re-checked later instead of stopped mid-turn.
+	busyRuntimeRecheckSeconds    = 30
 	eventProcessingRequeueGrace  = 3 * time.Minute
 	processingLeaseHeartbeatTick = 30 * time.Second
 	admitFailureBackoff          = 30 * time.Second
 )
 
 var errAssistantValidation = errors.New("assistant validation")
+
+// idleExpiringRuntimeBackends stop a runtime once its warm window lapses. A
+// cold admit on these is seconds (a GKE warm-pool claim, a local container
+// start). Unrecognized backends are left untouched.
+var idleExpiringRuntimeBackends = []string{runtimeBackendGKE, runtimeBackendLocal}
+
+// configuredIdleExpiringBackends narrows idleExpiringRuntimeBackends to the
+// backends this process can reach, so it never claims a row it cannot stop.
+func (s *ServiceCore) configuredIdleExpiringBackends() []string {
+	backends := make([]string, 0, len(idleExpiringRuntimeBackends))
+	for _, backend := range idleExpiringRuntimeBackends {
+		if s.runtime.SupportsBackend(backend) {
+			backends = append(backends, backend)
+		}
+	}
+	return backends
+}
 
 func assistantValidationError(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errAssistantValidation, fmt.Sprintf(format, args...))
@@ -148,7 +195,6 @@ type assistantRecord struct {
 	Name            string
 	Model           string
 	Instructions    string
-	Toolsets        []assistantToolsetRow
 	MCPServers      []assistantMCPServerRow
 	Skills          []assistantSkillRow
 	WarmTTLSeconds  int
@@ -202,31 +248,16 @@ type assistantThreadEventRecord struct {
 	SkillSetSnapshot      []byte
 }
 
-// assistantToolsetRow is the hydrated view of a row in assistant_toolsets
-// joined with toolsets + environments. Everything dispatch needs to build
-// MCP server URLs comes from one read.
-type assistantToolsetRow struct {
-	ToolsetID              uuid.UUID
-	ToolsetSlug            string
-	McpEnabled             bool
-	McpSlug                pgtype.Text
+// assistantMCPServerRow is one attached server; ToolsetSlug is set for hosted servers.
+type assistantMCPServerRow struct {
+	MCPServerID            uuid.UUID
+	ServerSlug             pgtype.Text
+	ToolsetSlug            pgtype.Text
+	Visibility             string
+	EndpointSlug           string
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
-}
-
-// assistantMCPServerRow is the hydrated view of a row in assistant_mcp_servers
-// joined with mcp_servers + its Gram-hosted endpoint + environments. Like
-// assistantToolsetRow, everything dispatch needs to build the MCP server URL
-// comes from one read; ServerSlug is the display/runtime ID and EndpointSlug is
-// the public /mcp/{slug} path segment the runner connects to.
-type assistantMCPServerRow struct {
-	MCPServerID     uuid.UUID
-	ServerSlug      pgtype.Text
-	Visibility      string
-	EndpointSlug    string
-	EnvironmentID   uuid.NullUUID
-	EnvironmentSlug pgtype.Text
 }
 
 type assistantSkillRow struct {
@@ -248,7 +279,6 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		Name:            row.Name,
 		Model:           row.Model,
 		Instructions:    row.Instructions,
-		Toolsets:        nil,
 		MCPServers:      nil,
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
@@ -271,7 +301,6 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		Name:            row.Name,
 		Model:           row.Model,
 		Instructions:    row.Instructions,
-		Toolsets:        nil,
 		MCPServers:      nil,
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
@@ -294,7 +323,6 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		Name:            row.Name,
 		Model:           row.Model,
 		Instructions:    row.Instructions,
-		Toolsets:        nil,
 		MCPServers:      nil,
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
@@ -317,7 +345,6 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		Name:            row.Name,
 		Model:           row.Model,
 		Instructions:    row.Instructions,
-		Toolsets:        nil,
 		MCPServers:      nil,
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
@@ -340,7 +367,6 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		Name:            row.Name,
 		Model:           row.Model,
 		Instructions:    row.Instructions,
-		Toolsets:        nil,
 		MCPServers:      nil,
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
@@ -368,7 +394,7 @@ type ProcessThreadEventsResult struct {
 	// BootstrappedRuntime signals that this call transitioned the v2 runtime
 	// row from `starting` to `active`. v2 admit only fans out the first
 	// pending thread when reserving a fresh row (Ensure has no per-row CAS,
-	// so concurrent ensures would race the Fly machine launch). The
+	// so concurrent ensures would race the runtime launch). The
 	// workflow signals the coordinator on this flag so the remaining
 	// pending threads get admitted against the now-active row.
 	BootstrappedRuntime bool
@@ -650,10 +676,14 @@ func (s *ServiceCore) emitAssistantTelemetry(
 type ReapStuckRuntimesResult struct {
 	StaleRuntimesStopped int64
 	StaleEventsRequeued  int64
+
+	// IdleRuntimesStopped counts runtimes the idle sweep expired.
+	IdleRuntimesStopped int64
+
 	// AffectedAssistantIDs lists distinct assistants whose events were
-	// requeued or whose runtimes were stopped. The singleton reaper uses
-	// these to kick the per-assistant coordinators so admit re-runs
-	// promptly instead of waiting for organic traffic.
+	// requeued or whose runtimes were stopped, including by the idle sweep.
+	// The singleton reaper uses these to kick the per-assistant coordinators
+	// so admit re-runs promptly instead of waiting for organic traffic.
 	AffectedAssistantIDs []uuid.UUID
 }
 
@@ -664,6 +694,7 @@ type ReapStuckRuntimesResult struct {
 // than locks so a live turn is never interrupted.
 func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesResult, error) {
 	var out ReapStuckRuntimesResult
+	var errs []error
 	now := time.Now().UTC()
 	affected := map[uuid.UUID]struct{}{}
 
@@ -676,11 +707,12 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	//     attempts after CAS active->expiring without reaching Stop or
 	//     Revert. Without this the row blocks the partial unique index
 	//     ReserveAssistantRuntime depends on.
-	// Healthy 'active' rows are never reaped: an idle runtime keeps its VM
-	// until the assistant is deleted. The local reconciliation below is the
-	// narrow exception for a row whose container no longer exists.
+	// Healthy 'active' rows are not reaped here; the idle sweep at the end
+	// expires them through the runner's idle clock. The local reconciliation
+	// below is the narrow exception for a row whose container no longer
+	// exists.
 	queries := assistantrepo.New(s.db)
-	// Local containers can be removed outside Gram (docker rm, daemon reset,
+	// Local containers can be removed outside Speakeasy (docker rm, daemon reset,
 	// pruning). Reconcile those rows before the age-based SQL sweep: unlike a
 	// healthy idle runtime, a definitively missing container can never make
 	// progress. Stop only the row; the next admission recreates the container
@@ -688,7 +720,7 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	if checker, ok := s.runtime.(runtimeLivenessChecker); ok && s.runtime.SupportsBackend(runtimeBackendLocal) {
 		rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
 		if err != nil {
-			return out, fmt.Errorf("list active assistant runtimes for liveness reconciliation: %w", err)
+			errs = append(errs, fmt.Errorf("list active assistant runtimes for liveness reconciliation: %w", err))
 		}
 		for _, row := range rows {
 			if row.Backend != runtimeBackendLocal {
@@ -725,7 +757,8 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 				ActiveState:   runtimeStateActive,
 				ExpiringState: runtimeStateExpiring,
 			}); err != nil {
-				return out, fmt.Errorf("stop vanished local assistant runtime: %w", err)
+				errs = append(errs, fmt.Errorf("stop vanished local assistant runtime: %w", err))
+				continue
 			}
 			affected[row.AssistantID] = struct{}{}
 			out.StaleRuntimesStopped++
@@ -733,14 +766,15 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	}
 
 	runtimeAssistantIDs, err := queries.ReapStuckAssistantRuntimes(ctx, assistantrepo.ReapStuckAssistantRuntimesParams{
-		StoppedState:   runtimeStateStopped,
-		StartingState:  runtimeStateStarting,
-		StartingCutoff: conv.ToPGTimestamptz(now.Add(-runtimeStartupReapGrace)),
-		ExpiringState:  runtimeStateExpiring,
-		ExpiringCutoff: conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
+		StoppedState:         runtimeStateStopped,
+		StartingState:        runtimeStateStarting,
+		StartingCutoff:       conv.ToPGTimestamptz(now.Add(-runtimeStartupReapGrace)),
+		ExpiringState:        runtimeStateExpiring,
+		ExpiringCutoff:       conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
+		IdleExpiringBackends: idleExpiringRuntimeBackends,
 	})
 	if err != nil {
-		return out, fmt.Errorf("reap stuck assistant runtimes: %w", err)
+		errs = append(errs, fmt.Errorf("reap stuck assistant runtimes: %w", err))
 	}
 	for _, assistantID := range runtimeAssistantIDs {
 		affected[assistantID] = struct{}{}
@@ -757,12 +791,17 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 		UpdatedBefore:    conv.ToPGTimestamptz(now.Add(-eventProcessingRequeueGrace)),
 	})
 	if err != nil {
-		return out, fmt.Errorf("reap stuck assistant thread events: %w", err)
+		errs = append(errs, fmt.Errorf("reap stuck assistant thread events: %w", err))
 	}
 	for _, assistantID := range eventAssistantIDs {
 		affected[assistantID] = struct{}{}
 		out.StaleEventsRequeued++
 	}
+
+	// 3. Expire idle runtimes no thread workflow is watching: workflows that
+	// exited without expiring, died before their warm timer fired, or gave up
+	// mid-expire.
+	out.IdleRuntimesStopped = s.sweepIdleRuntimes(ctx, now, affected)
 
 	if len(affected) > 0 {
 		out.AffectedAssistantIDs = make([]uuid.UUID, 0, len(affected))
@@ -771,17 +810,126 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 		}
 	}
 
+	if err := errors.Join(errs...); err != nil {
+		if len(out.AffectedAssistantIDs) == 0 {
+			return out, err
+		}
+		// Returning the error would discard the coordinator kicks for work
+		// this run already moved; the next tick retries the failed step.
+		s.logger.ErrorContext(ctx, "reap stuck assistant runtimes partially failed", attr.SlogError(err))
+	}
 	return out, nil
 }
 
-func warmRemainingSeconds(idleSeconds *uint64, ttlSeconds int) int {
-	if ttlSeconds <= 0 {
+// sweepIdleRuntimes expires up to runtimeIdleSweepBatch idle runtimes, adding
+// each stopped runtime's assistant to affected so its coordinator re-admits
+// anything left pending. It returns how many runtimes it stopped.
+func (s *ServiceCore) sweepIdleRuntimes(ctx context.Context, now time.Time, affected map[uuid.UUID]struct{}) int64 {
+	backends := s.configuredIdleExpiringBackends()
+	if len(backends) == 0 {
 		return 0
 	}
+
+	queries := assistantrepo.New(s.db)
+	expiringBefore := conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace))
+	candidates, err := queries.ListIdleAssistantRuntimes(ctx, assistantrepo.ListIdleAssistantRuntimesParams{
+		IdleExpiringBackends: backends,
+		ActiveState:          runtimeStateActive,
+		WarmUntilBefore:      conv.ToPGTimestamptz(now.Add(-runtimeIdleSweepGrace)),
+		ExpiringState:        runtimeStateExpiring,
+		ExpiringBefore:       expiringBefore,
+		ProcessingStatus:     eventStatusProcessing,
+		MaxRows:              runtimeIdleSweepBatch,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "list idle assistant runtimes failed", attr.SlogError(err))
+		return 0
+	}
+
+	var stopped int64
+	for _, candidate := range candidates {
+		if deadline, ok := ctx.Deadline(); ctx.Err() != nil || (ok && time.Until(deadline) < runtimeIdleSweepRowTimeout+runtimeIdleSweepRevertTimeout) {
+			break
+		}
+
+		row, err := queries.BeginExpireIdleAssistantRuntime(ctx, assistantrepo.BeginExpireIdleAssistantRuntimeParams{
+			ExpiringState:  runtimeStateExpiring,
+			RuntimeID:      candidate.ID,
+			ProjectID:      candidate.ProjectID,
+			ActiveState:    runtimeStateActive,
+			ExpiringBefore: expiringBefore,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			s.logger.WarnContext(ctx, "begin expire idle assistant runtime failed",
+				attr.SlogAssistantRuntimeID(candidate.ID.String()),
+				attr.SlogError(err),
+			)
+			continue
+		}
+
+		rowCtx, cancel := context.WithTimeout(ctx, runtimeIdleSweepRowTimeout)
+		result, err := s.expireRuntime(rowCtx, assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}, conv.SafeInt(candidate.WarmTtlSeconds))
+		cancel()
+		if err != nil {
+			s.logger.WarnContext(ctx, "expire idle assistant runtime failed",
+				attr.SlogAssistantID(row.AssistantID.String()),
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogAssistantRuntimeID(row.ID.String()),
+				attr.SlogError(err),
+			)
+			// Hand the row back with its lapsed warm window so the next tick
+			// retries the expire. Detached, because the usual cause is the
+			// row's own deadline.
+			revertCtx, cancelRevert := context.WithTimeout(context.WithoutCancel(ctx), runtimeIdleSweepRevertTimeout)
+			revertErr := queries.RevertExpireAssistantRuntimeToActive(revertCtx, assistantrepo.RevertExpireAssistantRuntimeToActiveParams{
+				ActiveState:   runtimeStateActive,
+				WarmUntil:     row.WarmUntil,
+				RuntimeID:     row.ID,
+				ProjectID:     row.ProjectID,
+				ExpiringState: runtimeStateExpiring,
+			})
+			cancelRevert()
+			if revertErr != nil {
+				s.logger.WarnContext(ctx, "revert failed idle assistant runtime expire",
+					attr.SlogAssistantRuntimeID(row.ID.String()),
+					attr.SlogError(revertErr),
+				)
+			}
+			continue
+		}
+		if result.Stopped {
+			affected[row.AssistantID] = struct{}{}
+			stopped++
+		}
+	}
+	return stopped
+}
+
+func warmRemainingSeconds(idleSeconds *uint64, ttlSeconds int) int {
 	// nil signals the runner reported no live threads — VM is fully idle, so
-	// no warm window remains. A non-nil min-idle bigger than the TTL also
-	// returns 0, matching the "expired" boundary.
-	if idleSeconds == nil || *idleSeconds >= uint64(ttlSeconds) {
+	// no warm window remains.
+	if idleSeconds == nil {
+		return 0
+	}
+	// A turn in flight (idle=&0) never expires, whatever the TTL.
+	if *idleSeconds == 0 {
+		return max(ttlSeconds, busyRuntimeRecheckSeconds)
+	}
+	// A min-idle at or past the TTL returns 0, matching the "expired"
+	// boundary.
+	if ttlSeconds <= 0 || *idleSeconds >= uint64(ttlSeconds) {
 		return 0
 	}
 	return ttlSeconds - int(*idleSeconds) //nolint:gosec // bounded above by ttlSeconds (int)
@@ -806,7 +954,10 @@ func normalizeMaxConcurrency(v *int) int {
 // supplied by the user.
 type resolvedToolsetInsert struct {
 	ToolsetID     uuid.UUID
+	Slug          string
 	EnvironmentID uuid.NullUUID
+	// EnablesMCP is read from the locked row: attaching would turn MCP on.
+	EnablesMCP bool
 }
 
 // resolveToolsetRefsForWrite validates that every user-supplied slug exists
@@ -815,13 +966,21 @@ type resolvedToolsetInsert struct {
 // create/update time. Resolve and lock targets in the write transaction before
 // touching the assistant or attachments: toolsets first, then MCP servers, each
 // ordered by ID. Deletion takes the target lock before detaching assistants too.
+// serverRefs only add the toolsets behind hosted servers to the lock set.
 func (s *ServiceCore) resolveToolsetRefsForWrite(
 	ctx context.Context,
 	tx pgx.Tx,
 	projectID uuid.UUID,
 	refs []*types.AssistantToolsetRef,
+	serverRefs []*types.AssistantMCPServerRef,
 ) ([]resolvedToolsetInsert, error) {
-	if len(refs) == 0 {
+	serverSlugs := make([]string, 0, len(serverRefs))
+	for _, ref := range serverRefs {
+		if ref != nil {
+			serverSlugs = append(serverSlugs, ref.McpServerSlug)
+		}
+	}
+	if len(refs) == 0 && len(serverSlugs) == 0 {
 		return nil, nil
 	}
 
@@ -848,14 +1007,20 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	queries := assistantrepo.New(tx)
 	toolsetIDs := map[string]uuid.UUID{}
 	toolsetRows, err := queries.ResolveToolsetsForWrite(ctx, assistantrepo.ResolveToolsetsForWriteParams{
-		ProjectID: projectID,
-		Slugs:     toolsetSlugs,
+		ProjectID:      projectID,
+		Slugs:          toolsetSlugs,
+		McpServerSlugs: serverSlugs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("resolve toolset slugs: %w", err)
 	}
+	if len(toolsetSlugs) == 0 {
+		return nil, nil
+	}
+	enablesMCP := map[uuid.UUID]bool{}
 	for _, row := range toolsetRows {
 		toolsetIDs[row.Slug] = row.ID
+		enablesMCP[row.ID] = row.EnablesMcp
 	}
 	for _, slug := range toolsetSlugs {
 		if _, ok := toolsetIDs[slug]; !ok {
@@ -897,7 +1062,7 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 		if ref.EnvironmentSlug != nil && *ref.EnvironmentSlug != "" {
 			envID = uuid.NullUUID{UUID: envIDs[*ref.EnvironmentSlug], Valid: true}
 		}
-		out = append(out, resolvedToolsetInsert{ToolsetID: toolsetID, EnvironmentID: envID})
+		out = append(out, resolvedToolsetInsert{ToolsetID: toolsetID, Slug: ref.ToolsetSlug, EnvironmentID: envID, EnablesMCP: enablesMCP[toolsetID]})
 	}
 	return out, nil
 }
@@ -937,18 +1102,22 @@ func (s *ServiceCore) AttachmentTargetIDs(ctx context.Context, projectID uuid.UU
 // assistant_mcp_servers for a single (mcp_server_slug, environment_slug?) ref.
 type resolvedMcpServerInsert struct {
 	MCPServerID   uuid.UUID
+	Slug          string
+	Hosted        bool
 	EnvironmentID uuid.NullUUID
 }
 
 // resolveMcpServerRefsForWrite validates that every user-supplied mcp server
 // slug exists within the project and returns the FK ids to persist, mirroring
 // resolveToolsetRefsForWrite. Failing fast turns silent dispatch-time errors
-// ("unknown mcp server") into 400s at create/update time.
+// ("unknown mcp server") into 400s at create/update time. Hosted servers in
+// skipHosted (already attached, or in this write's toolsets) are left as they are.
 func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	ctx context.Context,
 	tx pgx.Tx,
 	projectID uuid.UUID,
 	refs []*types.AssistantMCPServerRef,
+	skipHosted map[uuid.UUID]struct{},
 ) ([]resolvedMcpServerInsert, error) {
 	if len(refs) == 0 {
 		return nil, nil
@@ -983,21 +1152,29 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	if err != nil {
 		return nil, fmt.Errorf("resolve mcp server slugs: %w", err)
 	}
+	hosted := map[string]bool{}
+	skipped := map[string]bool{}
 	for _, row := range serverRows {
 		if !row.Slug.Valid {
+			continue
+		}
+		hosted[row.Slug.String] = row.Hosted
+		if _, skip := skipHosted[row.ID]; skip && row.Hosted {
+			skipped[row.Slug.String] = true
+			serverIDs[row.Slug.String] = row.ID
 			continue
 		}
 		// Reject servers the runtime cannot reach so a bad attach fails the
 		// write instead of silently vanishing from reads and dispatch:
 		// tunnelled backends have no /mcp serving path, disabled servers 404
-		// there, and without a Gram-hosted endpoint there is no URL to build.
+		// there, and without a Speakeasy-hosted endpoint there is no URL to build.
 		switch {
 		case row.Tunneled:
 			return nil, assistantValidationError("mcp server %q is tunnel-backed and cannot be attached to an assistant", row.Slug.String)
 		case row.Visibility == visibility.Disabled:
 			return nil, assistantValidationError("mcp server %q is disabled", row.Slug.String)
 		case !row.HasGramEndpoint:
-			return nil, assistantValidationError("mcp server %q has no Gram-hosted MCP endpoint", row.Slug.String)
+			return nil, assistantValidationError("mcp server %q has no Speakeasy-hosted MCP endpoint", row.Slug.String)
 		}
 		serverIDs[row.Slug.String] = row.ID
 	}
@@ -1032,6 +1209,9 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		if ref == nil {
 			continue
 		}
+		if skipped[ref.McpServerSlug] {
+			continue
+		}
 		serverID := serverIDs[ref.McpServerSlug]
 		if _, dup := seen[serverID]; dup {
 			return nil, assistantValidationError("mcp server %q listed more than once", ref.McpServerSlug)
@@ -1041,44 +1221,12 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		if ref.EnvironmentSlug != nil && *ref.EnvironmentSlug != "" {
 			envID = uuid.NullUUID{UUID: envIDs[*ref.EnvironmentSlug], Valid: true}
 		}
-		out = append(out, resolvedMcpServerInsert{MCPServerID: serverID, EnvironmentID: envID})
+		out = append(out, resolvedMcpServerInsert{MCPServerID: serverID, Slug: ref.McpServerSlug, Hosted: hosted[ref.McpServerSlug], EnvironmentID: envID})
 	}
 	return out, nil
 }
 
-// loadAssistantToolsets pulls the hydrated toolset rows for one or more
-// assistants in a single query so callers can attach them without N+1.
-func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantToolsetRow, error) {
-	out := map[uuid.UUID][]assistantToolsetRow{}
-	if len(assistantIDs) == 0 {
-		return out, nil
-	}
-	rows, err := assistantrepo.New(s.db).LoadAssistantToolsets(ctx, assistantrepo.LoadAssistantToolsetsParams{
-		AssistantIds: assistantIDs,
-		ProjectID:    projectID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("load assistant toolsets: %w", err)
-	}
-	for _, row := range rows {
-		out[row.AssistantID] = append(out[row.AssistantID], assistantToolsetRow{
-			ToolsetID:              row.ToolsetID,
-			ToolsetSlug:            row.ToolsetSlug,
-			McpEnabled:             row.McpEnabled,
-			McpSlug:                row.McpSlug,
-			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
-			EnvironmentID:          row.EnvironmentID,
-			EnvironmentSlug:        row.EnvironmentSlug,
-		})
-	}
-	return out, nil
-}
-
-// loadAssistantMcpServers pulls the hydrated mcp_servers attachments for one or
-// more assistants in a single query, mirroring loadAssistantToolsets. Rows
-// whose server has no Gram-hosted endpoint (empty EndpointSlug) are kept so
-// the attachment stays visible and detachable on API reads;
-// resolveAssistantMCPServers skips them at dispatch.
+// loadAssistantMcpServers loads attachments from both tables, one row per server.
 func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantMCPServerRow, error) {
 	out := map[uuid.UUID][]assistantMCPServerRow{}
 	if len(assistantIDs) == 0 {
@@ -1091,15 +1239,28 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	if err != nil {
 		return nil, fmt.Errorf("load assistant mcp servers: %w", err)
 	}
+	seen := map[[2]uuid.UUID]int{}
 	for _, row := range rows {
-		out[row.AssistantID] = append(out[row.AssistantID], assistantMCPServerRow{
-			MCPServerID:     row.McpServerID,
-			ServerSlug:      row.ServerSlug,
-			Visibility:      row.Visibility,
-			EndpointSlug:    row.EndpointSlug,
-			EnvironmentID:   row.EnvironmentID,
-			EnvironmentSlug: row.EnvironmentSlug,
-		})
+		key := [2]uuid.UUID{row.AssistantID, row.McpServerID}
+		item := assistantMCPServerRow{
+			MCPServerID:            row.McpServerID,
+			ServerSlug:             row.ServerSlug,
+			ToolsetSlug:            row.ToolsetSlug,
+			Visibility:             row.Visibility,
+			EndpointSlug:           row.EndpointSlug,
+			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
+			EnvironmentID:          row.EnvironmentID,
+			EnvironmentSlug:        row.EnvironmentSlug,
+		}
+		// The legacy row of a twin keeps its environment, as the old toolset arm did.
+		if i, dup := seen[key]; dup {
+			if row.Legacy {
+				out[row.AssistantID][i] = item
+			}
+			continue
+		}
+		seen[key] = len(out[row.AssistantID])
+		out[row.AssistantID] = append(out[row.AssistantID], item)
 	}
 	return out, nil
 }
@@ -1128,17 +1289,10 @@ func (s *ServiceCore) loadAssistantSkills(ctx context.Context, projectID uuid.UU
 	return out, nil
 }
 
-// hydrateAssistantToolSources loads both attachment kinds — toolsets and
-// directly-attached mcp_servers — onto a single assistant record. Every read
-// that feeds the runtime (dispatch, bootstrap, reconcile) and every API read
-// goes through here so record.Toolsets and record.MCPServers stay in lockstep.
+// hydrateAssistantToolSources loads the attached MCP servers onto a single
+// assistant record. Every read that feeds the runtime (dispatch, bootstrap,
+// reconcile) and every API read goes through here.
 func (s *ServiceCore) hydrateAssistantToolSources(ctx context.Context, projectID uuid.UUID, record *assistantRecord) error {
-	toolsets, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
-	if err != nil {
-		return err
-	}
-	record.Toolsets = toolsets[record.ID]
-
 	mcpServers, err := s.loadAssistantMcpServers(ctx, projectID, []uuid.UUID{record.ID})
 	if err != nil {
 		return err
@@ -1157,96 +1311,191 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 	return nil
 }
 
-// writeAssistantToolsets replaces the assistant's toolset membership with
-// the resolved set. Caller-supplied tx so create + update can share the
-// same atomic boundary as the assistant row write.
-func writeAssistantToolsets(
+// errMCPEnableForbidden rejects a write that would turn MCP on for a toolset
+// the caller cannot write.
+var errMCPEnableForbidden = errors.New("attaching a toolset with MCP disabled requires mcp:write on it")
+
+// enableAssistantToolsets turns MCP on for newly attached toolsets that have it
+// off, so every attached hosted server is reachable at runtime, and syncs their
+// canonical wrappers. Toolsets in alreadyAttached keep their MCP state. Toolset
+// rows are already locked FOR NO KEY UPDATE, so EnablesMCP is current.
+func enableAssistantToolsets(
 	ctx context.Context,
 	tx pgx.Tx,
-	assistantID, projectID uuid.UUID,
+	auditLogger *audit.Logger,
+	actor hostedmcp.Actor,
+	projectID uuid.UUID,
 	resolved []resolvedToolsetInsert,
+	alreadyAttached map[uuid.UUID]struct{},
+	canEnableMCP func(toolsetID uuid.UUID) bool,
 ) error {
-	queries := assistantrepo.New(tx)
-	if err := queries.ClearAssistantToolsets(ctx, assistantrepo.ClearAssistantToolsetsParams{
-		AssistantID: assistantID,
-		ProjectID:   projectID,
-	}); err != nil {
-		return fmt.Errorf("clear assistant toolsets: %w", err)
-	}
-	if len(resolved) == 0 {
-		return nil
-	}
-	rows := make([]assistantrepo.AddAssistantToolsetsParams, 0, len(resolved))
 	toolsetIDs := make([]uuid.UUID, 0, len(resolved))
 	for _, r := range resolved {
-		rows = append(rows, assistantrepo.AddAssistantToolsetsParams{
-			AssistantID:   assistantID,
-			ToolsetID:     r.ToolsetID,
-			EnvironmentID: r.EnvironmentID,
-			ProjectID:     projectID,
-		})
+		if _, attached := alreadyAttached[r.ToolsetID]; attached || !r.EnablesMCP {
+			continue
+		}
+		if canEnableMCP == nil || !canEnableMCP(r.ToolsetID) {
+			return fmt.Errorf("toolset %q: %w", r.Slug, errMCPEnableForbidden)
+		}
 		toolsetIDs = append(toolsetIDs, r.ToolsetID)
 	}
-	if _, err := queries.AddAssistantToolsets(ctx, rows); err != nil {
-		return fmt.Errorf("insert assistant toolsets: %w", err)
+	if len(toolsetIDs) == 0 {
+		return nil
 	}
-	// The runtime startup config requires every assistant-attached toolset
-	// to be MCP-reachable; assistants address tools via the MCP server.
-	// Auto-enable on attach so the user doesn't have to toggle it
-	// separately on each toolset.
-	if err := queries.EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
+	enabled, err := assistantrepo.New(tx).EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
 		ToolsetIds: toolsetIDs,
 		ProjectID:  projectID,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
 	}
-	// A hosted MCP wrapper mirrors the toolset's enabled state. Assistant
-	// attachment can enable the toolset outside the toolset update API.
-	if _, err := tx.Exec(ctx, `UPDATE mcp_servers AS server
-		SET visibility = CASE WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END,
-			updated_at = clock_timestamp()
-		FROM toolsets AS toolset
-		WHERE server.id = toolset.id AND server.toolset_id = toolset.id
-			AND server.project_id = $2 AND toolset.project_id = $2
-			AND toolset.id = ANY($1::uuid[]) AND toolset.mcp_enabled IS TRUE
-			AND toolset.deleted IS FALSE AND server.deleted IS FALSE
-			AND server.visibility = 'disabled'`, toolsetIDs, projectID); err != nil {
-		return fmt.Errorf("enable hosted mcp wrappers for assistant toolsets: %w", err)
+	slices.SortFunc(enabled, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	for _, id := range enabled {
+		toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: id, ProjectID: projectID})
+		if err != nil {
+			return fmt.Errorf("load enabled assistant toolset: %w", err)
+		}
+		if _, err := hostedmcp.Sync(ctx, tx, auditLogger, actor, toolset, nil); err != nil {
+			return fmt.Errorf("sync hosted mcp for assistant toolset: %w", err)
+		}
 	}
 	return nil
 }
 
-// writeAssistantMcpServers replaces the assistant's directly-attached mcp
-// server set. Caller-supplied tx so it shares the same atomic boundary as the
-// assistant row and toolset writes. Unlike toolsets there is no MCP-enable
-// step: a remote/tunnelled mcp_server is already reachable at its own endpoint.
-func writeAssistantMcpServers(
+func toolsetIDSet(resolved []resolvedToolsetInsert) map[uuid.UUID]struct{} {
+	out := make(map[uuid.UUID]struct{}, len(resolved))
+	for _, r := range resolved {
+		out[r.ToolsetID] = struct{}{}
+	}
+	return out
+}
+
+// assistantAttachmentRow is one attachment in write order; exactly one row is set.
+type assistantAttachmentRow struct {
+	toolset *assistantrepo.AddAssistantToolsetsParams
+	server  *assistantrepo.AddAssistantMcpServersParams
+}
+
+// writeAssistantAttachments stores hosted servers under their wrapper when
+// serverKey is on, keeping toolsets without a dialable wrapper in
+// assistant_toolsets; with serverKey off every hosted server stays in
+// assistant_toolsets. It clears both tables for every written server so none
+// is stored twice.
+// toolsets replaces the hosted servers; mcpServers replaces the other servers
+// and adds hosted ones not yet attached.
+func writeAssistantAttachments(
 	ctx context.Context,
 	tx pgx.Tx,
 	assistantID, projectID uuid.UUID,
-	resolved []resolvedMcpServerInsert,
+	toolsets []resolvedToolsetInsert,
+	replaceToolsets bool,
+	servers []resolvedMcpServerInsert,
+	replaceServers bool,
+	serverKey bool,
 ) error {
 	queries := assistantrepo.New(tx)
-	if err := queries.ClearAssistantMcpServers(ctx, assistantrepo.ClearAssistantMcpServersParams{
-		AssistantID: assistantID,
-		ProjectID:   projectID,
-	}); err != nil {
-		return fmt.Errorf("clear assistant mcp servers: %w", err)
+	wrapped := map[uuid.UUID]bool{}
+	if serverKey && len(toolsets) > 0 {
+		toolsetIDs := make([]uuid.UUID, 0, len(toolsets))
+		for _, r := range toolsets {
+			toolsetIDs = append(toolsetIDs, r.ToolsetID)
+		}
+		ids, err := queries.ListCanonicalWrapperIDs(ctx, assistantrepo.ListCanonicalWrapperIDsParams{ProjectID: projectID, ToolsetIds: toolsetIDs})
+		if err != nil {
+			return fmt.Errorf("list canonical wrappers for assistant toolsets: %w", err)
+		}
+		for _, id := range ids {
+			wrapped[id] = true
+		}
 	}
-	if len(resolved) == 0 {
-		return nil
+	addServer := func(id uuid.UUID, environmentID uuid.NullUUID) assistantAttachmentRow {
+		return assistantAttachmentRow{toolset: nil, server: &assistantrepo.AddAssistantMcpServersParams{
+			AssistantID: assistantID, McpServerID: id, EnvironmentID: environmentID, ProjectID: projectID,
+		}}
 	}
-	rows := make([]assistantrepo.AddAssistantMcpServersParams, 0, len(resolved))
-	for _, r := range resolved {
-		rows = append(rows, assistantrepo.AddAssistantMcpServersParams{
-			AssistantID:   assistantID,
-			McpServerID:   r.MCPServerID,
-			EnvironmentID: r.EnvironmentID,
-			ProjectID:     projectID,
-		})
+	// Hosted rows come first, in request order, as they did in one assistant_toolsets insert.
+	hostedRows := make([]assistantAttachmentRow, 0, len(toolsets)+len(servers))
+	serverRows := make([]assistantAttachmentRow, 0, len(servers))
+	written := make([]uuid.UUID, 0, len(toolsets)+len(servers))
+	for _, r := range toolsets {
+		written = append(written, r.ToolsetID)
+		if wrapped[r.ToolsetID] {
+			hostedRows = append(hostedRows, addServer(r.ToolsetID, r.EnvironmentID))
+			continue
+		}
+		hostedRows = append(hostedRows, assistantAttachmentRow{server: nil, toolset: &assistantrepo.AddAssistantToolsetsParams{
+			AssistantID: assistantID, ToolsetID: r.ToolsetID, EnvironmentID: r.EnvironmentID, ProjectID: projectID,
+		}})
 	}
-	if _, err := queries.AddAssistantMcpServers(ctx, rows); err != nil {
-		return fmt.Errorf("insert assistant mcp servers: %w", err)
+	for _, r := range servers {
+		if slices.Contains(written, r.MCPServerID) {
+			continue
+		}
+		written = append(written, r.MCPServerID)
+		if r.Hosted && serverKey {
+			hostedRows = append(hostedRows, addServer(r.MCPServerID, r.EnvironmentID))
+			continue
+		}
+		if r.Hosted {
+			hostedRows = append(hostedRows, assistantAttachmentRow{server: nil, toolset: &assistantrepo.AddAssistantToolsetsParams{
+				AssistantID: assistantID, ToolsetID: r.MCPServerID, EnvironmentID: r.EnvironmentID, ProjectID: projectID,
+			}})
+			continue
+		}
+		serverRows = append(serverRows, addServer(r.MCPServerID, r.EnvironmentID))
+	}
+
+	if replaceToolsets {
+		if err := queries.ClearAssistantToolsets(ctx, assistantrepo.ClearAssistantToolsetsParams{AssistantID: assistantID, ProjectID: projectID}); err != nil {
+			return fmt.Errorf("clear assistant toolsets: %w", err)
+		}
+		if err := queries.ClearAssistantHostedMcpServers(ctx, assistantrepo.ClearAssistantHostedMcpServersParams{AssistantID: assistantID, ProjectID: projectID}); err != nil {
+			return fmt.Errorf("clear assistant hosted mcp servers: %w", err)
+		}
+	}
+	if replaceServers {
+		if err := queries.ClearAssistantDirectMcpServers(ctx, assistantrepo.ClearAssistantDirectMcpServersParams{AssistantID: assistantID, ProjectID: projectID}); err != nil {
+			return fmt.Errorf("clear assistant mcp servers: %w", err)
+		}
+	}
+	if len(written) > 0 {
+		if err := queries.ClearAssistantToolsetsForServers(ctx, assistantrepo.ClearAssistantToolsetsForServersParams{AssistantID: assistantID, ProjectID: projectID, McpServerIds: written}); err != nil {
+			return fmt.Errorf("clear assistant toolsets for written servers: %w", err)
+		}
+		if err := queries.ClearAssistantMcpServersForServers(ctx, assistantrepo.ClearAssistantMcpServersForServersParams{AssistantID: assistantID, ProjectID: projectID, McpServerIds: written}); err != nil {
+			return fmt.Errorf("clear assistant mcp servers for written servers: %w", err)
+		}
+	}
+	return insertAssistantAttachments(ctx, queries, append(hostedRows, serverRows...))
+}
+
+// insertAssistantAttachments batches runs of one table so created_at keeps request order.
+func insertAssistantAttachments(ctx context.Context, queries *assistantrepo.Queries, rows []assistantAttachmentRow) error {
+	for len(rows) > 0 {
+		toolsetRun := rows[0].toolset != nil
+		n := 1
+		for n < len(rows) && (rows[n].toolset != nil) == toolsetRun {
+			n++
+		}
+		run := rows[:n]
+		rows = rows[n:]
+		if toolsetRun {
+			params := make([]assistantrepo.AddAssistantToolsetsParams, 0, len(run))
+			for _, row := range run {
+				params = append(params, *row.toolset)
+			}
+			if _, err := queries.AddAssistantToolsets(ctx, params); err != nil {
+				return fmt.Errorf("insert assistant toolsets: %w", err)
+			}
+			continue
+		}
+		params := make([]assistantrepo.AddAssistantMcpServersParams, 0, len(run))
+		for _, row := range run {
+			params = append(params, *row.server)
+		}
+		if _, err := queries.AddAssistantMcpServers(ctx, params); err != nil {
+			return fmt.Errorf("insert assistant mcp servers: %w", err)
+		}
 	}
 	return nil
 }
@@ -1256,28 +1505,25 @@ func deterministicChatID(assistantID uuid.UUID, correlationID string) uuid.UUID 
 }
 
 func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
-	toolsets := make([]*types.AssistantToolsetRef, 0, len(record.Toolsets))
-	for _, row := range record.Toolsets {
-		ref := &types.AssistantToolsetRef{
-			ToolsetSlug:     row.ToolsetSlug,
-			EnvironmentSlug: nil,
-		}
-		if row.EnvironmentSlug.Valid {
-			envSlug := row.EnvironmentSlug.String
-			ref.EnvironmentSlug = &envSlug
-		}
-		toolsets = append(toolsets, ref)
-	}
+	// Phase A keeps main's shape: hosted servers are listed only under toolsets.
+	toolsets := make([]*types.AssistantToolsetRef, 0, len(record.MCPServers))
 	mcpServers := make([]*types.AssistantMCPServerRef, 0, len(record.MCPServers))
 	for _, row := range record.MCPServers {
+		var envSlug *string
+		if row.EnvironmentSlug.Valid {
+			envSlug = &row.EnvironmentSlug.String
+		}
+		if row.ToolsetSlug.Valid {
+			toolsets = append(toolsets, &types.AssistantToolsetRef{
+				ToolsetSlug:     row.ToolsetSlug.String,
+				EnvironmentSlug: envSlug,
+			})
+			continue
+		}
 		ref := &types.AssistantMCPServerRef{
 			McpServerSlug:   row.ServerSlug.String,
-			EnvironmentSlug: nil,
+			EnvironmentSlug: envSlug,
 			EndpointSlug:    nil,
-		}
-		if row.EnvironmentSlug.Valid {
-			envSlug := row.EnvironmentSlug.String
-			ref.EnvironmentSlug = &envSlug
 		}
 		if row.EndpointSlug != "" {
 			endpointSlug := row.EndpointSlug
@@ -1326,26 +1572,24 @@ func (s *ServiceCore) CreateAssistant(
 	maxConcurrency int,
 	status string,
 	provisionIdentity bool,
+	canEnableMCP func(toolsetID uuid.UUID) bool,
 ) (assistantRecord, error) {
 	if createdByUserID == "" {
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
 	}
 
+	// Resolved before the transaction: the lookup takes its own pool connection.
+	serverKey := s.hostedServerKeyWrites(ctx, projectID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets)
+	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
-	if err != nil {
-		return assistantRecord{}, err
-	}
-
 	queries := assistantrepo.New(tx)
 	created, err := queries.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
 		ProjectID:       projectID,
@@ -1363,10 +1607,15 @@ func (s *ServiceCore) CreateAssistant(
 	}
 	record := assistantRecordFromCreateRow(created)
 
-	if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
+	if err := enableAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, createdByUserID), projectID, resolved, nil, canEnableMCP); err != nil {
 		return assistantRecord{}, err
 	}
-	if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
+	// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, toolsetIDSet(resolved))
+	if err != nil {
+		return assistantRecord{}, err
+	}
+	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true, serverKey); err != nil {
 		return assistantRecord{}, err
 	}
 
@@ -1402,10 +1651,6 @@ func (s *ServiceCore) ListAssistants(ctx context.Context, projectID uuid.UUID) (
 		ids = append(ids, record.ID)
 	}
 
-	refs, err := s.loadAssistantToolsets(ctx, projectID, ids)
-	if err != nil {
-		return nil, err
-	}
 	mcpRefs, err := s.loadAssistantMcpServers(ctx, projectID, ids)
 	if err != nil {
 		return nil, err
@@ -1415,7 +1660,6 @@ func (s *ServiceCore) ListAssistants(ctx context.Context, projectID uuid.UUID) (
 		return nil, err
 	}
 	for i := range out {
-		out[i].Toolsets = refs[out[i].ID]
 		out[i].MCPServers = mcpRefs[out[i].ID]
 		out[i].Skills = skillRefs[out[i].ID]
 	}
@@ -1470,30 +1714,20 @@ func (s *ServiceCore) UpdateAssistant(
 	warmTTLSeconds *int,
 	maxConcurrency *int,
 	status *string,
+	canEnableMCP func(toolsetID uuid.UUID) bool,
 ) (assistantRecord, error) {
+	// Resolved before the transaction: the lookup takes its own pool connection.
+	serverKey := s.hostedServerKeyWrites(ctx, projectID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var resolved []resolvedToolsetInsert
-	if toolsets != nil {
-		r, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets)
-		if err != nil {
-			return assistantRecord{}, err
-		}
-		resolved = r
+	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
+	if err != nil {
+		return assistantRecord{}, err
 	}
-	var resolvedMcpServers []resolvedMcpServerInsert
-	if mcpServers != nil {
-		r, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
-		if err != nil {
-			return assistantRecord{}, err
-		}
-		resolvedMcpServers = r
-	}
-
 	queries := assistantrepo.New(tx)
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
 		Name:           conv.PtrToPGText(name),
@@ -1510,13 +1744,37 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 	record := assistantRecordFromUpdateRow(updated)
 
+	var attached []uuid.UUID
+	if toolsets != nil || mcpServers != nil {
+		// Read under the assistant row lock taken by UpdateAssistant.
+		attached, err = queries.ListAssistantAttachedServerIDs(ctx, assistantrepo.ListAssistantAttachedServerIDsParams{AssistantID: record.ID, ProjectID: projectID})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("list assistant attached servers: %w", err)
+		}
+	}
 	if toolsets != nil {
-		if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
+		alreadyAttached := make(map[uuid.UUID]struct{}, len(attached))
+		for _, id := range attached {
+			alreadyAttached[id] = struct{}{}
+		}
+		if err := enableAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, record.CreatedByUserID), projectID, resolved, alreadyAttached, canEnableMCP); err != nil {
 			return assistantRecord{}, err
 		}
 	}
+	var resolvedMcpServers []resolvedMcpServerInsert
 	if mcpServers != nil {
-		if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
+		skipHosted := toolsetIDSet(resolved)
+		for _, id := range attached {
+			skipHosted[id] = struct{}{}
+		}
+		// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
+		resolvedMcpServers, err = s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, skipHosted)
+		if err != nil {
+			return assistantRecord{}, err
+		}
+	}
+	if toolsets != nil || mcpServers != nil {
+		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil, serverKey); err != nil {
 			return assistantRecord{}, err
 		}
 	}
@@ -1607,7 +1865,7 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 		return fmt.Errorf("commit delete assistant tx: %w", err)
 	}
 
-	// Best-effort: tear down per-assistant backend resources (e.g. Fly app)
+	// Best-effort: tear down per-assistant backend resources (e.g. sandbox claim)
 	// inline so the common case does not wait for the janitor. Failures here
 	// must not roll back the soft-delete; the long-inactivity janitor is the
 	// safety net.
@@ -1640,8 +1898,8 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 
 // ReapAssistantRuntimesResult summarises the outcome of one reap pass —
 // counted at the runtime-row level, not the backend-app level. A row whose
-// backend resource was already gone (404 from the Fly API, no in-memory
-// state for local) still counts as Reaped.
+// backend resource was already gone (a missing sandbox claim or local
+// container) still counts as Reaped.
 type ReapAssistantRuntimesResult struct {
 	Reaped int
 	Errors int
@@ -1649,7 +1907,7 @@ type ReapAssistantRuntimesResult struct {
 
 // ReapAssistantRuntimes tears down backend resources for every runtime row
 // belonging to the given assistant that still carries metadata. Used by the
-// assistant-delete handler so a deletion cleans up the corresponding Fly app
+// assistant-delete handler so a deletion cleans up the corresponding backend resources
 // without waiting for the janitor.
 func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assistantID uuid.UUID) (ReapAssistantRuntimesResult, error) {
 	rows, err := assistantrepo.New(s.db).ListAssistantRuntimesForReap(ctx, assistantrepo.ListAssistantRuntimesForReapParams{
@@ -1712,7 +1970,7 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 	rows, err := assistantrepo.New(s.db).ListInactiveAssistantRuntimesForReap(ctx, assistantrepo.ListInactiveAssistantRuntimesForReapParams{
 		InactiveBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.InactivityThreshold)),
 		// Also collect runtimes parked on a backend we no longer target so a
-		// provider switch (e.g. flyio -> gke) drains the old backend lazily as
+		// provider switch (e.g. local -> gke) drains the old backend lazily as
 		// assistants go idle, without an admission-path teardown.
 		TargetBackend: s.runtime.Backend(),
 		StoppedState:  runtimeStateStopped,
@@ -1757,9 +2015,8 @@ type ReapStoppedAssistantRuntimesParams struct {
 
 // ReapStoppedAssistantRuntimes drives the per-thread janitor. It collects
 // runtime rows whose own updated_at has aged past StoppedTTL, regardless of
-// sibling activity on the same assistant. The Fly machine for each row is
-// destroyed; the surrounding app stays in place so the next admit for the
-// same thread can cold-launch into it and keep its IP and secrets.
+// sibling activity on the same assistant. Each backend tears down the
+// stopped runtime resource before its row is marked reaped.
 func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params ReapStoppedAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.StoppedTTL <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("stopped TTL must be positive")
@@ -1819,8 +2076,8 @@ type RecycleAssistantRuntimeImagesParams struct {
 // the currently configured runtime image, so deploys absorb the image-pull +
 // reboot cost while runtimes are idle instead of the next turn paying it.
 // Busy or failed rows are not chased — the per-admission path catches them
-// lazily. The roll mechanism is the backend's RecycleImage: Fly updates the
-// machine in place; GKE deletes the claim and re-claims a warm-pool pod. An
+// lazily. The roll mechanism is the backend's RecycleImage: GKE deletes the
+// claim and re-claims a warm-pool pod. An
 // active-but-regularly-used runtime never goes idle long enough for the
 // inactivity janitor to reap it, so without this sweep it would stay on its
 // admission-time image across deploys indefinitely.
@@ -1927,11 +2184,10 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 
 // reapStoppedRuntimeRow tears down the machine first and only flips the row
 // to `reaped` once the destroy call returns. Inverting the order would orphan
-// the machine if the Fly call hits a transient error: a row marked `reaped`
-// with `machine_id` cleared no longer matches `ListStoppedRuntimesForReap`,
-// so the next sweep cannot retry — and the whole-assistant 7d janitor cannot
-// either, because it inherits the same cleared metadata. The narrow window
-// where a racing warm-resume admit copies this row's `machine_id` before
+// the machine if the backend call hits a transient error: a row marked `reaped`
+// no longer matches `ListStoppedRuntimesForReap`, so the next sweep cannot
+// retry until the whole-assistant inactivity janitor runs. The narrow window
+// where a racing warm-resume admit copies this row's resource metadata before
 // destroy is bounded by `ListStoppedRuntimesForReap`'s per-thread NOT EXISTS
 // guard, which excludes any row whose thread already has a fresher
 // starting/active sibling. Returns true on success (including idempotent
@@ -2109,7 +2365,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	}, nil
 }
 
-// dashboardChatUserID extracts the Gram user id from a dashboard turn payload
+// dashboardChatUserID extracts the Speakeasy user id from a dashboard turn payload
 // so UpsertAssistantChat can stamp it on the chats row. External-source turns
 // return empty — see assistantChatOwnerID for who owns those.
 func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
@@ -2373,10 +2629,10 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 		AssistantID: assistant.ID,
 	})
 	// When the runtime row is freshly reserved here, only admit the first
-	// thread. The Fly Ensure path has no CAS or lock around machine launch:
+	// thread. Backend provisioning must not race across concurrent ensures:
 	// fanning out all pending threads against a `starting` row lets two
 	// thread workflows race their Ensure activities and launch separate
-	// machines, with only one app/machine recorded in
+	// resources, with only one resource recorded in
 	// backend_metadata_json. The first admitted thread brings the runtime
 	// to `active`; subsequent admits fall through the lookup with row in
 	// active state and admit the rest.
@@ -3006,7 +3262,7 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 		)
 		return nil
 	}
-	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
+	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.MCPServers, platformSlugs)
 }
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
@@ -3031,6 +3287,23 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
 	return platformSlugs, nil
+}
+
+// hostedServerKeyWrites reports whether the project's organization writes hosted attachments under the canonical server key; any failure keeps assistant_toolsets.
+func (s *ServiceCore) hostedServerKeyWrites(ctx context.Context, projectID uuid.UUID) bool {
+	if s.featureFlags == nil {
+		return false
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization for hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+		return false
+	}
+	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.featureFlags, project.ID, project.Slug)
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+	}
+	return enabled
 }
 
 // assistantToolsVariant reports which managed-assistant platform toolset the
@@ -3165,7 +3438,6 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		Name:            row.Name,
 		Model:           row.Model,
 		Instructions:    row.Instructions,
-		Toolsets:        nil,
 		MCPServers:      nil,
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
@@ -3216,9 +3488,22 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// best-effort URLs rather than aborting the whole bootstrap. The runner
 	// will discover the failure when it tries to list tools and the
 	// assistant can tell the user which integration is broken.
-	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
+	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.MCPServers, platformSlugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread, baselineSkills.Skills)
+	// Only the managed assistant's saved prompt is swapped for the current
+	// built-in one; a user-created assistant keeps its prompt verbatim.
+	baseInstructions := assistant.Instructions
+	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
+	case mErr == nil:
+		if managed.ID == assistant.ID {
+			baseInstructions = currentAssistantInstructions(assistant.Instructions)
+		}
+	case errors.Is(mErr, pgx.ErrNoRows):
+	default:
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
+	}
+
+	instructions, err := composeInstructions(baseInstructions, thread, baselineSkills.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -3322,81 +3607,56 @@ func capRuntimeMCPServerID(id string) string {
 	return id[:maxLen-9] + "-" + hex.EncodeToString(sum[:4])
 }
 
-func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, toolsets []assistantToolsetRow, mcpServers []assistantMCPServerRow, platformToolsets []string) []runtimeMCPServer {
-	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(mcpServers)+len(platformToolsets))
+func unreachableReason(m assistantMCPServerRow) string {
+	if m.EndpointSlug == "" {
+		return "no_endpoint"
+	}
+	return "disabled"
+}
+
+func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, serverURL *url.URL, mcpServers []assistantMCPServerRow, platformToolsets []string) []runtimeMCPServer {
+	servers := make([]runtimeMCPServer, 0, len(mcpServers)+len(platformToolsets))
 	// Runtime server IDs must be unique — agentkit namespaces tool names by
 	// them — but toolset slugs and mcp_servers slugs live in separate slug
-	// spaces, so a collision is possible. Toolsets win (first writer);
-	// colliding direct attachments are skipped with a warning.
+	// spaces, so a collision is possible. Hosted servers load first and win;
+	// colliding servers are skipped with a warning.
 	seenIDs := map[string]struct{}{}
-	for _, t := range toolsets {
-		// Misconfiguration (no MCP slug, MCP disabled) is a tenant-side
-		// problem, not a server fault. Skip the broken toolset and let
-		// the rest of the thread admit — the assistant just won't see
-		// these tools.
-		if !t.McpEnabled || !t.McpSlug.Valid || t.McpSlug.String == "" {
-			logger.WarnContext(ctx, "skipping assistant toolset that is not MCP-reachable",
-				attr.SlogToolsetID(t.ToolsetID.String()),
-				attr.SlogToolsetSlug(t.ToolsetSlug),
-				attr.SlogToolsetMCPSlug(t.McpSlug.String),
-				attr.SlogToolsetMCPEnabled(t.McpEnabled),
+	for _, m := range mcpServers {
+		hosted := m.ToolsetSlug.Valid
+		// Tenant misconfiguration: skip the server and let the rest of the thread admit.
+		if m.EndpointSlug == "" || m.Visibility == visibility.Disabled {
+			logger.WarnContext(ctx, "skipping assistant mcp server that is not MCP-reachable",
+				attr.SlogMcpServerID(m.MCPServerID.String()),
+				attr.SlogToolsetSlug(m.ToolsetSlug.String),
+				attr.SlogReason(unreachableReason(m)),
 			)
 			continue
 		}
 
 		headers := map[string]string{}
 		envSlug := ""
-		if t.EnvironmentSlug.Valid {
-			envSlug = t.EnvironmentSlug.String
-		} else if t.DefaultEnvironmentSlug.Valid {
-			envSlug = t.DefaultEnvironmentSlug.String
+		switch {
+		case m.EnvironmentSlug.Valid:
+			envSlug = m.EnvironmentSlug.String
+		case hosted && m.DefaultEnvironmentSlug.Valid:
+			envSlug = m.DefaultEnvironmentSlug.String
 		}
 		if envSlug != "" {
 			headers["Gram-Environment"] = envSlug
 		}
 
-		seenIDs[t.ToolsetSlug] = struct{}{}
-		servers = append(servers, runtimeMCPServer{
-			ID:      t.ToolsetSlug,
-			URL:     serverURL.JoinPath("mcp", t.McpSlug.String).String(),
-			Headers: headers,
-		})
-	}
-
-	// MCP servers attached directly to the assistant (assistant_mcp_servers) —
-	// remote- or tunnelled-backed servers that have no toolsets row, so they
-	// can't ride the toolset branch above. The runner treats every entry
-	// uniformly as an MCP endpoint to connect to, so these need only the same
-	// {ID, URL, Headers} shape: the public /mcp/{endpoint} path that
-	// serveRemoteBackend already proxies, plus an optional bound environment.
-	// Rows without a Gram-hosted endpoint (deleted after attach) are skipped
-	// so dispatch never builds a slugless MCP URL; the attachment stays
-	// visible on reads. ServerSlug is the runtime ID (agentkit namespaces
-	// tool names by it, 64-char cap). Disabled servers 404 at the /mcp
-	// serving path, so
-	// they're skipped here like a not-MCP-reachable toolset: the attachment
-	// stays visible on reads, the runtime just won't dial it.
-	for _, m := range mcpServers {
-		if m.EndpointSlug == "" {
-			continue
+		// Hosted servers keep their toolset slug as the runtime ID so agentkit
+		// tool names survive the move to mcp_servers.
+		id := m.ToolsetSlug.String
+		if !hosted {
+			id = m.EndpointSlug
+			if m.ServerSlug.Valid && m.ServerSlug.String != "" {
+				id = m.ServerSlug.String
+			}
+			id = capRuntimeMCPServerID(id)
 		}
-		if m.Visibility == visibility.Disabled {
-			logger.WarnContext(ctx, "skipping disabled assistant mcp server",
-				attr.SlogMcpServerID(m.MCPServerID.String()),
-			)
-			continue
-		}
-		headers := map[string]string{}
-		if m.EnvironmentSlug.Valid && m.EnvironmentSlug.String != "" {
-			headers["Gram-Environment"] = m.EnvironmentSlug.String
-		}
-		id := m.EndpointSlug
-		if m.ServerSlug.Valid && m.ServerSlug.String != "" {
-			id = m.ServerSlug.String
-		}
-		id = capRuntimeMCPServerID(id)
 		if _, dup := seenIDs[id]; dup {
-			logger.WarnContext(ctx, "skipping assistant mcp server whose runtime ID collides with an attached toolset",
+			logger.WarnContext(ctx, "skipping assistant mcp server whose runtime ID collides with another attached server",
 				attr.SlogMcpServerID(m.MCPServerID.String()),
 			)
 			continue
@@ -3439,25 +3699,25 @@ func (s *ServiceCore) ProcessThreadEventsByThreadID(ctx context.Context, project
 // `expiring` blocks new dispatches; the post-CAS /state poll catches any turn
 // that slipped in (the runner clears idle_seconds synchronously inside /turn).
 func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, threadID uuid.UUID, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
-	q := assistantrepo.New(s.db)
-
-	row, err := q.BeginExpireAssistantRuntime(ctx, assistantrepo.BeginExpireAssistantRuntimeParams{
-		ExpiringState: runtimeStateExpiring,
-		ProjectID:     projectID,
-		ThreadID:      threadID,
-		ActiveState:   runtimeStateActive,
+	row, err := assistantrepo.New(s.db).BeginExpireAssistantRuntime(ctx, assistantrepo.BeginExpireAssistantRuntimeParams{
+		ExpiringState:        runtimeStateExpiring,
+		ProjectID:            projectID,
+		ThreadID:             threadID,
+		ActiveState:          runtimeStateActive,
+		IdleExpiringBackends: s.configuredIdleExpiringBackends(),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// No active row, or another actor (Stop, reaper, manual API) moved it
-		// before us. The runtime is going away regardless — report stopped so
-		// the workflow exits its expiry loop.
+		// No expirable row: another actor (Stop, reaper, manual API) moved it
+		// before us, or its backend keeps idle runtimes. Either way this
+		// workflow has nothing left to expire — report stopped so it exits
+		// its expiry loop.
 		return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
 	case err != nil:
 		return ExpireThreadRuntimeResult{}, fmt.Errorf("begin expire assistant runtime: %w", err)
 	}
 
-	runtimeRecord := assistantRuntimeRecord{
+	return s.expireRuntime(ctx, assistantRuntimeRecord{
 		ID:                  row.ID,
 		AssistantThreadID:   row.AssistantThreadID,
 		AssistantID:         row.AssistantID,
@@ -3466,14 +3726,21 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,
 		WarmUntil:           row.WarmUntil,
-	}
+	}, warmTTLSeconds)
+}
 
-	status, statusErr := s.runtime.Status(ctx, runtimeRecord)
+// expireRuntime finishes an expire on a row already moved to `expiring`. It
+// polls the runner's idle clock and either reverts the row to `active` with
+// the remaining warm window, or stops the backend and retires the row.
+func (s *ServiceCore) expireRuntime(ctx context.Context, runtimeRecord assistantRuntimeRecord, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
+	statusCtx, cancelStatus := context.WithTimeout(ctx, runtimeExpireStatusTimeout)
+	status, statusErr := s.runtime.Status(statusCtx, runtimeRecord)
+	cancelStatus()
 	if statusErr != nil {
 		// Runtime is already gone or unhealthy — fall through to Stop so the
 		// row + backend resources get cleaned up.
 		s.logger.WarnContext(ctx, "runtime status failed during expire; tearing down",
-			attr.SlogAssistantThreadID(threadID.String()),
+			attr.SlogAssistantRuntimeID(runtimeRecord.ID.String()),
 			attr.SlogError(statusErr),
 		)
 	} else if remaining := warmRemainingSeconds(status.IdleSeconds, warmTTLSeconds); remaining > 0 {
@@ -3481,11 +3748,11 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 		// Revert to active and let the workflow re-arm with the remaining
 		// window measured against the runner's current idle.
 		warmUntil := time.Now().UTC().Add(time.Duration(remaining) * time.Second)
-		revertErr := q.RevertExpireAssistantRuntimeToActive(ctx, assistantrepo.RevertExpireAssistantRuntimeToActiveParams{
+		revertErr := assistantrepo.New(s.db).RevertExpireAssistantRuntimeToActive(ctx, assistantrepo.RevertExpireAssistantRuntimeToActiveParams{
 			ActiveState:   runtimeStateActive,
 			WarmUntil:     conv.ToPGTimestamptz(warmUntil),
 			RuntimeID:     runtimeRecord.ID,
-			ProjectID:     projectID,
+			ProjectID:     runtimeRecord.ProjectID,
 			ExpiringState: runtimeStateExpiring,
 		})
 		if revertErr != nil {
@@ -3497,7 +3764,7 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 	if err := s.runtime.Stop(ctx, runtimeRecord); err != nil {
 		return ExpireThreadRuntimeResult{}, fmt.Errorf("stop assistant runtime backend: %w", err)
 	}
-	if err := s.stopRuntimeRecord(ctx, projectID, runtimeRecord.ID, runtimeStateStopped); err != nil {
+	if err := s.stopRuntimeRecord(ctx, runtimeRecord.ProjectID, runtimeRecord.ID, runtimeStateStopped); err != nil {
 		return ExpireThreadRuntimeResult{}, err
 	}
 	return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
@@ -3507,7 +3774,7 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 // and hydrates the records ProcessThreadEvents needs. The runtime row is
 // keyed on (project_id, assistant_id) and serves every thread under the
 // assistant; AssistantThreadID on the returned record is uuid.Nil so the
-// Fly backend dispatches to /threads/{id}/turn.
+// runner client dispatches to /threads/{id}/turn.
 func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID uuid.UUID) (assistantThreadRecord, assistantRecord, assistantRuntimeRecord, error) {
 	row, err := assistantrepo.New(s.db).LoadThreadContextV2(ctx, assistantrepo.LoadThreadContextV2Params{
 		ThreadID:      threadID,
@@ -3538,7 +3805,6 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		Name:            row.Name,
 		Model:           row.Model,
 		Instructions:    row.Instructions,
-		Toolsets:        nil,
 		MCPServers:      nil,
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
@@ -3973,4 +4239,16 @@ func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, runtimeI
 		return fmt.Errorf("stop assistant runtime: %w", err)
 	}
 	return nil
+}
+
+// assistantActor attributes hosted MCP changes made by an assistant write.
+func assistantActor(ctx context.Context, fallbackUserID string) hostedmcp.Actor {
+	actor := hostedmcp.Actor{UserID: fallbackUserID, Email: nil, System: ""}
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.UserID != "" {
+		actor.UserID, actor.Email = authCtx.UserID, authCtx.Email
+	} else if tombstone.ActorPresent(ctx, "") {
+		// An empty user ID lets the audit logger attribute to the agent in context.
+		actor.UserID = ""
+	}
+	return actor
 }

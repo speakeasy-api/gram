@@ -17,7 +17,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // memberSessionCloseTimeout bounds best-effort legacy session cleanup after a call.
@@ -35,7 +37,7 @@ var errMemberUnroutable = errors.New("member is not reachable")
 // apply, and records any authentication rejection the member answered with.
 type memberRoundTripper struct {
 	build memberProxyBuilder
-	// deadline bounds the operation; a legacy DELETE after it still gets closeFloor.
+	// deadline bounds the operation; a legacy DELETE or a cancellation notice after it still gets closeFloor.
 	deadline   time.Time
 	closeFloor time.Duration
 
@@ -52,8 +54,9 @@ type memberRoundTripper struct {
 	deleteAttempted bool
 }
 
-// closeBudget bounds a session DELETE: the usual close timeout while the probe
-// has that much left, never less than the floor once it has not.
+// closeBudget bounds a session DELETE or a cancellation notice: the usual close
+// timeout while the probe has that much left, never less than the floor once it
+// has not.
 func (rt *memberRoundTripper) closeBudget() time.Duration {
 	return min(memberSessionCloseTimeout, max(time.Until(rt.deadline), 0)+rt.closeFloor)
 }
@@ -84,6 +87,13 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		Method string `json:"method"`
 	}
 	_ = json.Unmarshal(requestBody, &rpc)
+	if rpc.Method == mcpversions.MethodNotificationsCancelled {
+		// The SDK notifies on its own detached context after the operation's
+		// deadline, so a member that never answers would hold it past the budget.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, rt.closeBudget())
+		defer cancel()
+	}
 	// The SDK falls back to initialize after any server/discover failure, and
 	// cleanup must not overwrite the outcome of the call, so neither is recorded.
 	record := req.Method != http.MethodDelete && rpc.Method != "server/discover"
@@ -254,12 +264,15 @@ func upstreamStatusOK(status int) bool {
 // the distinction between an absent credential and a rejected routed credential.
 // Failures it cannot attribute to the member are logged, since they may be ours.
 func memberClientFailure(ctx context.Context, logger *slog.Logger, rt *memberRoundTripper, dial memberDial, member metaMember, err error) error {
-	if _, rejected := rt.rejection(); rejected {
-		return memberAuthFailure(member, dial.anonymous)
-	}
-	// The SDK does not promise to wrap transport errors, so the round tripper's
-	// record of the latest exchange is checked alongside err.
+	// The SDK need not wrap a transport error, so consult the recorded
+	// exchange before reducing a credential failure to an upstream status.
 	exchangeErr := rt.failure()
+	if errors.Is(exchangeErr, remotesessions.ErrClientCredentialUnavailable) || errors.Is(exchangeErr, remotesessions.ErrClientCredentialMisconfigured) {
+		return metaMemberClientCredentialError(member, exchangeErr)
+	}
+	if _, rejected := rt.rejection(); rejected {
+		return memberAuthFailure(member, dial)
+	}
 	switch {
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
 		return &metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}

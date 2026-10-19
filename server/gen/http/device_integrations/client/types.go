@@ -2206,8 +2206,8 @@ type ManagedDeviceResponseBody struct {
 	// Assigned user's email exactly as the MDM reported it. Omitted when the MDM
 	// has no assignment.
 	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	// Resolved Gram user for the assigned email. Omitted when the email is missing
-	// or does not resolve to an org member.
+	// Resolved Speakeasy user for the assigned email. Omitted when the email is
+	// missing or does not resolve to an org member.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string `form:"mdm_last_check_in_at,omitempty" json:"mdm_last_check_in_at,omitempty" xml:"mdm_last_check_in_at,omitempty"`

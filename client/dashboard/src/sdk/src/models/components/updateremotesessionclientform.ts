@@ -38,7 +38,7 @@ export type UpdateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
 >;
 
 /**
- * Form for updating a remote_session_client. All non-id fields are optional patches.
+ * Form for updating a remote_session_client. All non-id fields are optional patches. credential_owner is fixed at creation and cannot be changed.
  */
 export type UpdateRemoteSessionClientForm = {
   /**
@@ -46,7 +46,7 @@ export type UpdateRemoteSessionClientForm = {
    */
   audience?: string | undefined;
   /**
-   * Rotate the client secret. Gram re-encrypts before persisting.
+   * Rotate the client secret. Speakeasy re-encrypts before persisting.
    */
   clientSecret?: string | undefined;
   /**

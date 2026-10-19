@@ -1430,7 +1430,7 @@ SELECT id, name, slug, account_type, workos_id, external_id, domains, created_at
 
 // GetOrganizationByWorkosID looks up an organization by its workos_id
 // text field. Used by mock-workos handlers to resolve external org IDs
-// (e.g. Gram KSUIDs like "org_01KMD...") to the internal dev-idp org.
+// (e.g. Speakeasy KSUIDs like "org_01KMD...") to the internal dev-idp org.
 func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID sql.NullString) (Organization, error) {
 	row := q.db.QueryRowContext(ctx, getOrganizationByWorkosID, workosID)
 	var i Organization
@@ -2069,7 +2069,7 @@ type ListMembershipsWithOrgNameRow struct {
 // =============================================================================
 // ListMembershipsWithOrgName joins memberships with organizations so the
 // WorkOS-shaped response can include `organization_name` and the external
-// `workos_id` (the WorkOS-style org ID that Gram stores in
+// `workos_id` (the WorkOS-style org ID that Speakeasy stores in
 // organization_metadata.workos_id).
 func (q *Queries) ListMembershipsWithOrgName(ctx context.Context, arg ListMembershipsWithOrgNameParams) ([]ListMembershipsWithOrgNameRow, error) {
 	rows, err := q.db.QueryContext(ctx, listMembershipsWithOrgName,

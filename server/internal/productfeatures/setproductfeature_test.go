@@ -299,8 +299,8 @@ func TestFeature_RequiresPlatformAdmin(t *testing.T) {
 		productfeatures.FeatureHooksBrowserLogin,
 		productfeatures.FeatureHooksFailOpen,
 		productfeatures.FeatureSkillCaptureMetadataOnly,
-		productfeatures.FeatureConsentToolFiltering,
 		productfeatures.FeaturePlatformMCP,
+		productfeatures.FeatureOrganizationGatewayDisabled,
 	}
 	for _, feature := range orgSettable {
 		require.Falsef(t, feature.RequiresPlatformAdmin(), "feature %s must stay org-settable", feature)

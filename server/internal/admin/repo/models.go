@@ -3,3 +3,25 @@
 //   sqlc v1.31.1
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type SignupOffer struct {
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: opaque-confidential
+	Name string
+	// @access: restricted
+	StripePromotionCodeID string
+	// @access: confidential
+	SignupFlow string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Enabled bool
+}

@@ -39,7 +39,7 @@ func TestService_ExportMcpMetadata_Success(t *testing.T) {
 
 	// Export the MCP metadata using the MCP slug
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(toolset.McpSlug.String),
+		McpSlug: new(types.Slug(toolset.McpSlug.String)),
 	})
 	require.NoError(t, err, "export mcp metadata")
 	require.NotNil(t, result, "result should not be nil")
@@ -63,7 +63,7 @@ func TestService_ExportMcpMetadata_NotFound(t *testing.T) {
 
 	// Try to export non-existent MCP server
 	_, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: types.Slug("non-existent-mcp"),
+		McpSlug: new(types.Slug("non-existent-mcp")),
 	})
 	require.Error(t, err, "should return error for non-existent MCP server")
 	require.Contains(t, err.Error(), "MCP server not found", "error message should indicate MCP server not found")
@@ -94,7 +94,7 @@ func TestService_ExportMcpMetadata_McpNotEnabled(t *testing.T) {
 
 	// Try to export - should fail because MCP is not enabled
 	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(toolset.McpSlug.String),
+		McpSlug: new(types.Slug(toolset.McpSlug.String)),
 	})
 	require.Error(t, err, "should return error for toolset with MCP disabled")
 	require.Contains(t, err.Error(), "MCP server not found", "error should indicate server not found")
@@ -133,7 +133,7 @@ func TestService_ExportMcpMetadata_WithMetadata(t *testing.T) {
 
 	// Export the MCP metadata using MCP slug
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(toolset.McpSlug.String),
+		McpSlug: new(types.Slug(toolset.McpSlug.String)),
 	})
 	require.NoError(t, err, "export mcp metadata")
 
@@ -190,7 +190,7 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 
 	// Export the MCP metadata
 	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: types.Slug(toolset.McpSlug.String),
+		McpSlug: new(types.Slug(toolset.McpSlug.String)),
 	})
 	require.NoError(t, err, "export mcp metadata")
 

@@ -51,7 +51,7 @@ func StartObservers(provider metric.MeterProvider, db *pgxpool.Pool) error {
 
 	if gauges[observableOrganizationsCount], err = meter.Int64ObservableGauge(
 		observableOrganizationsCount,
-		metric.WithDescription("Count of Gram organizations"),
+		metric.WithDescription("Count of Speakeasy organizations"),
 		metric.WithUnit("{#}"),
 		metric.WithInt64Callback(o.observeOrganizationsCount),
 	); err != nil {
@@ -60,7 +60,7 @@ func StartObservers(provider metric.MeterProvider, db *pgxpool.Pool) error {
 
 	if gauges[observableProjectsCount], err = meter.Int64ObservableGauge(
 		observableProjectsCount,
-		metric.WithDescription("Count of Gram projects that are not deleted"),
+		metric.WithDescription("Count of Speakeasy projects that are not deleted"),
 		metric.WithUnit("{#}"),
 		metric.WithInt64Callback(o.observeProjectsCount),
 	); err != nil {

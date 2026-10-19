@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -384,6 +385,50 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 			require.Error(t, err)
 			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: build, anonymous: false}, member, err)
 			require.EqualError(t, got, tc.want)
+		})
+	}
+}
+
+func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "outage", err: remotesessions.ErrClientCredentialUnavailable, want: "retry shortly"},
+		{name: "misconfigured", err: remotesessions.ErrClientCredentialMisconfigured, want: "contact the MCP server administrator"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+			t.Cleanup(upstream.Close)
+			service, build := memberClientFixture(t, upstream.URL)
+			buildWithRenewal := func(ctx context.Context) (*proxy.Proxy, error) {
+				p, err := build(ctx)
+				if err != nil {
+					return nil, err
+				}
+				renewal := &clientCredentialRenewal{}
+				p.UpstreamResponseRetryer = func(context.Context, *http.Response) (*proxy.UpstreamResponseRetry, error) {
+					renewal.err = tc.err
+					return nil, nil
+				}
+				renewal.preserveFailure(p)
+				return p, nil
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			_, rt, err := service.connectMetaMember(ctx, testenv.NewLogger(t), buildWithRenewal, time.Second)
+			require.Error(t, err)
+			require.ErrorIs(t, rt.failure(), tc.err)
+			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: buildWithRenewal, clientCredential: true}, metaMember{slug: "fixture"}, err)
+			require.Contains(t, got.Error(), tc.want)
+			require.NotContains(t, got.Error(), "reconnect")
 		})
 	}
 }

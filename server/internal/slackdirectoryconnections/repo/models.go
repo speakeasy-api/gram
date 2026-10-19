@@ -10,49 +10,88 @@ import (
 )
 
 type SlackDirectoryConnection struct {
-	ID                      uuid.UUID
-	OrganizationID          string
-	SlackTeamID             string
-	SlackTeamName           pgtype.Text
-	CredentialsEncrypted    pgtype.Text
-	GrantedScopes           []string
-	Generation              uuid.UUID
-	Health                  string
-	DisconnectedAt          pgtype.Timestamptz
-	LastSyncStartedAt       pgtype.Timestamptz
-	LastFullSyncGeneration  uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	SlackTeamID string
+	// @access: confidential
+	SlackTeamName pgtype.Text
+	// @access: secret-restricted
+	CredentialsEncrypted pgtype.Text
+	// @access: opaque-restricted
+	GrantedScopes []string
+	// @access: confidential
+	Generation uuid.UUID
+	// @access: confidential
+	Health string
+	// @access: confidential
+	DisconnectedAt pgtype.Timestamptz
+	// @access: confidential
+	LastSyncStartedAt pgtype.Timestamptz
+	// @access: confidential
+	LastFullSyncGeneration uuid.NullUUID
+	// @access: confidential
 	LastFullSyncSucceededAt pgtype.Timestamptz
-	LastSyncFailedAt        pgtype.Timestamptz
-	LastErrorCode           pgtype.Text
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
+	// @access: confidential
+	LastSyncFailedAt pgtype.Timestamptz
+	// @access: confidential
+	LastErrorCode pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SlackDirectoryMembership struct {
-	ID                        uuid.UUID
-	OrganizationID            string
-	SlackTeamID               string
-	SlackUserID               string
-	DisplayName               pgtype.Text
-	Email                     pgtype.Text
-	Status                    string
-	MemberType                string
-	ProviderUpdatedAt         pgtype.Timestamptz
-	LastSeenAt                pgtype.Timestamptz
-	MappingRevision           int64
-	MappingConflictReason     pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	SlackTeamID string
+	// @access: confidential-pii
+	SlackUserID string
+	// @access: confidential-pii
+	DisplayName pgtype.Text
+	// @access: confidential-pii
+	Email pgtype.Text
+	// @access: confidential
+	Status string
+	// @access: confidential
+	MemberType string
+	// @access: confidential
+	ProviderUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	LastSeenAt pgtype.Timestamptz
+	// @access: confidential
+	MappingRevision int64
+	// @access: confidential
+	MappingConflictReason pgtype.Text
+	// @access: confidential
 	MappingConflictDetectedAt pgtype.Timestamptz
-	CreatedAt                 pgtype.Timestamptz
-	UpdatedAt                 pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SlackIdentityMapping struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	SlackTeamID    string
-	SlackUserID    string
-	UserID         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	RevokedAt      pgtype.Timestamptz
+	// @access: confidential
+	SlackTeamID string
+	// @access: confidential-pii
+	SlackUserID string
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
 }

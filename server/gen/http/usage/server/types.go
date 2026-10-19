@@ -196,6 +196,14 @@ type GetUsageTiersResponseBody struct {
 // GetStripeSubscriptionResponseBody is the type of the "usage" service
 // "getStripeSubscription" endpoint HTTP response body.
 type GetStripeSubscriptionResponseBody struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string `form:"discount_description,omitempty" json:"discount_description,omitempty" xml:"discount_description,omitempty"`
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string `form:"discount_ends_at,omitempty" json:"discount_ends_at,omitempty" xml:"discount_ends_at,omitempty"`
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool `form:"gateway_promotion_applied,omitempty" json:"gateway_promotion_applied,omitempty" xml:"gateway_promotion_applied,omitempty"`
 	// The live Stripe subscription status
 	Status string `form:"status" json:"status" xml:"status"`
 	// Start of the current Stripe service period
@@ -242,6 +250,14 @@ type GetPaygBillingSummaryResponseBody struct {
 // CancelStripeSubscriptionResponseBody is the type of the "usage" service
 // "cancelStripeSubscription" endpoint HTTP response body.
 type CancelStripeSubscriptionResponseBody struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string `form:"discount_description,omitempty" json:"discount_description,omitempty" xml:"discount_description,omitempty"`
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string `form:"discount_ends_at,omitempty" json:"discount_ends_at,omitempty" xml:"discount_ends_at,omitempty"`
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool `form:"gateway_promotion_applied,omitempty" json:"gateway_promotion_applied,omitempty" xml:"gateway_promotion_applied,omitempty"`
 	// The live Stripe subscription status
 	Status string `form:"status" json:"status" xml:"status"`
 	// Start of the current Stripe service period
@@ -266,6 +282,14 @@ type CancelStripeSubscriptionResponseBody struct {
 // ResumeStripeSubscriptionResponseBody is the type of the "usage" service
 // "resumeStripeSubscription" endpoint HTTP response body.
 type ResumeStripeSubscriptionResponseBody struct {
+	// Verified terms of a currently applied Stripe subscription discount; absent
+	// when unsupported or inactive
+	DiscountDescription *string `form:"discount_description,omitempty" json:"discount_description,omitempty" xml:"discount_description,omitempty"`
+	// Discount expiration reported by Stripe, when present
+	DiscountEndsAt *string `form:"discount_ends_at,omitempty" json:"discount_ends_at,omitempty" xml:"discount_ends_at,omitempty"`
+	// Whether the live discount and gateway price verify the monthly five GiB
+	// promotion
+	GatewayPromotionApplied *bool `form:"gateway_promotion_applied,omitempty" json:"gateway_promotion_applied,omitempty" xml:"gateway_promotion_applied,omitempty"`
 	// The live Stripe subscription status
 	Status string `form:"status" json:"status" xml:"status"`
 	// Start of the current Stripe service period
@@ -4160,15 +4184,18 @@ func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseB
 // result of the "getStripeSubscription" endpoint of the "usage" service.
 func NewGetStripeSubscriptionResponseBody(res *usage.StripeSubscription) *GetStripeSubscriptionResponseBody {
 	body := &GetStripeSubscriptionResponseBody{
-		Status:             res.Status,
-		CurrentPeriodStart: res.CurrentPeriodStart,
-		CurrentPeriodEnd:   res.CurrentPeriodEnd,
-		TrialStart:         res.TrialStart,
-		TrialEnd:           res.TrialEnd,
-		CancelAtPeriodEnd:  res.CancelAtPeriodEnd,
-		CancelAt:           res.CancelAt,
-		CanceledAt:         res.CanceledAt,
-		PaymentFailed:      res.PaymentFailed,
+		DiscountDescription:     res.DiscountDescription,
+		DiscountEndsAt:          res.DiscountEndsAt,
+		GatewayPromotionApplied: res.GatewayPromotionApplied,
+		Status:                  res.Status,
+		CurrentPeriodStart:      res.CurrentPeriodStart,
+		CurrentPeriodEnd:        res.CurrentPeriodEnd,
+		TrialStart:              res.TrialStart,
+		TrialEnd:                res.TrialEnd,
+		CancelAtPeriodEnd:       res.CancelAtPeriodEnd,
+		CancelAt:                res.CancelAt,
+		CanceledAt:              res.CanceledAt,
+		PaymentFailed:           res.PaymentFailed,
 	}
 	return body
 }
@@ -4193,15 +4220,18 @@ func NewGetPaygBillingSummaryResponseBody(res *usage.PaygBillingSummary) *GetPay
 // the result of the "cancelStripeSubscription" endpoint of the "usage" service.
 func NewCancelStripeSubscriptionResponseBody(res *usage.StripeSubscription) *CancelStripeSubscriptionResponseBody {
 	body := &CancelStripeSubscriptionResponseBody{
-		Status:             res.Status,
-		CurrentPeriodStart: res.CurrentPeriodStart,
-		CurrentPeriodEnd:   res.CurrentPeriodEnd,
-		TrialStart:         res.TrialStart,
-		TrialEnd:           res.TrialEnd,
-		CancelAtPeriodEnd:  res.CancelAtPeriodEnd,
-		CancelAt:           res.CancelAt,
-		CanceledAt:         res.CanceledAt,
-		PaymentFailed:      res.PaymentFailed,
+		DiscountDescription:     res.DiscountDescription,
+		DiscountEndsAt:          res.DiscountEndsAt,
+		GatewayPromotionApplied: res.GatewayPromotionApplied,
+		Status:                  res.Status,
+		CurrentPeriodStart:      res.CurrentPeriodStart,
+		CurrentPeriodEnd:        res.CurrentPeriodEnd,
+		TrialStart:              res.TrialStart,
+		TrialEnd:                res.TrialEnd,
+		CancelAtPeriodEnd:       res.CancelAtPeriodEnd,
+		CancelAt:                res.CancelAt,
+		CanceledAt:              res.CanceledAt,
+		PaymentFailed:           res.PaymentFailed,
 	}
 	return body
 }
@@ -4210,15 +4240,18 @@ func NewCancelStripeSubscriptionResponseBody(res *usage.StripeSubscription) *Can
 // the result of the "resumeStripeSubscription" endpoint of the "usage" service.
 func NewResumeStripeSubscriptionResponseBody(res *usage.StripeSubscription) *ResumeStripeSubscriptionResponseBody {
 	body := &ResumeStripeSubscriptionResponseBody{
-		Status:             res.Status,
-		CurrentPeriodStart: res.CurrentPeriodStart,
-		CurrentPeriodEnd:   res.CurrentPeriodEnd,
-		TrialStart:         res.TrialStart,
-		TrialEnd:           res.TrialEnd,
-		CancelAtPeriodEnd:  res.CancelAtPeriodEnd,
-		CancelAt:           res.CancelAt,
-		CanceledAt:         res.CanceledAt,
-		PaymentFailed:      res.PaymentFailed,
+		DiscountDescription:     res.DiscountDescription,
+		DiscountEndsAt:          res.DiscountEndsAt,
+		GatewayPromotionApplied: res.GatewayPromotionApplied,
+		Status:                  res.Status,
+		CurrentPeriodStart:      res.CurrentPeriodStart,
+		CurrentPeriodEnd:        res.CurrentPeriodEnd,
+		TrialStart:              res.TrialStart,
+		TrialEnd:                res.TrialEnd,
+		CancelAtPeriodEnd:       res.CancelAtPeriodEnd,
+		CancelAt:                res.CancelAt,
+		CanceledAt:              res.CanceledAt,
+		PaymentFailed:           res.PaymentFailed,
 	}
 	return body
 }

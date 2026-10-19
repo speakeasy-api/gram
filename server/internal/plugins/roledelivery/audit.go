@@ -29,7 +29,7 @@ func auditChange(ctx context.Context, tx pgx.Tx, org string, projectID, pluginID
 		mcpURN = &value
 	}
 	actor := urn.NewSystemPrincipal("automatic-role-distribution")
-	actorDisplayName := "Gram"
+	actorDisplayName := "Speakeasy"
 	logger := audit.NewLogger()
 	if added {
 		if err := logger.LogPluginServerAdd(ctx, tx, audit.LogPluginServerAddEvent{OrganizationID: org, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, ServerID: membership.ID, ServerDisplayName: membership.DisplayName, ServerPolicy: membership.Policy, ServerSortOrder: membership.SortOrder, ToolsetURN: toolsetURN, McpServerURN: mcpURN, MetaMcpServerURN: nil}); err != nil {

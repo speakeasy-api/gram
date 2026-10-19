@@ -6,10 +6,10 @@ use opentelemetry::{Context, KeyValue};
 use opentelemetry_sdk::error::OTelSdkResult;
 use opentelemetry_sdk::trace::{Span, SpanData, SpanProcessor};
 
-/// Gram identity shared between the runtime host and the span processor
+/// Speakeasy identity shared between the runtime host and the span processor
 /// that stamps it onto exported spans. Both ids come from the
 /// GRAM_ASSISTANT_ID / GRAM_ASSISTANT_PROJECT_ID boot envs when present
-/// (Fly, GKE cold-start), or from authenticated bootstrap on the first /turn
+/// (local containers, GKE cold-start), or from authenticated bootstrap on the first /turn
 /// (GKE warm-pool sandbox). Set-once cells — the boot env wins because it is
 /// seeded first, and a sandbox binds to one assistant and project for its
 /// lifetime.

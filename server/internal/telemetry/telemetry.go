@@ -43,7 +43,7 @@ type ToolInfo struct {
 }
 
 // UserInfo identifies the user a telemetry log row is attributed to. Callers
-// provide either a Gram user ID or an email address; the logger resolves the
+// provide either a Speakeasy user ID or an email address; the logger resolves the
 // other identity field and directory context during hydration.
 type UserInfo struct {
 	userID string

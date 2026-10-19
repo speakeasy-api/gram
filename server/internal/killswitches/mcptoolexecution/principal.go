@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// AuthenticatedUserPrincipalAdapter canonicalizes concrete Gram user
+// AuthenticatedUserPrincipalAdapter canonicalizes concrete Speakeasy user
 // principals and derives candidates only from authoritative user-session
 // provenance. Membership is revalidated against the organization on every
 // derivation and is never cached, so a removed member stops producing

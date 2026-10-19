@@ -8,14 +8,14 @@
 package types
 
 type ExternalOAuthServerForm struct {
-	// Optional external OAuth server slug retained for compatibility. Gram
+	// Optional external OAuth server slug retained for compatibility. Speakeasy
 	// generates one from the toolset slug when omitted.
 	Slug *Slug
-	// JSON object metadata for Gram-hosted compatibility mode. Supply exactly one
-	// of metadata and authorization_server_issuer.
+	// JSON object metadata for Speakeasy-hosted compatibility mode. Supply exactly
+	// one of metadata and authorization_server_issuer.
 	Metadata any
-	// Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and
-	// strictly verifies this issuer before persistence. Supply exactly one of
+	// Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Speakeasy fetches
+	// and strictly verifies this issuer before persistence. Supply exactly one of
 	// authorization_server_issuer and metadata.
 	AuthorizationServerIssuer *string
 }

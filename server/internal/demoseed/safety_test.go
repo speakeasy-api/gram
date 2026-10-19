@@ -14,15 +14,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// otherTenantSpec retargets the embedded seed scripts at a second, unrelated
-// tenant. Running the seed "against itself" plants adversarial fixture data in
-// exactly the tables the seed touches — including tables added in the future —
-// so any unscoped DELETE/UPDATE someone introduces will, by construction, hit
-// fixture rows.
+// otherTenantSpec retargets the seed at a second, unrelated tenant. Running the
+// seed "against itself" plants adversarial fixture data in exactly the tables
+// the seed touches — including tables added in the future — so any unscoped
+// DELETE/UPDATE someone introduces will, by construction, hit fixture rows.
 //
 // It is an ordinary Spec, the same mechanism production uses to seed the local
-// development org, so the two cannot drift: a new identifier family added to
-// Spec is automatically rewritten here too.
+// development org, so the two cannot drift.
 var otherTenantSpec = Spec{
 	OrgID:       "org_gram_othr_workspace",
 	OrgSlug:     "acme-othr",
@@ -34,13 +32,6 @@ var otherTenantSpec = Spec{
 	GroupPrefix: "othr_grp_",
 	WorkOSOrgID: "workos_gram_othr_unlinked",
 	Marker:      "othr-seed",
-}
-
-func asOtherTenant(t *testing.T, script string) string {
-	t.Helper()
-
-	require.NoError(t, otherTenantSpec.Validate())
-	return otherTenantSpec.Rewrite(script)
 }
 
 // TestDemoSeedSafety is the generic cross-table guard for the demo seed. With
@@ -65,29 +56,17 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, err)
 	blob := assetstest.NewTestBlobStore(t)
 
-	// The critical identifiers must appear in the embedded scripts; if a
-	// rename breaks a replacement the fixture silently stops being
-	// adversarial, so fail loudly instead.
-	for _, needle := range []string{"org_gram_demo_workspace", "dec0de00", "user_demo_"} {
-		require.Contains(t, postgresSQL, needle, "postgres.sql lost literal %q; update DefaultSpec", needle)
-	}
-	for _, needle := range []string{"org_gram_demo_workspace", "dec0de00", "demo-seed"} {
-		require.Contains(t, clickhouseSQL, needle, "clickhouse.sql lost literal %q; update DefaultSpec", needle)
-	}
-
-	// Rewriting with the default spec must be a no-op, or the production run
-	// would not be executing the script as written.
-	require.Equal(t, postgresSQL, DefaultSpec().Rewrite(postgresSQL))
-	require.Equal(t, clickhouseSQL, DefaultSpec().Rewrite(clickhouseSQL))
+	require.NoError(t, otherTenantSpec.Validate())
 
 	// Baseline BEFORE the fixture: everything the fixture adds on top of it is
 	// "another tenant's data", and its ids feed the leak check below.
 	pgBaseline, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 
-	// Provision the other tenant from the transformed seed scripts, including
-	// realistic MCP server dependents that the demo cleanup must not touch.
-	require.NoError(t, demoseedtest.ExecPostgresScript(ctx, db, asOtherTenant(t, postgresSQL)))
+	// Provision the other tenant with the seed itself, including realistic MCP
+	// server dependents that the demo cleanup must not touch.
+	otherSeed, err := seedPostgres(ctx, logger, db, blob, otherTenantSpec)
+	require.NoError(t, err)
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	))
@@ -123,7 +102,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.Equal(t, pgBeforeNoServer, pgAfterNoServer,
 		"MCP dependent fixture created orphan rows without a target server")
 
-	require.NoError(t, demoseedtest.ExecClickHouseStatements(ctx, ch, splitStatements(asOtherTenant(t, clickhouseSQL))))
+	require.NoError(t, otherSeed.runClickHouse(ctx, ch))
 
 	demoProjects := []string{DefaultSpec().ProjectID()}
 

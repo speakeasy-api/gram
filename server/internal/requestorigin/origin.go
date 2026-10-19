@@ -20,7 +20,7 @@ const (
 )
 
 // NetworkIdentity is advisory identity supplied by a private-network provider.
-// It is not a Gram principal or an authorization grant.
+// It is not a Speakeasy principal or an authorization grant.
 type NetworkIdentity struct {
 	Login string
 	Name  string

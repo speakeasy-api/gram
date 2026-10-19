@@ -73,6 +73,51 @@ describe("DeviceAgentConfigurationTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
   }
 
+  it.each([
+    [undefined, "User", "user"],
+    [false, "Off", false],
+    ["user", "User", "user"],
+    ["managed", "Managed", "managed"],
+  ])("shows and preserves Copilot CLI layer %s", (layer, label, expected) => {
+    mocks.isPlatformAdmin = false;
+    mocks.configuration = {
+      ...storedConfiguration,
+      config: {
+        ...storedConfiguration.config,
+        platforms: {
+          cursor: "user",
+          ...(layer === undefined ? {} : { copilot: layer }),
+        },
+      },
+    };
+    renderAndSave();
+    expect(
+      screen.getByRole("combobox", {
+        name: "GitHub Copilot CLI enforcement layer",
+      }).textContent,
+    ).toContain(label);
+    expect(sentConfig().platforms).toMatchObject({ copilot: expected });
+  });
+
+  it("displays Off after selecting it and saves the opt-out", () => {
+    mocks.isPlatformAdmin = false;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <DeviceAgentConfigurationTab />
+      </QueryClientProvider>,
+    );
+    const trigger = screen.getByRole("combobox", {
+      name: "GitHub Copilot CLI enforcement layer",
+    });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent.click(screen.getByRole("option", { name: "Off" }));
+    expect(
+      trigger.querySelector('[data-slot="select-value"]')?.textContent,
+    ).toBe("Off");
+    fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(sentConfig().platforms).toMatchObject({ copilot: false });
+  });
+
   it("omits platform-admin-only keys when an org admin saves", () => {
     mocks.isPlatformAdmin = false;
     renderAndSave();

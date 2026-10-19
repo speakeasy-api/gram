@@ -126,7 +126,7 @@ var callerVaryingCacheable = mcp.Cacheable{TTLMs: 0, CacheScope: "private"}
 // spliceCallerVaryingHints overwrites both caching members of a tools/list
 // result payload with [callerVaryingCacheable]. Overwrite rather than fill: an
 // upstream declaring its own result public and long-lived is describing its
-// own caller-uniformity and cannot account for the RBAC layer Gram puts in
+// own caller-uniformity and cannot account for the RBAC layer Speakeasy puts in
 // front of it.
 //
 // Both members go in on one splice, since a chained pair would re-decode the

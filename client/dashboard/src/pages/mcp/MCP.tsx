@@ -1,5 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
+import { OrganizationGatewayButton } from "@/components/mcp/OrganizationGatewayButton";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import {
@@ -24,8 +25,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Plus } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Outlet } from "react-router";
+import { useCallback, useMemo } from "react";
+import { Outlet, useSearchParams } from "react-router";
 import { useToolsets } from "../toolsets/useToolsets";
 import { McpTabs } from "./McpTabs";
 import { MCPEmptyState } from "./MCPEmptyState";
@@ -69,6 +70,9 @@ export const MCPPage = (): JSX.Element => {
               The servers your agents can reach, what they are built from, and
               the versions those arrive in.
             </Page.Section.Description>
+            <Page.Section.CTA>
+              <OrganizationGatewayButton />
+            </Page.Section.CTA>
           </Page.Section>
           <McpTabs active="servers" />
           <MCPOverview />
@@ -175,7 +179,27 @@ function MCPOverview() {
     return grouped;
   }, [endpointsResult]);
 
-  const [search, setSearch] = useState("");
+  // The search term lives in the URL so it survives navigating to a server and
+  // back again.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get("q") ?? "";
+  const setSearch = useCallback(
+    (value: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("q", value);
+          } else {
+            next.delete("q");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   const [viewMode, setViewMode] = useViewMode();
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 
