@@ -25,7 +25,7 @@ export type SetupRow = {
 /** The most sources one apply takes; the server refuses more. */
 export const MAX_SETUP_ITEMS = 500;
 
-export function setupSourceKey(source: DirectoryRoleSetupSource): string {
+function setupSourceKey(source: DirectoryRoleSetupSource): string {
   return source.sourceKind === "group"
     ? `group:${source.directoryGroupId ?? ""}`
     : `attribute:${JSON.stringify([source.attributeKey ?? "", source.attributeValue ?? ""])}`;
