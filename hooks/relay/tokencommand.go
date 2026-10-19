@@ -244,6 +244,11 @@ func parseTokenOutput(raw []byte) (tokenCommandOutput, error) {
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return tokenCommandOutput{}, errors.New("trailing data after the JSON object")
 	}
+	// The project is checked first: a refusal must win over any outage
+	// classification, or a gating event could fail open.
+	if !validHooksProjectSlug(out.Project) {
+		return tokenCommandOutput{}, errNoHooksProject
+	}
 	token, ok := strings.CutPrefix(out.Authorization, "Bearer ")
 	switch {
 	case !ok || token == "":
@@ -252,8 +257,6 @@ func parseTokenOutput(raw []byte) (tokenCommandOutput, error) {
 		return tokenCommandOutput{}, errors.New("bearer token is malformed")
 	case out.ExpiresAt.IsZero() || !out.ExpiresAt.After(nowFunc()):
 		return tokenCommandOutput{}, errors.New("expires_at is missing or in the past")
-	case !validHooksProjectSlug(out.Project):
-		return tokenCommandOutput{}, errNoHooksProject
 	}
 	return out, nil
 }

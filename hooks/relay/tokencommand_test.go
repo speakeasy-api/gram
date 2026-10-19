@@ -263,18 +263,47 @@ func TestParseTokenOutputRefusesMissingOrMalformedProject(t *testing.T) {
 	require.Len(t, out.Project, 128)
 }
 
+// An invalid project is a refusal even when the rest of the output would be
+// an outage: the refusal must win, or a gating event could fail open.
+func TestParseTokenOutputProjectRefusalWinsOverOutage(t *testing.T) {
+	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	prev := nowFunc
+	nowFunc = func() time.Time { return now }
+	t.Cleanup(func() { nowFunc = prev })
+
+	for _, tc := range []struct{ name, raw string }{
+		{name: "expired", raw: `{"authorization":"Bearer abc","project":"Bad Slug","expires_at":"2026-10-13T11:00:00Z"}`},
+		{name: "missing expiry", raw: `{"authorization":"Bearer abc","project":""}`},
+		{name: "not a bearer", raw: `{"authorization":"Basic abc","expires_at":"2026-10-13T11:00:00Z"}`},
+		{name: "bearer with a newline", raw: `{"authorization":"Bearer a\nb","project":"a/b"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseTokenOutput([]byte(tc.raw))
+			require.ErrorIs(t, err, errNoHooksProject)
+		})
+	}
+}
+
 // A token command that delivers no valid project refuses hooks: nothing is
 // sent, no key is used in its place, nothing is spooled, and the box stays
 // closed. The plugin's own project never stands in for it.
 func TestTokenCommandWithoutValidProjectRefusesHooks(t *testing.T) {
-	for _, tc := range []struct{ name, project string }{
-		{name: "empty project", project: ""},
-		{name: "malformed project", project: "Not A Slug"},
+	for _, tc := range []struct {
+		name, project string
+		raw           string
+	}{
+		{name: "empty project", project: "", raw: ""},
+		{name: "malformed project", project: "Not A Slug", raw: ""},
+		{name: "malformed project and expired", project: "", raw: `{"authorization":"Bearer tok","project":"Not A Slug","expires_at":"2026-10-13T11:00:00Z"}`},
+		{name: "no project and no expiry", project: "", raw: `{"authorization":"Bearer tok"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fs := newFakeServer(t, nil)
 			cfg, fc := tokenBox(t, fs.URL)
 			fc.project = tc.project
+			if tc.raw != "" {
+				fc.raw = []byte(tc.raw)
+			}
 			t.Setenv("SPEAKEASY_AI_HOOKS_PROJECT_SLUG", "env-project")
 			stateHome := setSpoolStateHome(t)
 			writeOrgSettings(cfg, true)
