@@ -1,0 +1,42 @@
+# Slack app manifest for testing Speakeasy against your own Slack workspace:
+# tool approval requests sent to approvers as DMs, and the member directory.
+#
+#   1. Open https://api.slack.com/apps?new_app=1, choose "From a manifest",
+#      pick your test workspace and paste this file.
+#   2. Replace YOUR-TUNNEL-HOST below with a public HTTPS tunnel to your local
+#      server (GRAM_SERVER_URL), so Slack can deliver button clicks. For
+#      example: cloudflared tunnel --url "$GRAM_SERVER_URL" --no-tls-verify
+#   3. Install the app to the workspace, then run `mise run zero:slack` and
+#      paste the Bot User OAuth Token and the Signing Secret when asked.
+#
+# Keep the app's tokens and secrets in mise.local.toml only. Never commit them.
+display_information:
+  name: Speakeasy (dev)
+  description: Sends Speakeasy tool approval requests to approvers, and reads the member directory.
+features:
+  app_home:
+    home_tab_enabled: false
+    # Approval requests arrive in the app's Messages tab. Approvers answer
+    # with the buttons, not by typing.
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: true
+  bot_user:
+    display_name: Speakeasy (dev)
+    always_online: false
+oauth_config:
+  # Only the dashboard's "Connect Slack" flow uses this, and it also needs
+  # SLACK_CLIENT_ID and SLACK_CLIENT_SECRET. Use your GRAM_SERVER_URL.
+  redirect_urls:
+    - https://localhost:8080/rpc/slackDirectoryConnections.callback
+  scopes:
+    bot:
+      - chat:write
+      - users:read
+      - users:read.email
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: https://YOUR-TUNNEL-HOST/slack/interactions
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

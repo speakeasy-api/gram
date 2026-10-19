@@ -9,7 +9,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 )
 
 func newDemoSeedCommand() *cli.Command {
@@ -45,6 +48,21 @@ func newDemoSeedCommand() *cli.Command {
 				Usage:    "The location of the assets backend to connect to",
 				EnvVars:  []string{"GRAM_ASSETS_URI"},
 				Required: true,
+			},
+			&cli.StringFlag{
+				Name:    "encryption-key",
+				Usage:   "Key for App level AES encryption, used to store the local Slack test app token",
+				EnvVars: []string{"GRAM_ENCRYPTION_KEY"},
+			},
+			&cli.StringFlag{
+				Name:    "local-slack-bot-token",
+				Usage:   "Bot token of your Slack test app; with --local, connects the local org to its workspace (see mise run zero:slack)",
+				EnvVars: []string{"GRAM_DEV_SLACK_BOT_TOKEN"},
+			},
+			&cli.StringFlag{
+				Name:    "local-slack-email",
+				Usage:   "Your Slack account email, when it differs from your Speakeasy email",
+				EnvVars: []string{"GRAM_DEV_SLACK_EMAIL"},
 			},
 			&cli.StringFlag{
 				Name:    "environment",
@@ -124,10 +142,22 @@ func newDemoSeedCommand() *cli.Command {
 				observed[name] = os.Getenv(name)
 			}
 
+			slack := demoseed.LocalSlackOptions{BotToken: "", SlackEmail: c.String("local-slack-email"), Encryption: nil, Slack: nil}
+			if token := c.String("local-slack-bot-token"); token != "" && token != "unset" {
+				encryptionClient, err := encryption.New(c.String("encryption-key"))
+				if err != nil {
+					return fmt.Errorf("create encryption client for the local Slack app: %w", err)
+				}
+				slack.BotToken = token
+				slack.Encryption = encryptionClient
+				slack.Slack = slackapi.NewClient("", guardian.NewDefaultPolicy(otel.GetTracerProvider()).PooledClient())
+			}
+
 			if err := demoseed.RunLocalFixtures(ctx, logger, db, blob, redisClient, demoseed.LocalFixturesOptions{
 				DeveloperEmail: c.String("local-user-email"),
 				Environment:    c.String("environment"),
 				ObservedEnv:    observed,
+				Slack:          slack,
 			}); err != nil {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}
