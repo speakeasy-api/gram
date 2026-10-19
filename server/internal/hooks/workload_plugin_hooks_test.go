@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -47,37 +48,47 @@ func workloadIngestPayload(workload hooksWorkload, project string) *gen.IngestPa
 	return payload
 }
 
-func TestClaude_WorkloadTokenIsBoundToItsHooksProject(t *testing.T) {
+// The agent's org:hooks_ingest grant decides which project the relay's hooks
+// may name.
+func TestClaudeAndIngest_WorkloadHooksFollowTheAgentsProjectGrant(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 	other := otherReadableProject(t, ctx, ti, workload)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	grantAgentHooksFor(t, ctx, ti, workload, *authCtx.ProjectID)
 
 	_, err := ti.service.Claude(context.Background(), workloadClaudePayload(workload, workload.projectSlug))
+	require.NoError(t, err)
+	_, err = ti.service.Ingest(context.Background(), workloadIngestPayload(workload, workload.projectSlug))
 	require.NoError(t, err)
 
 	_, err = ti.service.Claude(context.Background(), workloadClaudePayload(workload, other.Slug))
 	requireShareableCode(t, err, oops.CodeForbidden)
-}
-
-func TestIngest_WorkloadTokenIsBoundToItsHooksProject(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
-	other := otherReadableProject(t, ctx, ti, workload)
-
-	_, err := ti.service.Ingest(context.Background(), workloadIngestPayload(workload, workload.projectSlug))
-	require.NoError(t, err)
-
 	_, err = ti.service.Ingest(context.Background(), workloadIngestPayload(workload, other.Slug))
 	requireShareableCode(t, err, oops.CodeForbidden)
 }
 
-// Without a hooks project on its admission the workload has no hooks grant.
-func TestClaudeAndIngest_WorkloadWithoutAHooksProjectAreRefused(t *testing.T) {
+// A relay that names no project is refused, as the other hooks methods refuse
+// it.
+func TestClaudeAndIngest_WorkloadWithoutGramProjectIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, false)
+	workload := newHooksWorkload(t, ctx, ti)
+
+	_, err := ti.service.Claude(context.Background(), workloadClaudePayload(workload, ""))
+	requireShareableCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.Ingest(context.Background(), workloadIngestPayload(workload, ""))
+	requireShareableCode(t, err, oops.CodeForbidden)
+}
+
+// An agent with no hooks grant leaves its workload nowhere to send hooks.
+func TestClaudeAndIngest_WorkloadWithoutTheHooksGrantIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti)
+	revokeAgentHooks(t, ctx, ti, workload)
 
 	_, err := ti.service.Claude(context.Background(), workloadClaudePayload(workload, workload.projectSlug))
 	requireShareableCode(t, err, oops.CodeForbidden)
@@ -90,7 +101,7 @@ func TestClaudeAndIngest_WorkloadWithoutAHooksProjectAreRefused(t *testing.T) {
 func TestClaudeAndIngest_RevokedWorkloadIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 
 	_, err := ti.service.Claude(context.Background(), workloadClaudePayload(workload, workload.projectSlug))
 	require.NoError(t, err)
@@ -115,7 +126,7 @@ func TestClaudeAndIngest_RevokedWorkloadIsRefused(t *testing.T) {
 func TestClaudeAndIngest_ForgedWorkloadTokenIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 	token, _, err := deviceagenttoken.New(mcpauthztest.NewIssuer(t), nil).Mint(workload.organizationID, urn.NewWorkloadPrincipal(uuid.New(), workload.subject), time.Now())
 	require.NoError(t, err)
 	forged := workload
@@ -134,7 +145,7 @@ func TestClaude_WorkloadReceivesPolicyBlock(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 
 	payload := workloadClaudePayload(workload, workload.projectSlug)
 	toolName := "mcp__notion__search"
@@ -159,7 +170,7 @@ func TestIngest_WorkloadReceivesPolicyBlock(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 
 	payload := shadowMCPDenyPayload("workload-shadow-deny-"+uuid.NewString(), "call-"+uuid.NewString())
 	payload.DeviceAgentToken = bearer(workload.token)

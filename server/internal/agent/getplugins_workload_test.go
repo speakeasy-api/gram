@@ -67,6 +67,23 @@ func newWorkloadDeviceInProject(t *testing.T, ctx context.Context, ti *testInsta
 		})
 		require.NoError(t, err)
 	}
+	// Workload admission also bounds every request by the agent owner's live
+	// permissions. The owner holds everything these tests exercise, so the
+	// agent's grants alone decide.
+	for _, grant := range []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgDeviceAgentSync, ti.orgID),
+		authz.NewGrant(authz.ScopeProjectRead, authz.WildcardResource),
+	} {
+		selectors, err := grant.Selector.MarshalJSON()
+		require.NoError(t, err)
+		_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+			OrganizationID: ti.orgID,
+			PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			Scope:          string(grant.Scope),
+			Selectors:      selectors,
+		})
+		require.NoError(t, err)
+	}
 
 	subject := "device:" + uuid.NewString()
 	fixtures := testrepo.New(ti.conn)

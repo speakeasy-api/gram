@@ -184,57 +184,6 @@ func (q *Queries) ResolveWorkloadAgentAssignment(ctx context.Context, arg Resolv
 	return agent_id, err
 }
 
-const resolveWorkloadHooksProject = `-- name: ResolveWorkloadHooksProject :one
-SELECT a.hooks_project_id, (p.id IS NOT NULL)::boolean AS hooks_project_live
-FROM workload_identity_admissions a
-JOIN workload_issuers i
-  ON i.organization_id = a.organization_id
-  AND i.id = a.workload_issuer_id
-  AND i.project_id IS NULL
-LEFT JOIN projects p
-  ON p.organization_id = a.organization_id
-  AND p.id = a.hooks_project_id
-  AND p.deleted IS FALSE
-WHERE a.organization_id = $1
-  AND a.workload_issuer_id = $2
-  AND a.project_id IS NULL
-  AND a.deleted IS FALSE
-  AND i.deleted IS FALSE
-  AND (
-    (a.match_kind = 'exact' AND a.subject = $3)
-    OR (
-      a.match_kind = 'wildcard'
-      AND i.allow_wildcard_admission
-      AND a.subject LIKE '%*'
-      AND length(a.subject) > 1
-      AND starts_with($3, left(a.subject, length(a.subject) - 1))
-    )
-  )
-ORDER BY (a.match_kind = 'exact') DESC, length(a.subject) DESC
-LIMIT 1
-`
-
-type ResolveWorkloadHooksProjectParams struct {
-	OrganizationID   string
-	WorkloadIssuerID uuid.UUID
-	Subject          string
-}
-
-type ResolveWorkloadHooksProjectRow struct {
-	HooksProjectID   uuid.NullUUID
-	HooksProjectLive bool
-}
-
-// The workload's hooks project from its org-tier admission, choosing among
-// matches as ResolveWorkloadAgentAssignment does. hooks_project_live is false
-// for a deleted project, which binds the workload to none.
-func (q *Queries) ResolveWorkloadHooksProject(ctx context.Context, arg ResolveWorkloadHooksProjectParams) (ResolveWorkloadHooksProjectRow, error) {
-	row := q.db.QueryRow(ctx, resolveWorkloadHooksProject, arg.OrganizationID, arg.WorkloadIssuerID, arg.Subject)
-	var i ResolveWorkloadHooksProjectRow
-	err := row.Scan(&i.HooksProjectID, &i.HooksProjectLive)
-	return i, err
-}
-
 const workloadIdentityIsAdmitted = `-- name: WorkloadIdentityIsAdmitted :one
 SELECT EXISTS (
   SELECT 1

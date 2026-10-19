@@ -167,35 +167,3 @@ WHERE organization_id = @organization_id
   AND workload_issuer_id = @workload_issuer_id
   AND subject = @subject
   AND deleted IS FALSE;
-
--- name: ResolveWorkloadHooksProject :one
--- The workload's hooks project from its org-tier admission, choosing among
--- matches as ResolveWorkloadAgentAssignment does. hooks_project_live is false
--- for a deleted project, which binds the workload to none.
-SELECT a.hooks_project_id, (p.id IS NOT NULL)::boolean AS hooks_project_live
-FROM workload_identity_admissions a
-JOIN workload_issuers i
-  ON i.organization_id = a.organization_id
-  AND i.id = a.workload_issuer_id
-  AND i.project_id IS NULL
-LEFT JOIN projects p
-  ON p.organization_id = a.organization_id
-  AND p.id = a.hooks_project_id
-  AND p.deleted IS FALSE
-WHERE a.organization_id = @organization_id
-  AND a.workload_issuer_id = @workload_issuer_id
-  AND a.project_id IS NULL
-  AND a.deleted IS FALSE
-  AND i.deleted IS FALSE
-  AND (
-    (a.match_kind = 'exact' AND a.subject = @subject)
-    OR (
-      a.match_kind = 'wildcard'
-      AND i.allow_wildcard_admission
-      AND a.subject LIKE '%*'
-      AND length(a.subject) > 1
-      AND starts_with(@subject, left(a.subject, length(a.subject) - 1))
-    )
-  )
-ORDER BY (a.match_kind = 'exact') DESC, length(a.subject) DESC
-LIMIT 1;

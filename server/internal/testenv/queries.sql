@@ -1129,18 +1129,6 @@ RETURNING id;
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
 VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject);
 
--- name: SetWorkloadAdmissionHooksProjectFixture :execrows
-UPDATE workload_identity_admissions
-SET hooks_project_id = sqlc.narg(hooks_project_id),
-    hooks_project_organization_id = CASE WHEN sqlc.narg(hooks_project_id)::uuid IS NULL THEN NULL ELSE organization_id END,
-    updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND project_id IS NULL
-  AND workload_issuer_id = @workload_issuer_id
-  AND match_kind = 'exact'
-  AND subject = @subject
-  AND deleted IS FALSE;
-
 -- name: CreateWorkloadIdentityRuleFixture :exec
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
 VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @match_kind);

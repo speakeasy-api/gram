@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 const (
@@ -96,25 +95,21 @@ func TokenURL(serverURL, organizationID string) string {
 }
 
 // Ceiling is the most a device-agent token may do: poll policy, read projects,
-// and send hooks to hooksProjectID only, with no hooks grant when it's unset.
-// Admission intersects it with the agent's live policy.
-func Ceiling(organizationID string, hooksProjectID uuid.NullUUID) []authz.Grant {
-	grants := []authz.Grant{
+// and send hooks to any project in organizationID. Admission intersects it with
+// the agent's live policy, so the agent's own org:hooks_ingest grants decide
+// which projects a hook may name.
+func Ceiling(organizationID string) []authz.Grant {
+	return []authz.Grant{
 		authz.NewGrant(authz.ScopeOrgDeviceAgentSync, organizationID),
 		authz.NewGrant(authz.ScopeProjectRead, authz.WildcardResource),
+		authz.NewGrant(authz.ScopeOrgHooksIngest, organizationID),
 	}
-	if hooksProjectID.Valid {
-		selector := authz.NewSelector(authz.ScopeOrgHooksIngest, organizationID)
-		selector[authz.SelectorKeyProjectID] = hooksProjectID.UUID.String()
-		grants = append(grants, authz.NewGrantWithSelector(authz.ScopeOrgHooksIngest, selector))
-	}
-	return grants
 }
 
 // EncodeCeiling encodes Ceiling with the current delegated policy version.
-func EncodeCeiling(organizationID string, hooksProjectID uuid.NullUUID) ([]byte, int32, error) {
+func EncodeCeiling(organizationID string) ([]byte, int32, error) {
 	version := runtimepolicy.CurrentDelegatedPolicyVersion
-	policy, err := runtimepolicy.NewDelegatedPolicy(version, Ceiling(organizationID, hooksProjectID))
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, Ceiling(organizationID))
 	if err != nil {
 		return nil, 0, fmt.Errorf("build device-agent token policy: %w", err)
 	}
@@ -191,18 +186,7 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 	if org.DisabledAt.Valid {
 		return ctx, fmt.Errorf("%w: organization is disabled", ErrInvalid)
 	}
-	// Read on every request, like the assignment, so binding the workload to
-	// another project, or to none, applies to tokens already issued.
-	workloadIssuerID, subject, _ := principal.Workload()
-	hooksProjectID, err := workloadidentity.ResolveHooksProject(ctx, i.db, workloadidentity.AssignmentParams{
-		OrganizationID:   c.OrganizationID,
-		WorkloadIssuerID: workloadIssuerID,
-		Subject:          subject,
-	})
-	if err != nil {
-		return ctx, fmt.Errorf("resolve device-agent token hooks project: %w", err)
-	}
-	ceiling, version, err := EncodeCeiling(c.OrganizationID, hooksProjectID)
+	ceiling, version, err := EncodeCeiling(c.OrganizationID)
 	if err != nil {
 		return ctx, err
 	}
@@ -213,25 +197,12 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 		AccountType: org.GramAccountType, HasActiveSubscription: false, Whitelisted: org.Whitelisted, ProjectSlug: nil,
 		APIKeyScopes: nil, IsAdmin: false, SupportOrganizationID: "",
 	}
-	authed := contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, principal, contextvalues.PrincipalCredential{
+	return contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, principal, contextvalues.PrincipalCredential{
 		// A workload records no approving human.
 		AuthorizerUserID:       "",
 		DelegatedGrants:        ceiling,
 		DelegatedGrantsVersion: version,
-	})
-	if hooksProjectID.Valid {
-		authed = context.WithValue(authed, hooksProjectKey{}, hooksProjectID.UUID)
-	}
-	return authed, nil
-}
-
-type hooksProjectKey struct{}
-
-// HooksProject returns the hooks project the workload's admission names, as
-// read when its token was authenticated for this request.
-func HooksProject(ctx context.Context) (uuid.UUID, bool) {
-	id, ok := ctx.Value(hooksProjectKey{}).(uuid.UUID)
-	return id, ok
+	}), nil
 }
 
 // AssignedAgent is the agent an authenticated workload acts as.

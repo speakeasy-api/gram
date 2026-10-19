@@ -148,15 +148,7 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	}
 	principal := urn.NewWorkloadPrincipal(presented.issuerID, presented.subject)
 
-	hooksProjectID, err := workloadidentity.ResolveHooksProject(ctx, s.db, workloadidentity.AssignmentParams{
-		OrganizationID:   organizationID,
-		WorkloadIssuerID: presented.issuerID,
-		Subject:          presented.subject,
-	})
-	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
-	}
-	ceiling, version, err := deviceagenttoken.EncodeCeiling(organizationID, hooksProjectID)
+	ceiling, version, err := deviceagenttoken.EncodeCeiling(organizationID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode device-agent token policy").LogError(ctx, logger)
 	}

@@ -6186,39 +6186,6 @@ func (q *Queries) SetUserSessionIssuerUseAuthenticationHostFixture(ctx context.C
 	return result.RowsAffected(), nil
 }
 
-const setWorkloadAdmissionHooksProjectFixture = `-- name: SetWorkloadAdmissionHooksProjectFixture :execrows
-UPDATE workload_identity_admissions
-SET hooks_project_id = $1,
-    hooks_project_organization_id = CASE WHEN $1::uuid IS NULL THEN NULL ELSE organization_id END,
-    updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND project_id IS NULL
-  AND workload_issuer_id = $3
-  AND match_kind = 'exact'
-  AND subject = $4
-  AND deleted IS FALSE
-`
-
-type SetWorkloadAdmissionHooksProjectFixtureParams struct {
-	HooksProjectID   uuid.NullUUID
-	OrganizationID   string
-	WorkloadIssuerID uuid.UUID
-	Subject          string
-}
-
-func (q *Queries) SetWorkloadAdmissionHooksProjectFixture(ctx context.Context, arg SetWorkloadAdmissionHooksProjectFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setWorkloadAdmissionHooksProjectFixture,
-		arg.HooksProjectID,
-		arg.OrganizationID,
-		arg.WorkloadIssuerID,
-		arg.Subject,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
 UPDATE organization_metadata
 SET workos_last_event_id = $1

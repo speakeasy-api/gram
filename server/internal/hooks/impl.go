@@ -39,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -401,14 +400,11 @@ func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, sche
 	if _, ok := deviceagenttoken.AssignedAgentFromContext(ctx); !ok {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	// A device that names no project sends into the one its admission names.
-	// An explicit Gram-Project is still checked against that bound below.
+	// Refused here rather than left to project resolution, which would bind
+	// an organization's only project when none is named.
 	if strings.TrimSpace(key) == "" {
-		slug, err := s.admittedHooksProjectSlug(ctx)
-		if err != nil {
-			return deviceagenttoken.WithAuthFailure(ctx, err), err
-		}
-		key = slug
+		err := oops.E(oops.CodeForbidden, nil, "hooks must name the project they are sent to")
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
 
 	authorized, err := s.auth.Authorize(ctx, key, schema)
@@ -422,25 +418,6 @@ func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, sche
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
 	return authorized, nil
-}
-
-// admittedHooksProjectSlug returns the slug of the hooks project the
-// workload's admission names. A workload with none is refused, since there is
-// no project its hooks may be sent to.
-func (s *Service) admittedHooksProjectSlug(ctx context.Context) (string, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	projectID, hasProject := deviceagenttoken.HooksProject(ctx)
-	if !ok || authCtx == nil || !hasProject {
-		return "", oops.E(oops.CodeForbidden, nil, "hooks must name the project they are sent to")
-	}
-	project, err := projectsRepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsRepo.GetProjectByIDAndOrganizationIDParams{
-		ID:             projectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		return "", oops.E(oops.CodeForbidden, err, "the admission's hooks project is unavailable")
-	}
-	return project.Slug, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {

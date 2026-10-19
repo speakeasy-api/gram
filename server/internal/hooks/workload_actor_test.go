@@ -49,10 +49,10 @@ type hooksWorkload struct {
 	subject        string
 }
 
-// newHooksWorkload admits a workload assigned to a new agent, its admission
-// bound to the test project for hooks when bindHooksProject is set, and gives
-// the service an engine that admits workloads.
-func newHooksWorkload(t *testing.T, ctx context.Context, ti *testInstance, bindHooksProject bool) hooksWorkload {
+// newHooksWorkload admits a workload assigned to a new agent that holds
+// org:hooks_ingest across the organization, and gives the service an engine
+// that admits workloads.
+func newHooksWorkload(t *testing.T, ctx context.Context, ti *testInstance) hooksWorkload {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -73,6 +73,21 @@ func newHooksWorkload(t *testing.T, ctx context.Context, ti *testInstance, bindH
 		PrincipalUrn:   actor,
 		Scope:          string(authz.ScopeProjectRead),
 		Selectors:      projectRead,
+	})
+	require.NoError(t, err)
+
+	// Workload admission also bounds every request by the agent owner's live
+	// permissions. The owner may reach every project and send hooks to any of
+	// them, so the agent's grants alone decide in these tests.
+	owner := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	seedHooksIngestGrant(t, ctx, ti, authCtx.ActiveOrganizationID, owner)
+	ownerProjectRead, err := authz.NewSelector(authz.ScopeProjectRead, authz.WildcardResource).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   owner,
+		Scope:          string(authz.ScopeProjectRead),
+		Selectors:      ownerProjectRead,
 	})
 	require.NoError(t, err)
 
@@ -99,9 +114,6 @@ func newHooksWorkload(t *testing.T, ctx context.Context, ti *testInstance, bindH
 		MatchKind:        string(workloadidentity.MatchKindExact),
 		AgentID:          agent.ID,
 	}))
-	if bindHooksProject {
-		bindWorkloadHooksProject(t, ctx, ti, authCtx.ActiveOrganizationID, issuerID, subject, *authCtx.ProjectID)
-	}
 
 	engine := authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
 		DevMode:                          false,
@@ -141,7 +153,7 @@ func requireShareableCode(t *testing.T, err error, code oops.Code) {
 func TestCursor_WorkloadTokenIngestsAsItsAgent(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 
 	admitted, err := authenticateWorkload(t, ti, "cursor", workload.token, workload.projectSlug)
 	require.NoError(t, err)
@@ -174,23 +186,42 @@ func TestCursor_WorkloadTokenIngestsAsItsAgent(t *testing.T) {
 	require.NoError(t, err, "an agent actor needs no user email")
 }
 
-// bindWorkloadHooksProject sets the project an admitted workload may send hooks
-// to.
-func bindWorkloadHooksProject(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, issuerID uuid.UUID, subject string, projectID uuid.UUID) {
+// revokeAgentHooks deletes the organization-wide org:hooks_ingest grant
+// newHooksWorkload gave the workload's agent.
+func revokeAgentHooks(t *testing.T, ctx context.Context, ti *testInstance, workload hooksWorkload) {
 	t.Helper()
-	rows, err := testrepo.New(ti.conn).SetWorkloadAdmissionHooksProjectFixture(ctx, testrepo.SetWorkloadAdmissionHooksProjectFixtureParams{
-		HooksProjectID:   uuid.NullUUID{UUID: projectID, Valid: true},
-		OrganizationID:   organizationID,
-		WorkloadIssuerID: issuerID,
-		Subject:          subject,
+	selectors, err := authz.NewSelector(authz.ScopeOrgHooksIngest, workload.organizationID).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
+		OrganizationID: workload.organizationID,
+		PrincipalUrn:   workload.actor,
+		Scope:          string(authz.ScopeOrgHooksIngest),
+		Selectors:      selectors,
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), rows)
+}
+
+// grantAgentHooksFor replaces the agent's organization-wide hooks grant with
+// one bounded to projectID.
+func grantAgentHooksFor(t *testing.T, ctx context.Context, ti *testInstance, workload hooksWorkload, projectID uuid.UUID) {
+	t.Helper()
+	revokeAgentHooks(t, ctx, ti, workload)
+	selector := authz.NewSelector(authz.ScopeOrgHooksIngest, workload.organizationID)
+	selector[authz.SelectorKeyProjectID] = projectID.String()
+	bounded, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: workload.organizationID,
+		PrincipalUrn:   workload.actor,
+		Scope:          string(authz.ScopeOrgHooksIngest),
+		Selectors:      bounded,
+	})
+	require.NoError(t, err)
 }
 
 // otherReadableProject creates a second project in the workload's organization
-// that its agent may read, so the hooks bound alone decides whether hooks
-// reach it.
+// that its agent may read, so the agent's hooks grant alone decides whether
+// hooks reach it.
 func otherReadableProject(t *testing.T, ctx context.Context, ti *testInstance, workload hooksWorkload) projectsrepo.Project {
 	t.Helper()
 	project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
@@ -211,14 +242,32 @@ func otherReadableProject(t *testing.T, ctx context.Context, ti *testInstance, w
 	return project
 }
 
-// The admission's hooks project bounds where the workload's hooks may go: the
-// request names a project, and any project but the bound one is refused, even
-// one its agent may read and send hooks to.
-func TestCodex_WorkloadTokenRefusedForAnotherProject(t *testing.T) {
+// A workload names its project on every hooks request. One that names none is
+// refused, even in an organization whose only project would otherwise be
+// chosen for it.
+func TestCodex_WorkloadWithoutGramProjectIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
+
+	for _, project := range []string{"", "  "} {
+		_, err := authenticateWorkload(t, ti, "codex", workload.token, project)
+		requireShareableCode(t, err, oops.CodeForbidden)
+		require.ErrorContains(t, err, "hooks must name the project they are sent to")
+	}
+}
+
+// The agent's org:hooks_ingest grant decides which projects the workload's
+// hooks may name: the granted project is accepted, any other refused, even
+// one its agent may read.
+func TestCodex_WorkloadHooksFollowTheAgentsProjectGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti)
 	other := otherReadableProject(t, ctx, ti, workload)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	grantAgentHooksFor(t, ctx, ti, workload, *authCtx.ProjectID)
 
 	_, err := authenticateWorkload(t, ti, "codex", workload.token, workload.projectSlug)
 	require.NoError(t, err)
@@ -227,82 +276,29 @@ func TestCodex_WorkloadTokenRefusedForAnotherProject(t *testing.T) {
 	requireShareableCode(t, err, oops.CodeForbidden)
 }
 
-// A workload that names no project sends into the one its admission names,
-// even in an organization with several projects it could read.
-func TestCodex_WorkloadWithoutGramProjectUsesItsAdmittedProject(t *testing.T) {
+// An agent granted hooks across the organization lets its workload send to any
+// project there it names: the token itself bounds no project.
+func TestCodex_WorkloadReachesEveryProjectAnOrgWideGrantCovers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
-	otherReadableProject(t, ctx, ti, workload)
-
-	admitted, err := authenticateWorkload(t, ti, "codex", workload.token, "")
-	require.NoError(t, err)
-	authCtx, ok := contextvalues.GetAuthContext(admitted)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectSlug)
-	require.Equal(t, workload.projectSlug, *authCtx.ProjectSlug)
-}
-
-// With no Gram-Project and no hooks project on its admission, a workload has
-// nowhere to send hooks.
-func TestCodex_WorkloadWithoutGramProjectOrHooksProjectIsRefused(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, false)
-
-	_, err := authenticateWorkload(t, ti, "codex", workload.token, "")
-	requireShareableCode(t, err, oops.CodeForbidden)
-}
-
-// A workload whose admission names no hooks project carries no hooks grant, so
-// its hooks are refused even for a project its agent may send to.
-func TestCursor_WorkloadWithoutAHooksProjectIsRefused(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, false)
-
-	_, err := authenticateWorkload(t, ti, "cursor", workload.token, workload.projectSlug)
-	requireShareableCode(t, err, oops.CodeForbidden)
-}
-
-// The agent's live policy bounds hooks too: an agent whose hooks grant names
-// another project is refused for the admission's project.
-func TestCursor_WorkloadRefusedWhenTheAgentPolicyNamesAnotherProject(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 	other := otherReadableProject(t, ctx, ti, workload)
 
-	unbounded, err := authz.NewSelector(authz.ScopeOrgHooksIngest, workload.organizationID).MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
-		OrganizationID: workload.organizationID,
-		PrincipalUrn:   workload.actor,
-		Scope:          string(authz.ScopeOrgHooksIngest),
-		Selectors:      unbounded,
-	})
-	require.NoError(t, err)
-	boundedSelector := authz.NewSelector(authz.ScopeOrgHooksIngest, workload.organizationID)
-	boundedSelector[authz.SelectorKeyProjectID] = other.ID.String()
-	bounded, err := boundedSelector.MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-		OrganizationID: workload.organizationID,
-		PrincipalUrn:   workload.actor,
-		Scope:          string(authz.ScopeOrgHooksIngest),
-		Selectors:      bounded,
-	})
-	require.NoError(t, err)
-
-	_, err = authenticateWorkload(t, ti, "cursor", workload.token, workload.projectSlug)
-	requireShareableCode(t, err, oops.CodeForbidden)
+	for _, project := range []string{workload.projectSlug, other.Slug} {
+		admitted, err := authenticateWorkload(t, ti, "codex", workload.token, project)
+		require.NoError(t, err)
+		authCtx, ok := contextvalues.GetAuthContext(admitted)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectSlug)
+		require.Equal(t, project, *authCtx.ProjectSlug)
+	}
 }
 
 // The token reaches only the ingestion methods an agent key may.
 func TestJWTAuth_WorkloadTokenRefusedOnOtherMethods(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 
 	_, err := ti.service.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "claude"), workload.token, workloadTokenScheme)
 	requireShareableCode(t, err, oops.CodeForbidden)
@@ -313,20 +309,11 @@ func TestJWTAuth_WorkloadTokenRefusedOnOtherMethods(t *testing.T) {
 func TestCursor_WorkloadTokenRefusedWithoutTheHooksGrant(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
+	revokeAgentHooks(t, ctx, ti, workload)
 
-	selectors, err := authz.NewSelector(authz.ScopeOrgHooksIngest, workload.organizationID).MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
-		OrganizationID: workload.organizationID,
-		PrincipalUrn:   workload.actor,
-		Scope:          string(authz.ScopeOrgHooksIngest),
-		Selectors:      selectors,
-	})
-	require.NoError(t, err)
-
-	_, err = authenticateWorkload(t, ti, "cursor", workload.token, workload.projectSlug)
-	require.Error(t, err)
+	_, err := authenticateWorkload(t, ti, "cursor", workload.token, workload.projectSlug)
+	requireShareableCode(t, err, oops.CodeForbidden)
 }
 
 // Withdrawing the workload's agent assignment refuses its next ingest, though
@@ -334,7 +321,7 @@ func TestCursor_WorkloadTokenRefusedWithoutTheHooksGrant(t *testing.T) {
 func TestCodex_WithdrawnWorkloadIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 
 	withdrawn, err := workloadpolicyrepo.New(ti.conn).SoftDeleteWorkloadAgentAssignmentForSubject(ctx, workloadpolicyrepo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
 		OrganizationID:   workload.organizationID,
@@ -353,7 +340,7 @@ func TestCodex_WithdrawnWorkloadIsRefused(t *testing.T) {
 func TestJWTAuth_ForgedWorkloadTokenIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	workload := newHooksWorkload(t, ctx, ti, true)
+	workload := newHooksWorkload(t, ctx, ti)
 
 	forged, _, err := deviceagenttoken.New(mcpauthztest.NewIssuer(t), nil).Mint(workload.organizationID, urn.NewWorkloadPrincipal(uuid.New(), workload.subject), time.Now())
 	require.NoError(t, err)
