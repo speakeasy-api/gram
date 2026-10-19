@@ -78,16 +78,17 @@ func NewTestPostgres(ctx context.Context) (_ *postgres.PostgresContainer, _ Post
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 		testcontainers.WithAdditionalLifecycleHooks(closeMaintenance),
 	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("start postgres container: %w", err)
-	}
 	// The caller receives the container only on success, so terminate it if
-	// any later step fails. Its PreStop hook closes the maintenance pool.
+	// any step fails, including a failed Run that still created one. Its
+	// PreStop hook closes the maintenance pool.
 	defer func() {
-		if err != nil {
+		if err != nil && container != nil {
 			_ = container.Terminate(context.WithoutCancel(ctx))
 		}
 	}()
+	if err != nil {
+		return nil, nil, fmt.Errorf("start postgres container: %w", err)
+	}
 
 	uri, err := postgresURI(ctx, container)
 	if err != nil {
