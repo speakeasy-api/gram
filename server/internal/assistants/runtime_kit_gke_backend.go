@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 	"slices"
@@ -133,6 +135,7 @@ func (k *KitGKERuntimeBackend) validate(r assistantRuntimeRecord) error {
 }
 
 type kitGKEBackendMetadata struct {
+	Provisioning      bool      `json:"provisioning,omitempty"`
 	CheckpointMarker  string    `json:"checkpoint_marker"`
 	ImageDigest       string    `json:"image_digest"`
 	ContainerID       string    `json:"container_id"`
@@ -160,7 +163,7 @@ func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackend
 	if err := json.Unmarshal(r.BackendMetadataJSON, &m); err != nil {
 		return m, fmt.Errorf("decode Kit GKE authority: %w", err)
 	}
-	if m.CheckpointMarker == "" || m.AuthorityNotAfter.IsZero() || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || m.ImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "" {
+	if m.CheckpointMarker == "" || m.AuthorityNotAfter.IsZero() || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || (!m.Provisioning && (m.ImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "")) {
 		return m, fmt.Errorf("kit GKE authority or exact compatibility mismatch; explicit fenced reset required")
 	}
 	return m, nil
@@ -188,13 +191,20 @@ func (k *KitGKERuntimeBackend) get(ctx context.Context, r assistantRuntimeRecord
 	return o, nil
 }
 
-func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
+func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRecord) (result RuntimeBackendEnsureResult, ensureErr error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	if err := k.validate(r); err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
 	if !kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
+		m, err := k.metadata(r)
+		if err != nil {
+			return RuntimeBackendEnsureResult{}, err
+		}
+		if m.Provisioning {
+			return k.finishColdProvision(ctx, r, m)
+		}
 		state, obj, e := k.loadAuthority(ctx, r)
 		if e != nil {
 			return RuntimeBackendEnsureResult{}, e
@@ -221,6 +231,21 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("kit GKE Ensure: %w", err)
 		}
 	}
+	// Once bootstrap may have minted credentials, failures without a durable
+	// resume point must revoke them. Durable readiness failures deliberately keep
+	// the same credentials: retry authenticates the same owned process, not a
+	// replacement process with revoked startup files.
+	resumable := false
+	defer func() {
+		if ensureErr != nil && !resumable {
+			result = RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: nil}
+			fenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			if err := k.config.Fence(fenceCtx, r); err != nil {
+				ensureErr = errors.Join(ensureErr, fmt.Errorf("fence failed Kit cold admission: %w", err))
+			}
+		}
+	}()
 	b, err := k.config.Bootstrap(ctx, r)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
@@ -250,11 +275,9 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	if podAnnotations == nil {
 		podAnnotations = map[string]string{}
 	}
-	for key, value := range annotations {
-		podAnnotations[key] = value
-	}
+	maps.Copy(podAnnotations, annotations)
 	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
-	m := kitGKEBackendMetadata{CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	m := kitGKEBackendMetadata{Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
 	for _, step := range []struct {
 		gvr schema.GroupVersionResource
 		obj *unstructured.Unstructured
@@ -271,6 +294,26 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("kit GKE create returned no authoritative UID")
 		}
 	}
+	m.Provisioning = true
+	if err := persistKitAdmissionProgress(ctx, m); err != nil {
+		return RuntimeBackendEnsureResult{}, err
+	}
+	_, resumable = ctx.Value(kitAdmissionProgressKey{}).(kitAdmissionProgressWriter)
+	return k.finishColdProvision(ctx, r, m)
+}
+
+// The caller persists exact create-response UIDs before waiting for a process.
+// Retrying this phase never adopts resources discovered by labels or names.
+func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) (RuntimeBackendEnsureResult, error) {
+	for _, step := range []struct {
+		gvr  schema.GroupVersionResource
+		name string
+		uid  types.UID
+	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}} {
+		if _, err := k.get(ctx, r, step.gvr, step.name, step.uid); err != nil {
+			return RuntimeBackendEnsureResult{}, err
+		}
+	}
 	readyCtx, cancel := context.WithTimeout(ctx, gkeRuntimeReadyTimeout)
 	defer cancel()
 	pod, err := k.waitPod(readyCtx, r, m)
@@ -283,17 +326,28 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	m.PodName = pod.GetName()
 	m.PodUID = pod.GetUID()
+	m.Provisioning = false
 	m, err = k.createAuthority(readyCtx, r, m)
 	if err != nil {
-		return RuntimeBackendEnsureResult{}, err
+		return RuntimeBackendEnsureResult{}, k.fenceColdAdmissionFailure(ctx, r, err)
 	}
 	raw, err := json.Marshal(m)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("kit GKE Ensure: %w", err)
 	}
+	if err := persistKitAdmissionProgress(ctx, m); err != nil {
+		return RuntimeBackendEnsureResult{}, k.fenceColdAdmissionFailure(ctx, r, err)
+	}
 	r.BackendMetadataJSON = raw
-	if _, err = k.protocol(readyCtx, r); err != nil {
-		return RuntimeBackendEnsureResult{}, err
+	for {
+		if _, err = k.protocol(readyCtx, r); err == nil {
+			break
+		}
+		select {
+		case <-readyCtx.Done():
+			return RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw}, fmt.Errorf("wait for authenticated Kit gateway: %w", err)
+		case <-time.After(gkeRuntimePollInterval):
+		}
 	}
 	return RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: raw}, nil
 }
@@ -505,4 +559,34 @@ func kitGKEProcessIdentity(p *unstructured.Unstructured) (string, string, error)
 		return "", "", fmt.Errorf("kit GKE process identity missing")
 	}
 	return digest, container, nil
+}
+
+// kitAdmissionProgressKey carries the admission owner's durable metadata writer.
+// It is deliberately not a discovery/adoption mechanism: only successful create
+// responses enter this callback, before readiness can fail or time out.
+type kitAdmissionProgressKey struct{}
+type kitAdmissionProgressWriter func(context.Context, []byte) error
+
+func persistKitAdmissionProgress(ctx context.Context, m kitGKEBackendMetadata) error {
+	write, ok := ctx.Value(kitAdmissionProgressKey{}).(kitAdmissionProgressWriter)
+	if !ok {
+		return nil // Standalone backend callers consume Ensure's result themselves.
+	}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("encode Kit admission progress: %w", err)
+	}
+	if err := write(ctx, raw); err != nil {
+		return fmt.Errorf("persist Kit admission progress: %w", err)
+	}
+	return nil
+}
+
+func (k *KitGKERuntimeBackend) fenceColdAdmissionFailure(ctx context.Context, r assistantRuntimeRecord, cause error) error {
+	fenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	if err := k.config.Fence(fenceCtx, r); err != nil {
+		return errors.Join(cause, fmt.Errorf("fence failed Kit cold admission: %w", err))
+	}
+	return cause
 }

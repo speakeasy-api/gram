@@ -118,5 +118,17 @@ func (s *ServiceCore) checkpointIdleKitRuntime(ctx context.Context, projectID, a
 	}
 	// Deliberately no StopAssistantRuntime: ended/deleted rows cannot be restored
 	// as the same authority. Ensure restores this exact lineage on next admission.
+	// A NULL warm window records a nonterminal checkpoint. Admission assigns a
+	// fresh window after restoring this same runtime. Do not spend future sweep
+	// batches repeatedly stopping an already-checkpointed process.
+	row.WarmUntil.Valid = false
+	if err := q.SetAssistantRuntimeActive(ctx, assistantrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive, RuntimeID: runtimeID, ProjectID: projectID, WarmUntil: row.WarmUntil,
+	}); err != nil {
+		return false, fmt.Errorf("record Kit idle checkpoint: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit Kit idle checkpoint: %w", err)
+	}
 	return true, nil
 }

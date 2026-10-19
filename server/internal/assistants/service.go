@@ -3027,7 +3027,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		Attempt:           0,
 	})
 
-	ensureResult, err := s.runtime.Ensure(ctx, runtimeRecord)
+	ensureCtx := ctx
+	if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
+		ensureCtx = context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(progressCtx context.Context, raw []byte) error {
+			return s.updateRuntimeEnsureResult(progressCtx, &runtimeRecord, RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw})
+		}))
+	}
+	ensureResult, err := s.runtime.Ensure(ensureCtx, runtimeRecord)
 	if err != nil {
 		if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
 			// A failed restore must not retire the canonical Kit session owner
@@ -3055,7 +3061,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{}, err
 	}
 
-	if runtimeRecord.State == runtimeStateStarting {
+	if runtimeRecord.State == runtimeStateStarting || (kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) && !runtimeRecord.WarmUntil.Valid) {
 		if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second)); err != nil {
 			return ProcessThreadEventsResult{}, err
 		}

@@ -6,8 +6,9 @@ adapter. For configuration and validation steps, see
 
 These contracts apply to local runtime version 3 with Kit commit
 `2c4a35e` and image
-`localhost/kit-control-plane:2c4a35e`. They do not enable production GKE
-deployment, migrate v1/v2 transcripts, or establish cold-restore correctness.
+`localhost/kit-control-plane:2c4a35e`. Production deployment has a separate
+[GKE lifecycle contract](../runbooks/kit-assistant-production.md). Neither path
+imports legacy history or migrates existing conversations.
 
 ## Bootstrap files and gateway
 
@@ -160,15 +161,16 @@ a stopped result, cancel the projector, or steal control with replacement
 failures are retried by the owner without detaching healthy projection or
 resubmitting the prompt.
 
-Focused mailbox and cancellation-state tests have passed; live cancellation has
-not been demonstrated. Runtime-image verification remains pending. The
-continuation/replay tests and unchanged image pin do not prove live cancellation.
+Runtime-image cancellation requires authoritative terminal evidence and a flushed
+canonical projection. Connection loss or session replay alone is not evidence of
+successful cancellation.
 
 Runtime-generated context-upgrade notices for preexisting transcripts are
 unsupported by the pinned runtime (`ErrKitUpgradeNoticeUnsupported`). Do not
 import legacy history or manufacture a successful upgrade notice.
 
-GKE memory-snapshot restore requires restarting the gateway and children with
-freshly provisioned credentials. Updating files alone does not invalidate
-credentials cached in restored processes. Provisioning helpers are not evidence
-of safe memory restore, cancellation, or production deployment readiness.
+Production GKE restore accepts only rootfs-only checkpoints and starts a fresh
+gateway process with renewed credentials. Whole-pod memory snapshots are rejected:
+updating files cannot revoke credentials cached in restored processes. A matching
+checkpoint marker and authenticated readiness are required before admission.
+Verify the complete lifecycle in the target deployment before rollout.

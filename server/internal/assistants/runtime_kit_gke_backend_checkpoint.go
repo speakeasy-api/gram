@@ -371,10 +371,10 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	// Stopped already fences admission and the source claim is gone. Keep that
 	// retryable phase through preparation: no Kubernetes resource has changed.
 	// Bootstrap may mint authority even when its result is an error. Revoke that
-	// authority on any preparation failure, including caller cancellation.
-	preparing := true
+	// authority on every failed restore, including failures after the fresh Pod
+	// starts and caller cancellation. Keep the durable phase fenced for recovery.
 	defer func() {
-		if preparing && returnErr != nil {
+		if returnErr != nil {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
 			if fenceErr := k.config.Fence(cleanupCtx, r); fenceErr != nil {
@@ -423,7 +423,6 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if err != nil {
 		return empty, err
 	}
-	preparing = false
 	secret, err := k.config.GKE.Dynamic.Resource(kitSecretGVR).Namespace(k.config.GKE.Namespace).Create(ctx, objects.Secret, metav1.CreateOptions{})
 	if err != nil {
 		return empty, fmt.Errorf("create fresh restore bootstrap: %w", err)

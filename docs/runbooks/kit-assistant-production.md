@@ -46,33 +46,34 @@ requires authoritative trigger completion, source Pod UID correlation, selected
 snapshot availability, and unexpired backing data. Cold restore must select that
 exact checkpoint and preserve its runtime lineage and compatibility identity.
 
-The public GKE documentation describes `spec.targetPod` for
-`PodSnapshotManualTrigger` and the `AllSnapshotsAvailable` display status, but
-omits the complete trigger/snapshot status schema. A deployment-verified `KitGKECheckpointDriver` is required before enabling
-`GRAM_ASSISTANT_KIT_GKE_SNAPSHOTS_ENABLED`. The CLI does not currently supply
-this adapter: snapshot-enabled installation fails closed until the deployed
-CRD status contract and cold-process/session-file restore mechanism are verified
-and wired. Merely deploying the snapshot CRDs is not sufficient.
-The Kubernetes principal also needs namespace-scoped ConfigMap create/get/update
-permissions for UID/resourceVersion-fenced lifecycle authority.
+Set `GRAM_ASSISTANT_KIT_GKE_SNAPSHOTS_ENABLED=true` only with a matching,
+manual `PodSnapshotPolicy` whose `snapshotScope` is explicitly `rootfs-only`.
+The CLI installs the managed snapshot driver. Whole-pod snapshots, the default
+whole-pod scope, ambiguous policies, stale controller status, and unsupported
+status schemas fail closed. Merely deploying the snapshot CRDs is not sufficient.
 
-Unavailable or mismatched evidence must fail closed; it must not authorize
-stopping a runtime or discarding its canonical session binding.
+Kit session files remain on the container root filesystem, not an excluded
+workspace volume. Restore starts a fresh gateway process. Before the gateway
+listens, bootstrap verifies the checkpoint marker, removes the restored
+credential directory, and installs newly issued inference, MCP, and gateway
+credentials. A missing or mismatched marker rejects silent cold fallback.
+
+The Kubernetes principal needs the lifecycle object's namespace-scoped
+permissions, including ConfigMap create/get/update for UID/resourceVersion-fenced
+authority, Secret and sandbox resource management, and snapshot policy/trigger/
+snapshot observation. Apply the matching infrastructure contract before opting in.
+
+Checkpoint and restore failures retain the canonical session and fail closed.
+Do not delete lifecycle authority or bypass its UID checks to resume a runtime.
+Ambiguous partial resource creation requires reconciliation; a running Pod alone
+is not permission to admit work.
+
+Before rollout, verify the complete checkpoint, deletion, fresh-process restore,
+and authenticated session-resume sequence in the target GKE deployment. Unit and
+fake-client coverage does not establish live cluster or controller compatibility.
 
 References:
 
 - [Trigger a Pod snapshot](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/pod-snapshots-trigger)
 - [Restore a Pod snapshot](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/pod-snapshots)
 - [Snapshot matching](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/pod-snapshots#snapshot-matching)
-
-## Product surface assessment
-
-Platform MCP tools retain the existing assistant create/read/chat outcomes and
-permissions. Runtime provisioning and checkpoint fencing are internal operator
-machinery, not new member-facing tools. The configured workload MCP connection
-uses the existing issuer-gated resource contract. No new Platform MCP tool is
-appropriate for raw Kubernetes lifecycle or credential operations.
-
-No demo seed change is required: this change adds no dashboard entity, field,
-or telemetry dimension. The shared read-only demo must not provision live
-production sandbox credentials as seed data.
