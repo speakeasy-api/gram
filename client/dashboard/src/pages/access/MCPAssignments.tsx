@@ -865,13 +865,12 @@ function UserAccess({
           <SheetTitle>Check user access</SheetTitle>
         </SheetHeader>
         <div className="space-y-4 p-5">
-          <Page.Toolbar>
-            <Page.Toolbar.Search
-              value={search}
-              onChange={setSearch}
-              placeholder="Find a person by name or email…"
-            />
-          </Page.Toolbar>
+          <Page.Toolbar.Search
+            className="w-full"
+            value={search}
+            onChange={setSearch}
+            placeholder="Find a person by name or email…"
+          />
           {search.trim() &&
             matchingMembers.slice(0, 20).map((member) => (
               <Button
@@ -910,16 +909,15 @@ function UserAccess({
                   .map((role) => role.name)
                   .join(", ")}
               </Text>
-              <Page.Toolbar>
-                <Page.Toolbar.Search
-                  value={serverSearch}
-                  onChange={(value) => {
-                    setServerSearch(value);
-                    setServerLimit(10);
-                  }}
-                  placeholder="Search this person’s MCPs…"
-                />
-              </Page.Toolbar>
+              <Page.Toolbar.Search
+                className="w-full"
+                value={serverSearch}
+                onChange={(value) => {
+                  setServerSearch(value);
+                  setServerLimit(10);
+                }}
+                placeholder="Search this person’s MCPs…"
+              />
               <Text small muted>
                 Connection access after combining all roles, direct assignments,
                 and blocks.
