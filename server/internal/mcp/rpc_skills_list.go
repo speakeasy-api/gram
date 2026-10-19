@@ -18,7 +18,7 @@ func handleSkillsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return nil, err
 	}
 
-	scope, err := hostedSkillScope(ctx, db, payload)
+	scope, err := hostedSkillScope(ctx, logger, db, payload)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve skill recipient").LogError(ctx, logger)
 	}
