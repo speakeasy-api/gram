@@ -978,7 +978,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(screen.queryByText("Will be created")).toBeNull();
     fireEvent.click(screen.getByLabelText("Authorization server"));
-    expect(screen.getByText("Known provider")).toBeDefined();
+    expect(
+      screen.getByRole("option", { name: /Known provider/ }),
+    ).toBeDefined();
   });
 
   it("does not offer to create a provider when the known-provider lookup fails", () => {
@@ -1073,6 +1075,409 @@ describe("RemoteMcpIdentitySectionBody", () => {
   });
 
   describe("unsaved provider discovery recovery", () => {
+    it("clears editor success on edits until explicit discovery validates the applied URL again", async () => {
+      discoverUnsavedProvider();
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Correct issuer URL" }),
+      );
+      const panel = screen.getByRole("group", { name: "Issuer correction" });
+      const success = "OAuth metadata discovered. Save to finish setup.";
+      expect(within(panel).getByRole("status").textContent).toBe(success);
+      const input = within(panel).getByLabelText(
+        "Issuer URL",
+      ) as HTMLInputElement;
+      expect(input.value).toBe(discoveryIssuer);
+      expect(
+        within(panel).getByRole("button", { name: "Check again" }),
+      ).toBeDefined();
+      const corrected = "https://auth.example.test";
+      fireEvent.change(input, { target: { value: corrected } });
+      expect(within(panel).queryByText(success)).toBeNull();
+      expect(
+        within(panel).queryByRole("button", { name: "Check again" }),
+      ).toBeNull();
+      expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
+      // Even reverting the text requires an explicit check before editor success returns.
+      fireEvent.change(input, { target: { value: discoveryIssuer } });
+      expect(within(panel).queryByText(success)).toBeNull();
+      fireEvent.change(input, { target: { value: corrected } });
+      mocks.fetchMetadata.mockResolvedValue({
+        ...discoveryMetadata,
+        issuer: corrected,
+      });
+      fireEvent.click(within(panel).getByRole("button", { name: "Discover" }));
+      await waitFor(() =>
+        expect(within(panel).getByRole("status").textContent).toBe(success),
+      );
+      expect(input.value).toBe(corrected);
+      expect(mocks.fetchMetadata).toHaveBeenLastCalledWith({
+        fetchIssuerMetadataRequestBody: { issuer: corrected },
+      });
+      expect(
+        within(panel).getByRole("button", { name: "Check again" }),
+      ).toBeDefined();
+      expect(mocks.commit).not.toHaveBeenCalled();
+    });
+
+    it("uses Check again for same-issuer loading, failure, and recovery without closing the form", async () => {
+      discoverUnsavedProvider();
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Correct issuer URL" }),
+      );
+      const panel = screen.getByRole("group", { name: "Issuer correction" });
+      let reject!: (error: Error) => void;
+      mocks.fetchMetadata.mockImplementationOnce(
+        () =>
+          new Promise((_, fail) => {
+            reject = fail;
+          }),
+      );
+      fireEvent.click(
+        within(panel).getByRole("button", { name: "Check again" }),
+      );
+      await waitFor(() =>
+        expect(within(panel).getByRole("status").textContent).toBe(
+          "Checking OAuth metadata",
+        ),
+      );
+      const checking = within(panel).getByRole("button", {
+        name: "Checking…",
+      }) as HTMLButtonElement;
+      expect(checking.disabled).toBe(true);
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      expect(within(panel).queryByText(/OAuth metadata discovered/)).toBeNull();
+      fireEvent.click(checking);
+      expect(mocks.fetchMetadata).toHaveBeenCalledTimes(2);
+      await act(async () => reject(new Error("synthetic failure")));
+      expect((await screen.findByRole("alert")).textContent).toContain(
+        "Could not discover OAuth metadata",
+      );
+      expect(within(panel).queryByRole("status")).toBeNull();
+      expect(
+        (within(panel).getByLabelText("Issuer URL") as HTMLInputElement).value,
+      ).toBe(discoveryIssuer);
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      fireEvent.click(within(panel).getByRole("button", { name: "Discover" }));
+      await waitFor(() =>
+        expect(within(panel).getByRole("status").textContent).toBe(
+          "OAuth metadata discovered. Save to finish setup.",
+        ),
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(
+        within(panel).getByRole("button", { name: "Check again" }),
+      ).toBeDefined();
+      expect(mocks.fetchMetadata).toHaveBeenCalledTimes(3);
+      expect(mocks.fetchMetadata).toHaveBeenLastCalledWith({
+        fetchIssuerMetadataRequestBody: { issuer: discoveryIssuer },
+      });
+      expect(mocks.commit).not.toHaveBeenCalled();
+    });
+
+    it("keeps the automatically shown correction form open after Reset succeeds", async () => {
+      discoverUnsavedProvider();
+      mocks.fetchMetadata.mockRejectedValueOnce(new Error("Discovery failed"));
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      await screen.findByRole("alert");
+      fireEvent.change(screen.getByLabelText("Issuer URL"), {
+        target: { value: "https://other.example.test/" },
+      });
+      expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset to advertised URL" }),
+      );
+      await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+      expect(
+        (screen.getByLabelText("Issuer URL") as HTMLInputElement).value,
+      ).toBe(discoveryIssuer);
+      expect(
+        screen.getByRole("button", { name: "Reset to advertised URL" }),
+      ).toBeDefined();
+      expect(mocks.fetchMetadata).toHaveBeenCalledTimes(2);
+      expect(mocks.fetchMetadata).toHaveBeenLastCalledWith({
+        fetchIssuerMetadataRequestBody: { issuer: discoveryIssuer },
+      });
+    });
+
+    it("hides inline correction when the corrected host selects a saved provider", async () => {
+      discoverUnsavedProvider();
+      mocks.hostIssuers.mockImplementation((host: string) =>
+        host === "saved.example.test"
+          ? [
+              {
+                id: "saved-example",
+                name: "Saved example",
+                slug: "saved-example",
+                issuer: "https://saved.example.test/stored",
+              },
+            ]
+          : undefined,
+      );
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Correct issuer URL" }),
+      );
+      fireEvent.change(screen.getByLabelText("Issuer URL"), {
+        target: { value: "https://saved.example.test/corrected" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Discover" }));
+      await waitFor(() =>
+        expect(
+          screen.getByLabelText("Authorization server").textContent,
+        ).toContain("Saved example"),
+      );
+      expect(screen.queryByLabelText("Issuer URL")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Correct issuer URL" }),
+      ).toBeNull();
+      expect(screen.queryByText("Will be created")).toBeNull();
+      expect(mocks.fetchMetadata).not.toHaveBeenCalledWith({
+        fetchIssuerMetadataRequestBody: {
+          issuer: "https://saved.example.test/corrected",
+        },
+      });
+    });
+
+    it("disables provider and correction controls while committing", async () => {
+      discoverUnsavedProvider();
+      let finishCommit!: (value: { status: string }) => void;
+      mocks.commit.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishCommit = resolve;
+          }),
+      );
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Correct issuer URL" }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+      for (const label of ["Authorization server", "Issuer URL"]) {
+        expect(
+          (screen.getByLabelText(label) as HTMLInputElement).disabled,
+        ).toBe(true);
+      }
+      for (const name of ["Check again", "Reset to advertised URL"]) {
+        expect(
+          (screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
+        ).toBe(true);
+      }
+      await act(async () => finishCommit({ status: "registered" }));
+    });
+
+    it("recovers a mismatch through explicit correction and submits only corrected DCR metadata", async () => {
+      discoverUnsavedProvider();
+      const issuer = "https://auth.example.test";
+      const correctedMetadata = {
+        issuer,
+        authorizationEndpoint: `${issuer}/oauth/authorize`,
+        tokenEndpoint: `${issuer}/oauth/token`,
+        registrationEndpoint: `${issuer}/oauth/register`,
+        scopesSupported: ["corrected.read"],
+        tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+      };
+      mocks.fetchMetadata.mockResolvedValueOnce(correctedMetadata);
+      mocks.fetchMetadata.mockResolvedValue(correctedMetadata);
+      const { queryClient } = renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      await screen.findByRole("alert");
+      expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Correct issuer URL" }),
+      ).toBeNull();
+      expect(
+        screen.queryByText(
+          "Use Discover in the issuer correction form to try again, or correct the URL to match the provider's documented issuer.",
+        ),
+      ).toBeNull();
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      const input = screen.getByRole("textbox", { name: "Issuer URL" });
+      expect(document.activeElement).toBe(input);
+      expect(
+        within(
+          screen.getByRole("group", { name: "Issuer correction" }),
+        ).getByRole("textbox", { name: "Issuer URL" }),
+      ).toBe(input);
+      expect(input.getAttribute("aria-describedby")).toBeTruthy();
+      fireEvent.change(input, { target: { value: `  ${issuer}  ` } });
+      expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
+      fireEvent.click(screen.getByRole("button", { name: "Discover" }));
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(false),
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Reset to advertised URL" }),
+      ).toBeDefined();
+      expect(
+        queryClient.getQueryData(["remote-session-issuer-metadata", issuer]),
+      ).toEqual(correctedMetadata);
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+      expect(mocks.commit).toHaveBeenCalledWith({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          providerId: undefined,
+          clientMode: "auto",
+          createProvider: expect.objectContaining(correctedMetadata),
+          clientConfiguration: expect.objectContaining({
+            scope: ["corrected.read"],
+            tokenEndpointAuthMethod: "client_secret_post",
+          }),
+        }),
+      });
+      expect(mocks.fetchMetadata).toHaveBeenCalledTimes(2);
+    });
+
+    it("labels correction errors and keeps Reset available after successful correction", async () => {
+      discoverUnsavedProvider();
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole("radio", { name: /Auto-Configure/ })
+            .getAttribute("aria-checked"),
+        ).toBe("true"),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Correct issuer URL" }),
+      );
+      fireEvent.change(screen.getByLabelText("Issuer URL"), {
+        target: { value: "http://auth.example.test" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Discover" }));
+      expect(screen.getByRole("alert").textContent).toContain(
+        "absolute HTTPS issuer URL",
+      );
+      expect(
+        screen.getByLabelText("Issuer URL").getAttribute("aria-invalid"),
+      ).toBe("true");
+      expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
+      const issuer = "https://other.example.test/tenant/";
+      mocks.fetchMetadata.mockResolvedValue({ ...discoveryMetadata, issuer });
+      fireEvent.change(screen.getByLabelText("Issuer URL"), {
+        target: { value: issuer },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Discover" }));
+      await waitFor(() =>
+        expect(
+          (
+            screen.getByRole("button", {
+              name: "Check again",
+            }) as HTMLButtonElement
+          ).disabled,
+        ).toBe(false),
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+      mocks.fetchMetadata.mockResolvedValue(discoveryMetadata);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset to advertised URL" }),
+      );
+      expect(
+        (screen.getByLabelText("Issuer URL") as HTMLInputElement).value,
+      ).toBe(discoveryIssuer);
+      expect(
+        screen.getByRole("button", { name: "Reset to advertised URL" }),
+      ).toBeDefined();
+    });
+
+    it("replaces an explicitly picked unsaved sentinel with a saved host match and its clients", async () => {
+      discoverUnsavedProvider();
+      const saved = {
+        id: "saved-example-provider",
+        name: "Saved example provider",
+        slug: "saved-example",
+        issuer: "https://saved.example.test/stored-path/",
+        projectId: "example-project",
+      };
+      mocks.hostIssuers.mockImplementation((host: string) =>
+        host === "saved.example.test" ? [saved] : undefined,
+      );
+      mocks.clients.mockImplementation(() => ({
+        items: [],
+        isLoading: false,
+      }));
+      const { result } = renderIdentityDraft();
+      await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
+      act(() => result.current.selectProvider("__discovered__"));
+      act(() => result.current.openIssuerEditor());
+      act(() =>
+        result.current.setIssuerEditorText(
+          "https://saved.example.test/corrected-path",
+        ),
+      );
+      mocks.clients.mockReturnValue({
+        items: [
+          {
+            id: "saved-example-client",
+            clientId: "EXAMPLE-CLIENT",
+            remoteSessionIssuerId: saved.id,
+            createdAt: new Date(0),
+          },
+        ],
+        isLoading: false,
+      });
+      act(() => result.current.discoverIssuer());
+      await waitFor(() => expect(result.current.selected?.id).toBe(saved.id));
+      expect(result.current.selected?.isNew).toBe(false);
+      expect(result.current.choice).toBe("existing");
+      expect(result.current.existingClientId).toBe("saved-example-client");
+      await act(async () => expect(await result.current.save()).toBe(true));
+      expect(mocks.commit).toHaveBeenCalledWith({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          providerId: saved.id,
+          createProvider: undefined,
+          existingClientId: "saved-example-client",
+        }),
+      });
+      expect(saved.issuer).toBe("https://saved.example.test/stored-path/");
+      expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
+    });
+
     it.each(["manual", "existing"] as const)(
       "preserves saved-provider %s submission without discovery",
       async (mode) => {
@@ -1170,7 +1575,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       );
     });
 
-    it("shows the public SDK mismatch error and retries into inline auto registration", async () => {
+    it("shows the public SDK error as code and retries unchanged issuer discovery through the correction form", async () => {
       discoverUnsavedProvider();
       const message =
         "Metadata issuer does not exactly match the requested issuer.";
@@ -1194,7 +1599,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
       renderIdentity();
       fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
 
-      expect((await screen.findByRole("alert")).textContent).toContain(message);
+      const alert = await screen.findByRole("alert");
+      expect(alert.querySelector("pre > code")?.textContent).toBe(message);
+      expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
       expect(screen.queryByText(/PRIVATE RESPONSE BODY/)).toBeNull();
       expect(
         screen.getByLabelText(
@@ -1206,7 +1613,14 @@ describe("RemoteMcpIdentitySectionBody", () => {
         (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
           .disabled,
       ).toBe(true);
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(
+        (screen.getByLabelText("Issuer URL") as HTMLInputElement).value,
+      ).toBe(discoveryIssuer);
+      fireEvent.click(
+        within(
+          screen.getByRole("group", { name: "Issuer correction" }),
+        ).getByRole("button", { name: "Discover" }),
+      );
       await waitFor(() =>
         expect(
           screen
@@ -1303,7 +1717,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       ).toBe(false);
     });
 
-    it("blocks cached metadata during refetch and failure, retaining explicit Manual input on Retry", async () => {
+    it("blocks cached metadata during refetch and failure, retaining explicit Manual input on Discover", async () => {
       discoverUnsavedProvider();
       const { queryClient } = renderIdentity();
       fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
@@ -1355,7 +1769,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
           .disabled,
       ).toBe(true);
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      fireEvent.click(screen.getByRole("button", { name: "Discover" }));
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)

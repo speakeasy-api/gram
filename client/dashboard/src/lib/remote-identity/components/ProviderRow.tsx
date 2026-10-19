@@ -1,4 +1,4 @@
-import { Alert } from "@/components/ui/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -216,11 +216,25 @@ export function UserIdentityRow({
   clientHref: (issuerId: string, clientId: string) => string;
 }): JSX.Element {
   const [providerOpen, setProviderOpen] = useState(false);
+  const issuerInputId = useId();
   const { selected } = draft;
   const connectedHref =
     selected && draft.connectedClient
       ? clientHref(selected.id, draft.connectedClient.id)
       : null;
+  const correctIssuerAction =
+    selected?.isNew && !draft.issuerEditorOpen ? (
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={disabled || draft.saving}
+        aria-expanded={false}
+        aria-controls={`${issuerInputId}-editor`}
+        onClick={draft.openIssuerEditor}
+      >
+        <Button.Text>Correct issuer URL</Button.Text>
+      </Button>
+    ) : null;
 
   return (
     <div className="space-y-4">
@@ -230,7 +244,7 @@ export function UserIdentityRow({
             <KeyRound aria-hidden="true" className="size-4" />
           </div>
           <div className="flex min-w-0 flex-col gap-0.5">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Popover
                 open={providerOpen}
                 onOpenChange={(open) => {
@@ -244,10 +258,10 @@ export function UserIdentityRow({
                     // about to answer its own question, and offering "choose
                     // one" in the meantime invites a pick that the arriving
                     // default would appear to overwrite.
-                    disabled={disabled || draft.providerLoading}
+                    disabled={disabled || draft.saving || draft.providerLoading}
                     ariaLabel="Authorization server"
                     className={cn(
-                      "gap-1.5",
+                      "max-w-full gap-1.5 text-left break-all whitespace-normal",
                       selected && "text-foreground text-base font-medium",
                     )}
                   >
@@ -306,7 +320,11 @@ export function UserIdentityRow({
                   <Badge.Text>Will be created</Badge.Text>
                 </Badge>
               ) : null}
-              <Text muted variant="small" className="font-mono text-xs">
+              <Text
+                muted
+                variant="small"
+                className="font-mono text-xs break-all"
+              >
                 {selected?.url ?? ""}
               </Text>
             </div>
@@ -346,8 +364,10 @@ export function UserIdentityRow({
       ) : null}
 
       {selected && !draft.connected ? (
-        <div className="space-y-4 pl-[52px]">
-          {selected.isNew && draft.discoveryStatus === "loading" ? (
+        <div className="min-w-0 space-y-4 sm:pl-[52px]">
+          {selected.isNew &&
+          draft.discoveryStatus === "loading" &&
+          !draft.issuerEditorOpen ? (
             <div role="status" className="flex items-center gap-2">
               <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
               <Text muted small>
@@ -356,22 +376,113 @@ export function UserIdentityRow({
             </div>
           ) : null}
           {selected.isNew && draft.discoveryStatus === "error" ? (
-            <Alert variant="error" dismissible={false}>
-              <div className="space-y-2 break-words">
-                <Text small className="block font-medium">
+            <Alert
+              variant="error"
+              dismissible={false}
+              className="block min-w-0 [&>div]:block [&>div>div:first-child]:hidden"
+            >
+              <div>
+                <AlertTitle className="flex items-center gap-2">
+                  <Info aria-hidden="true" className="size-4 shrink-0" />
                   Could not discover OAuth metadata
-                </Text>
-                <p>{draft.discoveryError}</p>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={disabled || draft.saving}
-                  onClick={draft.retryDiscovery}
-                >
-                  <Button.Text>Retry</Button.Text>
-                </Button>
+                </AlertTitle>
+                <AlertDescription className="space-y-2">
+                  <pre className="bg-muted/50 max-w-full overflow-x-auto p-3 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
+                    <code>{draft.discoveryError}</code>
+                  </pre>
+                </AlertDescription>
               </div>
             </Alert>
+          ) : null}
+          {selected.isNew ? (
+            draft.issuerEditorOpen || draft.discoveryStatus === "error" ? (
+              <div
+                id={`${issuerInputId}-editor`}
+                role="group"
+                aria-label="Issuer correction"
+                className="bg-muted/30 min-w-0 space-y-3 border p-4"
+              >
+                {draft.discoveryStatus === "loading" ? (
+                  <div role="status" className="flex items-center gap-2">
+                    <Loader2
+                      aria-hidden="true"
+                      className="size-3.5 shrink-0 animate-spin"
+                    />
+                    <Text muted small>
+                      Checking OAuth metadata
+                    </Text>
+                  </div>
+                ) : draft.issuerEditorValidated ? (
+                  <div role="status" className="flex items-center gap-2">
+                    <Check
+                      aria-hidden="true"
+                      className="text-default-success size-4 shrink-0"
+                    />
+                    <Text small>
+                      OAuth metadata discovered. Save to finish setup.
+                    </Text>
+                  </div>
+                ) : null}
+                <Label htmlFor={issuerInputId}>Issuer URL</Label>
+                <Input
+                  id={issuerInputId}
+                  value={draft.issuerEditorText}
+                  onChange={draft.setIssuerEditorText}
+                  disabled={disabled || draft.saving}
+                  autoFocus
+                  aria-describedby={`${issuerInputId}-help${draft.issuerEditorError ? ` ${issuerInputId}-error` : ""}`}
+                  aria-invalid={!!draft.issuerEditorError}
+                />
+                <Text
+                  id={`${issuerInputId}-help`}
+                  muted
+                  small
+                  className="block"
+                >
+                  Discover retries the current URL or checks a corrected URL
+                  before you can save the new provider. Saved providers are not
+                  changed.
+                </Text>
+                {draft.issuerEditorError ? (
+                  <div id={`${issuerInputId}-error`}>
+                    <Alert variant="error" dismissible={false}>
+                      {draft.issuerEditorError}
+                    </Alert>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={
+                      disabled ||
+                      draft.saving ||
+                      draft.capabilitiesLoading ||
+                      !draft.issuerEditorText.trim()
+                    }
+                    onClick={draft.discoverIssuer}
+                  >
+                    <Button.Text>
+                      {draft.capabilitiesLoading
+                        ? "Checking…"
+                        : draft.issuerEditorValidated
+                          ? "Check again"
+                          : "Discover"}
+                    </Button.Text>
+                  </Button>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    disabled={disabled || draft.saving}
+                    onClick={draft.resetIssuer}
+                  >
+                    <Button.Text>Reset to advertised URL</Button.Text>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              correctIssuerAction
+            )
           ) : null}
           <RegistrationChoices draft={draft} disabled={disabled} />
           <ChoiceDetails
