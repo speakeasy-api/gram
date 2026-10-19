@@ -6832,7 +6832,8 @@ CREATE INDEX IF NOT EXISTS directory_groups_organization_id_directory_id_idx
 ON directory_groups (organization_id, directory_id)
 WHERE directory_id IS NOT NULL;
 
-COMMENT ON COLUMN directory_groups.directory_id IS 'WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.';
+COMMENT ON COLUMN directory_groups.directory_id IS 'WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.
+@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS directory_groups_workos_directory_group_id_key
 ON directory_groups (workos_directory_group_id);
@@ -6890,7 +6891,8 @@ CREATE INDEX IF NOT EXISTS directory_users_organization_id_directory_id_idx
 ON directory_users (organization_id, directory_id)
 WHERE directory_id IS NOT NULL;
 
-COMMENT ON COLUMN directory_users.directory_id IS 'WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.';
+COMMENT ON COLUMN directory_users.directory_id IS 'WorkOS directory ID. NULL until an authoritative directory inventory or entity payload attributes this source.
+@access: confidential';
 
 CREATE INDEX IF NOT EXISTS directory_users_user_id_idx
 ON directory_users (user_id)
