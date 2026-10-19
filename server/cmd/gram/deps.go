@@ -264,9 +264,14 @@ func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickho
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
-			// Async inserts (async_insert=1 per query) are fire-and-forget:
-			// they ack once queued rather than once committed. Tests set 1 on
-			// their connection to read their own writes.
+			// Async inserts that leave the wait to the connection are
+			// fire-and-forget: they ack once queued rather than once
+			// committed. Tests set 1 on their connection to read their own
+			// writes. ClickHouse defaults async_insert to 1 since 26.2, so an
+			// insert that sends no async settings is fire-and-forget here too:
+			// every insert must state its posture (async_insert=0, or
+			// async_insert=1 with an explicit wait_for_async_insert=1 when it
+			// must read its own writes).
 			"wait_for_async_insert": 0,
 		},
 		MaxOpenConns: opts.maxOpenConns,
