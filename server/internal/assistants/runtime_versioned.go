@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 
 	"github.com/google/uuid"
 )
@@ -236,8 +237,8 @@ func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 	}
 	releases := make([]func(), 0, len(rows))
 	release := func() {
-		for i := len(releases) - 1; i >= 0; i-- {
-			releases[i]()
+		for _, release := range slices.Backward(releases) {
+			release()
 		}
 	}
 	for _, row := range rows {

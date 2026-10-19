@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -46,15 +47,24 @@ func TestAssistantWorkloadIdentityLockedUntilRegistrationCommit(t *testing.T) {
 	for _, lock := range []func(context.Context, pgx.Tx) error{
 		func(ctx context.Context, tx pgx.Tx) error {
 			_, err := identityrepo.New(tx).LockAssistant(ctx, identityrepo.LockAssistantParams{ProjectID: fx.target.ProjectID, AssistantID: a.ID})
-			return err
+			if err != nil {
+				return fmt.Errorf("probe identity lock: %w", err)
+			}
+			return nil
 		},
 		func(ctx context.Context, tx pgx.Tx) error {
 			_, err := identityrepo.New(tx).LockTriggers(ctx, identityrepo.LockTriggersParams{ProjectID: fx.target.ProjectID, TriggerIds: []uuid.UUID{trigger.ID}})
-			return err
+			if err != nil {
+				return fmt.Errorf("probe identity lock: %w", err)
+			}
+			return nil
 		},
 		func(ctx context.Context, tx pgx.Tx) error {
 			_, err := workloadrepo.New(tx).LockWorkloadIssuerForWrite(ctx, workloadrepo.LockWorkloadIssuerForWriteParams{OrganizationID: fx.orgID, ID: issuerID})
-			return err
+			if err != nil {
+				return fmt.Errorf("probe identity lock: %w", err)
+			}
+			return nil
 		},
 	} {
 		other := testenv.BeginTx(t, ctx, ti.conn)
