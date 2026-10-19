@@ -163,7 +163,6 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		case "private":
 			mcp.Operations = append(mcp.Operations, "disable_mcp")
 		}
-		mcp.Operations = append(mcp.Operations, deleteMCPToolName)
 		mcp.DashboardPath = "dashboard_mcp_settings"
 	case model == "dashboard_managed":
 		mcp.Model = model
@@ -172,7 +171,7 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		}
 		mcp.Source = MCPSource{Kind: "dashboard_source", Provider: "", Reference: ""}
 		mcp.Readiness = MCPReadiness{State: "unsupported", CheckedAt: "", ExpiresAt: ""}
-		mcp.Operations = []string{"read", "dashboard_setup", deleteMCPToolName}
+		mcp.Operations = []string{"read", "dashboard_setup"}
 		mcp.DashboardPath = "dashboard_mcp_settings"
 	default:
 		mcp.Model = "legacy"
@@ -180,7 +179,6 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		// Never infer or probe legacy readiness. The stored Platform readiness
 		// table applies only to Platform registrations.
 		mcp.Readiness = MCPReadiness{State: "unsupported", CheckedAt: "", ExpiresAt: ""}
-		mcp.Operations = []string{"read", deleteMCPToolName}
 		mcp.DashboardPath = "dashboard_mcp_settings"
 	}
 	return mcp

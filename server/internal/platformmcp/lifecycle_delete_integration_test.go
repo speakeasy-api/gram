@@ -36,6 +36,9 @@ type deleteMCPFixture struct {
 	service   *LifecycleDeleteService
 	deletes   int
 	failNext  bool
+	// failAfter lets the next delete commit, then reports a failure, as when
+	// the response is lost before the receipt is completed.
+	failAfter bool
 	// grants are what an administrator role carries: org:admin plus mcp:write
 	// on each seeded server, which the dashboard delete checks itself.
 	grants []authz.Grant
@@ -60,14 +63,19 @@ func newDeleteMCPFixture(t *testing.T, name string) (context.Context, *deleteMCP
 	toolsetService := toolsets.NewService(logger, tracerProvider, nil, conn, sessionManager, nil, engine, audit.NewLogger(), nil, false)
 	serverService := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, engine, audit.NewLogger(), nil, nil, false, nil, nil, networkaccess.DenyAllChecker{}).WithHostedServerWriter(toolsetService)
 
-	fixture := &deleteMCPFixture{conn: conn, principal: principal, project: project, service: nil, deletes: 0, failNext: false, grants: []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}}
+	fixture := &deleteMCPFixture{conn: conn, principal: principal, project: project, service: nil, deletes: 0, failNext: false, failAfter: false, grants: []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}}
 	service, err := NewLifecycleDeleteService(conn, engine, func(ctx context.Context, serverID uuid.UUID) error {
 		fixture.deletes++
 		if fixture.failNext {
 			fixture.failNext = false
 			return errors.New("interrupted before the delete committed")
 		}
-		return serverService.DeleteMcpServer(ctx, &mcpserversgen.DeleteMcpServerPayload{ID: serverID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+		err := serverService.DeleteMcpServer(ctx, &mcpserversgen.DeleteMcpServerPayload{ID: serverID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+		if err == nil && fixture.failAfter {
+			fixture.failAfter = false
+			return errors.New("interrupted after the delete committed")
+		}
+		return err
 	}, "platform-mcp-delete-test-key")
 	require.NoError(t, err)
 	fixture.service = service
@@ -174,6 +182,10 @@ func TestDeleteMCPTurnsOffAHostedToolsetServer(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := newDeleteMCPFixture(t, "platform_mcp_delete_hosted")
 	server := fixture.seedHostedServer(t, ctx)
+	serverUpdates, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	serverDeletes, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionMcpServerDelete)
+	require.NoError(t, err)
 
 	output, err := fixture.service.Delete(fixture.asAdmin(ctx), fixture.principal, fixture.input(server))
 	require.NoError(t, err)
@@ -186,6 +198,15 @@ func TestDeleteMCPTurnsOffAHostedToolsetServer(t *testing.T) {
 	toolset, err := toolsetsrepo.New(fixture.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: fixture.project.ID})
 	require.NoError(t, err)
 	require.False(t, toolset.McpEnabled, "the toolset turns its server off, as the dashboard delete does")
+
+	// Audited exactly as the dashboard audits it: the server is turned off, not
+	// deleted, so it is an update to disabled.
+	afterUpdates, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, serverUpdates+1, afterUpdates)
+	afterDeletes, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionMcpServerDelete)
+	require.NoError(t, err)
+	require.Equal(t, serverDeletes, afterDeletes)
 }
 
 func TestDeleteMCPRefusesAStaleVersion(t *testing.T) {
@@ -260,4 +281,47 @@ func TestDeleteMCPReportsAMissingServer(t *testing.T) {
 	_, err := fixture.service.Delete(fixture.asAdmin(ctx), fixture.principal, DeleteMCPInput{ProjectID: fixture.project.ID.String(), MCPID: uuid.NewString(), ExpectedVersion: "v", IdempotencyKey: uuid.NewString(), Confirmed: true})
 	require.ErrorIs(t, err, ErrLifecycleDeleteMissing)
 	require.Zero(t, fixture.deletes)
+}
+
+func TestDeleteMCPRefusesToResumeOnAServerChangedSinceTheFirstAttempt(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := newDeleteMCPFixture(t, "platform_mcp_delete_resume_stale")
+	server := fixture.seedServer(t, ctx)
+	input := fixture.input(server)
+
+	fixture.failNext = true
+	_, err := fixture.service.Delete(fixture.asAdmin(ctx), fixture.principal, input)
+	require.Error(t, err)
+	_, err = mcpserversrepo.New(fixture.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: server.ID, ProjectID: fixture.project.ID, Name: conv.ToPGText("Renamed"), Visibility: server.Visibility,
+		EnvironmentID: server.EnvironmentID, UserSessionIssuerID: server.UserSessionIssuerID, RemoteMcpServerID: server.RemoteMcpServerID,
+		TunneledMcpServerID: server.TunneledMcpServerID, ToolsetID: server.ToolsetID, UnproxiedMcpServerID: server.UnproxiedMcpServerID,
+		ToolVariationsGroupID: server.ToolVariationsGroupID,
+	})
+	require.NoError(t, err)
+
+	_, err = fixture.service.Delete(fixture.asAdmin(ctx), fixture.principal, input)
+	require.ErrorIs(t, err, ErrLifecycleDeleteConflict)
+	require.Equal(t, 1, fixture.deletes, "a resume re-checks the version before deleting")
+	_, err = mcpserversrepo.New(fixture.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: server.ID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+}
+
+func TestDeleteMCPResumeReportsADeleteThatAlreadyCommitted(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := newDeleteMCPFixture(t, "platform_mcp_delete_resume_applied")
+	server := fixture.seedHostedServer(t, ctx)
+	input := fixture.input(server)
+
+	fixture.failAfter = true
+	_, err := fixture.service.Delete(fixture.asAdmin(ctx), fixture.principal, input)
+	require.Error(t, err)
+	require.Equal(t, receiptStatusPending, fixture.receipt(t, ctx, input.IdempotencyKey).Status)
+
+	output, err := fixture.service.Delete(fixture.asAdmin(ctx), fixture.principal, input)
+	require.NoError(t, err)
+	require.Equal(t, deleteMCPOutcomeTurnedOff, output.Outcome)
+	require.Equal(t, deleteMCPStateDisabled, output.CurrentState)
+	require.Equal(t, 1, fixture.deletes, "the committed turn-off is not run again")
+	require.Equal(t, receiptStatusSucceeded, fixture.receipt(t, ctx, input.IdempotencyKey).Status)
 }

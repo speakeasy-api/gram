@@ -39,6 +39,8 @@ const (
 	deleteMCPStateGone     = "gone"
 	deleteMCPStateDisabled = "disabled"
 	deleteMCPStateEnabled  = "enabled"
+	// deleteMCPStateUnverified means the fresh read after a replay failed.
+	deleteMCPStateUnverified = "verification_unavailable"
 )
 
 var (
@@ -72,7 +74,7 @@ type DeleteMCPOutput struct {
 	Outcome string `json:"outcome"`
 	// CurrentState is a fresh read after the delete: gone, disabled, or
 	// enabled. On a replay it can differ from Outcome when someone changed the
-	// server since.
+	// server since, and is verification_unavailable when that read failed.
 	CurrentState string                  `json:"current_state"`
 	Receipt      RiskMutationToolReceipt `json:"receipt"`
 	Message      string                  `json:"message"`
@@ -110,6 +112,9 @@ type deleteMCPClaim struct {
 	snapshot deleteMCPSnapshot
 	replay   bool
 	resume   bool
+	// applied means a resumed delete already took effect before its receipt
+	// was completed, so the delete is not run again.
+	applied bool
 }
 
 func (s *LifecycleDeleteService) Delete(ctx context.Context, principal Principal, input DeleteMCPInput) (DeleteMCPOutput, error) {
@@ -151,14 +156,16 @@ func (s *LifecycleDeleteService) Delete(ctx context.Context, principal Principal
 		return DeleteMCPOutput{}, err
 	}
 	if claim.replay {
-		return s.result(ctx, project.ID, mcpID, claim.snapshot, claim.snapshot.Outcome, operationReceiptFromRow(claim.receipt, true))
+		return s.replayResult(ctx, project.ID, mcpID, claim.snapshot, operationReceiptFromRow(claim.receipt, true)), nil
 	}
 
-	if err := s.deleter(deleteMCPActorContext(ctx, principal, project.ID), mcpID); err != nil {
-		// A resumed delete may already have removed the server before the
-		// receipt was completed; the fresh read below decides.
-		if !claim.resume || !isOopsCode(err, oops.CodeNotFound) {
-			return DeleteMCPOutput{}, classifyDeleteMCPError(err)
+	if !claim.applied {
+		if err := s.deleter(deleteMCPActorContext(ctx, principal, project.ID), mcpID); err != nil {
+			// A concurrent delete may have removed the server since the claim;
+			// the fresh read below decides.
+			if !claim.resume || !isOopsCode(err, oops.CodeNotFound) {
+				return DeleteMCPOutput{}, classifyDeleteMCPError(err)
+			}
 		}
 	}
 
@@ -219,17 +226,23 @@ func (s *LifecycleDeleteService) claim(ctx context.Context, principal Principal,
 		if err := json.Unmarshal(stored.ResultPayload, &snapshot); err != nil {
 			return deleteMCPClaim{}, fmt.Errorf("decode platform mcp delete receipt: %w", err)
 		}
-		if err := tx.Commit(ctx); err != nil {
-			return deleteMCPClaim{}, fmt.Errorf("commit platform mcp delete replay: %w", err)
-		}
+		claim := deleteMCPClaim{receipt: stored, snapshot: snapshot, replay: false, resume: false, applied: false}
 		switch stored.Status {
 		case receiptStatusSucceeded:
-			return deleteMCPClaim{receipt: stored, snapshot: snapshot, replay: true, resume: false}, nil
+			claim.replay = true
 		case receiptStatusPending:
-			return deleteMCPClaim{receipt: stored, snapshot: snapshot, replay: false, resume: true}, nil
+			applied, err := s.resumable(ctx, tx, projectID, mcpID, input.ExpectedVersion)
+			if err != nil {
+				return deleteMCPClaim{}, err
+			}
+			claim.resume, claim.applied = true, applied
 		default:
 			return deleteMCPClaim{}, deleteMCPConflict("This idempotency key belongs to a delete that did not finish. Read the server again and use a fresh key.")
 		}
+		if err := tx.Commit(ctx); err != nil {
+			return deleteMCPClaim{}, fmt.Errorf("commit platform mcp delete replay: %w", err)
+		}
+		return claim, nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return deleteMCPClaim{}, fmt.Errorf("load platform mcp delete receipt: %w", err)
 	}
@@ -256,15 +269,39 @@ func (s *LifecycleDeleteService) claim(ctx context.Context, principal Principal,
 	if err := tx.Commit(ctx); err != nil {
 		return deleteMCPClaim{}, fmt.Errorf("commit platform mcp delete claim: %w", err)
 	}
-	return deleteMCPClaim{receipt: receipt, snapshot: snapshot, replay: false, resume: false}, nil
+	return deleteMCPClaim{receipt: receipt, snapshot: snapshot, replay: false, resume: false, applied: false}, nil
 }
 
-func (s *LifecycleDeleteService) result(ctx context.Context, projectID, mcpID uuid.UUID, snapshot deleteMCPSnapshot, outcome string, receipt OperationReceipt) (DeleteMCPOutput, error) {
+// resumable re-reads the server before a pending delete is retried, so a
+// server changed since the first attempt is never deleted on a stale version.
+// It reports whether the first attempt already took effect: the server is
+// gone, or it is a hosted toolset server that is now turned off.
+func (s *LifecycleDeleteService) resumable(ctx context.Context, tx pgx.Tx, projectID, mcpID uuid.UUID, expectedVersion string) (bool, error) {
+	server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpID, ProjectID: projectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("load platform mcp delete target: %w", err)
+	}
+	if hmac.Equal([]byte(s.version(server)), []byte(expectedVersion)) {
+		return false, nil
+	}
+	if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID && server.Visibility == "disabled" {
+		return true, nil
+	}
+	return false, deleteMCPConflict("The server changed since the interrupted delete. Read it again with get_mcp and confirm with the user before retrying with a fresh key.")
+}
+
+// replayResult answers a finished delete from its receipt. The delete is
+// committed, so a failed fresh read must not hide it: the state is then
+// reported as unverified rather than claimed.
+func (s *LifecycleDeleteService) replayResult(ctx context.Context, projectID, mcpID uuid.UUID, snapshot deleteMCPSnapshot, receipt OperationReceipt) DeleteMCPOutput {
 	state, err := s.currentState(ctx, projectID, mcpID)
 	if err != nil {
-		return DeleteMCPOutput{}, err
+		state = deleteMCPStateUnverified
 	}
-	return deleteMCPOutput(projectID, mcpID, snapshot, outcome, state, receipt), nil
+	return deleteMCPOutput(projectID, mcpID, snapshot, snapshot.Outcome, state, receipt)
 }
 
 // currentState is the post-delete read: a tombstoned server no longer loads,
