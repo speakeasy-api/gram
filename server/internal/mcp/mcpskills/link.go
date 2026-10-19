@@ -62,10 +62,14 @@ func CreateLink(ctx context.Context, db database.DBTX, link NewLink) (uuid.UUID,
 	return row.ID, nil
 }
 
-// DeleteLink unlinks a skill from its surface. It reports whether a live link
-// was removed.
-func DeleteLink(ctx context.Context, db database.DBTX, projectID, linkID uuid.UUID) (bool, error) {
-	removed, err := repo.New(db).DeleteMCPSkillLink(ctx, repo.DeleteMCPSkillLinkParams{ProjectID: projectID, ID: linkID})
+// DeleteLink unlinks a skill from its surface, scoped to the caller's
+// organization and project. It reports whether a live link was removed.
+func DeleteLink(ctx context.Context, db database.DBTX, organizationID string, projectID, linkID uuid.UUID) (bool, error) {
+	removed, err := repo.New(db).DeleteMCPSkillLink(ctx, repo.DeleteMCPSkillLinkParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		ID:             linkID,
+	})
 	if err != nil {
 		return false, fmt.Errorf("delete skill link: %w", err)
 	}

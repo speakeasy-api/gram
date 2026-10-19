@@ -84,20 +84,22 @@ const deleteMCPSkillLink = `-- name: DeleteMCPSkillLink :execrows
 UPDATE mcp_skill_links
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE project_id = $1
-  AND id = $2
+WHERE organization_id = $1
+  AND project_id = $2
+  AND id = $3
   AND deleted IS FALSE
 `
 
 type DeleteMCPSkillLinkParams struct {
-	ProjectID uuid.UUID
-	ID        uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
 }
 
 // Soft-deletes one live link, so the surface stops serving the skill through
 // it.
 func (q *Queries) DeleteMCPSkillLink(ctx context.Context, arg DeleteMCPSkillLinkParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteMCPSkillLink, arg.ProjectID, arg.ID)
+	result, err := q.db.Exec(ctx, deleteMCPSkillLink, arg.OrganizationID, arg.ProjectID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -312,6 +314,10 @@ WITH candidates AS (
       resolved.raw_sha256,
       resolved.effective_at
   FROM mcp_skill_links l
+  JOIN projects p
+    ON p.id = l.project_id
+    AND p.organization_id = l.organization_id
+    AND p.deleted IS FALSE
   JOIN skills sk
     ON sk.id = l.skill_id
     AND sk.project_id = l.project_id

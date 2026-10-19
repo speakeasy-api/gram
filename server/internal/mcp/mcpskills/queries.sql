@@ -54,6 +54,10 @@ WITH candidates AS (
       resolved.raw_sha256,
       resolved.effective_at
   FROM mcp_skill_links l
+  JOIN projects p
+    ON p.id = l.project_id
+    AND p.organization_id = l.organization_id
+    AND p.deleted IS FALSE
   JOIN skills sk
     ON sk.id = l.skill_id
     AND sk.project_id = l.project_id
@@ -145,7 +149,8 @@ RETURNING *;
 UPDATE mcp_skill_links
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-WHERE project_id = @project_id
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
   AND id = @id
   AND deleted IS FALSE;
 

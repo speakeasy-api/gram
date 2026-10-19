@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -68,7 +69,7 @@ func TestResolverListDeletedLinkExcluded(t *testing.T) {
 	ctx, f := newFixture(t)
 	skillID, _, linkID := servedSkill(t, ctx, f, "unlinked")
 
-	removed, err := mcpskills.DeleteLink(ctx, f.conn, f.projectID, linkID)
+	removed, err := mcpskills.DeleteLink(ctx, f.conn, f.organizationID, f.projectID, linkID)
 	require.NoError(t, err)
 	require.True(t, removed)
 
@@ -76,7 +77,7 @@ func TestResolverListDeletedLinkExcluded(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, entries)
 
-	removed, err = mcpskills.DeleteLink(ctx, f.conn, f.projectID, linkID)
+	removed, err = mcpskills.DeleteLink(ctx, f.conn, f.organizationID, f.projectID, linkID)
 	require.NoError(t, err)
 	require.False(t, removed, "a deleted link is not deleted twice")
 
@@ -85,6 +86,43 @@ func TestResolverListDeletedLinkExcluded(t *testing.T) {
 	entries, err = f.resolver.List(ctx, f.scope())
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
+}
+
+func TestDeleteLinkScopedToOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFixture(t)
+	_, other := newFixture(t)
+	_, _, linkID := servedSkill(t, ctx, f, "kept")
+
+	removed, err := mcpskills.DeleteLink(ctx, f.conn, other.organizationID, f.projectID, linkID)
+	require.NoError(t, err)
+	require.False(t, removed, "another organization cannot delete the link")
+
+	entries, err := f.resolver.List(ctx, f.scope())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+}
+
+func TestResolverListDeletedProjectExcluded(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFixture(t)
+	otherProjectID := createProject(t, ctx, f, "gone-"+uuid.NewString()[:8])
+	skillID := createSkill(t, ctx, f, otherProjectID, "orphaned")
+	addVersion(t, ctx, f, otherProjectID, skillID, skillContent("orphaned", "Linked from a project that is deleted."))
+	link(t, ctx, f, otherProjectID, skillID, mcpskills.OrganizationGatewayTarget(), nil)
+
+	entries, err := f.resolver.List(ctx, f.scopeFor(mcpskills.OrganizationGatewayTarget()))
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	_, err = projectsrepo.New(f.conn).DeleteProject(ctx, otherProjectID)
+	require.NoError(t, err)
+
+	entries, err = f.resolver.List(ctx, f.scopeFor(mcpskills.OrganizationGatewayTarget()))
+	require.NoError(t, err)
+	require.Empty(t, entries, "a deleted project's links are not served")
 }
 
 func TestCreateLinkRejectsDuplicateLiveLink(t *testing.T) {
