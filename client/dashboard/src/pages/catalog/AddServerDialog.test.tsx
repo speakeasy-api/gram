@@ -157,7 +157,7 @@ describe("AddServerDialog identity permissions", () => {
       ).disabled,
     ).toBe(true);
     expect(
-      screen.getByText(/User Identity creates an identity provider/i),
+      screen.getByText(/User Identity creates an authorization server/i),
     ).toBeDefined();
     expect(
       (
