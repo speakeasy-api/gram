@@ -52,7 +52,8 @@ RETURNING *;
 UPDATE risk_policy_approvals
 SET status = 'expired'
   , updated_at = clock_timestamp()
-WHERE project_id = @project_id
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
   AND risk_policy_id = @risk_policy_id
   AND requester_urn = @requester_urn
   AND tool_name = @tool_name
@@ -73,7 +74,8 @@ SET status = 'consumed'
 WHERE id = (
     SELECT a.id
     FROM risk_policy_approvals a
-    WHERE a.project_id = @project_id
+    WHERE a.organization_id = @organization_id
+      AND a.project_id = @project_id
       AND a.risk_policy_id = @risk_policy_id
       AND a.requester_urn = @requester_urn
       AND a.tool_name = @tool_name
@@ -85,6 +87,7 @@ WHERE id = (
     LIMIT 1
     FOR UPDATE SKIP LOCKED
   )
+  AND organization_id = @organization_id
   AND project_id = @project_id
   AND status = 'approved'
 RETURNING *;
@@ -100,7 +103,8 @@ WHERE token = @token
 -- name: GetApproval :one
 SELECT *
 FROM risk_policy_approvals
-WHERE project_id = @project_id
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
   AND id = @id
   AND deleted IS FALSE;
 
@@ -115,7 +119,8 @@ SET status = 'pending'
   , requested_at = clock_timestamp()
   , expires_at = @expires_at
   , updated_at = clock_timestamp()
-WHERE project_id = @project_id
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
   AND id = @id
   AND status = 'blocked'
   AND deleted IS FALSE
@@ -132,7 +137,8 @@ SET status = @status
   , granted_scope = @granted_scope
   , decided_at = clock_timestamp()
   , updated_at = clock_timestamp()
-WHERE project_id = @project_id
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
   AND id = @id
   AND status = 'pending'
   AND (expires_at IS NULL OR expires_at > clock_timestamp())
@@ -144,7 +150,8 @@ RETURNING *;
 -- one status.
 SELECT *
 FROM risk_policy_approvals
-WHERE project_id = @project_id
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
   AND deleted IS FALSE
   AND (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text)
   AND (sqlc.narg(cursor)::uuid IS NULL OR id < sqlc.narg(cursor)::uuid)

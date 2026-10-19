@@ -593,3 +593,67 @@ func TestRiskPolicyCreateAcceptsMCPScope(t *testing.T) {
 		})
 	}
 }
+
+func TestRiskPolicyUpdateRefusesApprovalPolicies(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_risk_policy_approval_update")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	principal.ClientID = "test-client"
+	principal.Surface = SurfacePlatformMCP
+	ctx = ContextWithPrincipal(ctx, principal)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
+	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
+	require.NoError(t, err)
+	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil))
+	require.NoError(t, err)
+
+	_, created, err := handlers.CreatePolicy(ctx, nil, map[string]any{
+		"project_slug":    project.Slug,
+		"policy_type":     "standard",
+		"name":            "Approve writes",
+		"enabled":         true,
+		"sources":         []string{"gitleaks"},
+		"idempotency_key": "create-approval-policy-key",
+	})
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(created.Policy.ID)
+	require.NoError(t, err)
+	queries := riskrepo.New(conn)
+	row, err := queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
+	require.NoError(t, err)
+	approvalConfig := []byte(`{"approvers":["user:` + principal.UserID + `"]}`)
+	_, err = queries.UpdateRiskPolicy(ctx, riskrepo.UpdateRiskPolicyParams{
+		Name: row.Name, Sources: []string{}, PresidioEntities: row.PresidioEntities, AnalyzerConfig: row.AnalyzerConfig,
+		PromptInjectionRules: row.PromptInjectionRules, DisabledRules: row.DisabledRules, CustomRuleIds: row.CustomRuleIds,
+		McpScope: []byte(`{"all_servers":true,"servers":[]}`), ApprovalConfig: approvalConfig, Enabled: row.Enabled, Action: "require_approval",
+		AudienceType: row.AudienceType, AutoName: row.AutoName, UserMessage: row.UserMessage, Prompt: row.Prompt,
+		ModelConfig: row.ModelConfig, Score: pgtype.Float8{Float64: row.Score, Valid: true}, ID: row.ID, ProjectID: row.ProjectID,
+	})
+	require.NoError(t, err)
+
+	reads, err := newRiskReadService(conn, "risk-policy-test-key")
+	require.NoError(t, err)
+	read, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: policyID.String()})
+	require.NoError(t, err)
+
+	_, _, err = handlers.UpdatePolicy(ctx, nil, map[string]any{
+		"project_slug":     project.Slug,
+		"policy_id":        policyID.String(),
+		"expected_version": read.Policy.Version,
+		"idempotency_key":  "update-approval-policy-key",
+		"patch":            map[string]any{"action": "block"},
+	})
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Contains(t, refusal.Payload, "edited in the dashboard")
+
+	stored, err := queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, "require_approval", stored.Action)
+	require.JSONEq(t, string(approvalConfig), string(stored.ApprovalConfig))
+}

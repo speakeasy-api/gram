@@ -516,6 +516,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err := policycore.ValidateApprovalPolicy(action, policyType, sources, payload.CustomRuleIds, approvalConfig); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
+	if err := s.validateApprovers(ctx, authCtx.ActiveOrganizationID, approvalConfig); err != nil {
+		return nil, err
+	}
 	approvalConfigJSON, err := policycore.MarshalApprovalConfig(approvalConfig)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "encode approval config").LogError(ctx, s.logger)
@@ -982,6 +985,11 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 	if err := policycore.ValidateApprovalPolicy(action, current.PolicyType, sources, customRuleIds, approvalConfig); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	if payload.ApprovalConfig != nil {
+		if err := s.validateApprovers(ctx, authCtx.ActiveOrganizationID, approvalConfig); err != nil {
+			return nil, err
+		}
 	}
 	approvalConfigJSON, err := policycore.MarshalApprovalConfig(approvalConfig)
 	if err != nil {
@@ -4000,6 +4008,24 @@ type promptModelConfig struct {
 
 // approvalConfigFromPayload converts an API approval config to its domain
 // form. A nil config stays nil.
+// validateApprovers checks that every approver names a user or role in the
+// organization, so a typo cannot hold calls for an approver nobody can be.
+func (s *Service) validateApprovers(ctx context.Context, organizationID string, config *policycore.ApprovalConfig) error {
+	if config == nil {
+		return nil
+	}
+	for _, approver := range config.Approvers {
+		principal, err := urn.ParsePrincipal(approver)
+		if err != nil {
+			return oops.E(oops.CodeInvalid, err, "invalid approver %q", approver)
+		}
+		if err := authz.ValidatePrincipal(ctx, s.db, organizationID, principal); err != nil {
+			return oops.E(oops.CodeInvalid, err, "approver %q is not a user or role in this organization", approver)
+		}
+	}
+	return nil
+}
+
 func approvalConfigFromPayload(c *types.RiskPolicyApprovalConfig) *policycore.ApprovalConfig {
 	if c == nil {
 		return nil

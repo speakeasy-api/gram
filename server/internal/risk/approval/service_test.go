@@ -43,7 +43,7 @@ func TestApprovedCallIsReleasedExactlyOnce(t *testing.T) {
 	// Repeating request_approval leaves the request as it is.
 	require.Equal(t, StatusPending, f.request(t, token))
 
-	decided, err := f.service.Decide(t.Context(), DecideInput{ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	decided, err := f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
 	require.NoError(t, err)
 	require.Equal(t, string(StatusApproved), decided.Status)
 	status, err = f.service.WatchStatus(t.Context(), token)
@@ -72,7 +72,7 @@ func TestDeniedCallStartsNewRequestOnRetry(t *testing.T) {
 	token := f.hold(t, call)
 	f.request(t, token)
 
-	_, err := f.service.Decide(t.Context(), DecideInput{ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: false, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: "Use the staging project."})
+	_, err := f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: false, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: "Use the staging project."})
 	require.NoError(t, err)
 
 	status, err := f.service.WatchStatus(t.Context(), token)
@@ -92,16 +92,16 @@ func TestDecideChecksTheDecider(t *testing.T) {
 	token := f.hold(t, f.call(`{}`))
 	id := f.approvalID(t, token)
 
-	_, err := f.service.Decide(t.Context(), DecideInput{ProjectID: f.projectID, ApprovalID: id, Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	_, err := f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: id, Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
 	require.ErrorIs(t, err, ErrNotPending, "a request must be filed before anyone decides it")
 
 	f.request(t, token)
-	_, err = f.service.Decide(t.Context(), DecideInput{ProjectID: f.projectID, ApprovalID: id, Approve: true, DeciderUserID: f.addMember(t), Via: DecidedViaDashboard, Note: ""})
+	_, err = f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: id, Approve: true, DeciderUserID: f.addMember(t), Via: DecidedViaDashboard, Note: ""})
 	require.ErrorIs(t, err, ErrNotApprover)
 
-	_, err = f.service.Decide(t.Context(), DecideInput{ProjectID: f.projectID, ApprovalID: id, Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	_, err = f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: id, Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
 	require.NoError(t, err)
-	_, err = f.service.Decide(t.Context(), DecideInput{ProjectID: f.projectID, ApprovalID: id, Approve: false, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	_, err = f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: id, Approve: false, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
 	require.ErrorIs(t, err, ErrNotPending, "a decision is final")
 }
 
@@ -115,7 +115,7 @@ func TestRequesterCannotApproveOwnCall(t *testing.T) {
 	_, _, err := f.service.Request(t.Context(), RequestInput{Token: token, RequesterURN: call.RequesterURN, OrganizationID: f.organizationID, Reason: "needed", Scope: "", ExpiresIn: 0})
 	require.NoError(t, err)
 
-	_, err = f.service.Decide(t.Context(), DecideInput{ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	_, err = f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
 	require.ErrorIs(t, err, ErrSelfApproval)
 }
 
@@ -137,13 +137,18 @@ func TestRequestValidatesInput(t *testing.T) {
 		"short expiry":    {input: RequestInput{Token: token, RequesterURN: f.agentURN, OrganizationID: f.organizationID, Reason: "r", Scope: "", ExpiresIn: time.Second}, err: ErrInvalidRequest},
 		"long expiry":     {input: RequestInput{Token: token, RequesterURN: f.agentURN, OrganizationID: f.organizationID, Reason: "r", Scope: "", ExpiresIn: 48 * time.Hour}, err: ErrInvalidRequest},
 	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			_, _, err := f.service.Request(t.Context(), tc.input)
-			require.ErrorIs(t, err, tc.err)
-		})
-	}
+	// The group returns only after its parallel cases finish, so the status
+	// check below sees every rejected request.
+	t.Run("cases", func(t *testing.T) {
+		t.Parallel()
+		for name, tc := range cases {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				_, _, err := f.service.Request(t.Context(), tc.input)
+				require.ErrorIs(t, err, tc.err)
+			})
+		}
+	})
 
 	status, err := f.service.WatchStatus(t.Context(), token)
 	require.NoError(t, err)
@@ -165,7 +170,7 @@ func TestExpiredRequestCannotBeDecidedAndRetryStartsOver(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, StatusExpired, status)
 
-	_, err = f.service.Decide(t.Context(), DecideInput{ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	_, err = f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
 	require.ErrorIs(t, err, ErrNotPending)
 
 	require.NotEqual(t, token, f.hold(t, call))
@@ -198,4 +203,68 @@ func TestCallFingerprintIgnoresKeyOrderAndSpacing(t *testing.T) {
 	emptyObject, err := CallFingerprint("s", "t", []byte(`{}`))
 	require.NoError(t, err)
 	require.Equal(t, empty, emptyObject, "a call without arguments matches an empty arguments object")
+}
+
+func TestEveryCoveringPolicyMustApprove(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	second := f.addPolicy(t, "Second policy")
+	call := f.call(`{"title":"bug"}`)
+	call.Policies = append(call.Policies, second)
+
+	firstToken := f.hold(t, call)
+	f.request(t, firstToken)
+	_, err := f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, firstToken), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	require.NoError(t, err)
+
+	// The first policy approved; the second now holds the call, and the first
+	// approval stays unused.
+	outcome, err := f.service.HoldCall(t.Context(), call)
+	require.NoError(t, err)
+	require.False(t, outcome.Allowed)
+	require.NotNil(t, outcome.Policy)
+	require.Equal(t, second.ID, outcome.Policy.ID)
+	require.NotEqual(t, firstToken, outcome.Token)
+	status, err := f.service.WatchStatus(t.Context(), firstToken)
+	require.NoError(t, err)
+	require.Equal(t, StatusApproved, status)
+
+	f.request(t, outcome.Token)
+	_, err = f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, outcome.Token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	require.NoError(t, err)
+
+	released, err := f.service.HoldCall(t.Context(), call)
+	require.NoError(t, err)
+	require.True(t, released.Allowed)
+	// Both approvals were used by that one retry.
+	again, err := f.service.HoldCall(t.Context(), call)
+	require.NoError(t, err)
+	require.False(t, again.Allowed)
+	require.NotNil(t, again.Policy)
+	require.Equal(t, f.policy.ID, again.Policy.ID)
+}
+
+func TestUnusedApprovalExpiresWithItsWindow(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	call := f.call(`{}`)
+	token := f.hold(t, call)
+
+	// Request and approve with the window already closed for the gateway's
+	// clock, as if nobody retried in time.
+	f.shiftClock(-29 * time.Minute)
+	f.request(t, token)
+	f.shiftClock(0)
+	_, err := f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	require.NoError(t, err)
+	f.shiftClock(2 * time.Minute)
+
+	status, err := f.service.WatchStatus(t.Context(), token)
+	require.NoError(t, err)
+	require.Equal(t, StatusExpired, status)
+}
+
+func TestArgumentsPreviewKeepsExactNumbers(t *testing.T) {
+	t.Parallel()
+	require.JSONEq(t, `{"id":9007199254740993,"nested":"{\"n\":12345678901234567890}"}`, string(argumentsPreview([]byte(`{"id":9007199254740993,"nested":{"n":12345678901234567890}}`))))
 }

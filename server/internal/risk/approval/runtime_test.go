@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -174,4 +179,109 @@ func TestRequestApprovalHandlerRequiresAuthentication(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = getRes.Body.Close() }()
 	require.Equal(t, http.StatusMethodNotAllowed, getRes.StatusCode)
+}
+
+func TestHandleWatchRateLimitsPerToken(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	runtime := NewRuntime(f.service, nil, ratelimit.NewRedisStore(redisClient))
+	token := f.hold(t, f.call(`{}`))
+
+	server := httptest.NewServer(oops.ErrHandle(testenv.NewLogger(t), runtime.HandleWatch))
+	t.Cleanup(server.Close)
+	limited := false
+	for range 70 {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err := server.Client().Do(req)
+		require.NoError(t, err)
+		_ = res.Body.Close()
+		if res.StatusCode == http.StatusTooManyRequests {
+			require.NotEmpty(t, res.Header.Get("Retry-After"))
+			limited = true
+			break
+		}
+		require.Equal(t, http.StatusOK, res.StatusCode)
+	}
+	require.True(t, limited, "a token polled faster than the limit is told to back off")
+}
+
+func TestRequestApprovalToolRejectsOutOfRangeExpiry(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	agentID := uuid.New()
+	f.agentURN = urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()).String()
+	token := f.hold(t, f.call(`{}`))
+	runtime := NewRuntime(f.service, agentAuthenticator(f.organizationID, agentID), nil)
+
+	res := callRequestApproval(t, runtime, map[string]any{"token": token, "reason": "needed", "expires_in": math.MaxInt64 / 2})
+	require.True(t, res.IsError)
+	content, ok := res.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, content.Text, "expires_in must be between")
+}
+
+// runWatcher runs the shipped watcher script once against url.
+func runWatcher(t *testing.T, url, tokenFile string) (string, int) {
+	t.Helper()
+	for _, tool := range []string{"bash", "curl"} {
+		_, err := exec.LookPath(tool)
+		require.NoError(t, err, "the watcher script needs %s", tool)
+	}
+	script := filepath.Join(t.TempDir(), "approval-watch.sh")
+	require.NoError(t, os.WriteFile(script, []byte(watchScript), 0o600))
+	cmd := exec.CommandContext(t.Context(), "bash", script, url, tokenFile, "1", "5")
+	out, err := cmd.CombinedOutput()
+	exitCode := 0
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		exitCode = exitErr.ExitCode()
+	} else {
+		require.NoError(t, err)
+	}
+	return string(out), exitCode
+}
+
+func TestWatchScriptReportsTheDecision(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	runtime := NewRuntime(f.service, nil, nil)
+	server := httptest.NewServer(oops.ErrHandle(testenv.NewLogger(t), runtime.HandleWatch))
+	t.Cleanup(server.Close)
+	token := f.hold(t, f.call(`{}`))
+	f.request(t, token)
+	_, err := f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
+	require.NoError(t, err)
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(tokenFile, []byte(token+"\n"), 0o600))
+	out, code := runWatcher(t, server.URL, tokenFile)
+	require.Equal(t, 0, code, out)
+	require.Contains(t, out, "APPROVED: retry the blocked tool call")
+}
+
+func TestWatchScriptStopsOnBadInput(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	runtime := NewRuntime(f.service, nil, nil)
+	server := httptest.NewServer(oops.ErrHandle(testenv.NewLogger(t), runtime.HandleWatch))
+	t.Cleanup(server.Close)
+	unknown, err := NewToken()
+	require.NoError(t, err)
+	unknownFile := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(unknownFile, []byte(unknown), 0o600))
+
+	out, code := runWatcher(t, server.URL, unknownFile)
+	require.Equal(t, 1, code, out)
+	require.Contains(t, out, "WATCH FAILED: the server rejected the request token (HTTP 401)")
+
+	out, code = runWatcher(t, server.URL, filepath.Join(t.TempDir(), "missing"))
+	require.Equal(t, 2, code, out)
+	require.Contains(t, out, "cannot read a token")
+
+	out, code = runWatcher(t, "http://approvals.example.test/approvals/watch", unknownFile)
+	require.Equal(t, 2, code, out)
+	require.Contains(t, out, "non-HTTPS URL")
 }

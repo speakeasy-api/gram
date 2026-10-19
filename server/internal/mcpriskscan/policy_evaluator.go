@@ -186,8 +186,9 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 	}
 
 	blockPolicies, approvalPolicies, flagPolicies := partitionPolicies(policies)
-	if event.Phase() != PhaseRequest {
-		// Approval holds a call before it runs; a response has nothing to hold.
+	if event.Phase() != PhaseRequest || event.Method != MethodToolsCall {
+		// Approval holds a tool call before it runs. A response, a prompt or a
+		// resource read has no call to retry.
 		approvalPolicies = nil
 	}
 	payloadSettled := false
@@ -204,6 +205,7 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
 	}
 
+	indeterminate := false
 	if len(blockPolicies) > 0 {
 		request := policyScanRequest(subject, subject.Payload.Bytes())
 		match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, request)
@@ -222,10 +224,17 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 			if decision.Denied() || len(approvalPolicies) == 0 {
 				return decision
 			}
+			indeterminate = true
 		}
 	}
 	if len(approvalPolicies) > 0 {
-		return p.holdForApproval(scanCtx, subject, approvalPolicies)
+		// The block lane may have used up the shared deadline; the approval
+		// lane gets its own so it can still record the request.
+		approvalCtx, cancelApproval := context.WithTimeout(ctx, p.config.Deadline)
+		defer cancelApproval()
+		decision := p.holdForApproval(approvalCtx, subject, approvalPolicies)
+		decision.Indeterminate = decision.Indeterminate || indeterminate
+		return decision
 	}
 	return Allow()
 }

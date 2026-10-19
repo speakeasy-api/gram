@@ -6,24 +6,51 @@
 #
 # The token is read from <token-file> and sent only in the Authorization
 # header, through a private header file, so it never appears in a URL, the
-# process list or shell history.
+# process list or shell history. It is sent only over HTTPS, except to a
+# local development server.
 set -uo pipefail
 
-url="${1:?usage: approval-watch.sh <watch-url> <token-file> [interval-secs] [max-checks]}"
-token_file="${2:?usage: approval-watch.sh <watch-url> <token-file> [interval-secs] [max-checks]}"
+usage="usage: approval-watch.sh <watch-url> <token-file> [interval-secs] [max-checks]"
+url="${1:?$usage}"
+token_file="${2:?$usage}"
 interval="${3:-3}"
-checks="${4:-1200}"
+# 24 hours at the default interval: the longest window a request can have.
+checks="${4:-28800}"
+
+case "$url" in
+  https://*) ;;
+  http://localhost:* | http://localhost/* | http://127.0.0.1:* | http://127.0.0.1/*) ;;
+  *)
+    echo "WATCH FAILED: refusing to send the token to a non-HTTPS URL; tell the user"
+    exit 2
+    ;;
+esac
+
+token="$(tr -d '[:space:]' < "$token_file" 2>/dev/null || true)"
+if [ -z "$token" ]; then
+  echo "WATCH FAILED: cannot read a token from $token_file; save the request token there first"
+  exit 2
+fi
 
 header_file="$(mktemp)"
 trap 'rm -f "$header_file"' EXIT
 chmod 600 "$header_file"
-printf 'Authorization: Bearer %s\n' "$(tr -d '[:space:]' < "$token_file")" > "$header_file"
+printf 'Authorization: Bearer %s\n' "$token" > "$header_file"
+unset token
 
 last=""
 n=0
 while [ "$n" -lt "$checks" ]; do
   n=$((n + 1))
-  body="$(curl -fsS --max-time 10 -H @"$header_file" "$url" 2>/dev/null || true)"
+  response="$(curl -sS --max-time 10 --proto '=https,http' -H @"$header_file" -w '\n%{http_code}' "$url" 2>/dev/null || true)"
+  code="$(printf '%s' "$response" | tail -n 1)"
+  body="$(printf '%s' "$response" | sed '$d')"
+  case "$code" in
+    401 | 403 | 404)
+      echo "WATCH FAILED: the server rejected the request token (HTTP $code); tell the user"
+      exit 1
+      ;;
+  esac
   status="$(printf '%s' "$body" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([a-z_]*\)".*/\1/p')"
   if [ -z "$status" ]; then
     status="unreachable"

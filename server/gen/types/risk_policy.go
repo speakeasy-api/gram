@@ -58,7 +58,8 @@ type RiskPolicy struct {
 	// is everyone.
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScope
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server

@@ -33,6 +33,15 @@ const (
 	// MCPServerName is the server name agents see.
 	MCPServerName = "speakeasy-approvals"
 
+	// watchIntervalSeconds is how often the watcher polls. Three seconds
+	// feels immediate to a person who just clicked Approve and stays well
+	// under the per-token rate limit.
+	watchIntervalSeconds = 3
+
+	// watchMarginChecks lets the watcher outlast the request window by a
+	// minute, so it reports EXPIRED instead of timing out.
+	watchMarginChecks = 20
+
 	// mcpMaxBodyBytes bounds one MCP request. request_approval carries a token,
 	// a sentence and two small options; 64 KiB leaves room for protocol framing.
 	mcpMaxBodyBytes = 64 << 10 // 64 KiB
@@ -134,6 +143,11 @@ func (r *Runtime) requestApproval(ctx context.Context, _ *mcp.CallToolRequest, i
 	if !ok || !hasAuth || authCtx == nil {
 		return nil, requestApprovalOutput{}, errors.New("this credential cannot request approval; call with an agent key or sign in")
 	}
+	// Check the bounds in seconds first, so a huge value cannot wrap around
+	// when it becomes a Duration.
+	if input.ExpiresIn != 0 && (input.ExpiresIn < int(minRequestTTL/time.Second) || input.ExpiresIn > int(maxRequestTTL/time.Second)) {
+		return nil, requestApprovalOutput{}, fmt.Errorf("%w: expires_in must be between %d and %d seconds", ErrInvalidRequest, int(minRequestTTL/time.Second), int(maxRequestTTL/time.Second))
+	}
 	row, status, err := r.service.Request(ctx, RequestInput{
 		Token:          strings.TrimSpace(input.Token),
 		RequesterURN:   requesterURN,
@@ -171,11 +185,11 @@ func (r *Runtime) requestResultText(row repo.RiskPolicyApproval, status Status) 
 	case StatusApproved:
 		return "Already approved. Retry the blocked tool call now with exactly the same arguments."
 	case StatusConsumed:
-		return "This approval was already used by a retry. Calling the tool again starts a new request."
+		return "This approval was already used by a retry. Retrying the blocked call starts a new request."
 	case StatusDenied:
 		return "An approver denied this request. Do not retry; tell the user." + noteSuffix(row)
 	case StatusExpired:
-		return "This request expired before anyone decided. Tell the user; calling the tool again starts a new request."
+		return "This request expired before it was used. Tell the user; retrying the blocked call starts a new request."
 	case StatusBlocked, StatusPending:
 	}
 
@@ -183,15 +197,25 @@ func (r *Runtime) requestResultText(row repo.RiskPolicyApproval, status Status) 
 	return fmt.Sprintf(`Approval requested (status: %s). It stays pending until an approver decides or it expires.
 Wait for the decision with the watcher below, then retry the blocked call with exactly the same arguments when it prints APPROVED.
 
-1. Save the token to a private file:
+1. Save the request token, and nothing else, to %s with your file-writing tool. If you have none, run:
    umask 077 && printf '%%s' '%s' > "%s"
 2. Save the script below as approval-watch.sh.
-3. Run it: bash approval-watch.sh %s "%s"
+3. Run it: bash approval-watch.sh %s "%s" %d %d
    In Claude Code, run it with the Monitor tool so its output wakes you. Elsewhere, run it in a background terminal and check its output.
-   It prints APPROVED, DENIED or EXPIRED and exits. On DENIED or EXPIRED, do not retry; tell the user.
+   It prints APPROVED, DENIED or EXPIRED and exits. On DENIED, EXPIRED or WATCH FAILED, do not retry; tell the user.
 
 approval-watch.sh:
-%s`, status, row.Token, tokenFile, r.service.WatchURL(), tokenFile, watchScript)
+%s`, status, tokenFile, row.Token, tokenFile, r.service.WatchURL(), tokenFile, watchIntervalSeconds, r.watchChecks(row), watchScript)
+}
+
+// watchChecks is how many polls cover the rest of the request's window, plus
+// a margin so the watcher sees the final status rather than timing out first.
+func (r *Runtime) watchChecks(row repo.RiskPolicyApproval) int {
+	remaining := defaultRequestTTL
+	if row.ExpiresAt.Valid {
+		remaining = max(row.ExpiresAt.Time.Sub(r.service.now()), 0)
+	}
+	return int(remaining/(watchIntervalSeconds*time.Second)) + watchMarginChecks
 }
 
 // Handler serves the Approvals MCP server.

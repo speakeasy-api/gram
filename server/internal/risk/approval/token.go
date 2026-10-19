@@ -34,11 +34,16 @@ func NewToken() (string, error) {
 }
 
 // IsToken reports whether s has the shape of a request token. It does not say
-// whether the token names a live request.
+// whether the token names a live request. Only the canonical encoding passes,
+// so one token has exactly one spelling.
 func IsToken(s string) bool {
 	if len(s) != tokenLength || !strings.HasPrefix(s, TokenPrefix) {
 		return false
 	}
-	_, err := base64.RawURLEncoding.DecodeString(s[len(TokenPrefix):])
-	return err == nil
+	encoded := s[len(TokenPrefix):]
+	decoded, err := base64.RawURLEncoding.Strict().DecodeString(encoded)
+	if err != nil || len(decoded) != tokenRandomBytes {
+		return false
+	}
+	return base64.RawURLEncoding.EncodeToString(decoded) == encoded
 }

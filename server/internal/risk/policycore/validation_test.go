@@ -247,7 +247,7 @@ func TestValidateDetectionScopesAcceptsCategoryWithoutRecommendation(t *testing.
 
 func TestValidateApprovalPolicy(t *testing.T) {
 	t.Parallel()
-	approvers := &ApprovalConfig{Approvers: []string{"user:user_1", "role:admin"}}
+	approvers := &ApprovalConfig{Approvers: []string{"user:user_1", "role:organization:" + uuid.NewString()}}
 
 	require.NoError(t, ValidateApprovalPolicy(ActionRequireApproval, "standard", nil, nil, approvers))
 	require.NoError(t, ValidateApprovalPolicy(ActionRequireApproval, "", []string{}, []string{}, approvers))

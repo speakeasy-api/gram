@@ -208,7 +208,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Default("everyone")
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
-	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server. When set, the action must be flag or block.")
+	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server. When set, the action must be flag, block or require_approval; require_approval needs it.")
 	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
 		RiskPolicyShadowMCPDispositionEnum()
 	})

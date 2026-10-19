@@ -60,7 +60,7 @@ type CreateRiskPolicyRequestBody struct {
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Omit or send an empty server list
 	// to apply the policy to every MCP server. When a non-empty scope is set, the
-	// action must be flag or block.
+	// action must be flag, block or require_approval; require_approval needs one.
 	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
@@ -137,7 +137,8 @@ type UpdateRiskPolicyRequestBody struct {
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Omit to preserve; send an empty
 	// server list to clear and apply the policy to every MCP server. When the
-	// resulting policy keeps an MCP scope, the action must be flag or block.
+	// resulting policy keeps an MCP scope, the action must be flag, block or
+	// require_approval; require_approval needs one.
 	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
@@ -502,7 +503,8 @@ type CreateRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns" json:"audience_principal_urns" xml:"audience_principal_urns"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -619,7 +621,8 @@ type GetRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns" json:"audience_principal_urns" xml:"audience_principal_urns"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -706,7 +709,8 @@ type UpdateRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns" json:"audience_principal_urns" xml:"audience_principal_urns"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -11643,7 +11647,8 @@ type RiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns" json:"audience_principal_urns" xml:"audience_principal_urns"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server

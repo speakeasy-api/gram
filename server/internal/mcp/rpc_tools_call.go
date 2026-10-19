@@ -516,7 +516,12 @@ func handleToolsCall(
 	if decision.HeldForApproval() {
 		// A held call is an instruction, not a refusal: the agent reads the
 		// tool result, requests approval and retries.
-		return marshalMetaToolError(ctx, logger, req.ID, decision.UserMessage)
+		rw.resultIsError = true
+		identity := serverInfoHostedToolset
+		if payload.metaMcpServerID != "" {
+			identity = serverInfoMetaServer
+		}
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
 	}
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)

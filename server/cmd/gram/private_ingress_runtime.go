@@ -41,7 +41,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -226,7 +225,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
-		approval.NewService(logger, db, serverURL),
+		// The approval routes are not served behind private ingress, so
+		// require_approval policies deny here with a clear message instead of
+		// pointing agents at a server they may not reach.
+		nil,
 	)
 	if err != nil {
 		return nil, err

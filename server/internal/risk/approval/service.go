@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -158,8 +159,9 @@ func (s *Service) MCPServerURL() string {
 
 // HoldInput is one MCP tool call a require_approval policy covers.
 type HoldInput struct {
-	// Policy is the require_approval policy that covers the call.
-	Policy policycore.Policy
+	// Policies are the require_approval policies that cover the call. The call
+	// runs only once each of them has approved it.
+	Policies []policycore.Policy
 
 	// OrganizationID is the organization the call belongs to.
 	OrganizationID string
@@ -203,6 +205,9 @@ type HoldOutcome struct {
 
 	// UserMessage tells the agent how to request approval and resume.
 	UserMessage string
+
+	// Policy is the policy that holds the call. Nil when Allowed.
+	Policy *policycore.Policy
 }
 
 // Requester maps validated MCP provenance to the principal an approval
@@ -225,39 +230,41 @@ func Requester(identity mcpidentity.Identity) (requesterURN, requesterUserID str
 	}
 }
 
-// HoldCall lets the call through when an approved exact-once request covers
-// it, consuming that approval. Otherwise it records the held call, or finds
-// its still-open request, and returns the token with instructions.
+// HoldCall lets the call through only when every policy covering it has an
+// approved exact-once request for it, and then uses all of those approvals
+// together. Otherwise it records the call under the first policy without one,
+// or finds that policy's still-open request, and returns the token with
+// instructions. No approval is used up while another policy still holds the
+// call.
 func (s *Service) HoldCall(ctx context.Context, call HoldInput) (HoldOutcome, error) {
+	if len(call.Policies) == 0 {
+		return HoldOutcome{Allowed: true, Token: "", UserMessage: "", Policy: nil}, nil
+	}
 	fingerprint, err := CallFingerprint(call.ServerID, call.ToolName, call.Arguments)
 	if err != nil {
 		return HoldOutcome{}, fmt.Errorf("fingerprint call: %w", err)
 	}
 
 	queries := repo.New(s.db)
-	consumed, err := queries.ConsumeApprovedApproval(ctx, repo.ConsumeApprovedApprovalParams{
-		ProjectID:       call.ProjectID,
-		RiskPolicyID:    call.Policy.ID,
-		RequesterUrn:    call.RequesterURN,
-		ToolName:        call.ToolName,
-		CallFingerprint: fingerprint,
-	})
-	switch {
-	case err == nil:
-		s.logger.InfoContext(ctx, "approved call released", attr.SlogRiskPolicyApprovalID(consumed.ID.String()))
-		return HoldOutcome{Allowed: true, Token: "", UserMessage: ""}, nil
-	case !errors.Is(err, pgx.ErrNoRows):
-		return HoldOutcome{}, fmt.Errorf("consume approval: %w", err)
+	for _, policy := range call.Policies {
+		if err := queries.ExpireLapsedOpenApproval(ctx, repo.ExpireLapsedOpenApprovalParams{
+			OrganizationID:  call.OrganizationID,
+			ProjectID:       call.ProjectID,
+			RiskPolicyID:    policy.ID,
+			RequesterUrn:    call.RequesterURN,
+			ToolName:        call.ToolName,
+			CallFingerprint: fingerprint,
+		}); err != nil {
+			return HoldOutcome{}, fmt.Errorf("expire lapsed approval: %w", err)
+		}
 	}
 
-	if err := queries.ExpireLapsedOpenApproval(ctx, repo.ExpireLapsedOpenApprovalParams{
-		ProjectID:       call.ProjectID,
-		RiskPolicyID:    call.Policy.ID,
-		RequesterUrn:    call.RequesterURN,
-		ToolName:        call.ToolName,
-		CallFingerprint: fingerprint,
-	}); err != nil {
-		return HoldOutcome{}, fmt.Errorf("expire lapsed approval: %w", err)
+	missing, err := s.consumeAll(ctx, call, fingerprint)
+	if err != nil {
+		return HoldOutcome{}, err
+	}
+	if missing == nil {
+		return HoldOutcome{Allowed: true, Token: "", UserMessage: "", Policy: nil}, nil
 	}
 
 	token, err := NewToken()
@@ -267,8 +274,8 @@ func (s *Service) HoldCall(ctx context.Context, call HoldInput) (HoldOutcome, er
 	row, err := queries.UpsertBlockedApproval(ctx, repo.UpsertBlockedApprovalParams{
 		OrganizationID:   call.OrganizationID,
 		ProjectID:        call.ProjectID,
-		RiskPolicyID:     call.Policy.ID,
-		PolicyVersion:    call.Policy.Version,
+		RiskPolicyID:     missing.ID,
+		PolicyVersion:    missing.Version,
 		Token:            token,
 		RequesterUrn:     call.RequesterURN,
 		RequesterUserID:  conv.ToPGTextEmpty(call.RequesterUserID),
@@ -288,8 +295,47 @@ func (s *Service) HoldCall(ctx context.Context, call HoldInput) (HoldOutcome, er
 	return HoldOutcome{
 		Allowed:     false,
 		Token:       row.Token,
-		UserMessage: s.holdMessage(call.Policy.Name, call.ToolName, row),
+		UserMessage: s.holdMessage(missing.Name, call.ToolName, row),
+		Policy:      missing,
 	}, nil
+}
+
+// consumeAll uses one approval per policy in a single transaction. It returns
+// the first policy without an approval, in which case nothing is used up.
+func (s *Service) consumeAll(ctx context.Context, call HoldInput, fingerprint string) (*policycore.Policy, error) {
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin approval release: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	queries := repo.New(dbtx)
+	consumedIDs := make([]string, 0, len(call.Policies))
+	for i := range call.Policies {
+		policy := &call.Policies[i]
+		consumed, err := queries.ConsumeApprovedApproval(ctx, repo.ConsumeApprovedApprovalParams{
+			OrganizationID:  call.OrganizationID,
+			ProjectID:       call.ProjectID,
+			RiskPolicyID:    policy.ID,
+			RequesterUrn:    call.RequesterURN,
+			ToolName:        call.ToolName,
+			CallFingerprint: fingerprint,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return policy, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("consume approval: %w", err)
+		}
+		consumedIDs = append(consumedIDs, consumed.ID.String())
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit approval release: %w", err)
+	}
+	for _, id := range consumedIDs {
+		s.logger.InfoContext(ctx, "approved call released", attr.SlogRiskPolicyApprovalID(id))
+	}
+	return nil, nil
 }
 
 // RequestInput is a request_approval call.
@@ -362,6 +408,7 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (repo.RiskPol
 	}
 
 	updated, err := queries.MarkApprovalRequested(ctx, repo.MarkApprovalRequestedParams{
+		OrganizationID: row.OrganizationID,
 		Reason:         conv.ToPGText(reason),
 		RequestedScope: requestedScope,
 		ExpiresAt:      pgtype.Timestamptz{Time: s.now().Add(ttl), InfinityModifier: pgtype.Finite, Valid: true},
@@ -370,7 +417,7 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (repo.RiskPol
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A concurrent request_approval won the race; report its result.
-		current, getErr := queries.GetApproval(ctx, repo.GetApprovalParams{ProjectID: row.ProjectID, ID: row.ID})
+		current, getErr := queries.GetApproval(ctx, repo.GetApprovalParams{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, ID: row.ID})
 		if getErr != nil {
 			return repo.RiskPolicyApproval{}, "", fmt.Errorf("reload approval: %w", getErr)
 		}
@@ -406,6 +453,9 @@ func (s *Service) WatchStatus(ctx context.Context, token string) (Status, error)
 
 // DecideInput is an approver's decision on a pending request.
 type DecideInput struct {
+	// OrganizationID is the organization the request belongs to.
+	OrganizationID string
+
 	// ProjectID is the project the request belongs to.
 	ProjectID uuid.UUID
 
@@ -430,7 +480,7 @@ type DecideInput struct {
 // made the call.
 func (s *Service) Decide(ctx context.Context, input DecideInput) (repo.RiskPolicyApproval, error) {
 	queries := repo.New(s.db)
-	row, err := queries.GetApproval(ctx, repo.GetApprovalParams{ProjectID: input.ProjectID, ID: input.ApprovalID})
+	row, err := queries.GetApproval(ctx, repo.GetApprovalParams{OrganizationID: input.OrganizationID, ProjectID: input.ProjectID, ID: input.ApprovalID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return repo.RiskPolicyApproval{}, ErrNotFound
 	}
@@ -448,7 +498,7 @@ func (s *Service) Decide(ctx context.Context, input DecideInput) (repo.RiskPolic
 	if err != nil {
 		return repo.RiskPolicyApproval{}, fmt.Errorf("get policy: %w", err)
 	}
-	if err := s.requireApprover(ctx, row.OrganizationID, input.DeciderUserID, policycore.Project(policyRow, nil).ApprovalConfig); err != nil {
+	if err := s.requireApprover(ctx, input.OrganizationID, input.DeciderUserID, policycore.Project(policyRow, nil).ApprovalConfig); err != nil {
 		return repo.RiskPolicyApproval{}, err
 	}
 
@@ -459,13 +509,14 @@ func (s *Service) Decide(ctx context.Context, input DecideInput) (repo.RiskPolic
 		grantedScope = row.RequestedScope
 	}
 	decided, err := queries.DecideApproval(ctx, repo.DecideApprovalParams{
-		Status:       string(status),
-		DecidedByUrn: conv.ToPGText(urn.NewPrincipal(urn.PrincipalTypeUser, input.DeciderUserID).String()),
-		DecidedVia:   conv.ToPGText(string(input.Via)),
-		DecisionNote: conv.ToPGTextEmpty(strings.TrimSpace(input.Note)),
-		GrantedScope: grantedScope,
-		ProjectID:    input.ProjectID,
-		ID:           input.ApprovalID,
+		OrganizationID: input.OrganizationID,
+		Status:         string(status),
+		DecidedByUrn:   conv.ToPGText(urn.NewPrincipal(urn.PrincipalTypeUser, input.DeciderUserID).String()),
+		DecidedVia:     conv.ToPGText(string(input.Via)),
+		DecisionNote:   conv.ToPGTextEmpty(strings.TrimSpace(input.Note)),
+		GrantedScope:   grantedScope,
+		ProjectID:      input.ProjectID,
+		ID:             input.ApprovalID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return repo.RiskPolicyApproval{}, ErrNotPending
@@ -496,12 +547,14 @@ func (s *Service) requireApprover(ctx context.Context, organizationID, userID st
 	return ErrNotApprover
 }
 
-// effectiveStatus reports an open request whose window has passed as expired,
-// without waiting for a sweep to rewrite the row.
+// effectiveStatus reports an open request or an unused approval whose window
+// has passed as expired, without waiting for a sweep to rewrite the row.
 func (s *Service) effectiveStatus(row repo.RiskPolicyApproval) Status {
 	status := Status(row.Status)
-	open := status == StatusBlocked || status == StatusPending
-	if open && row.ExpiresAt.Valid && !row.ExpiresAt.Time.After(s.now()) {
+	// An approval no retry used before the window closed is as dead as an
+	// undecided request: the gateway no longer accepts it.
+	lapsable := status == StatusBlocked || status == StatusPending || status == StatusApproved
+	if lapsable && row.ExpiresAt.Valid && !row.ExpiresAt.Time.After(s.now()) {
 		return StatusExpired
 	}
 	return status
@@ -570,8 +623,12 @@ func canonicalJSON(raw []byte) ([]byte, error) {
 // most maxPreviewKeys top-level keys, with long strings and nested values
 // truncated. It always returns a JSON object.
 func argumentsPreview(raw []byte) []byte {
+	// Keep numbers as written: approvers must see the exact value the
+	// fingerprint covers, not a float rounding of a large id.
 	var args map[string]any
-	if err := json.Unmarshal(raw, &args); err != nil || len(args) == 0 {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&args); err != nil || len(args) == 0 {
 		return []byte("{}")
 	}
 	keys := make([]string, 0, len(args))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func approvalPolicy(projectID uuid.UUID) policycore.Policy {
 		OrganizationID: "org-test",
 		Name:           "Approve writes",
 		Action:         policycore.ActionRequireApproval,
-		ApprovalConfig: &policycore.ApprovalConfig{Approvers: []string{"role:admin"}},
+		ApprovalConfig: &policycore.ApprovalConfig{Approvers: []string{"role:organization:" + uuid.NewString()}},
 	}
 }
 
@@ -57,7 +58,7 @@ func TestPolicyEvaluator_ApprovalHoldsAgentCall(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		calls = append(calls, call)
-		return approval.HoldOutcome{Allowed: false, Token: "apr_test", UserMessage: "ask for approval"}, nil
+		return approval.HoldOutcome{Allowed: false, Token: "apr_test", UserMessage: "ask for approval", Policy: &call.Policies[0]}, nil
 	})
 	evaluator := newPolicyEvaluator(t, staticPolicies(policy), noDetector(t), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithApprovalGate(gate))
 
@@ -70,6 +71,7 @@ func TestPolicyEvaluator_ApprovalHoldsAgentCall(t *testing.T) {
 	require.Equal(t, "ask for approval", decision.UserMessage)
 	require.Equal(t, policy.ID.String(), decision.PolicyID)
 	require.Len(t, calls, 1)
+	require.Len(t, calls[0].Policies, 1)
 	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()).String(), calls[0].RequesterURN)
 	require.Empty(t, calls[0].RequesterUserID)
 	require.Equal(t, projectID, calls[0].ProjectID)
@@ -81,8 +83,10 @@ func TestPolicyEvaluator_ApprovalHoldsAgentCall(t *testing.T) {
 func TestPolicyEvaluator_ApprovalAllowsCoveredCall(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
+	var consulted atomic.Int32
 	gate := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
-		return approval.HoldOutcome{Allowed: true, Token: "", UserMessage: ""}, nil
+		consulted.Add(1)
+		return approval.HoldOutcome{Allowed: true, Token: "", UserMessage: "", Policy: nil}, nil
 	})
 	evaluator := newPolicyEvaluator(t, staticPolicies(approvalPolicy(projectID)), noDetector(t), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithApprovalGate(gate))
 
@@ -91,6 +95,7 @@ func TestPolicyEvaluator_ApprovalAllowsCoveredCall(t *testing.T) {
 
 	require.False(t, decision.Denied())
 	require.False(t, decision.HeldForApproval())
+	require.Equal(t, int32(1), consulted.Load(), "the gate decides covered calls")
 }
 
 func TestPolicyEvaluator_ApprovalFailsClosed(t *testing.T) {
@@ -201,8 +206,8 @@ func TestPolicyEvaluator_FailOpenBlockLaneStillHoldsForApproval(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
 	block := policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block", Action: "block"}
-	gate := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
-		return approval.HoldOutcome{Allowed: false, Token: "apr_test", UserMessage: "ask for approval"}, nil
+	gate := approvalGateFunc(func(_ context.Context, call approval.HoldInput) (approval.HoldOutcome, error) {
+		return approval.HoldOutcome{Allowed: false, Token: "apr_test", UserMessage: "ask for approval", Policy: &call.Policies[0]}, nil
 	})
 	evaluator := newPolicyEvaluator(t, staticPolicies(block, approvalPolicy(projectID)), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
 		return nil, errors.New("detector unavailable")
@@ -213,4 +218,60 @@ func TestPolicyEvaluator_FailOpenBlockLaneStillHoldsForApproval(t *testing.T) {
 
 	require.True(t, decision.HeldForApproval())
 	require.Equal(t, "apr_test", decision.ApprovalToken)
+}
+
+func TestPolicyEvaluator_ApprovalPassesEveryCoveringPolicy(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	first := approvalPolicy(projectID)
+	second := approvalPolicy(projectID)
+	gate := approvalGateFunc(func(_ context.Context, call approval.HoldInput) (approval.HoldOutcome, error) {
+		require.Len(t, call.Policies, 2)
+		// The first policy already approved; the second still holds the call.
+		return approval.HoldOutcome{Allowed: false, Token: "apr_second", UserMessage: "ask again", Policy: &call.Policies[1]}, nil
+	})
+	evaluator := newPolicyEvaluator(t, staticPolicies(first, second), noDetector(t), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithApprovalGate(gate))
+
+	ctx := mcpidentity.NewValidatorBoundary().StampAgent(t.Context(), uuid.New())
+	decision := evaluator.Scan(ctx, requestSubject(ctx, projectID, uuid.New(), `{}`))
+
+	require.True(t, decision.HeldForApproval())
+	require.Equal(t, second.ID.String(), decision.PolicyID)
+	require.Equal(t, "apr_second", decision.ApprovalToken)
+}
+
+func TestPolicyEvaluator_ApprovalOnlyHoldsToolCalls(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	gate := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
+		t.Error("only tool calls are held for approval")
+		return approval.HoldOutcome{}, nil
+	})
+	evaluator := newPolicyEvaluator(t, staticPolicies(approvalPolicy(projectID)), noDetector(t), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithApprovalGate(gate))
+
+	ctx := mcpidentity.NewValidatorBoundary().StampAgent(t.Context(), uuid.New())
+	read := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface: mcpriskscan.SurfaceHostedMCP, Method: mcpriskscan.MethodResourcesRead,
+		OrganizationID: "org-test", ProjectID: projectID.String(), ServerID: uuid.NewString(), ResourceURI: "file:///notes",
+	}, mcpriskscan.BorrowPayload([]byte(`{}`)))
+
+	require.False(t, evaluator.Scan(ctx, read).Denied())
+}
+
+func TestPolicyEvaluator_FailOpenBlockLaneMarksApprovalIndeterminate(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	block := policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Block", Action: "block"}
+	gate := approvalGateFunc(func(context.Context, approval.HoldInput) (approval.HoldOutcome, error) {
+		return approval.HoldOutcome{Allowed: true, Token: "", UserMessage: "", Policy: nil}, nil
+	})
+	evaluator := newPolicyEvaluator(t, staticPolicies(block, approvalPolicy(projectID)), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+		return nil, errors.New("detector unavailable")
+	}), &findingPublisher{}, mcpriskscan.PolicyConfig{Deadline: time.Second, FailMode: mcpriskscan.FailOpen, FlagConcurrency: 1}, mcpriskscan.WithApprovalGate(gate))
+
+	ctx := mcpidentity.NewValidatorBoundary().StampAgent(t.Context(), uuid.New())
+	decision := evaluator.Scan(ctx, requestSubject(ctx, projectID, uuid.New(), `{}`))
+
+	require.False(t, decision.Denied())
+	require.True(t, decision.Indeterminate)
 }

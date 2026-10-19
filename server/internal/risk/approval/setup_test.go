@@ -69,15 +69,35 @@ func newFixture(t *testing.T) fixture {
 	authCtx, ok := contextvalues.GetAuthContext(testenv.InitAuthContext(t, ctx, conn, sessionManager))
 	require.True(t, ok)
 
-	approvalConfig, err := policycore.MarshalApprovalConfig(&policycore.ApprovalConfig{Approvers: []string{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()}})
+	serverURL, err := url.Parse("https://speakeasy.test")
 	require.NoError(t, err)
-	scope, err := json.Marshal(policycore.MCPScope{AllServers: true, Servers: []policycore.MCPServerScope{}})
+	f := fixture{
+		service:        NewService(logger, conn, serverURL),
+		db:             conn,
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      *authCtx.ProjectID,
+		approverID:     authCtx.UserID,
+		policy:         policycore.Policy{},
+		agentURN:       urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()).String(),
+	}
+	f.policy = f.addPolicy(t, "Approve writes")
+	return f
+}
+
+// addPolicy creates a require_approval policy over every server whose only
+// approver is the signed-in test user.
+func (f fixture) addPolicy(t *testing.T, name string) policycore.Policy {
+	t.Helper()
+	ctx := t.Context()
+	approvalConfig, err := policycore.MarshalApprovalConfig(&policycore.ApprovalConfig{Approvers: []string{urn.NewPrincipal(urn.PrincipalTypeUser, f.approverID).String()}})
 	require.NoError(t, err)
-	row, err := riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+	scope, err := json.Marshal(policycore.MCPScope{AllServers: true, ToolAnnotations: nil, Servers: []policycore.MCPServerScope{}})
+	require.NoError(t, err)
+	row, err := riskrepo.New(f.db).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
 		ID:                   uuid.New(),
-		ProjectID:            *authCtx.ProjectID,
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		Name:                 "Approve writes",
+		ProjectID:            f.projectID,
+		OrganizationID:       f.organizationID,
+		Name:                 name,
 		PolicyType:           "standard",
 		Sources:              []string{},
 		PresidioEntities:     []string{},
@@ -98,24 +118,13 @@ func newFixture(t *testing.T) fixture {
 		Score:                pgtype.Float8{Float64: 0, Valid: false},
 	})
 	require.NoError(t, err)
-
-	serverURL, err := url.Parse("https://speakeasy.test")
-	require.NoError(t, err)
-	return fixture{
-		service:        NewService(logger, conn, serverURL),
-		db:             conn,
-		organizationID: authCtx.ActiveOrganizationID,
-		projectID:      *authCtx.ProjectID,
-		approverID:     authCtx.UserID,
-		policy:         policycore.Project(row, nil),
-		agentURN:       urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()).String(),
-	}
+	return policycore.Project(row, nil)
 }
 
 // call is a held call by the fixture's agent.
 func (f fixture) call(arguments string) HoldInput {
 	return HoldInput{
-		Policy:          f.policy,
+		Policies:        []policycore.Policy{f.policy},
 		OrganizationID:  f.organizationID,
 		ProjectID:       f.projectID,
 		RequesterURN:    f.agentURN,

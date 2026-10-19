@@ -20,11 +20,12 @@ SET status = 'consumed'
 WHERE id = (
     SELECT a.id
     FROM risk_policy_approvals a
-    WHERE a.project_id = $1
-      AND a.risk_policy_id = $2
-      AND a.requester_urn = $3
-      AND a.tool_name = $4
-      AND a.call_fingerprint = $5
+    WHERE a.organization_id = $1
+      AND a.project_id = $2
+      AND a.risk_policy_id = $3
+      AND a.requester_urn = $4
+      AND a.tool_name = $5
+      AND a.call_fingerprint = $6
       AND a.status = 'approved'
       AND a.deleted IS FALSE
       AND (a.expires_at IS NULL OR a.expires_at > clock_timestamp())
@@ -32,12 +33,14 @@ WHERE id = (
     LIMIT 1
     FOR UPDATE SKIP LOCKED
   )
-  AND project_id = $1
+  AND organization_id = $1
+  AND project_id = $2
   AND status = 'approved'
 RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 `
 
 type ConsumeApprovedApprovalParams struct {
+	OrganizationID  string
 	ProjectID       uuid.UUID
 	RiskPolicyID    uuid.UUID
 	RequesterUrn    string
@@ -50,6 +53,7 @@ type ConsumeApprovedApprovalParams struct {
 // atomic: two concurrent retries cannot both use one approval.
 func (q *Queries) ConsumeApprovedApproval(ctx context.Context, arg ConsumeApprovedApprovalParams) (RiskPolicyApproval, error) {
 	row := q.db.QueryRow(ctx, consumeApprovedApproval,
+		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RiskPolicyID,
 		arg.RequesterUrn,
@@ -103,8 +107,9 @@ SET status = $1
   , granted_scope = $5
   , decided_at = clock_timestamp()
   , updated_at = clock_timestamp()
-WHERE project_id = $6
-  AND id = $7
+WHERE organization_id = $6
+  AND project_id = $7
+  AND id = $8
   AND status = 'pending'
   AND (expires_at IS NULL OR expires_at > clock_timestamp())
   AND deleted IS FALSE
@@ -112,13 +117,14 @@ RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token
 `
 
 type DecideApprovalParams struct {
-	Status       string
-	DecidedByUrn pgtype.Text
-	DecidedVia   pgtype.Text
-	DecisionNote pgtype.Text
-	GrantedScope []byte
-	ProjectID    uuid.UUID
-	ID           uuid.UUID
+	Status         string
+	DecidedByUrn   pgtype.Text
+	DecidedVia     pgtype.Text
+	DecisionNote   pgtype.Text
+	GrantedScope   []byte
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
 }
 
 // Records an approver's decision on a pending request. Only a pending,
@@ -130,6 +136,7 @@ func (q *Queries) DecideApproval(ctx context.Context, arg DecideApprovalParams) 
 		arg.DecidedVia,
 		arg.DecisionNote,
 		arg.GrantedScope,
+		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ID,
 	)
@@ -175,11 +182,12 @@ const expireLapsedOpenApproval = `-- name: ExpireLapsedOpenApproval :exec
 UPDATE risk_policy_approvals
 SET status = 'expired'
   , updated_at = clock_timestamp()
-WHERE project_id = $1
-  AND risk_policy_id = $2
-  AND requester_urn = $3
-  AND tool_name = $4
-  AND call_fingerprint = $5
+WHERE organization_id = $1
+  AND project_id = $2
+  AND risk_policy_id = $3
+  AND requester_urn = $4
+  AND tool_name = $5
+  AND call_fingerprint = $6
   AND status IN ('blocked', 'pending')
   AND expires_at IS NOT NULL
   AND expires_at <= clock_timestamp()
@@ -187,6 +195,7 @@ WHERE project_id = $1
 `
 
 type ExpireLapsedOpenApprovalParams struct {
+	OrganizationID  string
 	ProjectID       uuid.UUID
 	RiskPolicyID    uuid.UUID
 	RequesterUrn    string
@@ -198,6 +207,7 @@ type ExpireLapsedOpenApprovalParams struct {
 // the same call starts a new request instead of landing on the lapsed one.
 func (q *Queries) ExpireLapsedOpenApproval(ctx context.Context, arg ExpireLapsedOpenApprovalParams) error {
 	_, err := q.db.Exec(ctx, expireLapsedOpenApproval,
+		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RiskPolicyID,
 		arg.RequesterUrn,
@@ -210,18 +220,20 @@ func (q *Queries) ExpireLapsedOpenApproval(ctx context.Context, arg ExpireLapsed
 const getApproval = `-- name: GetApproval :one
 SELECT id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_approvals
-WHERE project_id = $1
-  AND id = $2
+WHERE organization_id = $1
+  AND project_id = $2
+  AND id = $3
   AND deleted IS FALSE
 `
 
 type GetApprovalParams struct {
-	ProjectID uuid.UUID
-	ID        uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
 }
 
 func (q *Queries) GetApproval(ctx context.Context, arg GetApprovalParams) (RiskPolicyApproval, error) {
-	row := q.db.QueryRow(ctx, getApproval, arg.ProjectID, arg.ID)
+	row := q.db.QueryRow(ctx, getApproval, arg.OrganizationID, arg.ProjectID, arg.ID)
 	var i RiskPolicyApproval
 	err := row.Scan(
 		&i.ID,
@@ -312,25 +324,28 @@ func (q *Queries) GetApprovalByToken(ctx context.Context, token string) (RiskPol
 const listApprovals = `-- name: ListApprovals :many
 SELECT id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_approvals
-WHERE project_id = $1
+WHERE organization_id = $1
+  AND project_id = $2
   AND deleted IS FALSE
-  AND ($2::text IS NULL OR status = $2::text)
-  AND ($3::uuid IS NULL OR id < $3::uuid)
+  AND ($3::text IS NULL OR status = $3::text)
+  AND ($4::uuid IS NULL OR id < $4::uuid)
 ORDER BY id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type ListApprovalsParams struct {
-	ProjectID uuid.UUID
-	Status    pgtype.Text
-	Cursor    uuid.NullUUID
-	PageLimit int32
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Status         pgtype.Text
+	Cursor         uuid.NullUUID
+	PageLimit      int32
 }
 
 // Lists a project's approval requests, newest first, optionally narrowed to
 // one status.
 func (q *Queries) ListApprovals(ctx context.Context, arg ListApprovalsParams) ([]RiskPolicyApproval, error) {
 	rows, err := q.db.Query(ctx, listApprovals,
+		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Status,
 		arg.Cursor,
@@ -395,8 +410,9 @@ SET status = 'pending'
   , requested_at = clock_timestamp()
   , expires_at = $3
   , updated_at = clock_timestamp()
-WHERE project_id = $4
-  AND id = $5
+WHERE organization_id = $4
+  AND project_id = $5
+  AND id = $6
   AND status = 'blocked'
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
@@ -406,6 +422,7 @@ type MarkApprovalRequestedParams struct {
 	Reason         pgtype.Text
 	RequestedScope []byte
 	ExpiresAt      pgtype.Timestamptz
+	OrganizationID string
 	ProjectID      uuid.UUID
 	ID             uuid.UUID
 }
@@ -418,6 +435,7 @@ func (q *Queries) MarkApprovalRequested(ctx context.Context, arg MarkApprovalReq
 		arg.Reason,
 		arg.RequestedScope,
 		arg.ExpiresAt,
+		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ID,
 	)

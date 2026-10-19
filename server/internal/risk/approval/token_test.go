@@ -41,6 +41,8 @@ func TestIsTokenRejectsOtherShapes(t *testing.T) {
 		{name: "wrong prefix", input: "awt_" + strings.Repeat("A", 43)},
 		{name: "too short", input: approval.TokenPrefix + strings.Repeat("A", 42)},
 		{name: "not base64url", input: approval.TokenPrefix + strings.Repeat("+", 43)},
+		{name: "embedded newline", input: approval.TokenPrefix + strings.Repeat("A", 21) + "\n" + strings.Repeat("A", 21)},
+		{name: "non-zero trailing bits", input: approval.TokenPrefix + strings.Repeat("A", 42) + "B"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
