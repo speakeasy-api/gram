@@ -33,6 +33,13 @@ evidence AS (
              WHERE rs.remote_session_client_id = ec.id
                AND rs.deleted IS FALSE
                AND rtrim(rs.resource, '/') = rtrim(target.remote_url, '/')
+               AND EXISTS (
+                 SELECT 1
+                 FROM user_session_issuers AS minted
+                 LEFT JOIN projects AS minted_project ON minted_project.id = minted.project_id
+                 WHERE minted.id = rs.user_session_issuer_id
+                   AND COALESCE(minted.organization_id, minted_project.organization_id) = target.organization_id
+               )
            )) AS grant_match,
            EXISTS (
              SELECT 1
@@ -235,6 +242,9 @@ WHERE s.id = $2::uuid
         ON i.id = c.remote_session_issuer_id
        AND i.deleted IS FALSE
        AND i.issuer = ANY (rpr.authorization_servers)
+       AND (i.project_id = p.id
+            OR (i.project_id IS NULL AND i.organization_id = p.organization_id)
+            OR (i.project_id IS NULL AND i.organization_id IS NULL))
       WHERE rms.id = s.remote_mcp_server_id
         AND rms.project_id = s.project_id
         AND rms.deleted IS FALSE
@@ -261,6 +271,9 @@ WHERE s.id = $2::uuid
         ON i.id = other.remote_session_issuer_id
        AND i.deleted IS FALSE
        AND i.issuer = ANY (rpr.authorization_servers)
+       AND (i.project_id = p.id
+            OR (i.project_id IS NULL AND i.organization_id = p.organization_id)
+            OR (i.project_id IS NULL AND i.organization_id IS NULL))
       WHERE other_link.user_session_issuer_id = usi.id
     )
   ))
@@ -363,6 +376,13 @@ SELECT f.issuer_id::uuid AS issuer_id,
            AND rs.deleted IS FALSE
            AND r.url IS NOT NULL
            AND rtrim(rs.resource, '/') = rtrim(r.url, '/')
+           AND EXISTS (
+             SELECT 1
+             FROM user_session_issuers AS minted
+             LEFT JOIN projects AS minted_project ON minted_project.id = minted.project_id
+             WHERE minted.id = rs.user_session_issuer_id
+               AND COALESCE(minted.organization_id, minted_project.organization_id) = p.organization_id
+           )
        )::boolean AS grant_match,
        EXISTS (
          SELECT 1
@@ -436,7 +456,9 @@ type ListGatewayAssociationCandidatesRow struct {
 // grant whose RFC 8707 resource is the server's remote upstream URL, the
 // comparison request routing makes. The issuer a grant was minted through is
 // provenance only: a grant is one subject's credential for one client, and
-// the gateway offers it whichever issuer minted it. A tunnel's resource identifier is only
+// the gateway offers it whichever issuer minted it. Only grants minted in the
+// server's organization count, so another tenant's use of a shared platform
+// client is never evidence here. A tunnel's resource identifier is only
 // what the tunnel claims, independent of where it dials, so it proves no
 // client: request routing matches tunnels by derived issuer alone, and so
 // does this. derived_match reports that the client's authorization server is
@@ -580,6 +602,9 @@ SELECT page.id AS mcp_server_id,
           AND rpr.deleted IS FALSE
          WHERE i.id = c.remote_session_issuer_id
            AND i.deleted IS FALSE
+           AND (i.project_id = page.project_id
+                OR (i.project_id IS NULL AND i.organization_id = page.organization_id)
+                OR (i.project_id IS NULL AND i.organization_id IS NULL))
          LIMIT 1
        ), false)::boolean AS metadata_match,
        (c.id IS NOT NULL AND EXISTS (
