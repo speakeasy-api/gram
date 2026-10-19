@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
+	"maps"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -29,41 +32,78 @@ const insertStatement = `INSERT INTO risk_findings (
 	message_created_at, assistant_id, surface, field, path, tool_call_id
 )`
 
-// Sink batches FindingRow values and inserts them into the ClickHouse
-// risk_findings table via native prepared batches. It owns the buffered input
-// channel exposed by Input; the pipeline's transform stage is the sole producer
-// and closes the channel when the source is exhausted.
+// SinkOptions configures batching, writes, and gap detection.
+type SinkOptions struct {
+	// BufferSize sizes the sink input channel.
+	BufferSize int
+
+	// BatchSize is the target rows per ClickHouse insert and lookup. A flush
+	// can exceed it to keep all spans of one finding together.
+	BatchSize int
+
+	// DryRun disables writes while retaining lookups and counts.
+	DryRun bool
+
+	// LiftPartitionGuard disables the per-insert partition limit.
+	LiftPartitionGuard bool
+
+	// GapFill enables destination existence checks.
+	GapFill bool
+}
+
+// SourceStats reports gap-fill outcomes for one finding source.
+type SourceStats struct {
+	// PresentByID counts rows found under the migration id.
+	PresentByID int64
+
+	// MatchedByKey counts rows found under a live writer id.
+	MatchedByKey int64
+
+	// StateCopies counts suppression copies appended or planned.
+	StateCopies int64
+
+	// SkippedCHNewer counts missing Postgres marks ignored because ClickHouse
+	// has an explicit reversal or a newer state event.
+	SkippedCHNewer int64
+
+	// Inserted counts missing rows inserted or planned.
+	Inserted int64
+}
+
+// Sink batches FindingRow values and inserts them into ClickHouse.
 type Sink struct {
 	conn               clickhouse.Conn
 	in                 chan FindingRow
 	batchSize          int
 	dryRun             bool
 	liftPartitionGuard bool
+	gapFill            bool
+	now                func() time.Time
 
 	inserted      int64
 	lastCommitted uuid.UUID
+	bySource      map[string]SourceStats
 }
 
-// NewSink builds a ClickHouse sink. conn may be nil when dryRun is true, in which
-// case rows are counted but never written. bufferSize sizes the input channel;
-// batchSize bounds each insert. liftPartitionGuard sets
-// max_partitions_per_insert_block=0 on each insert; pass false against servers
-// whose settings profile constrains that setting (constraint violation, code 452).
-func NewSink(conn clickhouse.Conn, bufferSize, batchSize int, dryRun, liftPartitionGuard bool) *Sink {
-	if bufferSize < 0 {
-		bufferSize = 0
+// NewSink builds a ClickHouse sink.
+func NewSink(conn clickhouse.Conn, options SinkOptions) *Sink {
+	if options.BufferSize < 0 {
+		options.BufferSize = 0
 	}
-	if batchSize <= 0 {
-		batchSize = DefaultSinkBatchSize
+	if options.BatchSize <= 0 {
+		options.BatchSize = DefaultSinkBatchSize
 	}
 	return &Sink{
 		conn:               conn,
-		in:                 make(chan FindingRow, bufferSize),
-		batchSize:          batchSize,
-		dryRun:             dryRun,
-		liftPartitionGuard: liftPartitionGuard,
+		in:                 make(chan FindingRow, options.BufferSize),
+		batchSize:          options.BatchSize,
+		dryRun:             options.DryRun,
+		liftPartitionGuard: options.LiftPartitionGuard,
+		gapFill:            options.GapFill,
+		now:                time.Now,
 		inserted:           0,
 		lastCommitted:      uuid.Nil,
+		bySource:           make(map[string]SourceStats),
 	}
 }
 
@@ -73,16 +113,20 @@ func (s *Sink) Input() chan<- FindingRow { return s.in }
 // Inserted returns the number of rows written (or, in dry-run, that would be).
 func (s *Sink) Inserted() int64 { return s.inserted }
 
-// LastCommitted returns the id of the last row in the last successfully flushed
-// batch. Because records flow through the pipeline in id order, everything up to
-// and including this id is durably written, so it is the safe cursor to resume a
-// later run from (unlike the source's read position, which runs ahead). It stays
-// uuid.Nil in dry-run, where no batch is actually written and there is therefore
-// no durable checkpoint.
+// StatsBySource returns gap-fill outcomes per source.
+func (s *Sink) StatsBySource() map[string]SourceStats {
+	out := make(map[string]SourceStats, len(s.bySource))
+	maps.Copy(out, s.bySource)
+	return out
+}
+
+// LastCommitted returns the Postgres id of the last finding in the last
+// successfully processed batch. It stays uuid.Nil in dry-run mode because no
+// durable checkpoint exists.
 func (s *Sink) LastCommitted() uuid.UUID { return s.lastCommitted }
 
-// Run implements pipeline.Sink. It drains the input channel, flushing whenever a
-// batch fills, and flushes the final partial batch when the channel closes.
+// Run implements pipeline.Sink. It keeps every transformed row from one
+// Postgres finding in the same flush so a committed cursor cannot split spans.
 func (s *Sink) Run(ctx context.Context) error {
 	buf := make([]FindingRow, 0, s.batchSize)
 
@@ -93,14 +137,10 @@ func (s *Sink) Run(ctx context.Context) error {
 		if err := s.flush(ctx, buf); err != nil {
 			return err
 		}
-		s.inserted += int64(len(buf))
-		// Only a real write advances the durable resume cursor. In dry-run the
-		// flush is a no-op, so exposing a cursor would let an operator resume the
-		// real migration from a checkpoint that was never written.
 		if !s.dryRun && s.conn != nil {
-			s.lastCommitted = buf[len(buf)-1].ID
+			s.lastCommitted = buf[len(buf)-1].sourceID
 		}
-		log.Printf("sink: flushed batch=%d total=%d committed=%s", len(buf), s.inserted, s.lastCommitted)
+		log.Printf("sink: flushed batch=%d inserted=%d committed=%s", len(buf), s.inserted, s.lastCommitted)
 		buf = buf[:0]
 		return nil
 	}
@@ -113,34 +153,50 @@ func (s *Sink) Run(ctx context.Context) error {
 			if !ok {
 				return flush()
 			}
-			buf = append(buf, row)
-			if len(buf) >= s.batchSize {
+			if row.sourceID == uuid.Nil {
+				row.sourceID = row.ID
+			}
+			if len(buf) >= s.batchSize && buf[len(buf)-1].sourceID != row.sourceID {
 				if err := flush(); err != nil {
 					return err
 				}
 			}
+			buf = append(buf, row)
 		}
 	}
 }
 
-// flush writes one batch. A deterministic per-batch deduplication token makes a
-// re-run of the same batch idempotent on Replicated engines (ignored on plain
-// MergeTree, where resuming from the checkpoint bounds any duplication to the
-// single in-flight batch).
 func (s *Sink) flush(ctx context.Context, rows []FindingRow) error {
-	if s.dryRun || s.conn == nil {
+	if s.gapFill {
+		if s.conn == nil {
+			return errors.New("gap-fill requires a ClickHouse connection")
+		}
+		return s.flushGapFill(ctx, rows)
+	}
+
+	if !s.dryRun {
+		if err := s.insertRows(ctx, rows); err != nil {
+			return err
+		}
+	}
+	s.inserted += int64(len(rows))
+	for _, row := range rows {
+		stats := s.bySource[row.Source]
+		stats.Inserted++
+		s.bySource[row.Source] = stats
+	}
+	return nil
+}
+
+// insertRows writes one native batch.
+func (s *Sink) insertRows(ctx context.Context, rows []FindingRow) error {
+	if len(rows) == 0 {
 		return nil
 	}
 
 	token := deduplicationToken(rows)
-	settings := clickhouse.Settings{
-		"insert_deduplication_token": token,
-	}
+	settings := clickhouse.Settings{"insert_deduplication_token": token}
 	if s.liftPartitionGuard {
-		// risk_findings is PARTITION BY toYYYYMMDD(created_at). A single backfill
-		// batch is time-ordered but can still span more than the default 100
-		// partitions when historical data is sparse, so lift the guard (0 = no
-		// limit) for this one-shot operator insert.
 		settings["max_partitions_per_insert_block"] = 0
 	}
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(settings))
@@ -149,12 +205,10 @@ func (s *Sink) flush(ctx context.Context, rows []FindingRow) error {
 	if err != nil {
 		return fmt.Errorf("prepare batch: %w", err)
 	}
-
 	if err := appendRows(batch, rows); err != nil {
 		_ = batch.Abort()
 		return err
 	}
-
 	if err := batch.Send(); err != nil {
 		_ = batch.Abort()
 		return fmt.Errorf("send batch: %w", err)

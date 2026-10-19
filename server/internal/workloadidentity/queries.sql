@@ -157,3 +157,13 @@ WHERE a.organization_id = @organization_id
   )
 ORDER BY (a.match_kind = 'exact') DESC, length(a.subject) DESC
 LIMIT 1;
+
+-- name: GetWorkloadDeviceKey :one
+-- The one key registered for a device subject, which alone verifies its
+-- assertions. Scoped to the issuer row the assertion already resolved to.
+SELECT public_jwk, thumbprint
+FROM workload_device_keys
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;

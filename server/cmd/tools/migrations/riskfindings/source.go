@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,7 @@ const (
 	CriteriaOrgID     = "org_id"     // string; filters organization_id
 	CriteriaProjectID = "project_id" // uuid.UUID; filters project_id
 	CriteriaPolicyID  = "policy_id"  // uuid.UUID; filters risk_policy_id
+	CriteriaSources   = "sources"    // []string; filters source
 	CriteriaFrom      = "from"       // time.Time; created_at >= from (applies with or without a cursor)
 	CriteriaTo        = "to"         // time.Time; created_at < to
 	CriteriaCursor    = "cursor"     // uuid.UUID; resume after this id (exclusive)
@@ -85,9 +87,9 @@ type SourceRow struct {
 // keyset pagination/resume key (id > cursor); it is deliberately NOT used to
 // prune the time window. A row's uuidv7 id and its created_at are minted at
 // slightly different instants (generate_uuidv7() vs clock_timestamp()), so the
-// id timestamp is not a sound bound for a created_at filter — using it could drop
+// id timestamp is not a sound bound for a created_at filter. Using it could drop
 // a row whose created_at is inside the window but whose id falls just outside it.
-// Time bounds are therefore enforced exactly by the created_at predicates ($4/$5).
+// Time bounds are therefore enforced exactly by the created_at predicates ($5/$6).
 //
 // Optional filters use the "$n IS NULL OR col = $n" idiom so a single prepared
 // statement serves every filter combination.
@@ -173,13 +175,14 @@ LEFT JOIN LATERAL (
 WHERE ($1::text IS NULL OR r.organization_id = $1)
   AND ($2::uuid IS NULL OR r.project_id = $2)
   AND ($3::uuid IS NULL OR r.risk_policy_id = $3)
-  AND ($4::timestamptz IS NULL OR r.created_at >= $4)
-  AND ($5::timestamptz IS NULL OR r.created_at < $5)
-  AND r.id > $6
+  AND ($4::text[] IS NULL OR r.source = ANY($4))
+  AND ($5::timestamptz IS NULL OR r.created_at >= $5)
+  AND ($6::timestamptz IS NULL OR r.created_at < $6)
+  AND r.id > $7
   AND r.found IS TRUE
   AND r.rule_id IS NOT NULL
 ORDER BY r.id
-LIMIT $7
+LIMIT $8
 `
 
 // Source reads risk_results pages from Postgres and publishes them to the
@@ -187,19 +190,28 @@ LIMIT $7
 type Source struct {
 	pool *pgxpool.Pool
 
-	scanned int64
+	scanned  int64
+	bySource map[string]int64
 }
 
 // NewSource builds a Postgres source over pool.
 func NewSource(pool *pgxpool.Pool) *Source {
 	return &Source{
-		pool:    pool,
-		scanned: 0,
+		pool:     pool,
+		scanned:  0,
+		bySource: make(map[string]int64),
 	}
 }
 
 // Scanned returns the number of rows read so far.
 func (s *Source) Scanned() int64 { return s.scanned }
+
+// ScannedBySource returns Postgres findings read per source.
+func (s *Source) ScannedBySource() map[string]int64 {
+	out := make(map[string]int64, len(s.bySource))
+	maps.Copy(out, s.bySource)
+	return out
+}
 
 // Read implements pipeline.Source. It paginates risk_results by keyset over id,
 // publishing each row to out, and returns when the window is exhausted.
@@ -233,7 +245,7 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 	}
 
 	// nil interface values become SQL NULL, disabling the optional filters.
-	var orgArg, projectArg, policyArg any
+	var orgArg, projectArg, policyArg, sourcesArg any
 	if org != "" {
 		orgArg = org
 	}
@@ -243,13 +255,16 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 	if policyID, ok := criteria[CriteriaPolicyID].(uuid.UUID); ok {
 		policyArg = policyID
 	}
+	if sources, ok := criteria[CriteriaSources].([]string); ok && len(sources) > 0 {
+		sourcesArg = sources
+	}
 
 	for {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("read interrupted at %s: %w", cursor, err)
 		}
 
-		rows, err := s.pool.Query(ctx, selectPage, orgArg, projectArg, policyArg, fromArg, toArg, cursor, batchSize)
+		rows, err := s.pool.Query(ctx, selectPage, orgArg, projectArg, policyArg, sourcesArg, fromArg, toArg, cursor, batchSize)
 		if err != nil {
 			return fmt.Errorf("query page after %s: %w", cursor, err)
 		}
@@ -271,6 +286,8 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 			}
 			cursor = r.ID
 			n++
+			s.scanned++
+			s.bySource[r.Source]++
 
 			select {
 			case out <- r:
@@ -285,7 +302,6 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 		}
 		rows.Close()
 
-		s.scanned += int64(n)
 		// This is the read position, not a safe resume point: rows up to here may
 		// still be in flight downstream. The resume cursor is the sink's committed
 		// id (see Sink.LastCommitted), printed in the final report.

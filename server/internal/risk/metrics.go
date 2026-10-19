@@ -16,6 +16,7 @@ const (
 	meterFindingCHFiltered                   = "gram.risk_findings.ch_filtered"
 	meterFindingCHMessagesExcluded           = "gram.risk_findings.ch_messages_excluded"
 	meterFindingCHMessagesAttributionDropped = "gram.risk_findings.ch_messages_attribution_dropped"
+	meterFindingCHWebhooksDropped            = "gram.risk_findings.ch_webhooks_dropped"
 )
 
 type metrics struct {
@@ -26,6 +27,8 @@ type metrics struct {
 	// chMessagesAttributionDropped is deliberately not a skipped reason: the
 	// finding still lands, only its carried chat attribution is dropped.
 	chMessagesAttributionDropped metric.Int64Counter
+	// chWebhooksDropped counts stored findings whose created webhook was skipped.
+	chWebhooksDropped metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -77,12 +80,22 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHMessagesAttributionDropped), attr.SlogError(err))
 	}
 
+	chWebhooksDropped, err := meter.Int64Counter(
+		meterFindingCHWebhooksDropped,
+		metric.WithDescription("Number of risk findings stored in ClickHouse whose created webhook was skipped"),
+		metric.WithUnit("{finding}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterFindingCHWebhooksDropped), attr.SlogError(err))
+	}
+
 	return &metrics{
 		chMessagesInserted:           chMessagesInserted,
 		chMessagesSkipped:            chMessagesSkipped,
 		chFiltered:                   chFiltered,
 		chMessagesExcluded:           chMessagesExcluded,
 		chMessagesAttributionDropped: chMessagesAttributionDropped,
+		chWebhooksDropped:            chWebhooksDropped,
 	}
 }
 
@@ -133,4 +146,12 @@ func (m *metrics) RecordFindingCHExcluded(ctx context.Context) {
 		return
 	}
 	m.chMessagesExcluded.Add(ctx, 1)
+}
+
+// RecordFindingCHWebhookDropped records a stored finding whose created webhook was skipped.
+func (m *metrics) RecordFindingCHWebhookDropped(ctx context.Context, reason string) {
+	if m.chWebhooksDropped == nil {
+		return
+	}
+	m.chWebhooksDropped.Add(ctx, 1, metric.WithAttributes(attr.Reason(reason)))
 }

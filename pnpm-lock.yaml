@@ -666,11 +666,11 @@ importers:
         specifier: ^1.7.0
         version: 1.7.0
       '@logtape/logtape':
-        specifier: ^2.4.0
-        version: 2.4.0
+        specifier: ^2.4.1
+        version: 2.4.1
       '@logtape/pretty':
-        specifier: ^2.4.0
-        version: 2.4.0(@logtape/logtape@2.4.0)
+        specifier: ^2.4.1
+        version: 2.4.1(@logtape/logtape@2.4.1)
       '@stricli/core':
         specifier: ^1.3.0
         version: 1.3.0
@@ -1443,13 +1443,13 @@ packages:
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
 
-  '@logtape/logtape@2.4.0':
-    resolution: {integrity: sha512-xhvG/NwfBXs+a+oJxl6xOmqA4zX8giP1brvd5lVbL3qUHUkZfVt+4QE/+9p/Vf76JNwe/upH3XYTNItocKQ8Qg==}
+  '@logtape/logtape@2.4.1':
+    resolution: {integrity: sha512-faEZkjQf5pI8WsnCXbpBInC9SeWqYUNAtLviTLkCI3JLHFkV1bKrfxbIJc96TVqqVjSUz8LYtX0JWKdiBwEpCg==}
 
-  '@logtape/pretty@2.4.0':
-    resolution: {integrity: sha512-dBx+Ml/ej76HPcCiTumcMonmsyl8U8LDoygHDQH/uk+xRUduGw7RiyRnsijUPwZsKarFU/W9BNwFPR7E6vS60w==}
+  '@logtape/pretty@2.4.1':
+    resolution: {integrity: sha512-WFQgDjgFEoesoB+1m2x3GPpa4NAfbXcZFT5clthWTEMlt+I06z2zLiwEtNTh7wqqtlO/iOBHhBcudy6H4q3rwg==}
     peerDependencies:
-      '@logtape/logtape': ^2.4.0
+      '@logtape/logtape': ^2.4.1
 
   '@manypkg/find-root@3.1.0':
     resolution: {integrity: sha512-BcSqCyKhBVZ5YkSzOiheMCV41kqAFptW6xGqYSTjkVTl9XQpr+pqHhwgGCOHQtjDCv7Is6EFyA14Sm5GVbVABA==}
@@ -9320,11 +9320,11 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@logtape/logtape@2.4.0': {}
+  '@logtape/logtape@2.4.1': {}
 
-  '@logtape/pretty@2.4.0(@logtape/logtape@2.4.0)':
+  '@logtape/pretty@2.4.1(@logtape/logtape@2.4.1)':
     dependencies:
-      '@logtape/logtape': 2.4.0
+      '@logtape/logtape': 2.4.1
 
   '@manypkg/find-root@3.1.0':
     dependencies:
