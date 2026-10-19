@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -94,7 +95,7 @@ func (d consentTemplateData) ConsentPath() string {
 	if d.SharedConsentPath != "" {
 		return d.SharedConsentPath
 	}
-	return "/" + d.MCPRouteBase + "/" + d.MCPSlug + "/connect"
+	return "/" + d.MCPRouteBase.String() + "/" + d.MCPSlug + "/connect"
 }
 
 // consentFormMaxBytes caps the consent form body to defend against memory
@@ -113,7 +114,7 @@ type consentTemplateData struct {
 	PrefillDiscoveryMode metamcp.DiscoveryMode
 	ClientName           string
 	MCPSlug              string
-	MCPRouteBase         string
+	MCPRouteBase         mcproute.Base
 	// SharedConsentPath is the consent page path on the issuer's shared
 	// authorization server when it is serving the request. Empty when the
 	// endpoint's own authorization server is, whose consent page lives under
@@ -453,7 +454,7 @@ func (s *Service) HandleConsent(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
 		return err
 	}

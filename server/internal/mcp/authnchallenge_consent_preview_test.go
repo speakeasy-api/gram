@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
 // TestConsentPagePreview renders every shape of the consent page, asserting
@@ -33,7 +35,7 @@ func TestConsentPagePreview(t *testing.T) {
 	base := consentTemplateData{
 		ClientName:     "Claude Code",
 		MCPSlug:        "speakeasy-team-datadog",
-		MCPRouteBase:   "mcp",
+		MCPRouteBase:   mcproute.MCP,
 		State:          "12b256a1-a7b9-44f7-af8b-0ce000000000",
 		CSRFToken:      "csrf",
 		SubjectDisplay: "adam@speakeasy.com",

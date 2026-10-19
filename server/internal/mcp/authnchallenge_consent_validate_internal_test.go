@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -196,7 +197,7 @@ func renderValidationCard(t *testing.T, card remoteSessionCard) string {
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:         "Speakeasy",
 		MCPSlug:            "example",
-		MCPRouteBase:       "mcp",
+		MCPRouteBase:       mcproute.MCP,
 		State:              "state",
 		CSRFToken:          "csrf",
 		SubjectDisplay:     "user@example.com",

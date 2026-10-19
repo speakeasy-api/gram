@@ -52,6 +52,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -77,12 +78,8 @@ import (
 // upstream token exchange instead of bouncing back to
 // /<RouteBase>/{slug}/connect.
 //
-// RouteBase is the surface the parent challenge was
-// minted under. Drives both the upstream provider's redirect_uri
-// (/<RouteBase>/remote_login_callback) and the post-callback bounce to
-// /<RouteBase>/{slug}/connect. Empty values fall back to "mcp" so
-// in-flight states minted before this field landed still resume on the
-// original surface.
+// RouteBase is the surface the parent challenge was minted under. Drives
+// the post-callback bounce to /<RouteBase>/{slug}/connect.
 type ParentChallenge struct {
 	ID                  string
 	ProjectID           uuid.UUID
@@ -90,7 +87,7 @@ type ParentChallenge struct {
 	UserSessionIssuerID uuid.UUID
 	Subject             *urn.SessionSubject
 	McpSlug             string
-	RouteBase           string
+	RouteBase           mcproute.Base
 	McpServerID         uuid.NullUUID
 	MetaMcpServerID     uuid.NullUUID
 	// ResourceMcpServerID is the gateway member whose protected resource
@@ -147,10 +144,10 @@ type RemoteLoginState struct {
 	Resource        string              `json:"resource,omitempty"`
 	Subject         *urn.SessionSubject `json:"subject,omitempty"`
 	McpSlug         string              `json:"mcp_slug"`
-	// RouteBase drives the post-callback redirect
-	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
-	// for in-flight states minted before this field landed.
-	RouteBase       string        `json:"route_base,omitempty"`
+	// RouteBase drives the post-callback redirect to
+	// /<RouteBase>/{slug}/connect. Read it through Resolve: empty means
+	// mcproute.MCP, and an unserved value fails the callback closed.
+	RouteBase       mcproute.Base `json:"route_base,omitempty"`
 	McpServerID     uuid.NullUUID `json:"mcp_server_id,omitzero"`
 	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
 	// FinalRedirectURI overrides the default post-callback redirect to
@@ -1535,6 +1532,17 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, denied(ctx, logger, q)
 	}
 
+	// Only the default consent bounce is built from the route base; one no
+	// longer served fails before the code is exchanged.
+	routeBase := mcproute.MCP
+	if state.ConsentURL == "" && state.FinalRedirectURI == "" {
+		resolved, ok := state.RouteBase.Resolve()
+		if !ok {
+			return none, oops.E(oops.CodeUnauthorized, nil, "remote login state not found or expired").LogWarn(ctx, logger)
+		}
+		routeBase = resolved
+	}
+
 	// Hoisted above the DB lookup + upstream code exchange so a state with a
 	// missing/zero Subject fails fast — otherwise we burn the single-use
 	// upstream authorization code on a request that can't produce a
@@ -1791,10 +1799,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 	stranded = false
 
-	routeBase := state.RouteBase
-	if routeBase == "" {
-		routeBase = "mcp"
-	}
 	redirectBaseURL := m.serverURL.String()
 	if state.Authority.IsPrivate() {
 		redirectBaseURL = state.Authority.BaseURL
@@ -1915,7 +1919,7 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 // matches the lone redirect_uri a CIMD client publishes in its metadata
 // document; the originating surface lives in the login state's RouteBase for
 // the post-callback bounce.
-const canonicalCallbackRouteBase = "mcp"
+const canonicalCallbackRouteBase = mcproute.MCP
 
 // HandleLegacyProxyCallback is the shim behind `GET /oauth/callback`, the
 // oauth_proxy_servers-era redirect_uri that clients flagged LegacyCallbackUrl

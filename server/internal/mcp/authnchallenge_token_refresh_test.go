@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -293,7 +294,7 @@ func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
 		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
 		OrganizationID:      fx.orgID,
 		ProjectID:           fx.target.ProjectID,
-		RouteBase:           "mcp",
+		RouteBase:           mcproute.MCP,
 		Slug:                fx.toolset.McpSlug.String,
 		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,

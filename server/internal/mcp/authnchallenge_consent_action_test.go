@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -132,7 +133,7 @@ func mintConsentEndpointState(t *testing.T, ctx context.Context, ti *testInstanc
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       orgID,
 		ProjectID:            projectID,
-		RouteBase:            "mcp",
+		RouteBase:            mcproute.MCP,
 		Slug:                 slug,
 		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		// Deliberately matches no client: the action must never thread it in.

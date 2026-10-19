@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -1020,7 +1021,7 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 		return true, err
 	}
 
-	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
+	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, mcproute.MCP)
 }
 
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
@@ -1105,7 +1106,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		if metaServer != nil {
 			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
 		}
-		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
+		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, mcproute.MCP)
 	case mcpendpoints.IsAddressMiss(err):
 		// Address miss: fall through to the legacy toolset lookup.
 	case mcpendpoints.IsPolicyDenied(err):
@@ -1138,7 +1139,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Legacy toolset-by-slug path: hosting configuration comes from the
 	// toolset columns; the canonical wrapper, when present, keys kill switches
 	// and attribution.
-	return s.serveToolsetResolved(w, r, toolset, mcpSlug, "mcp", hostedServingFromToolset(toolset, wrapperID), nil, nil, nil, nil)
+	return s.serveToolsetResolved(w, r, toolset, mcpSlug, mcproute.MCP, hostedServingFromToolset(toolset, wrapperID), nil, nil, nil, nil)
 }
 
 // hostedServing is the hosting configuration one toolset-backed MCP request
@@ -1199,7 +1200,7 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset, wrapperID uuid.Nul
 //
 // mcpSlug and mcpRouteBase are used to build the WWW-Authenticate
 // resource_metadata URL. mcpRouteBase is the route segment that sits
-// between the well-known prefix and the slug — "mcp" for /mcp/{slug}, no
+// between the well-known prefix and the slug — mcproute.MCP for /mcp/{slug}, no
 // leading or trailing slashes.
 //
 // extraUpstreamTokens are the upstream remote-session access tokens
@@ -1212,7 +1213,7 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset, wrapperID uuid.Nul
 // caller-side issuer gate. Nil when the caller ran no gate or the session
 // carries no policy; the in-toolset gate below populates it for legacy-path
 // callers.
-func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, cfg *hostedServing, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, pendingIssuerGate *issuerGateAuthentication, prepared *preparedMCPRequest) error {
+func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug string, mcpRouteBase mcproute.Base, cfg *hostedServing, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, pendingIssuerGate *issuerGateAuthentication, prepared *preparedMCPRequest) error {
 	ctx := r.Context()
 	var err error
 
@@ -1302,7 +1303,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 	}
 
-	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
+	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase.String(), mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").LogError(ctx, s.logger)
 	}
