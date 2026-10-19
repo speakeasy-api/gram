@@ -19,9 +19,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
@@ -315,6 +317,14 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	defer writeSpan.End()
 
+	// The flag is checked on both producers so one organization has one emitter.
+	// A failed lookup retries the write rather than guessing which emitter owns it.
+	clickHouseEmitsWebhooks, err := policyflags.ProjectFlagChecked(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
+	if err != nil {
+		writeSpan.SetStatus(codes.Error, err.Error())
+		return false, fmt.Errorf("check finding webhook emitter flag: %w", err)
+	}
+
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
 		writeSpan.SetStatus(codes.Error, err.Error())
@@ -387,17 +397,13 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		}
 	}
 
-	// Only findings this transaction writes for the first time are announced:
-	// an id present in prior was already announced by the committed transaction
-	// that first wrote it (delete, insert and outbox share one transaction).
-	// Event ids stay pinned to the deterministic row ids as the backstop for
-	// the residual race — a zombie attempt and its retry can both commit "new"
-	// rows, and delivery then dedups on the Svix idempotency key.
-	webhookEvents := findingCreatedEvents(rows, prior, time.Now())
-	if len(webhookEvents) > 0 {
-		if _, err := outbox.PublishIdentifiedWebhookEvents(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, webhookEvents); err != nil {
-			writeSpan.SetStatus(codes.Error, err.Error())
-			return false, fmt.Errorf("append risk findings to outbox: %w", err)
+	if !clickHouseEmitsWebhooks {
+		webhookEvents := findingCreatedEvents(rows, prior, time.Now())
+		if len(webhookEvents) > 0 {
+			if _, err := outbox.PublishIdentifiedWebhookEvents(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, webhookEvents); err != nil {
+				writeSpan.SetStatus(codes.Error, err.Error())
+				return false, fmt.Errorf("append risk findings to outbox: %w", err)
+			}
 		}
 	}
 
@@ -427,7 +433,7 @@ func findingCreatedEvents(rows []repo.InsertRiskResultsParams, prior map[uuid.UU
 			continue
 		}
 		evs = append(evs, outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]{
-			ID: findingWebhookEventID(row.ID),
+			ID: events.RiskFindingCreatedEventID(row.ID),
 			Payload: events.RiskFindingCreatedPayloadV1{
 				ID:                row.ID,
 				ProjectID:         row.ProjectID,
@@ -444,15 +450,6 @@ func findingCreatedEvents(rows []repo.InsertRiskResultsParams, prior map[uuid.UU
 		})
 	}
 	return evs
-}
-
-// findingWebhookEventID pins the created-event's id to the finding's row id,
-// which is itself deterministic over the batch identity: every redriven write
-// of the same row re-emits the same event id — the Svix idempotency key — so
-// delivery dedups instead of double-sending. Hashed into its own namespace so
-// the event id never collides with the row id it derives from.
-func findingWebhookEventID(rowID uuid.UUID) uuid.UUID {
-	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding-created-event:"+rowID.String()))
 }
 
 func emptyResultRow(args AnalyzeBatchArgs, msg batchMessage) repo.InsertRiskResultsParams {

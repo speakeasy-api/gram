@@ -2,6 +2,8 @@ package remotemcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -40,6 +42,38 @@ func (h *Headers) ListHeaders(ctx context.Context, serverID uuid.UUID, redacted 
 	}
 
 	return h.revealHeaders(headers, redacted)
+}
+
+// ConfigurationFingerprint detects access-relevant header changes without
+// decrypting secrets. Secret values retain their stored randomized ciphertext,
+// so the digest cannot be used to guess low-entropy plaintext values. Rewriting
+// or re-encrypting a secret conservatively invalidates the fingerprint, even
+// when its plaintext is unchanged. Descriptions and timestamps are excluded.
+func (h *Headers) ConfigurationFingerprint(ctx context.Context, serverID uuid.UUID) (string, error) {
+	headers, err := repo.New(h.db).ListHeadersByServerID(ctx, serverID)
+	if err != nil {
+		return "", fmt.Errorf("list header configuration: %w", err)
+	}
+	type headerConfiguration struct {
+		Name                   string      `json:"name"`
+		Value                  pgtype.Text `json:"value"`
+		ValueFromRequestHeader pgtype.Text `json:"value_from_request_header"`
+		IsRequired             bool        `json:"is_required"`
+		IsSecret               bool        `json:"is_secret"`
+	}
+	// ListHeadersByServerID orders by name, independent of insertion order.
+	config := make([]headerConfiguration, 0, len(headers))
+	for _, header := range headers {
+		config = append(config, headerConfiguration{
+			Name: header.Name, Value: header.Value, ValueFromRequestHeader: header.ValueFromRequestHeader,
+			IsRequired: header.IsRequired, IsSecret: header.IsSecret,
+		})
+	}
+	data, err := json.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("encode header configuration: %w", err)
+	}
+	return fmt.Sprintf("v1:%x", sha256.Sum256(data)), nil
 }
 
 // ListServerHeaders reads a server's headers, scoped to the given project.

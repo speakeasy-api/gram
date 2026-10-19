@@ -507,7 +507,7 @@ SELECT EXISTS (
 -- name: AdminListProjectMcpServerRows :many
 -- One row per live endpoint, and one with no endpoint columns for a server that
 -- has none. custom_domain is null for an endpoint whose domain cannot serve it;
--- the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
+-- the caller skips those and picks the address with endpointaddr.PrimaryEndpoint.
 SELECT
     m.id,
     m.name,
@@ -951,7 +951,7 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
 -- outright: it counts as one, and any other wrapper of that toolset as two.
 -- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
--- endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+-- endpoint's (custom domain first, as endpointaddr.PrimaryEndpoint ranks them;
 -- a domain root has no such path), else the server's own slug, else the
 -- toolset's mcp_slug when no other wrapper shares that toolset.
 SELECT
@@ -1242,3 +1242,9 @@ JOIN reached
   ON reached.organization_id = om.id
 GROUP BY om.id, om.name, om.slug
 ORDER BY om.name, om.id;
+
+-- name: AdminListOrganizationNamesByIDs :many
+-- Labels the hook client grids, whose rows carry only organization ids.
+SELECT id, name, slug
+FROM organization_metadata
+WHERE id = ANY(@ids::text[]);

@@ -438,7 +438,7 @@ func discoveredIssuerParams(principal Principal, project ResolvedProject, regist
 		OrganizationID:                      conv.ToPGText(principal.OrganizationID),
 		Slug:                                attachmentIssuerSlug(registrationID),
 		Issuer:                              metadata.Issuer,
-		Name:                                conv.ToPGText("Remote identity provider"),
+		Name:                                conv.ToPGText("Authorization server"),
 		LogoAssetID:                         uuid.NullUUID{},
 		ClientSetupDocumentationUrl:         pgtype.Text{},
 		AuthorizationEndpoint:               conv.ToPGText(metadata.AuthorizationEndpoint),

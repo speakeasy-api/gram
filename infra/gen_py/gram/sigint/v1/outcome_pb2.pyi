@@ -9,7 +9,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Outcome(_message.Message):
-    __slots__ = ("id", "evaluation_attempt_id", "organization_id", "project_id", "event", "sensor_id", "sensor_slug", "evaluated_at", "definition_hash", "configured_model", "models", "compiler_version", "actor", "billing_user_id", "source", "account", "assistant_id", "replayed", "status", "failure_reason", "provider", "attributes", "input")
+    __slots__ = ("id", "evaluation_attempt_id", "organization_id", "project_id", "event", "sensor_id", "sensor_slug", "evaluated_at", "definition_hash", "configured_model", "models", "compiler_version", "actor", "billing_user_id", "source", "account", "assistant_id", "replayed", "status", "failure_reason", "provider", "attributes", "input", "trigger_kind", "run_id", "evaluation_requested_at")
     class Status(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = ()
         STATUS_UNSPECIFIED: _ClassVar[Outcome.Status]
@@ -116,6 +116,9 @@ class Outcome(_message.Message):
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
     ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
+    TRIGGER_KIND_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    EVALUATION_REQUESTED_AT_FIELD_NUMBER: _ClassVar[int]
     id: str
     evaluation_attempt_id: str
     organization_id: str
@@ -139,4 +142,7 @@ class Outcome(_message.Message):
     provider: str
     attributes: _containers.ScalarMap[str, str]
     input: Outcome.Input
-    def __init__(self, id: _Optional[str] = ..., evaluation_attempt_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., event: _Optional[_Union[Outcome.Event, _Mapping]] = ..., sensor_id: _Optional[str] = ..., sensor_slug: _Optional[str] = ..., evaluated_at: _Optional[str] = ..., definition_hash: _Optional[str] = ..., configured_model: _Optional[str] = ..., models: _Optional[_Iterable[str]] = ..., compiler_version: _Optional[str] = ..., actor: _Optional[_Union[Outcome.Actor, _Mapping]] = ..., billing_user_id: _Optional[str] = ..., source: _Optional[str] = ..., account: _Optional[_Union[Outcome.Account, _Mapping]] = ..., assistant_id: _Optional[str] = ..., replayed: _Optional[bool] = ..., status: _Optional[_Union[Outcome.Status, str]] = ..., failure_reason: _Optional[str] = ..., provider: _Optional[str] = ..., attributes: _Optional[_Mapping[str, str]] = ..., input: _Optional[_Union[Outcome.Input, _Mapping]] = ...) -> None: ...
+    trigger_kind: str
+    run_id: str
+    evaluation_requested_at: str
+    def __init__(self, id: _Optional[str] = ..., evaluation_attempt_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., event: _Optional[_Union[Outcome.Event, _Mapping]] = ..., sensor_id: _Optional[str] = ..., sensor_slug: _Optional[str] = ..., evaluated_at: _Optional[str] = ..., definition_hash: _Optional[str] = ..., configured_model: _Optional[str] = ..., models: _Optional[_Iterable[str]] = ..., compiler_version: _Optional[str] = ..., actor: _Optional[_Union[Outcome.Actor, _Mapping]] = ..., billing_user_id: _Optional[str] = ..., source: _Optional[str] = ..., account: _Optional[_Union[Outcome.Account, _Mapping]] = ..., assistant_id: _Optional[str] = ..., replayed: _Optional[bool] = ..., status: _Optional[_Union[Outcome.Status, str]] = ..., failure_reason: _Optional[str] = ..., provider: _Optional[str] = ..., attributes: _Optional[_Mapping[str, str]] = ..., input: _Optional[_Union[Outcome.Input, _Mapping]] = ..., trigger_kind: _Optional[str] = ..., run_id: _Optional[str] = ..., evaluation_requested_at: _Optional[str] = ...) -> None: ...

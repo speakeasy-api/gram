@@ -285,6 +285,18 @@ func (q *Queries) PostflightIDDirectoryRoleMappings(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightIDEMACredentials = `-- name: PostflightIDEMACredentials :one
+SELECT count(*) FROM remote_session_ema_credentials
+WHERE organization_id = $1::text
+`
+
+func (q *Queries) PostflightIDEMACredentials(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDEMACredentials, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDExternalOAuthMetadata = `-- name: PostflightIDExternalOAuthMetadata :one
 SELECT count(*) FROM external_oauth_server_metadata
 WHERE project_id = $1::uuid AND deleted IS FALSE
@@ -335,6 +347,22 @@ WHERE remote_session_client_id = $1::uuid
 
 func (q *Queries) PostflightIDInertUpstreamSessions(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDInertUpstreamSessions, remoteSessionClientID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDInfraGroupMappedRoles = `-- name: PostflightIDInfraGroupMappedRoles :one
+SELECT count(DISTINCT drm.role_urn) FROM directory_role_mappings drm
+JOIN directory_groups dg ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = $1::text AND drm.deleted IS FALSE
+  AND dg.name = 'Infra'
+  AND dg.deleted IS FALSE AND dg.workos_deleted IS FALSE
+`
+
+func (q *Queries) PostflightIDInfraGroupMappedRoles(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDInfraGroupMappedRoles, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -585,8 +613,8 @@ SELECT count(*) FROM remote_session_issuers
 WHERE project_id = $1::uuid AND deleted IS FALSE
 `
 
-// Linear's remote identity provider, the identity chaining example, and
-// Jamf Pro.
+// Linear's remote identity provider, the identity chaining example, Jamf
+// Pro, and the two EMA services' authorization servers.
 func (q *Queries) PostflightIDProjectRemoteSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectRemoteSessionIssuers, projectID)
 	var count int64
@@ -608,6 +636,24 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // GitHub.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDReadyEMABindings = `-- name: PostflightIDReadyEMABindings :one
+SELECT count(*) FROM remote_session_ema_bindings
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND state = 'ready'
+`
+
+type PostflightIDReadyEMABindingsParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) PostflightIDReadyEMABindings(ctx context.Context, arg PostflightIDReadyEMABindingsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDReadyEMABindings, arg.OrgID, arg.ProjectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -640,6 +686,18 @@ type PostflightIDRemoteIdentityClientsParams struct {
 
 func (q *Queries) PostflightIDRemoteIdentityClients(ctx context.Context, arg PostflightIDRemoteIdentityClientsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDRemoteIdentityClients, arg.ProjectID, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDSavedEMAProviders = `-- name: PostflightIDSavedEMAProviders :one
+SELECT count(*) FROM remote_session_ema_providers
+WHERE organization_id = $1::text AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightIDSavedEMAProviders(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDSavedEMAProviders, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1013,6 +1071,18 @@ func (q *Queries) PostflightIDTriggerWorkloadBindings(ctx context.Context, arg P
 	return count, err
 }
 
+const postflightIDTrustedIssuerSessions = `-- name: PostflightIDTrustedIssuerSessions :one
+SELECT count(*) FROM trusted_issuer_sessions
+WHERE organization_id = $1::text
+`
+
+func (q *Queries) PostflightIDTrustedIssuerSessions(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDTrustedIssuerSessions, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDUndecidedAITools = `-- name: PostflightIDUndecidedAITools :one
 SELECT count(*) FROM ai_scan_targets
 WHERE organization_id = $1::text AND status NOT IN ('approved', 'blocked')
@@ -1137,6 +1207,28 @@ type PostflightIDWorkforceIssuerParams struct {
 // The workforce issuer shows a shared authorization server.
 func (q *Queries) PostflightIDWorkforceIssuer(ctx context.Context, arg PostflightIDWorkforceIssuerParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDWorkforceIssuer, arg.WorkforceIssuer, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDWorkforceTrustsEMAProvider = `-- name: PostflightIDWorkforceTrustsEMAProvider :one
+SELECT count(*) FROM user_session_issuers
+WHERE id = $1::uuid
+  AND organization_id = $2::text
+  AND trusted_remote_session_issuer_id = $3::uuid
+`
+
+type PostflightIDWorkforceTrustsEMAProviderParams struct {
+	WorkforceIssuer uuid.UUID
+	OrgID           string
+	EmaProvider     uuid.UUID
+}
+
+// EMA: two ready bindings, no cached credentials, and one saved provider
+// order. The workforce sign-in must not trust the fictional provider.
+func (q *Queries) PostflightIDWorkforceTrustsEMAProvider(ctx context.Context, arg PostflightIDWorkforceTrustsEMAProviderParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDWorkforceTrustsEMAProvider, arg.WorkforceIssuer, arg.OrgID, arg.EmaProvider)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

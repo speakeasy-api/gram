@@ -385,9 +385,20 @@ func lockActiveConnection(ctx context.Context, q *repo.Queries, subjectURN strin
 	return nil
 }
 
+// ProposalPrecheck refuses a new proposal inside its creation transaction. It
+// runs only when the retry key is unused, so a retry replays the stored
+// proposal even after executing it changed what the precheck looks at.
+type ProposalPrecheck func(ctx context.Context, tx pgx.Tx) error
+
 // Create stores a pending proposal, or returns the existing proposal for the
 // same retry key when the target and change match.
 func (s *proposalStore) Create(ctx context.Context, owner proposalOwner, input NewProposal, now time.Time) (Proposal, bool, error) {
+	return s.CreateChecked(ctx, owner, input, now, nil)
+}
+
+// CreateChecked is Create with a precheck that runs only for an unused retry
+// key, in the same transaction as the insert.
+func (s *proposalStore) CreateChecked(ctx context.Context, owner proposalOwner, input NewProposal, now time.Time, precheck ProposalPrecheck) (Proposal, bool, error) {
 	if err := input.validate(); err != nil {
 		return Proposal{}, false, err
 	}
@@ -434,6 +445,11 @@ func (s *proposalStore) Create(ctx context.Context, owner proposalOwner, input N
 			return Proposal{}, false, ErrProposalConflict
 		}
 		return existing, true, nil
+	}
+	if precheck != nil {
+		if err := precheck(ctx, tx); err != nil {
+			return Proposal{}, false, err
+		}
 	}
 	pending, err := q.CountPendingProposals(ctx, repo.CountPendingProposalsParams{
 		SubjectUrn:    owner.SubjectURN,
