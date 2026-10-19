@@ -1212,6 +1212,40 @@ func (q *Queries) ServersInsertSlackIdentityHeader(ctx context.Context, arg Serv
 	return err
 }
 
+const serversInsertSlackToolMetadata = `-- name: ServersInsertSlackToolMetadata :exec
+INSERT INTO mcp_server_tool_metadata (id, project_id, mcp_server_id, tool_name,
+                                      title, read_only_hint, destructive_hint) VALUES
+  ($1::uuid, $2::uuid, $3::uuid,
+   'slack_search_messages', 'Search messages', TRUE, FALSE),
+  ($4::uuid, $2::uuid, $3::uuid,
+   'slack_read_channel', 'Read channel history', TRUE, FALSE),
+  ($5::uuid, $2::uuid, $3::uuid,
+   'slack_send_message', 'Send message', NULL, NULL)
+`
+
+type ServersInsertSlackToolMetadataParams struct {
+	SearchMessagesID uuid.UUID
+	ProjectID        uuid.UUID
+	SlackServerID    uuid.UUID
+	ReadChannelID    uuid.UUID
+	SendMessageID    uuid.UUID
+}
+
+// Recorded Slack tool metadata, as the Inspect tab records it from a live
+// listing. Support Desk's read-only rule on Slack reaches only the read-only
+// tools: annotation rules never reach a tool with no recorded annotation,
+// such as slack_send_message here.
+func (q *Queries) ServersInsertSlackToolMetadata(ctx context.Context, arg ServersInsertSlackToolMetadataParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSlackToolMetadata,
+		arg.SearchMessagesID,
+		arg.ProjectID,
+		arg.SlackServerID,
+		arg.ReadChannelID,
+		arg.SendMessageID,
+	)
+	return err
+}
+
 const serversInsertSupportDeskGrants = `-- name: ServersInsertSupportDeskGrants :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 SELECT $1::text, 'role:organization:' || r.id, 'mcp:connect', sel

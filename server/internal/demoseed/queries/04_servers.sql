@@ -56,6 +56,20 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
    NULL, @remote_github_id::uuid,
    @issuer_workforce_id::uuid, 'private');
 
+-- Recorded Slack tool metadata, as the Inspect tab records it from a live
+-- listing. Support Desk's read-only rule on Slack reaches only the read-only
+-- tools: annotation rules never reach a tool with no recorded annotation,
+-- such as slack_send_message here.
+-- name: ServersInsertSlackToolMetadata :exec
+INSERT INTO mcp_server_tool_metadata (id, project_id, mcp_server_id, tool_name,
+                                      title, read_only_hint, destructive_hint) VALUES
+  (@search_messages_id::uuid, @project_id::uuid, @slack_server_id::uuid,
+   'slack_search_messages', 'Search messages', TRUE, FALSE),
+  (@read_channel_id::uuid, @project_id::uuid, @slack_server_id::uuid,
+   'slack_read_channel', 'Read channel history', TRUE, FALSE),
+  (@send_message_id::uuid, @project_id::uuid, @slack_server_id::uuid,
+   'slack_send_message', 'Send message', NULL, NULL);
+
 -- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
 -- toolset id) and one endpoint at its address, mirroring its hosting
 -- columns. The fresh-id servers above stay separate servers over the same

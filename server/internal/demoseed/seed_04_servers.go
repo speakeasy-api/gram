@@ -84,6 +84,15 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo mcp servers: %w", err)
 	}
+	if err := s.q.ServersInsertSlackToolMetadata(ctx, repo.ServersInsertSlackToolMetadataParams{
+		SearchMessagesID: s.det("slack-tool-slack_search_messages"),
+		ProjectID:        proj,
+		SlackServerID:    s.det("mcpserver-slack"),
+		ReadChannelID:    s.det("slack-tool-slack_read_channel"),
+		SendMessageID:    s.det("slack-tool-slack_send_message"),
+	}); err != nil {
+		return fmt.Errorf("insert demo slack tool metadata: %w", err)
+	}
 
 	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, proj); err != nil {
 		return fmt.Errorf("insert demo hosted toolset mcp servers: %w", err)

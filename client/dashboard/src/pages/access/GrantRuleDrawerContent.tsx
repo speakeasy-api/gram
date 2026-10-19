@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useToolMetadata } from "@/hooks/useToolMetadata";
 import { useRoutes } from "@/routes";
+import { annotationRuleDescription } from "./mcpAccessModel";
 import { ArrowUpRight, Check, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -1199,7 +1200,7 @@ function RoleToolSelectionPanel({
         selectedTools={selectedTools}
         onSelectionChange={handleSelectionChange}
         annotationSelectionSupported={!!onChangeAnnotations}
-        annotationsDescription="Tools can be annotated with labels that provide more context about the properties of the tool, such as if it's a destructive operation. OpenAPI sources are tagged automatically based on HTTP method. You can edit annotations on the MCP tools tab."
+        annotationsDescription={annotationRuleDescription(!!isDeny)}
         toolsDescription={
           isDeny
             ? "Select specific tools to exclude. Expand a server to choose which tools this role should not access."
