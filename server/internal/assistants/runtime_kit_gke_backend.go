@@ -183,10 +183,13 @@ func (k *KitGKERuntimeBackend) checkObject(r assistantRuntimeRecord, o *unstruct
 func (k *KitGKERuntimeBackend) get(ctx context.Context, r assistantRuntimeRecord, gvr schema.GroupVersionResource, name string, uid types.UID) (*unstructured.Unstructured, error) {
 	o, err := k.config.GKE.Dynamic.Resource(gvr).Namespace(k.config.GKE.Namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, kitGKEAdmissionTerminalError{err}
+		}
 		return nil, fmt.Errorf("kit GKE get: %w", err)
 	}
 	if err = k.checkObject(r, o, uid); err != nil {
-		return nil, err
+		return nil, kitGKEAdmissionTerminalError{err}
 	}
 	return o, nil
 }
@@ -203,7 +206,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 			return RuntimeBackendEnsureResult{}, err
 		}
 		if m.Provisioning {
-			return k.finishColdProvision(ctx, r, m)
+			return k.finishColdProvision(ctx, r, m, true)
 		}
 		state, obj, e := k.loadAuthority(ctx, r)
 		if e != nil {
@@ -298,13 +301,27 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	if err := persistKitAdmissionProgress(ctx, m); err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
-	_, resumable = ctx.Value(kitAdmissionProgressKey{}).(kitAdmissionProgressWriter)
-	return k.finishColdProvision(ctx, r, m)
+	// finishColdProvision owns fencing after this handoff.
+	resumable = true
+	_, persisted := ctx.Value(kitAdmissionProgressKey{}).(kitAdmissionProgressWriter)
+	return k.finishColdProvision(ctx, r, m, persisted)
 }
+
+// Terminal failures cannot reuse the recorded resources or their startup authority.
+type kitGKEAdmissionTerminalError struct{ error }
+
+func (e kitGKEAdmissionTerminalError) Unwrap() error { return e.error }
 
 // The caller persists exact create-response UIDs before waiting for a process.
 // Retrying this phase never adopts resources discovered by labels or names.
-func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) (RuntimeBackendEnsureResult, error) {
+func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata, resumable bool) (result RuntimeBackendEnsureResult, ensureErr error) {
+	defer func() {
+		var terminal kitGKEAdmissionTerminalError
+		if ensureErr != nil && (!resumable || errors.As(ensureErr, &terminal)) {
+			result = RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: nil}
+			ensureErr = k.fenceColdAdmissionFailure(ctx, r, ensureErr)
+		}
+	}()
 	for _, step := range []struct {
 		gvr  schema.GroupVersionResource
 		name string
@@ -329,14 +346,14 @@ func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assist
 	m.Provisioning = false
 	m, err = k.createAuthority(readyCtx, r, m)
 	if err != nil {
-		return RuntimeBackendEnsureResult{}, k.fenceColdAdmissionFailure(ctx, r, err)
+		return RuntimeBackendEnsureResult{}, kitGKEAdmissionTerminalError{err}
 	}
 	raw, err := json.Marshal(m)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("kit GKE Ensure: %w", err)
 	}
 	if err := persistKitAdmissionProgress(ctx, m); err != nil {
-		return RuntimeBackendEnsureResult{}, k.fenceColdAdmissionFailure(ctx, r, err)
+		return RuntimeBackendEnsureResult{}, kitGKEAdmissionTerminalError{err}
 	}
 	r.BackendMetadataJSON = raw
 	for {
@@ -362,25 +379,25 @@ func (k *KitGKERuntimeBackend) waitPod(ctx context.Context, r assistantRuntimeRe
 			return nil, fmt.Errorf("kit GKE waitPod: %w", err)
 		}
 		if len(pods.Items) > 1 {
-			return nil, fmt.Errorf("ambiguous Kit GKE claim pod authority")
+			return nil, kitGKEAdmissionTerminalError{fmt.Errorf("ambiguous Kit GKE claim pod authority")}
 		}
 		if len(pods.Items) == 1 {
 			p := &pods.Items[0]
 			if err := k.checkObject(r, p, m.PodUID); err != nil {
-				return nil, err
+				return nil, kitGKEAdmissionTerminalError{err}
 			}
 			phase, _, _ := unstructured.NestedString(p.Object, "status", "phase")
 			ip, _, _ := unstructured.NestedString(p.Object, "status", "podIP")
 			if phase == "Running" && net.ParseIP(ip) != nil {
 				if _, _, e := kitGKEProcessIdentity(p); e == nil {
 					if e = k.checkPod(r, p, m); e != nil {
-						return nil, e
+						return nil, kitGKEAdmissionTerminalError{e}
 					}
 					return p, nil
 				}
 			}
 			if phase == "Failed" || phase == "Succeeded" {
-				return nil, fmt.Errorf("kit GKE process exited; cold replacement requires explicit fenced reset")
+				return nil, kitGKEAdmissionTerminalError{fmt.Errorf("kit GKE process exited; cold replacement requires explicit fenced reset")}
 			}
 		}
 		select {

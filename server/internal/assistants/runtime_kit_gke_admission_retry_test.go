@@ -55,8 +55,8 @@ func TestKitGKEColdAdmissionRetry(t *testing.T) {
 
 func TestKitGKEColdAdmissionPodWaitRetryRejectsReplacement(t *testing.T) {
 	t.Parallel()
-	for _, replaced := range []bool{false, true} {
-		t.Run(fmt.Sprint(replaced), func(t *testing.T) {
+	for _, failure := range []string{"none", "claim", "template", "secret", "Failed", "Succeeded", "missing-claim", "transient-api"} {
+		t.Run(failure, func(t *testing.T) {
 			t.Parallel()
 			k, client, r, fences := kitGKEBackendFixture(t)
 			var persisted []byte
@@ -77,20 +77,61 @@ func TestKitGKEColdAdmissionPodWaitRetryRejectsReplacement(t *testing.T) {
 			require.True(t, metadata.Provisioning)
 			require.NotEmpty(t, metadata.ClaimUID)
 			client.ReactionChain = client.ReactionChain[1:]
-			if replaced {
-				resource := client.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace)
-				claim, err := resource.Get(ctx, kitGKEName(r), metav1.GetOptions{})
+			switch failure {
+			case "claim", "template", "secret":
+				gvr, name := gkeSandboxClaimGVR, kitGKEName(r)
+				switch failure {
+				case "template":
+					gvr = kitTemplateGVR
+				case "secret":
+					gvr, name = kitSecretGVR, metadata.SecretName
+				}
+				resource := client.Resource(gvr).Namespace(k.config.GKE.Namespace)
+				obj, err := resource.Get(ctx, name, metav1.GetOptions{})
 				require.NoError(t, err)
-				claim.SetUID("replacement")
-				_, err = resource.Update(ctx, claim, metav1.UpdateOptions{})
+				obj.SetUID("replacement")
+				_, err = resource.Update(ctx, obj, metav1.UpdateOptions{})
 				require.NoError(t, err)
+			case "Failed", "Succeeded":
+				resource := client.Resource(gkePodGVR).Namespace(k.config.GKE.Namespace)
+				pods, err := resource.List(ctx, metav1.ListOptions{})
+				require.NoError(t, err)
+				require.Len(t, pods.Items, 1)
+				pod := &pods.Items[0]
+				require.NoError(t, unstructured.SetNestedField(pod.Object, failure, "status", "phase"))
+				_, err = resource.Update(ctx, pod, metav1.UpdateOptions{})
+				require.NoError(t, err)
+			case "missing-claim":
+				require.NoError(t, client.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Delete(ctx, kitGKEName(r), metav1.DeleteOptions{}))
+			case "transient-api":
+				client.PrependReactor("get", "sandboxclaims", func(ktesting.Action) (bool, runtime.Object, error) {
+					return true, nil, fmt.Errorf("temporary API outage")
+				})
 			}
 			r.BackendMetadataJSON = persisted
 			_, err = k.Ensure(ctx, r)
-			if replaced {
-				require.ErrorContains(t, err, "authority mismatch")
-			} else {
+			switch failure {
+			case "none":
 				require.NoError(t, err)
+				require.Zero(t, *fences)
+			case "transient-api":
+				require.ErrorContains(t, err, "temporary API outage")
+				require.Zero(t, *fences)
+				client.ReactionChain = client.ReactionChain[1:]
+				_, err = k.Ensure(ctx, r)
+				require.NoError(t, err)
+				require.Zero(t, *fences)
+			default:
+				require.Error(t, err)
+				switch failure {
+				case "Failed", "Succeeded":
+					require.ErrorContains(t, err, "process exited")
+				case "missing-claim":
+					require.ErrorContains(t, err, "not found")
+				default:
+					require.ErrorContains(t, err, "authority mismatch")
+				}
+				require.Equal(t, 1, *fences, "terminal failures must revoke startup credentials")
 			}
 		})
 	}
