@@ -159,7 +159,7 @@ func IsToken(raw string) bool {
 }
 
 // Authenticate verifies raw and returns a context authenticated as its workload,
-// carrying the token's ceiling. Admission is left to authz.PrepareContext.
+// bounded by the organization's Ceiling. Admission is left to authz.PrepareContext.
 func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context, error) {
 	if !IsToken(raw) {
 		return ctx, ErrNotToken
@@ -202,7 +202,8 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 		AuthorizerUserID:       "",
 		DelegatedGrants:        ceiling,
 		DelegatedGrantsVersion: version,
-		// The token carries its ceiling, so admission derives none.
+		// The ceiling is built from Ceiling on each request and supplied as
+		// the delegated policy, so admission derives none.
 		DerivesPolicyAtAdmission: false,
 	}), nil
 }
