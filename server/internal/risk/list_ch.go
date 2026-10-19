@@ -66,10 +66,17 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	uniqueMatch, nonAssistant bool,
 	assistantID uuid.NullUUID,
 	from, to *time.Time,
+	enabledPoliciesOnly bool,
 ) (*gen.ListRiskResultsResult, error) {
 	projectID := *authCtx.ProjectID
 
-	policyIDs, err := s.visiblePolicyIDs(ctx, projectID, policyID)
+	var policyIDs []string
+	var err error
+	if enabledPoliciesOnly {
+		policyIDs, err = s.enabledPolicyIDs(ctx, authCtx.ActiveOrganizationID, projectID, policyID)
+	} else {
+		policyIDs, err = s.visiblePolicyIDs(ctx, projectID, policyID)
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve visible risk policies").LogError(ctx, s.logger)
 	}
@@ -166,6 +173,97 @@ func (s *Service) visiblePolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 		ids = append(ids, policy.ID.String())
 	}
 	return ids, nil
+}
+
+func (s *Service) enabledPolicyIDs(ctx context.Context, organizationID string, projectID uuid.UUID, policyID uuid.NullUUID) ([]string, error) {
+	if policyID.Valid {
+		policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID.UUID, ProjectID: projectID})
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !policy.Enabled) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("get enabled risk policy: %w", err)
+		}
+		return []string{policyID.UUID.String()}, nil
+	}
+
+	policies, err := s.repo.ListEnabledRiskPolicyIDsByOrganizationProject(ctx, repo.ListEnabledRiskPolicyIDsByOrganizationProjectParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list enabled risk policies: %w", err)
+	}
+	ids := make([]string, 0, len(policies))
+	for _, id := range policies {
+		ids = append(ids, id.String())
+	}
+	return ids, nil
+}
+
+func (s *Service) listRiskResultsByChatFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext, cursor uuid.NullUUID, pageSize int) (*gen.ListRiskResultsByChatResult, error) {
+	projectID := *authCtx.ProjectID
+	policyIDs, err := s.enabledPolicyIDs(ctx, authCtx.ActiveOrganizationID, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve enabled risk policies").LogError(ctx, s.logger)
+	}
+	if len(policyIDs) == 0 {
+		return &gen.ListRiskResultsByChatResult{Chats: []*types.RiskChatSummary{}, NextCursor: nil}, nil
+	}
+
+	cursorChatID := ""
+	if cursor.Valid {
+		cursorChatID = cursor.UUID.String()
+	}
+	rows, err := s.findingsCH.GroupRiskFindingsByChat(ctx, chrepo.GroupRiskFindingsByChatParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID.String(),
+		PolicyIDs:      policyIDs,
+		CursorChatID:   cursorChatID,
+		Limit:          uint64(conv.SafeInt32(pageSize)) + 1, // #nosec G115 -- non-negative by construction.
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat from clickhouse").LogError(ctx, s.logger)
+	}
+
+	chatIDs := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		id, err := uuid.Parse(row.ChatID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "parse clickhouse risk chat id").LogError(ctx, s.logger)
+		}
+		chatIDs = append(chatIDs, id)
+	}
+	titles := make(map[uuid.UUID]*string, len(chatIDs))
+	if len(chatIDs) > 0 {
+		titleRows, err := s.repo.ListChatTitlesByIDs(ctx, repo.ListChatTitlesByIDsParams{
+			ProjectID: projectID,
+			Ids:       chatIDs,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "enrich risk chat titles", attr.SlogError(err))
+		}
+		for _, row := range titleRows {
+			titles[row.ID] = conv.FromPGText[string](row.Title)
+		}
+	}
+
+	chats := make([]*types.RiskChatSummary, 0, len(rows))
+	for i, row := range rows {
+		chats = append(chats, &types.RiskChatSummary{
+			ChatID:         chatIDs[i].String(),
+			ChatTitle:      titles[chatIDs[i]],
+			UserID:         conv.PtrEmpty(row.ExternalUserID),
+			FindingsCount:  safeCount(row.FindingsCount),
+			LatestDetected: row.LatestDetected.Format(time.RFC3339),
+		})
+	}
+	var nextCursor *string
+	if len(chats) > pageSize {
+		nextCursor = &chats[pageSize].ChatID
+		chats = chats[:pageSize]
+	}
+	return &gen.ListRiskResultsByChatResult{Chats: chats, NextCursor: nextCursor}, nil
 }
 
 // listDisplayEnrichment batch-fetches the page's chat titles (by chat id),

@@ -9,7 +9,6 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	dockercontainer "github.com/moby/moby/api/types/container"
-	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	clickhousecontainer "github.com/testcontainers/testcontainers-go/modules/clickhouse"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -31,7 +30,7 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 		return nil, nil, fmt.Errorf("wait for docker: %w", err)
 	}
 
-	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:26.4.5.143-distroless@sha256:d7c4cf5575c3d0d49cf1beb7ce8d938d64f707789d9fa3fa538c7d3f898b0649",
+	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:26.6.8.7-distroless@sha256:31f67400c46f94f7d9236728f369faa125067f13f98fa2ad620ee190fe70eed5",
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
 		clickhousecontainer.WithInitScripts(filepath.Join(root, "server", "clickhouse", "schema.sql")),
@@ -46,7 +45,7 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 			wait.ForExec([]string{"clickhouse-client", "--host", clickhouseTestHostname, "--user", "gram", "--password", "gram", "--query", "SELECT 1"}),
 		),
 		WithPublishedPortWait("9000/tcp"),
-		WithoutPublishedPorts(),
+		WithLoopbackPorts(),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
 	if err != nil {
@@ -75,8 +74,13 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 				Password: "gram",
 			},
 			Settings: clickhouse.Settings{
-				"async_insert":          0,
-				"wait_for_async_insert": 0,
+				"async_insert": 0,
+				// Inserts that opt into async_insert per query leave the wait
+				// to the connection, which is fire-and-forget in production.
+				// Waiting here acks each insert only once its rows, and the
+				// materialized views they feed, are committed, so tests read
+				// their own writes without flushing or polling.
+				"wait_for_async_insert": 1,
 			},
 		})
 		if err != nil {
@@ -110,13 +114,4 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 
 		return conn, nil
 	}
-}
-
-// FlushClickHouseAsyncInserts synchronously drains ClickHouse's async insert
-// queue. Some write paths use server-side async fire-and-forget inserts, so
-// rows only become visible to queries after a buffer flush.
-func FlushClickHouseAsyncInserts(t *testing.T, conn clickhouse.Conn) {
-	t.Helper()
-
-	require.NoError(t, conn.Exec(t.Context(), "SYSTEM FLUSH ASYNC INSERT QUEUE"))
 }

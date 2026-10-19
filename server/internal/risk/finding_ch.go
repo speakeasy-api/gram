@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
@@ -54,15 +56,16 @@ type FindingCHWriter struct {
 	inserter       RiskFindingInserter
 	fingerprinter  Fingerprinter
 	builtinPresets *presetlib.Library
+	webhooks       RiskFindingCreatedEmitter
 
 	exclusions    *FindingExclusionResolver
 	policyFilters *findingPolicyFilterResolver
-	// db backs the per-batch chat-message attribution read. A read replica is
-	// fine because attribution is best-effort enrichment.
+
+	// db backs the per-batch chat-message attribution read.
 	db repo.DBTX
 }
 
-func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter, builtinPresets *presetlib.Library) *FindingCHWriter {
+func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter, builtinPresets *presetlib.Library, webhooks RiskFindingCreatedEmitter) *FindingCHWriter {
 	logger = logger.With(attr.SlogComponent("finding-ch-writer"))
 	return &FindingCHWriter{
 		logger:         logger,
@@ -70,6 +73,7 @@ func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.
 		inserter:       inserter,
 		fingerprinter:  fingerprinter,
 		builtinPresets: builtinPresets,
+		webhooks:       webhooks,
 		exclusions:     NewFindingExclusionResolver(db),
 		policyFilters:  newFindingPolicyFilterResolver(db),
 		db:             db,
@@ -133,6 +137,8 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 	}
 
 	rows := make([]chrepo.RiskFindingRow, 0, len(messages))
+	webhookEvents := make([]RiskFindingCreatedEvent, 0, len(messages))
+	webhookFindingIDs := make(map[uuid.UUID]struct{}, len(messages))
 	for msgIdx, message := range messages {
 		orgID := strings.TrimSpace(message.GetOrganizationId())
 		match := message.GetMatch()
@@ -381,7 +387,7 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			falsePositiveAt = &utc
 		}
 
-		rows = append(rows, chrepo.RiskFindingRow{
+		row := chrepo.RiskFindingRow{
 			ID:                       id,
 			CreatedAt:                createdAt.UTC(),
 			OrganizationID:           message.GetOrganizationId(),
@@ -435,7 +441,22 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			PrincipalKind:            message.GetExecution().GetPrincipalKind(),
 			IdentityStamped:          message.GetExecution().GetIdentityStamped(),
 			EnforcementOutcome:       findingEnforcementOutcome(message.GetEnforcementOutcome()),
-		})
+		}
+		if w.webhooks != nil {
+			// A bad webhook identity skips only the webhook; the finding is still stored.
+			event, err := riskFindingCreatedWebhook(row)
+			if err != nil {
+				logger.ErrorContext(ctx, "finding has invalid webhook identity, skipping its webhook", attr.SlogError(err))
+				w.metrics.RecordFindingCHWebhookDropped(ctx, "invalid_webhook_identity")
+			}
+			if event != nil {
+				if _, duplicate := webhookFindingIDs[row.ID]; !duplicate {
+					webhookFindingIDs[row.ID] = struct{}{}
+					webhookEvents = append(webhookEvents, *event)
+				}
+			}
+		}
+		rows = append(rows, row)
 	}
 
 	if len(rows) == 0 {
@@ -452,7 +473,54 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 		return nil, fmt.Errorf("insert risk findings batch: %w", err)
 	}
 
+	if w.webhooks != nil {
+		if err := w.webhooks.Emit(ctx, webhookEvents); err != nil {
+			return nil, fmt.Errorf("emit risk finding created webhooks: %w", err)
+		}
+	}
+
 	return failed, nil
+}
+
+func riskFindingCreatedWebhook(row chrepo.RiskFindingRow) (*RiskFindingCreatedEvent, error) {
+	if row.EventKind != chrepo.EventKindFinding || row.Shadow || row.DeadLetterReason != "" || row.ChatMessageID == "" {
+		return nil, nil
+	}
+	if strings.TrimSpace(row.OrganizationID) == "" {
+		return nil, fmt.Errorf("finding %s has no organization id", row.ID)
+	}
+	projectID, err := uuid.Parse(row.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding %s project id: %w", row.ID, err)
+	}
+	riskPolicyID, err := uuid.Parse(row.RiskPolicyID)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding %s risk policy id: %w", row.ID, err)
+	}
+	chatMessageID, err := uuid.Parse(row.ChatMessageID)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding %s chat message id: %w", row.ID, err)
+	}
+	return &RiskFindingCreatedEvent{
+		ProjectID:      projectID,
+		OrganizationID: row.OrganizationID,
+		Event: outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]{
+			ID: events.RiskFindingCreatedEventID(row.ID),
+			Payload: events.RiskFindingCreatedPayloadV1{
+				ID:                row.ID,
+				ProjectID:         projectID,
+				OrganizationID:    row.OrganizationID,
+				RiskPolicyID:      riskPolicyID,
+				RiskPolicyVersion: row.RiskPolicyVersion,
+				ChatMessageID:     chatMessageID,
+				RuleID:            row.RuleID,
+				Description:       row.Description,
+				Confidence:        row.Confidence,
+				Tags:              row.Tags,
+				CreatedAt:         row.CreatedAt,
+			},
+		},
+	}, nil
 }
 
 // chatMessageAttribution batch-fetches the denormalized attribution stamped
