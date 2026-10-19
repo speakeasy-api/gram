@@ -109,7 +109,6 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		live1, live2, fpMarked, deadLetter, heldByOther, ingestExcluded, otherRule, shadowRow,
 	}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	predicate := chrepo.RetroExclusionPredicate{
 		PolicyID:           "",
@@ -219,7 +218,6 @@ func TestRetroExclusion_FiltersAndPolicyScope(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{inPolicyP, wrongSource, inPolicyQ, noPolicy}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// Policy-bound + source filter: exactly the one row in P from gitleaks.
 	count, err := chQueries.CountRetroExclusionApply(ctx, scope, chrepo.RetroExclusionPredicate{
@@ -281,7 +279,6 @@ func TestRetroExclusion_ExactFingerprints(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{oldPepper, newPepper, noFingerprint}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	predicate := chrepo.RetroExclusionPredicate{
 		PolicyID:           "",
@@ -359,7 +356,6 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 		surface:       "content",
 		shadow:        true,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The unmask fixture writes rows two days back.
 	_, scope := retroDay(orgID, projectID.String())
@@ -451,7 +447,6 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 		exclusionID:   &exclusionID,
 		shadow:        true,
 	})
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The flagged row is now a REVERSAL candidate for this exclusion, and a
 	// by-id reversal un-hides it again.
@@ -501,7 +496,6 @@ func TestRetroExclusion_KeepGuardedReversal(t *testing.T) {
 
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{stillMatching, staleRule}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	keep, err := chrepo.RetroExclusionPredicate{
 		PolicyID:           "",
@@ -541,7 +535,6 @@ func TestRetroExclusion_KeepGuardedReversal(t *testing.T) {
 	staleFp := holdExact(chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt.Add(4*time.Minute), "gitleaks", "secret.github_pat", "alice@example.com"), "fp-other")
 
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{matchingFp, noFp, staleFp}))
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	exactKeep, err := chrepo.RetroExclusionPredicate{
 		PolicyID:           "",
@@ -645,7 +638,6 @@ func TestRetroExclusion_FutureSourceVersion(t *testing.T) {
 				"gitleaks", "secret.github_pat", "user@example.com")
 			q := chrepo.New(ti.chConn)
 			require.NoError(t, q.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
-			testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 			supplied := time.Now().UTC()
 			future := supplied.Add(24 * time.Hour)
