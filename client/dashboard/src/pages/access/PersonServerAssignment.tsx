@@ -1,112 +1,162 @@
+import { Ban } from "lucide-react";
 import { Link } from "react-router";
 import { useRoutes } from "@/routes";
 import { useOrganization } from "@/contexts/Auth";
-import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { RoleLink } from "@/components/role-link";
-import { useExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
-import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import { cn } from "@/lib/utils";
 import type { AccessibleMCPServer } from "@gram/client/models/components/accessiblemcpserver.js";
-import { effectBadge, directorySourceLabel } from "../mcp/access/explainAccess";
+import type { ExplainResourceAccessResult } from "@gram/client/models/components/explainresourceaccessresult.js";
+import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
+import { levelStatus } from "../mcp/access/explainAccess";
 import { narrowingLabel } from "../mcp/access/serverAudience";
+import { AssignmentServerIcon } from "./AssignmentServerIcon";
 
-/** A person's resolved access, distinct from any one role's grant. */
+export type PersonServerAccess = {
+  server: AccessibleMCPServer;
+  explanation: ExplainResourceAccessResult;
+};
+
+function uniqueSources(
+  rules: ExplainedAccessRule[],
+  effects: ExplainedAccessRule["effect"][],
+): ExplainedAccessRule[] {
+  return [
+    ...new Map(
+      rules
+        .filter((rule) => effects.includes(rule.effect))
+        .map((rule) => [rule.principalUrn, rule]),
+    ).values(),
+  ];
+}
+
+function RuleSources({ rules }: { rules: ExplainedAccessRule[] }): JSX.Element {
+  return (
+    <>
+      {rules.map((rule, index) => (
+        <span key={rule.principalUrn}>
+          {index > 0 && ", "}
+          {rule.kind === "role" ? (
+            <RoleLink principalUrn={rule.principalUrn}>
+              {rule.displayName}
+            </RoleLink>
+          ) : rule.kind === "user" ? (
+            "Direct assignment"
+          ) : (
+            rule.displayName
+          )}
+        </span>
+      ))}
+    </>
+  );
+}
+
+/** Use the server's resolved decision, including grants suppressed by a block. */
 export function ServerAssignment({
   server,
-  member,
-}: {
-  server: AccessibleMCPServer;
-  member: AccessMember;
-}): JSX.Element {
+  explanation,
+}: PersonServerAccess): JSX.Element {
   const organization = useOrganization();
   const routes = useRoutes({ projectSlug: server.projectSlug });
   const project = organization.projects?.find(
     (project) => project.id === server.projectId,
   );
-  const explanation = useExplainResourceAccess(
-    { resourceKind: "mcp", resourceId: server.id, userId: member.id },
-    undefined,
-    { throwOnError: false },
-  );
-  const level = explanation.data?.levels.find((level) => level.level === "use");
-  const sources = [
-    ...new Map(
-      (level?.rules ?? [])
+  const level = explanation.levels.find((level) => level.level === "use");
+  if (!level)
+    return (
+      <Text small muted>
+        Connection access unavailable.
+      </Text>
+    );
+  const status = levelStatus(level, explanation.visibility);
+  const blocked = status.tone === "blocked";
+  const rules = explanation.visibility === "public" ? [] : level.rules;
+  const sources = uniqueSources(rules, ["allows", "overrides", "blocked"]);
+  const blockers = uniqueSources(rules, ["blocks"]);
+  const limits = uniqueSources(rules, ["limits"]);
+  const overridden = uniqueSources(rules, ["overridden"]);
+  const restrictions = [
+    ...new Set(
+      rules
         .filter(
-          (rule) => rule.effect === "allows" || rule.effect === "overrides",
+          (rule) =>
+            rule.effect !== "blocked" &&
+            ((rule.tools?.length ?? 0) > 0 ||
+              (rule.dispositions?.length ?? 0) > 0),
         )
-        .map((rule) => [rule.principalUrn, rule]),
-    ).values(),
+        .map((rule) => narrowingLabel(rule)),
+    ),
   ];
   return (
-    <div className="border-border space-y-2 border-b py-4">
-      <Link
-        className="break-words text-sm font-medium hover:underline"
-        to={routes.mcp.x.overview.href(server.slug || server.id)}
-      >
-        {server.name || "Unnamed server"}
-      </Link>
-      {server.projectSlug !== "default" && (
-        <Text small muted>
-          {project?.name || server.projectSlug}
-        </Text>
+    <div
+      className={cn(
+        "border-border flex items-start gap-3 border-b py-4",
+        blocked && "bg-destructive/5",
       )}
-      {explanation.isError && (
-        <Button variant="secondary" onClick={() => void explanation.refetch()}>
-          Retry loading access
-        </Button>
-      )}
-      {explanation.isPending && (
-        <Text small muted>
-          Loading access…
-        </Text>
-      )}
-      {level && (
-        <details className="text-sm">
-          <summary className="cursor-pointer">
-            {level.toolAccess === "all" ? "All tools" : "Restricted tools"}
-          </summary>
-          <div className="space-y-2 py-2">
-            {level.rules.map((rule, index) => (
-              <div key={index}>
-                <Text small>
-                  {rule.displayName}: {effectBadge(rule).label.toLowerCase()}{" "}
-                  {narrowingLabel(rule)}
-                </Text>
-                {directorySourceLabel(rule) && (
-                  <Text small muted>
-                    {directorySourceLabel(rule)}
-                  </Text>
-                )}
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-      {sources.length > 0 && (
-        <div className="flex flex-wrap gap-1 text-sm">
-          <Text small muted>
-            Assigned through
+    >
+      <span className="relative mt-0.5 shrink-0">
+        <AssignmentServerIcon server={server} />
+        {blocked && (
+          <Ban
+            aria-hidden="true"
+            className="bg-card text-destructive absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full"
+          />
+        )}
+      </span>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <Link
+            className={cn(
+              "break-words text-sm font-medium hover:underline",
+              blocked && "text-destructive",
+            )}
+            to={routes.mcp.x.overview.href(server.slug || server.id)}
+          >
+            {server.name || "Unnamed server"}
+          </Link>
+          <Text small destructive={blocked} muted={!blocked}>
+            {status.label}
           </Text>
-          {sources.map((rule, index) => (
-            <span key={rule.principalUrn}>
-              {index > 0 && ", "}
-              {rule.kind === "role" ? (
-                <RoleLink principalUrn={rule.principalUrn}>
-                  {rule.displayName}
-                </RoleLink>
-              ) : (
-                rule.displayName
-              )}
-            </span>
-          ))}
         </div>
-      )}
-      {explanation.data?.visibility === "public" && (
-        <Text small muted>
-          Public server
-        </Text>
-      )}
+        {server.projectSlug !== "default" && (
+          <Text small muted>
+            {project?.name || server.projectSlug}
+          </Text>
+        )}
+        <p className="text-muted-foreground text-sm">
+          {sources.length > 0 && (
+            <>
+              Assigned through <RuleSources rules={sources} />
+            </>
+          )}
+          {blockers.length > 0 && (
+            <span className="text-destructive">
+              {sources.length > 0 ? ", but blocked by " : "Blocked by "}
+              <RuleSources rules={blockers} />
+            </span>
+          )}
+          {limits.length > 0 && (
+            <>
+              {sources.length > 0 ? "; restricted by " : "Restricted by "}
+              <RuleSources rules={limits} />
+            </>
+          )}
+          {explanation.visibility === "public" &&
+            sources.length === 0 &&
+            "Public server"}
+        </p>
+        {overridden.length > 0 && !blocked && (
+          <Text small muted>
+            Direct assignment overrides the block from{" "}
+            <RuleSources rules={overridden} />.
+          </Text>
+        )}
+        {restrictions.length > 0 && !blocked && (
+          <Text small muted>
+            {restrictions.join(" · ")}
+          </Text>
+        )}
+      </div>
     </div>
   );
 }

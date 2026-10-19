@@ -1,4 +1,5 @@
-import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { ArrowRight, Pencil } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { useIdentityTint } from "@/components/gradient-colors";
 import { IdentityLink } from "@/components/identity-link";
@@ -109,12 +110,14 @@ export function MemberFacepile({
   renderTrigger,
   onMemberSelect,
   memberActionLabel,
+  onEditRole,
 }: {
   members: FacepileMember[];
   maxFaces?: number;
   /** Opens a searchable picker that reports the selected member instead of navigating. */
   onMemberSelect?: (member: FacepileMember) => void;
   memberActionLabel?: string;
+  onEditRole?: () => void;
   renderTrigger?: (props: {
     label: string;
     onClick: (event: React.MouseEvent) => void;
@@ -225,45 +228,75 @@ export function MemberFacepile({
         onClick={(e) => e.stopPropagation()}
         className={
           memberActionLabel
-            ? "w-80 overflow-hidden p-0"
+            ? "w-72 overflow-hidden p-0"
             : "w-64 overflow-hidden p-0"
         }
       >
         {onMemberSelect ? (
           <Command>
-            {members.length > 5 && (
-              <CommandInput placeholder="Search members…" />
-            )}
+            <div className="border-border flex items-center border-b">
+              <div className="min-w-0 flex-1 [&_[data-slot=command-input-wrapper]]:h-9 [&_[data-slot=command-input-wrapper]]:border-b-0">
+                <CommandInput
+                  className="h-9 py-1"
+                  placeholder="Search members…"
+                />
+              </div>
+              {onEditRole && (
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  className="mr-1 shrink-0"
+                  onClick={() => {
+                    selectedMember.current = true;
+                    setOpen(false);
+                    onEditRole();
+                  }}
+                >
+                  <Button.LeftIcon>
+                    <Pencil className="size-3.5" />
+                  </Button.LeftIcon>
+                  <Button.Text className="font-sans text-xs font-normal tracking-normal normal-case">
+                    Edit role
+                  </Button.Text>
+                </Button>
+              )}
+            </div>
             <CommandList className="max-h-64">
               <CommandEmpty>No members match.</CommandEmpty>
               {sorted.map((member) => (
-                <CommandItem
-                  key={member.id}
-                  value={member.id}
-                  keywords={[member.name, member.email]}
-                  className="group cursor-pointer gap-2.5 px-3 py-2"
-                  onSelect={() => {
-                    selectedMember.current = true;
-                    setOpen(false);
-                    onMemberSelect(member);
-                  }}
-                >
-                  <MemberAvatar member={member} className="size-6" />
-                  <div className="min-w-0">
-                    <Text small className="truncate font-medium">
-                      {member.name || member.email}
-                    </Text>
-                    <Text muted small className="truncate text-xs">
-                      {member.email}
-                    </Text>
-                  </div>
-                  {memberActionLabel && (
-                    <span className="text-muted-foreground ml-auto inline-flex shrink-0 items-center gap-1 text-xs opacity-0 group-hover:opacity-100 group-data-[selected=true]:opacity-100">
-                      {memberActionLabel}
-                      <ArrowRight aria-hidden="true" className="size-3" />
-                    </span>
-                  )}
-                </CommandItem>
+                <Tooltip key={member.id}>
+                  <TooltipTrigger asChild>
+                    <CommandItem
+                      value={member.id}
+                      aria-label={`${member.name || member.email} ${member.email}: ${memberActionLabel || "Select member"}`}
+                      keywords={[member.name, member.email]}
+                      className="group cursor-pointer gap-2.5 px-3 py-2"
+                      onSelect={() => {
+                        selectedMember.current = true;
+                        setOpen(false);
+                        onMemberSelect(member);
+                      }}
+                    >
+                      <MemberAvatar member={member} className="size-6" />
+                      <div className="min-w-0">
+                        <Text small className="truncate font-medium">
+                          {member.name || member.email}
+                        </Text>
+                        <Text muted small className="truncate text-xs">
+                          {member.email}
+                        </Text>
+                      </div>
+                      {memberActionLabel && (
+                        <span className="text-muted-foreground ml-auto inline-flex shrink-0 items-center gap-1 text-xs opacity-0 group-hover:opacity-100 group-data-[selected=true]:opacity-100">
+                          <ArrowRight aria-hidden="true" className="size-3" />
+                        </span>
+                      )}
+                    </CommandItem>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">
+                    {memberActionLabel || "Select member"}
+                  </TooltipContent>
+                </Tooltip>
               ))}
             </CommandList>
           </Command>

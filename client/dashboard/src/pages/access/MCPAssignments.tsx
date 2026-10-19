@@ -49,9 +49,12 @@ import {
 } from "../mcp/access/accessRows";
 import { ownRules, narrowingLabel } from "../mcp/access/serverAudience";
 import { assignmentExclusions } from "./assignmentExclusions";
-import { ServerAssignment } from "./PersonServerAssignment";
-import { useRoutes } from "@/routes";
-import { Link } from "react-router";
+import {
+  ServerAssignment,
+  type PersonServerAccess,
+} from "./PersonServerAssignment";
+import { useRoutes, useOrgRoutes } from "@/routes";
+import { Link, useNavigate } from "react-router";
 
 const FILTERS = defineFilters([
   { id: "server", label: "MCP server", kind: "select", pinned: true },
@@ -118,6 +121,8 @@ export function MCPAssignments({
   onReady?: (ready: boolean) => void;
 }): JSX.Element {
   const organization = useOrganization();
+  const orgRoutes = useOrgRoutes();
+  const navigate = useNavigate();
   const sdk = useSdkClient();
   const roles = useRoles(undefined, undefined, { throwOnError: false });
   const members = useMembers(undefined, undefined, { throwOnError: false });
@@ -280,10 +285,17 @@ export function MCPAssignments({
         <SkeletonTable />
       ) : (
         <Table
-          columns={roleColumns((member) => {
-            setSelectedMember(member);
-            setCheckingUser(true);
-          })}
+          columns={roleColumns(
+            (member) => {
+              setSelectedMember(member);
+              setCheckingUser(true);
+            },
+            (role) => {
+              void navigate(
+                `${orgRoutes.access.roles.href()}/${encodeURIComponent(role.id)}/edit`,
+              );
+            },
+          )}
           data={roleRows}
           rowKey={({ role }) => role.id}
           noResultsMessage="No roles match these filters."
@@ -299,6 +311,7 @@ export function MCPAssignments({
         <UserAccess
           members={members.data?.members ?? []}
           initialMember={selectedMember}
+          serverAccess={assignments.data}
           onClose={() => setCheckingUser(false)}
         />
       )}
@@ -308,6 +321,7 @@ export function MCPAssignments({
 
 function roleColumns(
   onSelectMember: (member: AccessMember) => void,
+  onEditRole: (role: Role) => void,
 ): Column<RoleAssignment>[] {
   return [
     {
@@ -328,11 +342,12 @@ function roleColumns(
       key: "members",
       header: "Members",
       width: "1fr",
-      render: ({ members }) => (
+      render: ({ role, members }) => (
         <MemberFacepile
           members={members}
           maxFaces={3}
           memberActionLabel="View assignments"
+          onEditRole={() => onEditRole(role)}
           onMemberSelect={(picked) => {
             const member = members.find((member) => member.id === picked.id);
             if (member) onSelectMember(member);
@@ -741,10 +756,12 @@ function ChangeRoleServerAccess({
 function UserAccess({
   members,
   initialMember,
+  serverAccess,
   onClose,
 }: {
   members: AccessMember[];
   initialMember?: AccessMember;
+  serverAccess?: ServerAccess[];
   onClose: () => void;
 }): JSX.Element {
   const sdk = useSdkClient();
@@ -762,8 +779,14 @@ function UserAccess({
       .includes(search.toLowerCase()),
   );
   const access = useQuery({
-    queryKey: ["mcpAssignments", organization.id, "user", selected?.id],
-    enabled: !!selected,
+    queryKey: [
+      "mcpAssignments",
+      organization.id,
+      "user",
+      "explained",
+      selected?.id,
+    ],
+    enabled: !!selected && !!serverAccess,
     queryFn: async ({ signal }) => {
       if (!selected) return [];
       const result = await sdk.access.listIdentityAccess(
@@ -771,37 +794,64 @@ function UserAccess({
         undefined,
         { signal },
       );
-      const servers: AccessibleMCPServer[] = [];
-      for (let i = 0; i < result.servers.length; i += 6) {
+      const candidates = [
+        ...new Map(
+          [
+            ...result.servers,
+            ...(serverAccess ?? [])
+              .filter(({ entries }) =>
+                entries.some((entry) => entry.level === "blocked"),
+              )
+              .map(({ server }) => server),
+          ].map((server) => [server.id, server]),
+        ).values(),
+      ];
+      const servers: PersonServerAccess[] = [];
+      for (let i = 0; i < candidates.length; i += 6) {
         const batch = await Promise.all(
-          result.servers.slice(i, i + 6).map(async (server) => {
-            const explanation = await sdk.access.explainResourceAccess(
-              {
-                resourceKind: "mcp",
-                resourceId: server.id,
-                userId: selected.id,
-              },
-              undefined,
-              { signal },
-            );
-            return explanation.levels.some(
-              (level) => level.level === "use" && level.allowed,
-            )
-              ? server
-              : null;
-          }),
+          candidates
+            .slice(i, i + 6)
+            .map(async (server): Promise<PersonServerAccess | null> => {
+              const explanation = await sdk.access.explainResourceAccess(
+                {
+                  resourceKind: "mcp",
+                  resourceId: server.id,
+                  userId: selected.id,
+                },
+                undefined,
+                { signal },
+              );
+              return explanation.levels.some(
+                (level) =>
+                  level.level === "use" &&
+                  (level.allowed ||
+                    level.rules.some((rule) => rule.effect === "blocks")),
+              )
+                ? { server, explanation }
+                : null;
+            }),
         );
         servers.push(
           ...batch.filter(
-            (server): server is AccessibleMCPServer => server !== null,
+            (server): server is PersonServerAccess => server !== null,
           ),
         );
       }
-      return servers;
+      return servers.sort(
+        (a, b) =>
+          Number(
+            !a.explanation.levels.find((level) => level.level === "use")
+              ?.allowed,
+          ) -
+            Number(
+              !b.explanation.levels.find((level) => level.level === "use")
+                ?.allowed,
+            ) || a.server.name.localeCompare(b.server.name),
+      );
     },
     throwOnError: false,
   });
-  const matchingServers = (access.data ?? []).filter((server) =>
+  const matchingServers = (access.data ?? []).filter(({ server }) =>
     `${server.name} ${server.projectSlug}`
       .toLowerCase()
       .includes(serverSearch.toLowerCase()),
@@ -892,11 +942,10 @@ function UserAccess({
               ) : access.data?.length ? (
                 matchingServers
                   .slice(0, serverLimit)
-                  .map((server) => (
+                  .map((assignment) => (
                     <ServerAssignment
-                      key={server.id}
-                      server={server}
-                      member={selected}
+                      key={assignment.server.id}
+                      {...assignment}
                     />
                   ))
               ) : (

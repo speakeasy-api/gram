@@ -145,8 +145,7 @@ In **MCP Assignments**, confirm one row per role with stacked server icons under
 read-only access; expand **Contractors** to see its blocked server after allowed
 servers, with red styling and a blocked icon badge. The MCP filter opens a
 searchable list directly. Click a role’s member avatars and select a person to
-open their effective assignments; member search appears only for rosters larger
-than five. Default-project labels and per-row totals stay hidden.
+open their effective assignments; the dropdown always offers compact member search and **Edit role**. Default-project labels and per-row totals stay hidden.
 
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this

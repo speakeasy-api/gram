@@ -109,6 +109,7 @@ vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ access: { roles: { href: () => "/access/roles" } } }),
   useRoutes: () => ({
     mcp: { x: { overview: { href: (slug: string) => `/servers/${slug}` } } },
   }),
@@ -174,7 +175,7 @@ beforeEach(() => {
   });
   state.explain.mockImplementation(
     async ({ resourceId }: { resourceId: string }) => ({
-      levels: [{ level: "use", allowed: resourceId === "allowed" }],
+      levels: [{ level: "use", allowed: resourceId === "allowed", rules: [] }],
     }),
   );
 });
@@ -444,4 +445,55 @@ it("opens effective access with a member selected from a role roster", async () 
   expect(
     screen.queryByPlaceholderText("Search MCPs in Engineering…"),
   ).toBeNull();
+});
+
+it("includes blocked servers that the identity access listing omits", async () => {
+  state.audience.mockImplementation(
+    async ({ resourceId }: { resourceId: string }) => ({
+      version: "v1",
+      entries: [
+        {
+          principalUrn: role.principalUrn,
+          kind: "role",
+          displayName: role.name,
+          level: resourceId === "server-0" ? "blocked" : "use",
+          appliesTo: "resource",
+        },
+      ],
+    }),
+  );
+  state.explain.mockImplementation(
+    async ({ resourceId }: { resourceId: string }) => ({
+      visibility: "private",
+      levels: [
+        {
+          level: "use",
+          allowed: resourceId === "allowed",
+          rules:
+            resourceId === "server-0"
+              ? [
+                  {
+                    effect: "blocks",
+                    kind: "role",
+                    displayName: "Engineering",
+                    principalUrn: role.principalUrn,
+                  },
+                ]
+              : [],
+        },
+      ],
+    }),
+  );
+  mount();
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Pick Lee" }),
+  );
+  await screen.findByText("Allowed server");
+  expect(screen.getByText("Server 00")).toBeTruthy();
+  expect(screen.queryByText("Denied server")).toBeNull();
+  expect(state.explain).toHaveBeenCalledWith(
+    expect.objectContaining({ resourceId: "server-0", userId: "lee" }),
+    undefined,
+    expect.anything(),
+  );
 });

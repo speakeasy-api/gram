@@ -88,25 +88,37 @@ it("searches the member dropdown and selects a member without navigation", async
   expect(screen.queryByPlaceholderText("Search members…")).toBeNull();
 });
 
-it("hides search for five members while retaining the assignment action cue", async () => {
+it("always shows compact search and the edit-role action for a small roster", async () => {
   const members = Array.from({ length: 5 }, (_, i) => ({
     id: `member-${i}`,
     name: `Member ${i}`,
     email: `member-${i}@example.test`,
   }));
+  const editRole = vi.fn();
   render(
     <MemoryRouter>
       <TooltipProvider>
         <MemberFacepile
           members={members}
           memberActionLabel="View assignments"
+          onEditRole={() => {
+            editRole();
+          }}
           onMemberSelect={() => {}}
         />
       </TooltipProvider>
     </MemoryRouter>,
   );
   await userEvent.click(screen.getByRole("button", { name: "5 members" }));
-  expect(screen.queryByPlaceholderText("Search members…")).toBeNull();
+  expect(screen.getByPlaceholderText("Search members…")).toBeTruthy();
   expect(screen.getAllByRole("option")).toHaveLength(5);
-  expect(screen.getAllByText("View assignments")).toHaveLength(5);
+  expect(
+    screen
+      .getAllByRole("option")
+      .every((option) =>
+        option.getAttribute("aria-label")?.includes("View assignments"),
+      ),
+  ).toBe(true);
+  await userEvent.click(screen.getByRole("button", { name: "Edit role" }));
+  expect(editRole).toHaveBeenCalledOnce();
 });
