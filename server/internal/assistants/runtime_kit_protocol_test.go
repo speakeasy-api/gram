@@ -276,6 +276,18 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				w.WriteHeader(400)
 				return
 			}
+			// Session SSE attachment is not gateway control. Uncontrolled
+			// notifications are admitted with 202 but never execute.
+			mu.Lock()
+			controlled := controls[r.Header.Get("Acp-Connection-Id")]
+			mu.Unlock()
+			if msg.Method != "session/new" && msg.Method != "session/resume" && !controlled {
+				w.WriteHeader(http.StatusAccepted)
+				if len(msg.ID) > 0 {
+					ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":-32000,\"message\":\"resume session before controlling it\"}}\n\n", msg.ID)
+				}
+				return
+			}
 			result := `{}`
 			switch msg.Method {
 			case "session/new", "session/resume":
@@ -391,6 +403,12 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
+	interrupted, err := p.InterruptTurn(ctx, r, key.ThreadID)
+	require.NoError(t, err)
+	require.False(t, interrupted)
+	mu.Lock()
+	require.Zero(t, connections, "missing session must not dial")
+	mu.Unlock()
 	require.NoError(t, p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1-mini", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
 	// A new adapter reconstructs the durable correlation before replay.
 	restarted, err := NewKitRuntimeProtocol(p.config)
@@ -409,11 +427,12 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	}
 	require.Equal(t, 1, users)
 	require.Equal(t, 1, finals)
-	interrupted, err := p.InterruptTurn(ctx, r, key.ThreadID)
-	require.NoError(t, err)
-	require.True(t, interrupted)
+	interrupted, err = p.InterruptTurn(ctx, r, key.ThreadID)
+	require.ErrorIs(t, err, ErrKitInterruptControlUnavailable)
+	require.False(t, interrupted)
 	mu.Lock()
-	require.Equal(t, []string{"session/new", "session/set_config_option", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/prompt", "kit/session/status", "session/cancel"}, methods)
+	require.Equal(t, []string{"session/new", "session/set_config_option", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/prompt", "kit/session/status"}, methods)
+	require.Equal(t, 2, connections, "interrupt must not dial or replace projector control")
 	mu.Unlock()
 }
 

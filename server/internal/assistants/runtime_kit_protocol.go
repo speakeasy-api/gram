@@ -33,6 +33,9 @@ type KitRuntimeProtocol struct{ config KitRuntimeProtocolConfig }
 var _ runtimeProtocol = (*KitRuntimeProtocol)(nil)
 var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 
+// ErrKitInterruptControlUnavailable prevents falsely acknowledging an unowned cancellation.
+var ErrKitInterruptControlUnavailable = errors.New("Kit turn interruption requires routing to the existing session controller; cancellation was not sent")
+
 var ErrKitUpgradeNoticeUnsupported = errors.New("kit runtime-generated context upgrade notice is not supported by the pinned runtime")
 
 func NewKitRuntimeProtocol(c KitRuntimeProtocolConfig) (*KitRuntimeProtocol, error) {
@@ -317,27 +320,19 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 }
 
 func (p *KitRuntimeProtocol) InterruptTurn(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) (bool, error) {
-	session, found, err := p.config.Core.LoadKitRuntimeSession(ctx, kitSessionKey(r, thread))
+	_, found, err := p.config.Core.LoadKitRuntimeSession(ctx, kitSessionKey(r, thread))
 	if err != nil {
 		return false, fmt.Errorf("load kit session for interrupt: %w", err)
 	}
 	if !found {
 		return false, nil
 	}
-	c, err := p.dial(ctx, r)
-	if err != nil {
-		return false, fmt.Errorf("kit protocol operation: %w", err)
-	}
-	defer closeKitTransport(c)
-	if err = c.AttachSession(ctx, session.SessionID); err != nil {
-		return false, fmt.Errorf("kit protocol operation: %w", err)
-	}
-	err = c.Cancel(ctx, session.SessionID)
-	if err != nil {
-		return false, fmt.Errorf("cancel kit turn: %w", err)
-	}
-	return true, nil
+	// Attaching a fresh transport does not grant control, and HTTP 202 for a
+	// cancellation notification does not acknowledge cancellation. Resuming
+	// would replace the active controller and disconnect its sole projector.
+	return false, ErrKitInterruptControlUnavailable
 }
+
 func (p *KitRuntimeProtocol) Status(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	c, err := p.dial(ctx, r)
 	if err != nil {
