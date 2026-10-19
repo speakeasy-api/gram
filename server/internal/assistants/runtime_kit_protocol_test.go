@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,6 +111,7 @@ func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
 	t.Parallel()
 	for _, busy := range []bool{false, true} {
 		t.Run(fmt.Sprintf("background_busy_%t", busy), func(t *testing.T) {
+			t.Parallel()
 			core, db, key, chatID := kitSessionFixture(t)
 			_, err := core.StoreKitRuntimeSession(t.Context(), key, "session-one")
 			require.NoError(t, err)
@@ -145,9 +147,9 @@ func TestKitProtocolSwitchUnderAdmissionLock(t *testing.T) {
 					ch := streams[session]
 					mu.Unlock()
 					if ch != nil && msg.Method == "session/resume" {
-						require.NotContains(t, msg.Params, "replayFrom")
-						require.NotContains(t, msg.Params, "mcpServers")
-						require.JSONEq(t, fmt.Sprintf(`{"ai.speakeasy/gram-chat-id":%q}`, chatID.String()), string(msg.Params["_meta"]))
+						assert.NotContains(t, msg.Params, "replayFrom")
+						assert.NotContains(t, msg.Params, "mcpServers")
+						assert.JSONEq(t, fmt.Sprintf(`{"ai.speakeasy/gram-chat-id":%q}`, chatID.String()), string(msg.Params["_meta"]))
 						resumed = true
 						w.WriteHeader(202)
 						ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
