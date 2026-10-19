@@ -72,7 +72,7 @@ func NewTestPostgres(ctx context.Context) (_ *postgres.PostgresContainer, _ Post
 			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
 		),
 		WithPublishedPortWait("5432/tcp"),
-		WithoutPublishedPorts(),
+		WithLoopbackPorts(),
 		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
 		testcontainers.WithEnv(map[string]string{"PGDATA": "/var/lib/postgresql/data"}),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
