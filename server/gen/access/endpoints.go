@@ -26,6 +26,8 @@ type Endpoints struct {
 	SetDirectoryRoleMapping              goa.Endpoint
 	SetDirectoryRoleMappings             goa.Endpoint
 	DeleteDirectoryRoleMapping           goa.Endpoint
+	PreviewDirectoryRoleSetup            goa.Endpoint
+	ApplyDirectoryRoleSetup              goa.Endpoint
 	ListScopes                           goa.Endpoint
 	ListMembers                          goa.Endpoint
 	ListGrants                           goa.Endpoint
@@ -66,6 +68,8 @@ func NewEndpoints(s Service) *Endpoints {
 		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingEndpoint(s, a.APIKeyAuth),
 		SetDirectoryRoleMappings:             NewSetDirectoryRoleMappingsEndpoint(s, a.APIKeyAuth),
 		DeleteDirectoryRoleMapping:           NewDeleteDirectoryRoleMappingEndpoint(s, a.APIKeyAuth),
+		PreviewDirectoryRoleSetup:            NewPreviewDirectoryRoleSetupEndpoint(s, a.APIKeyAuth),
+		ApplyDirectoryRoleSetup:              NewApplyDirectoryRoleSetupEndpoint(s, a.APIKeyAuth),
 		ListScopes:                           NewListScopesEndpoint(s, a.APIKeyAuth),
 		ListMembers:                          NewListMembersEndpoint(s, a.APIKeyAuth),
 		ListGrants:                           NewListGrantsEndpoint(s, a.APIKeyAuth),
@@ -104,6 +108,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SetDirectoryRoleMapping = m(e.SetDirectoryRoleMapping)
 	e.SetDirectoryRoleMappings = m(e.SetDirectoryRoleMappings)
 	e.DeleteDirectoryRoleMapping = m(e.DeleteDirectoryRoleMapping)
+	e.PreviewDirectoryRoleSetup = m(e.PreviewDirectoryRoleSetup)
+	e.ApplyDirectoryRoleSetup = m(e.ApplyDirectoryRoleSetup)
 	e.ListScopes = m(e.ListScopes)
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
@@ -476,6 +482,76 @@ func NewDeleteDirectoryRoleMappingEndpoint(s Service, authAPIKeyFn security.Auth
 			return nil, err
 		}
 		return nil, s.DeleteDirectoryRoleMapping(ctx, p)
+	}
+}
+
+// NewPreviewDirectoryRoleSetupEndpoint returns an endpoint function that calls
+// the method "previewDirectoryRoleSetup" of service "access".
+func NewPreviewDirectoryRoleSetupEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PreviewDirectoryRoleSetupPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.PreviewDirectoryRoleSetup(ctx, p)
+	}
+}
+
+// NewApplyDirectoryRoleSetupEndpoint returns an endpoint function that calls
+// the method "applyDirectoryRoleSetup" of service "access".
+func NewApplyDirectoryRoleSetupEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ApplyDirectoryRoleSetupPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ApplyDirectoryRoleSetup(ctx, p)
 	}
 }
 

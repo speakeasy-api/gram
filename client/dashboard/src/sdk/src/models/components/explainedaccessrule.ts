@@ -53,7 +53,7 @@ export type Effect = ClosedEnum<typeof Effect>;
 /**
  * What the principal identifies.
  */
-export const Kind = {
+export const ExplainedAccessRuleKind = {
   Everyone: "everyone",
   Role: "role",
   User: "user",
@@ -62,7 +62,9 @@ export const Kind = {
 /**
  * What the principal identifies.
  */
-export type Kind = ClosedEnum<typeof Kind>;
+export type ExplainedAccessRuleKind = ClosedEnum<
+  typeof ExplainedAccessRuleKind
+>;
 
 /**
  * The access the rule gives, or the access a "blocked_" rule takes away. "all" is a grant covering every permission.
@@ -120,7 +122,7 @@ export type ExplainedAccessRule = {
   /**
    * What the principal identifies.
    */
-  kind: Kind;
+  kind: ExplainedAccessRuleKind;
   /**
    * The access the rule gives, or the access a "blocked_" rule takes away. "all" is a grant covering every permission.
    */
@@ -158,7 +160,9 @@ export const Effect$inboundSchema: z.ZodMiniEnum<typeof Effect> = z.enum(
 );
 
 /** @internal */
-export const Kind$inboundSchema: z.ZodMiniEnum<typeof Kind> = z.enum(Kind);
+export const ExplainedAccessRuleKind$inboundSchema: z.ZodMiniEnum<
+  typeof ExplainedAccessRuleKind
+> = z.enum(ExplainedAccessRuleKind);
 
 /** @internal */
 export const ExplainedAccessRuleLevel$inboundSchema: z.ZodMiniEnum<
@@ -183,7 +187,7 @@ export const ExplainedAccessRule$inboundSchema: z.ZodMiniType<
     display_name: z.string(),
     dispositions: z.optional(z.array(Dispositions$inboundSchema)),
     effect: Effect$inboundSchema,
-    kind: Kind$inboundSchema,
+    kind: ExplainedAccessRuleKind$inboundSchema,
     level: ExplainedAccessRuleLevel$inboundSchema,
     principal_urn: z.string(),
     reason: z.optional(Reason$inboundSchema),

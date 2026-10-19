@@ -454,6 +454,106 @@ func BuildDeleteDirectoryRoleMappingPayload(accessDeleteDirectoryRoleMappingID s
 	return v, nil
 }
 
+// BuildPreviewDirectoryRoleSetupPayload builds the payload for the access
+// previewDirectoryRoleSetup endpoint from CLI flags.
+func BuildPreviewDirectoryRoleSetupPayload(accessPreviewDirectoryRoleSetupApikeyToken string, accessPreviewDirectoryRoleSetupSessionToken string) (*access.PreviewDirectoryRoleSetupPayload, error) {
+	var apikeyToken *string
+	{
+		if accessPreviewDirectoryRoleSetupApikeyToken != "" {
+			apikeyToken = &accessPreviewDirectoryRoleSetupApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessPreviewDirectoryRoleSetupSessionToken != "" {
+			sessionToken = &accessPreviewDirectoryRoleSetupSessionToken
+		}
+	}
+	v := &access.PreviewDirectoryRoleSetupPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildApplyDirectoryRoleSetupPayload builds the payload for the access
+// applyDirectoryRoleSetup endpoint from CLI flags.
+func BuildApplyDirectoryRoleSetupPayload(accessApplyDirectoryRoleSetupBody string, accessApplyDirectoryRoleSetupApikeyToken string, accessApplyDirectoryRoleSetupSessionToken string) (*access.ApplyDirectoryRoleSetupPayload, error) {
+	var err error
+	var body ApplyDirectoryRoleSetupRequestBody
+	{
+		err = json.Unmarshal([]byte(accessApplyDirectoryRoleSetupBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"items\": [\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         },\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		if body.Items == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+		}
+		if len(body.Items) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.items", body.Items, len(body.Items), 1, true))
+		}
+		if len(body.Items) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.items", body.Items, len(body.Items), 500, false))
+		}
+		for _, e := range body.Items {
+			if e != nil {
+				if err2 := ValidateApplyDirectoryRoleSetupItemRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		for _, e := range body.GrantSet {
+			if e != nil {
+				if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessApplyDirectoryRoleSetupApikeyToken != "" {
+			apikeyToken = &accessApplyDirectoryRoleSetupApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessApplyDirectoryRoleSetupSessionToken != "" {
+			sessionToken = &accessApplyDirectoryRoleSetupSessionToken
+		}
+	}
+	v := &access.ApplyDirectoryRoleSetupPayload{}
+	if body.Items != nil {
+		v.Items = make([]*access.ApplyDirectoryRoleSetupItem, len(body.Items))
+		for i, val := range body.Items {
+			if val == nil {
+				v.Items[i] = nil
+				continue
+			}
+			v.Items[i] = marshalApplyDirectoryRoleSetupItemRequestBodyToAccessApplyDirectoryRoleSetupItem(val)
+		}
+	} else {
+		v.Items = []*access.ApplyDirectoryRoleSetupItem{}
+	}
+	if body.GrantSet != nil {
+		v.GrantSet = make([]*access.RoleGrant, len(body.GrantSet))
+		for i, val := range body.GrantSet {
+			if val == nil {
+				v.GrantSet[i] = nil
+				continue
+			}
+			v.GrantSet[i] = marshalRoleGrantRequestBodyToAccessRoleGrant(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListScopesPayload builds the payload for the access listScopes endpoint
 // from CLI flags.
 func BuildListScopesPayload(accessListScopesApikeyToken string, accessListScopesSessionToken string) (*access.ListScopesPayload, error) {

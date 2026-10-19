@@ -12,14 +12,16 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Whether membership of a directory group or a directory attribute value mapped the role.
  */
-export const SourceKind = {
+export const ExplainedAccessDirectorySourceSourceKind = {
   Group: "group",
   Attribute: "attribute",
 } as const;
 /**
  * Whether membership of a directory group or a directory attribute value mapped the role.
  */
-export type SourceKind = ClosedEnum<typeof SourceKind>;
+export type ExplainedAccessDirectorySourceSourceKind = ClosedEnum<
+  typeof ExplainedAccessDirectorySourceSourceKind
+>;
 
 export type ExplainedAccessDirectorySource = {
   /**
@@ -37,12 +39,14 @@ export type ExplainedAccessDirectorySource = {
   /**
    * Whether membership of a directory group or a directory attribute value mapped the role.
    */
-  sourceKind: SourceKind;
+  sourceKind: ExplainedAccessDirectorySourceSourceKind;
 };
 
 /** @internal */
-export const SourceKind$inboundSchema: z.ZodMiniEnum<typeof SourceKind> = z
-  .enum(SourceKind);
+export const ExplainedAccessDirectorySourceSourceKind$inboundSchema:
+  z.ZodMiniEnum<typeof ExplainedAccessDirectorySourceSourceKind> = z.enum(
+    ExplainedAccessDirectorySourceSourceKind,
+  );
 
 /** @internal */
 export const ExplainedAccessDirectorySource$inboundSchema: z.ZodMiniType<
@@ -53,7 +57,7 @@ export const ExplainedAccessDirectorySource$inboundSchema: z.ZodMiniType<
     attribute_key: z.optional(z.string()),
     attribute_value: z.optional(z.string()),
     directory_group_name: z.optional(z.string()),
-    source_kind: SourceKind$inboundSchema,
+    source_kind: ExplainedAccessDirectorySourceSourceKind$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

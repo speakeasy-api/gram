@@ -2371,6 +2371,480 @@ func DecodeDeleteDirectoryRoleMappingResponse(decoder func(*http.Response) goaht
 	}
 }
 
+// BuildPreviewDirectoryRoleSetupRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "previewDirectoryRoleSetup" endpoint
+func (c *Client) BuildPreviewDirectoryRoleSetupRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PreviewDirectoryRoleSetupAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "previewDirectoryRoleSetup", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodePreviewDirectoryRoleSetupRequest returns an encoder for requests sent
+// to the access previewDirectoryRoleSetup server.
+func EncodePreviewDirectoryRoleSetupRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.PreviewDirectoryRoleSetupPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "previewDirectoryRoleSetup", "*access.PreviewDirectoryRoleSetupPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodePreviewDirectoryRoleSetupResponse returns a decoder for responses
+// returned by the access previewDirectoryRoleSetup endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodePreviewDirectoryRoleSetupResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodePreviewDirectoryRoleSetupResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body PreviewDirectoryRoleSetupResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+			}
+			err = ValidatePreviewDirectoryRoleSetupResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+			}
+			res := NewPreviewDirectoryRoleSetupDirectoryRoleSetupPreviewResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body PreviewDirectoryRoleSetupUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+			}
+			err = ValidatePreviewDirectoryRoleSetupUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+			}
+			return nil, NewPreviewDirectoryRoleSetupUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body PreviewDirectoryRoleSetupForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+			}
+			err = ValidatePreviewDirectoryRoleSetupForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+			}
+			return nil, NewPreviewDirectoryRoleSetupForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body PreviewDirectoryRoleSetupBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+			}
+			err = ValidatePreviewDirectoryRoleSetupBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+			}
+			return nil, NewPreviewDirectoryRoleSetupBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body PreviewDirectoryRoleSetupNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+			}
+			err = ValidatePreviewDirectoryRoleSetupNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+			}
+			return nil, NewPreviewDirectoryRoleSetupNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body PreviewDirectoryRoleSetupConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+			}
+			err = ValidatePreviewDirectoryRoleSetupConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+			}
+			return nil, NewPreviewDirectoryRoleSetupConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body PreviewDirectoryRoleSetupUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+			}
+			err = ValidatePreviewDirectoryRoleSetupUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+			}
+			return nil, NewPreviewDirectoryRoleSetupUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body PreviewDirectoryRoleSetupInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+			}
+			err = ValidatePreviewDirectoryRoleSetupInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+			}
+			return nil, NewPreviewDirectoryRoleSetupInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body PreviewDirectoryRoleSetupInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+				}
+				err = ValidatePreviewDirectoryRoleSetupInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+				}
+				return nil, NewPreviewDirectoryRoleSetupInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body PreviewDirectoryRoleSetupUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+				}
+				err = ValidatePreviewDirectoryRoleSetupUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+				}
+				return nil, NewPreviewDirectoryRoleSetupUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "previewDirectoryRoleSetup", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body PreviewDirectoryRoleSetupGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "previewDirectoryRoleSetup", err)
+			}
+			err = ValidatePreviewDirectoryRoleSetupGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "previewDirectoryRoleSetup", err)
+			}
+			return nil, NewPreviewDirectoryRoleSetupGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "previewDirectoryRoleSetup", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildApplyDirectoryRoleSetupRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "applyDirectoryRoleSetup"
+// endpoint
+func (c *Client) BuildApplyDirectoryRoleSetupRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ApplyDirectoryRoleSetupAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "applyDirectoryRoleSetup", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeApplyDirectoryRoleSetupRequest returns an encoder for requests sent to
+// the access applyDirectoryRoleSetup server.
+func EncodeApplyDirectoryRoleSetupRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ApplyDirectoryRoleSetupPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "applyDirectoryRoleSetup", "*access.ApplyDirectoryRoleSetupPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewApplyDirectoryRoleSetupRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "applyDirectoryRoleSetup", err)
+		}
+		return nil
+	}
+}
+
+// DecodeApplyDirectoryRoleSetupResponse returns a decoder for responses
+// returned by the access applyDirectoryRoleSetup endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeApplyDirectoryRoleSetupResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeApplyDirectoryRoleSetupResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ApplyDirectoryRoleSetupResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+			}
+			err = ValidateApplyDirectoryRoleSetupResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+			}
+			res := NewApplyDirectoryRoleSetupResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ApplyDirectoryRoleSetupUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+			}
+			err = ValidateApplyDirectoryRoleSetupUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+			}
+			return nil, NewApplyDirectoryRoleSetupUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ApplyDirectoryRoleSetupForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+			}
+			err = ValidateApplyDirectoryRoleSetupForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+			}
+			return nil, NewApplyDirectoryRoleSetupForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ApplyDirectoryRoleSetupBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+			}
+			err = ValidateApplyDirectoryRoleSetupBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+			}
+			return nil, NewApplyDirectoryRoleSetupBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ApplyDirectoryRoleSetupNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+			}
+			err = ValidateApplyDirectoryRoleSetupNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+			}
+			return nil, NewApplyDirectoryRoleSetupNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ApplyDirectoryRoleSetupConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+			}
+			err = ValidateApplyDirectoryRoleSetupConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+			}
+			return nil, NewApplyDirectoryRoleSetupConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ApplyDirectoryRoleSetupUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+			}
+			err = ValidateApplyDirectoryRoleSetupUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+			}
+			return nil, NewApplyDirectoryRoleSetupUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ApplyDirectoryRoleSetupInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+			}
+			err = ValidateApplyDirectoryRoleSetupInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+			}
+			return nil, NewApplyDirectoryRoleSetupInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ApplyDirectoryRoleSetupInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+				}
+				err = ValidateApplyDirectoryRoleSetupInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+				}
+				return nil, NewApplyDirectoryRoleSetupInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ApplyDirectoryRoleSetupUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+				}
+				err = ValidateApplyDirectoryRoleSetupUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+				}
+				return nil, NewApplyDirectoryRoleSetupUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "applyDirectoryRoleSetup", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ApplyDirectoryRoleSetupGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "applyDirectoryRoleSetup", err)
+			}
+			err = ValidateApplyDirectoryRoleSetupGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "applyDirectoryRoleSetup", err)
+			}
+			return nil, NewApplyDirectoryRoleSetupGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "applyDirectoryRoleSetup", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListScopesRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "listScopes" endpoint
 func (c *Client) BuildListScopesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -8056,6 +8530,197 @@ func unmarshalDirectoryRoleMappingResponseToAccessDirectoryRoleMapping(v *Direct
 		RoleUrn:            *v.RoleUrn,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalDirectoryRoleSetupPreviewItemResponseBodyToAccessDirectoryRoleSetupPreviewItem
+// builds a value of type *access.DirectoryRoleSetupPreviewItem from a value of
+// type *DirectoryRoleSetupPreviewItemResponseBody.
+func unmarshalDirectoryRoleSetupPreviewItemResponseBodyToAccessDirectoryRoleSetupPreviewItem(v *DirectoryRoleSetupPreviewItemResponseBody) *access.DirectoryRoleSetupPreviewItem {
+	res := &access.DirectoryRoleSetupPreviewItem{
+		SourceName:      *v.SourceName,
+		DirectoryPeople: *v.DirectoryPeople,
+		Version:         *v.Version,
+	}
+	res.Source = unmarshalDirectoryRoleSetupSourceResponseBodyToAccessDirectoryRoleSetupSource(v.Source)
+	res.ExistingRoleUrns = make([]string, len(v.ExistingRoleUrns))
+	for i, val := range v.ExistingRoleUrns {
+		res.ExistingRoleUrns[i] = val
+	}
+	res.ProposedRoles = make([]*access.DirectoryRoleSetupProposedRole, len(v.ProposedRoles))
+	for i, val := range v.ProposedRoles {
+		if val == nil {
+			res.ProposedRoles[i] = nil
+			continue
+		}
+		res.ProposedRoles[i] = unmarshalDirectoryRoleSetupProposedRoleResponseBodyToAccessDirectoryRoleSetupProposedRole(val)
+	}
+
+	return res
+}
+
+// unmarshalDirectoryRoleSetupSourceResponseBodyToAccessDirectoryRoleSetupSource
+// builds a value of type *access.DirectoryRoleSetupSource from a value of type
+// *DirectoryRoleSetupSourceResponseBody.
+func unmarshalDirectoryRoleSetupSourceResponseBodyToAccessDirectoryRoleSetupSource(v *DirectoryRoleSetupSourceResponseBody) *access.DirectoryRoleSetupSource {
+	res := &access.DirectoryRoleSetupSource{
+		SourceKind:       *v.SourceKind,
+		DirectoryGroupID: v.DirectoryGroupID,
+		AttributeKey:     v.AttributeKey,
+		AttributeValue:   v.AttributeValue,
+	}
+
+	return res
+}
+
+// unmarshalDirectoryRoleSetupProposedRoleResponseBodyToAccessDirectoryRoleSetupProposedRole
+// builds a value of type *access.DirectoryRoleSetupProposedRole from a value
+// of type *DirectoryRoleSetupProposedRoleResponseBody.
+func unmarshalDirectoryRoleSetupProposedRoleResponseBodyToAccessDirectoryRoleSetupProposedRole(v *DirectoryRoleSetupProposedRoleResponseBody) *access.DirectoryRoleSetupProposedRole {
+	res := &access.DirectoryRoleSetupProposedRole{
+		RoleAction: *v.RoleAction,
+		RoleID:     v.RoleID,
+		RoleUrn:    v.RoleUrn,
+		RoleName:   *v.RoleName,
+	}
+	res.CurrentGrants = make([]*access.RoleGrant, len(v.CurrentGrants))
+	for i, val := range v.CurrentGrants {
+		if val == nil {
+			res.CurrentGrants[i] = nil
+			continue
+		}
+		res.CurrentGrants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
+	}
+
+	return res
+}
+
+// unmarshalDirectoryRoleSetupHiddenAttributeKeyResponseBodyToAccessDirectoryRoleSetupHiddenAttributeKey
+// builds a value of type *access.DirectoryRoleSetupHiddenAttributeKey from a
+// value of type *DirectoryRoleSetupHiddenAttributeKeyResponseBody.
+func unmarshalDirectoryRoleSetupHiddenAttributeKeyResponseBodyToAccessDirectoryRoleSetupHiddenAttributeKey(v *DirectoryRoleSetupHiddenAttributeKeyResponseBody) *access.DirectoryRoleSetupHiddenAttributeKey {
+	res := &access.DirectoryRoleSetupHiddenAttributeKey{
+		Key:        *v.Key,
+		ValueCount: *v.ValueCount,
+	}
+
+	return res
+}
+
+// marshalAccessApplyDirectoryRoleSetupItemToApplyDirectoryRoleSetupItemRequestBody
+// builds a value of type *ApplyDirectoryRoleSetupItemRequestBody from a value
+// of type *access.ApplyDirectoryRoleSetupItem.
+func marshalAccessApplyDirectoryRoleSetupItemToApplyDirectoryRoleSetupItemRequestBody(v *access.ApplyDirectoryRoleSetupItem) *ApplyDirectoryRoleSetupItemRequestBody {
+	res := &ApplyDirectoryRoleSetupItemRequestBody{
+		Version: v.Version,
+	}
+	if v.Source != nil {
+		res.Source = marshalAccessDirectoryRoleSetupSourceToDirectoryRoleSetupSourceRequestBody(v.Source)
+	}
+	if v.Roles != nil {
+		res.Roles = make([]*ApplyDirectoryRoleSetupRoleRequestBody, len(v.Roles))
+		for i, val := range v.Roles {
+			if val == nil {
+				res.Roles[i] = nil
+				continue
+			}
+			res.Roles[i] = marshalAccessApplyDirectoryRoleSetupRoleToApplyDirectoryRoleSetupRoleRequestBody(val)
+		}
+	} else {
+		res.Roles = []*ApplyDirectoryRoleSetupRoleRequestBody{}
+	}
+
+	return res
+}
+
+// marshalAccessDirectoryRoleSetupSourceToDirectoryRoleSetupSourceRequestBody
+// builds a value of type *DirectoryRoleSetupSourceRequestBody from a value of
+// type *access.DirectoryRoleSetupSource.
+func marshalAccessDirectoryRoleSetupSourceToDirectoryRoleSetupSourceRequestBody(v *access.DirectoryRoleSetupSource) *DirectoryRoleSetupSourceRequestBody {
+	res := &DirectoryRoleSetupSourceRequestBody{
+		SourceKind:       v.SourceKind,
+		DirectoryGroupID: v.DirectoryGroupID,
+		AttributeKey:     v.AttributeKey,
+		AttributeValue:   v.AttributeValue,
+	}
+
+	return res
+}
+
+// marshalAccessApplyDirectoryRoleSetupRoleToApplyDirectoryRoleSetupRoleRequestBody
+// builds a value of type *ApplyDirectoryRoleSetupRoleRequestBody from a value
+// of type *access.ApplyDirectoryRoleSetupRole.
+func marshalAccessApplyDirectoryRoleSetupRoleToApplyDirectoryRoleSetupRoleRequestBody(v *access.ApplyDirectoryRoleSetupRole) *ApplyDirectoryRoleSetupRoleRequestBody {
+	res := &ApplyDirectoryRoleSetupRoleRequestBody{
+		RoleUrn:    v.RoleUrn,
+		CreateName: v.CreateName,
+	}
+
+	return res
+}
+
+// marshalApplyDirectoryRoleSetupItemRequestBodyToAccessApplyDirectoryRoleSetupItem
+// builds a value of type *access.ApplyDirectoryRoleSetupItem from a value of
+// type *ApplyDirectoryRoleSetupItemRequestBody.
+func marshalApplyDirectoryRoleSetupItemRequestBodyToAccessApplyDirectoryRoleSetupItem(v *ApplyDirectoryRoleSetupItemRequestBody) *access.ApplyDirectoryRoleSetupItem {
+	res := &access.ApplyDirectoryRoleSetupItem{
+		Version: v.Version,
+	}
+	if v.Source != nil {
+		res.Source = marshalDirectoryRoleSetupSourceRequestBodyToAccessDirectoryRoleSetupSource(v.Source)
+	}
+	if v.Roles != nil {
+		res.Roles = make([]*access.ApplyDirectoryRoleSetupRole, len(v.Roles))
+		for i, val := range v.Roles {
+			if val == nil {
+				res.Roles[i] = nil
+				continue
+			}
+			res.Roles[i] = marshalApplyDirectoryRoleSetupRoleRequestBodyToAccessApplyDirectoryRoleSetupRole(val)
+		}
+	} else {
+		res.Roles = []*access.ApplyDirectoryRoleSetupRole{}
+	}
+
+	return res
+}
+
+// marshalDirectoryRoleSetupSourceRequestBodyToAccessDirectoryRoleSetupSource
+// builds a value of type *access.DirectoryRoleSetupSource from a value of type
+// *DirectoryRoleSetupSourceRequestBody.
+func marshalDirectoryRoleSetupSourceRequestBodyToAccessDirectoryRoleSetupSource(v *DirectoryRoleSetupSourceRequestBody) *access.DirectoryRoleSetupSource {
+	res := &access.DirectoryRoleSetupSource{
+		SourceKind:       v.SourceKind,
+		DirectoryGroupID: v.DirectoryGroupID,
+		AttributeKey:     v.AttributeKey,
+		AttributeValue:   v.AttributeValue,
+	}
+
+	return res
+}
+
+// marshalApplyDirectoryRoleSetupRoleRequestBodyToAccessApplyDirectoryRoleSetupRole
+// builds a value of type *access.ApplyDirectoryRoleSetupRole from a value of
+// type *ApplyDirectoryRoleSetupRoleRequestBody.
+func marshalApplyDirectoryRoleSetupRoleRequestBodyToAccessApplyDirectoryRoleSetupRole(v *ApplyDirectoryRoleSetupRoleRequestBody) *access.ApplyDirectoryRoleSetupRole {
+	res := &access.ApplyDirectoryRoleSetupRole{
+		RoleUrn:    v.RoleUrn,
+		CreateName: v.CreateName,
+	}
+
+	return res
+}
+
+// unmarshalDirectoryRoleSetupSideEffectResponseBodyToAccessDirectoryRoleSetupSideEffect
+// builds a value of type *access.DirectoryRoleSetupSideEffect from a value of
+// type *DirectoryRoleSetupSideEffectResponseBody.
+func unmarshalDirectoryRoleSetupSideEffectResponseBodyToAccessDirectoryRoleSetupSideEffect(v *DirectoryRoleSetupSideEffectResponseBody) *access.DirectoryRoleSetupSideEffect {
+	res := &access.DirectoryRoleSetupSideEffect{
+		Kind:          *v.Kind,
+		RoleID:        *v.RoleID,
+		RequestStatus: *v.RequestStatus,
 	}
 
 	return res
