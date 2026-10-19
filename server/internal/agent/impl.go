@@ -356,11 +356,13 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	group.Go(func() error {
 		organization, err := orgrepo.New(s.db).GetOrganizationMetadata(groupCtx, authCtx.ActiveOrganizationID)
 		if err != nil {
-			return fmt.Errorf("read organization for gateway: %w", err)
+			s.logger.WarnContext(ctx, "organization gateway unavailable; plugin poll omits organization_gateway_url", attr.SlogError(err))
+			return nil
 		}
 		_, unavailable, err := orggateway.Availability(groupCtx, s.db, organization)
 		if err != nil {
-			return fmt.Errorf("resolve organization gateway: %w", err)
+			s.logger.WarnContext(ctx, "organization gateway unavailable; plugin poll omits organization_gateway_url", attr.SlogError(err))
+			return nil
 		}
 		if unavailable == orggateway.UnavailabilityNone {
 			organizationGatewayURL = new(orggateway.URL(s.orgHosts.ServerURL(organization.DefaultHost), organization.Slug))
