@@ -1,0 +1,16 @@
+server/internal/usersessions/sign_ins_test.go
+  h_9630b74bdac540 358,368,372
+server/cmd/directory-id-backfill/main.go
+  h_9630b74bdac540 67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6777e589545316512c8c4f1af286d054b1d575bf",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
