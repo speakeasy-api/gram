@@ -9,6 +9,9 @@ import (
 	"io"
 	"maps"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -310,8 +313,13 @@ func TestKitLocalDockerCreateUsesOnlyInjectedImageContract(t *testing.T) {
 	require.Contains(t, joined, "127.0.0.1::8080")
 	require.Contains(t, joined, "host.docker.internal:host-gateway")
 	require.Contains(t, joined, ":/home/kit")
-	require.Contains(t, joined, "--entrypoint /usr/local/bin/kit example.invalid/kit:local gateway")
-	require.Contains(t, joined, "SSL_CERT_FILE="+localRuntimeCACertMountPath)
+	require.Contains(t, joined, "--entrypoint /bin/sh example.invalid/kit:local -c")
+	require.Contains(t, args, kitLocalCABundleScript)
+	require.Contains(t, args, "/etc/ssl/certs/ca-certificates.crt")
+	require.NotContains(t, args, "SSL_CERT_FILE="+localRuntimeCACertMountPath)
+	require.Equal(t, append(append([]string{}, spec.Command...), spec.Args...), args[len(args)-len(spec.Command)-len(spec.Args):])
+	spec.ExtraCACertFile = ""
+	require.Contains(t, strings.Join(kitLocalCreateArgs(8080, spec), " "), "--entrypoint /usr/local/bin/kit example.invalid/kit:local gateway")
 	require.Contains(t, joined, "NODE_EXTRA_CA_CERTS="+localRuntimeCACertMountPath)
 	require.NotContains(t, joined, "private-test-token")
 	require.NotContains(t, joined, "/healthz")
@@ -380,4 +388,49 @@ func TestKitLocalEnsureAcceptsDatabaseReservation(t *testing.T) {
 	require.NoError(t, backend.validate(record))
 	record.ID = uuid.New()
 	require.Error(t, backend.validate(record), "a different runtime generation cannot inherit saved authority")
+}
+
+func TestKitLocalCABundlePreservesTrustAndArgv(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	public := filepath.Join(dir, "public roots.pem")
+	extra := filepath.Join(dir, "relay $(false).pem")
+	require.NoError(t, os.WriteFile(public, []byte("public roots"), 0600))
+	require.NoError(t, os.WriteFile(extra, []byte("relay root\n"), 0600))
+	// The child reports the bundle path and argv verbatim. Shell metacharacters
+	// must not be interpreted by the startup shell.
+	child := `printf '%s\n%s' "$SSL_CERT_FILE" "$1"`
+	arg := "spaces ; $(false) '"
+	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCABundleScript, "kit-ca-bundle", public, extra, "/bin/sh", "-c", child, "child", arg)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+	path, gotArg, ok := strings.Cut(string(out), "\n")
+	require.True(t, ok)
+	t.Cleanup(func() { _ = os.Remove(path) })
+	require.Equal(t, arg, gotArg)
+	bundle, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "public roots\nrelay root\n", string(bundle))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
+}
+
+func TestKitLocalCABundleFailsClosed(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []int{0, 1} {
+		t.Run(fmt.Sprint(missing), func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			roots := filepath.Join(dir, "roots.pem")
+			require.NoError(t, os.WriteFile(roots, []byte("root"), 0600))
+			paths := []string{roots, roots}
+			paths[missing] = filepath.Join(dir, "missing.pem")
+			marker := filepath.Join(dir, "started")
+			cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", kitLocalCABundleScript, "kit-ca-bundle", paths[0], paths[1], "touch", marker)
+			require.Error(t, cmd.Run())
+			_, err := os.Stat(marker)
+			require.True(t, os.IsNotExist(err))
+		})
+	}
 }

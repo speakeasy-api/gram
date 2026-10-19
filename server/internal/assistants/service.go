@@ -2096,6 +2096,23 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("batch size must be positive")
 	}
 
+	// Switch retirement intent is committed with the selection update before
+	// any backend stop. Retry it independently of TTL and newer runtimes.
+	pending, err := assistantrepo.New(s.db).ListPendingRuntimeSwitchRetirements(ctx, params.BatchSize)
+	if err != nil {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("list pending switch retirements: %w", err)
+	}
+	retirementErrors := 0
+	for _, row := range pending {
+		if err := s.finishRuntimeSwitchRetirement(ctx, assistantRuntimeRecord{
+			ID: row.ID, AssistantThreadID: row.AssistantThreadID, AssistantID: row.AssistantID,
+			ProjectID: row.ProjectID, RuntimeVersion: row.RuntimeVersion, Backend: row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson, State: row.State, WarmUntil: row.WarmUntil,
+		}); err != nil {
+			retirementErrors++
+		}
+	}
+
 	rows, err := assistantrepo.New(s.db).ListStoppedRuntimesForReap(ctx, assistantrepo.ListStoppedRuntimesForReapParams{
 		StoppedState:  runtimeStateStopped,
 		FailedState:   runtimeStateFailed,
@@ -2107,7 +2124,7 @@ func (s *ServiceCore) ReapStoppedAssistantRuntimes(ctx context.Context, params R
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("list stopped assistant runtimes for reap: %w", err)
 	}
 
-	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
+	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: retirementErrors}
 	for _, row := range rows {
 		if s.reapStoppedRuntimeRow(ctx, assistantRuntimeRecord{
 			ID:                  row.ID,
@@ -2390,6 +2407,17 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistant.ID.String()); err != nil {
 		return EnqueueResult{}, fmt.Errorf("lock assistant ingestion: %w", err)
 	}
+	current, err := queries.GetAssistantForDispatch(ctx, assistant.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return EnqueueResult{AssistantID: assistant.ID, ThreadID: uuid.Nil, ShouldSignal: false}, nil
+	}
+	if err != nil {
+		return EnqueueResult{}, fmt.Errorf("revalidate assistant ingestion: %w", err)
+	}
+	if current.Status != StatusActive {
+		return EnqueueResult{AssistantID: assistant.ID, ThreadID: uuid.Nil, ShouldSignal: false}, nil
+	}
+	assistant = assistantRecordFromDispatchRow(current)
 	if err := queries.UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,

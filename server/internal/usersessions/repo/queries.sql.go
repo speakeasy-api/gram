@@ -36,9 +36,9 @@ FROM trigger_workload_bindings tb
 JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
   AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
   AND ab.generation = tb.assistant_binding_generation
-JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id
+JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
 JOIN assistant_runtimes r ON r.assistant_id = a.id AND r.project_id = a.project_id
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
 WHERE c.id = $1 AND c.deleted IS FALSE
   AND c.assistant_trigger_workload_binding_id IS NULL AND c.assistant_runtime_id IS NULL
   AND r.id = $2 AND r.runtime_version = 3 AND a.runtime_version = 3
@@ -1460,9 +1460,9 @@ const getAssistantRuntimeForWorkloadSession = `-- name: GetAssistantRuntimeForWo
 SELECT r.id AS runtime_id, r.assistant_id, c.id AS client_registration_id
 FROM user_sessions s
 JOIN user_session_clients c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = s.user_session_issuer_id
-JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id AND tb.deleted IS FALSE
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id AND ab.deleted IS FALSE AND ab.generation = tb.assistant_binding_generation
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.deleted IS FALSE AND t.status = 'active'
+JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id AND tb.organization_id = c.organization_id AND tb.deleted IS FALSE
+JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id AND ab.deleted IS FALSE AND ab.generation = tb.assistant_binding_generation
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id AND t.deleted IS FALSE AND t.status = 'active'
 JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.project_id = tb.project_id AND r.assistant_id = ab.assistant_id
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE s.jti = $1 AND s.subject_urn = $2
@@ -1508,9 +1508,9 @@ JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_bindin
 JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
   AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
   AND ab.generation = tb.assistant_binding_generation
-JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id
+JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
 JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.assistant_id = a.id AND r.project_id = a.project_id
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
 WHERE c.id = $1 AND c.user_session_issuer_id = $2
   AND c.organization_id = $3 AND c.deleted IS FALSE
   AND (c.project_id = $4 OR c.project_id IS NULL)
@@ -2520,7 +2520,7 @@ FROM trigger_workload_bindings tb
 JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
   AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
   AND ab.generation = tb.assistant_binding_generation
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id
+JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
 WHERE tb.project_id = $1 AND tb.organization_id = $2
   AND ab.original_assistant_id = $3 AND ab.deleted IS FALSE AND tb.deleted IS FALSE
   AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'

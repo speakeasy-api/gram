@@ -111,7 +111,7 @@ func registerAssistantRuntimeTool(reg *Registrar, service *AssistantIdentityServ
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        selectAssistantRuntimeToolName,
 		Title:       "Select Assistant Runtime",
-		Description: "Select the persisted runtime for one assistant in an exact project. Versions 1 and 2 are legacy; select 2 for legacy or explicitly opt into Kit with 3. First call with confirmed:false to preview the current runtime_version without changing it, then obtain explicit confirmation of the exact target and choice. Supply that value as expected_runtime_version. Requires organization administrator access and the same project:write authorization as the dashboard; a frontend feature flag is not authorization. The shared service rejects stale versions and unsettled active or background work. On conflict read again and reconfirm; never automatically overwrite. Returns committed runtime configuration, not runtime readiness, instructions or credentials. Managed assistants cannot change their own runtime through this tool.",
+		Description: "Select the persisted runtime for one assistant in an exact project. Select 2 for the legacy runtime or explicitly opt into Kit with 3. First call with confirmed:false to preview the current runtime_version without changing it, then obtain explicit confirmation of the exact target and choice. Supply that value as expected_runtime_version. Requires organization administrator access and the same project:write authorization as the dashboard; a frontend feature flag is not authorization. The shared service rejects stale versions and unsettled active or background work. On conflict read again and reconfirm; never automatically overwrite. Returns committed runtime configuration, not runtime readiness, instructions or credentials. Managed assistants cannot change their own runtime through this tool.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: nil, Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input SelectAssistantRuntimeInput) (*mcp.CallToolResult, SelectAssistantRuntimeOutput, error) {
 		return principalToolCall(ctx, assistantRuntimeToolResult, func(principal Principal) (SelectAssistantRuntimeOutput, error) {
@@ -125,10 +125,9 @@ func assistantRuntimeToolResult(err error) (*mcp.CallToolResult, bool) {
 		return result, true
 	}
 	result := featureUnavailableResult{Code: unavailableCode, Feature: "assistant_runtime", Message: "Assistant runtime selection is temporarily unavailable."}
-	var shared *oops.ShareableError
 	if errors.Is(err, ErrForbidden) {
 		result.Code, result.Message = "not_found", "That assistant or project is not available to you."
-	} else if errors.As(err, &shared) {
+	} else if shared, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shared.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
 			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs, a supported runtime, its freshly read expected version and explicit confirmation."

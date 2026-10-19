@@ -5,8 +5,8 @@ adapter. For configuration and validation steps, see
 [Run Kit assistants locally](../runbooks/kit-assistant-local.md).
 
 These contracts apply to local runtime version 3 with Kit commit
-`c3cbc0ebfb3c802bd001340d2868448074e0e187` and image
-`localhost/kit-assistant-integration:c3cbc0e`. They do not enable production GKE
+`2c4a35e` and image
+`localhost/kit-control-plane:2c4a35e`. They do not enable production GKE
 deployment, migrate v1/v2 transcripts, or establish cold-restore correctness.
 
 ## Bootstrap files and gateway
@@ -14,13 +14,13 @@ deployment, migrate v1/v2 transcripts, or establish cold-restore correctness.
 Provision files before starting the gateway. Private files are owned by UID/GID
 1000 and use mode `0600` under `/home/kit`. Never log their contents.
 
-| Path relative to `/home/kit`                                                             | Contract                                                                                                                                                              |
-| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.kit/AGENTS.md`                                                                         | Global assistant instructions, loaded before workspace rules.                                                                                                         |
-| `.kit/config.toml`                                                                       | Set `provider = "speakeasy"`, `credential_store = "file"`, `credential_dir = "/home/kit/.kit/credentials"`, and `mcp_config = "/home/kit/.kit/credentials/mcp.json"`. |
-| `.kit/credentials/f5a93b2411bbf44d12df4db53aa064d87685df4fad637f3c61a653f4bc5b200f.json` | Version-1 inference record containing `bearer_token` and the matching `origin`. `inference.json` is not a recognized replacement filename.                            |
-| `.kit/credentials/gateway-token`                                                         | Gateway bearer credential.                                                                                                                                            |
-| `.kit/credentials/mcp.json` and referenced private files                                 | MCP client-credentials configuration and machine secrets; not a fabricated credential-store record.                                                                   |
+| Path relative to `/home/kit`                                                             | Contract                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.kit/AGENTS.md`                                                                         | Global assistant instructions, loaded before workspace rules.                                                                                                                                                                  |
+| `.kit/config.toml`                                                                       | Set `provider = "speakeasy"`, `credential_store = "file"`, `credential_dir = "/home/kit/.kit/credentials"`, and `mcp_config = "/home/kit/.kit/credentials/mcp.json"`.                                                          |
+| `.kit/credentials/9bad6d07edf01f03e226b74e3be944c9fc374754bf1903ac36e2c7ce4cd7f305.json` | Native `speakeasy/default` record containing `api_key`, `project` (project slug), `email: null`, and `organization_id: null`. No version, bearer, or origin fields; `inference.json` is not a recognized replacement filename. |
+| `.kit/credentials/gateway-token`                                                         | Gateway bearer credential.                                                                                                                                                                                                     |
+| `.kit/credentials/mcp.json` and referenced private files                                 | MCP client-credentials configuration and machine secrets; not a fabricated credential-store record.                                                                                                                            |
 
 The persistent workspace is `/home/kit/workspace`; ACP `cwd` must match it
 exactly. The gateway listens on `0.0.0.0:8081` with explicit wildcard permission
@@ -36,19 +36,25 @@ records are not equivalent to the empty sentinel.
 
 Every fresh process start or restore must revoke/remint inference credentials
 before startup. `PrepareKitStartupBootstrap` revokes runtime-row credentials and
-issues their replacement. Composition also rotates gateway authority and
+issues a replacement native API key bound to the runtime. Composition also
+rotates gateway authority and
 provisions MCP machine authentication. Do not add a per-turn inference-token
-exchange or reuse a bearer restored from a snapshot.
+exchange or reuse an API key restored from a snapshot.
 
-Session creation/restoration supplies
-`_meta["ai.speakeasy/gram-chat-id"]` with the assistant thread's canonical chat
-UUID. An ACP session UUID is not a substitute.
+The control plane persists the canonical chat binding and fences transcript
+projection against that binding. ACP session creation/resumption omits
+`_meta["ai.speakeasy/gram-chat-id"]`; the canonical chat UUID is not sent to Kit.
+An ACP session UUID is not a substitute for the canonical chat UUID.
 
-The Speakeasy provider uses authenticated `GET /chat/models` for discovery and
-ordinary ACP configuration for model selection. Inference uses
-`POST /chat/completions` with bearer authentication and `Gram-Chat-ID`. Catalog
-discovery must retain the provider's supported-model policy through composed
-client wrappers; it must not invent a fallback catalog.
+The native provider reads the file-backed `api_key`/`project` record and sends
+`Gram-Key` and `Gram-Project` to `POST /chat/completions` at the fixed HTTPS
+origin `https://ai.speakeasy.com`. It does not use inference bearer authentication
+or a `Gram-Chat-ID` header. The adapter writes the saved model into startup
+configuration and selects it through ACP `session/set_config_option` before
+prompting. Kit `2c4a35e` fetches public OpenRouter model metadata and has an
+offline fallback; it does not use authenticated `GET /chat/models` discovery.
+The control plane's model allowlist remains authoritative on completion; a
+model menu or session creation alone does not prove authenticated inference.
 
 The local composition accepts one configured, attached, issuer-gated HTTPS
 `/mcp/<slug>` resource. Its machine token sessions use the agent principal only.

@@ -75,13 +75,27 @@ func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
 func TestKitCompositionRequiresExplicitAttachedResource(t *testing.T) {
 	t.Parallel()
 	resource, _ := url.Parse("https://mcp.example/mcp/attached")
+	origin, _ := url.Parse("https://mcp.example")
 	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", Visibility: "private"}}}
-	require.True(t, kitResourceAttached(a, resource))
+	require.True(t, kitResourceAttached(a, origin, resource))
+	for _, raw := range []string{
+		"https://other.example/mcp/attached",
+		"https://mcp.example:8443/mcp/attached",
+		"http://mcp.example/mcp/attached",
+		"https://user@mcp.example/mcp/attached",
+		"https://mcp.example/mcp/attached?redirect=1",
+		"https://mcp.example/mcp/attached#fragment",
+	} {
+		other, err := url.Parse(raw)
+		require.NoError(t, err)
+		require.False(t, kitResourceAttached(a, origin, other), raw)
+	}
+	require.False(t, kitResourceAttached(a, nil, resource))
 	a.MCPServers[0].Visibility = "disabled"
-	require.False(t, kitResourceAttached(a, resource))
+	require.False(t, kitResourceAttached(a, origin, resource))
 	a.MCPServers[0].Visibility = "private"
 	a.MCPServers[0].EndpointSlug = "other"
-	require.False(t, kitResourceAttached(a, resource))
+	require.False(t, kitResourceAttached(a, origin, resource))
 	_, _, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource, MCPIssuer: resource}, KitMCPProvisionResult{})
 	require.Error(t, err)
 }
@@ -133,4 +147,35 @@ func TestKitCompositionRejectsInvalidCredentials(t *testing.T) {
 		_, _, err := kitCompositionMCP(KitLocalCompositionConfig{}, client)
 		require.Error(t, err)
 	}
+}
+
+func TestKitCompositionBootstrapRejectsUnattachedDisabledAndWrongOrigin(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "kit_bootstrap_attachment_gate")
+	origin, err := url.Parse("https://mcp.example")
+	require.NoError(t, err)
+	f.core.serverURL = origin
+	resource := origin.JoinPath("mcp", "team-remote")
+	config := KitLocalCompositionConfig{
+		MCPResource: resource,
+		ProvisionMCP: func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error) {
+			t.Fatal("rejected attachment must not provision credentials")
+			return KitMCPProvisionResult{}, nil
+		},
+	}
+	runtime := assistantRuntimeRecord{ID: uuid.New(), ProjectID: f.projectID, AssistantID: f.assistant, RuntimeVersion: 3}
+	assertRejected := func() {
+		t.Helper()
+		_, err := f.core.kitCompositionBootstrap(t.Context(), runtime, config)
+		require.ErrorContains(t, err, "not an enabled attachment")
+	}
+	assertRejected()
+	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
+	config.MCPResource, err = url.Parse("https://other.example/mcp/team-remote")
+	require.NoError(t, err)
+	assertRejected()
+	config.MCPResource = resource
+	f.remote.Visibility = "disabled"
+	f.updateWrapper(t, f.remote)
+	assertRejected()
 }

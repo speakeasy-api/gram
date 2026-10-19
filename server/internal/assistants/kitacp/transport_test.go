@@ -199,3 +199,41 @@ func flushTestResponse(t *testing.T, w http.ResponseWriter) {
 	}
 	flusher.Flush()
 }
+
+type marshalAfterFailure struct{ fail func() }
+
+func (p marshalAfterFailure) MarshalJSON() ([]byte, error) {
+	p.fail()
+	return []byte(`{}`), nil
+}
+
+func TestCallFailureDuringMarshalPreventsDispatch(t *testing.T) {
+	t.Parallel()
+	var posts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts.Add(1)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+	life, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	c := &Client{http: testHTTPClient(t), endpoint: server.URL, done: life.Done(), cancel: cancel, pending: make(map[string]pending), streams: map[string]bool{"session": true}}
+	terminal := errors.New("stream failed")
+	_, err := c.Call(t.Context(), "session/prompt", marshalAfterFailure{fail: func() {
+		c.fail(terminal)
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for _, request := range c.pending {
+			// fail must cancel each registered HTTP request synchronously, before returning.
+			if request.cancel == nil {
+				t.Error("request cancellation not registered")
+			}
+		}
+	}}, "session")
+	if err == nil {
+		t.Fatal("call accepted after stream failure")
+	}
+	if posts.Load() != 0 {
+		t.Fatal("terminal transport dispatched a new request")
+	}
+}

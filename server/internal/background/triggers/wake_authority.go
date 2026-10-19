@@ -2,9 +2,11 @@ package triggers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -38,6 +40,9 @@ func validateWakeRuntimeAuthority(ctx context.Context, db triggerrepo.DBTX, para
 		Jti: *auth.SessionID, SubjectUrn: subjectURN, OrganizationID: conv.ToPGText(params.OrganizationID), ProjectID: uuid.NullUUID{UUID: params.ProjectID, Valid: true},
 	})
 	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("resolve wake workload session: %w", err)
+		}
 		return fmt.Errorf("%w: resolve wake workload session: %w", ErrBadRequest, err)
 	}
 	if !clientID.Valid {
@@ -48,6 +53,9 @@ func validateWakeRuntimeAuthority(ctx context.Context, db triggerrepo.DBTX, para
 		Jti: *auth.SessionID, SubjectUrn: subjectURN, OrganizationID: conv.ToPGText(params.OrganizationID), ProjectID: params.ProjectID,
 	})
 	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("wake runtime authority is no longer active: %w", err)
+		}
 		return fmt.Errorf("%w: wake runtime authority is no longer active: %w", ErrBadRequest, err)
 	}
 	if binding.AssistantID != params.AssistantID || binding.ClientRegistrationID != clientID.UUID {

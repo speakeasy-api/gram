@@ -55,14 +55,17 @@ func TestKitWorkloadAuthMethodConfiguration(t *testing.T) {
 		_, _, err := kitWorkloadClientCredentials(method)
 		require.Error(t, err)
 	}
+	found := false
 	for _, f := range assistantKitRuntimeFlags() {
 		if f.Names()[0] == "assistant-kit-mcp-auth-method" {
+			found = true
 			value, ok := f.(*cli.StringFlag)
 			require.True(t, ok)
 			require.Equal(t, "client_secret_basic", value.Value)
 			require.Equal(t, []string{"GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD"}, value.EnvVars)
 		}
 	}
+	require.True(t, found, "authentication method flag must be registered")
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	set.String("assistant-kit-image", "kit:test", "")
 	set.String("assistant-kit-mcp-auth-method", "invalid", "")
@@ -120,16 +123,15 @@ func TestKitGKEProvisionCLI(t *testing.T) {
 func TestKitGKEProvisionCLIRejectsUnsafeConfiguration(t *testing.T) {
 	t.Parallel()
 	for name, value := range map[string]string{
-		"assistant-kit-network":                  "local-network",
-		"assistant-runtime-local-ca-file":        "/local/ca.pem",
-		"assistant-kit-allow-insecure-inference": "true",
-		"assistant-kit-gke-ingress-cidr":         "",
-		"assistant-kit-gke-cpu-request":          "2",
-		"assistant-kit-gke-cpu-limit":            "0",
-		"assistant-kit-gke-memory-request":       "2Gi",
-		"assistant-kit-gke-memory-limit":         "-1Gi",
-		"assistant-kit-gke-work-size-limit":      "invalid",
-		"assistant-kit-gke-tmp-size-limit":       "0",
+		"assistant-kit-network":             "local-network",
+		"assistant-runtime-local-ca-file":   "/local/ca.pem",
+		"assistant-kit-gke-ingress-cidr":    "",
+		"assistant-kit-gke-cpu-request":     "2",
+		"assistant-kit-gke-cpu-limit":       "0",
+		"assistant-kit-gke-memory-request":  "2Gi",
+		"assistant-kit-gke-memory-limit":    "-1Gi",
+		"assistant-kit-gke-work-size-limit": "invalid",
+		"assistant-kit-gke-tmp-size-limit":  "0",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -149,4 +151,19 @@ func TestKitCLIOptInAndProviderValidation(t *testing.T) {
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local environment")
 	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "ingress-cidr")
+}
+
+func TestPrivateIngressRegistersAssistantRuntimeFlags(t *testing.T) {
+	t.Parallel()
+	flags := map[string]bool{}
+	for _, f := range privateIngressServerFlags() {
+		for _, name := range f.Names() {
+			require.False(t, flags[name], "duplicate flag %s", name)
+			flags[name] = true
+		}
+	}
+	for _, f := range assistantRuntimeFlags() {
+		require.True(t, flags[f.Names()[0]], "missing flag %s", f.Names()[0])
+	}
+	require.False(t, flags["assistant-kit-allow-insecure-inference"], "Kit requires its fixed HTTPS provider origin")
 }

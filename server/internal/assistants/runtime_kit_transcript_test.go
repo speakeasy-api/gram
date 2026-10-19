@@ -93,9 +93,15 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 	b := KitTranscriptBinding{RuntimeID: runtime, ProjectID: project, AssistantID: assistant, ThreadID: thread, ChatID: chatID, SessionID: "session"}
-	projector := NewKitTranscriptProjector(db, writer, nil, func(_ context.Context, _ pgx.Tx, got KitTranscriptBinding) error {
-		require.Equal(t, b.SessionID, got.SessionID)
-		return nil
+	_, err = queries.InsertKitRuntimeSession(t.Context(), assistantrepo.InsertKitRuntimeSessionParams{SessionID: b.SessionID, RuntimeID: runtime, ProjectID: project, AssistantID: assistant, ThreadID: thread})
+	require.NoError(t, err)
+	core := &ServiceCore{db: db}
+	projector := NewKitTranscriptProjector(db, writer, nil, func(ctx context.Context, tx pgx.Tx, got KitTranscriptBinding) error {
+		binding, err := core.ValidateKitRuntimeSessionInTx(ctx, tx, kitRuntimeSessionKey{ProjectID: got.ProjectID, AssistantID: got.AssistantID, RuntimeID: got.RuntimeID, ThreadID: got.ThreadID}, got.SessionID)
+		if err == nil {
+			require.Equal(t, got.ChatID, binding.ChatID)
+		}
+		return err
 	})
 	notification := func(update string) kitacp.Notification {
 		return kitacp.Notification{SessionID: b.SessionID, Method: "session/update", Params: json.RawMessage(`{"sessionId":"session","update":` + update + `}`)}
@@ -127,6 +133,39 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
 	require.Equal(t, "two", messages[0].Content)
+	// A reason-only terminal update must update the same canonical row, even
+	// though content is unchanged. Replaying it must be idempotent.
+	reducer := newKitTranscriptReducer()
+	_, err = reducer.Apply(first)
+	require.NoError(t, err)
+	terminal, err := reducer.Apply(notification(`{"sessionUpdate":"state_update","state":"idle","stopReason":"cancelled"}`))
+	require.NoError(t, err)
+	result, err = projector.Handle(t.Context(), b, terminal)
+	require.NoError(t, err)
+	require.True(t, result.Changed)
+	result, err = projector.Handle(t.Context(), b, terminal)
+	require.NoError(t, err)
+	require.False(t, result.Changed)
+	row, err := chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: KitTranscriptMessageID(b, "agent_message", "reply")})
+	require.NoError(t, err)
+	require.Equal(t, "two", row.Content)
+	require.Equal(t, "cancelled", row.FinishReason.String)
+
+	// Idle alone is not an authoritative completion reason, and terminal output
+	// without a matching message must not create an empty canonical row.
+	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"state_update","state":"idle","messageId":"reply"}`))
+	require.NoError(t, err)
+	require.False(t, result.Changed)
+	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"state_update","state":"idle","messageId":"no-output","stopReason":"end_turn"}`))
+	require.NoError(t, err)
+	require.False(t, result.Changed)
+	// Replaying a content event without terminal metadata cannot erase it.
+	_, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"agent_message","messageId":"reply","content":[{"type":"text","text":"two"}]}`))
+	require.NoError(t, err)
+	row, err = chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: row.ID})
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", row.FinishReason.String)
+
 	readings, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, initialReadings, readings)
@@ -150,8 +189,11 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	require.Error(t, err)
 	wrong = b
 	wrong.SessionID = "stale-session"
-	_, err = projector.Handle(t.Context(), wrong, first)
-	require.Error(t, err)
+	stale := first
+	stale.SessionID = wrong.SessionID
+	stale.Params = json.RawMessage(`{"sessionId":"stale-session","update":{"sessionUpdate":"agent_message","messageId":"reply","content":[]}}`)
+	_, err = projector.Handle(t.Context(), wrong, stale)
+	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 	// Chunks are transient only and foreground idle is not runtime settlement.
 	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":"delta"}}`))
 	require.NoError(t, err)
@@ -163,4 +205,26 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	require.NoError(t, err)
 	_, err = projector.Handle(t.Context(), b, first)
 	require.Error(t, err, "stale callbacks must not reach persistence")
+}
+
+func TestKitTranscriptTerminalReasonTranslation(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"end_turn", "cancelled", "max_tokens", "future_reason"} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			old := &chatrepo.ChatMessage{Content: "answer", ContentRaw: []byte(`[{"type":"text","text":"answer"}]`)}
+			update := kitTranscriptUpdate{SessionUpdate: "agent_message", StopReason: reason}
+			write, apply, _, _, err := translateKitMessage(KitTranscriptBinding{}, uuid.New(), update, nil, old)
+			require.NoError(t, err)
+			require.True(t, apply)
+			require.Equal(t, reason, write.Params.FinishReason.String)
+			require.Equal(t, old.Content, write.Params.Content)
+			require.Equal(t, old.ContentRaw, write.Params.ContentRaw)
+			update.Content = json.RawMessage(`[]`)
+			write, apply, _, _, err = translateKitMessage(KitTranscriptBinding{}, uuid.New(), update, nil, nil)
+			require.NoError(t, err)
+			require.True(t, apply)
+			require.Equal(t, reason, write.Params.FinishReason.String)
+		})
+	}
 }

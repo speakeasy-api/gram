@@ -41,7 +41,7 @@ type kitNativeCatalogStats struct {
 func newKitNativeCatalogFixture(t *testing.T, image string) kitNativeCatalogFixture {
 	t.Helper()
 	dir := t.TempDir()
-	// The fixture container runs as the image's unprivileged user.
+	// The fixture runs as root only to bind TLS port 443; Kit stays unprivileged.
 	require.NoError(t, os.Chmod(dir, 0755))
 	caFile := kitSmokeCertificate(t, dir)
 	source := filepath.Join(dir, "main.go")

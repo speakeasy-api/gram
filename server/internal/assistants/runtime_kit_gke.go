@@ -25,6 +25,8 @@ import (
 
 var kitTemplateGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxtemplates"}
 
+func validKitGKEImage(image string) bool { return kitGKEExplicitImage(image) }
+
 var kitSecretGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"}
 
 // KitGKEIdentity must come from the authoritative runtime record, not pod labels.
@@ -141,9 +143,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		annotations["podsnapshot.gke.io/ps-name"] = in.Restore.name
 	}
 	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitBootstrapConfig(KitLocalBootstrap{Model: in.Model})), KitInferenceCredentialFilename: in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
-	for name, bytes := range in.MCPFiles {
-		data[name] = bytes
-	}
+	maps.Copy(data, in.MCPFiles)
 	items := make([]corev1.KeyToPath, 0, len(data))
 	for _, name := range slices.Sorted(maps.Keys(data)) {
 		path := "credentials/" + name
@@ -179,7 +179,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	security := &corev1.SecurityContext{AllowPrivilegeEscalation: &no, Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}}
 	home := corev1.VolumeMount{Name: "work", MountPath: "/home/kit"}
 	pod := corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: in.Identity.labels(), Annotations: annotations}, Spec: corev1.PodSpec{
-		RuntimeClassName: ptrKitString("gvisor"), AutomountServiceAccountToken: &no,
+		RuntimeClassName: new("gvisor"), AutomountServiceAccountToken: &no,
 		DNSPolicy: corev1.DNSNone, DNSConfig: &corev1.PodDNSConfig{Nameservers: []string{"8.8.8.8", "1.1.1.1"}},
 		NodeSelector:    map[string]string{"sandbox.gke.io/runtime": "gvisor", "workload-type": "sandbox"},
 		Tolerations:     []corev1.Toleration{{Key: "sandbox.gke.io/runtime", Operator: corev1.TolerationOpEqual, Value: "gvisor", Effect: corev1.TaintEffectNoSchedule}, {Key: "workload-type", Operator: corev1.TolerationOpEqual, Value: "sandbox", Effect: corev1.TaintEffectNoSchedule}},
@@ -205,9 +205,11 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	return out, nil
 }
 
-func ptrKitString(s string) *string { return &s }
+//go:fix inline
+func ptrKitString(s string) *string { return new(s) }
 
 const kitBootstrapScript = `umask 077
+rm -rf /home/kit/.kit/credentials
 mkdir -p /home/kit/.kit/credentials /home/kit/workspace
 chmod 700 /home/kit/.kit /home/kit/.kit/credentials /home/kit/workspace
 cp /bootstrap/AGENTS.md /home/kit/.kit/AGENTS.md

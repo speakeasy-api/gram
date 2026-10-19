@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -214,10 +215,22 @@ func (k *KitLocalRuntimeBackend) metadata(r assistantRuntimeRecord, info kitLoca
 	return b, nil
 }
 
-func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
+func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRecord) (result RuntimeBackendEnsureResult, resultErr error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	var result RuntimeBackendEnsureResult
+	startedID := ""
+	defer func() {
+		if resultErr == nil || startedID == "" {
+			return
+		}
+		// Cancellation must not prevent stopping the exact incarnation started
+		// by this attempt. The janitor only reaps stopped containers.
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if err := k.engine.Stop(cleanup, startedID); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("stop unready kit gateway: %w", err))
+		}
+	}()
 	if err := k.validate(r); err != nil {
 		return result, err
 	}
@@ -276,6 +289,7 @@ func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeR
 		if err := k.engine.CopyKitBootstrap(ctx, info.ID, bootstrap); err != nil {
 			return result, fmt.Errorf("inject kit bootstrap: %w", err)
 		}
+		startedID = info.ID
 		if err := k.engine.Start(ctx, info.ID); err != nil {
 			return result, fmt.Errorf("start kit gateway: %w", err)
 		}

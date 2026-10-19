@@ -1549,6 +1549,11 @@ SELECT * FROM assistant_runtimes
 WHERE id = @id
   AND project_id = @project_id;
 
+-- name: GetAssistantRuntimeForAdmission :one
+SELECT * FROM assistant_runtimes
+WHERE id = @id AND project_id = @project_id
+FOR UPDATE;
+
 -- name: BackdateAssistantRuntimeUpdatedAt :exec
 -- Test-only helper: rewinds updated_at on the active runtime for a thread so
 -- backoff windows that key off updated_at can be exercised without sleeping.
@@ -1863,15 +1868,42 @@ WHERE id = @assistant_id AND project_id = @project_id AND deleted IS FALSE
 -- name: RetireAssistantRuntimesForSwitch :exec
 -- Never rewrite a runtime's protocol. Authority checks must reject ended rows.
 UPDATE assistant_runtimes
-SET state = 'stopped', ended_at = clock_timestamp(), updated_at = clock_timestamp()
+SET state = 'switch_retiring', ended_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE project_id = @project_id AND assistant_id = @assistant_id
   AND deleted IS FALSE AND ended IS FALSE;
+
+-- name: HasPendingRuntimeSwitchRetirement :one
+SELECT EXISTS (SELECT 1 FROM assistant_runtimes
+ WHERE project_id = @project_id AND assistant_id = @assistant_id
+ AND state = 'switch_retiring' AND ended IS TRUE);
+
+-- name: ListPendingRuntimeSwitchRetirements :many
+SELECT * FROM assistant_runtimes
+WHERE state = 'switch_retiring' AND ended IS TRUE
+ORDER BY updated_at ASC
+LIMIT @limit_count;
+
+-- name: CompleteRuntimeSwitchRetirement :exec
+UPDATE assistant_runtimes SET state = 'stopped', updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id
+ AND state = 'switch_retiring' AND ended IS TRUE;
 
 -- name: GetLiveKitRuntimeAuthority :one
 SELECT r.id
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND r.state IN ('starting', 'active')
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+FOR SHARE OF r, a;
+
+-- name: GetKitRuntimeControlAuthority :one
+SELECT r.id
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = @runtime_id AND r.project_id = @project_id AND r.assistant_id = @assistant_id
+  AND r.state IN ('starting', 'active', 'stopped')
   AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
   AND a.runtime_version = 3 AND a.deleted IS FALSE
 FOR SHARE OF r, a;
@@ -2011,7 +2043,7 @@ SELECT EXISTS (
    AND r.deleted IS FALSE AND r.ended IS FALSE AND r.runtime_version=3
 )::boolean AS pending;
 
--- name: AcknowledgeKitInterrupt :exec
+-- name: AcknowledgeKitInterrupt :execrows
 -- Only the owning turn calls this after authoritative settlement AND projector flush.
 UPDATE assistant_kit_interrupt_requests q SET outcome=sqlc.arg(outcome)::text, acknowledged_at=clock_timestamp()
 WHERE q.project_id=sqlc.arg(project_id)::uuid AND q.runtime_id=sqlc.arg(runtime_id)::uuid
@@ -2033,3 +2065,9 @@ FROM assistant_kit_interrupt_requests q
 LEFT JOIN assistant_thread_events e ON e.id=q.event_id AND e.project_id=q.project_id
   AND e.assistant_id=q.assistant_id AND e.assistant_thread_id=q.assistant_thread_id
 WHERE q.project_id=sqlc.arg(project_id)::uuid AND q.id=sqlc.arg(request_id)::uuid;
+
+-- name: HasPendingKitInterruptRequest :one
+-- Unlike KitInterruptPending, retain pending requests after ownership is lost.
+SELECT EXISTS (SELECT 1 FROM assistant_kit_interrupt_requests
+ WHERE project_id = sqlc.arg(project_id)::uuid AND runtime_id = sqlc.arg(runtime_id)::uuid
+ AND event_id = sqlc.arg(event_id)::uuid AND attempt = @attempt AND outcome = 'pending');

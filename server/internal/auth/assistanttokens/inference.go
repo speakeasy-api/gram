@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -108,6 +109,9 @@ func (m *Manager) AuthorizeInference(ctx context.Context, header string) (contex
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	_, err = runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(row.PolicyVersion), row.PolicyJson)
+	if errors.Is(err, runtimepolicy.ErrInvalidDelegatedPolicy) {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
 	if err != nil {
 		return ctx, fmt.Errorf("decode inference policy: %w", err)
 	}

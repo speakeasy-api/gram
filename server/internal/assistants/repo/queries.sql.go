@@ -42,7 +42,7 @@ func (q *Queries) AbandonAssistantMCPOAuthClientRegistration(ctx context.Context
 	return err
 }
 
-const acknowledgeKitInterrupt = `-- name: AcknowledgeKitInterrupt :exec
+const acknowledgeKitInterrupt = `-- name: AcknowledgeKitInterrupt :execrows
 UPDATE assistant_kit_interrupt_requests q SET outcome=$1::text, acknowledged_at=clock_timestamp()
 WHERE q.project_id=$2::uuid AND q.runtime_id=$3::uuid
   AND q.event_id=$4::uuid AND q.attempt=$5::bigint AND q.outcome='pending'
@@ -63,15 +63,18 @@ type AcknowledgeKitInterruptParams struct {
 }
 
 // Only the owning turn calls this after authoritative settlement AND projector flush.
-func (q *Queries) AcknowledgeKitInterrupt(ctx context.Context, arg AcknowledgeKitInterruptParams) error {
-	_, err := q.db.Exec(ctx, acknowledgeKitInterrupt,
+func (q *Queries) AcknowledgeKitInterrupt(ctx context.Context, arg AcknowledgeKitInterruptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, acknowledgeKitInterrupt,
 		arg.Outcome,
 		arg.ProjectID,
 		arg.RuntimeID,
 		arg.EventID,
 		arg.Attempt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const acquireAssistantAdvisoryLock = `-- name: AcquireAssistantAdvisoryLock :exec
@@ -719,6 +722,22 @@ func (q *Queries) CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx contex
 	var completed bool
 	err := row.Scan(&completed)
 	return completed, err
+}
+
+const completeRuntimeSwitchRetirement = `-- name: CompleteRuntimeSwitchRetirement :exec
+UPDATE assistant_runtimes SET state = 'stopped', updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2
+ AND state = 'switch_retiring' AND ended IS TRUE
+`
+
+type CompleteRuntimeSwitchRetirementParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) CompleteRuntimeSwitchRetirement(ctx context.Context, arg CompleteRuntimeSwitchRetirementParams) error {
+	_, err := q.db.Exec(ctx, completeRuntimeSwitchRetirement, arg.ID, arg.ProjectID)
+	return err
 }
 
 const countActiveAssistantRuntimes = `-- name: CountActiveAssistantRuntimes :one
@@ -1498,6 +1517,42 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 	return i, err
 }
 
+const getAssistantRuntimeForAdmission = `-- name: GetAssistantRuntimeForAdmission :one
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+WHERE id = $1 AND project_id = $2
+FOR UPDATE
+`
+
+type GetAssistantRuntimeForAdmissionParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetAssistantRuntimeForAdmission(ctx context.Context, arg GetAssistantRuntimeForAdmissionParams) (AssistantRuntime, error) {
+	row := q.db.QueryRow(ctx, getAssistantRuntimeForAdmission, arg.ID, arg.ProjectID)
+	var i AssistantRuntime
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantThreadID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.Backend,
+		&i.State,
+		&i.WarmUntil,
+		&i.LeaseOwner,
+		&i.LastHeartbeatAt,
+		&i.BackendMetadataJson,
+		&i.EndedAt,
+		&i.RuntimeVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.Ended,
+	)
+	return i, err
+}
+
 const getAssistantRuntimeV2 = `-- name: GetAssistantRuntimeV2 :one
 SELECT id, assistant_thread_id, assistant_id, project_id, runtime_version, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
@@ -1647,6 +1702,30 @@ func (q *Queries) GetKitInterruptOutcome(ctx context.Context, arg GetKitInterrup
 	return outcome, err
 }
 
+const getKitRuntimeControlAuthority = `-- name: GetKitRuntimeControlAuthority :one
+SELECT r.id
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.id = $1 AND r.project_id = $2 AND r.assistant_id = $3
+  AND r.state IN ('starting', 'active', 'stopped')
+  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
+  AND a.runtime_version = 3 AND a.deleted IS FALSE
+FOR SHARE OF r, a
+`
+
+type GetKitRuntimeControlAuthorityParams struct {
+	RuntimeID   uuid.UUID
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+func (q *Queries) GetKitRuntimeControlAuthority(ctx context.Context, arg GetKitRuntimeControlAuthorityParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getKitRuntimeControlAuthority, arg.RuntimeID, arg.ProjectID, arg.AssistantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getKitRuntimeSessionBinding = `-- name: GetKitRuntimeSessionBinding :one
 SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
   EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
@@ -1781,6 +1860,7 @@ SELECT r.id
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.id = $1 AND r.project_id = $2 AND r.assistant_id = $3
+  AND r.state IN ('starting', 'active')
   AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
   AND a.runtime_version = 3 AND a.deleted IS FALSE
 FOR SHARE OF r, a
@@ -1863,6 +1943,50 @@ func (q *Queries) GetProjectName(ctx context.Context, projectID uuid.UUID) (stri
 	var name string
 	err := row.Scan(&name)
 	return name, err
+}
+
+const hasPendingKitInterruptRequest = `-- name: HasPendingKitInterruptRequest :one
+SELECT EXISTS (SELECT 1 FROM assistant_kit_interrupt_requests
+ WHERE project_id = $1::uuid AND runtime_id = $2::uuid
+ AND event_id = $3::uuid AND attempt = $4 AND outcome = 'pending')
+`
+
+type HasPendingKitInterruptRequestParams struct {
+	ProjectID uuid.UUID
+	RuntimeID uuid.UUID
+	EventID   uuid.UUID
+	Attempt   int64
+}
+
+// Unlike KitInterruptPending, retain pending requests after ownership is lost.
+func (q *Queries) HasPendingKitInterruptRequest(ctx context.Context, arg HasPendingKitInterruptRequestParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingKitInterruptRequest,
+		arg.ProjectID,
+		arg.RuntimeID,
+		arg.EventID,
+		arg.Attempt,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasPendingRuntimeSwitchRetirement = `-- name: HasPendingRuntimeSwitchRetirement :one
+SELECT EXISTS (SELECT 1 FROM assistant_runtimes
+ WHERE project_id = $1 AND assistant_id = $2
+ AND state = 'switch_retiring' AND ended IS TRUE)
+`
+
+type HasPendingRuntimeSwitchRetirementParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+func (q *Queries) HasPendingRuntimeSwitchRetirement(ctx context.Context, arg HasPendingRuntimeSwitchRetirementParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingRuntimeSwitchRetirement, arg.ProjectID, arg.AssistantID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const initThreadSkillSnapshot = `-- name: InitThreadSkillSnapshot :one
@@ -2872,6 +2996,51 @@ func (q *Queries) ListKitProtocolUserEchoes(ctx context.Context, arg ListKitProt
 			return nil, err
 		}
 		items = append(items, echoes)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingRuntimeSwitchRetirements = `-- name: ListPendingRuntimeSwitchRetirements :many
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+WHERE state = 'switch_retiring' AND ended IS TRUE
+ORDER BY updated_at ASC
+LIMIT $1
+`
+
+func (q *Queries) ListPendingRuntimeSwitchRetirements(ctx context.Context, limitCount int32) ([]AssistantRuntime, error) {
+	rows, err := q.db.Query(ctx, listPendingRuntimeSwitchRetirements, limitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssistantRuntime
+	for rows.Next() {
+		var i AssistantRuntime
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssistantThreadID,
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Backend,
+			&i.State,
+			&i.WarmUntil,
+			&i.LeaseOwner,
+			&i.LastHeartbeatAt,
+			&i.BackendMetadataJson,
+			&i.EndedAt,
+			&i.RuntimeVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.Ended,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4525,7 +4694,7 @@ func (q *Queries) RetireAssistantMCPOAuthClients(ctx context.Context, arg Retire
 
 const retireAssistantRuntimesForSwitch = `-- name: RetireAssistantRuntimesForSwitch :exec
 UPDATE assistant_runtimes
-SET state = 'stopped', ended_at = clock_timestamp(), updated_at = clock_timestamp()
+SET state = 'switch_retiring', ended_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE project_id = $1 AND assistant_id = $2
   AND deleted IS FALSE AND ended IS FALSE
 `

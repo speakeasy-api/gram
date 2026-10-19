@@ -162,7 +162,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if err != nil {
 		return zero, err
 	}
-	if !kitResourceAttached(assistant, c.MCPResource) {
+	if !kitResourceAttached(assistant, s.serverURL, c.MCPResource) {
 		return zero, errors.New("configured Kit MCP resource is not an enabled attachment of this assistant")
 	}
 	trigger := c.RootTriggerID
@@ -200,13 +200,17 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	return bootstrap, err
 }
 
-func kitResourceAttached(a assistantRecord, resource *url.URL) bool {
-	if resource == nil {
+func kitResourceAttached(a assistantRecord, serverURL, resource *url.URL) bool {
+	if serverURL == nil || resource == nil {
 		return false
 	}
+	// Endpoint slugs are deployment-local, not authority for an arbitrary origin.
+	// Match the same canonical URL used by resolveAssistantMCPServers before
+	// provisioning any workload credentials.
 	slug := strings.TrimPrefix(resource.Path, "/mcp/")
 	for _, attached := range a.MCPServers {
-		if attached.EndpointSlug == slug && attached.Visibility != "disabled" {
+		if attached.EndpointSlug == slug && attached.Visibility != "disabled" &&
+			resource.String() == serverURL.JoinPath("mcp", attached.EndpointSlug).String() {
 			return true
 		}
 	}
@@ -277,7 +281,11 @@ func (s *ServiceCore) rotateKitGatewayTokenAlreadyLocked(ctx context.Context, r 
 	return token, nil
 }
 func (s *ServiceCore) loadKitGatewayTokenAlreadyLocked(ctx context.Context, r assistantRuntimeRecord) (string, error) {
-	ciphertext, err := assistantrepo.New(s.db).LoadKitGatewayCredential(ctx, assistantrepo.LoadKitGatewayCredentialParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID})
+	queries := runtimeSwitchQueries(ctx, s.db)
+	if _, err := queries.GetKitRuntimeControlAuthority(ctx, assistantrepo.GetKitRuntimeControlAuthorityParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID}); err != nil {
+		return "", ErrKitRuntimeBinding
+	}
+	ciphertext, err := queries.LoadKitGatewayCredential(ctx, assistantrepo.LoadKitGatewayCredentialParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrKitGatewayTokenNotFound
 	}

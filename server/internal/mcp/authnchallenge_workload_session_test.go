@@ -227,7 +227,7 @@ func TestApplyIssuerGate_WorkloadSessionActsThroughItsAssignedAgent(t *testing.T
 	require.NoError(t, err)
 	disposition, err = checkpoint.Evaluate(admittedCtx, fx.orgID, source)
 	require.NoError(t, err)
-	require.NotEqual(t, killswitches.TransportDispositionContinue, disposition.Kind(), "even an already admitted context must fail closed after suspension")
+	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind(), "even an already admitted context must fail closed after suspension")
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time), ti.serverURL.String(), endpoint)
 	require.Error(t, err, "fresh admission must also reject the suspended assigned agent")
 }

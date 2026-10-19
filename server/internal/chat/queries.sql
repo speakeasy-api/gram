@@ -2259,9 +2259,9 @@ SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
 
 -- name: PatchKitProjectionMessage :execrows
 UPDATE chat_messages SET content = @content, content_raw = @content_raw,
- tool_calls = @tool_calls, content_hash = @content_hash
+ tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason
 WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
-AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls);
+AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls OR finish_reason IS DISTINCT FROM @finish_reason);
 
 -- name: ValidateKitTranscriptBinding :one
 SELECT t.id FROM assistant_threads t

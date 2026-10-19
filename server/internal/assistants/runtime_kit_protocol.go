@@ -394,7 +394,7 @@ func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant
 	}
 	// Plain SELECT only: the caller holds the advisory and runtime row locks.
 	// Do not use the session helpers, which acquire another advisory lock.
-	sessions, err := assistantrepo.New(p.config.Core.db).ListKitProtocolSessions(ctx, assistantrepo.ListKitProtocolSessionsParams{ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, AssistantID: uuid.NullUUID{UUID: r.AssistantID, Valid: true}, RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true}})
+	sessions, err := runtimeSwitchQueries(ctx, p.config.Core.db).ListKitProtocolSessions(ctx, assistantrepo.ListKitProtocolSessionsParams{ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, AssistantID: uuid.NullUUID{UUID: r.AssistantID, Valid: true}, RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true}})
 	if err != nil {
 		return result, fmt.Errorf("list Kit sessions for switch: %w", err)
 	}
