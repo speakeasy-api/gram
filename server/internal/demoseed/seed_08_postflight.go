@@ -350,6 +350,12 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountPolicyMissingCustomRules),
 			fail:  postflightMustBeZero("%d policy custom_rule_ids have no rule row"),
 		},
+		// One approval request per status the Tool approvals tab shows.
+		{
+			what:  "tool approval requests",
+			count: byOrg(s.q.PostflightCountApprovals),
+			fail:  postflightMustEqual(4, "expected 4 tool approval requests, found %d"),
+		},
 		{
 			what: "foreign-org chats",
 			count: func() (int64, error) {

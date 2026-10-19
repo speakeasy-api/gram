@@ -1,9 +1,15 @@
-import { type LucideIcon, MonitorCheck, Shield, Sparkles } from "lucide-react";
+import {
+  type LucideIcon,
+  MonitorCheck,
+  Shield,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 
 /** Which editor a policy opens in. Standard and prompt policies choose their
  *  detectors; a Shadow AI policy's detector is fixed, and it is told apart
  *  by what it decides instead. */
-export type PolicyEditorKind = "prompt" | "standard" | "shadow_ai";
+export type PolicyEditorKind = "prompt" | "standard" | "shadow_ai" | "approval";
 
 export const POLICY_EDITOR_KIND_META: Record<
   PolicyEditorKind,
@@ -34,5 +40,12 @@ export const POLICY_EDITOR_KIND_META: Record<
     placeholder: "Untitled Shadow AI policy",
     createHint:
       "Decide which AI tools may connect. Decisions apply when the policy is created.",
+  },
+  approval: {
+    icon: ShieldCheck,
+    label: "Tool approval",
+    placeholder: "Untitled approval policy",
+    createHint:
+      "Choose the tools that need approval, then who it applies to and who approves.",
   },
 };

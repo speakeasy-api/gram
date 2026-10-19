@@ -9,6 +9,7 @@ export const POLICY_CENTER_TABS = [
   "detection-rules",
   "shadow-ai-targets",
   "mcp-approvals",
+  "tool-approvals",
   "exclusions",
   "quarantines",
 ] as const;
@@ -20,6 +21,7 @@ const TAB_LABEL: Record<PolicyCenterTab, string> = {
   "detection-rules": "Detection Rules",
   "shadow-ai-targets": "Shadow AI targets",
   "mcp-approvals": "MCP approvals",
+  "tool-approvals": "Tool approvals",
   exclusions: "Exclusion Rules",
   quarantines: "Quarantines",
 };
@@ -34,8 +36,13 @@ export function policyCenterTabSearch(tab: PolicyCenterTab): string {
   return `?tab=${tab}`;
 }
 
-export function policyCenterTabs(): PageTab[] {
-  return POLICY_CENTER_TABS.map((tab) => ({
+/** The tabs to show. Tool approvals is behind its rollout flag. */
+export function policyCenterTabs({
+  toolApprovals = false,
+}: { toolApprovals?: boolean } = {}): PageTab[] {
+  return POLICY_CENTER_TABS.filter(
+    (tab) => toolApprovals || tab !== "tool-approvals",
+  ).map((tab) => ({
     value: tab,
     label: TAB_LABEL[tab],
     href: policyCenterTabSearch(tab),
