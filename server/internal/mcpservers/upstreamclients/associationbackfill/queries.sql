@@ -127,7 +127,9 @@ ORDER BY page.id, c.id;
 -- the server is live on the same tenant issuer, the client is still bound to
 -- it and in the server's tenant, with require_sole_consumer the server is
 -- still the issuer's only consumer and no gateway fronts it, and with
--- respect_removed no row was recorded for the pair meanwhile. A concurrent
+-- respect_removed no row was recorded for the pair meanwhile, and with
+-- require_metadata_match the server's upstream still names this client's
+-- authorization server and no other client bound to the issuer. A concurrent
 -- configuration change therefore wins and the write is skipped.
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
 SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
@@ -181,6 +183,47 @@ WHERE s.id = @mcp_server_id::uuid
     WHERE recorded.mcp_server_id = s.id
       AND recorded.remote_session_client_id = c.id
   ))
+  AND (NOT @require_metadata_match::boolean OR (
+    EXISTS (
+      SELECT 1
+      FROM remote_mcp_servers AS rms
+      JOIN remote_protected_resources AS rpr
+        ON rpr.project_id = s.project_id
+       AND rpr.resource_identifier = rms.url
+       AND rpr.deleted IS FALSE
+      JOIN remote_session_issuers AS i
+        ON i.id = c.remote_session_issuer_id
+       AND i.deleted IS FALSE
+       AND i.issuer = ANY (rpr.authorization_servers)
+      WHERE rms.id = s.remote_mcp_server_id
+        AND rms.project_id = s.project_id
+        AND rms.deleted IS FALSE
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS other_link
+      JOIN remote_session_clients AS other
+        ON other.id = other_link.remote_session_client_id
+       AND other.id <> c.id
+       AND other.deleted IS FALSE
+       AND (other.project_id = p.id
+            OR (other.project_id IS NULL AND other.organization_id = p.organization_id)
+            OR (other.project_id IS NULL AND other.organization_id IS NULL))
+      JOIN remote_mcp_servers AS rms
+        ON rms.id = s.remote_mcp_server_id
+       AND rms.project_id = s.project_id
+       AND rms.deleted IS FALSE
+      JOIN remote_protected_resources AS rpr
+        ON rpr.project_id = s.project_id
+       AND rpr.resource_identifier = rms.url
+       AND rpr.deleted IS FALSE
+      JOIN remote_session_issuers AS i
+        ON i.id = other.remote_session_issuer_id
+       AND i.deleted IS FALSE
+       AND i.issuer = ANY (rpr.authorization_servers)
+      WHERE other_link.user_session_issuer_id = usi.id
+    )
+  ))
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: ListGatewayAssociationCandidates :many
@@ -190,11 +233,15 @@ ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO 
 -- an organization's only organization-level issuer fronts every server of
 -- the organization, as the organization gateway does.
 --
--- grant_match reports that the client holds a live grant under the issuer
--- whose RFC 8707 resource is the server's upstream, the comparison request
--- routing makes. derived_match reports that the client's authorization
--- server is the one derived for the server, the comparison consent claimed
--- members by.
+-- grant_match reports that the client, bound to the issuer, holds a live
+-- grant whose RFC 8707 resource is the server's remote upstream URL, the
+-- comparison request routing makes. The issuer a grant was minted through is
+-- provenance only: a grant is one subject's credential for one client, and
+-- the gateway offers it whichever issuer minted it. A tunnel's resource identifier is only
+-- what the tunnel claims, independent of where it dials, so it proves no
+-- client: request routing matches tunnels by derived issuer alone, and so
+-- does this. derived_match reports that the client's authorization server is
+-- the one derived for the server, the comparison consent claimed members by.
 WITH fronted AS (
     SELECT g.user_session_issuer_id AS issuer_id, s.id AS server_id
     FROM meta_mcp_servers AS g
@@ -245,11 +292,10 @@ SELECT f.issuer_id::uuid AS issuer_id,
        EXISTS (
          SELECT 1
          FROM remote_sessions AS rs
-         WHERE rs.user_session_issuer_id = f.issuer_id
-           AND rs.remote_session_client_id = c.id
+         WHERE rs.remote_session_client_id = c.id
            AND rs.deleted IS FALSE
-           AND COALESCE(r.url, t.resource_identifier, '') <> ''
-           AND rtrim(rs.resource, '/') = rtrim(COALESCE(r.url, t.resource_identifier), '/')
+           AND r.url IS NOT NULL
+           AND rtrim(rs.resource, '/') = rtrim(r.url, '/')
        )::boolean AS grant_match,
        EXISTS (
          SELECT 1
@@ -304,8 +350,64 @@ ORDER BY f.issuer_id, s.id, c.id;
 -- holding: the server is live with a live source of its own project, the
 -- issuer is still a live gateway issuer fronting it (or still the
 -- organization's only organization-level issuer), the client is still bound
--- to the issuer and in the server's tenant, and no row was recorded for the
--- pair meanwhile, so an explicit detach is never undone.
+-- to the issuer and in the server's tenant, the issuer's clients' grants and
+-- derived authorization servers still decide this client the way
+-- DecideGateway does, and no row was recorded for the pair meanwhile, so an
+-- explicit detach is never undone.
+WITH target AS (
+    SELECT s.id, s.project_id, p.organization_id, s.remote_session_issuer_id, r.url AS remote_url
+    FROM mcp_servers AS s
+    JOIN projects AS p
+      ON p.id = s.project_id
+    LEFT JOIN remote_mcp_servers AS r
+      ON r.id = s.remote_mcp_server_id
+     AND r.project_id = s.project_id
+     AND r.deleted IS FALSE
+    WHERE s.id = @mcp_server_id::uuid
+),
+evidence AS (
+    SELECT ec.id AS client_id,
+           (target.remote_url IS NOT NULL AND EXISTS (
+             SELECT 1
+             FROM remote_sessions AS rs
+             WHERE rs.remote_session_client_id = ec.id
+               AND rs.deleted IS FALSE
+               AND rtrim(rs.resource, '/') = rtrim(target.remote_url, '/')
+           )) AS grant_match,
+           EXISTS (
+             SELECT 1
+             FROM remote_session_issuers AS derived
+             WHERE derived.id = target.remote_session_issuer_id
+               AND derived.id = ec.remote_session_issuer_id
+               AND derived.deleted IS FALSE
+               AND (derived.project_id = target.project_id
+                    OR (derived.project_id IS NULL AND derived.organization_id = target.organization_id)
+                    OR (derived.project_id IS NULL AND derived.organization_id IS NULL))
+           ) AS derived_match
+    FROM target
+    JOIN remote_session_client_user_session_issuers AS el
+      ON el.user_session_issuer_id = @user_session_issuer_id::uuid
+    JOIN remote_session_clients AS ec
+      ON ec.id = el.remote_session_client_id
+     AND ec.deleted IS FALSE
+     AND (ec.project_id = target.project_id
+          OR (ec.project_id IS NULL AND ec.organization_id = target.organization_id)
+          OR (ec.project_id IS NULL AND ec.organization_id IS NULL))
+),
+decided AS (
+    SELECT e.client_id
+    FROM evidence AS e
+    WHERE (
+        e.grant_match
+        AND (SELECT count(*) FROM evidence AS g WHERE g.grant_match) = 1
+        AND NOT EXISTS (SELECT 1 FROM evidence AS o WHERE o.derived_match AND o.client_id <> e.client_id)
+      )
+      OR (
+        e.derived_match
+        AND NOT EXISTS (SELECT 1 FROM evidence AS g WHERE g.grant_match)
+        AND (SELECT count(*) FROM evidence AS d WHERE d.derived_match) = 1
+      )
+)
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
 SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
 FROM mcp_servers AS s
@@ -376,6 +478,7 @@ WHERE s.id = @mcp_server_id::uuid
         ) = 1
     )
   )
+  AND c.id IN (SELECT decided.client_id FROM decided)
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_server_remote_session_clients AS recorded
@@ -464,3 +567,14 @@ UPDATE projects SET deleted_at = clock_timestamp() WHERE id = @id;
 -- name: SoftDeleteRemoteMCPServersOfServerFixture :exec
 UPDATE remote_mcp_servers SET deleted_at = clock_timestamp()
 WHERE id = (SELECT s.remote_mcp_server_id FROM mcp_servers AS s WHERE s.id = @mcp_server_id);
+
+-- name: SeedTunneledMCPServerFixture :exec
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
+VALUES (@id, @project_id, @name, @key_hash, 'prefix', @resource_identifier);
+
+-- name: SeedTunneledServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, slug, tunneled_mcp_server_id, user_session_issuer_id, visibility)
+VALUES (@id, @project_id, @slug, @tunneled_mcp_server_id, @user_session_issuer_id, 'private');
+
+-- name: RemoveGatewayMemberFixture :exec
+UPDATE meta_mcp_server_members SET deleted_at = clock_timestamp() WHERE mcp_server_id = @mcp_server_id AND deleted IS FALSE;

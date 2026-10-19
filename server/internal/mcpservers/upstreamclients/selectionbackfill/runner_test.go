@@ -4,10 +4,12 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -474,4 +476,74 @@ func TestRecordUpstreamClientSelectionsSkipsUnproxiedServers(t *testing.T) {
 	report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
 	require.NoError(t, err)
 	require.Empty(t, report.Gaps, "and is never a gap")
+}
+
+// A grant is one subject's credential for one client, whichever issuer
+// minted it, so grants minted through a sibling issuer for the gateway's
+// clients still keep a member from being recorded as needing no auth.
+func TestRecordUpstreamClientSelectionsCountsGrantsMintedThroughAnotherIssuer(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.projectIssuer()
+	siblingIssuer := f.projectIssuer()
+	member := f.server(f.projectIssuer())
+	for _, client := range []uuid.UUID{f.client(gatewayIssuer, siblingIssuer), f.client(gatewayIssuer, siblingIssuer)} {
+		require.NoError(t, f.q.SeedGrantFixture(t.Context(), SeedGrantFixtureParams{
+			SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
+			UserSessionIssuerID:   siblingIssuer,
+			RemoteSessionClientID: client,
+			Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
+		}))
+	}
+	gatewayID := uuid.New()
+	require.NoError(t, f.q.SeedMetaMCPServerFixture(t.Context(), SeedMetaMCPServerFixtureParams{
+		ID:                  gatewayID,
+		OrganizationID:      f.orgID,
+		ProjectID:           f.projectID,
+		Name:                "gateway",
+		UserSessionIssuerID: uuid.NullUUID{UUID: gatewayIssuer, Valid: true},
+	}))
+	require.NoError(t, f.q.SeedMetaMCPServerMemberFixture(t.Context(), SeedMetaMCPServerMemberFixtureParams{ProjectID: f.projectID, MetaMcpServerID: gatewayID, McpServerID: member}))
+	credential := f.session(gatewayIssuer)
+
+	require.Zero(t, f.record(gatewayIssuer, credential))
+	require.Empty(t, f.selections(credential))
+
+	report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: member, Outcome: OutcomeUnassociated}}, report.Gaps)
+}
+
+// beforeSelectionWrite runs a change just before the backfill records a
+// credential's choices, standing in for a configuration change that races
+// the run.
+type beforeSelectionWrite struct {
+	DBTX
+	change func()
+}
+
+func (db beforeSelectionWrite) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	if strings.Contains(sql, "INSERT INTO upstream_client_selections") {
+		db.change()
+	}
+	return db.DBTX.Exec(ctx, sql, args...) //nolint:wrapcheck,glint // notestingrawsql: forwards the generated statement unchanged; the test double only observes it.
+}
+
+func TestRunReportsCoverageFromWhatWasRecorded(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	server := f.server(issuer, f.client(issuer))
+	credential := f.session(issuer)
+
+	// A second eligible client is associated between the coverage read and
+	// the write, so the write correctly records nothing.
+	racing := beforeSelectionWrite{DBTX: f.pool, change: func() { f.associate(server, f.client(issuer)) }}
+	report, err := Run(t.Context(), racing, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, report.Pairs[OutcomeClient], "the prediction made before the write")
+	require.Zero(t, report.Written)
+	require.Zero(t, report.FullyCovered, "an unrecorded pair is not covered")
+	require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: server, Outcome: OutcomeAmbiguous}}, report.Gaps)
+	require.Empty(t, f.selections(credential))
 }
