@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
+func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, contents []string, judgeInHandlers bool) ([][]scanners.Finding, error) {
 	out := make([]scanners.Result, len(messages))
 	judgeMessages := make([]judgemessage.Message, len(messages))
 	judgeTrajectories := make([]judgemessage.Trajectory, len(messages))
@@ -24,10 +24,12 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		judgeTrajectories[i] = batchJudgeTrajectory(messages[i])
 		judgeUserIDs[i] = messages[i].UserID
 	}
-	if err := a.publishPromptInjectionScanRequests(ctx, args, messages); err != nil {
+	if err := a.publishPromptInjectionScanRequests(ctx, args, messages, judgeInHandlers); err != nil {
 		return nil, err
 	}
-
+	if judgeInHandlers {
+		return findingsFromResults(out), nil
+	}
 	startedAt := time.Now().UTC()
 	results, verdicts, err := a.promptInjectionScanner.ScanBatchWithVerdicts(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeUserIDs, judgeMessages, judgeTrajectories)
 	if err != nil {
@@ -45,11 +47,7 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		if len(results[i].Findings) == 0 {
 			continue
 		}
-		ev := judgemessage.Render(judgeMessages[i])
-		for j := range results[i].Findings {
-			results[i].Findings[j].Match = ev
-			results[i].Findings[j].EndPos = len(ev)
-		}
+		scanners.SetEventMatch(results[i].Findings, judgemessage.Render(judgeMessages[i]))
 	}
 	requestID := batchScanRequestID(args, "standard").String()
 
@@ -67,12 +65,16 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 	return findingsFromResults(results), nil
 }
 
-func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage) error {
+func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, judgeInHandlers bool) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	requestID := batchScanRequestID(args, "standard")
+	executionPath := shadowStreamExecutionPath
+	if judgeInHandlers {
+		executionPath = judgeHandlerStreamExecutionPath
+	}
 	for _, msg := range messages {
-		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
+		provenance := batchRiskProvenance(args, msg, executionPath, requestID.String())
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptInjectionAnalysis_ToolCall, 0, len(jm.ToolCalls))
@@ -97,7 +99,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 			OriginRiskPolicyId:      new(args.RiskPolicyID.String()),
 			OriginRiskPolicyVersion: &args.PolicyVersion,
 			MessageLinkReason:       &provenance.MessageLinkReason,
-			ExecutionPath:           new(shadowStreamExecutionPath),
+			ExecutionPath:           &executionPath,
 			ToolCallId:              &provenance.ToolCallID,
 			HookSource:              &msg.Source,
 
@@ -110,6 +112,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 			ToolCalls:              toolCalls,
 			PriorUserRequest:       &msg.PriorUserRequest,
 			RecentUntrustedContent: &msg.RecentUntrustedContent,
+			RunJudge:               &judgeInHandlers,
 		}.Build()))
 	}
 	return drainPublishAcks(ctx, "publish prompt injection scan requests", publishResults)

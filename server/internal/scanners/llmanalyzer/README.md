@@ -264,8 +264,8 @@ scanners.PublishFindings ─► Finding topic ─► FindingCHWriter ─► Clic
 
 - Findings are **ClickHouse-only**. No `risk_results` rows are written for
   covered sources.
-- The handler bypasses `AsyncShadowGate` (requests only reach the lane for
-  orgs in the `llm` or `shadow` mode). It acks analyzer failures with nothing
+- The handler runs requests selected upstream for organizations in the `llm`
+  or `shadow` mode. It acks analyzer failures with nothing
   published and nacks only when the findings publish fails. A batch whose LLM
   publish fails fails the activity: in the `llm` mode nothing else scans those
   sources for the org, and in the `shadow` mode the retry keeps both engines'
@@ -473,7 +473,7 @@ the dispatcher's `lane`, which is scanner + policy) and
 | `risk.enforcement.llm.stale_dropped`      | counter   | mode=`sync`                                                                                                                                                                                                                           | streams        |
 | `risk.enforcement.llm.reply_write_errors` | counter   | mode=`sync`                                                                                                                                                                                                                           | streams        |
 | `risk.enforcement.pubsub_degraded`        | counter   | `lane` = `ENFORCEMENT_SCANNER_LLM_ANALYZER`, `reason`, `gram.risk.enforcement.fail_mode` ∈ `closed` (llm) \| `shadow` (shared with legacy lanes, which use `open`)                                                                    | server         |
-| `risk.async_scan.handler_messages`        | counter   | org, `scanner` = `llm_analyzer`, `engine` = `real`, `gram.outcome` ∈ `ok` \| `scan_error` \| `publish_error` \| `disabled` \| `shadow_published`, `gate_reason` = `not_gated` (shared)                                                | streams        |
+| `risk.async_scan.handler_messages`        | counter   | org, `scanner` = `llm_analyzer`, `engine` = `real`, `gram.outcome` ∈ `ok` \| `scan_error` \| `publish_error` \| `disabled` \| `shadow_published`, `selection_reason` = `upstream_selected` (shared)                                   | streams        |
 
 A parse failure counts as `success` on `risk.llm.requests` (the HTTP call
 succeeded) and increments `risk.llm.parse_failures`.

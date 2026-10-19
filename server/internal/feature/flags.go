@@ -41,7 +41,10 @@ const (
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
 
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
-	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
+	// FlagRiskFindingsClickHouseCutover moves an org's prompt-injection and prompt-policy judging from inline batch scans to the analysis handlers.
+	// Cut-over orgs stop getting judge findings in Postgres, so keep it off in production until chat risk reads use ClickHouse (AIS-802).
+	// Server-side org-group targeting fails closed to inline judging.
+	FlagRiskFindingsClickHouseCutover Flag = "risk-findings-clickhouse-cutover"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated

@@ -30,6 +30,23 @@ const (
 	meterAsyncScanHandlerMessages = "risk.async_scan.handler_messages"
 )
 
+type AsyncScanEngineSelectionReason string
+
+const (
+	AsyncScanEngineSelectionRequestReal      AsyncScanEngineSelectionReason = "request_real"
+	AsyncScanEngineSelectionRequestStub      AsyncScanEngineSelectionReason = "request_stub"
+	AsyncScanEngineSelectionUpstreamSelected AsyncScanEngineSelectionReason = "upstream_selected"
+)
+
+func (r AsyncScanEngineSelectionReason) Engine() string {
+	switch r {
+	case AsyncScanEngineSelectionRequestReal, AsyncScanEngineSelectionUpstreamSelected:
+		return AsyncScanEngineReal
+	default:
+		return AsyncScanEngineStub
+	}
+}
+
 type AsyncScanHandlerMetrics struct {
 	handledMessages metric.Int64Counter
 }
@@ -43,7 +60,7 @@ func NewAsyncScanHandlerMetrics(meterProvider metric.MeterProvider, logger *slog
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/scanners")
 	handledMessages, err := meter.Int64Counter(
 		meterAsyncScanHandlerMessages,
-		metric.WithDescription("Total async risk scan messages handled by scanner, engine, gate decision, and outcome"),
+		metric.WithDescription("Total async risk scan messages handled by scanner, engine, selection reason, and outcome"),
 		metric.WithUnit("{message}"),
 	)
 	if err != nil {
@@ -53,7 +70,7 @@ func NewAsyncScanHandlerMetrics(meterProvider metric.MeterProvider, logger *slog
 	return &AsyncScanHandlerMetrics{handledMessages: handledMessages}
 }
 
-func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scanner, engine, outcome string, gateReason AsyncShadowGateReason) {
+func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scanner, engine, outcome string, selectionReason AsyncScanEngineSelectionReason) {
 	if m == nil || m.handledMessages == nil {
 		return
 	}
@@ -63,6 +80,6 @@ func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scan
 		attribute.String("scanner", scanner),
 		attribute.String("engine", engine),
 		attr.Outcome(outcome),
-		attribute.String("gate_reason", string(gateReason)),
+		attribute.String("selection_reason", string(selectionReason)),
 	))
 }

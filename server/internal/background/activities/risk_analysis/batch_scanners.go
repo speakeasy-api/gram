@@ -25,8 +25,9 @@ import (
 )
 
 const (
-	inlineBatchExecutionPath  = "inline_batch"
-	shadowStreamExecutionPath = "shadow_stream"
+	inlineBatchExecutionPath        = "inline_batch"
+	shadowStreamExecutionPath       = "shadow_stream"
+	judgeHandlerStreamExecutionPath = "judge_handler_stream"
 	// llmAnalyzerStreamExecutionPath marks analysis requests the fine-tuned
 	// LLM analyzer's streams consumer evaluates as the only engine for the
 	// policy's sources, as opposed to the shadow stream that runs alongside
@@ -155,7 +156,7 @@ func findingsFromResults(results []scanners.Result) [][]scanners.Finding {
 	return findings
 }
 
-func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
+func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks, judgeInHandlers bool) ([][]scanners.Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -273,7 +274,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
-			findings, err := a.scanPromptInjection(ctx, args, subMessages, subContents)
+			findings, err := a.scanPromptInjection(ctx, args, subMessages, subContents, judgeInHandlers)
 			if err != nil {
 				promptInjectionErr = err
 				return
