@@ -64,8 +64,8 @@ func RenderKitGKEManualTrigger(enabled bool, name string, binding KitGKESnapshot
 
 // KitGKESnapshotAvailabilityVerifier must use the deployed CRD's actual status
 // contract to verify trigger success, selected snapshot AllSnapshotsAvailable,
-// unexpired backing data, and source pod name/UID correlation. No implementation
-// is supplied until that contract is verified in the dev canary. A successful
+// unexpired backing data, and source pod name/UID correlation. The managed
+// implementation rejects incompatible storage/process scopes. A successful
 // trigger create or Pod Running alone MUST NOT satisfy this interface.
 type KitGKESnapshotAvailabilityVerifier interface {
 	VerifyAvailable(context.Context, *unstructured.Unstructured, KitGKESnapshotBinding) error

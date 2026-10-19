@@ -44,9 +44,8 @@ type KitGKERuntimeBackend struct {
 
 var _ RuntimeBackend = (*KitGKERuntimeBackend)(nil)
 
-// No deployed snapshot status/expiry or persisted checkpoint authority contract
-// is verified here. Trigger creation and Pod Running never prove a checkpoint.
-const kitGKECheckpointUnavailable = "Kit GKE checkpoint/restore unavailable: deployed PodSnapshot trigger completion, source UID, AllSnapshotsAvailable and expiry contract and persisted checkpoint authority are not verified"
+// Trigger creation and Pod Running never prove a checkpoint.
+const kitGKECheckpointUnavailable = "Kit GKE checkpoint/restore unavailable: snapshots are disabled or no driver is installed"
 
 func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend, error) {
 	if config.GKE.Dynamic == nil || config.GKE.Namespace == "" || config.GKE.ServerURL == nil || config.Bootstrap == nil || config.Protocol == nil || config.Fence == nil {
@@ -75,7 +74,11 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	config.GKE.ServerURL = &serverURL
 	config.Provision = p
 	if p.SnapshotsEnabled && config.Snapshots == nil {
-		return nil, fmt.Errorf("%s", kitGKECheckpointUnavailable)
+		driver, err := NewKitGKEManagedCheckpointDriver(config.GKE.Dynamic)
+		if err != nil {
+			return nil, err
+		}
+		config.Snapshots = driver
 	}
 	if p.Restore != nil || p.RestoreSource != nil || p.ColdReset || p.PreviousIdentity != nil {
 		return nil, fmt.Errorf("restore/reset input must come from persisted runtime authority")

@@ -103,8 +103,9 @@ func TestKitGKEBackendStopCannotClaimCheckpointSuccess(t *testing.T) {
 	require.Zero(t, *fences)
 	config := k.config
 	config.Provision.SnapshotsEnabled = true
-	_, err = NewKitGKERuntimeBackend(config)
-	require.ErrorContains(t, err, "checkpoint/restore unavailable")
+	managed, err := NewKitGKERuntimeBackend(config)
+	require.NoError(t, err)
+	require.IsType(t, &KitGKEManagedCheckpointDriver{}, managed.config.Snapshots)
 }
 func TestKitGKEBackendReapRequiresSettlementAndFences(t *testing.T) {
 	t.Parallel()

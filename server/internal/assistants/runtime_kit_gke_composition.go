@@ -18,8 +18,8 @@ type KitGKECompositionConfig struct {
 	KitLocalCompositionConfig
 	GKE       GKERuntimeConfig
 	Provision KitGKEProvisionInput
-	// Snapshots must verify the deployed CRD contract and cold restore evidence.
-	// Nil deliberately leaves checkpoint/restore unavailable.
+	// Snapshots optionally overrides the managed GKE driver for tests. Nil uses
+	// the concrete managed API driver when snapshot provisioning is enabled.
 	Snapshots KitGKECheckpointDriver
 }
 

@@ -19,11 +19,11 @@ var kitGKEAuthorityGVR = schema.GroupVersionResource{Group: "", Version: "v1", R
 var kitGKETriggerGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io", Version: "v1", Resource: "podsnapshotmanualtriggers"}
 var kitGKESnapshotGVR = schema.GroupVersionResource{Group: "podsnapshot.gke.io", Version: "v1", Resource: "podsnapshots"}
 
-// KitGKECheckpointDriver is the deployment-verified part of the GKE contract.
-// Public docs specify targetPod, AllSnapshotsAvailable and ps-name, but omit
-// machine-readable trigger/source UID/expiry status and restore-vs-cold evidence:
-// https://docs.cloud.google.com/kubernetes-engine/docs/how-to/pod-snapshots-trigger
-// https://docs.cloud.google.com/kubernetes-engine/docs/how-to/pod-snapshots
+// KitGKECheckpointDriver enforces the filesystem/fresh-process lifecycle contract.
+// The default managed driver reads the public CRD API and reports the concrete
+// incompatibility of whole-pod memory restore and rootfs-only mounted-file loss.
+// Public trigger result fields are documented at:
+// https://docs.cloud.google.com/kubernetes-engine/docs/reference/crds/podsnapshot
 // Select must wait for this exact trigger's completion and correlate source UID.
 // VerifyAvailable must recheck expiry/backing data, not merely cached status.
 // PrepareColdRestore must arrange filesystem restoration WITHOUT restoring
