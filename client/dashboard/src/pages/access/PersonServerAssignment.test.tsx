@@ -145,3 +145,77 @@ it("shows role blocks on public servers without implying public access is preven
     ),
   ).toBeTruthy();
 });
+
+it.each(["role", "user", "everyone"] as const)(
+  "names a public server's %s block without duplicate public text",
+  (kind) => {
+    render(
+      <MemoryRouter>
+        <ServerAssignment
+          server={server}
+          explanation={{
+            visibility: "public",
+            levels: [
+              {
+                level: "use",
+                allowed: false,
+                toolAccess: "none",
+                rules: [
+                  rule({
+                    kind,
+                    displayName: "Engineer",
+                    effect: "blocks",
+                    level: "blocked",
+                  }),
+                ],
+              },
+            ],
+          }}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByText("Blocked by", { selector: "span" }).textContent,
+    ).toBe(
+      kind === "user" ? "Blocked by Direct assignment" : "Blocked by Engineer",
+    );
+    expect(screen.queryByText("Public server")).toBeNull();
+    expect(screen.queryByText("Blocked by role") !== null).toBe(
+      kind === "role",
+    );
+  },
+);
+
+it("does not present an overridden block's tool scope as an active restriction", () => {
+  render(
+    <MemoryRouter>
+      <ServerAssignment
+        server={server}
+        explanation={{
+          visibility: "private",
+          levels: [
+            {
+              level: "use",
+              allowed: true,
+              toolAccess: "all",
+              rules: [
+                rule({
+                  kind: "user",
+                  principalUrn: "user:person",
+                  effect: "overrides",
+                }),
+                rule({
+                  effect: "overridden",
+                  level: "blocked",
+                  tools: ["delete_issue"],
+                }),
+              ],
+            },
+          ],
+        }}
+      />
+    </MemoryRouter>,
+  );
+  expect(screen.getByText("All tools")).toBeTruthy();
+  expect(screen.queryByText(/delete_issue/)).toBeNull();
+});

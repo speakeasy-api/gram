@@ -71,7 +71,7 @@ export function ServerAssignment({
   const rules = level.rules;
   const publicRoleBlock =
     explanation.visibility === "public" &&
-    rules.some((rule) => rule.effect === "blocks");
+    rules.some((rule) => rule.effect === "blocks" && rule.kind === "role");
   const status = publicRoleBlock
     ? { tone: "blocked", label: "Blocked by role" }
     : levelStatus(level, explanation.visibility);
@@ -85,7 +85,7 @@ export function ServerAssignment({
       rules
         .filter(
           (rule) =>
-            rule.effect !== "blocked" &&
+            ["allows", "overrides", "limits"].includes(rule.effect) &&
             ((rule.tools?.length ?? 0) > 0 ||
               (rule.dispositions?.length ?? 0) > 0),
         )
@@ -142,12 +142,16 @@ export function ServerAssignment({
           )}
           {limits.length > 0 && (
             <>
-              {sources.length > 0 ? "; restricted by " : "Restricted by "}
+              {sources.length > 0 || blockers.length > 0
+                ? "; restricted by "
+                : "Restricted by "}
               <RuleSources rules={limits} />
             </>
           )}
           {explanation.visibility === "public" &&
             sources.length === 0 &&
+            blockers.length === 0 &&
+            limits.length === 0 &&
             "Public server"}
         </p>
         {publicRoleBlock && (

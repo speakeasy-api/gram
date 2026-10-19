@@ -95,6 +95,7 @@ it("always shows compact search and the edit-role action for a small roster", as
     email: `member-${i}@example.test`,
   }));
   const editRole = vi.fn();
+  const selectMember = vi.fn();
   render(
     <MemoryRouter>
       <TooltipProvider>
@@ -104,7 +105,7 @@ it("always shows compact search and the edit-role action for a small roster", as
           onEditRole={() => {
             editRole();
           }}
-          onMemberSelect={() => {}}
+          onMemberSelect={selectMember}
         />
       </TooltipProvider>
     </MemoryRouter>,
@@ -119,6 +120,9 @@ it("always shows compact search and the edit-role action for a small roster", as
         option.getAttribute("aria-label")?.includes("View assignments"),
       ),
   ).toBe(true);
-  await userEvent.click(screen.getByRole("button", { name: "Edit role" }));
+  expect(screen.getAllByText("View assignments").length).toBeGreaterThan(0);
+  screen.getByRole("button", { name: "Edit role" }).focus();
+  await userEvent.keyboard("{Enter}");
   expect(editRole).toHaveBeenCalledOnce();
+  expect(selectMember).not.toHaveBeenCalled();
 });

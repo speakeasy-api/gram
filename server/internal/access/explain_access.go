@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -92,6 +93,71 @@ func EvaluateEffectiveMCPAccess(grants []authz.Grant, resourceID, projectID stri
 		}
 	}
 	return result, nil
+}
+
+// MCPAccessRuleSummary explains a grant without exposing member identifiers or
+// directory attribute values.
+type MCPAccessRuleSummary struct {
+	// AccessLevel is the use, view, or manage decision this rule affects.
+	AccessLevel string `json:"access_level"`
+
+	// SourceKind distinguishes direct, everyone, role, and unknown grants.
+	SourceKind string `json:"source_kind"`
+
+	// SourceName names a role or describes a non-identifying grant source.
+	SourceName string `json:"source_name"`
+
+	// Effect describes whether the rule allows, blocks, limits, or is overridden.
+	Effect string `json:"effect"`
+
+	// AppliesTo distinguishes server, project, and organization-wide rules.
+	AppliesTo string `json:"applies_to"`
+
+	// Tools names any tool restriction on the rule.
+	Tools []string `json:"tools,omitempty"`
+
+	// Dispositions names any annotation restriction on the rule.
+	Dispositions []string `json:"dispositions,omitempty"`
+
+	// Reason explains a direct grant that does not override an exclusion.
+	Reason *string `json:"reason,omitempty"`
+}
+
+// SummarizeMCPAccessRules uses the dashboard explanation to report grant and
+// block sources while withholding principal identifiers and directory data.
+func SummarizeMCPAccessRules(grants []authz.Grant, resourceID, projectID string, roleNames map[string]string) ([]MCPAccessRuleSummary, error) {
+	names := make(map[string]audienceName)
+	for _, grant := range grants {
+		kind, name := "unknown", "Unknown source"
+		switch {
+		case grant.PrincipalUrn == string(urn.PrincipalTypeUser)+":"+urn.AllUsersPrincipalID:
+			kind, name = "everyone", "Everyone"
+		case authz.IsDirectGrant(grant):
+			kind, name = "user", "Direct grant"
+		case strings.HasPrefix(grant.PrincipalUrn, string(urn.PrincipalTypeRole)+":"):
+			kind, name = "role", "Deleted role"
+			if roleName, ok := roleNames[grant.PrincipalUrn]; ok {
+				name = roleName
+			}
+		}
+		names[grant.PrincipalUrn] = audienceName{kind: kind, displayName: name, description: nil, memberCount: nil}
+	}
+	describe := explainedRuleDescriber{resourceID: resourceID, projectID: projectID, names: names, sources: nil}
+	rules := make([]MCPAccessRuleSummary, 0)
+	for _, level := range explainedAccessLevels {
+		explained, err := explainAccessLevel(grants, level.level, authz.MCPCheck(level.scope, resourceID, projectID), describe)
+		if err != nil {
+			return nil, err
+		}
+		for _, rule := range explained.Rules {
+			rules = append(rules, MCPAccessRuleSummary{
+				AccessLevel: level.level, SourceKind: rule.Kind, SourceName: rule.DisplayName,
+				Effect: rule.Effect, AppliesTo: rule.AppliesTo, Tools: rule.Tools,
+				Dispositions: rule.Dispositions, Reason: rule.Reason,
+			})
+		}
+	}
+	return rules, nil
 }
 
 // effectiveToolAccess computes only the compact all/some/none decision. Unlike

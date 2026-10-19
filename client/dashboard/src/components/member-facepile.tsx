@@ -117,6 +117,7 @@ export function MemberFacepile({
   /** Opens a searchable picker that reports the selected member instead of navigating. */
   onMemberSelect?: (member: FacepileMember) => void;
   memberActionLabel?: string;
+  /** Shown in the searchable picker when onMemberSelect is provided. */
   onEditRole?: () => void;
   renderTrigger?: (props: {
     label: string;
@@ -246,6 +247,9 @@ export function MemberFacepile({
                   variant="tertiary"
                   size="sm"
                   className="mr-1 shrink-0"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.stopPropagation();
+                  }}
                   onClick={() => {
                     selectedMember.current = true;
                     setOpen(false);
@@ -288,6 +292,7 @@ export function MemberFacepile({
                       </div>
                       {memberActionLabel && (
                         <span className="text-muted-foreground ml-auto inline-flex shrink-0 items-center gap-1 text-xs opacity-0 group-hover:opacity-100 group-data-[selected=true]:opacity-100">
+                          {memberActionLabel}
                           <ArrowRight aria-hidden="true" className="size-3" />
                         </span>
                       )}

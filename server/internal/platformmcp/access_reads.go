@@ -122,6 +122,9 @@ type GetMemberMCPAccessInput struct {
 }
 
 type MemberMCPAccessRow struct {
+	// Rules explains live grant and block sources without member identifiers.
+	Rules []access.MCPAccessRuleSummary `json:"rules"`
+
 	ProjectID         string `json:"project_id"`
 	ProjectName       string `json:"project_name"`
 	MCPID             string `json:"mcp_id"`
@@ -444,6 +447,14 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 	if err != nil {
 		return GetMemberMCPAccessOutput{}, fmt.Errorf("load platform mcp access member grants: %w", err)
 	}
+	roles, err := s.roles.ListRoles(ctx, principal.OrganizationID)
+	if err != nil {
+		return GetMemberMCPAccessOutput{}, fmt.Errorf("list member access role names: %w", err)
+	}
+	roleNames := make(map[string]string, len(roles.Roles))
+	for _, role := range roles.Roles {
+		roleNames[role.PrincipalUrn] = role.Name
+	}
 	//nolint:exhaustruct // Optional inventory filters intentionally stay unset.
 	rows, err := platformrepo.New(s.db).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
 		OrganizationID: principal.OrganizationID, SkipAuthorizationFilter: true, LimitValue: maxMemberMCPAccessServers + 1,
@@ -464,6 +475,10 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 		effective, err := access.EvaluateEffectiveMCPAccess(grants, row.McpServerID.String(), row.ProjectID.String())
 		if err != nil {
 			return GetMemberMCPAccessOutput{}, fmt.Errorf("evaluate member access to MCP %q: %w", name, err)
+		}
+		rules, err := access.SummarizeMCPAccessRules(grants, row.McpServerID.String(), row.ProjectID.String(), roleNames)
+		if err != nil {
+			return GetMemberMCPAccessOutput{}, fmt.Errorf("explain member access to MCP %q: %w", name, err)
 		}
 		//nolint:exhaustruct // Access mode helpers only consume endpoint-kind fields.
 		item := platformrepo.GetPlatformMCPInventoryItemRow{
@@ -487,7 +502,7 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 		output.Servers = append(output.Servers, MemberMCPAccessRow{
 			ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName, MCPID: row.McpServerID.String(), MCPName: name,
 			Backend: accessBackend(item), Visibility: row.Visibility, AuthorizationMode: mode, ConnectionAccess: connectionAccess,
-			CanConnect: canConnect, ToolAccess: toolAccess, CanView: effective.CanView, CanManage: effective.CanManage,
+			CanConnect: canConnect, ToolAccess: toolAccess, CanView: effective.CanView, CanManage: effective.CanManage, Rules: rules,
 		})
 	}
 	sort.Slice(output.Servers, func(i, j int) bool {
