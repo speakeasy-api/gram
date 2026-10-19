@@ -18,7 +18,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -185,14 +184,17 @@ func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Pri
 	}
 	return ListMySessionsOutput{Sessions: sessions}, nil
 }
-func (s *SessionRecallService) useClickHouseFindings(ctx context.Context, principal Principal) bool {
+
+// useClickHouseFindings fails closed: a cut-over org's ClickHouse-only
+// findings are absent from Postgres, so an unresolved flag must not downgrade
+// the masking source.
+func (s *SessionRecallService) useClickHouseFindings(ctx context.Context, principal Principal) (bool, error) {
 	if s.cutover == nil || s.organizations == nil {
-		return false
+		return false, nil
 	}
 	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "resolve organization for risk findings cutover; using postgres", attr.SlogError(err))
-		return false
+		return false, fmt.Errorf("resolve organization for risk findings cutover: %w", err)
 	}
 	enabled, err := s.cutover.IsFlagEnabled(
 		ctx,
@@ -201,10 +203,9 @@ func (s *SessionRecallService) useClickHouseFindings(ctx context.Context, princi
 		feature.OrgProjectGroups(organizationSlug, ""),
 	)
 	if err != nil {
-		s.logger.WarnContext(ctx, "risk findings clickhouse cutover flag check failed; using postgres", attr.SlogError(err))
-		return false
+		return false, fmt.Errorf("check risk findings clickhouse cutover flag: %w", err)
 	}
-	return enabled
+	return enabled, nil
 }
 
 func (s *SessionRecallService) riskFindingMasks(
@@ -213,7 +214,11 @@ func (s *SessionRecallService) riskFindingMasks(
 	chatID, projectID uuid.UUID,
 	messages []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow,
 ) (findingMasks, error) {
-	if !s.useClickHouseFindings(ctx, principal) {
+	useClickHouse, err := s.useClickHouseFindings(ctx, principal)
+	if err != nil {
+		return findingMasks{}, err
+	}
+	if !useClickHouse {
 		findings, err := s.repo.ListRiskFindingSpansForRecall(ctx, platformrepo.ListRiskFindingSpansForRecallParams{
 			ChatID:         chatID,
 			ProjectID:      projectID,
@@ -228,7 +233,10 @@ func (s *SessionRecallService) riskFindingMasks(
 	if s.findings == nil {
 		return findingMasks{}, errors.New("clickhouse risk findings for recall are unavailable")
 	}
-	policies, err := riskrepo.New(s.db).ListEnabledRiskPoliciesByProject(ctx, projectID)
+	policies, err := riskrepo.New(s.db).ListEnabledRiskPoliciesByOrganizationProject(ctx, riskrepo.ListEnabledRiskPoliciesByOrganizationProjectParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      projectID,
+	})
 	if err != nil {
 		return findingMasks{}, fmt.Errorf("list enabled risk policies for recall: %w", err)
 	}
@@ -578,10 +586,15 @@ func maskClickHouseFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessa
 			ms = &recallMessageSpans{spans: nil, unappliable: 0}
 			byMessage[messageID] = ms
 		}
-		if strings.HasPrefix(finding.Field, "tool.") || finding.Surface == scanners.SurfaceToolArgs {
+		surface := finding.Surface
+		if surface == "" {
+			// Rows written before the surface column default to empty.
+			surface = scanners.FindingSurface(finding.Source, finding.Field, finding.Path)
+		}
+		if strings.HasPrefix(finding.Field, "tool.") || surface == scanners.SurfaceToolArgs {
 			continue
 		}
-		switch finding.Surface {
+		switch surface {
 		case scanners.SurfaceContent:
 			start, end := int(finding.StartPos), int(finding.EndPos)
 			if start < 0 || end <= start || end > len(content) || finding.MatchLen == 0 || end-start != conv.SafeInt(int64(finding.MatchLen)) {
@@ -589,10 +602,17 @@ func maskClickHouseFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessa
 				continue
 			}
 			match := content[start:end]
+			display := maskdisplay.Display(finding.Source, finding.RuleID, match)
+			// ClickHouse stores no raw match, so the ingest-time display string
+			// is the evidence that these bytes are still the finding's.
+			if display != finding.MatchRedacted {
+				ms.unappliable++
+				continue
+			}
 			ms.spans = append(ms.spans, contentMaskSpan{
 				start:   start,
 				end:     end,
-				display: maskdisplay.Display(finding.Source, finding.RuleID, match),
+				display: display,
 				match:   match,
 			})
 		case scanners.SurfaceDerived, scanners.SurfaceNone:

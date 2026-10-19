@@ -355,6 +355,7 @@ func TestSessionRecallMasksSameSpanWithClickHouseCutover(t *testing.T) {
 		ChatID:            chatID.String(),
 		MessageCreatedAt:  at,
 		MatchLen:          uint32(len(secret)), // #nosec G115 -- fixture match is bounded.
+		MatchRedacted:     maskdisplay.Display("gitleaks", "secret.aws_access_token", secret),
 		Surface:           scanners.SurfaceContent,
 		EventKind:         chrepo.EventKindFinding,
 	}}))

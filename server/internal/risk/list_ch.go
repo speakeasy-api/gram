@@ -73,7 +73,7 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	var policyIDs []string
 	var err error
 	if enabledPoliciesOnly {
-		policyIDs, err = s.enabledPolicyIDs(ctx, projectID, policyID)
+		policyIDs, err = s.enabledPolicyIDs(ctx, authCtx.ActiveOrganizationID, projectID, policyID)
 	} else {
 		policyIDs, err = s.visiblePolicyIDs(ctx, projectID, policyID)
 	}
@@ -175,7 +175,7 @@ func (s *Service) visiblePolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 	return ids, nil
 }
 
-func (s *Service) enabledPolicyIDs(ctx context.Context, projectID uuid.UUID, policyID uuid.NullUUID) ([]string, error) {
+func (s *Service) enabledPolicyIDs(ctx context.Context, organizationID string, projectID uuid.UUID, policyID uuid.NullUUID) ([]string, error) {
 	if policyID.Valid {
 		policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID.UUID, ProjectID: projectID})
 		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !policy.Enabled) {
@@ -187,7 +187,10 @@ func (s *Service) enabledPolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 		return []string{policyID.UUID.String()}, nil
 	}
 
-	policies, err := s.repo.ListEnabledRiskPoliciesByProject(ctx, projectID)
+	policies, err := s.repo.ListEnabledRiskPoliciesByOrganizationProject(ctx, repo.ListEnabledRiskPoliciesByOrganizationProjectParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list enabled risk policies: %w", err)
 	}
@@ -200,7 +203,7 @@ func (s *Service) enabledPolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 
 func (s *Service) listRiskResultsByChatFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext, cursor uuid.NullUUID, pageSize int) (*gen.ListRiskResultsByChatResult, error) {
 	projectID := *authCtx.ProjectID
-	policyIDs, err := s.enabledPolicyIDs(ctx, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	policyIDs, err := s.enabledPolicyIDs(ctx, authCtx.ActiveOrganizationID, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve enabled risk policies").LogError(ctx, s.logger)
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 )
 
@@ -650,4 +651,50 @@ func TestTurnsFromRowsSubstitutesMaskedContent(t *testing.T) {
 
 func itoa(v int) string {
 	return strconv.Itoa(v)
+}
+
+func clickHouseRecallFinding(messageID uuid.UUID, surface, match string, start int) chrepo.RiskFindingUnmaskRow {
+	return chrepo.RiskFindingUnmaskRow{
+		ChatMessageID: messageID.String(),
+		Source:        "gitleaks",
+		RuleID:        "secret.generic",
+		StartPos:      int32(start),              // #nosec G115 -- fixture offsets are small constants.
+		EndPos:        int32(start + len(match)), // #nosec G115 -- fixture offsets are small constants.
+		MatchLen:      uint32(len(match)),        // #nosec G115 -- fixture matches are bounded literals.
+		MatchRedacted: maskdisplay.Display("gitleaks", "secret.generic", match),
+		Surface:       surface,
+	}
+}
+
+// ClickHouse stores no raw match: in-range offsets over drifted content must
+// fail the ingest-time display check and withhold the message.
+func TestMaskClickHouseFindingSpansWithholdsOnStaleOffsets(t *testing.T) {
+	t.Parallel()
+
+	messageID := uuid.New()
+	content := "aaaaDRIFTYbbbb SECRET moved here"
+
+	masks := maskClickHouseFindingSpans(
+		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]chrepo.RiskFindingUnmaskRow{clickHouseRecallFinding(messageID, "content", "SECRET", 4)},
+	)
+
+	require.Equal(t, 1, masks.withheld)
+	require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
+}
+
+// Rows written before the surface column derive it like the Postgres path.
+func TestMaskClickHouseFindingSpansDerivesMissingSurface(t *testing.T) {
+	t.Parallel()
+
+	messageID := uuid.New()
+	content := "aaaaSECRETbbbb"
+
+	masks := maskClickHouseFindingSpans(
+		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]chrepo.RiskFindingUnmaskRow{clickHouseRecallFinding(messageID, "", "SECRET", 4)},
+	)
+
+	require.Equal(t, 0, masks.withheld)
+	require.Equal(t, "aaaa"+maskdisplay.Display("gitleaks", "secret.generic", "SECRET")+"bbbb", masks.content[messageID])
 }
