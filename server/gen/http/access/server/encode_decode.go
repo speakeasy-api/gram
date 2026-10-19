@@ -7460,6 +7460,7 @@ func marshalAccessDirectoryRoleMappingToDirectoryRoleMappingResponseBody(v *acce
 		DirectoryGroupName: v.DirectoryGroupName,
 		AttributeKey:       v.AttributeKey,
 		AttributeValue:     v.AttributeValue,
+		SourceStatus:       v.SourceStatus,
 		RoleUrn:            v.RoleUrn,
 		CreatedAt:          v.CreatedAt,
 		UpdatedAt:          v.UpdatedAt,
@@ -7479,6 +7480,7 @@ func marshalAccessDirectoryRoleMappingToDirectoryRoleMappingResponse(v *access.D
 		DirectoryGroupName: v.DirectoryGroupName,
 		AttributeKey:       v.AttributeKey,
 		AttributeValue:     v.AttributeValue,
+		SourceStatus:       v.SourceStatus,
 		RoleUrn:            v.RoleUrn,
 		CreatedAt:          v.CreatedAt,
 		UpdatedAt:          v.UpdatedAt,
@@ -7514,6 +7516,7 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 		PhotoURL:     v.PhotoURL,
 		JoinedAt:     v.JoinedAt,
 		Department:   v.Department,
+		InDirectory:  v.InDirectory,
 	}
 	if v.RoleIds != nil {
 		res.RoleIds = make([]string, len(v.RoleIds))
@@ -7536,6 +7539,58 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 		for i, val := range v.Groups {
 			res.Groups[i] = val
 		}
+	}
+	if v.DirectoryGroups != nil {
+		res.DirectoryGroups = make([]*AccessMemberDirectoryGroupResponseBody, len(v.DirectoryGroups))
+		for i, val := range v.DirectoryGroups {
+			if val == nil {
+				res.DirectoryGroups[i] = nil
+				continue
+			}
+			res.DirectoryGroups[i] = marshalAccessAccessMemberDirectoryGroupToAccessMemberDirectoryGroupResponseBody(val)
+		}
+	}
+	if v.DirectoryRoleSources != nil {
+		res.DirectoryRoleSources = make([]*AccessMemberDirectoryRoleSourceResponseBody, len(v.DirectoryRoleSources))
+		for i, val := range v.DirectoryRoleSources {
+			if val == nil {
+				res.DirectoryRoleSources[i] = nil
+				continue
+			}
+			res.DirectoryRoleSources[i] = marshalAccessAccessMemberDirectoryRoleSourceToAccessMemberDirectoryRoleSourceResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalAccessAccessMemberDirectoryGroupToAccessMemberDirectoryGroupResponseBody
+// builds a value of type *AccessMemberDirectoryGroupResponseBody from a value
+// of type *access.AccessMemberDirectoryGroup.
+func marshalAccessAccessMemberDirectoryGroupToAccessMemberDirectoryGroupResponseBody(v *access.AccessMemberDirectoryGroup) *AccessMemberDirectoryGroupResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AccessMemberDirectoryGroupResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+	}
+
+	return res
+}
+
+// marshalAccessAccessMemberDirectoryRoleSourceToAccessMemberDirectoryRoleSourceResponseBody
+// builds a value of type *AccessMemberDirectoryRoleSourceResponseBody from a
+// value of type *access.AccessMemberDirectoryRoleSource.
+func marshalAccessAccessMemberDirectoryRoleSourceToAccessMemberDirectoryRoleSourceResponseBody(v *access.AccessMemberDirectoryRoleSource) *AccessMemberDirectoryRoleSourceResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AccessMemberDirectoryRoleSourceResponseBody{
+		RoleID:           v.RoleID,
+		MappingID:        v.MappingID,
+		SourceKind:       v.SourceKind,
+		DirectoryGroupID: v.DirectoryGroupID,
 	}
 
 	return res

@@ -7,6 +7,14 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AccessMemberDirectoryGroup,
+  AccessMemberDirectoryGroup$inboundSchema,
+} from "./accessmemberdirectorygroup.js";
+import {
+  AccessMemberDirectoryRoleSource,
+  AccessMemberDirectoryRoleSource$inboundSchema,
+} from "./accessmemberdirectoryrolesource.js";
 
 export type AccessMember = {
   /**
@@ -14,9 +22,17 @@ export type AccessMember = {
    */
   department?: string | undefined;
   /**
+   * The directory groups the member belongs to, by stable ID. Prefer this to groups when matching a member to a group, since two groups can share a name.
+   */
+  directoryGroups?: Array<AccessMemberDirectoryGroup> | undefined;
+  /**
    * Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.
    */
   directoryRoleIds: Array<string>;
+  /**
+   * Where each role in directory_role_ids comes from: one entry per directory role mapping that currently gives the member that role, so a role reached through two groups appears twice. Set by listMembers.
+   */
+  directoryRoleSources?: Array<AccessMemberDirectoryRoleSource> | undefined;
   /**
    * Email address.
    */
@@ -29,6 +45,10 @@ export type AccessMember = {
    * User ID.
    */
   id: string;
+  /**
+   * Whether the member has a live profile in the organization's synced directory. Set by listMembers.
+   */
+  inDirectory?: boolean | undefined;
   /**
    * When the member joined the organization.
    */
@@ -56,10 +76,17 @@ export const AccessMember$inboundSchema: z.ZodMiniType<AccessMember, unknown> =
   z.pipe(
     z.object({
       department: z.optional(z.string()),
+      directory_groups: z.optional(
+        z.array(AccessMemberDirectoryGroup$inboundSchema),
+      ),
       directory_role_ids: z.array(z.string()),
+      directory_role_sources: z.optional(
+        z.array(AccessMemberDirectoryRoleSource$inboundSchema),
+      ),
       email: z.string(),
       groups: z.optional(z.array(z.string())),
       id: z.string(),
+      in_directory: z.optional(z.boolean()),
       joined_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -71,7 +98,10 @@ export const AccessMember$inboundSchema: z.ZodMiniType<AccessMember, unknown> =
     }),
     z.transform((v) => {
       return remap$(v, {
+        "directory_groups": "directoryGroups",
         "directory_role_ids": "directoryRoleIds",
+        "directory_role_sources": "directoryRoleSources",
+        "in_directory": "inDirectory",
         "joined_at": "joinedAt",
         "photo_url": "photoUrl",
         "principal_urn": "principalUrn",

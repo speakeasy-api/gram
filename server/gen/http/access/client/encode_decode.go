@@ -8032,6 +8032,7 @@ func unmarshalDirectoryRoleMappingResponseBodyToAccessDirectoryRoleMapping(v *Di
 		DirectoryGroupName: v.DirectoryGroupName,
 		AttributeKey:       v.AttributeKey,
 		AttributeValue:     v.AttributeValue,
+		SourceStatus:       *v.SourceStatus,
 		RoleUrn:            *v.RoleUrn,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
@@ -8051,6 +8052,7 @@ func unmarshalDirectoryRoleMappingResponseToAccessDirectoryRoleMapping(v *Direct
 		DirectoryGroupName: v.DirectoryGroupName,
 		AttributeKey:       v.AttributeKey,
 		AttributeValue:     v.AttributeValue,
+		SourceStatus:       *v.SourceStatus,
 		RoleUrn:            *v.RoleUrn,
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
@@ -8086,6 +8088,7 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 		PhotoURL:     v.PhotoURL,
 		JoinedAt:     *v.JoinedAt,
 		Department:   v.Department,
+		InDirectory:  v.InDirectory,
 	}
 	res.RoleIds = make([]string, len(v.RoleIds))
 	for i, val := range v.RoleIds {
@@ -8100,6 +8103,58 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 		for i, val := range v.Groups {
 			res.Groups[i] = val
 		}
+	}
+	if v.DirectoryGroups != nil {
+		res.DirectoryGroups = make([]*access.AccessMemberDirectoryGroup, len(v.DirectoryGroups))
+		for i, val := range v.DirectoryGroups {
+			if val == nil {
+				res.DirectoryGroups[i] = nil
+				continue
+			}
+			res.DirectoryGroups[i] = unmarshalAccessMemberDirectoryGroupResponseBodyToAccessAccessMemberDirectoryGroup(val)
+		}
+	}
+	if v.DirectoryRoleSources != nil {
+		res.DirectoryRoleSources = make([]*access.AccessMemberDirectoryRoleSource, len(v.DirectoryRoleSources))
+		for i, val := range v.DirectoryRoleSources {
+			if val == nil {
+				res.DirectoryRoleSources[i] = nil
+				continue
+			}
+			res.DirectoryRoleSources[i] = unmarshalAccessMemberDirectoryRoleSourceResponseBodyToAccessAccessMemberDirectoryRoleSource(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalAccessMemberDirectoryGroupResponseBodyToAccessAccessMemberDirectoryGroup
+// builds a value of type *access.AccessMemberDirectoryGroup from a value of
+// type *AccessMemberDirectoryGroupResponseBody.
+func unmarshalAccessMemberDirectoryGroupResponseBodyToAccessAccessMemberDirectoryGroup(v *AccessMemberDirectoryGroupResponseBody) *access.AccessMemberDirectoryGroup {
+	if v == nil {
+		return nil
+	}
+	res := &access.AccessMemberDirectoryGroup{
+		ID:   *v.ID,
+		Name: *v.Name,
+	}
+
+	return res
+}
+
+// unmarshalAccessMemberDirectoryRoleSourceResponseBodyToAccessAccessMemberDirectoryRoleSource
+// builds a value of type *access.AccessMemberDirectoryRoleSource from a value
+// of type *AccessMemberDirectoryRoleSourceResponseBody.
+func unmarshalAccessMemberDirectoryRoleSourceResponseBodyToAccessAccessMemberDirectoryRoleSource(v *AccessMemberDirectoryRoleSourceResponseBody) *access.AccessMemberDirectoryRoleSource {
+	if v == nil {
+		return nil
+	}
+	res := &access.AccessMemberDirectoryRoleSource{
+		RoleID:           *v.RoleID,
+		MappingID:        *v.MappingID,
+		SourceKind:       *v.SourceKind,
+		DirectoryGroupID: v.DirectoryGroupID,
 	}
 
 	return res

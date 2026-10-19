@@ -289,6 +289,11 @@ type SetDirectoryRoleMappingResponseBody struct {
 	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
 	// The directory attribute value. Set when source_kind is attribute.
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Whether the mapped source still exists. missing means the group was deleted
+	// from the directory, or no live directory user has the attribute value. A
+	// missing source matches nobody, so the mapping grants nothing until the
+	// source returns.
+	SourceStatus *string `form:"source_status,omitempty" json:"source_status,omitempty" xml:"source_status,omitempty"`
 	// Principal URN of the role granted to matching members.
 	RoleUrn   *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -341,6 +346,16 @@ type UpdateMemberRolesResponseBody struct {
 	Department *string `form:"department,omitempty" json:"department,omitempty" xml:"department,omitempty"`
 	// Names of the directory groups the member belongs to.
 	Groups []string `form:"groups,omitempty" json:"groups,omitempty" xml:"groups,omitempty"`
+	// The directory groups the member belongs to, by stable ID. Prefer this to
+	// groups when matching a member to a group, since two groups can share a name.
+	DirectoryGroups []*AccessMemberDirectoryGroupResponseBody `form:"directory_groups,omitempty" json:"directory_groups,omitempty" xml:"directory_groups,omitempty"`
+	// Whether the member has a live profile in the organization's synced
+	// directory. Set by listMembers.
+	InDirectory *bool `form:"in_directory,omitempty" json:"in_directory,omitempty" xml:"in_directory,omitempty"`
+	// Where each role in directory_role_ids comes from: one entry per directory
+	// role mapping that currently gives the member that role, so a role reached
+	// through two groups appears twice. Set by listMembers.
+	DirectoryRoleSources []*AccessMemberDirectoryRoleSourceResponseBody `form:"directory_role_sources,omitempty" json:"directory_role_sources,omitempty" xml:"directory_role_sources,omitempty"`
 }
 
 // ListShadowMCPInventoryResponseBody is the type of the "access" service
@@ -6778,6 +6793,11 @@ type DirectoryRoleMappingResponseBody struct {
 	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
 	// The directory attribute value. Set when source_kind is attribute.
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Whether the mapped source still exists. missing means the group was deleted
+	// from the directory, or no live directory user has the attribute value. A
+	// missing source matches nobody, so the mapping grants nothing until the
+	// source returns.
+	SourceStatus *string `form:"source_status,omitempty" json:"source_status,omitempty" xml:"source_status,omitempty"`
 	// Principal URN of the role granted to matching members.
 	RoleUrn   *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -6798,6 +6818,11 @@ type DirectoryRoleMappingResponse struct {
 	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
 	// The directory attribute value. Set when source_kind is attribute.
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Whether the mapped source still exists. missing means the group was deleted
+	// from the directory, or no live directory user has the attribute value. A
+	// missing source matches nobody, so the mapping grants nothing until the
+	// source returns.
+	SourceStatus *string `form:"source_status,omitempty" json:"source_status,omitempty" xml:"source_status,omitempty"`
 	// Principal URN of the role granted to matching members.
 	RoleUrn   *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -6847,6 +6872,38 @@ type AccessMemberResponseBody struct {
 	Department *string `form:"department,omitempty" json:"department,omitempty" xml:"department,omitempty"`
 	// Names of the directory groups the member belongs to.
 	Groups []string `form:"groups,omitempty" json:"groups,omitempty" xml:"groups,omitempty"`
+	// The directory groups the member belongs to, by stable ID. Prefer this to
+	// groups when matching a member to a group, since two groups can share a name.
+	DirectoryGroups []*AccessMemberDirectoryGroupResponseBody `form:"directory_groups,omitempty" json:"directory_groups,omitempty" xml:"directory_groups,omitempty"`
+	// Whether the member has a live profile in the organization's synced
+	// directory. Set by listMembers.
+	InDirectory *bool `form:"in_directory,omitempty" json:"in_directory,omitempty" xml:"in_directory,omitempty"`
+	// Where each role in directory_role_ids comes from: one entry per directory
+	// role mapping that currently gives the member that role, so a role reached
+	// through two groups appears twice. Set by listMembers.
+	DirectoryRoleSources []*AccessMemberDirectoryRoleSourceResponseBody `form:"directory_role_sources,omitempty" json:"directory_role_sources,omitempty" xml:"directory_role_sources,omitempty"`
+}
+
+// AccessMemberDirectoryGroupResponseBody is used to define fields on response
+// body types.
+type AccessMemberDirectoryGroupResponseBody struct {
+	// Directory group identifier.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Directory group name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
+// AccessMemberDirectoryRoleSourceResponseBody is used to define fields on
+// response body types.
+type AccessMemberDirectoryRoleSourceResponseBody struct {
+	// The role the mapping grants.
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
+	// The directory role mapping.
+	MappingID *string `form:"mapping_id,omitempty" json:"mapping_id,omitempty" xml:"mapping_id,omitempty"`
+	// What the mapping matches: a directory group or an attribute value.
+	SourceKind *string `form:"source_kind,omitempty" json:"source_kind,omitempty" xml:"source_kind,omitempty"`
+	// The mapped directory group. Set when source_kind is group.
+	DirectoryGroupID *string `form:"directory_group_id,omitempty" json:"directory_group_id,omitempty" xml:"directory_group_id,omitempty"`
 }
 
 // ListRoleGrantResponseBody is used to define fields on response body types.
@@ -8787,6 +8844,7 @@ func NewSetDirectoryRoleMappingDirectoryRoleMappingOK(body *SetDirectoryRoleMapp
 		DirectoryGroupName: body.DirectoryGroupName,
 		AttributeKey:       body.AttributeKey,
 		AttributeValue:     body.AttributeValue,
+		SourceStatus:       *body.SourceStatus,
 		RoleUrn:            *body.RoleUrn,
 		CreatedAt:          *body.CreatedAt,
 		UpdatedAt:          *body.UpdatedAt,
@@ -9769,6 +9827,7 @@ func NewUpdateMemberRolesAccessMemberOK(body *UpdateMemberRolesResponseBody) *ac
 		PhotoURL:     body.PhotoURL,
 		JoinedAt:     *body.JoinedAt,
 		Department:   body.Department,
+		InDirectory:  body.InDirectory,
 	}
 	v.RoleIds = make([]string, len(body.RoleIds))
 	for i, val := range body.RoleIds {
@@ -9782,6 +9841,26 @@ func NewUpdateMemberRolesAccessMemberOK(body *UpdateMemberRolesResponseBody) *ac
 		v.Groups = make([]string, len(body.Groups))
 		for i, val := range body.Groups {
 			v.Groups[i] = val
+		}
+	}
+	if body.DirectoryGroups != nil {
+		v.DirectoryGroups = make([]*access.AccessMemberDirectoryGroup, len(body.DirectoryGroups))
+		for i, val := range body.DirectoryGroups {
+			if val == nil {
+				v.DirectoryGroups[i] = nil
+				continue
+			}
+			v.DirectoryGroups[i] = unmarshalAccessMemberDirectoryGroupResponseBodyToAccessAccessMemberDirectoryGroup(val)
+		}
+	}
+	if body.DirectoryRoleSources != nil {
+		v.DirectoryRoleSources = make([]*access.AccessMemberDirectoryRoleSource, len(body.DirectoryRoleSources))
+		for i, val := range body.DirectoryRoleSources {
+			if val == nil {
+				v.DirectoryRoleSources[i] = nil
+				continue
+			}
+			v.DirectoryRoleSources[i] = unmarshalAccessMemberDirectoryRoleSourceResponseBodyToAccessAccessMemberDirectoryRoleSource(val)
 		}
 	}
 
@@ -13371,6 +13450,9 @@ func ValidateSetDirectoryRoleMappingResponseBody(body *SetDirectoryRoleMappingRe
 	if body.SourceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("source_kind", "body"))
 	}
+	if body.SourceStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_status", "body"))
+	}
 	if body.RoleUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_urn", "body"))
 	}
@@ -13390,6 +13472,11 @@ func ValidateSetDirectoryRoleMappingResponseBody(body *SetDirectoryRoleMappingRe
 	}
 	if body.DirectoryGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
+	}
+	if body.SourceStatus != nil {
+		if !(*body.SourceStatus == "active" || *body.SourceStatus == "missing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_status", *body.SourceStatus, []any{"active", "missing"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -13474,6 +13561,20 @@ func ValidateUpdateMemberRolesResponseBody(body *UpdateMemberRolesResponseBody) 
 	}
 	if body.JoinedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.joined_at", *body.JoinedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.DirectoryGroups {
+		if e != nil {
+			if err2 := ValidateAccessMemberDirectoryGroupResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.DirectoryRoleSources {
+		if e != nil {
+			if err2 := ValidateAccessMemberDirectoryRoleSourceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -22030,6 +22131,9 @@ func ValidateDirectoryRoleMappingResponseBody(body *DirectoryRoleMappingResponse
 	if body.SourceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("source_kind", "body"))
 	}
+	if body.SourceStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_status", "body"))
+	}
 	if body.RoleUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_urn", "body"))
 	}
@@ -22049,6 +22153,11 @@ func ValidateDirectoryRoleMappingResponseBody(body *DirectoryRoleMappingResponse
 	}
 	if body.DirectoryGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
+	}
+	if body.SourceStatus != nil {
+		if !(*body.SourceStatus == "active" || *body.SourceStatus == "missing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_status", *body.SourceStatus, []any{"active", "missing"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -22068,6 +22177,9 @@ func ValidateDirectoryRoleMappingResponse(body *DirectoryRoleMappingResponse) (e
 	if body.SourceKind == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("source_kind", "body"))
 	}
+	if body.SourceStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_status", "body"))
+	}
 	if body.RoleUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_urn", "body"))
 	}
@@ -22087,6 +22199,11 @@ func ValidateDirectoryRoleMappingResponse(body *DirectoryRoleMappingResponse) (e
 	}
 	if body.DirectoryGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
+	}
+	if body.SourceStatus != nil {
+		if !(*body.SourceStatus == "active" || *body.SourceStatus == "missing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_status", *body.SourceStatus, []any{"active", "missing"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -22164,6 +22281,61 @@ func ValidateAccessMemberResponseBody(body *AccessMemberResponseBody) (err error
 	}
 	if body.JoinedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.joined_at", *body.JoinedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.DirectoryGroups {
+		if e != nil {
+			if err2 := ValidateAccessMemberDirectoryGroupResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.DirectoryRoleSources {
+		if e != nil {
+			if err2 := ValidateAccessMemberDirectoryRoleSourceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAccessMemberDirectoryGroupResponseBody runs the validations defined
+// on AccessMemberDirectoryGroupResponseBody
+func ValidateAccessMemberDirectoryGroupResponseBody(body *AccessMemberDirectoryGroupResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAccessMemberDirectoryRoleSourceResponseBody runs the validations
+// defined on AccessMemberDirectoryRoleSourceResponseBody
+func ValidateAccessMemberDirectoryRoleSourceResponseBody(body *AccessMemberDirectoryRoleSourceResponseBody) (err error) {
+	if body.RoleID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	}
+	if body.MappingID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mapping_id", "body"))
+	}
+	if body.SourceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_kind", "body"))
+	}
+	if body.MappingID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mapping_id", *body.MappingID, goa.FormatUUID))
+	}
+	if body.SourceKind != nil {
+		if !(*body.SourceKind == "group" || *body.SourceKind == "attribute") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", *body.SourceKind, []any{"group", "attribute"}))
+		}
+	}
+	if body.DirectoryGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
 	}
 	return
 }

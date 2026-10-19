@@ -67,6 +67,7 @@ describe("create role round trip", () => {
       ...source,
       id,
       roleUrn,
+      sourceStatus: "active",
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -133,6 +134,7 @@ describe("create role round trip", () => {
       attributeKey: "department",
       attributeValue,
       roleUrn,
+      sourceStatus: "active",
       createdAt: new Date(0),
       updatedAt: new Date(0),
     });
