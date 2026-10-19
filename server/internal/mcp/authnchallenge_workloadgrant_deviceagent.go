@@ -103,8 +103,8 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 
 	// Decided before any organization lookup, so whether the grant is served
 	// never depends on, or reveals, which organizations exist.
-	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, logger); refused {
-		return err
+	if s.workloadGrant == nil {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "the device-agent token grant is not served by this deployment")
 	}
 
 	organizationID := chi.URLParam(r, deviceagenttoken.TokenPathOrganizationParam)

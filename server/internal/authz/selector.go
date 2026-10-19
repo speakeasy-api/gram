@@ -109,7 +109,8 @@ var validDispositions = map[string]bool{
 
 // allowedSelectorKeys defines which extra keys (beyond resource_kind and
 // resource_id) are valid for each scope family. Scope families not listed here
-// allow no extra keys.
+// allow no extra keys, except where scopeAllowsSelectorKey admits one for a
+// single scope.
 var allowedSelectorKeys = map[string]map[string]bool{
 	ResourceKindMCP: {
 		SelectorKeyTool:        true,
@@ -138,7 +139,8 @@ func scopeAllowsSelectorKey(scope Scope, key string) bool {
 // Rules:
 //   - resource_kind and resource_id must both be present
 //   - resource_kind must match the scope family (or be "*" for root)
-//   - extra keys must be in the allowed set for the scope family
+//   - extra keys must be in the allowed set for the scope family, or one
+//     scopeAllowsSelectorKey admits for the scope itself
 //   - unknown keys are rejected
 func ValidateSelector(scope Scope, sel Selector) error {
 	kind, hasKind := sel[SelectorKeyResourceKind]

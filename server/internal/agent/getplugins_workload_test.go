@@ -185,8 +185,12 @@ func TestJWTAuth_AgentInDeletedProjectStillPolls(t *testing.T) {
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, ti.projectID)
 	require.NoError(t, err)
 
-	_, err = ti.service.JWTAuth(getPluginsContext(t), device.token, deviceAgentTokenScheme)
+	admitted, err := ti.service.JWTAuth(getPluginsContext(t), device.token, deviceAgentTokenScheme)
 	require.NoError(t, err)
+	res, err := ti.service.GetPlugins(admitted, &gen.GetPluginsPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, res.Principal)
+	require.Equal(t, device.actor.String(), res.Principal.Urn)
 }
 
 // A workload whose agent lacks the device-sync grant cannot poll, as an agent

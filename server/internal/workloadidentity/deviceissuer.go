@@ -14,7 +14,7 @@ const deviceIssuerPath = "/workload/devices/"
 // issuer: the workload issuer that vouches for devices which joined with a
 // join token instead of presenting a platform identity.
 func DeviceIssuerURL(serverURL, organizationID string) string {
-	return strings.TrimSuffix(serverURL, "/") + deviceIssuerPath + organizationID
+	return strings.TrimRight(serverURL, "/") + deviceIssuerPath + organizationID
 }
 
 // IsUnderDeviceIssuerPrefix reports whether issuerURL is under the reserved
@@ -23,7 +23,7 @@ func DeviceIssuerURL(serverURL, organizationID string) string {
 func IsUnderDeviceIssuerPrefix(serverURL, issuerURL string) bool {
 	prefix, ok := canonicalDeviceIssuerPrefix(serverURL)
 	if !ok {
-		return strings.HasPrefix(strings.TrimSpace(issuerURL), strings.TrimSuffix(serverURL, "/")+deviceIssuerPath)
+		return strings.HasPrefix(strings.TrimSpace(issuerURL), strings.TrimRight(serverURL, "/")+deviceIssuerPath)
 	}
 	canonical, err := issuerurl.Parse(issuerURL)
 	if err != nil {
@@ -36,7 +36,7 @@ func IsUnderDeviceIssuerPrefix(serverURL, issuerURL string) bool {
 // canonicalDeviceIssuerPrefix is serverURL's device issuer prefix in canonical
 // form, without its trailing slash.
 func canonicalDeviceIssuerPrefix(serverURL string) (string, bool) {
-	canonical, err := issuerurl.Parse(strings.TrimSuffix(serverURL, "/") + strings.TrimSuffix(deviceIssuerPath, "/"))
+	canonical, err := issuerurl.Parse(strings.TrimRight(serverURL, "/") + strings.TrimSuffix(deviceIssuerPath, "/"))
 	if err != nil {
 		return "", false
 	}
